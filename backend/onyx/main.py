@@ -40,6 +40,7 @@ from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.app_configs import ENABLE_PUBLIC_DOCS
 from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
 from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
@@ -147,6 +148,7 @@ from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.query_backend import admin_router as admin_query_router
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.server.saml import router as saml_router
+from onyx.server.security.api import admin_router as security_admin_router
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
 from onyx.server.token_rate_limits.api import router as token_rate_limit_settings_router
@@ -457,6 +459,12 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         servers=[
             {"url": f"{WEB_DOMAIN.rstrip('/')}/api", "description": "Onyx API Server"}
         ],
+        # The interactive docs and schema are opt-in (see ENABLE_PUBLIC_DOCS).
+        # When disabled, these routes are not registered at all (404), so the
+        # API surface is not exposed publicly on a default deployment.
+        openapi_url="/openapi.json" if ENABLE_PUBLIC_DOCS else None,
+        docs_url="/docs" if ENABLE_PUBLIC_DOCS else None,
+        redoc_url="/redoc" if ENABLE_PUBLIC_DOCS else None,
         lifespan=lifespan_override or lifespan,
     )
     if SENTRY_DSN:
@@ -522,6 +530,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, onyx_api_router)
     include_router_with_global_prefix_prepended(application, settings_router)
     include_router_with_global_prefix_prepended(application, settings_admin_router)
+    include_router_with_global_prefix_prepended(application, security_admin_router)
     include_router_with_global_prefix_prepended(application, llm_admin_router)
     include_router_with_global_prefix_prepended(application, kg_admin_router)
     include_router_with_global_prefix_prepended(application, llm_router)

@@ -22,6 +22,7 @@ from onyx.context.search.utils import sandbox_filename_for_document
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import is_kg_config_settings_enabled_valid
 from onyx.db.models import ChatMessage
@@ -142,7 +143,7 @@ def create_chat_session_from_request(
 
     persona_id = chat_session_request.persona_id
     if persona_id != DEFAULT_PERSONA_ID:
-        if not user_can_access_persona(
+        if not user.is_anonymous and not user_can_access_persona(
             db_session=db_session,
             persona_id=persona_id,
             user=user,
@@ -467,7 +468,31 @@ def load_chat_file(
             logger.warning("Failed to get token count for file %s: %s", file_id, e)
 
     def _load_content() -> bytes:
-        return get_default_file_store().read_file(file_id, mode="b").read()
+        # Chat messages keep file references in their JSONB `files` column, but
+        # user-file deletion does not scrub those references — a file in the
+        # history may no longer exist in the file store. Since this loader runs
+        # lazily (on first `.content` access, often mid-LLM-flow), a raised
+        # exception here would kill the whole send-message request, so degrade
+        # to empty content instead. Deletion is expected and logs at warning;
+        # anything else (e.g. transient object-store failure) logs at error so
+        # outages remain distinguishable in alerting.
+        try:
+            return get_default_file_store().read_file(file_id, mode="b").read()
+        except FileRecordNotFoundError:
+            logger.warning(
+                "Chat file %s no longer exists (deleted after being referenced "
+                "in chat history); substituting empty content",
+                file_id,
+            )
+            return b""
+        except Exception:
+            logger.error(
+                "Unexpected error loading content for chat file %s; "
+                "substituting empty content",
+                file_id,
+                exc_info=True,
+            )
+            return b""
 
     return ChatLoadedFile.lazy_loaded(
         file_id=file_id,

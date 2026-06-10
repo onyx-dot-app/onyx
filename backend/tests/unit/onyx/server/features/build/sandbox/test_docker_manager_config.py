@@ -560,6 +560,8 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
         "AWS_CA_BUNDLE",
         "CURL_CA_BUNDLE",
         "GIT_SSL_CAINFO",
+        "GH_TOKEN",
+        "GH_NO_UPDATE_NOTIFIER",
     }
 
 

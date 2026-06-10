@@ -1,6 +1,8 @@
 """Composes recognition + policy resolution into a single verdict for an
 outbound request."""
 
+from collections.abc import Iterable
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import BaseModel
@@ -62,6 +64,37 @@ class AllMatchedActions(BaseModel):
     def governing_action(self) -> MatchedAction:
         """The action whose policy drove the verdict (head of the sorted list)."""
         return self.actions[0]
+
+
+PersistedMatchedAction = Mapping[str, Any]
+ActionLike = MatchedAction | PersistedMatchedAction
+
+
+def actions_requiring_approval(actions: Iterable[ActionLike]) -> list[str]:
+    """Return the action types whose policy requires a user approval.
+
+    The live gate works with ``MatchedAction`` models while the approval API
+    reads the same shape back from JSONB. Keeping both paths here avoids
+    mismatched grant semantics between current and persisted requests.
+    """
+    action_types: set[str] = set()
+    for action in actions:
+        if isinstance(action, MatchedAction):
+            policy = action.policy
+            action_type = action.action_type
+        else:
+            try:
+                policy = EndpointPolicy(action["policy"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            raw_action_type = action.get("action_type")
+            if not isinstance(raw_action_type, str):
+                continue
+            action_type = raw_action_type
+
+        if policy is EndpointPolicy.ASK:
+            action_types.add(action_type)
+    return sorted(action_types)
 
 
 def _app_name(app: ExternalApp) -> str:

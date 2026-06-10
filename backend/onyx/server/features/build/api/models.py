@@ -11,12 +11,14 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.server.features.build.sandbox.models import FilesystemEntry as FileSystemEntry
 
 if TYPE_CHECKING:
     from onyx.db.models import BuildSession
     from onyx.db.models import Sandbox
+    from onyx.server.features.build.interactive_turns.state import InteractiveTurn
 
 
 # ===== Session Models =====
@@ -108,6 +110,7 @@ class SessionResponse(BaseModel):
     sandbox: SandboxResponse | None
     artifacts: list[ArtifactResponse]
     sharing_scope: SharingScope
+    origin: SessionOrigin
     agent_provider: str | None
     agent_model: str | None
 
@@ -133,6 +136,7 @@ class SessionResponse(BaseModel):
             sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
             sharing_scope=session.sharing_scope,
+            origin=session.origin,
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
         )
@@ -183,9 +187,28 @@ class MessageRequest(BaseModel):
     """Request to send a message to the CLI agent."""
 
     content: str
+    client_request_id: str | None = None
     # Per-message model override from the composer; both set together.
     provider: str | None = None
     model: str | None = None
+
+
+class InteractiveTurnResponse(BaseModel):
+    """Interactive turn lifecycle response."""
+
+    turn_id: str
+    session_id: str
+    status: str
+    turn_index: int
+
+    @classmethod
+    def from_turn(cls, turn: "InteractiveTurn") -> "InteractiveTurnResponse":
+        return cls(
+            turn_id=str(turn.turn_id),
+            session_id=str(turn.session_id),
+            status=turn.status,
+            turn_index=turn.turn_index,
+        )
 
 
 class MessageInterruptResponse(BaseModel):

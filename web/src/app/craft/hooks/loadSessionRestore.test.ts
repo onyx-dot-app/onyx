@@ -42,6 +42,7 @@ describe("loadSession restore status", () => {
       currentSessionId: null,
     } as never);
     mockedApi.fetchMessages.mockResolvedValue([] as never);
+    mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
     mockedApi.fetchArtifacts.mockResolvedValue([] as never);
     // Default: webapp already serving, so the readiness gate is a no-op.
     mockedApi.fetchWebappInfo.mockResolvedValue(
@@ -87,9 +88,282 @@ describe("loadSession restore status", () => {
     const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
     expect(session?.sandbox?.status).toBe("running");
   });
+
+  it("restores persisted agent thought packets as collapsed transcript stream items", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Build a dashboard",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Build a dashboard" },
+        },
+      },
+      {
+        id: "thought-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_thought",
+          content: { type: "text", text: "Inspecting available files." },
+        },
+      },
+      {
+        id: "answer-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_message",
+          content: { type: "text", text: "Created the dashboard." },
+        },
+      },
+    ] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    const assistant = session?.messages.find((message) => {
+      return message.type === "assistant";
+    });
+    const streamItems = assistant?.message_metadata?.streamItems;
+
+    expect(streamItems).toEqual([
+      {
+        type: "thinking",
+        id: "thought-1",
+        content: "Inspecting available files.",
+        isStreaming: false,
+      },
+      {
+        type: "text",
+        id: "answer-1",
+        content: "Created the dashboard.",
+        isStreaming: false,
+      },
+    ]);
+  });
+
+  it("keeps child-routed text and thinking out of the parent transcript", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Build a dashboard",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Build a dashboard" },
+        },
+      },
+      {
+        id: "child-thought-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_thought",
+          content: { type: "text", text: "Child thinking." },
+          _meta: {
+            sessionId: "child-session-1",
+            parentSessionId: SESSION_ID,
+          },
+        },
+      },
+      {
+        id: "child-answer-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_message",
+          content: { type: "text", text: "Child answer." },
+          _meta: {
+            sessionId: "child-session-1",
+            parentSessionId: SESSION_ID,
+          },
+        },
+      },
+    ] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.messages).toEqual([
+      expect.objectContaining({ id: "user-1", type: "user" }),
+    ]);
+    expect(session?.subagents.get("child-session-1")?.turns[0]).toMatchObject({
+      thinking: "Child thinking.",
+      response: "Child answer.",
+      streamItems: [
+        expect.objectContaining({
+          type: "thinking",
+          content: "Child thinking.",
+          isStreaming: false,
+        }),
+        expect.objectContaining({
+          type: "text",
+          content: "Child answer.",
+          isStreaming: false,
+        }),
+      ],
+    });
+  });
+
+  it("restores subagent prompt and logs when parent task output carries the child id", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchMessages.mockResolvedValue([
+      {
+        id: "user-1",
+        type: "user",
+        content: "Build a game",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "user_message",
+          content: { type: "text", text: "Build a game" },
+        },
+      },
+      {
+        id: "child-thought-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_thought",
+          content: { type: "text", text: "Child thinking." },
+          _meta: {
+            sessionId: "child-session-1",
+            parentSessionId: SESSION_ID,
+          },
+        },
+      },
+      {
+        id: "child-answer-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "agent_message",
+          content: { type: "text", text: "Child answer." },
+          _meta: {
+            sessionId: "child-session-1",
+            parentSessionId: SESSION_ID,
+          },
+        },
+      },
+      {
+        id: "task-progress-1",
+        type: "assistant",
+        content: "",
+        timestamp: new Date(),
+        message_metadata: {
+          type: "tool_call_progress",
+          tool_call_id: "task-call-1",
+          kind: "task",
+          status: "completed",
+          raw_input: {
+            description: "Build Space Invaders game",
+            prompt:
+              "You are building ONE retro arcade game as a single React component.",
+          },
+          raw_output: {
+            output:
+              "task_id: child-session-1 (for resuming to continue this task if needed)\n\n<task_result>Child answer.</task_result>",
+          },
+        },
+      },
+    ] as never);
+
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.subagents.get("child-session-1")).toMatchObject({
+      parentToolCallId: "task-call-1",
+      name: "Build Space Invaders game",
+      status: "done",
+      turns: [
+        expect.objectContaining({
+          prompt:
+            "You are building ONE retro arcade game as a single React component.",
+          thinking: "Child thinking.",
+          response: "Child answer.",
+          streamItems: [
+            expect.objectContaining({ type: "thinking" }),
+            expect.objectContaining({ type: "text", content: "Child answer." }),
+          ],
+        }),
+      ],
+    });
+
+    const assistant = session?.messages.find(
+      (message) => message.type === "assistant"
+    );
+    expect(assistant?.message_metadata?.streamItems).toEqual([
+      expect.objectContaining({
+        type: "tool_call",
+        id: "task-call-1",
+      }),
+    ]);
+  });
+
+  it("preserves live turn metadata when active turn lookup fails", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchActiveTurn.mockRejectedValue(
+      new Error("turn endpoint unavailable")
+    );
+    useBuildSessionStore.getState().createSession(SESSION_ID, {
+      status: "running",
+      messages: [
+        {
+          id: "local-user",
+          type: "user",
+          content: "hello",
+          timestamp: new Date(),
+        },
+      ],
+      activeTurnId: "turn-live",
+      activeTurnLocalOwner: false,
+      isLoaded: false,
+    });
+
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.status).toBe("running");
+    expect(session?.activeTurnId).toBe("turn-live");
+    expect(session?.activeTurnLocalOwner).toBe(false);
+  });
+
+  it("clears stale turn metadata when active turn lookup says no turn is running", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
+    useBuildSessionStore.getState().createSession(SESSION_ID, {
+      status: "running",
+      activeTurnId: "turn-stale",
+      activeTurnLocalOwner: false,
+      isLoaded: false,
+    });
+
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+
+    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(session?.status).toBe("active");
+    expect(session?.activeTurnId).toBeNull();
+    expect(session?.activeTurnLocalOwner).toBe(false);
+  });
 });
 
 describe("waitForWebappReady", () => {
+  beforeEach(() => jest.clearAllMocks());
   afterEach(() => jest.clearAllMocks());
 
   it("returns immediately when the session has no webapp", async () => {

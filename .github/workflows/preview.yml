@@ -11,11 +11,33 @@ on:
       - "web/**"
 permissions:
   contents: read
-  pull-requests: write
 jobs:
+  check-credentials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      has-credentials: ${{ steps.check.outputs.has-credentials }}
+    steps:
+      - name: Check Vercel credentials
+        id: check
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ] && [ -n "$VERCEL_TOKEN" ]; then
+            echo "has-credentials=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-credentials=false" >> "$GITHUB_OUTPUT"
+            echo "Vercel credentials not set; skipping preview deployment."
+          fi
+
   Deploy-Preview:
+    needs: check-credentials
+    if: needs.check-credentials.outputs.has-credentials == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -29,9 +51,9 @@ jobs:
       - name: Pull Vercel Environment Information
         run: bunx ${{ env.VERCEL_CLI }} pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Install dependencies and build Opal
+      - name: Install dependencies and build Opal + Shared
         working-directory: ./web
-        run: bun install --frozen-lockfile && bun run --filter './lib/opal' build
+        run: bun install --frozen-lockfile && bun run --filter './lib/opal' build && bun run --filter './lib/shared' build
 
       - name: Build Project Artifacts
         run: bunx ${{ env.VERCEL_CLI }} build --token=${{ secrets.VERCEL_TOKEN }}

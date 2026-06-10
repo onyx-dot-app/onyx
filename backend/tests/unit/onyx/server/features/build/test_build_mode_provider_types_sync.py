@@ -1,52 +1,40 @@
-"""Guards that the backend Craft-allowed provider types stay in sync with the
-frontend source of truth (``BUILD_MODE_PROVIDERS`` keys in
-``web/src/app/craft/onboarding/constants.ts``). Drift (e.g. adding a type on one
-side only) fails CI instead of silently mismatching onboarding vs. provisioning."""
+"""Guards for the Craft-supported provider list, which is maintained in two
+runtimes: BUILD_MODE_ALLOWED_PROVIDER_TYPES (backend, used for provisioning /
+DB filtering) and CRAFT_PROVIDERS (frontend, used for the model picker). These
+tests fail loudly if they drift, or if the shared recommended-models config is
+missing a default for a supported type."""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
+from onyx.llm.well_known_providers.llm_provider_options import (
+    _load_bundled_recommendations,
+)
 from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
-from onyx.server.features.build.configs import BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE
 
 
-def _build_mode_providers_block() -> str:
+def _frontend_craft_provider_keys() -> list[str]:
     rel = Path("web/src/app/craft/onboarding/constants.ts")
     for parent in Path(__file__).resolve().parents:
         candidate = parent / rel
         if candidate.exists():
             text = candidate.read_text()
-            start = text.index("export const BUILD_MODE_PROVIDERS")
-            return text[start : text.index("\n];", start)]
+            start = text.index("export const CRAFT_PROVIDERS")
+            block = text[start : text.index("\n];", start)]
+            return re.findall(r'key:\s*"([^"]+)"', block)
     raise FileNotFoundError(f"Could not locate {rel} above {__file__}")
 
 
-def _frontend_provider_keys() -> list[str]:
-    # Within BUILD_MODE_PROVIDERS only provider objects carry a `key:` field
-    # (models use `name:`), so this captures provider types in order.
-    return re.findall(r'key:\s*"([^"]+)"', _build_mode_providers_block())
+def test_frontend_and_backend_craft_provider_types_match() -> None:
+    assert _frontend_craft_provider_keys() == BUILD_MODE_ALLOWED_PROVIDER_TYPES
 
 
-def _frontend_recommended_by_type() -> dict[str, str]:
-    block = _build_mode_providers_block()
-    result: dict[str, str] = {}
-    # Split into per-provider chunks on `key: "..."`, then within each find the
-    # model object flagged `recommended: true`.
-    for m in re.finditer(r'key:\s*"([^"]+)".*?models:\s*\[(.*?)\]', block, re.DOTALL):
-        key, models_blob = m.group(1), m.group(2)
-        rec = re.search(
-            r'name:\s*"([^"]+)"[^}]*?recommended:\s*true', models_blob, re.DOTALL
+def test_recommended_config_covers_allowed_provider_types() -> None:
+    recommendations = _load_bundled_recommendations()
+    for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES:
+        assert recommendations.get_default_model(provider_type) is not None, (
+            f"recommended-models.json has no default_model for Craft provider "
+            f"type {provider_type!r}"
         )
-        if rec:
-            result[key] = rec.group(1)
-    return result
-
-
-def test_backend_provider_types_match_frontend() -> None:
-    assert _frontend_provider_keys() == BUILD_MODE_ALLOWED_PROVIDER_TYPES
-
-
-def test_backend_recommended_models_match_frontend() -> None:
-    assert _frontend_recommended_by_type() == BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE

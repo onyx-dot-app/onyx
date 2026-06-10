@@ -1,0 +1,92 @@
+"""
+Overrides the integration framework's in-process ``_test_client`` autouse with a
+real httpx.Client, plus seeds a Slack ``external_app`` so the gate flow can
+fire.
+
+The default ``tests/integration/conftest.py::_test_client`` builds an in-process
+FastAPI ``TestClient``. That works for tests where the "api_server" being
+asserted against is the test process itself. It does NOT work for the docker e2e
+-- those tests provision real sandbox containers via the docker socket, and
+``DockerSandboxManager.provision`` blocks on a health-check against
+``http://sandbox-<id8>:4096``, a hostname that only resolves inside the
+``onyx_craft_sandbox`` bridge network. The in-process api_server lives on the
+host net and can never resolve it.
+
+The fix: hit the dockerized api_server (port-published at host 8080 by
+``docker-compose.dev.yml``) instead. From the host, ``localhost:8080`` -> the
+api_server container, which is on both the default and ``onyx_craft_sandbox``
+networks and CAN resolve sandbox hostnames.
+
+The Slack seeding is needed because the default deployment has no external apps
+configured. ``ExternalAppActionMatcher`` only claims a request if some app's
+``upstream_url_patterns`` matches the URL; without a Slack row,
+``chat.postMessage`` is treated as off-catalog and not gated.
+``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS`` defaults to off and the K8s lane
+doesn't actually run ``test_approval_gate.py`` either (it's not listed in the
+lane's paths filter or pytest args), so this fixture is the first place to wire
+the seeding in CI.
+
+This conftest is intentionally scoped to ``docker_e2e/`` only. Sibling craft
+tests under ``tests/integration/tests/craft/`` keep the in-process model.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Generator
+
+import httpx
+import pytest
+
+from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ExternalAppType
+from onyx.db.external_app import create_external_app
+from onyx.db.external_app import get_built_in_external_app
+from tests.integration.common_utils import http_client
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _test_client() -> Generator[httpx.Client, None, None]:
+    """
+    Replaces the parent ``_test_client`` with an httpx.Client targeting the
+    dockerized api_server. Same fixture name + scope so pytest picks the child
+    override per directory.
+    """
+    real_client = httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0))
+    http_client.set_test_client(real_client)
+    try:
+        yield real_client
+    finally:
+        real_client.close()
+        http_client.set_test_client(None)
+
+
+@pytest.fixture(scope="module")
+def slack_external_app() -> None:
+    """
+    Seeds Slack directly with ``enabled=True`` and an ``ASK`` policy on
+    ``slack.messages.write`` so the gate matcher claims ``chat.postMessage``.
+
+    Unlike ``provision_built_in_external_apps`` (which the cloud tenant-creation
+    path runs when ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS=true``), this skips
+    real credentials and the full action catalog -- the test only needs the one
+    gated action. Re-seed is a no-op when the row already exists.
+    """
+    with get_session_with_tenant(tenant_id="public") as db:
+        existing = get_built_in_external_app(db, ExternalAppType.SLACK)
+        if existing is None:
+            create_external_app(
+                db_session=db,
+                name="Slack",
+                description="Slack integration for gate-flow e2e tests.",
+                bundle_file_id="",
+                bundle_sha256="",
+                app_type=ExternalAppType.SLACK,
+                upstream_url_patterns=["https://slack\\.com/api/.*"],
+                auth_template={"Authorization": "Bearer {access_token}"},
+                organization_credentials={},
+                enabled=True,
+                is_public=True,
+                action_policies={"slack.messages.write": EndpointPolicy.ASK},
+            )
+            db.commit()

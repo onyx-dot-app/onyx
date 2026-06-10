@@ -77,8 +77,11 @@ export default function BuildChatPanel({
   const session = useSession();
   const sessionId = useSessionId();
   const scheduledSessionId = sessionId ?? existingSessionId ?? null;
+  // Gate on origin so interactive sessions don't 404 on scheduled-run-context.
+  const scheduledRunSessionId =
+    session?.origin === "SCHEDULED" ? scheduledSessionId : null;
   const { data: scheduledRunContext, mutate: mutateScheduledRunContext } =
-    useScheduledRunContext(scheduledSessionId);
+    useScheduledRunContext(scheduledRunSessionId);
   const scheduledRunInFlight =
     isScheduledRunContextInFlight(scheduledRunContext);
   const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
@@ -142,14 +145,26 @@ export default function BuildChatPanel({
   const nameBuildSession = useBuildSessionStore(
     (state) => state.nameBuildSession
   );
-  const { streamMessage, interruptStreaming, streamScheduledRunEvents } =
-    useBuildStreaming();
+  const {
+    streamMessage,
+    interruptStreaming,
+    streamScheduledRunEvents,
+    streamTurnEvents,
+  } = useBuildStreaming();
   const isInterrupting = useIsInterrupting();
   const queuedMessages = useQueuedMessages();
   const enqueueMessage = useBuildSessionStore((state) => state.enqueueMessage);
   const removeQueuedMessage = useBuildSessionStore(
     (state) => state.removeQueuedMessage
   );
+  const attachedTurnRef = useRef<{
+    turnId: string;
+    controller: AbortController;
+  } | null>(null);
+  const attachCleanupTimerRef = useRef<{
+    turnId: string;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -210,8 +225,78 @@ export default function BuildChatPanel({
     mutateScheduledRunContext,
   ]);
 
+  const activeTurnId = session?.activeTurnId ?? null;
+  const activeTurnLocalOwner = session?.activeTurnLocalOwner ?? false;
   useEffect(() => {
-    if (!scheduledSessionId || !scheduledRunContext || scheduledRunInFlight) {
+    const pendingCleanup = attachCleanupTimerRef.current;
+    if (pendingCleanup?.turnId === activeTurnId) {
+      clearTimeout(pendingCleanup.timer);
+      attachCleanupTimerRef.current = null;
+    }
+
+    if (
+      !scheduledSessionId ||
+      !activeTurnId ||
+      activeTurnLocalOwner ||
+      scheduledRunInFlight
+    ) {
+      return;
+    }
+
+    const scheduleCleanup = (attachment: {
+      turnId: string;
+      controller: AbortController;
+    }) => {
+      attachCleanupTimerRef.current = {
+        turnId: attachment.turnId,
+        timer: setTimeout(() => {
+          attachment.controller.abort();
+          if (attachedTurnRef.current === attachment) {
+            attachedTurnRef.current = null;
+          }
+          if (attachCleanupTimerRef.current?.turnId === attachment.turnId) {
+            attachCleanupTimerRef.current = null;
+          }
+        }, 0),
+      };
+    };
+
+    const existingAttachment = attachedTurnRef.current;
+    if (existingAttachment?.turnId === activeTurnId) {
+      return () => scheduleCleanup(existingAttachment);
+    }
+
+    existingAttachment?.controller.abort();
+    const controller = new AbortController();
+    const attachment = { turnId: activeTurnId, controller };
+    attachedTurnRef.current = attachment;
+    void streamTurnEvents(
+      scheduledSessionId,
+      activeTurnId,
+      controller.signal,
+      () => {
+        if (attachedTurnRef.current === attachment) {
+          attachedTurnRef.current = null;
+        }
+      }
+    );
+
+    return () => scheduleCleanup(attachment);
+  }, [
+    scheduledSessionId,
+    activeTurnId,
+    activeTurnLocalOwner,
+    scheduledRunInFlight,
+    streamTurnEvents,
+  ]);
+
+  useEffect(() => {
+    if (
+      !scheduledSessionId ||
+      !scheduledRunContext ||
+      scheduledRunInFlight ||
+      activeTurnId
+    ) {
       return;
     }
     updateSessionData(scheduledSessionId, { status: "active" });
@@ -219,6 +304,7 @@ export default function BuildChatPanel({
     scheduledSessionId,
     scheduledRunContext,
     scheduledRunInFlight,
+    activeTurnId,
     updateSessionData,
   ]);
 
@@ -644,7 +730,7 @@ export default function BuildChatPanel({
                   )}
                   {/* Model is locked once the session starts — show the picker
                   only before the first message. */}
-                  {session?.messages.length === 0 && (
+                  {session?.isLoaded && session.messages.length === 0 && (
                     <div className="flex justify-end pb-2">
                       <ModelPickerButton
                         selection={selectedModel}

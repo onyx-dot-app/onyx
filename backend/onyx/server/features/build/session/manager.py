@@ -11,6 +11,7 @@ import uuid
 import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
+from contextlib import AbstractContextManager
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
@@ -48,7 +49,6 @@ from onyx.server.features.build.db.build_session import get_empty_session_for_us
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
-from onyx.server.features.build.db.build_session import update_session_agent_selection
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
@@ -72,6 +72,7 @@ from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -211,6 +212,33 @@ class SessionManager:
             logger.warning(
                 "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
             )
+
+    def _prewarm_opencode_session(
+        self, sandbox_id: UUID, session: BuildSession
+    ) -> None:
+        """Mint and persist the opencode-serve session before the first prompt.
+
+        The caller owns the surrounding transaction. This keeps the empty Craft
+        session's frontend-ready state aligned with the agent runtime being
+        ready to accept the first user message.
+        """
+        opencode_session_id = self._sandbox_manager.ensure_opencode_session(
+            sandbox_id=sandbox_id,
+            session_id=session.id,
+            opencode_session_id=session.opencode_session_id,
+        )
+        if opencode_session_id is None:
+            raise RuntimeError(
+                f"Failed to prewarm opencode session for build session {session.id}"
+            )
+        if session.opencode_session_id != opencode_session_id:
+            logger.info(
+                "Prewarmed opencode session %s for build session %s",
+                opencode_session_id,
+                session.id,
+            )
+            session.opencode_session_id = opencode_session_id
+            self._db_session.flush()
 
     def ensure_sandbox_running(
         self,
@@ -367,6 +395,7 @@ class SessionManager:
         )
         self._hydrate_skills(sandbox.id, user, files=skills_files)
         self._hydrate_user_library(sandbox.id, user_id)
+        self._prewarm_opencode_session(sandbox.id, build_session)
 
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",
@@ -429,6 +458,7 @@ class SessionManager:
                     else:
                         self._hydrate_skills(sandbox.id, user)
                     self._hydrate_user_library(sandbox.id, user_id)
+                    self._prewarm_opencode_session(sandbox.id, existing)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,
@@ -680,43 +710,6 @@ class SessionManager:
             return None
         return get_session_messages(session_id, self._db_session)
 
-    def send_message(
-        self,
-        session_id: UUID,
-        user_id: UUID,
-        content: str,
-        agent_provider: str | None = None,
-        agent_model: str | None = None,
-    ) -> Generator[str, None, None]:
-        """
-        Send a message to the CLI agent and stream the response as SSE events.
-
-        Validates session, saves user message, streams agent response,
-        and saves assistant response to database.
-
-        Args:
-            session_id: The session UUID
-            user_id: The user ID
-            content: The message content
-            agent_provider: Optional per-message model provider override
-            agent_model: Optional per-message model name override
-
-        Yields:
-            SSE formatted event strings
-        """
-        # Persist the per-message model override; the turn reads it off the session row.
-        if agent_provider and agent_model:
-            update_session_agent_selection(
-                session_id, agent_provider, agent_model, self._db_session
-            )
-        yield from _streaming.stream_cli_agent_turn(
-            self._db_session,
-            self._sandbox_manager,
-            session_id,
-            content,
-            user_id,
-        )
-
     def send_subagent_message(
         self,
         session_id: UUID,
@@ -742,9 +735,9 @@ class SessionManager:
         Sets the interrupt fence and returns. The active stream's consume loop
         polls the fence (~1/s) and self-terminates — aborting opencode and
         emitting its own ``PromptResponse`` rather than waiting on a
-        ``session.idle`` that may never arrive after an abort. Setting a flag
-        (vs. a direct abort) is also what survives the first-turn race, where
-        the opencode session id isn't minted until inside the stream.
+        ``session.idle`` that may never arrive after an abort. A flag-based
+        approach (vs. a direct abort) is safe to call at any point in the turn
+        lifecycle, including before the stream has started consuming events.
         """
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
@@ -759,6 +752,7 @@ class SessionManager:
         user_id: UUID,
         *,
         keepalive_seconds: float = 15.0,
+        include_approval_announces: bool = True,
     ) -> Generator[str, None, None]:
         """Attach to an existing opencode session and stream translated ACP SSE.
 
@@ -785,24 +779,39 @@ class SessionManager:
                 "Session live stream is not ready yet.",
             )
 
-        for acp_event in self._sandbox_manager.subscribe_to_opencode_session(
+        raw_events = self._sandbox_manager.subscribe_to_opencode_session(
             sandbox.id,
             opencode_session_id,
             directory=f"/workspace/sessions/{session_id}",
             keepalive_seconds=keepalive_seconds,
-        ):
+        )
+        if include_approval_announces:
+            raw_events = self.merge_events_with_announces(
+                raw_events,
+                session_id=session_id,
+                tenant_id=get_current_tenant_id(),
+            )
+
+        for acp_event in raw_events:
             yield _streaming.event_to_sse(acp_event)
 
     # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
     #
-    # `_yield_sandbox_events` is a thin wrapper around the sandbox manager that drives
+    # `yield_sandbox_events` is a thin wrapper around the sandbox manager that drives
     # the agent to completion and yields raw sandbox events. It does NO database
     # writes, no SSE formatting — making it composable: the SSE endpoint wraps
-    # it with `_persist_sandbox_event` + an SSE formatter, and the headless
-    # scheduled-tasks executor reuses `_persist_sandbox_event` directly so the
+    # it with `persist_sandbox_event` + an SSE formatter, and the headless
+    # scheduled-tasks executor reuses `persist_sandbox_event` directly so the
     # persisted transcript is identical to an interactive run.
 
-    def _yield_sandbox_events(
+    def prompt_slot(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> AbstractContextManager[bool]:
+        return self._sandbox_manager.prompt_slot(sandbox_id, session_id)
+
+    def yield_sandbox_events(
         self,
         sandbox_id: UUID,
         session_id: UUID,
@@ -826,7 +835,20 @@ class SessionManager:
             should_interrupt=should_interrupt,
         )
 
-    def _persist_sandbox_event(
+    def merge_events_with_announces(
+        self,
+        event_iter: Generator[Any, None, None],
+        *,
+        session_id: UUID,
+        tenant_id: str,
+    ) -> Generator[Any, None, None]:
+        yield from _streaming.merge_events_with_announces(
+            event_iter,
+            session_id=session_id,
+            tenant_id=tenant_id,
+        )
+
+    def persist_sandbox_event(
         self,
         session_id: UUID,
         state: BuildStreamingState,
@@ -837,7 +859,7 @@ class SessionManager:
             self._db_session, session_id, state, sandbox_event, routing_meta
         )
 
-    def _finalize_persist(
+    def finalize_persist(
         self,
         session_id: UUID,
         state: BuildStreamingState,

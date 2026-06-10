@@ -9,6 +9,7 @@ import os
 import queue
 import re
 import threading
+import time
 import traceback
 from collections.abc import Callable
 from collections.abc import Generator
@@ -57,6 +58,7 @@ from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -111,6 +113,7 @@ from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
+from onyx.server.query_and_chat.streaming_models import ChatHeartbeat
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -1214,6 +1217,7 @@ def _run_models(
 
         # ── Main thread: merge and yield packets ────────────────────────────
         models_remaining = n_models
+        last_packet_yield: float = time.monotonic()
         while models_remaining > 0:
             try:
                 model_idx, item = merged_queue.get(timeout=_CANCEL_POLL_INTERVAL_S)
@@ -1254,6 +1258,13 @@ def _run_models(
                     )
                     completion_persisted = True
                     return
+                now = time.monotonic()
+                if now - last_packet_yield >= CHAT_HEARTBEAT_INTERVAL_S:
+                    yield Packet(
+                        placement=Placement(turn_index=0),
+                        obj=ChatHeartbeat(),
+                    )
+                    last_packet_yield = now
                 continue
             else:
                 if item is _MODEL_DONE:
@@ -1285,9 +1296,11 @@ def _run_models(
                             "model_index": model_idx,
                         },
                     )
+                    last_packet_yield = time.monotonic()
                 elif isinstance(item, Packet):
                     # model_index already embedded by the model's Emitter in _run_model
                     yield item
+                    last_packet_yield = time.monotonic()
 
         # ── Completion: save each successful model's response ───────────────
         # All model loops have completed (run_llm_loop returned) — no more writes
@@ -1413,6 +1426,7 @@ def _stream_chat_turn(
             try:
                 if (
                     not bypass_acl
+                    and not user.is_anonymous
                     and new_msg_req.internal_search_filters is not None
                     and new_msg_req.internal_search_filters.document_set is not None
                 ):

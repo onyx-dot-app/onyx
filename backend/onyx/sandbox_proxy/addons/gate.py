@@ -29,14 +29,30 @@ from onyx.db.enums import EndpointPolicy
 from onyx.db.notification import create_notification
 from onyx.db.scheduled_task import get_live_scheduled_run_grants
 from onyx.db.scheduled_task import ScheduledRunGrants
+from onyx.external_apps.matching.engine import actions_requiring_approval
 from onyx.external_apps.matching.engine import AllMatchedActions
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.credential_injection import InjectionContext
+from onyx.sandbox_proxy.credential_injection import InjectionOutcome
 from onyx.sandbox_proxy.errors import http_403
 from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
+from onyx.sandbox_proxy.logging_utils import approval_decided_args
+from onyx.sandbox_proxy.logging_utils import APPROVAL_DECIDED_FIELDS
+from onyx.sandbox_proxy.logging_utils import credential_outcome_label
+from onyx.sandbox_proxy.logging_utils import egress_approval_matched_args
+from onyx.sandbox_proxy.logging_utils import EGRESS_APPROVAL_MATCHED_FIELDS
+from onyx.sandbox_proxy.logging_utils import egress_matched_args
+from onyx.sandbox_proxy.logging_utils import EGRESS_MATCHED_FIELDS
+from onyx.sandbox_proxy.logging_utils import egress_session_matched_args
+from onyx.sandbox_proxy.logging_utils import EGRESS_SESSION_MATCHED_FIELDS
+from onyx.sandbox_proxy.logging_utils import egress_target_args
+from onyx.sandbox_proxy.logging_utils import EGRESS_TARGET_FIELDS
+from onyx.sandbox_proxy.logging_utils import full_log_id
+from onyx.sandbox_proxy.logging_utils import sandbox_log_label
+from onyx.sandbox_proxy.logging_utils import short_log_id
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.db import action_approval
@@ -71,18 +87,17 @@ _CRAFT_SESSION_LINK_TEMPLATE = "/craft/v1?sessionId={session_id}"
 
 
 @dataclass(frozen=True)
-class _AutoApproval:
+class _ApprovalGrant:
     """A decision to approve a gated request without parking it.
 
-    Produced by a grant source in ``_resolve_auto_approval``; the
-    mint/inject/notify path that consumes it is source-agnostic. Carries how to
-    attribute the audit row (``decided_via``) and the bell entry to raise.
+    Produced by a grant source in ``_resolve_approval_grant``. Carries how to
+    attribute the audit row (``decided_via``) and any bell entry to raise.
     """
 
     decided_via: ApprovalDecidedVia
-    notif_type: NotificationType
-    notification_title: str
-    notification_data: dict[str, str | int]
+    notif_type: NotificationType | None = None
+    notification_title: str | None = None
+    notification_data: dict[str, str | int] | None = None
 
 
 # TTL bounds staleness past a run's RUNNING -> terminal transition.
@@ -137,7 +152,8 @@ class GateAddon:
         self._snapshot_policy = snapshot_policy
         self._stream_responses = stream_responses
         # Invariant: `_persist_approval_row` is the only writer;
-        # `_await_decision`'s finally is the only remover.
+        # `_await_decision`'s finally and the post-persist grant recheck are the
+        # only removers.
         self._parked = ParkedApprovals()
         # client connection id -> session tag, captured from the CONNECT's
         # Proxy-Authorization (only place it's visible for MITM'd HTTPS).
@@ -169,12 +185,13 @@ class GateAddon:
         tag = _parse_proxy_auth_username(auth_header)
 
         logger.debug(
-            "gate.http_connect conn_id=%s host=%s port=%s proxy_auth=%r parsed_tag=%s",
-            conn_id,
+            "session_tag_capture conn=%s host=%s port=%s session=%s "
+            "proxy_auth_present=%s",
+            conn_id or "-",
             flow.request.host,
             flow.request.port,
-            auth_header,
-            tag,
+            short_log_id(tag),
+            str(auth_header is not None).lower(),
         )
         if conn_id is None:
             return
@@ -234,9 +251,9 @@ class GateAddon:
         flow.request.stream = True
         flow.metadata[_SNAPSHOT_STREAM_FLAG] = True
         logger.info(
-            "gate.snapshot_stream sandbox_id=%s tenant_id=%s host=%s method=%s",
-            sandbox.sandbox_id,
+            "snapshot_stream tenant=%s sandbox=%s host=%s method=%s",
             sandbox.tenant_id,
+            sandbox_log_label(sandbox),
             flow.request.host,
             flow.request.method,
         )
@@ -258,40 +275,28 @@ class GateAddon:
             return
         ctx, matched_actions = gate_target
 
-        # Auto-approval short-circuit: a grant source (today: a RUNNING
-        # scheduled run pre-approving this app) skips the park. Off-thread to
-        # keep sync DB work off the event loop; failure falls through to park.
-        try:
-            auto_approved = await asyncio.to_thread(
-                self._try_auto_approve, ctx, matched_actions
-            )
-        except Exception:
-            logger.exception(
-                "gate.auto_approval_check_error session_id=%s tenant_id=%s "
-                "action_type=%s",
-                ctx.session_id,
-                ctx.tenant_id,
-                matched_actions.governing_action.action_type,
-            )
-            auto_approved = False
-        if auto_approved:
+        # Grant sources can approve without asking the user. Check
+        # before we insert a pending row, then re-check after insert to close the
+        # window where a session grant appears between those two steps.
+        applied_approval_id = await self._apply_approval_grant(ctx, matched_actions)
+        if applied_approval_id is not None:
             # Fail closed: an unguarded raise here would let mitmproxy forward
             # the original request, bypassing the gate after an APPROVED row
             # exists.
             try:
-                await asyncio.to_thread(
-                    self._dispatch_injection_or_block,
-                    flow,
-                    sandbox=ctx.without_session(),
-                    matched_actions=matched_actions,
+                await self._dispatch_approved_request(
+                    flow, ctx, matched_actions, approval_id=applied_approval_id
                 )
             except Exception:
                 logger.exception(
-                    "gate.auto_approved_dispatch_error session_id=%s tenant_id=%s "
-                    "action_type=%s",
-                    ctx.session_id,
+                    "approval_dispatch_error tenant=%s sandbox=%s "
+                    "session=%s app_name=%r action_type=%s session_id=%s",
                     ctx.tenant_id,
+                    sandbox_log_label(ctx),
+                    short_log_id(ctx.session_id),
+                    matched_actions.app_name,
                     matched_actions.governing_action.action_type,
+                    full_log_id(ctx.session_id),
                 )
                 flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             return
@@ -301,31 +306,92 @@ class GateAddon:
         approval_id: UUID | None = None
         try:
             approval_id = self._persist_approval_row(ctx, matched_actions)
-            decision = await self._await_decision(approval_id, ctx, matched_actions)
+            if (
+                await self._apply_approval_grant(
+                    ctx, matched_actions, approval_id=approval_id
+                )
+                is not None
+            ):
+                self._parked.remove(ctx.tenant_id, approval_id)
+                decision = ApprovalDecision.APPROVED
+            else:
+                decision = await self._await_decision(approval_id, ctx, matched_actions)
             self._write_response_for_decision(flow, decision)
             if decision == ApprovalDecision.APPROVED:
-                # Off-thread: the external-app resolver may refresh an expiring
-                # OAuth token (token POST + Redis lock) before rendering
-                # headers; Keep that off the proxy event loop so a slow token
-                # endpoint stalls only this request, not every in-flight flow.
-                await asyncio.to_thread(
-                    self._dispatch_injection_or_block,
-                    flow,
-                    sandbox=ctx.without_session(),
-                    matched_actions=matched_actions,
+                await self._dispatch_approved_request(
+                    flow, ctx, matched_actions, approval_id=approval_id
+                )
+            else:
+                reason = (
+                    SandboxProxyError.USER_REJECTED.value
+                    if decision == ApprovalDecision.REJECTED
+                    else SandboxProxyError.NOT_AUTHORIZED.value
+                )
+                logger.info(
+                    "egress_block " + EGRESS_APPROVAL_MATCHED_FIELDS + " reason=%s",
+                    *egress_approval_matched_args(
+                        flow, ctx, matched_actions, EndpointPolicy.ASK, approval_id
+                    ),
+                    reason,
                 )
         except Exception:
             logger.exception(
-                "gate.unhandled_error session_id=%s tenant_id=%s "
-                "approval_id=%s action_type=%s",
-                ctx.session_id,
+                "approval_unhandled_error tenant=%s sandbox=%s session=%s "
+                "approval=%s app_name=%r action_type=%s session_id=%s approval_id=%s",
                 ctx.tenant_id,
-                approval_id,
+                sandbox_log_label(ctx),
+                short_log_id(ctx.session_id),
+                short_log_id(approval_id),
+                matched_actions.app_name,
                 matched_actions.governing_action.action_type,
+                full_log_id(ctx.session_id),
+                full_log_id(approval_id),
             )
             flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             if approval_id is not None:
                 self._terminalize_after_unhandled_error(approval_id, ctx.tenant_id)
+
+    async def _dispatch_approved_request(
+        self,
+        flow: http.HTTPFlow,
+        ctx: SessionContext,
+        matched_actions: AllMatchedActions,
+        *,
+        approval_id: UUID | None = None,
+    ) -> None:
+        # Off-thread: resolvers may refresh an expiring OAuth token before
+        # rendering headers; keep that off the proxy event loop so a slow token
+        # endpoint stalls only this request, not every in-flight flow.
+        injection = await asyncio.to_thread(
+            self._dispatch_injection_or_block,
+            flow,
+            sandbox=ctx.without_session(),
+            matched_actions=matched_actions,
+        )
+        if approval_id is None:
+            fields = EGRESS_SESSION_MATCHED_FIELDS
+            args = egress_session_matched_args(
+                flow, ctx, matched_actions, EndpointPolicy.ASK
+            )
+        else:
+            fields = EGRESS_APPROVAL_MATCHED_FIELDS
+            args = egress_approval_matched_args(
+                flow, ctx, matched_actions, EndpointPolicy.ASK, approval_id
+            )
+
+        if injection is InjectionOutcome.BLOCKED:
+            logger.warning(
+                "egress_block " + fields + " reason=%s credential_outcome=%s",
+                *args,
+                SandboxProxyError.CREDENTIAL_ERROR.value,
+                credential_outcome_label(injection),
+            )
+        else:
+            logger.info(
+                "egress_allow " + fields + " credential_outcome=%s",
+                *args,
+                credential_outcome_label(injection),
+            )
 
     # --------------------------------------------------------------------------
     # request() helpers
@@ -350,10 +416,12 @@ class GateAddon:
             # mitmproxy peername returned no usable IP -- should never happen
             # over real TCP. Log loudly so a stuck NAT or transport-mode mishap
             # doesn't read as "everything just 403's silently".
+            peer = flow.client_conn.peername
+            peer_label = "-" if peer is None else ":".join(str(part) for part in peer)
             logger.warning(
-                "gate.no_src_ip host=%s peername=%s",
+                "identity_missing_src_ip host=%s peer=%s",
                 flow.request.host,
-                flow.client_conn.peername,
+                peer_label,
             )
             flow.response = http_403(SandboxProxyError.UNIDENTIFIED_SANDBOX)
             return None
@@ -363,7 +431,7 @@ class GateAddon:
         except Exception:
             # A DB blip can't be allowed to grant ungated egress.
             logger.exception(
-                "gate.identity_error src_ip=%s host=%s",
+                "identity_error src_ip=%s host=%s",
                 src_ip,
                 flow.request.host,
             )
@@ -375,7 +443,7 @@ class GateAddon:
             # (2) Deployment-shape SNAT masks the sandbox's real bridge IP (e.g.
             # proxy outside the sandbox bridge).
             logger.warning(
-                "gate.unidentified_sandbox src_ip=%s host=%s",
+                "identity_unknown_sandbox src_ip=%s host=%s",
                 src_ip,
                 flow.request.host,
             )
@@ -386,6 +454,15 @@ class GateAddon:
         # future stream opt-in can't silently bypass the cap.
         raw = flow.request.raw_content
         if raw is None or len(raw) > PARSER_MAX_BODY_BYTES:
+            logger.info(
+                "egress_block "
+                + EGRESS_TARGET_FIELDS
+                + " reason=%s body_bytes=%s body_limit=%s",
+                *egress_target_args(flow, sandbox),
+                SandboxProxyError.BODY_TOO_LARGE.value,
+                "-" if raw is None else len(raw),
+                PARSER_MAX_BODY_BYTES,
+            )
             flow.response = http_403(SandboxProxyError.BODY_TOO_LARGE)
             return None
 
@@ -398,51 +475,80 @@ class GateAddon:
             # still get a chance to inject so the request doesn't forward with a
             # placeholder credential.
             logger.exception(
-                "gate.matcher_error host=%s error=%s",
+                "matcher_error tenant=%s sandbox=%s host=%s error=%r",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
                 flow.request.host,
                 str(e),
             )
             matched_actions = None
 
-        # Audit every evaluated request. session_id is the unvalidated claimed
-        # tag (the ASK path validates it below); off_catalog = nothing matched.
-        logger.info(
-            "gate.request tenant_id=%s sandbox_id=%s session_id=%s host=%s "
-            "action_type=%s policy=%s",
-            sandbox.tenant_id,
-            sandbox.sandbox_id,
-            self._extract_session_tag(flow),
-            flow.request.host,
-            matched_actions.governing_action.action_type
-            if matched_actions is not None
-            else "-",
-            matched_actions.governing_action.policy.value
-            if matched_actions is not None
-            else "off_catalog",
-        )
-
         # ALWAYS / DENY / off-catalog terminate here; ASK falls through to the
         # approval pipeline in `request()`.
         if matched_actions is None:
-            self._dispatch_injection_or_block(
+            injection = self._dispatch_injection_or_block(
                 flow, sandbox=sandbox, matched_actions=None
             )
+            if injection is InjectionOutcome.BLOCKED:
+                logger.warning(
+                    "egress_block "
+                    + EGRESS_TARGET_FIELDS
+                    + " reason=%s credential_outcome=%s",
+                    *egress_target_args(flow, sandbox),
+                    SandboxProxyError.CREDENTIAL_ERROR.value,
+                    credential_outcome_label(injection),
+                )
+            elif injection is not InjectionOutcome.PASS_THROUGH:
+                logger.info(
+                    "egress_allow "
+                    + EGRESS_TARGET_FIELDS
+                    + " policy=%s credential_outcome=%s",
+                    *egress_target_args(flow, sandbox),
+                    "off_catalog",
+                    credential_outcome_label(injection),
+                )
             return None
 
         if matched_actions.governing_action.policy is EndpointPolicy.DENY:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
+            logger.info(
+                "egress_block " + EGRESS_MATCHED_FIELDS + " reason=%s",
+                *egress_matched_args(
+                    flow, sandbox, matched_actions, EndpointPolicy.DENY
+                ),
+                SandboxProxyError.POLICY_DENIED.value,
+            )
             return None
 
         if matched_actions.governing_action.policy is EndpointPolicy.ALWAYS:
             # Off-thread: see the ASK path in `request` — the resolver may
             # refresh an expiring OAuth token before injecting on this
             # auto-approved call.
-            await asyncio.to_thread(
+            injection = await asyncio.to_thread(
                 self._dispatch_injection_or_block,
                 flow,
                 sandbox=sandbox,
                 matched_actions=matched_actions,
             )
+            if injection is InjectionOutcome.BLOCKED:
+                logger.warning(
+                    "egress_block "
+                    + EGRESS_MATCHED_FIELDS
+                    + " reason=%s credential_outcome=%s",
+                    *egress_matched_args(
+                        flow, sandbox, matched_actions, EndpointPolicy.ALWAYS
+                    ),
+                    SandboxProxyError.CREDENTIAL_ERROR.value,
+                    credential_outcome_label(injection),
+                )
+            else:
+                logger.info(
+                    "egress_allow " + EGRESS_MATCHED_FIELDS + " credential_outcome=%s",
+                    *egress_matched_args(
+                        flow, sandbox, matched_actions, EndpointPolicy.ALWAYS
+                    ),
+                    credential_outcome_label(injection),
+                )
             return None
 
         # ASK: resolve the originating session before prompting. An
@@ -451,46 +557,49 @@ class GateAddon:
             session_id = self._resolve_gated_session(flow, sandbox)
         except Exception:
             logger.exception(
-                "gate.session_lookup_error sandbox_id=%s user_id=%s host=%s",
-                sandbox.sandbox_id,
-                sandbox.user_id,
+                "session_lookup_error tenant=%s sandbox=%s host=%s app_name=%r "
+                "action_type=%s",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
                 flow.request.host,
+                matched_actions.app_name,
+                matched_actions.governing_action.action_type,
             )
             flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
             return None
         if session_id is None:
             logger.info(
-                "gate.unattributed_block sandbox_id=%s user_id=%s "
-                "tenant_id=%s action_type=%s host=%s",
-                sandbox.sandbox_id,
-                sandbox.user_id,
-                sandbox.tenant_id,
-                matched_actions.governing_action.action_type,
-                flow.request.host,
+                "egress_block " + EGRESS_MATCHED_FIELDS + " reason=%s",
+                *egress_matched_args(
+                    flow, sandbox, matched_actions, EndpointPolicy.ASK
+                ),
+                SandboxProxyError.NO_ACTIVE_SESSION.value,
             )
             flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
             return None
 
         ctx = sandbox.with_session(session_id)
-        logger.info(
-            "gate.match session_id=%s tenant_id=%s sandbox_id=%s "
-            "action_type=%s host=%s",
-            ctx.session_id,
+        logger.debug(
+            "approval_match tenant=%s sandbox=%s session=%s host=%s "
+            "method=%s app_name=%r action_type=%s",
             ctx.tenant_id,
-            ctx.sandbox_id,
-            matched_actions.governing_action.action_type,
+            sandbox_log_label(ctx),
+            short_log_id(ctx.session_id),
             flow.request.host,
+            flow.request.method,
+            matched_actions.app_name,
+            matched_actions.governing_action.action_type,
         )
         return ctx, matched_actions
 
-    def _resolve_auto_approval(
+    def _resolve_approval_grant(
         self, db: Session, ctx: SessionContext, matched_actions: AllMatchedActions
-    ) -> _AutoApproval | None:
-        """Resolve a gated request to an auto-approval, or ``None`` to park."""
-        # Scheduled-task grants are the only auto-approval type today. As other
-        # types appear (session-scoped, per-action), each becomes a source
-        # resolved here — first hit wins.
-        return self._scheduled_task_grant(db, ctx, matched_actions)
+    ) -> _ApprovalGrant | None:
+        """Resolve a gated request to a reusable approval grant, or ``None``."""
+        # Grant sources are checked in order, first hit wins.
+        return self._scheduled_task_grant(db, ctx, matched_actions) or (
+            self._session_grant(db, ctx, matched_actions)
+        )
 
     @cachedmethod(
         operator.attrgetter("_grant_cache"),
@@ -502,7 +611,7 @@ class GateAddon:
 
     def _scheduled_task_grant(
         self, db: Session, ctx: SessionContext, matched_actions: AllMatchedActions
-    ) -> _AutoApproval | None:
+    ) -> _ApprovalGrant | None:
         """
         Grant source: a RUNNING scheduled run whose task pre-approves the
         matched app.
@@ -513,7 +622,7 @@ class GateAddon:
         run_id, granted_app_ids = grants
         if matched_actions.external_app_id not in granted_app_ids:
             return None
-        return _AutoApproval(
+        return _ApprovalGrant(
             decided_via=ApprovalDecidedVia.PRE_APPROVAL,
             notif_type=NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION,
             notification_title=f"Scheduled task used {matched_actions.app_name} (pre-approved)",
@@ -523,52 +632,160 @@ class GateAddon:
             },
         )
 
-    def _try_auto_approve(
-        self, ctx: SessionContext, matched_actions: AllMatchedActions
-    ) -> bool:
-        """
-        Mints a pre-decided APPROVED row if a grant source covers this request;
-        False otherwise (falls through to the park). Source-agnostic.
-
-        Bypassing ``try_record_decision``'s arbiter is safe: nothing parks on a
-        pre-decided row.
-        """
-        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
-            approval = self._resolve_auto_approval(db, ctx, matched_actions)
-            if approval is None:
-                return False
-            row = action_approval.insert_action_approval(
-                db,
+    def _session_grant(
+        self, db: Session, ctx: SessionContext, matched_actions: AllMatchedActions
+    ) -> _ApprovalGrant | None:
+        """The user approved this app/action for the session."""
+        action_types = actions_requiring_approval(matched_actions.actions)
+        if not action_types:
+            return None
+        cache: CacheBackend | None = None
+        try:
+            cache = self._cache_factory(ctx.tenant_id)
+            if approval_cache.cached_session_grants_cover(
                 session_id=ctx.session_id,
-                actions=[a.model_dump(mode="json") for a in matched_actions.actions],
-                app_name=matched_actions.app_name,
-                payload=matched_actions.payload,
                 external_app_id=matched_actions.external_app_id,
-                decision=ApprovalDecision.APPROVED,
-                decided_via=approval.decided_via,
+                action_types=action_types,
+                cache=cache,
+            ):
+                return _ApprovalGrant(decided_via=ApprovalDecidedVia.SESSION_GRANT)
+        except CACHE_TRANSIENT_ERRORS as e:
+            logger.warning(
+                "approval_grant_cache_error tenant=%s session=%s "
+                "external_app_id=%s operation=%s error=%r",
+                ctx.tenant_id,
+                short_log_id(ctx.session_id),
+                matched_actions.external_app_id,
+                "check",
+                str(e),
             )
-            approval_id = row.approval_id
+
+        grant_source_rows = action_approval.list_session_grant_action_approvals(
+            db,
+            session_id=ctx.session_id,
+            external_app_id=matched_actions.external_app_id,
+        )
+        granted_action_types: set[str] = set()
+        for grant_source_row in grant_source_rows:
+            granted_action_types.update(
+                actions_requiring_approval(grant_source_row.actions)
+            )
+        if not set(action_types).issubset(granted_action_types):
+            return None
+
+        if cache is not None:
+            try:
+                for grant_source_row in grant_source_rows:
+                    approval_cache.cache_session_grant_actions(
+                        session_id=ctx.session_id,
+                        external_app_id=matched_actions.external_app_id,
+                        action_types=actions_requiring_approval(
+                            grant_source_row.actions
+                        ),
+                        source_approval_id=grant_source_row.approval_id,
+                        cache=cache,
+                    )
+            except CACHE_TRANSIENT_ERRORS as e:
+                logger.warning(
+                    "approval_grant_cache_error tenant=%s session=%s "
+                    "external_app_id=%s operation=%s error=%r",
+                    ctx.tenant_id,
+                    short_log_id(ctx.session_id),
+                    matched_actions.external_app_id,
+                    "hydrate",
+                    str(e),
+                )
+        return _ApprovalGrant(decided_via=ApprovalDecidedVia.SESSION_GRANT)
+
+    async def _apply_approval_grant(
+        self,
+        ctx: SessionContext,
+        matched_actions: AllMatchedActions,
+        *,
+        approval_id: UUID | None = None,
+    ) -> UUID | None:
+        try:
+            return await asyncio.to_thread(
+                self._try_apply_approval_grant,
+                ctx,
+                matched_actions,
+                approval_id,
+            )
+        except Exception:
+            logger.exception(
+                "approval_grant_check_error tenant=%s sandbox=%s "
+                "session=%s approval=%s app_name=%r action_type=%s session_id=%s "
+                "approval_id=%s",
+                ctx.tenant_id,
+                sandbox_log_label(ctx),
+                short_log_id(ctx.session_id),
+                short_log_id(approval_id),
+                matched_actions.app_name,
+                matched_actions.governing_action.action_type,
+                full_log_id(ctx.session_id),
+                full_log_id(approval_id),
+            )
+            return None
+
+    def _try_apply_approval_grant(
+        self,
+        ctx: SessionContext,
+        matched_actions: AllMatchedActions,
+        approval_id: UUID | None,
+    ) -> UUID | None:
+        """Apply an existing approval grant to a new or already-persisted row."""
+        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
+            grant = self._resolve_approval_grant(db, ctx, matched_actions)
+            if grant is None:
+                return None
+            if approval_id is None:
+                row = action_approval.insert_action_approval(
+                    db,
+                    session_id=ctx.session_id,
+                    actions=[
+                        a.model_dump(mode="json") for a in matched_actions.actions
+                    ],
+                    app_name=matched_actions.app_name,
+                    payload=matched_actions.payload,
+                    external_app_id=matched_actions.external_app_id,
+                    decision=ApprovalDecision.APPROVED,
+                    decided_via=grant.decided_via,
+                )
+                applied_approval_id = row.approval_id
+            else:
+                decided = action_approval.try_record_decision(
+                    db,
+                    approval_id=approval_id,
+                    decision=ApprovalDecision.APPROVED,
+                    decided_via=grant.decided_via,
+                )
+                if decided is None:
+                    return None
+                applied_approval_id = approval_id
             db.commit()
 
         logger.info(
-            "gate.auto_approved approval_id=%s session_id=%s tenant_id=%s "
-            "decided_via=%s external_app_id=%s action_type=%s",
-            approval_id,
-            ctx.session_id,
-            ctx.tenant_id,
-            approval.decided_via,
-            matched_actions.external_app_id,
-            matched_actions.governing_action.action_type,
+            "approval_decided " + APPROVAL_DECIDED_FIELDS,
+            *approval_decided_args(
+                ctx,
+                applied_approval_id,
+                matched_actions,
+                decision=ApprovalDecision.APPROVED.value,
+                wake="-",
+                source=grant.decided_via.value,
+            ),
         )
         try:
-            self._notify_auto_approved(ctx, approval)
+            if grant.notif_type is not None:
+                self._notify_approval_grant(ctx, grant)
         except Exception as e:
             logger.warning(
-                "gate.auto_approve_notify_failed approval_id=%s error=%s",
-                approval_id,
+                "approval_notify_error approval=%s error=%r approval_id=%s",
+                short_log_id(applied_approval_id),
                 str(e),
+                full_log_id(applied_approval_id),
             )
-        return True
+        return applied_approval_id
 
     def _persist_approval_row(
         self, ctx: SessionContext, matched_actions: AllMatchedActions
@@ -600,30 +817,37 @@ class GateAddon:
             )
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
-                "gate.announce_failed approval_id=%s error=%s",
-                approval_id,
+                "approval_announce_error approval=%s error=%r approval_id=%s",
+                short_log_id(approval_id),
                 str(e),
+                full_log_id(approval_id),
             )
 
         logger.info(
-            "gate.row_committed approval_id=%s session_id=%s tenant_id=%s "
-            "sandbox_id=%s proxy_instance_id=%s action_type=%s action_count=%s",
-            approval_id,
-            ctx.session_id,
+            "approval_requested tenant=%s sandbox=%s session=%s approval=%s "
+            "app_name=%r external_app_id=%s action_type=%s action_count=%s "
+            "proxy_instance=%s session_id=%s approval_id=%s",
             ctx.tenant_id,
-            ctx.sandbox_id,
-            self._proxy_instance_id,
+            sandbox_log_label(ctx),
+            short_log_id(ctx.session_id),
+            short_log_id(approval_id),
+            matched_actions.app_name,
+            matched_actions.external_app_id,
             matched_actions.governing_action.action_type,
             len(matched_actions.actions),
+            self._proxy_instance_id,
+            full_log_id(ctx.session_id),
+            full_log_id(approval_id),
         )
 
         try:
             self._notify_approval_requested(approval_id, ctx, matched_actions)
         except Exception as e:
             logger.warning(
-                "approval.notify_failed approval_id=%s error=%s",
-                approval_id,
+                "approval_notify_error approval=%s error=%r approval_id=%s",
+                short_log_id(approval_id),
                 str(e),
+                full_log_id(approval_id),
             )
 
         return approval_id
@@ -645,30 +869,30 @@ class GateAddon:
             )
             if decision is not None:
                 logger.info(
-                    "gate.wake_received approval_id=%s session_id=%s "
-                    "tenant_id=%s decision=%s",
-                    approval_id,
-                    ctx.session_id,
-                    ctx.tenant_id,
-                    decision.value,
+                    "approval_decided " + APPROVAL_DECIDED_FIELDS,
+                    *approval_decided_args(
+                        ctx,
+                        approval_id,
+                        matched_actions,
+                        decision=decision.value,
+                        wake="received",
+                        source="wake",
+                    ),
                 )
                 return decision
-            logger.info(
-                "gate.wake_timeout approval_id=%s session_id=%s tenant_id=%s "
-                "action_type=%s",
-                approval_id,
-                ctx.session_id,
-                ctx.tenant_id,
-                matched_actions.governing_action.action_type,
-            )
             resolved = self._claim_expired_or_read_winner(approval_id, ctx.tenant_id)
-            if resolved == ApprovalDecision.EXPIRED:
-                logger.info(
-                    "gate.expired_on_timeout approval_id=%s session_id=%s tenant_id=%s",
+            source = "timeout" if resolved == ApprovalDecision.EXPIRED else "db_winner"
+            logger.info(
+                "approval_decided " + APPROVAL_DECIDED_FIELDS,
+                *approval_decided_args(
+                    ctx,
                     approval_id,
-                    ctx.session_id,
-                    ctx.tenant_id,
-                )
+                    matched_actions,
+                    decision=resolved.value,
+                    wake="missed",
+                    source=source,
+                ),
+            )
             return resolved
         except asyncio.CancelledError:
             # Sandbox socket closed mid-wait. Terminalize the audit row, then
@@ -699,9 +923,10 @@ class GateAddon:
                 # FK cascade dropped the row (build_session deleted).
                 # Treat as expired so the upstream call is rejected.
                 logger.error(
-                    "gate.row_missing_on_claim approval_id=%s tenant_id=%s",
-                    approval_id,
+                    "approval_row_missing tenant=%s approval=%s approval_id=%s",
                     tenant_id,
+                    short_log_id(approval_id),
+                    full_log_id(approval_id),
                 )
                 return ApprovalDecision.EXPIRED
             return existing.decision
@@ -724,15 +949,18 @@ class GateAddon:
         *,
         sandbox: ResolvedSandbox,
         matched_actions: AllMatchedActions | None,
-    ) -> None:
+    ) -> InjectionOutcome:
         """Runs the credential dispatcher; Fails closed with a 403 on BLOCKED."""
-        self._credential_dispatcher.apply_or_block(
+        outcome = self._credential_dispatcher.apply(
             flow,
             InjectionContext(
                 sandbox=sandbox,
                 matched_actions=matched_actions,
             ),
         )
+        if outcome is InjectionOutcome.BLOCKED:
+            flow.response = http_403(SandboxProxyError.CREDENTIAL_ERROR)
+        return outcome
 
     def _terminalize_after_unhandled_error(
         self, approval_id: UUID, tenant_id: str
@@ -747,9 +975,12 @@ class GateAddon:
             decision = self._claim_expired_or_read_winner(approval_id, tenant_id)
         except Exception:
             logger.exception(
-                "gate.terminalize_db_failed approval_id=%s tenant_id=%s",
-                approval_id,
+                "approval_terminalize_error tenant=%s approval=%s "
+                "operation=%s approval_id=%s",
                 tenant_id,
+                short_log_id(approval_id),
+                "db",
+                full_log_id(approval_id),
             )
             return
         try:
@@ -758,9 +989,12 @@ class GateAddon:
             )
         except Exception:
             logger.exception(
-                "gate.terminalize_wake_failed approval_id=%s tenant_id=%s",
-                approval_id,
+                "approval_terminalize_error tenant=%s approval=%s "
+                "operation=%s approval_id=%s",
                 tenant_id,
+                short_log_id(approval_id),
+                "wake",
+                full_log_id(approval_id),
             )
 
     # ------------------------------------------------------------------
@@ -789,24 +1023,27 @@ class GateAddon:
                         pass
                     if decision == ApprovalDecision.EXPIRED:
                         logger.info(
-                            "gate.drain_expired approval_id=%s tenant_id=%s",
-                            approval_id,
+                            "drain_expired tenant=%s approval=%s approval_id=%s",
                             tenant_id,
+                            short_log_id(approval_id),
+                            full_log_id(approval_id),
                         )
                     else:
                         logger.info(
-                            "gate.drain_forwarded approval_id=%s "
-                            "tenant_id=%s decision=%s",
-                            approval_id,
+                            "drain_forwarded tenant=%s approval=%s "
+                            "decision=%s approval_id=%s",
                             tenant_id,
+                            short_log_id(approval_id),
                             decision.value,
+                            full_log_id(approval_id),
                         )
                 except Exception as e:
                     logger.warning(
-                        "gate.drain_error approval_id=%s tenant_id=%s error=%s",
-                        approval_id,
+                        "drain_error tenant=%s approval=%s error=%r approval_id=%s",
                         tenant_id,
+                        short_log_id(approval_id),
                         str(e),
+                        full_log_id(approval_id),
                     )
 
         # Exclude self so we don't deadlock if drain ever ends up registered in
@@ -814,15 +1051,15 @@ class GateAddon:
         self_task = asyncio.current_task()
         pending = [t for t in self._inflight_tasks if t is not self_task]
         if pending:
-            logger.info("gate.drain_awaiting_tasks count=%d", len(pending))
+            logger.info("drain_wait requests=%s", len(pending))
             await asyncio.wait(pending)
 
     # --------------------------------------------------------------------------
     # Notification dispatch
     # --------------------------------------------------------------------------
 
-    def _notify_auto_approved(
-        self, ctx: SessionContext, approval: _AutoApproval
+    def _notify_approval_grant(
+        self, ctx: SessionContext, grant: _ApprovalGrant
     ) -> None:
         """Best-effort bell entry for an auto-approved action.
 
@@ -830,13 +1067,19 @@ class GateAddon:
         grant source must keep ``notification_data`` a stable per-scope key —
         anything per-request would defeat the dedup.
         """
+        if (
+            grant.notif_type is None
+            or grant.notification_title is None
+            or grant.notification_data is None
+        ):
+            return
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             create_notification(
                 user_id=ctx.user_id,
-                notif_type=approval.notif_type,
+                notif_type=grant.notif_type,
                 db_session=db,
-                title=approval.notification_title,
-                additional_data=approval.notification_data,
+                title=grant.notification_title,
+                additional_data=grant.notification_data,
                 autocommit=True,
             )
 
@@ -853,7 +1096,7 @@ class GateAddon:
                 user_id=ctx.user_id,
                 notif_type=NotificationType.APPROVAL_REQUESTED,
                 db_session=db,
-                title="Craft is awaiting approval",
+                title="Craft is requesting approval",
                 additional_data={
                     "approval_id": str(approval_id),
                     "session_id": str(ctx.session_id),
@@ -892,9 +1135,9 @@ class GateAddon:
         tag = self._extract_session_tag(flow)
         if tag is None:
             logger.warning(
-                "gate.session_tag_missing sandbox_id=%s user_id=%s host=%s",
-                sandbox.sandbox_id,
-                sandbox.user_id,
+                "session_missing tenant=%s sandbox=%s host=%s",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
                 flow.request.host,
             )
             return None
@@ -902,9 +1145,9 @@ class GateAddon:
             tagged_id = UUID(tag)
         except ValueError:
             logger.warning(
-                "gate.session_tag_malformed sandbox_id=%s user_id=%s host=%s",
-                sandbox.sandbox_id,
-                sandbox.user_id,
+                "session_malformed tenant=%s sandbox=%s host=%s",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
                 flow.request.host,
             )
             return None
@@ -914,16 +1157,18 @@ class GateAddon:
         if exact is None:
             # Stale, foreign, or tampered tag. Fail closed — do not guess.
             logger.warning(
-                "gate.session_tag_unverified sandbox_id=%s user_id=%s host=%s",
-                sandbox.sandbox_id,
-                sandbox.user_id,
+                "session_unverified tenant=%s sandbox=%s session=%s host=%s",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
+                short_log_id(tagged_id),
                 flow.request.host,
             )
             return None
-        logger.info(
-            "gate.session_exact session_id=%s sandbox_id=%s host=%s",
-            exact,
-            sandbox.sandbox_id,
+        logger.debug(
+            "session_verified tenant=%s sandbox=%s session=%s host=%s",
+            sandbox.tenant_id,
+            sandbox_log_label(sandbox),
+            short_log_id(exact),
             flow.request.host,
         )
         return exact
@@ -941,14 +1186,14 @@ class GateAddon:
         tag = cached or direct
 
         logger.debug(
-            "gate.session_tag_extract conn_id=%s host=%s cached=%s "
-            "direct=%s direct_proxy_auth=%r resolved=%s",
-            conn_id,
+            "session_tag_resolved conn=%s host=%s cached=%s direct=%s "
+            "proxy_auth_present=%s session=%s",
+            conn_id or "-",
             flow.request.host,
-            cached,
-            direct,
-            direct_auth_header,
-            tag,
+            short_log_id(cached),
+            short_log_id(direct),
+            str(direct_auth_header is not None).lower(),
+            short_log_id(tag),
         )
         return tag
 

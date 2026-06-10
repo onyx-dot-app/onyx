@@ -15,6 +15,21 @@ global:
   # Host for all Onyx components
   host: "0.0.0.0"
 
+# -- Custom (private/internal) CA certificates for outbound TLS.
+# When enabled, every pod that makes outbound TLS connections (api server,
+# celery workers, bots, MCP server, model servers) mounts the referenced
+# Secret/ConfigMap at /usr/local/share/ca-certificates, runs
+# `update-ca-certificates` at startup, and sets REQUESTS_CA_BUNDLE /
+# SSL_CERT_FILE so Python HTTP clients trust the updated bundle.
+# Keys must be PEM certs ending in `.crt`.
+# NOTE: requires the containers to run as root (the chart default);
+# incompatible with runAsNonRoot overrides.
+customCACerts:
+  enabled: false
+  # Exactly one of secretName / configMapName must be set when enabled.
+  secretName: ""
+  configMapName: ""
+
 postgresql:
   enabled: true
   # IMPORTANT: This nameOverride is required for the CloudNativePG operator to find itself.
@@ -110,6 +125,8 @@ autoscaling:
 
 inferenceCapability:
   extraEnv: []
+  volumes: []
+  volumeMounts: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -165,6 +182,8 @@ inferenceCapability:
 
 indexCapability:
   extraEnv: []
+  volumes: []
+  volumeMounts: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -483,7 +502,9 @@ api:
   affinity: {}
 
   # Run update-ca-certificates before starting the server.
-  # Useful when mounting custom CA certificates via volumes/volumeMounts.
+  # DEPRECATED: prefer the top-level customCACerts block, which covers all
+  # outbound-TLS pods. This flag only affects the API server; useful when
+  # mounting custom CA certificates manually via api.volumes/api.volumeMounts.
   # NOTE: Requires the container to run as root (runAsUser: 0).
   # CA certificate files must be mounted under /usr/local/share/ca-certificates/
   # with a .crt extension (e.g. /usr/local/share/ca-certificates/my-ca.crt).
@@ -1342,6 +1363,28 @@ auth:
     # If not set, helm install/upgrade will fail when auth.userauth.enabled=true.
     values:
       user_auth_secret: ""
+  metricsAuth:
+    # -- Bearer token guarding the API server's /metrics endpoint. /metrics
+    # returns 401 by default until you either enable this (provide a token) or
+    # explicitly opt out via configMap.DISABLE_METRICS_AUTH="true". When enabled,
+    # scrapers must send the token as `Authorization: Bearer <token>` (Prometheus
+    # scrape config: `authorization`), and the api ServiceMonitor below is wired
+    # to send it automatically.
+    enabled: false
+    # -- Only inject the token into pods that serve the protected /metrics (the
+    # API server), not every backend pod. Routes through onyx.envSecretsRestricted.
+    allPods: false
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-metrics-auth'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map
+    secretKeys:
+      METRICS_AUTH_TOKEN: metrics_auth_token
+    # -- Secret value. Required when this secret is enabled - generate with: openssl rand -hex 32
+    # If not set, helm install/upgrade will fail when auth.metricsAuth.enabled=true.
+    values:
+      metrics_auth_token: ""
   # Ed25519 private key for sandbox push auth (only the public key reaches sandbox pods).
   # Generate with: python3 -c "import base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as K; from cryptography.hazmat.primitives.serialization import *; print(base64.b64encode(K.generate().private_bytes(Encoding.Raw,PrivateFormat.Raw,NoEncryption())).decode())"
   sandboxPushSecret:
@@ -1384,6 +1427,14 @@ configMap:
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
   VALID_EMAIL_DOMAINS: ""
+  # /metrics requires a bearer token by default and returns 401 until one is set
+  # (enable auth.metricsAuth) OR you explicitly opt out here. Set to "true" to
+  # expose /metrics with NO authentication.
+  DISABLE_METRICS_AUTH: ""
+  # The interactive API docs and schema (/openapi.json, /docs, /redoc) are off by
+  # default and the routes are not registered (404). Set to "true" to expose them
+  # publicly with NO authentication.
+  ENABLE_PUBLIC_DOCS: ""
   # For sending verification emails, true or false
   REQUIRE_EMAIL_VERIFICATION: ""
   # If unspecified then defaults to 'smtp.gmail.com'
@@ -1463,8 +1514,16 @@ configMap:
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
+  SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox-file-sync"
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
+
+# -- Craft sandbox identity/RBAC (rendered when configMap.ENABLE_CRAFT=true).
+craft:
+  # Required when ENABLE_CRAFT=true. The craft_sandbox terraform module's role_arn output.
+  sandboxFileSyncRoleArn: ""
+  # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
+  extraBoundServiceAccounts: []
 
 # -- Sandbox egress proxy.
 sandboxProxy:

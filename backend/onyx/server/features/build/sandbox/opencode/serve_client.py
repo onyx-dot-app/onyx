@@ -24,6 +24,7 @@ from typing import cast
 
 import httpx
 
+from onyx.server.features.build.api.packets import SubagentStartedPacket
 from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
@@ -45,7 +46,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-# Acp event union (kept narrow — only the types we actually translate to).
+# Event union (kept narrow — only the types we actually translate to).
 SandboxEvent = (
     AgentMessageChunk
     | AgentThoughtChunk
@@ -53,6 +54,7 @@ SandboxEvent = (
     | ToolCallProgress
     | PromptResponse
     | Error
+    | SubagentStartedPacket
     | SSEKeepalive
 )
 
@@ -115,6 +117,9 @@ class _TurnState:
     user_message_ids: set[str] = field(default_factory=set)
     # `task` callID → claimed child session (parallel tasks get distinct children).
     task_child_by_call: dict[str, str] = field(default_factory=dict)
+    # Descendant sessions share this parent turn stream but not opencode-local
+    # ids. Keep each child session's message/part/tool caches isolated.
+    child_states: dict[str, _TurnState] = field(default_factory=dict)
     # Last LLM finish reason seen on any assistant message.updated. Only the
     # terminator (fired from session.idle/status) consumes it — message.updated
     # itself is per-step and can't terminate the turn.
@@ -337,6 +342,57 @@ def _is_assistant_message(
     return _hydrate_message(state, msg_id, fetch_message) == "assistant"
 
 
+def _emit_text_delta(
+    props: dict[str, Any],
+    state: _TurnState,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None,
+) -> Iterable[SandboxEvent]:
+    field_name = props.get("field")
+    delta = props.get("delta")
+    part_id = props.get("partID")
+    msg_id = props.get("messageID")
+    if not isinstance(delta, str) or not isinstance(part_id, str):
+        return
+    if not delta:
+        return
+    # Assistant-only filter. Deltas race ~300ms ahead of message.updated;
+    # _is_assistant_message hydrates via REST when the role is unknown.
+    if not _is_assistant_message(state, msg_id, fetch_message):
+        return
+    if field_name != "text":
+        # Non-text fields (e.g. tool input streaming, future extensions)
+        # have no sandbox-event mapping yet. Drop silently.
+        return
+    # Route by the PART'S TYPE (not the delta's ``field``, which is
+    # always "text" because that's the part attribute being updated).
+    # opencode emits reasoning content on parts with ``type=reasoning``
+    # and visible text on parts with ``type=text``. The part type is
+    # recorded from prior ``message.part.updated`` events.
+    part_type = state.part_types.get(part_id, "text")
+    if part_type == "reasoning":
+        # Track reasoning accumulator the same way as text so the
+        # post-delta ``message.part.updated`` reconciliation doesn't
+        # double-emit. partID is unique across types, so they share
+        # ``state.local_text`` without collision.
+        state.local_text[part_id] = state.local_text.get(part_id, "") + delta
+        yield AgentThoughtChunk.model_validate(
+            {
+                "sessionUpdate": "agent_thought_chunk",
+                "content": {"type": "text", "text": delta},
+            }
+        )
+    elif part_type == "text":
+        state.local_text[part_id] = state.local_text.get(part_id, "") + delta
+        yield AgentMessageChunk.model_validate(
+            {
+                "sessionUpdate": "agent_message_chunk",
+                "content": {"type": "text", "text": delta},
+            }
+        )
+    # Other part types (step-start, step-finish, tool, ...) don't carry
+    # user-visible text — ignore.
+
+
 # ---------------------------------------------------------------------------
 # translate_opencode_event — translation has no I/O of its own. Hydration of
 # unknown messageIDs (the delta-before-message.updated race) is delegated to
@@ -363,12 +419,23 @@ def _is_descendant_of(
     return False
 
 
+def _state_for_session(state: _TurnState, session_id: str) -> _TurnState:
+    if session_id == state.session_id:
+        return state
+    child_state = state.child_states.get(session_id)
+    if child_state is None:
+        child_state = _TurnState(session_id=session_id)
+        state.child_states[session_id] = child_state
+    return child_state
+
+
 def translate_opencode_event(
     raw: dict[str, Any],
     state: _TurnState,
     fetch_message: Callable[[str], dict[str, Any] | None] | None = None,
     parent_resolver: Callable[[str], str | None] | None = None,
     children_resolver: Callable[[str], list[str]] | None = None,
+    fetch_message_by_session: Callable[[str, str], dict[str, Any] | None] | None = None,
 ) -> Iterable[SandboxEvent]:
     """Convert one opencode ``/event`` payload into zero-or-more SandboxEvents.
 
@@ -402,71 +469,92 @@ def translate_opencode_event(
         if isinstance(info, dict):
             sess_id = info.get("sessionID")
 
+    if etype == "session.created":
+        info = props.get("info") or {}
+        if not isinstance(info, dict):
+            return
+        child_id = info.get("id")
+        parent_id = info.get("parentID")
+        if (
+            isinstance(child_id, str)
+            and isinstance(parent_id, str)
+            and parent_id == state.session_id
+        ):
+            yield SubagentStartedPacket(
+                subagent_session_id=child_id,
+                parent_session_id=parent_id,
+            )
+        return
+
     if isinstance(sess_id, str) and sess_id != state.session_id:
-        # Event from another session. Forward ONLY descendant tool events,
-        # tagged so the frontend can route them to the right subagent. Child
-        # text/reasoning are dropped for v1 (routing them through
-        # _is_assistant_message would 404: fetch_message is bound to the
-        # parent session).
+        # Event from another session. Forward descendant text/thought/tool
+        # events tagged so the frontend can route them to the live subagent.
         if not _is_descendant_of(sess_id, state.session_id, parent_resolver):
             return  # unrelated session — drop as before
+
+        child_meta = {"sessionId": sess_id, "parentSessionId": state.session_id}
+        child_state = _state_for_session(state, sess_id)
+
+        if etype == "message.updated":
+            info = props.get("info") or {}
+            if not isinstance(info, dict):
+                return
+            if info.get("role") != "assistant":
+                return
+            msg_id = info.get("id")
+            if isinstance(msg_id, str):
+                child_state.assistant_message_ids.add(msg_id)
+            return
+
+        child_fetch_message = (
+            (lambda mid: fetch_message_by_session(sess_id, mid))
+            if fetch_message_by_session is not None
+            else None
+        )
+
+        if etype == "message.part.delta":
+            for event in _emit_text_delta(props, child_state, child_fetch_message):
+                _merge_field_meta(event, child_meta)
+                yield event
+            return
+
         if etype != "message.part.updated":
             return
+
         part = props.get("part") or {}
-        if not isinstance(part, dict) or part.get("type") != "tool":
+        if not isinstance(part, dict):
             return
-        for event in _emit_tool_events(part, state):
-            _merge_field_meta(
-                event,
-                {"sessionId": sess_id, "parentSessionId": state.session_id},
-            )
+
+        part_type = part.get("type")
+        part_id_for_state = part.get("id")
+        if isinstance(part_id_for_state, str) and isinstance(part_type, str):
+            child_state.part_types[part_id_for_state] = part_type
+
+        if part_type == "reasoning":
+            if not _is_assistant_message(
+                child_state, part.get("messageID"), child_fetch_message
+            ):
+                return
+            events = _reconcile_reasoning_part(part, child_state)
+        elif part_type == "text":
+            if not _is_assistant_message(
+                child_state, part.get("messageID"), child_fetch_message
+            ):
+                return
+            events = _reconcile_text_part(part, child_state)
+        elif part_type == "tool":
+            events = _emit_tool_events(part, child_state)
+        else:
+            return
+
+        for event in events:
+            _merge_field_meta(event, child_meta)
             yield event
         return
 
     # ── streaming text deltas ────────────────────────────────────────
     if etype == "message.part.delta":
-        field_name = props.get("field")
-        delta = props.get("delta")
-        part_id = props.get("partID")
-        msg_id = props.get("messageID")
-        if not isinstance(delta, str) or not isinstance(part_id, str):
-            return
-        # Assistant-only filter. Deltas race ~300ms ahead of message.updated;
-        # _is_assistant_message hydrates via REST when the role is unknown.
-        if not _is_assistant_message(state, msg_id, fetch_message):
-            return
-        if field_name != "text":
-            # Non-text fields (e.g. tool input streaming, future extensions)
-            # have no sandbox-event mapping yet. Drop silently.
-            return
-        # Route by the PART'S TYPE (not the delta's ``field``, which is
-        # always "text" because that's the part attribute being updated).
-        # opencode emits reasoning content on parts with ``type=reasoning``
-        # and visible text on parts with ``type=text``. The part type is
-        # recorded from prior ``message.part.updated`` events.
-        part_type = state.part_types.get(part_id, "text")
-        if part_type == "reasoning":
-            # Track reasoning accumulator the same way as text so the
-            # post-delta ``message.part.updated`` reconciliation doesn't
-            # double-emit. partID is unique across types, so they share
-            # ``state.local_text`` without collision.
-            state.local_text[part_id] = state.local_text.get(part_id, "") + delta
-            yield AgentThoughtChunk.model_validate(
-                {
-                    "sessionUpdate": "agent_thought_chunk",
-                    "content": {"type": "text", "text": delta},
-                }
-            )
-        elif part_type == "text":
-            state.local_text[part_id] = state.local_text.get(part_id, "") + delta
-            yield AgentMessageChunk.model_validate(
-                {
-                    "sessionUpdate": "agent_message_chunk",
-                    "content": {"type": "text", "text": delta},
-                }
-            )
-        # Other part types (step-start, step-finish, tool, ...) don't
-        # carry user-visible text — ignore.
+        yield from _emit_text_delta(props, state, fetch_message)
         return
 
     # ── part lifecycle (tool calls + gap-fill anchors for text parts) ──
@@ -1128,23 +1216,26 @@ class OpencodeServeClient:
             )
 
         state = _TurnState(session_id=opencode_session_id)
+        turn_started_at = time.monotonic()
+        prompt_posted = False
 
         def fetch_message(mid: str) -> dict[str, Any] | None:
             return self.get_message(opencode_session_id, mid, directory=directory)
 
         sub = self._event_bus.subscribe(opencode_session_id)
         try:
-            # Block until the bus reader has the stream open, else we'd
-            # POST prompt_async and miss the first events of the turn.
-            if not self._event_bus.stream_ready.wait(
-                timeout=self._timeouts.connect_timeout
-            ):
-                yield Error.model_validate(
-                    {
-                        "code": -3,
-                        "message": "opencode /event stream did not become ready",
-                    }
-                )
+            # Wait until the bus reader has the /event stream open, else we'd
+            # POST prompt_async and miss the first events of the turn. The bus
+            # may be in a reconnect window after a transient disconnect, so do
+            # not fail on the short HTTP connect timeout; wait within the turn's
+            # wall-clock budget while emitting keepalives.
+            ready = yield from self._wait_for_event_stream_ready(
+                sub,
+                timeout,
+                turn_started_at,
+                should_interrupt=should_interrupt,
+            )
+            if not ready:
                 return
 
             try:
@@ -1155,6 +1246,7 @@ class OpencodeServeClient:
                     model_id,
                     directory=directory,
                 )
+                prompt_posted = True
             except httpx.HTTPStatusError as e:
                 yield Error.model_validate(
                     {
@@ -1169,9 +1261,10 @@ class OpencodeServeClient:
                 )
                 return
 
+            remaining_timeout = max(0.0, timeout - (time.monotonic() - turn_started_at))
             yield from self._consume_from_bus(
                 sub,
-                timeout,
+                remaining_timeout,
                 opencode_session_id,
                 state,
                 fetch_message,
@@ -1182,10 +1275,92 @@ class OpencodeServeClient:
             )
 
         except GeneratorExit:
-            self.abort(opencode_session_id, directory=directory)
+            if prompt_posted:
+                self.abort(opencode_session_id, directory=directory)
             raise
         finally:
             self._event_bus.unsubscribe(sub)
+
+    def _wait_for_event_stream_ready(
+        self,
+        sub: _Subscription,
+        timeout: float,
+        turn_started_at: float,
+        *,
+        should_interrupt: Callable[[], bool] | None = None,
+    ) -> Generator[SandboxEvent, None, bool]:
+        """Wait for the shared /event reader to be connected before prompting.
+
+        This absorbs short reconnect windows without dropping the turn. It still
+        respects the caller's turn budget and exits promptly if the bus gives up
+        and self-closes.
+        """
+        last_keepalive = time.monotonic()
+        last_interrupt_check = last_keepalive
+
+        while True:
+            if self._event_bus is None:
+                yield Error.model_validate(
+                    {
+                        "code": -3,
+                        "message": "opencode /event bus is unavailable",
+                    }
+                )
+                return False
+
+            if self._event_bus.closed:
+                yield Error.model_validate(
+                    {
+                        "code": -3,
+                        "message": "event bus closed before /event stream became ready",
+                    }
+                )
+                return False
+
+            if self._event_bus.stream_ready.is_set():
+                return True
+
+            now = time.monotonic()
+            if should_interrupt is not None and now - last_interrupt_check >= 1.0:
+                last_interrupt_check = now
+                if should_interrupt():
+                    yield PromptResponse.model_validate({"stopReason": "cancelled"})
+                    return False
+
+            remaining = timeout - (now - turn_started_at)
+            if remaining <= 0:
+                yield Error.model_validate(
+                    {
+                        "code": -3,
+                        "message": "opencode /event stream did not become ready",
+                    }
+                )
+                return False
+
+            wait_for = min(remaining, 1.0)
+            if self._event_bus.stream_ready.wait(timeout=wait_for):
+                return True
+
+            try:
+                raw = sub.queue.get_nowait()
+            except queue.Empty:
+                if time.monotonic() - last_keepalive >= SSE_KEEPALIVE_INTERVAL:
+                    yield SSEKeepalive()
+                    last_keepalive = time.monotonic()
+                continue
+
+            if raw is BUS_CLOSED_SENTINEL:
+                yield Error.model_validate(
+                    {
+                        "code": -3,
+                        "message": "event bus closed before /event stream became ready",
+                    }
+                )
+                return False
+
+            # Do not translate pre-prompt events; they belong to prior activity
+            # on this opencode session. Loop back to re-check stream readiness,
+            # timeout, and bus closure.
 
     def _consume_from_bus(
         self,
@@ -1260,8 +1435,12 @@ class OpencodeServeClient:
                 fetch_message,
                 parent_resolver=parent_resolver,
                 children_resolver=children_resolver,
+                fetch_message_by_session=lambda session_id,
+                message_id: self.get_message(
+                    session_id, message_id, directory=directory
+                ),
             ):
-                if isinstance(sandbox_event, PromptResponse):
+                if isinstance(sandbox_event, (Error, PromptResponse)):
                     terminated_locally = True
                 yield sandbox_event
 

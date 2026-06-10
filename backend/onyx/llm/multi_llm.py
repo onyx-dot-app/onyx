@@ -11,6 +11,7 @@ from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
+from onyx.configs.chat_configs import LLM_FIRST_CHUNK_MAX_RETRIES
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
@@ -901,8 +902,23 @@ class LitellmLLM(LLM):
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from litellm import HTTPHandler
+        from litellm.exceptions import APIConnectionError as LiteLLMAPIConnectionError
+        from litellm.exceptions import InternalServerError as LiteLLMInternalServerError
+        from litellm.exceptions import (
+            ServiceUnavailableError as LiteLLMServiceUnavailableError,
+        )
+        from litellm.exceptions import Timeout as LiteLLMTimeout
 
         from onyx.llm.model_response import from_litellm_model_response_stream
+
+        retryable_exceptions = (
+            LiteLLMTimeout,
+            LiteLLMAPIConnectionError,
+            LiteLLMServiceUnavailableError,
+            LiteLLMInternalServerError,
+        )
+        max_attempts: int = 1 + LLM_FIRST_CHUNK_MAX_RETRIES
+        yielded_any: bool = False
 
         # HTTPHandler Threading & Connection Pool Notes:
         # =============================================
@@ -933,39 +949,52 @@ class LitellmLLM(LLM):
         #    - litellm's InMemoryCache (used for client caching) is NOT thread-safe
         #    - Shared pools can have connections corrupted by other threads
         #    - Per-request HTTPHandler eliminates cross-thread interference
-        client = None
-        if is_true_openai_model(self.config.model_provider, self.config.model_name):
-            client = HTTPHandler(timeout=timeout_override or self._timeout)
+        for attempt in range(max_attempts):
+            client = None
+            if is_true_openai_model(self.config.model_provider, self.config.model_name):
+                client = HTTPHandler(timeout=timeout_override or self._timeout)
 
-        try:
-            response = cast(
-                LiteLLMCustomStreamWrapper,
-                self._completion(
-                    prompt=prompt,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=True,
-                    structured_response_format=structured_response_format,
-                    timeout_override=timeout_override,
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=True,
-                    reasoning_effort=reasoning_effort,
-                    user_identity=user_identity,
-                    client=client,
-                ),
-            )
+            try:
+                response = cast(
+                    LiteLLMCustomStreamWrapper,
+                    self._completion(
+                        prompt=prompt,
+                        tools=tools,
+                        tool_choice=tool_choice,
+                        stream=True,
+                        structured_response_format=structured_response_format,
+                        timeout_override=timeout_override,
+                        max_tokens=max_tokens,
+                        parallel_tool_calls=True,
+                        reasoning_effort=reasoning_effort,
+                        user_identity=user_identity,
+                        client=client,
+                    ),
+                )
 
-            for chunk in response:
-                model_response = from_litellm_model_response_stream(chunk)
+                for chunk in response:
+                    model_response = from_litellm_model_response_stream(chunk)
 
-                # Track LLM cost when usage info is available (typically in the last chunk)
-                if model_response.usage:
-                    self._track_llm_cost(model_response.usage)
+                    # Track LLM cost when usage info is available (typically in the last chunk)
+                    if model_response.usage:
+                        self._track_llm_cost(model_response.usage)
 
-                yield model_response
-        finally:
-            if client is not None:
-                client.close()
+                    yielded_any = True
+                    yield model_response
+                return
+            except retryable_exceptions as e:
+                if yielded_any or attempt >= max_attempts - 1:
+                    raise
+                logger.warning(
+                    "Retrying pre-chunk stream for model %s after %s on attempt %d/%d",
+                    self.config.model_name,
+                    type(e).__name__,
+                    attempt + 1,
+                    max_attempts,
+                )
+            finally:
+                if client is not None:
+                    client.close()
 
 
 @contextmanager

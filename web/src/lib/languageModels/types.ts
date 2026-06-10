@@ -7,6 +7,8 @@ export interface ModelConfiguration {
   max_input_tokens: number | null;
   supports_image_input: boolean;
   supports_reasoning: boolean;
+  /** True when this is the provider's recommended default model. */
+  is_recommended_default?: boolean;
   display_name?: string;
   /** Admin-set override that takes precedence over display_name everywhere in the UI. */
   custom_display_name?: string;

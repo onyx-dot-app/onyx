@@ -70,6 +70,7 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -1429,7 +1430,10 @@ class SlackConnector(
             slack_error = e.response.get("error", "")
             if slack_error == "ratelimited":
                 # Handle rate limiting specifically
-                retry_after = int(e.response.headers.get("Retry-After", 1))
+                retry_after = (
+                    parse_retry_after_seconds(e.response.headers.get("Retry-After"))
+                    or 1
+                )
                 logger.warning(
                     "Slack API rate limited during validation. Retry suggested after %s seconds. Proceeding with validation, but be aware that connector operations might be throttled.",
                     retry_after,
