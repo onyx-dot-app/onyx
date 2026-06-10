@@ -292,13 +292,13 @@ def setup_logger(
     extra: MutableMapping[str, Any] | None = None,
     propagate: bool = True,
 ) -> OnyxLoggingAdapter:
-    configure_noisy_dependency_loggers()
-
     logger = logging.getLogger(name)
 
     # If the logger already has handlers, assume it was already configured and return it.
     if logger.handlers:
         return OnyxLoggingAdapter(logger, extra=extra)
+
+    configure_noisy_dependency_loggers(max(logging.WARNING, log_level))
 
     logger.setLevel(log_level)
 

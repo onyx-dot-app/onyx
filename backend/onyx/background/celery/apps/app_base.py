@@ -528,7 +528,7 @@ def on_setup_logging(
         root_logger.addHandler(root_file_handler)
 
     root_logger.setLevel(effective_loglevel)
-    configure_noisy_dependency_loggers()
+    configure_noisy_dependency_loggers(max(logging.WARNING, effective_loglevel))
 
     # Emit the diagnostic after the root logger is configured so it goes through
     # the fresh handler at the level we just chose. (Before this point Python's
