@@ -26,6 +26,9 @@ def upgrade() -> None:
         "model_cost_override",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("model", sa.String(), nullable=False),
+        # Empty string (not NULL) for a provider-agnostic override, so the unique
+        # key works on every Postgres version (NULLS NOT DISTINCT is PG15+ only).
+        sa.Column("provider", sa.String(), nullable=False, server_default=""),
         sa.Column("input_cost_per_mtok", sa.Float(), nullable=False),
         sa.Column("output_cost_per_mtok", sa.Float(), nullable=False),
         # null cache rate bills cache reads at the input rate (litellm default).
@@ -39,7 +42,10 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("model", name="uq_model_cost_override_model"),
+        # provider+model so the same model can be priced per provider.
+        sa.UniqueConstraint(
+            "provider", "model", name="uq_model_cost_override_provider_model"
+        ),
     )
 
     op.create_table(
@@ -73,7 +79,8 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_user_usage_user_id", "user_usage", ["user_id"], unique=False)
+    # No standalone user_id index: uq_user_usage_dims leads with user_id, so
+    # Postgres uses it for user-only lookups.
     # Upsert key. provider is non-null ('' when absent), so a plain unique index
     # dedups correctly on every Postgres version (no PG15-only NULLS NOT DISTINCT).
     op.create_index(
@@ -108,7 +115,6 @@ def downgrade() -> None:
     op.alter_column("token_rate_limit", "token_budget", nullable=False)
     op.drop_column("token_rate_limit", "cost_budget_cents")
     op.drop_index("uq_user_usage_dims", table_name="user_usage")
-    op.drop_index("ix_user_usage_user_id", table_name="user_usage")
     op.drop_index("ix_user_usage_window_start", table_name="user_usage")
     op.drop_table("user_usage")
     op.drop_table("model_cost_override")
