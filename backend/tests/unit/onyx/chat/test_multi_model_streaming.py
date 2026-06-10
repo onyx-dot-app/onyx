@@ -21,6 +21,7 @@ from onyx.db.chat import set_preferred_response
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import ChatHeartbeat
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
@@ -317,6 +318,38 @@ class TestRunModels:
         stop_obj = stops[0].obj
         assert isinstance(stop_obj, OverallStop)
         assert stop_obj.stop_reason == "complete"
+
+    def test_idle_gap_emits_chat_heartbeat(self) -> None:
+        """Idle gaps in the drain loop emit ChatHeartbeat packets."""
+
+        def sleep_then_return(**_kwargs: Any) -> None:
+            time.sleep(0.2)
+
+        with (
+            patch(
+                "onyx.chat.process_message.CHAT_HEARTBEAT_INTERVAL_S",
+                0.05,
+            ),
+            patch(
+                "onyx.chat.process_message.run_llm_loop",
+                side_effect=sleep_then_return,
+            ),
+            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            packets = _run_models_collect(_make_setup(n_models=1))
+
+        heartbeats = [
+            p
+            for p in packets
+            if isinstance(p, Packet) and isinstance(p.obj, ChatHeartbeat)
+        ]
+        assert heartbeats
 
     def test_n1_emitted_packet_has_model_index_zero(self) -> None:
         """Single-model path: model_index is 0 (Emitter defaults model_idx=0)."""

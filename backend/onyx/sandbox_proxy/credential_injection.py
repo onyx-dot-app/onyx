@@ -4,10 +4,8 @@
 and asks each in turn whether it owns the request. The first one that claims
 renders its auth headers; the dispatcher writes them onto `flow.request` so the
 real secret never has to live in the sandbox pod. Resolution outcomes are
-explicit (`PASS_THROUGH` / `INJECTED` / `BLOCKED`) and the dispatcher never
-raises. The high-level `apply_or_block(flow, ctx)` does both the dispatch and
-the fail-closed 403 in one call; tests use `apply(flow, ctx)` when they want
-to inspect the outcome directly.
+explicit (`PASS_THROUGH` / `CLAIMED` / `INJECTED` / `BLOCKED`) and the
+dispatcher never raises.
 """
 
 from __future__ import annotations
@@ -19,8 +17,6 @@ from typing import Protocol
 from mitmproxy import http
 
 from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.sandbox_proxy.errors import http_403
-from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.utils.logger import setup_logger
 
@@ -63,6 +59,7 @@ class CredentialResolver(Protocol):
 
 class InjectionOutcome(Enum):
     PASS_THROUGH = "pass_through"
+    CLAIMED = "claimed"
     INJECTED = "injected"
     BLOCKED = "blocked"
 
@@ -84,7 +81,7 @@ class CredentialInjectionDispatcher:
             headers = resolver.resolve(flow.request, ctx)
         except CredentialUnavailableError as e:
             logger.warning(
-                "credential_injection.unavailable resolver=%s host=%s error=%s",
+                "credential_unavailable resolver=%s host=%s error=%r",
                 resolver_name,
                 host,
                 str(e),
@@ -92,32 +89,34 @@ class CredentialInjectionDispatcher:
             return InjectionOutcome.BLOCKED
         except Exception:
             logger.exception(
-                "credential_injection.resolver_error resolver=%s host=%s",
+                "credential_resolver_error resolver=%s host=%s",
                 resolver_name,
                 host,
             )
             return InjectionOutcome.BLOCKED
 
+        if not headers:
+            logger.debug(
+                "credential_claimed resolver=%s host=%s "
+                "header_count=%s header_names=%s",
+                resolver_name,
+                host,
+                0,
+                "-",
+            )
+            return InjectionOutcome.CLAIMED
+
         for name, value in headers.items():
             flow.request.headers[name] = value
         # Header NAMES only — never log the injected secret values.
-        logger.info(
-            "credential_injection.applied resolver=%s host=%s headers=%s",
+        logger.debug(
+            "credential_injected resolver=%s host=%s header_count=%s header_names=%s",
             resolver_name,
             host,
-            sorted(headers),
+            len(headers),
+            ",".join(sorted(headers)),
         )
         return InjectionOutcome.INJECTED
-
-    def apply_or_block(self, flow: http.HTTPFlow, ctx: InjectionContext) -> None:
-        """Run `apply`; on `BLOCKED`, write a sandbox-visible 403 to `flow`.
-
-        The single seam most call sites want — they don't need to inspect the
-        outcome, just to fail closed on it. Tests that need to assert on the
-        outcome directly call `apply` instead.
-        """
-        if self.apply(flow, ctx) is InjectionOutcome.BLOCKED:
-            flow.response = http_403(SandboxProxyError.CREDENTIAL_ERROR)
 
     def _pick(
         self, request: http.Request, ctx: InjectionContext
@@ -129,7 +128,7 @@ class CredentialInjectionDispatcher:
             except Exception:
                 # One buggy resolver must not deny the others a chance.
                 logger.exception(
-                    "credential_injection.claims_error resolver=%s host=%s",
+                    "credential_claim_error resolver=%s host=%s",
                     type(resolver).__name__,
                     request.host,
                 )

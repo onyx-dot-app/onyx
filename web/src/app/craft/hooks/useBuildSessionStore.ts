@@ -10,6 +10,7 @@ import {
   BuildMessage,
   Session,
   SessionHistoryItem,
+  SessionOrigin,
   SessionStatus,
   ToolCall,
   ToolCallStatus,
@@ -611,6 +612,7 @@ export interface BuildSessionData {
   /** Model this session runs on (from the row); seeds the composer picker. */
   agentProvider: string | null;
   agentModel: string | null;
+  origin: SessionOrigin;
   abortController: AbortController;
   lastAccessed: Date;
   isLoaded: boolean;
@@ -716,6 +718,7 @@ interface BuildSessionStore {
     toolCallId: string,
     updates: Partial<ToolCallState>
   ) => void;
+  cancelLatestInFlightToolCallStreamItem: (sessionId: string) => void;
   updateTodoListStreamItem: (
     sessionId: string,
     todoListId: string,
@@ -869,6 +872,7 @@ const createInitialSessionData = (
   sandbox: null,
   agentProvider: null,
   agentModel: null,
+  origin: "INTERACTIVE",
   abortController: new AbortController(),
   lastAccessed: new Date(),
   isLoaded: false,
@@ -1386,6 +1390,47 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     });
   },
 
+  cancelLatestInFlightToolCallStreamItem: (sessionId: string) => {
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      let latestInFlightIndex = -1;
+      for (let i = session.streamItems.length - 1; i >= 0; i--) {
+        const item = session.streamItems[i];
+        if (
+          item?.type === "tool_call" &&
+          (item.toolCall.status === "pending" ||
+            item.toolCall.status === "in_progress")
+        ) {
+          latestInFlightIndex = i;
+          break;
+        }
+      }
+
+      if (latestInFlightIndex === -1) return state;
+
+      const streamItems = session.streamItems.map((item, index) => {
+        if (index === latestInFlightIndex && item.type === "tool_call") {
+          return {
+            ...item,
+            toolCall: { ...item.toolCall, status: "cancelled" as const },
+          };
+        }
+        return item;
+      }) as StreamItem[];
+
+      const updatedSession: BuildSessionData = {
+        ...session,
+        streamItems,
+        lastAccessed: new Date(),
+      };
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
   updateTodoListStreamItem: (
     sessionId: string,
     todoListId: string,
@@ -1725,6 +1770,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
+        origin: sessionData.origin,
         activeTurnId: resolvedActiveTurnId,
         activeTurnIndex: resolvedActiveTurnIndex,
         activeTurnLocalOwner: isStreaming

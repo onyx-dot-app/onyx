@@ -11,6 +11,7 @@ from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
 from onyx.server.features.build.sandbox.models import FilesystemEntry as FileSystemEntry
 
@@ -109,6 +110,7 @@ class SessionResponse(BaseModel):
     sandbox: SandboxResponse | None
     artifacts: list[ArtifactResponse]
     sharing_scope: SharingScope
+    origin: SessionOrigin
     agent_provider: str | None
     agent_model: str | None
 
@@ -134,6 +136,7 @@ class SessionResponse(BaseModel):
             sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
             sharing_scope=session.sharing_scope,
+            origin=session.origin,
             agent_provider=session.agent_provider,
             agent_model=session.agent_model,
         )

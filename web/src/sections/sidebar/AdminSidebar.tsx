@@ -4,8 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import * as SidebarLayouts from "@/layouts/sidebar-layouts";
-import { useSidebarFolded } from "@/layouts/sidebar-layouts";
+import {
+  SidebarLayouts,
+  useSidebarFolded,
+  useSidebarState,
+} from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
@@ -23,7 +26,7 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
 import { markdown } from "@opal/utils";
 
 const SECTIONS = {
@@ -131,6 +134,7 @@ function buildItems(
 
   // 6. Organization (admin only)
   if (!isCurator) {
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
     }
@@ -333,8 +337,15 @@ function AdminSidebarInner() {
 }
 
 export default function AdminSidebar() {
+  const settings = useSettingsContext();
+  const showLogoWhenFolded =
+    settings.enterpriseSettings?.logo_display_style !== "name_only";
+
   return (
-    <SidebarLayouts.Root>
+    <SidebarLayouts.Root
+      logo={renderAppLogo}
+      showLogoWhenFolded={showLogoWhenFolded}
+    >
       <AdminSidebarInner />
     </SidebarLayouts.Root>
   );
