@@ -57,7 +57,7 @@ jobs:
     # sufficient disk space by default.
     runs-on:
       - runs-on
-      - runner=2cpu-linux-x64
+      - runner=4cpu-linux-x64
       - volume=100gb
       - run-id=${{ github.run_id }}-craft-compose-integration
       - extras=ecr-cache
