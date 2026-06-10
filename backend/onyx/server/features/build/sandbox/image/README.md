@@ -35,9 +35,9 @@ Dev builds never cut a `vX.Y.Z` version or move `:latest`. The nightly tag
 still cuts an auto-versioned `vX.Y.Z` + `latest` when the image context changed.
 Only `sandbox-dev` is supported, to keep Docker Hub free of one-off tags.
 
-When `SANDBOX_CONTAINER_IMAGE` is pinned to `:dev`, sandbox pods pull with
-`imagePullPolicy: Always` (instead of `IfNotPresent`) so re-pushed dev builds
-are picked up by new pods. See `docs/craft/image-architecture.md`.
+Environments that pin `SANDBOX_CONTAINER_IMAGE` to `:dev` must also set
+`SANDBOX_IMAGE_PULL_POLICY=Always` (default `IfNotPresent`) so re-pushed dev
+builds are picked up by new pods. See `docs/craft/image-architecture.md`.
 
 ### Building locally
 
