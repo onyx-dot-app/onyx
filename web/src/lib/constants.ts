@@ -37,12 +37,13 @@ export const TENANT_ID_COOKIE_NAME = "onyx_tid";
 export const SERVER_SIDE_ONLY__AUTH_COOKIE_NAME =
   process.env.AUTH_COOKIE_NAME || "fastapiusersauth";
 
-// All-or-nothing runtime switch (env change + restart, no rebuild):
-// src/proxy.ts redirects /nrf* to / and drops the chrome-extension:
-// frame-ancestors allowance, so nothing in the app is embeddable by the
-// Chrome extension.
-export const SERVER_SIDE_ONLY__DISABLE_NRF_PAGE =
-  process.env.DISABLE_NRF_PAGE?.toLowerCase() === "true";
+// All-or-nothing runtime switch (env change + restart, no rebuild) for the
+// /nrf pages the Chrome extension embeds. Off by default: src/proxy.ts
+// redirects /nrf* to / and emits no chrome-extension: frame-ancestors
+// allowance, so nothing in the app is extension-embeddable until a
+// deployment opts in.
+export const SERVER_SIDE_ONLY__NRF_PAGE_ENABLED =
+  process.env.ENABLE_NRF_PAGE?.toLowerCase() === "true";
 
 export const SEARCH_TYPE_COOKIE_NAME = "search_type";
 export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";

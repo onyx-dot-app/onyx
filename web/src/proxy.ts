@@ -5,7 +5,7 @@ import {
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_TYPE,
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
-  SERVER_SIDE_ONLY__DISABLE_NRF_PAGE,
+  SERVER_SIDE_ONLY__NRF_PAGE_ENABLED,
 } from "./lib/constants";
 import { buildCspHeader } from "./lib/security-headers";
 
@@ -40,12 +40,12 @@ const EE_ROUTES = [
   "/agents/stats",
 ];
 
-// Clickjacking protection. Pages get frame-ancestors 'self', except the /nrf
-// pages embedded by the Chrome extension iframes — the extension ID differs
-// between store and unpacked installs, so the scheme is allowed instead.
-// Emitted here (not next.config.js, which is resolved at build time) so the
-// DISABLE_NRF_PAGE env switch works at runtime; see security-headers.js for
-// why the full CSP must be emitted.
+// Clickjacking protection. Pages get frame-ancestors 'self'; deployments
+// that opt in via ENABLE_NRF_PAGE relax the /nrf pages to chrome-extension:
+// so the Chrome extension can embed them (its ID differs between store and
+// unpacked installs, so the scheme is allowed instead). Emitted here (not
+// next.config.js, which is resolved at build time) so the switch works at
+// runtime; see security-headers.js for why the full CSP must be emitted.
 const STRICT_CSP_HEADER = buildCspHeader("'self'");
 const EXTENSION_EMBEDDABLE_CSP_HEADER = buildCspHeader(
   "'self' chrome-extension:"
@@ -61,7 +61,7 @@ function withFrameProtectionHeaders(
 ): NextResponse {
   const pathname = request.nextUrl.pathname;
   const isExtensionEmbeddable =
-    !SERVER_SIDE_ONLY__DISABLE_NRF_PAGE && isNrfRoute(pathname);
+    SERVER_SIDE_ONLY__NRF_PAGE_ENABLED && isNrfRoute(pathname);
 
   response.headers.set(
     "Content-Security-Policy",
@@ -76,10 +76,10 @@ function withFrameProtectionHeaders(
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // With /nrf disabled the pages are unreachable and the chrome-extension:
-  // allowance is never emitted, so the extension can't frame anything — the
-  // redirect target / carries frame-ancestors 'self'.
-  if (SERVER_SIDE_ONLY__DISABLE_NRF_PAGE && isNrfRoute(pathname)) {
+  // Unless a deployment opts in, the /nrf pages are unreachable and the
+  // chrome-extension: allowance is never emitted, so the extension can't
+  // frame anything — the redirect target / carries frame-ancestors 'self'.
+  if (!SERVER_SIDE_ONLY__NRF_PAGE_ENABLED && isNrfRoute(pathname)) {
     return withFrameProtectionHeaders(
       request,
       NextResponse.redirect(new URL("/", request.url))
