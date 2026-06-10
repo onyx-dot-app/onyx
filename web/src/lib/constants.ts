@@ -37,6 +37,13 @@ export const TENANT_ID_COOKIE_NAME = "onyx_tid";
 export const SERVER_SIDE_ONLY__AUTH_COOKIE_NAME =
   process.env.AUTH_COOKIE_NAME || "fastapiusersauth";
 
+// Runtime kill switch for the clickjacking protection headers (CSP
+// frame-ancestors + X-Frame-Options) emitted by src/proxy.ts. Read at server
+// start, so it can be flipped with an env change + restart — no rebuild.
+// Server-side only: read in the proxy (middleware).
+export const SERVER_SIDE_ONLY__DISABLE_FRAME_PROTECTION =
+  process.env.DISABLE_FRAME_PROTECTION?.toLowerCase() === "true";
+
 export const SEARCH_TYPE_COOKIE_NAME = "search_type";
 export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
 

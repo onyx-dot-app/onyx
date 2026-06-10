@@ -5,7 +5,9 @@ import {
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_TYPE,
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
+  SERVER_SIDE_ONLY__DISABLE_FRAME_PROTECTION,
 } from "./lib/constants";
+import { buildCspHeader } from "./lib/security-headers";
 
 // Authentication cookie names (matches backend constants)
 const ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
@@ -20,24 +22,13 @@ const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
 // be run before the config is defined e.g. if we try and do a .map it will complain
 export const config = {
   matcher: [
-    // Auth-protected routes (for middleware auth check)
-    "/app/:path*",
-    "/admin/:path*",
-    "/agents/:path*",
-    "/connector/:path*",
-
-    // Enterprise Edition routes (for /ee rewriting)
-    // These are ONLY the EE-specific routes that should be rewritten
-    "/admin/groups/:path*",
-    "/admin/performance/usage/:path*",
-    "/admin/performance/query-history/:path*",
-    "/admin/theme/:path*",
-    "/admin/performance/custom-analytics/:path*",
-    "/admin/standard-answer/:path*",
-    "/agents/stats/:path*",
-
-    // Cloud only
-    "/admin/billing/:path*",
+    // Match everything except /api (proxied to the backend — framing headers
+    // are meaningless on API responses and the proxy would add per-request
+    // overhead) and Next.js internals/static assets. The catch-all is needed
+    // so the clickjacking protection headers below cover every page; the
+    // auth check and /ee rewriting are still gated on their route prefixes
+    // inside proxy() itself.
+    "/((?!api$|api/|_next/|favicon.ico).*)",
   ],
 };
 
@@ -51,6 +42,47 @@ const EE_ROUTES = [
   "/admin/standard-answer",
   "/agents/stats",
 ];
+
+// frame-ancestors controls who may embed a page in an iframe (clickjacking
+// protection). Pages get 'self' only, except the /nrf pages which are
+// embedded by the Chrome extension (new tab + side panel). The extension's
+// origin can't be pinned to an ID since unpacked dev installs and store
+// installs have different IDs, so the chrome-extension: scheme is allowed
+// for those routes only.
+//
+// These headers are emitted here rather than from next.config.js headers()
+// because config headers are resolved at build time — emitting them at
+// request time is what makes the DISABLE_FRAME_PROTECTION kill switch work
+// without a rebuild. Headers set here REPLACE same-named headers from
+// next.config.js, which is why the full CSP (shared via security-headers.js)
+// is emitted and not just the frame-ancestors directive.
+const STRICT_CSP_HEADER = buildCspHeader("'self'");
+const EXTENSION_EMBEDDABLE_CSP_HEADER = buildCspHeader(
+  "'self' chrome-extension:"
+);
+
+function withFrameProtectionHeaders(
+  request: NextRequest,
+  response: NextResponse
+): NextResponse {
+  if (SERVER_SIDE_ONLY__DISABLE_FRAME_PROTECTION) {
+    return response;
+  }
+
+  const pathname = request.nextUrl.pathname;
+  const isExtensionEmbeddable =
+    pathname === "/nrf" || pathname.startsWith("/nrf/");
+
+  response.headers.set(
+    "Content-Security-Policy",
+    isExtensionEmbeddable ? EXTENSION_EMBEDDABLE_CSP_HEADER : STRICT_CSP_HEADER
+  );
+  // Legacy fallback for browsers without CSP frame-ancestors support. Modern
+  // browsers ignore this header when frame-ancestors is present, so the
+  // chrome-extension: allowance still applies for the /nrf pages.
+  response.headers.set("X-Frame-Options", "SAMEORIGIN");
+  return response;
+}
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
@@ -74,7 +106,10 @@ export async function proxy(request: NextRequest) {
       // Preserve full URL including query params and hash for deep linking
       const fullPath = pathname + request.nextUrl.search + request.nextUrl.hash;
       loginUrl.searchParams.set("next", fullPath);
-      return NextResponse.redirect(loginUrl);
+      return withFrameProtectionHeaders(
+        request,
+        NextResponse.redirect(loginUrl)
+      );
     }
   }
 
@@ -82,9 +117,9 @@ export async function proxy(request: NextRequest) {
   if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
     if (EE_ROUTES.some((route) => pathname.startsWith(route))) {
       const newUrl = new URL(`/ee${pathname}`, request.url);
-      return NextResponse.rewrite(newUrl);
+      return withFrameProtectionHeaders(request, NextResponse.rewrite(newUrl));
     }
   }
 
-  return NextResponse.next();
+  return withFrameProtectionHeaders(request, NextResponse.next());
 }
