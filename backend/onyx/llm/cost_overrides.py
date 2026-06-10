@@ -21,14 +21,17 @@ _OverrideRates = tuple[float, float, float | None]
 # the TTL bounds how long sibling workers serve stale rates after an admin edit.
 _CACHE_TTL_SECONDS = 60.0
 _cache_lock = threading.Lock()
-# tenant_id -> (loaded_at_monotonic, {model: rates})
-_cache: dict[str, tuple[float, dict[str, _OverrideRates]]] = {}
+# Keyed by (provider, model) so the same model can carry per-provider rates;
+# provider is "" for a provider-agnostic override.
+_OverrideKey = tuple[str, str]
+# tenant_id -> (loaded_at_monotonic, {(provider, model): rates})
+_cache: dict[str, tuple[float, dict[_OverrideKey, _OverrideRates]]] = {}
 
 
-def _load_cache(db_session: Session) -> dict[str, _OverrideRates]:
+def _load_cache(db_session: Session) -> dict[_OverrideKey, _OverrideRates]:
     rows = db_session.execute(select(ModelCostOverride)).scalars().all()
     return {
-        r.model: (
+        (r.provider, r.model): (
             r.input_cost_per_mtok,
             r.output_cost_per_mtok,
             r.cache_read_cost_per_mtok,
@@ -37,9 +40,18 @@ def _load_cache(db_session: Session) -> dict[str, _OverrideRates]:
     }
 
 
-def get_override(db_session: Session, model: str) -> _OverrideRates | None:
-    """Return (input_per_mtok, output_per_mtok) for `model` in the current
-    tenant, or None if unset."""
+def _lookup(
+    snapshot: dict[_OverrideKey, _OverrideRates], model: str, provider: str
+) -> _OverrideRates | None:
+    # Prefer a provider-specific rate, else the provider-agnostic ("") one.
+    return snapshot.get((provider, model)) or snapshot.get(("", model))
+
+
+def get_override(
+    db_session: Session, model: str, provider: str = ""
+) -> _OverrideRates | None:
+    """Return the (input, output, cache_read) rates for `model` (+ optional
+    `provider`) in the current tenant, or None if unset."""
     tenant_id = get_current_tenant_id()
     with _cache_lock:
         entry = _cache.get(tenant_id)
@@ -55,10 +67,10 @@ def get_override(db_session: Session, model: str) -> _OverrideRates | None:
                 logger.exception("Failed to load model cost overrides")
                 if entry is None:
                     return None
-                return entry[1].get(model)
+                return _lookup(entry[1], model, provider)
             entry = (time.monotonic(), snapshot)
             _cache[tenant_id] = entry
-        return entry[1].get(model)
+        return _lookup(entry[1], model, provider)
 
 
 def invalidate_override_cache() -> None:
@@ -83,8 +95,10 @@ def upsert_override(
     input_cost_per_mtok: float,
     output_cost_per_mtok: float,
     cache_read_cost_per_mtok: float | None = None,
+    provider: str = "",
 ) -> ModelCostOverride:
-    """Set the negotiated rates for `model`, creating or replacing its row.
+    """Set the negotiated rates for (`provider`, `model`), creating or replacing
+    its row. `provider` is "" for a provider-agnostic override.
 
     Rates are USD per million tokens; a null cache rate bills cache reads at the
     input rate. Caller invalidates the cache and commits.
@@ -96,11 +110,15 @@ def upsert_override(
             raise ValueError("cost override rates must be non-negative")
 
     row = db_session.execute(
-        select(ModelCostOverride).where(ModelCostOverride.model == model)
+        select(ModelCostOverride).where(
+            ModelCostOverride.provider == provider,
+            ModelCostOverride.model == model,
+        )
     ).scalar_one_or_none()
 
     if row is None:
         row = ModelCostOverride(
+            provider=provider,
             model=model,
             input_cost_per_mtok=input_cost_per_mtok,
             output_cost_per_mtok=output_cost_per_mtok,
@@ -116,10 +134,13 @@ def upsert_override(
     return row
 
 
-def delete_override(db_session: Session, model: str) -> bool:
-    """Remove the override for `model`; False if there was none."""
+def delete_override(db_session: Session, model: str, provider: str = "") -> bool:
+    """Remove the override for (`provider`, `model`); False if there was none."""
     row = db_session.execute(
-        select(ModelCostOverride).where(ModelCostOverride.model == model)
+        select(ModelCostOverride).where(
+            ModelCostOverride.provider == provider,
+            ModelCostOverride.model == model,
+        )
     ).scalar_one_or_none()
     if row is None:
         return False

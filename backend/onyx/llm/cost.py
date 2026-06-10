@@ -62,7 +62,7 @@ def get_model_price_per_million(
     """
     if db_session is not None:
         try:
-            rates = cost_overrides.get_override(db_session, model)
+            rates = cost_overrides.get_override(db_session, model, provider or "")
         except Exception:
             logger.exception("Override lookup failed for model %s", model)
             rates = None
@@ -142,7 +142,7 @@ def compute_cost_cents(
     # Admin override beats everything, including image pricing.
     if db_session is not None:
         try:
-            rates = cost_overrides.get_override(db_session, model)
+            rates = cost_overrides.get_override(db_session, model, provider or "")
         except Exception:
             logger.exception("Override lookup failed for model %s", model)
             rates = None

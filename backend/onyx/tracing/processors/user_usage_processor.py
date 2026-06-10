@@ -84,6 +84,10 @@ class UserUsageTracingProcessor(TracingProcessor):
         self._thread.start()
 
     def on_span_end(self, span: Span[Any]) -> None:
+        # After shutdown the drain thread is gone, so anything enqueued now would
+        # sit unwritten forever — drop it instead.
+        if self._shutdown.is_set():
+            return
         # Never propagate into the span/LLM path.
         try:
             record = self._capture(span)
