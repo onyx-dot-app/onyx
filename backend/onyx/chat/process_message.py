@@ -1119,9 +1119,8 @@ def _run_models(
         for i in range(n_models):
             _persist_model_outcome(i, "post-steps")
 
-        # Normally reset in _stream_chat_turn's finally, but that generator can be
-        # abandoned on HTTP disconnect — without this the session shows "processing"
-        # forever after a disconnected run completes.
+        # _stream_chat_turn's own reset can be abandoned on disconnect; reset here
+        # so the session never sticks at "processing".
         try:
             set_processing_status(
                 chat_session_id=setup.chat_session.id,
@@ -1351,8 +1350,7 @@ def _run_models(
             with persist_lock:
                 all_finished: bool = finished_count[0] == n_models
                 running_count: int = n_models - finished_count[0]
-            # Workers that finished before drain_done was set saw is_last=False and
-            # skipped post-steps — no later worker will run them, so do it here.
+            # No worker runs post-steps if they all finished before drain_done was set.
             if all_finished:
                 _run_post_steps()
             else:
