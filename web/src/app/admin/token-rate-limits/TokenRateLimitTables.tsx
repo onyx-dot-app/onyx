@@ -55,7 +55,7 @@ export const TokenRateLimitTable = ({
 
   const handleEnabledChange = (id: number) => {
     const tokenRateLimit = tokenRateLimits.find(
-      (tokenRateLimit) => tokenRateLimit.token_id === id
+      (tokenRateLimit) => tokenRateLimit.token_id === id,
     );
 
     if (!tokenRateLimit) {
@@ -115,7 +115,7 @@ export const TokenRateLimitTable = ({
             <TableHead>Enabled</TableHead>
             {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
             <TableHead>Time Window</TableHead>
-            <TableHead>Token Budget (Thousands)</TableHead>
+            <TableHead>Token Budget</TableHead>
             <TableHead>Cost Budget (USD)</TableHead>
             {isAdmin && <TableHead>Delete</TableHead>}
           </TableRow>
@@ -207,7 +207,7 @@ export const GenericTokenRateLimitTable = ({
 }) => {
   const { data, isLoading, error } = useSWR<TokenRateLimitDisplay[]>(
     fetchUrl,
-    errorHandlingFetcher
+    errorHandlingFetcher,
   );
 
   if (isLoading) {
