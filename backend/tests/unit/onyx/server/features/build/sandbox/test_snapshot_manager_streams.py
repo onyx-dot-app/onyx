@@ -15,6 +15,7 @@ from typing import IO
 
 import pytest
 
+import onyx.server.features.build.sandbox.manager.snapshot_manager as snapshot_manager_mod
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import FileStore
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
@@ -95,18 +96,21 @@ def test_create_snapshot_from_stream_persists_with_expected_metadata(
     assert saved["size"] == len(payload)
 
 
-def test_create_snapshot_from_stream_uses_size_hint(
+def test_create_snapshot_from_stream_rejects_oversized_stream(
+    store: _FakeFileStore,
     manager: SnapshotManager,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With a size hint, the manager skips spooling to disk and trusts the caller."""
-    payload = b"hint-data"
-    _id, _path, size = manager.create_snapshot_from_stream(
-        stream=io.BytesIO(payload),
-        sandbox_id="s",
-        tenant_id="t",
-        size_hint=999,
-    )
-    assert size == 999
+    monkeypatch.setattr(snapshot_manager_mod, "MAX_SNAPSHOT_ARCHIVE_BYTES", 4)
+
+    with pytest.raises(RuntimeError, match="exceeds"):
+        manager.create_snapshot_from_stream(
+            stream=io.BytesIO(b"12345"),
+            sandbox_id="s",
+            tenant_id="t",
+        )
+
+    assert store.saved == []
 
 
 def test_restore_snapshot_to_stream_writes_stored_bytes(
@@ -122,3 +126,21 @@ def test_restore_snapshot_to_stream_writes_stored_bytes(
     sink = io.BytesIO()
     manager.restore_snapshot_to_stream(storage_path, sink)
     assert sink.getvalue() == payload
+
+
+def test_restore_snapshot_to_stream_rejects_oversized_snapshot(
+    manager: SnapshotManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = b"12345"
+    _id, storage_path, _size = manager.create_snapshot_from_stream(
+        stream=io.BytesIO(payload),
+        sandbox_id="s",
+        tenant_id="t",
+    )
+    monkeypatch.setattr(snapshot_manager_mod, "MAX_SNAPSHOT_ARCHIVE_BYTES", 4)
+
+    sink = io.BytesIO()
+    with pytest.raises(RuntimeError, match="exceeds"):
+        manager.restore_snapshot_to_stream(storage_path, sink)
+    assert sink.getvalue() == b""

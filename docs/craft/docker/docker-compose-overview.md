@@ -68,11 +68,11 @@ These must end up in `~/onyx_data/deployment/.env` after install:
 
 | Variable | Required? | Notes |
 |---|---|---|
-| `ENABLE_CRAFT=true` | yes | Install script sets this only on **fresh-install** path. If you ran `--include-craft` against an existing `.env`, append manually. |
-| `SANDBOX_BACKEND=docker` | yes | Same as above — install script gates on fresh-install. |
+| `ENABLE_CRAFT=true` | yes | `--include-craft` sets this (fresh installs and existing `.env`). |
+| `SANDBOX_BACKEND=docker` | yes | `--include-craft` sets this alongside `ENABLE_CRAFT`. |
 | `SANDBOX_API_SERVER_URL=http://host.docker.internal:3001` | yes | Provision raises `ValueError("SANDBOX_API_SERVER_URL must be set")` without it. Must be a URL the sandbox container can reach **from the `onyx_craft_sandbox` bridge** — compose-internal hostnames (`api_server`, `nginx`) won't resolve there. Match the port to `HOST_PORT`. |
 | `HOST_PORT=3001` | only if 3000 conflicts | Default is 3000; nginx binds this on the host. Free up 3000 or change here. |
-| `IMAGE_TAG=craft-edge` | yes | `craft-latest` lags `main` by weeks and predates the Docker sandbox backend (see [image staleness](#image-staleness--published-tags-lag-main) below). Use `craft-edge`. |
+| `IMAGE_TAG=edge` | recommended | Use a normal tag (`edge` from `main`, or a release `vX.Y.Z`). There are **no** craft-specific images — Craft is enabled at runtime via `ENABLE_CRAFT=true` (above). See [image architecture](../image-architecture.md). |
 | `ONYX_BACKEND_IMAGE` | only when running unreleased PRs | Lets you override just the backend image without forcing model-server / web-server to the same tag. |
 | `SANDBOX_CONTAINER_IMAGE` | only when running unreleased PRs | Same idea for the sandbox image itself. Default is a pinned tag like `onyxdotapp/sandbox:v0.1.44`. |
 | `AGENT_TRANSPORT=serve` | for serve transport | `docker-compose.craft.yml` defaults this to `serve` (post-#11402); override to `acp` for the rollback path. Reaches the sandbox container via env passthrough. |
@@ -122,17 +122,15 @@ adapt the prompts (Standard mode = `2`, keep existing env = blank).
 
 ### 3. Fix the .env
 
-When the installer detects an existing `.env`, it takes the
-"update / restart" branch and skips the Craft-specific env writes. You
-need to append them yourself:
+On an existing `.env`, `--include-craft` writes `ENABLE_CRAFT=true` and
+`SANDBOX_BACKEND=docker` for you (on both the update and restart paths). It
+does **not** set the host-specific values, so append those yourself:
 
 ```bash
 cat >> ~/onyx_data/deployment/.env <<'ENV'
-ENABLE_CRAFT=true
-SANDBOX_BACKEND=docker
 SANDBOX_API_SERVER_URL=http://host.docker.internal:3001
 HOST_PORT=3001
-IMAGE_TAG=craft-edge
+IMAGE_TAG=edge
 ENV
 ```
 
@@ -185,7 +183,7 @@ You should see:
 
 ## Running an unreleased PR (local image builds)
 
-Published `craft-edge` is built from `main`. If you're testing a PR that
+Published `edge` is built from `main`. If you're testing a PR that
 isn't merged yet, the published images **will not contain your code**.
 Build the affected images locally.
 
@@ -376,18 +374,17 @@ environment:
 ### Image staleness: published tags lag main
 
 Symptom A: api_server crashes on boot with
-`ValueError: 'docker' is not a valid SandboxBackend`. Cause: the
-`craft-latest` tag is built off a release (e.g. `v4.0.0`) that predates
-the Docker sandbox backend (PR #11222, May 20). The `SandboxBackend`
-enum in that image only has `LOCAL` and `KUBERNETES`.
+`ValueError: 'docker' is not a valid SandboxBackend`. Cause: you're on a
+release image older than the Docker sandbox backend (PR #11222, May 20) —
+its `SandboxBackend` enum only has `LOCAL`/`KUBERNETES`.
 
-Fix: switch to `craft-edge` (rolling tag built from `main`):
+Fix: use `edge` (built from `main`) or a release new enough to include it:
 
 ```
-IMAGE_TAG=craft-edge
+IMAGE_TAG=edge
 ```
 
-Symptom B: `craft-edge` works for the Docker backend but is missing PR
+Symptom B: `edge` works for the Docker backend but is missing PR
 #11402's serve transport additions. `ensure_opencode_session()`
 returns `None` because base.py's stub never gets overridden by
 `DockerSandboxManager` (which doesn't implement `_serve_base_url` /

@@ -262,6 +262,7 @@ class DocumentSource(str, Enum):
     IMAP = "imap"
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
+    BRAINTRUST = "braintrust"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -740,4 +741,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DRUPAL_WIKI: "Knowledge base pages and content",
     DocumentSource.IMAP: "Email messages and threads",
     DocumentSource.TESTRAIL: "Test cases and QA management",
+    DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
 }

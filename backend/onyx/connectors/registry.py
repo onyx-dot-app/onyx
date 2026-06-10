@@ -220,6 +220,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.testrail.connector",
         class_name="TestRailConnector",
     ),
+    DocumentSource.BRAINTRUST: ConnectorMapping(
+        module_path="onyx.connectors.braintrust.connector",
+        class_name="BraintrustConnector",
+    ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
         module_path="onyx.connectors.mock_connector.connector",

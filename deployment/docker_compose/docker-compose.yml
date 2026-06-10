@@ -42,8 +42,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-      args:
-        - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
@@ -123,8 +121,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
-      args:
-        - ENABLE_CRAFT=${ENABLE_CRAFT:-false}
     command: >
       /bin/sh -c "
       if [ -f /etc/ssl/certs/custom-ca.crt ]; then

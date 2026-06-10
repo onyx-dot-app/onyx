@@ -13,11 +13,11 @@ Related files:
 - `backend/onyx/server/features/build/sandbox/kubernetes/scripts/bench-sandbox-spinup.sh`
 - `deployment/helm/charts/onyx/templates/sandbox-namespace.yaml`
 
-## SHA-pinned base + sidecar images
+## SHA-pinned base + helper images
 
-`node:20-slim`, `oven/bun:1.3.14`, and `peakcom/s5cmd:v2.3.0` are all
-SHA-pinned in the Dockerfile (`@sha256:...`). Same precedent as
-`backend/Dockerfile` and `web/Dockerfile`. Bump via:
+`node:20-slim` and `oven/bun:1.3.14` are SHA-pinned in the Dockerfile
+(`@sha256:...`). Same precedent as `backend/Dockerfile` and
+`web/Dockerfile`. Bump via:
 
 ```
 docker pull <image>:<tag>
@@ -27,35 +27,24 @@ docker inspect <image>:<tag> --format '{{index .RepoDigests 0}}'
 and update both the tag and the digest in the same commit so they don't
 drift.
 
-## s5cmd replaces the AWS CLI v2 layer
+## No storage client in the sandbox image
 
-The sandbox image used to `COPY --from=amazon/aws-cli:latest` (~250 MB of
-Python-bundled CLI v2) purely so `sandbox_daemon/snapshot.py` could shell
-out to `aws s3 cp - s3://...` for streaming snapshot upload/download.
+The sandbox image used to include a pod-side storage client for snapshot
+upload/download. That is no longer part of the architecture: the sidecar tars
+and untars local filesystem state, and the API server persists snapshot bytes
+through the normal Onyx FileStore.
 
-The file-sync sidecar already moved off the AWS CLI in PR #8170
-("chad s5cmd > chud aws cli (mem overhead + speed)") for the same memory
-+ speed reasons that apply here. The snapshot daemon now does the same:
+Do not add AWS CLI, `s5cmd`, or provider-specific object-store CLIs back to the
+sandbox image for snapshots. If a future feature needs durable storage, route it
+through the API server and FileStore unless there is a strong reason to expand
+the sandbox's credential surface.
 
-| Operation | Old                         | New                |
-|-----------|-----------------------------|--------------------|
-| Upload    | `... \| aws s3 cp - s3://x` | `... \| s5cmd pipe s3://x` |
-| Download  | `aws s3 cp s3://x - \| ...` | `s5cmd cat s3://x \| ...` |
-
-Same streaming semantics, no memory buffering. The static binary is
-copied out of the upstream `peakcom/s5cmd` image via multi-stage COPY.
-
-If you reintroduce an AWS CLI dependency for some other reason — please
-don't. `s5cmd` and AWS SDKs in app code cover everything we need.
-
-## Multi-stage COPY for bun and s5cmd
+## Multi-stage COPY for bun
 
 We used to `curl -fsSL https://bun.sh/install | bash` at image-build
 time. That hit the public internet on every uncached layer rebuild and
 made builds vulnerable to bun.sh availability. The bun binary is now
 copied out of `oven/bun:<version>` (same pattern as `web/Dockerfile:15-16`).
-
-s5cmd is copied the same way from `peakcom/s5cmd:<version>`.
 
 `BUN_VERSION` and the COPY tag must be kept in sync.
 
@@ -198,7 +187,7 @@ warm = pod create + Ready with image already on the node.
 | `after-trimmed` (`ENABLE_SKILLS=false`, CI)   | **581 MB (−37%)** | **2.79 GB (−34%)** | **22.8 s (−25%)** | 923 ms |
 
 `after-trimmed` is the cumulative result of: dropping the AWS CLI layer,
-multi-stage COPYs for bun + s5cmd, SHA-pinning the base, gating
+multi-stage COPYs for bun, SHA-pinning the base, gating
 LibreOffice/poppler/fonts/pptxgenjs behind `ENABLE_SKILLS`, and trimming
 heavy ML libs (`opencv-python`, `scikit-learn`, `scikit-image`, `scipy`,
 `xgboost-cpu`, `markitdown` (→ `magika`+`onnxruntime`), `seaborn`,
@@ -277,7 +266,7 @@ delta without rebuilding locally.
 
 The bench creates a bare pod running `sleep` — it does **not** exercise
 the full `KubernetesSandboxManager.provision` + `setup_session_workspace`
-path (no sidecar S3 sync, no init container, no `bun install`, no
+path (no snapshot streaming, no init container, no `bun install`, no
 session config). For end-to-end session-spinup numbers, run a real
 session against a live cluster and time `provision()` →
 `setup_session_workspace()` via the manager directly.
@@ -290,12 +279,10 @@ overhead, not realistic prod cold-pull time. See the caveats under
 
 ## Snapshot daemon path quick reference
 
-`sandbox_daemon/snapshot.py` runs **inside** the sandbox container (not
-the file-sync sidecar). The sidecar is responsible for syncing the
-user's knowledge files from S3 (`/workspace/files/`); the daemon is
-responsible for session-level snapshots
-(`/workspace/sessions/<session_id>/{outputs,attachments,.opencode-data}`).
-Both shell out to `s5cmd`. Don't conflate them.
+`sandbox_daemon/snapshot.py` runs inside the sidecar process and only touches
+the shared pod filesystem. It is responsible for session-level snapshots under
+`/workspace/sessions/<session_id>/{outputs,attachments,.opencode-data}`.
+Storage is handled by the API server through FileStore.
 
 `node_modules` and `.next` are deliberately excluded from snapshots
 because (a) they're huge, (b) `restore_snapshot` rebuilds them via the

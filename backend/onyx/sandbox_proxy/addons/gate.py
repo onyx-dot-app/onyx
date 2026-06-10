@@ -54,7 +54,6 @@ from onyx.sandbox_proxy.logging_utils import full_log_id
 from onyx.sandbox_proxy.logging_utils import sandbox_log_label
 from onyx.sandbox_proxy.logging_utils import short_log_id
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
 
@@ -62,10 +61,6 @@ logger = setup_logger()
 
 # Bodies over this cap are fail-closed (rejected), not parsed by the matcher.
 PARSER_MAX_BODY_BYTES = 1_048_576
-
-# flow.metadata flag set in `requestheaders` for confirmed snapshot egress, so
-# `request` skips the body cap + matcher and lets the streamed upload through.
-_SNAPSHOT_STREAM_FLAG = "onyx_snapshot_stream"
 
 
 class _IdentityResolver(Protocol):
@@ -141,7 +136,6 @@ class GateAddon:
         cache_factory: CacheFactory,
         proxy_instance_id: str,
         credential_dispatcher: CredentialInjectionDispatcher,
-        snapshot_policy: SnapshotEgressPolicy | None = None,
         stream_responses: bool = True,
     ) -> None:
         self._identity = identity
@@ -149,7 +143,6 @@ class GateAddon:
         self._cache_factory = cache_factory
         self._proxy_instance_id = proxy_instance_id
         self._credential_dispatcher = credential_dispatcher
-        self._snapshot_policy = snapshot_policy
         self._stream_responses = stream_responses
         # Invariant: `_persist_approval_row` is the only writer;
         # `_await_decision`'s finally and the post-persist grant recheck are the
@@ -215,58 +208,11 @@ class GateAddon:
         if flow.response is not None:
             flow.response.stream = True
 
-    async def requestheaders(self, flow: http.HTTPFlow) -> None:
-        """Opt a tenant-scoped snapshot upload into unbuffered streaming.
-
-        Must run here, not in `request`: mitmproxy only honors
-        `flow.request.stream = True` before the body is read. Anything not
-        confirmed as the resolving tenant's snapshot egress falls through to
-        `request`'s normal cap + matcher path.
-        """
-        policy = self._snapshot_policy
-        if policy is None:
-            return
-        if not policy.host_matches(flow.request.host):
-            return
-
-        src_ip = self._extract_src_ip(flow)
-        if src_ip is None:
-            return
-        try:
-            sandbox = self._identity.resolve_sandbox(src_ip)
-        except Exception:
-            # Let `request` re-resolve and fail closed on the DB error.
-            return
-        if sandbox is None:
-            return
-
-        if not policy.should_stream(
-            host=flow.request.host,
-            port=flow.request.port,
-            path_components=tuple(flow.request.path_components),
-            tenant_id=sandbox.tenant_id,
-        ):
-            return
-
-        flow.request.stream = True
-        flow.metadata[_SNAPSHOT_STREAM_FLAG] = True
-        logger.info(
-            "snapshot_stream tenant=%s sandbox=%s host=%s method=%s",
-            sandbox.tenant_id,
-            sandbox_log_label(sandbox),
-            flow.request.host,
-            flow.request.method,
-        )
-
     async def request(self, flow: http.HTTPFlow) -> None:
         task = asyncio.current_task()
         if task is not None:
             self._inflight_tasks.add(task)
             task.add_done_callback(self._inflight_tasks.discard)
-
-        if flow.metadata.get(_SNAPSHOT_STREAM_FLAG):
-            # Already validated in `requestheaders`; body is streaming.
-            return
 
         gate_target = await self._resolve_and_match(flow)
         # Strip the in-band session tag so it never reaches the origin

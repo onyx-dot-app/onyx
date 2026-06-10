@@ -44,7 +44,6 @@ from onyx.sandbox_proxy.errors import SandboxProxyError
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
-from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from tests.unit.sandbox_proxy.conftest import make_flow
 from tests.unit.sandbox_proxy.conftest import make_matched_actions
 from tests.unit.sandbox_proxy.conftest import make_resolved_sandbox
@@ -1128,119 +1127,6 @@ async def test_request_strips_proxy_authorization_before_forward() -> None:
 
     assert flow.response is None  # forwarded
     assert "Proxy-Authorization" not in flow.request.headers
-
-
-# ---------------------------------------------------------------------------
-# requestheaders — tenant-scoped snapshot egress streaming (option B)
-# ---------------------------------------------------------------------------
-
-
-_SNAPSHOT_BUCKET = "onyx-sandbox-snapshots"
-
-
-def _snapshot_policy() -> SnapshotEgressPolicy:
-    # Path-style (MinIO-shaped) endpoint so the tenant-prefix check is load-bearing.
-    return SnapshotEgressPolicy(
-        bucket=_SNAPSHOT_BUCKET, endpoint_host="release-minio", endpoint_port=9000
-    )
-
-
-def _snapshot_flow(
-    *, tenant_segment: str, host: str = "release-minio"
-) -> http.HTTPFlow:
-    # UploadPart shape; oversize body so a missed streaming opt-in fails
-    # closed on the cap.
-    return make_flow(
-        host=host,
-        port=9000,
-        method="PUT",
-        path_components=(
-            _SNAPSHOT_BUCKET,
-            tenant_segment,
-            "snapshots",
-            "sess-1",
-            "snap-1.tar.gz",
-        ),
-        raw_content=_OVERSIZE_BODY,
-    )
-
-
-@pytest.mark.asyncio
-async def test_requestheaders_streams_tenant_snapshot_upload() -> None:
-    sandbox = make_resolved_sandbox(tenant_id="tenant_acme")
-    resolver = StubResolver(sandbox=sandbox)
-    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
-    addon._snapshot_policy = _snapshot_policy()
-    flow = _snapshot_flow(tenant_segment="tenant_acme")
-
-    await addon.requestheaders(flow)
-
-    assert flow.request.stream is True
-    assert flow.metadata[gate._SNAPSHOT_STREAM_FLAG] is True
-
-
-@pytest.mark.asyncio
-async def test_requestheaders_ignores_non_s3_host() -> None:
-    """Cheap host pre-check must short-circuit before any DB resolve."""
-    resolver = StubResolver(sandbox=make_resolved_sandbox())
-    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
-    addon._snapshot_policy = _snapshot_policy()
-    flow = make_flow(host="slack.com")
-
-    await addon.requestheaders(flow)
-
-    assert flow.request.stream is False
-    assert gate._SNAPSHOT_STREAM_FLAG not in flow.metadata
-    assert resolver.resolve_sandbox_calls == 0
-
-
-@pytest.mark.asyncio
-async def test_requestheaders_rejects_cross_tenant_prefix() -> None:
-    """Pod is tenant_acme but the key targets tenant_evil's prefix: must
-    not stream, so `request` then fail-closes on the cap."""
-    resolver = StubResolver(sandbox=make_resolved_sandbox(tenant_id="tenant_acme"))
-    addon = _build(resolver=resolver, matcher=_StubMatcher(result=None))
-    addon._snapshot_policy = _snapshot_policy()
-    flow = _snapshot_flow(tenant_segment="tenant_evil")
-
-    await addon.requestheaders(flow)
-    assert flow.request.stream is False
-    assert gate._SNAPSHOT_STREAM_FLAG not in flow.metadata
-
-    # Unmarked oversize flow now hits the fail-closed cap.
-    result = await addon._resolve_and_match(flow)
-    assert result is None
-    _assert_403(flow, SandboxProxyError.BODY_TOO_LARGE)
-
-
-@pytest.mark.asyncio
-async def test_request_forwards_flagged_snapshot_flow() -> None:
-    """A flagged flow forwards from `request` without touching the
-    matcher, the cap, or the session lookup."""
-    resolver = StubResolver(sandbox=make_resolved_sandbox())
-    matcher = _StubMatcher(result=_MATCH)
-    addon = _build(resolver=resolver, matcher=matcher)
-    flow = _snapshot_flow(tenant_segment="tenant_acme")
-    flow.metadata[gate._SNAPSHOT_STREAM_FLAG] = True
-
-    await addon.request(flow)
-
-    assert flow.response is None
-    assert matcher.calls == 0
-    assert resolver.resolve_sandbox_calls == 0
-
-
-@pytest.mark.asyncio
-async def test_requestheaders_noop_without_policy() -> None:
-    resolver = StubResolver(sandbox=make_resolved_sandbox())
-    addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
-    flow = _snapshot_flow(tenant_segment="tenant_acme")
-
-    await addon.requestheaders(flow)
-
-    assert flow.request.stream is False
-    assert gate._SNAPSHOT_STREAM_FLAG not in flow.metadata
-    assert resolver.resolve_sandbox_calls == 0
 
 
 # ---------------------------------------------------------------------------

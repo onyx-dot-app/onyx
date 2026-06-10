@@ -1,4 +1,9 @@
-import { R2Icon, S3Icon, GoogleStorageIcon } from "@/components/icons/icons";
+import {
+  R2Icon,
+  S3Icon,
+  GoogleStorageIcon,
+  BraintrustIcon,
+} from "@/components/icons/icons";
 import { ValidSources } from "@/lib/types";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { Agent } from "@/lib/agents/types";
@@ -414,6 +419,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Other,
     docs: `${DOCS_BASE_URL}/overview/core_features/chat#projects`,
     isPopular: false, // Needs to be false to hide from the Add Connector page
+  },
+  braintrust: {
+    icon: BraintrustIcon,
+    displayName: "Braintrust",
+    category: SourceCategory.Other,
   },
 
   // Other

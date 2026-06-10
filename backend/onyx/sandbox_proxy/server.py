@@ -29,7 +29,6 @@ from onyx.sandbox_proxy.request_evaluator import ExternalAppRequestEvaluator
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
 from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
-from onyx.sandbox_proxy.snapshot_egress import SnapshotEgressPolicy
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_HEALTHZ_PORT
 from onyx.server.features.build.configs import SANDBOX_PROXY_LISTEN_PORT
@@ -242,13 +241,6 @@ def main() -> int:
 
         identity = IdentityResolver(ip_lookup=lookup)
         proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())
-        snapshot_policy = SnapshotEgressPolicy.from_env()
-        if snapshot_policy is not None:
-            logger.info(
-                "Snapshot egress streaming enabled bucket=%s endpoint_host=%s",
-                snapshot_policy.bucket,
-                snapshot_policy.endpoint_host,
-            )
         resolvers = build_resolvers()
         logger.info(
             "Credential resolvers registered: %s",
@@ -260,7 +252,6 @@ def main() -> int:
             cache_factory=_build_cache_factory(),
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),
-            snapshot_policy=snapshot_policy,
         )
 
         # DumpMaster binds to the running event loop in its constructor.

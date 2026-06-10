@@ -22,6 +22,25 @@ and are pushed into sandboxes at session setup, never baked into the image.
 
 ## Building the Image
 
+### Via CI (preferred)
+
+Push the `sandbox-dev` git tag to have `.github/workflows/sandbox-deployment.yml`
+build multi-arch and push `onyxdotapp/sandbox:dev`:
+
+```bash
+git tag -f sandbox-dev && git push -f origin sandbox-dev
+```
+
+Dev builds never cut a `vX.Y.Z` version or move `:latest`. The nightly tag
+still cuts an auto-versioned `vX.Y.Z` + `latest` when the image context changed.
+Only `sandbox-dev` is supported, to keep Docker Hub free of one-off tags.
+
+Environments that pin `SANDBOX_CONTAINER_IMAGE` to `:dev` must also set
+`SANDBOX_IMAGE_PULL_POLICY=Always` (default `IfNotPresent`) so re-pushed dev
+builds are picked up by new pods. See `docs/craft/image-architecture.md`.
+
+### Building locally
+
 The sandbox image must be built for **amd64** architecture since our Kubernetes cluster runs on x86_64 nodes.
 
 ### Build for amd64 only (fastest)
@@ -89,7 +108,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 - **Python venv**: `/workspace/.venv/` with packages from `initial-requirements.txt`
 - **OpenCode CLI**: Installed in `/home/sandbox/.opencode/bin/`
 - **onyx-cli**: `/usr/local/bin/onyx-cli` — Onyx CLI for search
-- **AWS CLI**: For S3 snapshot operations
+- **Snapshot sidecar daemon**: Packages and restores session files; durable storage is handled by the api_server through the Onyx FileStore
 
 Skills are **not** baked in — the API server pushes them to `/workspace/managed/skills/` at session setup.
 

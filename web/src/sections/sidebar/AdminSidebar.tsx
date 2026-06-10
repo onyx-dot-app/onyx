@@ -134,6 +134,7 @@ function buildItems(
 
   // 6. Organization (admin only)
   if (!isCurator) {
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
     if (hasSubscription) {
       add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
     }

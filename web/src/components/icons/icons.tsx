@@ -234,6 +234,7 @@ export const WindowsIcon = ({
 // Only icons that don't yet have opal logo equivalents remain here.
 // ============================================================================
 export const BoxIcon = createLogoIcon(boxIcon);
+export const BraintrustIcon = createLogoIcon("/Braintrust.svg");
 export const GoogleStorageIcon = createLogoIcon(googleCloudStorageIcon, {
   sizeAdjustment: 4,
   classNameAddition: "-m-0.5",

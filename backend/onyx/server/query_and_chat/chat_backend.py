@@ -73,6 +73,7 @@ from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
+from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -743,7 +744,10 @@ def set_preferred_response_endpoint(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
 
-@router.post("/create-chat-message-feedback")
+@router.post(
+    "/create-chat-message-feedback",
+    dependencies=get_feedback_rate_limiters(),
+)
 def create_chat_feedback(
     feedback: ChatFeedbackRequest,
     user: User = Depends(current_chat_accessible_user),
@@ -761,7 +765,10 @@ def create_chat_feedback(
     )
 
 
-@router.delete("/remove-chat-message-feedback")
+@router.delete(
+    "/remove-chat-message-feedback",
+    dependencies=get_feedback_rate_limiters(),
+)
 def remove_chat_feedback(
     chat_message_id: int,
     user: User = Depends(current_chat_accessible_user),

@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.21
+version: 0.5.22
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,10 +16,9 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: Add a top-level `customCACerts` block that installs
-        private CA certificates (via `update-ca-certificates`) on every
-        pod that makes outbound TLS connections.
+    - kind: changed
+      description: Store Craft sandbox snapshots in the Onyx filestore instead
+        of requiring sandbox pods to write directly to S3.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

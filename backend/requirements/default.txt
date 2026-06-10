@@ -260,13 +260,17 @@ authlib==1.6.12 \
     --hash=sha256:0656d8482f28fc8221929d5f35b2bde5d13e10555ebc06b4561b0d622e83b1bd \
     --hash=sha256:e9229ad7fde610b139dd12f5edbe97eab9ee78bfb85691247e767727850b99ab
     # via fastmcp
-azure-cognitiveservices-speech==1.38.0 \
-    --hash=sha256:16a530e6c646eb49ea0bc05cb45a9d28b99e4b67613f6c3a6c54e26e6bf65241 \
-    --hash=sha256:18dce915ab032711f687abb3297dd19176b9cbea562b322ee6fa7365ef4a5091 \
-    --hash=sha256:1c344e8a6faadb063cea451f0301e13b44d9724e1242337039bff601e81e6f86 \
-    --hash=sha256:1d38d8c056fb3f513a9ff27ab4e77fd08ca487f8788cc7a6df772c1ab2c97b54 \
-    --hash=sha256:1e002595a749471efeac3a54c80097946570b76c13049760b97a4b881d9d24af \
-    --hash=sha256:9dd0800fbc4a8438c6dfd5747a658251914fe2d205a29e9b46158cadac6ab381
+azure-cognitiveservices-speech==1.50.0 \
+    --hash=sha256:2621d1c95741c0864d418f88c59d1355bde0d893beb57c609b6ae4819c99e591 \
+    --hash=sha256:44279ad5430db7484ef412d89599f926e623b184a365a2258056f4ffdee34e55 \
+    --hash=sha256:828891baac849137d9773d980910939c0541cbfc4653265597fea592684efafd \
+    --hash=sha256:a199cac027f4f3c4972b9c76efb425dd7479eabd4beb9c613140fe5549c649c6 \
+    --hash=sha256:c600bdab8bcc12b3e7e1297c0026dbe09edf90d9b399a719303132c216bc8002 \
+    --hash=sha256:e58faf51d82963b395c06a7e65dd6bead71c242e013695c62949ff8b9607d77e
+azure-core==1.41.0 \
+    --hash=sha256:522b4011e8180b1a3dcd2024396a4e7fe9ac37fb8597db47163d230b5efe892d \
+    --hash=sha256:f46ff5dfcd230f25cf1c19e8a34b8dc08a337b2503e268bb600a16c00db8ad5a
+    # via azure-cognitiveservices-speech
 babel==2.17.0 \
     --hash=sha256:0c54cffb19f690cdcc52a3b50bcbf71e07a808d1c80d549f2459b9d2cf0afb9d \
     --hash=sha256:4d0b53093fdfb4b21c92b5213dba5a1b23885afa8383709427046b21c366e5f2
@@ -2586,6 +2590,7 @@ requests==2.33.0 \
     --hash=sha256:c7ebc5e8b0f21837386ad0e1c8fe8b829fa5f544d8df3b2253bff14ef29d7652
     # via
     #   atlassian-python-api
+    #   azure-core
     #   braintrust
     #   cohere
     #   docker
@@ -2969,6 +2974,7 @@ typing-extensions==4.15.0 \
     --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
     # via
     #   alembic
+    #   azure-core
     #   braintrust
     #   cohere
     #   cron-descriptor
