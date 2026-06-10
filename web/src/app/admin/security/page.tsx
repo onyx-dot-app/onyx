@@ -1,15 +1,5 @@
-"use client";
-
-import { SettingsLayouts } from "@opal/layouts";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
-
-const route = ADMIN_ROUTES.SECURITY_HARDENING;
+import SecurityHardeningPage from "@/refresh-pages/admin/SecurityHardeningPage";
 
 export default function Page() {
-  return (
-    <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
-      <SettingsLayouts.Body />
-    </SettingsLayouts.Root>
-  );
+  return <SecurityHardeningPage />;
 }
