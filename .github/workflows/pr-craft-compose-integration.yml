@@ -49,6 +49,9 @@ env:
   # into each sandbox container. Without this, compose falls back to
   # docker-compose.craft.yml's default version tag (currently v0.1.52).
   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:ci"
+  # Read by api_server on boot; Sandbox containers call back via this URL on the
+  # compose bridge.
+  SANDBOX_API_SERVER_URL: "http://api_server:8080"
 
 jobs:
   craft-compose-integration-test:
@@ -165,7 +168,6 @@ jobs:
           SANDBOX_BACKEND: "docker"
           SANDBOX_PROXY_HOST: "sandbox-proxy"
           SANDBOX_PROXY_PORT: "8080"
-          SANDBOX_API_SERVER_URL: "http://api_server:8080"
           SANDBOX_DOCKER_NETWORK: "onyx_craft_sandbox"
           SANDBOX_DOCKER_SOCKET: "/var/run/docker.sock"
         run: |
