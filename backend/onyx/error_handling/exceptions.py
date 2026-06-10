@@ -77,7 +77,8 @@ def log_onyx_error(exc: OnyxError) -> None:
 def onyx_error_to_json_response(exc: OnyxError) -> JSONResponse:
     content = exc.error_code.detail(exc.detail)
     if exc.extra:
-        content = {**content, **exc.extra}
+        # extra first so the canonical error_code/detail can't be overwritten.
+        content = {**exc.extra, **content}
     return JSONResponse(
         status_code=exc.status_code,
         content=content,

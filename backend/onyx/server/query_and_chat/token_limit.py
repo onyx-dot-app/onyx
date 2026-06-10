@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
@@ -18,7 +17,7 @@ from onyx.db.models import ChatSession
 from onyx.db.models import TokenRateLimit
 from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
-from onyx.db.user_usage import get_total_cost_cents_since
+from onyx.db.user_usage import get_total_cost_cents_buckets_since
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -73,9 +72,16 @@ def _user_is_rate_limited_by_global() -> None:
                 global_usage = _fetch_global_usage(global_cutoff_time, db_session)
                 triggered = _worst_triggered_limit(global_rate_limits, global_usage)
 
+            cost_buckets: list[tuple[datetime, float]] = []
+            if any(rl.cost_budget_cents is not None for rl in global_rate_limits):
+                # One bucket fetch for the widest window; _worst_triggered_cost_limit
+                # sums per-limit in Python (no query per cost limit).
+                cost_cutoff = _get_cutoff_time(global_rate_limits) - _LEDGER_GRID
+                cost_buckets = get_total_cost_cents_buckets_since(
+                    db_session, cost_cutoff
+                )
             cost_triggered = _worst_triggered_cost_limit(
-                global_rate_limits,
-                lambda cutoff: get_total_cost_cents_since(db_session, cutoff),
+                global_rate_limits, cost_buckets
             )
             _raise_for_longest_window(
                 "organization",
@@ -156,14 +162,15 @@ def _worst_triggered_limit(
 
 def _worst_triggered_cost_limit(
     rate_limits: Sequence[TokenRateLimit],
-    cost_since: Callable[[datetime], float],
+    cost_buckets: Sequence[tuple[datetime, float]],
 ) -> TokenRateLimit | None:
     """Among rows whose cost_budget_cents is set and exceeded, return the one
     with the longest window (or None) — longest period_hours so the reset is
     deterministic and conservative, matching _worst_triggered_limit.
 
-    Cost comes from the UserUsage ledger (not ChatMessage.token_count), which
-    buckets spend at a coarse fixed grid (_LEDGER_GRID). A bucket has no sub-grid
+    Cost comes from the UserUsage ledger (not ChatMessage.token_count), bucketed
+    at a coarse fixed grid (_LEDGER_GRID) and fetched once upstream; we sum the
+    buckets per window in Python (no query per limit). A bucket has no sub-grid
     timing, so to mirror the token sliding window over [now - period_hours, now]
     we count every bucket that *overlaps* it: window_start >= now - period_hours
     - grid. This is conservative (a budget period finer than the grid can pull in
@@ -178,7 +185,10 @@ def _worst_triggered_cost_limit(
             continue
 
         cutoff = now - timedelta(hours=rate_limit.period_hours) - _LEDGER_GRID
-        if cost_since(cutoff) >= budget:
+        cost = sum(
+            cents for window_start, cents in cost_buckets if window_start >= cutoff
+        )
+        if cost >= budget:
             if worst is None or rate_limit.period_hours > worst.period_hours:
                 worst = rate_limit
 
