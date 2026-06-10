@@ -1080,7 +1080,9 @@ def _run_models(
     # Signals emitters to skip future puts so workers exit promptly.
     drain_done = threading.Event()
 
-    def _persist_model_outcome(model_idx: int, context: str) -> None:
+    def _persist_model_outcome(
+        model_idx: int, context: str, completed_normally: bool | None = None
+    ) -> None:
         with persist_lock:
             if persisted[model_idx]:
                 return
@@ -1094,10 +1096,19 @@ def _run_models(
             _save_errored_message(model_idx, context)
             return
 
+        # completed_normally decides the "stopped by the user" annotation. The
+        # stop-button path overrides it to True for models whose loops finished
+        # before the stop was noticed; otherwise fall back to the stop signal.
+        if completed_normally is None:
+            completed_normally = setup.check_is_connected()
+
+        def _is_connected(value: bool = completed_normally) -> bool:
+            return value
+
         try:
             llm_loop_completion_handle(
                 state_container=state_containers[model_idx],
-                is_connected=setup.check_is_connected,
+                is_connected=_is_connected,
                 assistant_message=setup.reserved_messages[model_idx],
                 llm=setup.llms[model_idx],
                 reserved_tokens=setup.reserved_token_count,
@@ -1120,7 +1131,10 @@ def _run_models(
             _persist_model_outcome(i, "post-steps")
 
         # _stream_chat_turn's own reset can be abandoned on disconnect; reset here
-        # so the session never sticks at "processing".
+        # so the session never sticks at "processing". Normal exits (drain alive)
+        # leave it to _stream_chat_turn.
+        if not drain_done.is_set():
+            return
         try:
             set_processing_status(
                 chat_session_id=setup.chat_session.id,
@@ -1291,7 +1305,11 @@ def _run_models(
                 if not setup.check_is_connected():
                     # Persist finished models now; workers persist themselves on exit.
                     for i in range(n_models):
-                        _persist_model_outcome(i, "stop-button")
+                        # Loops that finished before the stop was noticed are
+                        # complete answers — don't annotate them as stopped.
+                        _persist_model_outcome(
+                            i, "stop-button", completed_normally=True
+                        )
                     yield Packet(
                         placement=Placement(turn_index=0),
                         obj=OverallStop(type="stop", stop_reason="user_cancelled"),
