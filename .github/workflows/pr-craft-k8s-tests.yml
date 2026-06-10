@@ -399,6 +399,43 @@ jobs:
                   protocol: TCP
           EOF
 
+      # Same selector-less Service trick as Postgres above. The configmap
+      # renders REDIS_HOST as the helm release name (`onyx`); The proxy uses it
+      # for the approval-grant cache check.
+      - name: Expose Redis inside the kind cluster
+        run: |
+          set -eo pipefail
+          REDIS_ID=$(cd deployment/docker_compose && \
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q cache)
+          docker network connect kind "$REDIS_ID" --alias cache
+          REDIS_IP=$(docker inspect "$REDIS_ID" \
+            --format '{{ (index .NetworkSettings.Networks "kind").IPAddress }}')
+          echo "redis on kind network at $REDIS_IP"
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: onyx
+            namespace: onyx
+          spec:
+            ports:
+              - port: 6379
+                targetPort: 6379
+                protocol: TCP
+          ---
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: onyx
+            namespace: onyx
+          subsets:
+            - addresses:
+                - ip: ${REDIS_IP}
+              ports:
+                - port: 6379
+                  protocol: TCP
+          EOF
+
       - name: Run migrations
         run: |
           cd backend
