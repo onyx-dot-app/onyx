@@ -68,7 +68,14 @@ def _user_is_rate_limited_by_global() -> None:
             # Skip the token-usage aggregation when every limit is cost-only.
             triggered = None
             if _has_token_budget(global_rate_limits):
-                global_cutoff_time = _get_cutoff_time(global_rate_limits)
+                # Scan the token table only as far back as the widest *token*
+                # window — a longer cost-only window must not widen the scan.
+                token_limits = [
+                    rl
+                    for rl in global_rate_limits
+                    if rl.token_budget is not None and rl.token_budget > 0
+                ]
+                global_cutoff_time = _get_cutoff_time(token_limits)
                 global_usage = _fetch_global_usage(global_cutoff_time, db_session)
                 triggered = _worst_triggered_limit(global_rate_limits, global_usage)
 
@@ -151,6 +158,7 @@ def _is_rate_limited(
     rate_limits: Sequence[TokenRateLimit],
     usage: Sequence[TokenUsageBucket],
 ) -> bool:
+    """Whether any provider-token budget is exceeded."""
     return _worst_triggered_limit(rate_limits, usage) is not None
 
 
