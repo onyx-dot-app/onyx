@@ -107,11 +107,11 @@ def downgrade() -> None:
     op.drop_constraint(
         "ck_token_rate_limit_budget_set", "token_rate_limit", type_="check"
     )
-    # token_budget goes back to NOT NULL; back-fill any cost-only rows first so
-    # the alter can't fail on NULLs.
-    op.execute(
-        "UPDATE token_rate_limit SET token_budget = 0 WHERE token_budget IS NULL"
-    )
+    # Delete cost-only rows before restoring NOT NULL. Zero-filling them would
+    # leave token_budget=0 rows that older enforcement reads as "block at 0
+    # tokens" (rejecting every request); a cost-only limit can't function once
+    # cost_budget_cents is dropped below anyway.
+    op.execute("DELETE FROM token_rate_limit WHERE token_budget IS NULL")
     op.alter_column("token_rate_limit", "token_budget", nullable=False)
     op.drop_column("token_rate_limit", "cost_budget_cents")
     op.drop_index("uq_user_usage_dims", table_name="user_usage")
