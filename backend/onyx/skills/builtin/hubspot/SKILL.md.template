@@ -1,0 +1,81 @@
+---
+name: hubspot
+description: Read, search, create, and edit the connected user's HubSpot CRM (contacts, companies, deals) via a light REST wrapper.
+---
+
+# HubSpot
+
+Call the HubSpot CRM API as the connected user via the bundled helper. Reads run
+freely; writes (create / edit) may pause for the user to approve.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/hubspot/hubspot_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. `create-*` and
+`update-contact` are the only writes. Use `--raw` to skip pruning;
+`python hubspot_api.py <command> -h` shows a command's flags. Pass
+`--properties a,b,c` to a read to choose which CRM properties come back.
+
+### Contacts, companies, and deals
+
+```
+python hubspot_api.py contacts [--limit N] [--properties email,firstname]
+python hubspot_api.py contact 12345
+python hubspot_api.py companies [--limit N]
+python hubspot_api.py company 67890
+python hubspot_api.py deals [--limit N]
+python hubspot_api.py deal 11223
+```
+
+### Owners
+
+```
+python hubspot_api.py owners [--limit N]
+```
+
+### Search
+
+```
+python hubspot_api.py search contacts "jane@example.com" [--limit N]
+python hubspot_api.py search companies "Acme" [--limit N]
+python hubspot_api.py search deals "Renewal" [--limit N]
+```
+
+### Create a contact / company / deal (write)
+
+```
+python hubspot_api.py create-contact --set email=jane@acme.com --set firstname=Jane
+python hubspot_api.py create-company --set name="Acme Inc" --set domain=acme.com
+python hubspot_api.py create-deal --set dealname="Acme renewal" --set amount=5000
+```
+
+### Edit a contact (write)
+
+```
+python hubspot_api.py update-contact 12345 --set jobtitle="VP Sales"
+```
+
+### Raw request (escape hatch)
+
+```
+python hubspot_api.py call GET /crm/v3/objects/tickets
+python hubspot_api.py call POST /crm/v3/objects/notes '{"properties": {"hs_note_body": "Called"}}'
+```
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "results": [...], "count": N,
+"truncated": bool}` (`truncated` means more results existed past `--limit`).
+Failures return `{"ok": false, "status": <code>, "error": "<message>"}` and exit
+non-zero — surface the error rather than retrying blindly.
+
+## Notes
+
+- Records are addressed by their numeric HubSpot id.
+- `--set key=value` is repeatable; keys are HubSpot internal property names
+  (e.g. `email`, `firstname`, `dealname`, `amount`).
+- Scopes are fixed by the admin (CRM contacts/companies/deals read+write). An
+  operation needing a scope you don't have returns `403` — tell the user.
