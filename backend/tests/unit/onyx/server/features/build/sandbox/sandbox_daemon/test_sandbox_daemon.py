@@ -763,6 +763,41 @@ def test_snapshot_create_rejects_nested_symlink(
         list(snapshot_mod.iter_snapshot_archive(session_id))
 
 
+def test_snapshot_create_excludes_generated_dirs_from_size_check_and_archive(
+    sandbox_daemon_modules: tuple[ModuleType, ModuleType],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _ = sandbox_daemon_modules
+    snapshot_mod = sys.modules["sandbox_daemon.snapshot"]
+    sessions_root = tmp_path / "sessions"
+    session_id = UUID("00000000-0000-0000-0000-000000000001")
+    session_path = sessions_root / str(session_id)
+    (session_path / "outputs/apps/admin/app").mkdir(parents=True)
+    (session_path / "outputs/apps/admin/node_modules/pkg").mkdir(parents=True)
+    (session_path / "outputs/apps/admin/.next/cache").mkdir(parents=True)
+    (session_path / "attachments/node_modules/pkg").mkdir(parents=True)
+    (session_path / "outputs/apps/admin/app/page.tsx").write_text("ok\n")
+    (session_path / "outputs/apps/admin/node_modules/pkg/index.js").write_bytes(
+        b"x" * 1024
+    )
+    (session_path / "outputs/apps/admin/.next/cache/blob").write_bytes(b"y" * 1024)
+    (session_path / "attachments/node_modules/pkg/index.js").write_text("keep\n")
+    monkeypatch.setattr(snapshot_mod, "SESSIONS_ROOT", sessions_root)
+    monkeypatch.setattr(snapshot_mod, "MAX_SNAPSHOT_UNCOMPRESSED_BYTES", 16)
+
+    archive_bytes = b"".join(snapshot_mod.iter_snapshot_archive(session_id))
+
+    with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
+        members = tar.getnames()
+    assert "outputs/apps/admin/app/page.tsx" in members
+    assert "attachments/node_modules/pkg/index.js" in members
+    assert not any(
+        member.startswith("outputs/apps/admin/node_modules") for member in members
+    )
+    assert not any(member.startswith("outputs/apps/admin/.next") for member in members)
+
+
 @pytest.mark.parametrize(
     "endpoint,body",
     [

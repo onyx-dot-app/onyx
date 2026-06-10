@@ -26,6 +26,7 @@ class SnapshotError(RuntimeError):
 
 
 _SNAPSHOT_ROOTS = frozenset({"outputs", "attachments", ".opencode-data"})
+_SNAPSHOT_GENERATED_DIR_NAMES = frozenset({"node_modules", ".next"})
 MAX_SNAPSHOT_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_SNAPSHOT_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 _ARCHIVE_CHUNK_BYTES = 1024 * 1024
@@ -71,15 +72,43 @@ def _snapshot_dirs(session_path: Path) -> list[str]:
         return []
 
     dirs = ["outputs"]
-    for subdir in ("outputs", "attachments", ".opencode-data"):
+    for subdir in ("attachments", ".opencode-data"):
         candidate = session_path / subdir
         if candidate.is_symlink():
             raise SnapshotError(f"{subdir} is a symlink; refusing to snapshot")
-        if subdir == "outputs":
-            continue
         if candidate.is_dir() and any(candidate.iterdir()):
             dirs.append(subdir)
     return dirs
+
+
+def _is_excluded_snapshot_dir(relative_path: Path) -> bool:
+    """True for generated dependency/build directories under outputs/."""
+    parts = relative_path.parts
+    return (
+        len(parts) >= 2
+        and parts[0] == "outputs"
+        and any(part in _SNAPSHOT_GENERATED_DIR_NAMES for part in parts[1:])
+    )
+
+
+def _snapshot_tar_exclude_paths(session_path: Path) -> list[str]:
+    """Return session-relative generated directories to exclude from tar."""
+    outputs_path = session_path / "outputs"
+    if not outputs_path.is_dir():
+        return []
+
+    excluded_paths: list[str] = []
+    for dirpath, dirnames, _filenames in os.walk(outputs_path, followlinks=False):
+        current = Path(dirpath)
+        visible_dirnames: list[str] = []
+        for dirname in dirnames:
+            relative_dir = (current / dirname).relative_to(session_path)
+            if _is_excluded_snapshot_dir(relative_dir):
+                excluded_paths.append(relative_dir.as_posix())
+                continue
+            visible_dirnames.append(dirname)
+        dirnames[:] = visible_dirnames
+    return excluded_paths
 
 
 def _validate_snapshot_tree(session_path: Path, dirs: list[str]) -> None:
@@ -95,7 +124,15 @@ def _validate_snapshot_tree(session_path: Path, dirs: list[str]) -> None:
 
         for dirpath, dirnames, filenames in os.walk(root_path, followlinks=False):
             current = Path(dirpath)
-            entries = [current, *(current / name for name in dirnames + filenames)]
+            dirnames[:] = [
+                dirname
+                for dirname in dirnames
+                if not _is_excluded_snapshot_dir(
+                    (current / dirname).relative_to(session_path)
+                )
+            ]
+            entries = [current, *(current / name for name in dirnames)]
+            entries.extend(current / name for name in filenames)
             for entry in entries:
                 try:
                     mode = entry.lstat().st_mode
@@ -234,6 +271,9 @@ def iter_snapshot_archive(session_id: UUID) -> Iterator[bytes]:
     if not dirs:
         return
     _validate_snapshot_tree(session_path, dirs)
+    exclude_args = [
+        f"--exclude={path}" for path in _snapshot_tar_exclude_paths(session_path)
+    ]
 
     tmp_path: Path | None = None
     try:
@@ -243,8 +283,7 @@ def iter_snapshot_archive(session_id: UUID) -> Iterator[bytes]:
         proc = subprocess.run(
             [
                 "tar",
-                "--exclude=outputs/web/node_modules",
-                "--exclude=outputs/web/.next",
+                *exclude_args,
                 "-czf",
                 str(tmp_path),
                 *dirs,
