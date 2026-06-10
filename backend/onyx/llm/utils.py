@@ -843,13 +843,12 @@ def litellm_thinks_model_supports_image_input(
 
 _REASONING_PROBE_FAILURE_TTL_SECONDS = 300
 
-# value: (result, expires_at) — expires_at None means permanent (a real probe
-# result, which is static model metadata); a float means a failure placeholder
-# that re-probes once the TTL passes.
+# (result, expires_at): None expiry = permanent probe result (static metadata);
+# float = failure placeholder that re-probes once the TTL passes
 _LITELLM_SUPPORTS_REASONING_CACHE: dict[str, tuple[bool, float | None]] = {}
 
-# per-model locks so concurrent cold misses probe once instead of stampeding;
-# a single shared lock would serialize unrelated models behind one slow host
+# per-model locks so concurrent cold misses probe once; a single shared lock
+# would serialize unrelated models behind one slow host
 _REASONING_PROBE_LOCKS: dict[str, threading.Lock] = {}
 _REASONING_PROBE_LOCKS_GUARD = threading.Lock()
 
@@ -865,14 +864,11 @@ def _cached_reasoning_result(full_model_name: str) -> bool | None:
 
 
 def _litellm_supports_reasoning(full_model_name: str) -> bool:
-    """litellm.supports_reasoning can fetch model info over the network for some
-    providers (e.g. Ollama hosts), and every request used to pay that cost —
-    convoying on litellm's shared httpx pool under load. Memoize per process.
-    Failures are cached as False with a short TTL: an unreachable host costs one
-    attempt per TTL window instead of one per request, but a recovered host is
-    re-probed rather than pinned to False until restart (a wrong False silently
-    degrades reasoning models in chat and deep research).
-    """
+    """Single-flight, process-lifetime cache around litellm.supports_reasoning,
+    which can fetch model info over the network (e.g. Ollama hosts). Successful
+    probes cache permanently; failures cache as False with a short TTL so an
+    unreachable host isn't probed per-request but recovers without a restart
+    (a stuck False silently downgrades reasoning models)."""
     cached = _cached_reasoning_result(full_model_name)
     if cached is not None:
         return cached
