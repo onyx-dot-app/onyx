@@ -4,15 +4,15 @@ name: Build and Push Sandbox Image
 # the nightly tag when its build context changed, or manually on demand.
 #
 # To push an ad-hoc dev build:
-#   git tag -f sandbox/dev && git push -f origin sandbox/dev
+#   git tag -f sandbox-dev && git push -f origin sandbox-dev
 # builds unconditionally and pushes onyxdotapp/sandbox:dev. Dev builds never
 # cut a vX.Y.Z version or move :latest — those only happen on the nightly
-# path. Only sandbox/dev is supported, to keep Docker Hub free of one-off tags.
+# path. Only sandbox-dev is supported, to keep Docker Hub free of one-off tags.
 on:
   push:
     tags:
       - "nightly-latest-*"
-      - "sandbox/dev"
+      - "sandbox-dev"
   workflow_dispatch:
 
 # Restrictive defaults; jobs declare what they need.
@@ -47,8 +47,8 @@ jobs:
             exit 0
           fi
 
-          # The sandbox/dev tag always builds and pushes the :dev image tag.
-          if [ "$GITHUB_REF_NAME" = "sandbox/dev" ]; then
+          # The sandbox-dev tag always builds and pushes the :dev image tag.
+          if [ "$GITHUB_REF_NAME" = "sandbox-dev" ]; then
             echo "Dev tag: building and pushing :dev"
             echo "custom-tag=dev" >> "$GITHUB_OUTPUT"
             echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
