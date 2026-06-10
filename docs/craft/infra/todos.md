@@ -62,8 +62,11 @@ Replicate the production network-firewall setup in every region that runs Craft.
 
 Onboarding a new Craft cluster becomes:
 
-1. `terraform apply` against the cluster (provisions or references the bucket, creates the role, sets metadata hop-limit).
-2. Copy `role_arn` and `bucket_name` from terraform outputs into the cluster's Helm values alongside `ENABLE_CRAFT: "true"`.
+1. `terraform apply` against the cluster (provisions the normal Onyx
+   FileStore path and the sandbox node-group contract, including metadata
+   hop-limit).
+2. Point Helm at the normal Onyx FileStore backend/bucket and set
+   `ENABLE_CRAFT: "true"`.
 3. `helm upgrade` (creates namespace, SA, and sandbox RBAC).
 
 Item 5 is independent and bolts on to any cluster after the rest is in place.
