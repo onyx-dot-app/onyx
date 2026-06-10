@@ -29,10 +29,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import TextSection
-from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
-
-logger = setup_logger()
 
 _BASE_URL = "https://api.braintrust.dev"
 _API_KEY = "braintrust_api_key"

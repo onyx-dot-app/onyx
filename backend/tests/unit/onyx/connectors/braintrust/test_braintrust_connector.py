@@ -131,8 +131,7 @@ def connector() -> BraintrustConnector:
 
 def test_experiment_row_lookback_skips_old_experiments() -> None:
     """Experiments older than the lookback window keep their summary doc but
-    contribute no per-row docs; nightly re-runs would otherwise grow the index
-    with time instead of suite size."""
+    contribute no per-row docs."""
     connector = BraintrustConnector(experiment_row_lookback_days=30)
     connector.load_credentials({"braintrust_api_key": "test-key"})
     old_created = (datetime.now(tz=timezone.utc) - timedelta(days=60)).strftime(
