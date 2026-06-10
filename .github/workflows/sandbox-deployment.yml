@@ -26,8 +26,9 @@ jobs:
       contents: read
     outputs:
       sandbox-changed: ${{ steps.check.outputs.sandbox-changed }}
-      new-version: ${{ steps.version.outputs.new-version }}
-      custom-tag: ${{ steps.check.outputs.custom-tag }}
+      # metadata-action tags input: set by the check step for dev builds,
+      # otherwise by the version step.
+      image-tags: ${{ steps.check.outputs.image-tags || steps.version.outputs.image-tags }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -50,7 +51,7 @@ jobs:
           # The sandbox-dev tag always builds and pushes the :dev image tag.
           if [ "$GITHUB_REF_NAME" = "sandbox-dev" ]; then
             echo "Dev tag: building and pushing :dev"
-            echo "custom-tag=dev" >> "$GITHUB_OUTPUT"
+            echo "image-tags=type=raw,value=dev" >> "$GITHUB_OUTPUT"
             echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -76,7 +77,7 @@ jobs:
 
       - name: Determine new sandbox version
         id: version
-        if: steps.check.outputs.sandbox-changed == 'true' && steps.check.outputs.custom-tag == ''
+        if: steps.check.outputs.sandbox-changed == 'true' && steps.check.outputs.image-tags == ''
         run: |
           # Query Docker Hub for the latest versioned tag
           LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
@@ -101,7 +102,12 @@ jobs:
           fi
 
           echo "New version: $NEW_VERSION"
-          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "image-tags<<EOF"
+            echo "type=raw,value=v${NEW_VERSION}"
+            echo "type=raw,value=latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
   build-sandbox-amd64:
     needs: check-sandbox-changes
@@ -292,9 +298,7 @@ jobs:
           images: ${{ env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
-          tags: |
-            ${{ needs.check-sandbox-changes.outputs.custom-tag != '' && format('type=raw,value={0}', needs.check-sandbox-changes.outputs.custom-tag) || format('type=raw,value=v{0}', needs.check-sandbox-changes.outputs.new-version) }}
-            ${{ needs.check-sandbox-changes.outputs.custom-tag == '' && 'type=raw,value=latest' || '' }}
+          tags: ${{ needs.check-sandbox-changes.outputs.image-tags }}
 
       - name: Create and push manifest
         env:
