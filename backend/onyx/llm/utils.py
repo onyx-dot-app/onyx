@@ -1,5 +1,6 @@
 import copy
 import re
+import threading
 import time
 from collections.abc import Callable
 from collections.abc import Iterable
@@ -847,6 +848,21 @@ _REASONING_PROBE_FAILURE_TTL_SECONDS = 300
 # that re-probes once the TTL passes.
 _LITELLM_SUPPORTS_REASONING_CACHE: dict[str, tuple[bool, float | None]] = {}
 
+# per-model locks so concurrent cold misses probe once instead of stampeding;
+# a single shared lock would serialize unrelated models behind one slow host
+_REASONING_PROBE_LOCKS: dict[str, threading.Lock] = {}
+_REASONING_PROBE_LOCKS_GUARD = threading.Lock()
+
+
+def _cached_reasoning_result(full_model_name: str) -> bool | None:
+    entry = _LITELLM_SUPPORTS_REASONING_CACHE.get(full_model_name)
+    if entry is None:
+        return None
+    result, expires_at = entry
+    if expires_at is None or time.monotonic() < expires_at:
+        return result
+    return None
+
 
 def _litellm_supports_reasoning(full_model_name: str) -> bool:
     """litellm.supports_reasoning can fetch model info over the network for some
@@ -857,23 +873,31 @@ def _litellm_supports_reasoning(full_model_name: str) -> bool:
     re-probed rather than pinned to False until restart (a wrong False silently
     degrades reasoning models in chat and deep research).
     """
-    entry = _LITELLM_SUPPORTS_REASONING_CACHE.get(full_model_name)
-    if entry is not None:
-        result, expires_at = entry
-        if expires_at is None or time.monotonic() < expires_at:
-            return result
+    cached = _cached_reasoning_result(full_model_name)
+    if cached is not None:
+        return cached
 
-    import litellm
+    with _REASONING_PROBE_LOCKS_GUARD:
+        key_lock = _REASONING_PROBE_LOCKS.setdefault(full_model_name, threading.Lock())
 
-    expires_at = None
-    try:
-        result = bool(litellm.supports_reasoning(model=full_model_name))
-    except Exception:
-        logger.exception("Failed to check if %s supports reasoning", full_model_name)
-        result = False
-        expires_at = time.monotonic() + _REASONING_PROBE_FAILURE_TTL_SECONDS
-    _LITELLM_SUPPORTS_REASONING_CACHE[full_model_name] = (result, expires_at)
-    return result
+    with key_lock:
+        cached = _cached_reasoning_result(full_model_name)
+        if cached is not None:
+            return cached
+
+        import litellm
+
+        expires_at = None
+        try:
+            result = bool(litellm.supports_reasoning(model=full_model_name))
+        except Exception:
+            logger.exception(
+                "Failed to check if %s supports reasoning", full_model_name
+            )
+            result = False
+            expires_at = time.monotonic() + _REASONING_PROBE_FAILURE_TTL_SECONDS
+        _LITELLM_SUPPORTS_REASONING_CACHE[full_model_name] = (result, expires_at)
+        return result
 
 
 def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:

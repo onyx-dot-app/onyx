@@ -85,3 +85,39 @@ def test_litellm_fallback_failure_cached_with_ttl(
     assert model_is_reasoning_model("unreachable-model", "fakeprov") is True
     assert model_is_reasoning_model("unreachable-model", "fakeprov") is True
     assert len(calls) == 2
+
+
+def test_concurrent_cold_misses_probe_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Concurrent cold misses for the same model must produce a single probe
+    (per-key lock), not a stampede."""
+    import threading
+
+    calls = []
+    release_probe = threading.Event()
+
+    def slow_supports_reasoning(model: str) -> bool:
+        calls.append(model)
+        release_probe.wait(timeout=5)
+        return True
+
+    monkeypatch.setattr(litellm, "supports_reasoning", slow_supports_reasoning)
+    monkeypatch.setattr(utils, "_LITELLM_SUPPORTS_REASONING_CACHE", {})
+    monkeypatch.setattr(utils, "_REASONING_PROBE_LOCKS", {})
+
+    results: list[bool] = []
+    threads = [
+        threading.Thread(
+            target=lambda: results.append(
+                model_is_reasoning_model("cold-model", "fakeprov")
+            )
+        )
+        for _ in range(4)
+    ]
+    for t in threads:
+        t.start()
+    release_probe.set()
+    for t in threads:
+        t.join(timeout=5)
+
+    assert results == [True, True, True, True]
+    assert calls == ["fakeprov/cold-model"]
