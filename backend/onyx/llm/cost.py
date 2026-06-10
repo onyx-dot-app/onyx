@@ -87,12 +87,18 @@ def get_model_price_per_million(
         return None, None
 
 
-def _image_cost_cents(model: str) -> float:
-    """Per-image cost in cents from litellm, falling back to a flat constant."""
+def _image_cost_cents(model: str, provider: str | None) -> float:
+    """Per-image cost in cents from litellm, falling back to a flat constant.
+
+    provider disambiguates non-self-identifying model names so image pricing
+    resolves the same way token pricing + admin overrides do."""
     try:
         import litellm
 
-        entry = litellm.model_cost.get(model) or {}
+        try:
+            entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
+        except Exception:
+            entry = litellm.model_cost.get(model) or {}
         # litellm prices images per-image under either of these keys. Use an
         # explicit None check so a genuinely free (0.0) model is billed 0, not
         # silently bumped to the flat fallback.
@@ -154,7 +160,7 @@ def compute_cost_cents(
     if flow in _IMAGE_FLOWS:
         # Image generation isn't priced per token; attribute the whole cost
         # to the output (generated-image) half.
-        return 0.0, _image_cost_cents(model)
+        return 0.0, _image_cost_cents(model, provider)
 
     try:
         import litellm

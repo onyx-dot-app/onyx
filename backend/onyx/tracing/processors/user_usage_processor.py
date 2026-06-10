@@ -29,6 +29,10 @@ logger = setup_logger()
 _DEFAULT_FLUSH_INTERVAL_SECONDS = 2.0
 # Drain early once this many records have queued up, regardless of interval.
 _FLUSH_BATCH_SIZE = 200
+# Bound the buffer so a DB slowdown/outage (producer outpacing the single drain
+# thread) sheds load instead of growing memory unboundedly. Sized for a large
+# burst; overflow drops the oldest-unqueued sample with a log, never blocks.
+_MAX_QUEUE_SIZE = 100_000
 # Sentinel pushed on shutdown to wake the drain thread immediately.
 _SHUTDOWN = object()
 
@@ -70,7 +74,7 @@ class UserUsageTracingProcessor(TracingProcessor):
     def __init__(
         self, flush_interval_seconds: float = _DEFAULT_FLUSH_INTERVAL_SECONDS
     ) -> None:
-        self._queue: queue.Queue[Any] = queue.Queue()
+        self._queue: queue.Queue[Any] = queue.Queue(maxsize=_MAX_QUEUE_SIZE)
         self._flush_interval = flush_interval_seconds
         self._shutdown = threading.Event()
         # Serializes the shutdown flag against enqueues so a record can't slip in
@@ -93,7 +97,14 @@ class UserUsageTracingProcessor(TracingProcessor):
                 # item, so the drain thread won't pick this up.
                 if self._shutdown.is_set():
                     return
-                self._queue.put(record)
+                try:
+                    # Never block the LLM hot path: shed load if the buffer is
+                    # full (drain thread stalled on a slow/unavailable DB).
+                    self._queue.put_nowait(record)
+                except queue.Full:
+                    logger.warning(
+                        "user-usage queue full (%d); dropping sample", _MAX_QUEUE_SIZE
+                    )
         except Exception:
             logger.exception("UserUsageTracingProcessor.on_span_end failed; dropping")
 
