@@ -36,7 +36,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     This task:
     1. Finds sandboxes that have been idle longer than SANDBOX_IDLE_TIMEOUT_SECONDS
     2. Lists all session directories in the pod's /workspace/sessions/
-    3. Creates a snapshot of each session's outputs to S3
+    3. Creates a FileStore-backed snapshot of each session's outputs
     4. Terminates the pod (but keeps the sandbox record)
     5. Marks the sandbox as SLEEPING (can be restored later)
 

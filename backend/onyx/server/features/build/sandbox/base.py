@@ -167,13 +167,12 @@ class SandboxManager(_ServeMixin, ABC):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
-        snapshot_path: str | None = None,
         user_name: str | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
         Creates the per-session directory structure:
-        - sessions/$session_id/outputs/ (from snapshot or template)
+        - sessions/$session_id/outputs/
         - sessions/$session_id/venv/
         - sessions/$session_id/.opencode/skills (symlink → managed skills dir)
         - sessions/$session_id/AGENTS.md
@@ -185,7 +184,6 @@ class SandboxManager(_ServeMixin, ABC):
             llm_config: LLM provider configuration (passed to AGENTS.md rendering)
             nextjs_port: Port for the Next.js dev server, or None for headless.
             skills_section: Pre-rendered ``{{AVAILABLE_SKILLS_SECTION}}`` for AGENTS.md.
-            snapshot_path: Optional storage path to restore outputs from
             user_name: User's name for personalization in AGENTS.md
 
         Raises:

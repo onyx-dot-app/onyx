@@ -6,8 +6,8 @@ Status in PR 11787:
 
 | Item | Status | Notes |
 |---|---|---|
-| 1. Helm sandbox RBAC + ServiceAccount | Covered | `templates/sandbox-namespace.yaml` renders the sandbox namespace, and `templates/sandbox-rbac.yaml` renders the `sandbox-file-sync` ServiceAccount, sandbox manager Role/RoleBinding, proxy service lookup Role/RoleBinding, and fails fast when the EKS IRSA role ARN is missing. |
-| 2. Terraform sandbox object store + workload identity | Covered | `modules/aws/craft_sandbox` creates or references the snapshot bucket, creates the S3 policy, creates the sandbox file-sync IRSA role, and outputs the role ARN/bucket name for Helm. |
+| 1. Helm sandbox RBAC + ServiceAccount | Covered | `templates/sandbox-namespace.yaml` renders the sandbox namespace, and `templates/sandbox-rbac.yaml` renders the `sandbox` ServiceAccount, sandbox manager Role/RoleBinding, and proxy service lookup Role/RoleBinding. |
+| 2. Terraform sandbox object store + workload identity | Removed | Craft snapshots now use the normal Onyx FileStore from the API server. There is no sandbox-specific bucket, S3 policy, or sandbox IRSA role to create. |
 | 3. Node-group security-group composition | Covered | The sandbox managed node group uses the upstream shared node SG, matching regular managed node groups without also attaching the EKS primary cluster SG and creating duplicate `kubernetes.io/cluster/<name>`-tagged SGs on the same nodes. |
 | 4. Node-group metadata-service hardening | Covered | The sandbox managed node group sets IMDSv2 required and hop-limit 1. |
 | 5. Network firewall | Not codified in this PR | Still valid and still independent. The runbook calls this out as remaining defense-in-depth work because it needs regional firewall subnets, route-table changes, and firewall rule deployment beyond this Terraform/Helm slice. |
@@ -16,26 +16,22 @@ Status in PR 11787:
 
 Render everything in the sandbox namespace required for Craft via the Helm chart when `ENABLE_CRAFT=true`:
 
-- The sandbox ServiceAccount, with the workload-identity role annotation.
+- The sandbox ServiceAccount, without storage credentials or an automounted API token.
 - The sandbox-namespace Role granting `pods`, `pods/exec`, `pods/log`, `services`, and `secrets` verbs used by the sandbox manager.
 - RoleBinding(s) attaching that Role to whichever workload ServiceAccount(s) call the K8s API to manage sandbox pods (typically the api-server SA and the relevant Celery worker SAs).
 
-Source identifiers (IAM role ARN, bound SA names) from a configurable values block and mark them required so a misconfigured deploy fails fast.
+Source extra bound SA names from a configurable values block.
 
-The `eks.amazonaws.com/skip-containers=sandbox` credential-isolation annotation belongs on each sandbox pod's metadata, not on this ServiceAccount. `KubernetesSandboxManager` owns that runtime pod annotation.
+Snapshot persistence is API-server-owned FileStore IO, so sandbox pods do not receive S3 bucket names, AWS credentials, or IRSA annotations.
 
 This removes the need for manual `kubectl create serviceaccount`, `kubectl annotate`, and `kubectl create rolebinding` steps when onboarding a new cluster. Existing clusters whose Role is currently shipped via raw manifests / external GitOps need a one-time cleanup so the chart becomes the single source of truth.
 
-## 2. Terraform module: sandbox object store + workload-identity role
+## 2. Terraform module: removed sandbox object store
 
-A shared Terraform module that provisions the cloud-side prerequisites for Craft on a given cluster:
-
-- Optional object-storage bucket for snapshots (with encryption + public-access block)
-- IAM policy granting the SA read/write/delete/list on that bucket
-- IAM role with a trust policy scoped to the sandbox namespace + SA via the cluster's OIDC provider
-- Outputs (`role_arn`, `bucket_name`) to wire into the cluster's Helm values
-
-For migrations with an existing bucket, set `create_bucket=false` and pass the existing bucket name. Terraform will still create the IAM role and policy for that bucket, but it will not create or manage the bucket itself. Existing roles that should become module-managed still need Terraform import.
+The previous `craft_sandbox` module created a Craft-only snapshot bucket and an
+IRSA role for the sandbox ServiceAccount. That is no longer part of the deploy
+contract. Configure the normal Onyx FileStore bucket/backend instead; snapshot
+archives are stored there with `FileOrigin.SANDBOX_SNAPSHOT`.
 
 ## 3. Node-group security-group composition
 
@@ -66,8 +62,11 @@ Replicate the production network-firewall setup in every region that runs Craft.
 
 Onboarding a new Craft cluster becomes:
 
-1. `terraform apply` against the cluster (provisions or references the bucket, creates the role, sets metadata hop-limit).
-2. Copy `role_arn` and `bucket_name` from terraform outputs into the cluster's Helm values alongside `ENABLE_CRAFT: "true"`.
+1. `terraform apply` against the cluster (provisions the normal Onyx
+   FileStore path and the sandbox node-group contract, including metadata
+   hop-limit).
+2. Point Helm at the normal Onyx FileStore backend/bucket and set
+   `ENABLE_CRAFT: "true"`.
 3. `helm upgrade` (creates namespace, SA, and sandbox RBAC).
 
 Item 5 is independent and bolts on to any cluster after the rest is in place.

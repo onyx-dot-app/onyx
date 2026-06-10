@@ -390,7 +390,6 @@ class SessionManager:
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
-            snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
         )
         self._hydrate_skills(sandbox.id, user, files=skills_files)
@@ -669,7 +668,7 @@ class SessionManager:
                     "Failed to cleanup session workspace %s: %s", session_id, e
                 )
 
-        # Delete snapshot files from S3 before removing DB records
+        # Delete snapshot files from FileStore before removing DB records
         snapshots = get_snapshots_for_session(self._db_session, session_id)
         if snapshots:
             snapshot_manager = SnapshotManager(get_default_file_store())

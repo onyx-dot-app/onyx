@@ -44,23 +44,15 @@ permissions:
   contents: read
 
 env:
-  S3_ENDPOINT_URL: "http://localhost:9004"
+  S3_ENDPOINT_URL: "http://127.0.0.1:9004"
+  S3_FILE_STORE_BUCKET_NAME: "onyx-file-store-bucket"
   S3_AWS_ACCESS_KEY_ID: "minioadmin"
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
 
-  # AWS_* are forwarded by the K8s sandbox manager into each sandbox pod's
-  # sidecar so the daemon's `aws s3 cp` reaches the in-cluster minio.
-  # In prod these are absent and the sidecar uses IRSA.
-  AWS_ACCESS_KEY_ID: "minioadmin"
-  AWS_SECRET_ACCESS_KEY: "minioadmin"
-  AWS_REGION: "us-east-1"
-  AWS_ENDPOINT_URL: "http://minio.onyx-sandboxes.svc.cluster.local:9000"
-
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
-  SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox-file-sync"
+  SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
-  SANDBOX_S3_BUCKET: "onyx-sandbox-snapshots-ci"
   # CI runs on a 4 vCPU runner, and tests like test_skill_push provision
   # up to 4 sandbox pods concurrently (pool + 3 cohort). With prod-default
   # requests of 1 CPU/pod, the 4th pod stays Pending and trips the 60s
@@ -226,7 +218,7 @@ jobs:
           helm repo update
           helm dependency build deployment/helm/charts/onyx
 
-      # Render the sandbox namespace + proxy manifests from the helm chart
+      # Render the sandbox namespace, proxy, and MinIO manifests from the helm chart
       # rather than maintaining a parallel copy here. Future chart edits
       # (proxy spec, RBAC, NetworkPolicy, env-configmap) flow into CI
       # automatically. When you add a new chart component the K8s sandbox
@@ -240,22 +232,26 @@ jobs:
             --set "celery_shared.image.repository=localhost:5001/onyx-backend" \
             --set "celery_shared.image.tag=ci" \
             --show-only templates/sandbox-namespace.yaml \
+            --show-only templates/sandbox-rbac.yaml \
             --show-only templates/sandbox-proxy/deployment.yaml \
             --show-only templates/sandbox-proxy/service.yaml \
             --show-only templates/sandbox-proxy/rbac.yaml \
             --show-only templates/sandbox-proxy/networkpolicy.yaml \
             --show-only templates/auth-secrets.yaml \
             --show-only templates/configmap.yaml \
+            --show-only charts/minio/templates/serviceaccount.yaml \
+            --show-only charts/minio/templates/configmap.yaml \
+            --show-only charts/minio/templates/pvc.yaml \
+            --show-only charts/minio/templates/deployment.yaml \
+            --show-only charts/minio/templates/service.yaml \
+            --show-only charts/minio/templates/post-job.yaml \
             > /tmp/manifests/sandbox.yaml
           echo "--- rendered resources ---"
           grep -E '^(kind|  name):' /tmp/manifests/sandbox.yaml || true
 
-      # sandbox-file-sync SA isn't in the chart — it's normally created
-      # out-of-band by the dev k8s-up.sh / cluster admin. Apply alongside
-      # the rendered manifests so the namespace exists first. The release
-      # namespace `onyx` isn't in the rendered output (only `onyx-sandboxes`
-      # is), so create it explicitly before applying.
-      - name: Apply manifests + sandbox-file-sync SA
+      # The release namespace `onyx` isn't in the rendered output (only
+      # `onyx-sandboxes` is), so create it explicitly before applying.
+      - name: Apply sandbox and proxy manifests
         run: |
           kubectl create namespace "${HELM_RELEASE_NAMESPACE}" \
             --dry-run=client -o yaml | kubectl apply -f -
@@ -264,17 +260,36 @@ jobs:
           # land where they declare. Passing -n would conflict with those.
           kubectl config set-context --current --namespace="${HELM_RELEASE_NAMESPACE}"
           kubectl apply -f /tmp/manifests/sandbox.yaml
-          kubectl -n onyx-sandboxes apply -f - <<'EOF'
-          apiVersion: v1
-          kind: ServiceAccount
-          metadata:
-            name: sandbox-file-sync
-          EOF
 
       - name: Wait for proxy ready
         run: |
           kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
             deployment/onyx-sandbox-proxy --timeout=180s
+
+      - name: Wait for chart MinIO ready
+        run: |
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
+            deployment/onyx-minio --timeout=180s
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" wait \
+            --for=condition=complete job/onyx-minio-post-job \
+            --timeout=180s
+
+      - name: Forward chart MinIO to runner
+        run: |
+          set -eo pipefail
+          nohup kubectl -n "${HELM_RELEASE_NAMESPACE}" port-forward \
+            svc/onyx-minio 9004:9000 \
+            > "${RUNNER_TEMP}/minio-port-forward.log" 2>&1 &
+          echo "$!" > "${RUNNER_TEMP}/minio-port-forward.pid"
+          for _ in $(seq 1 30); do
+            if curl -fsS "${S3_ENDPOINT_URL}/minio/health/ready"; then
+              echo "chart MinIO is reachable at ${S3_ENDPOINT_URL}"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "${RUNNER_TEMP}/minio-port-forward.log" || true
+          exit 1
 
       # The test process runs on the CI runner, which has no cluster DNS.
       # `socket.gethostbyname(IP)` returns the IP unchanged, so resolving
@@ -291,68 +306,18 @@ jobs:
       - name: Create .env for Docker Compose
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          COMPOSE_PROFILES=s3-filestore
           DISABLE_TELEMETRY=true
           EOF
 
-      - name: Start Postgres, Redis, MinIO
+      - name: Start Postgres and Redis
         run: |
           cd deployment/docker_compose
           docker compose \
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
             up -d \
-            minio \
             relational_db \
             cache
-
-      - name: Expose MinIO inside the kind cluster
-        run: |
-          set -eo pipefail
-          MINIO_ID=$(cd deployment/docker_compose && \
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q minio)
-          # Attach the minio container to kind's docker network so kind pods
-          # can route to it; alias is cosmetic but useful for debugging.
-          docker network connect kind "$MINIO_ID" --alias minio
-          MINIO_IP=$(docker inspect "$MINIO_ID" \
-            --format '{{ (index .NetworkSettings.Networks "kind").IPAddress }}')
-          echo "minio on kind network at $MINIO_IP"
-
-          # Pre-create the snapshot bucket so the daemon's `aws s3 cp` doesn't
-          # 404 on first run.
-          docker exec "$MINIO_ID" \
-            mc alias set local http://localhost:9000 minioadmin minioadmin
-          docker exec "$MINIO_ID" \
-            mc mb -p "local/${SANDBOX_S3_BUCKET}"
-
-          # Expose minio via a cluster Service in onyx-sandboxes so the
-          # sidecar resolves `minio.onyx-sandboxes.svc.cluster.local:9000`.
-          # Manual Endpoints (no selector) — points straight at the
-          # container's IP on kind's docker network.
-          cat <<EOF | kubectl apply -f -
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: minio
-            namespace: onyx-sandboxes
-          spec:
-            ports:
-              - port: 9000
-                targetPort: 9000
-                protocol: TCP
-          ---
-          apiVersion: v1
-          kind: Endpoints
-          metadata:
-            name: minio
-            namespace: onyx-sandboxes
-          subsets:
-            - addresses:
-                - ip: ${MINIO_IP}
-              ports:
-                - port: 9000
-                  protocol: TCP
-          EOF
 
       - name: Expose Postgres inside the kind cluster
         run: |
@@ -482,17 +447,17 @@ jobs:
           echo "=== docker images ==="; docker images || true
           echo "=== /tmp contents ==="; ls -lah /tmp || true
 
-      - name: MinIO snapshot diagnostics on failure
+      - name: MinIO FileStore diagnostics on failure
         if: failure()
         run: |
-          MINIO_ID=$(cd deployment/docker_compose && \
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q minio)
-          docker exec "$MINIO_ID" \
-            mc alias set local http://localhost:9000 minioadmin minioadmin || true
-          echo "=== buckets in docker-compose minio (container view) ==="
-          docker exec "$MINIO_ID" mc ls local/ || true
-          echo "=== recursive listing of every bucket (container view) ==="
-          docker exec "$MINIO_ID" mc ls --recursive local/ || true
+          echo "=== chart MinIO resources ==="
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" get pods,svc,job -l release=onyx || true
+          echo "=== chart MinIO deployment logs ==="
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-minio --tail=500 || true
+          echo "=== chart MinIO bucket job logs ==="
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs job/onyx-minio-post-job --all-containers --tail=500 || true
+          echo "=== MinIO port-forward log ==="
+          cat "${RUNNER_TEMP}/minio-port-forward.log" || true
           echo "=== host boto3 view via S3_ENDPOINT_URL ==="
           python - <<'PY' || true
           import os, boto3
@@ -502,7 +467,7 @@ jobs:
               endpoint_url=os.environ.get("S3_ENDPOINT_URL"),
               aws_access_key_id=os.environ.get("S3_AWS_ACCESS_KEY_ID"),
               aws_secret_access_key=os.environ.get("S3_AWS_SECRET_ACCESS_KEY"),
-              region_name=os.environ.get("AWS_REGION") or "us-east-1",
+              region_name=os.environ.get("AWS_REGION_NAME") or "us-east-1",
               config=Config(s3={"addressing_style": "path"}),
           )
           print("buckets:", [b["Name"] for b in s3.list_buckets().get("Buckets", [])])
