@@ -539,63 +539,66 @@ export default function AppChrome({ children }: AppChromeProps) {
   return (
     <RootLayout.App
       data-main-container
-      className={cn(
-        "@container relative isolate",
-        showBackground && "bg-cover bg-center bg-fixed"
-      )}
-      style={
-        showBackground
-          ? { backgroundImage: `url(${appBackgroundUrl})` }
-          : undefined
-      }
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
     >
-      {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
+      <div
+        className={cn(
+          "@container relative isolate flex-1 flex flex-col",
+          showBackground && "bg-cover bg-center bg-fixed"
+        )}
+        style={
+          showBackground
+            ? { backgroundImage: `url(${appBackgroundUrl})` }
+            : undefined
+        }
+      >
+        {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
           z-[-1] keeps overlays below the normal-flow header/content/footer. */}
-      {showBackground && !isLightMode && (
-        <div
-          className="absolute z-[-1] inset-0 pointer-events-none"
-          style={{
-            background: `
+        {showBackground && !isLightMode && (
+          <div
+            className="absolute z-[-1] inset-0 pointer-events-none"
+            style={{
+              background: `
               linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
               linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
             `,
-          }}
-        />
-      )}
-      {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
-      {showBackground && appFocus.isChat() && (
-        <>
-          <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
-          {isSafari ? (
-            <div
-              className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
-              style={{
-                backgroundImage: `url(${appBackgroundUrl})`,
-                filter: "blur(16px)",
-                maskImage: horizontalBlurMask,
-                WebkitMaskImage: horizontalBlurMask,
-              }}
-            />
-          ) : (
-            <div
-              className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-              style={{
-                maskImage: horizontalBlurMask,
-                WebkitMaskImage: horizontalBlurMask,
-              }}
-            />
-          )}
-        </>
-      )}
-      <RootLayout.Header>
-        <Header />
-      </RootLayout.Header>
-      <RootLayout.MainContent>{children}</RootLayout.MainContent>
-      <RootLayout.Footer>
-        <Footer />
-      </RootLayout.Footer>
+            }}
+          />
+        )}
+        {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
+        {showBackground && appFocus.isChat() && (
+          <>
+            <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
+            {isSafari ? (
+              <div
+                className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
+                style={{
+                  backgroundImage: `url(${appBackgroundUrl})`,
+                  filter: "blur(16px)",
+                  maskImage: horizontalBlurMask,
+                  WebkitMaskImage: horizontalBlurMask,
+                }}
+              />
+            ) : (
+              <div
+                className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+                style={{
+                  maskImage: horizontalBlurMask,
+                  WebkitMaskImage: horizontalBlurMask,
+                }}
+              />
+            )}
+          </>
+        )}
+        <RootLayout.Header>
+          <Header />
+        </RootLayout.Header>
+        <RootLayout.MainContent>{children}</RootLayout.MainContent>
+        <RootLayout.Footer>
+          <Footer />
+        </RootLayout.Footer>
+      </div>
     </RootLayout.App>
   );
 }

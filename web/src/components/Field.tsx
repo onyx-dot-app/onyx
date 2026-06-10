@@ -741,23 +741,26 @@ export const BooleanFormField = memo(function BooleanFormField({
               side={disabledTooltipSide}
             >
               <Section flexDirection="row" width="fit" height="fit" gap={0}>
-                <Checkbox
-                  aria-label={`${label
-                    .toLowerCase()
-                    .replace(" ", "-")}-checkbox`}
-                  id={checkboxId}
+                <div
                   className={cn(
                     disabled && "opacity-50",
                     removeIndent ? "mr-2" : "mx-3"
                   )}
-                  checked={Boolean(field.value)}
-                  onCheckedChange={(checked) => {
-                    if (!disabled) {
-                      form.setFieldValue(name, checked === true);
-                      if (onChange) onChange(checked === true);
-                    }
-                  }}
-                />
+                >
+                  <Checkbox
+                    aria-label={`${label
+                      .toLowerCase()
+                      .replace(" ", "-")}-checkbox`}
+                    id={checkboxId}
+                    checked={Boolean(field.value)}
+                    onCheckedChange={(checked) => {
+                      if (!disabled) {
+                        form.setFieldValue(name, checked === true);
+                        if (onChange) onChange(checked === true);
+                      }
+                    }}
+                  />
+                </div>
                 {!noLabel && (
                   <div
                     className={disabled ? "" : "cursor-pointer"}

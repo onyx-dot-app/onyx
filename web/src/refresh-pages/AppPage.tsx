@@ -671,13 +671,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const desktopDocumentSidebar =
     retrievalEnabled && !settings.isMobile ? (
-      <RootLayout.RightPanel
-        className={cn(
-          "overflow-hidden transition-all duration-300 ease-in-out",
-          documentSidebarVisible ? "w-100" : "w-0"
-        )}
-      >
-        <div className="h-full w-100">
+      <RootLayout.RightPanel>
+        <div
+          className={cn(
+            "overflow-hidden transition-all duration-300 ease-in-out h-full",
+            documentSidebarVisible ? "w-100" : "w-0"
+          )}
+        >
           <DocumentsSidebar
             setPresentingDocument={setPresentingDocument}
             modal={false}
