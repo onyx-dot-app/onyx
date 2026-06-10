@@ -98,9 +98,9 @@ def _seed_current_window(db_session: Session, user_id: str) -> datetime.datetime
     from onyx.db.user_usage import get_window_start
 
     now = datetime.datetime.now(datetime.timezone.utc)
-    from onyx.server.features.usage.api import _PERIOD_HOURS
+    from onyx.db.user_usage import USAGE_PERIOD_HOURS
 
-    window = get_window_start(now, _PERIOD_HOURS)
+    window = get_window_start(now, USAGE_PERIOD_HOURS)
     record_user_usage(
         db_session, user_id, "gpt-4o", "CHAT", "openai", 100, 50, 0, 1.25, window
     )
