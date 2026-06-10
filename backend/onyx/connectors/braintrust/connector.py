@@ -27,6 +27,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import TextSection
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -428,9 +429,21 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
         # Keep paging past fully out-of-window pages (bounded) so stale objects
         # don't cost one checkpoint round-trip per skipped page.
         for _ in range(_MAX_PAGES_PER_CALL):
-            events, next_cursor = self._fetch_events_page(
-                object_path, parent.id, checkpoint.cursor
-            )
+            try:
+                events, next_cursor = self._fetch_events_page(
+                    object_path, parent.id, checkpoint.cursor
+                )
+            except Exception as e:
+                # Skip the object (e.g. deleted upstream -> 404) so the dead ref
+                # can't pin the persisted checkpoint and wedge every resume.
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(entity_id=parent.id),
+                    failure_message=f"Failed to fetch Braintrust {object_path} '{parent.id}' events: {e}",
+                    exception=e,
+                )
+                checkpoint.todo.pop()
+                checkpoint.cursor = None
+                return
             yielded = False
             for event in events:
                 created = _parse_time(event.get("created"))

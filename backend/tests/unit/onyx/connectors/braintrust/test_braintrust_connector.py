@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+import requests
 
 from onyx.connectors.braintrust.connector import BraintrustCheckpoint
 from onyx.connectors.braintrust.connector import BraintrustConnector
@@ -195,6 +196,32 @@ def test_project_and_experiment_lists_fetched_once(
 
     assert list_calls.count("/v1/project") == 1
     assert list_calls.count("/v1/experiment") == 1
+
+
+def test_fetch_error_skips_object_and_sweep_continues(
+    connector: BraintrustConnector,
+) -> None:
+    """A non-transient fetch error (e.g. object deleted upstream -> 404) yields
+    an EntityFailure and pops the object so the sweep and later phases still
+    complete."""
+
+    def get_with_dead_dataset(
+        self: BraintrustConnector, path: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        if path == "/v1/dataset/ds-1/fetch":
+            raise requests.HTTPError("404 Client Error: Not Found")
+        return _fake_get(self, path, params)
+
+    with patch.object(BraintrustConnector, "_get", get_with_dead_dataset):
+        outputs = _run_connector(connector)
+
+    failures = [o for o in outputs if isinstance(o, ConnectorFailure)]
+    assert len(failures) == 1
+    assert failures[0].failed_entity is not None
+    assert failures[0].failed_entity.entity_id == "ds-1"
+    ids = {o.id for o in outputs if isinstance(o, Document)}
+    assert "braintrust:exp:exp-1" in ids
+    assert "braintrust:exp:exp-1:row:row-2" in ids
 
 
 def test_experiment_row_lookback_skips_old_experiments() -> None:
