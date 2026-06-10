@@ -99,7 +99,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                         f"Found {len(session_ids)} sessions in sandbox {sandbox_id_str}"
                     )
 
-                    # Snapshot each session
+                    # Snapshot each session; track failures for the fail-closed
+                    # guard below.
+                    snapshot_failed = False
                     for session_id in session_ids:
                         try:
                             task_logger.debug(
@@ -120,10 +122,30 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                                     f"Snapshot created for session {session_id}"
                                 )
                         except Exception as e:
+                            snapshot_failed = True
                             task_logger.warning(
                                 f"Failed to create snapshot for session {session_id}: {e}"
                             )
-                            # Continue with other sessions even if one fails
+
+                    # Fail-closed: terminating with an unsnapshotted workspace
+                    # loses it (restore falls back to a fresh template). Keep the
+                    # sandbox RUNNING to retry next cycle — unless the pod is
+                    # unreachable, where snapshots can never succeed and the
+                    # workspace is already gone, so don't pin it RUNNING forever.
+                    if snapshot_failed:
+                        if sandbox_manager.health_check(sandbox_id, timeout=5.0):
+                            task_logger.error(
+                                f"Snapshot failed for sandbox {sandbox_id_str}; "
+                                f"leaving it RUNNING to retry next cycle"
+                            )
+                            # Drop this sandbox's uncommitted snapshot rows.
+                            db_session.rollback()
+                            continue
+                        task_logger.warning(
+                            f"Sandbox {sandbox_id_str} pod is unreachable; "
+                            f"terminating despite snapshot failure (cannot recover "
+                            f"its workspace, won't pin it RUNNING forever)"
+                        )
 
                     # Terminate the pod (but keep sandbox record)
                     sandbox_manager.terminate(sandbox_id)
