@@ -579,14 +579,18 @@ def test_ask_with_uninvokable_app_forwards_bare(
         curl_proc = _start_slack_post_via_proxy(container, session_id)
         try:
             stdout, _stderr = curl_proc.communicate(timeout=60)
-            assert stdout.strip() == "401", (
-                "Uninvokable ASK should forward bare and Slack should 401, got "
-                f"{stdout!r}"
+            # Slack returns HTTP 200 with `invalid_auth` in the body for the
+            # fake bearer -- the 200 + body is the proof the request actually
+            # reached slack.com bare (no injection from the gate).
+            assert stdout.strip() == "200", (
+                "Uninvokable ASK should forward bare to Slack and Slack should "
+                f"200 with invalid_auth in the body, got {stdout!r}"
             )
             body = _docker_exec(container, ["cat", "/tmp/slack_out"]).stdout
             payload = json.loads(body)
             assert payload.get("error") == "invalid_auth", (
-                f"Slack did not 401 the fake bearer: {payload!r}"
+                f"Bare-forwarded request should reach slack.com and get "
+                f"invalid_auth, got {payload!r}"
             )
 
             live_url = f"{API_SERVER_URL}/build/approvals/sessions/{session_id}/live"

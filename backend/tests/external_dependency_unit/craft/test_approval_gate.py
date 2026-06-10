@@ -581,12 +581,19 @@ def test_ask_with_uninvokable_app_forwards_bare(
         session_id=session_id,
     )
 
-    # Request hit Slack with the curl's fake bearer -> 401 invalid_auth.
-    status_code, _body = wait_for_pod_exec_output(
+    # Slack returns HTTP 200 with `invalid_auth` in the body for the curl's fake
+    # bearer -- the 200 + body is the proof the request actually reached
+    # slack.com bare (no injection from the gate).
+    status_code, body = wait_for_pod_exec_output(
         k8s_client, pod_name, output_path, timeout_s=30
     )
-    assert status_code == 401, (
-        f"Uninvokable ASK should forward bare and Slack should 401, got {status_code}."
+    assert status_code == 200, (
+        f"Uninvokable ASK should forward bare to Slack and Slack should 200 "
+        f"with invalid_auth in the body, got {status_code}: {body!r}"
+    )
+    assert "invalid_auth" in body.strip(), (
+        f"Bare-forwarded request should reach slack.com and get invalid_auth, "
+        f"got body {body!r}"
     )
     assert _approval_count_for_user(db_session, user.id) == 0, (
         "Uninvokable ASK must not mint an approval row."
