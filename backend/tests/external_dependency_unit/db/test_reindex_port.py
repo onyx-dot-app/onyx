@@ -8,9 +8,10 @@ covered by applying the migration, which this repo does not test programmaticall
   and first-terminal-write-wins
 - mark_document_synced_secondary_pending sets the flag (and clears needs-sync),
   and a later mark_document_as_synced clears it again
-- the synthetic seed: writer row shape, seed-blind filtering (a seed must not count
-  toward the swap or masquerade as the poll cursor), and the gated should_index
-  FUTURE branch (legacy once-only vs port-flow continuous)
+- the synthetic seed: writer row shape, seed-blind filtering for counts/latest/swap (a
+  seed must not count toward the swap or appear as the latest run) while it DOES prime the
+  resume poll cursor, and the gated should_index FUTURE branch (legacy once-only vs
+  port-flow continuous)
 - run_port_attempt: ports docs in batches, advances/commits the cursor, retries a
   failed batch then marks FAILED (cursor left at the prior good batch)
 """
@@ -368,8 +369,6 @@ def test_seed_excluded_from_latest_and_counts(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     cc_pair, future_id = cc_pair_and_future
-    future_ss = db_session.get(SearchSettings, future_id)
-    assert future_ss is not None
 
     # only a synthetic seed exists
     create_synthetic_seed_attempt(
@@ -391,13 +390,6 @@ def test_seed_excluded_from_latest_and_counts(
         )
         is None
     )
-    # the seed's cursor is invisible to the seed-blind helper -> earliest fallback
-    assert (
-        get_last_successful_attempt_poll_range_end(
-            cc_pair.id, 42.0, future_ss, db_session
-        )
-        == 42.0
-    )
 
     # a real SUCCESS attempt IS counted and returned
     real_id = mock_successful_index_attempt(
@@ -411,6 +403,47 @@ def test_seed_excluded_from_latest_and_counts(
         db_session, cc_pair.id, secondary_index=True
     )
     assert latest is not None and latest.id == real_id
+
+
+def test_seed_primes_poll_cursor(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The seed IS the resume cursor: with only a seed present, the FUTURE's first
+    connector attempt starts from PRESENT's cursor (carried by the seed), not the
+    earliest_index fallback. A later real SUCCESS attempt then supersedes the seed."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+
+    seed_cursor = 1000.0
+    create_synthetic_seed_attempt(
+        cc_pair.id, future_id, poll_range_end=seed_cursor, db_session=db_session
+    )
+    db_session.expire_all()
+    # resume from the seed cursor, not the earliest_index arg (42.0)
+    assert (
+        get_last_successful_attempt_poll_range_end(
+            cc_pair.id, 42.0, future_ss, db_session
+        )
+        == seed_cursor
+    )
+
+    # a real SUCCESS attempt with a later cursor supersedes the seed
+    later_cursor = seed_cursor + 5000.0
+    real_id = mock_successful_index_attempt(
+        cc_pair.id, future_id, docs_indexed=5, db_session=db_session
+    )
+    real = db_session.get(IndexAttempt, real_id)
+    assert real is not None
+    real.poll_range_end = datetime.fromtimestamp(later_cursor, tz=timezone.utc)
+    db_session.commit()
+    db_session.expire_all()
+    assert (
+        get_last_successful_attempt_poll_range_end(
+            cc_pair.id, 42.0, future_ss, db_session
+        )
+        == later_cursor
+    )
 
 
 def test_should_index_future_gated_on_port_flow(
