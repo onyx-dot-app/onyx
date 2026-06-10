@@ -1,9 +1,12 @@
-name: Build and Push Sandbox Image on Tag
+name: Build and Push Sandbox Image
 
+# The sandbox image is the only Craft-specific image. Build a new version on
+# the nightly tag when its build context changed, or manually on demand.
 on:
   push:
     tags:
-      - "experimental-cc4a.*"
+      - "nightly-latest-*"
+  workflow_dispatch:
 
 # Restrictive defaults; jobs declare what they need.
 permissions: {}
@@ -24,36 +27,36 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Check for sandbox-relevant file changes
+      - name: Check for sandbox image changes
         id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          # Get the previous tag to diff against
-          CURRENT_TAG="${GITHUB_REF_NAME}"
-          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep '^experimental-cc4a\.' | grep -v "^${CURRENT_TAG}$" | head -n 1)
+          # Manual runs always build.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "Manual dispatch: building unconditionally"
+            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
+          # Diff the sandbox image build context against the previous nightly tag.
+          CURRENT_TAG="${GITHUB_REF_NAME}"
+          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep '^nightly-latest-' | grep -v "^${CURRENT_TAG}$" | head -n 1)
           if [ -z "$PREVIOUS_TAG" ]; then
-            echo "No previous experimental-cc4a tag found, building unconditionally"
+            echo "No previous nightly tag; building unconditionally"
             echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "Comparing ${PREVIOUS_TAG}..${CURRENT_TAG}"
-
-          # Check if any sandbox-relevant files changed
-          SANDBOX_PATHS=(
-            "backend/onyx/server/features/build/sandbox/"
-          )
-
-          CHANGED=false
-          for path in "${SANDBOX_PATHS[@]}"; do
-            if git diff --name-only "${PREVIOUS_TAG}..${CURRENT_TAG}" -- "$path" | grep -q .; then
-              echo "Changes detected in: $path"
-              CHANGED=true
-              break
-            fi
-          done
-
-          echo "sandbox-changed=$CHANGED" >> "$GITHUB_OUTPUT"
+          if git diff --name-only "${PREVIOUS_TAG}..${CURRENT_TAG}" -- \
+              "backend/onyx/server/features/build/sandbox/image/" | grep -q .; then
+            echo "Sandbox image changed"
+            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No sandbox image changes"
+            echo "sandbox-changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Determine new sandbox version
         id: version

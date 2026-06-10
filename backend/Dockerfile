@@ -66,11 +66,6 @@ have a contract or agreement with DanswerAI, you are not permitted to use the En
 Edition features outside of personal development or testing purposes. Please reach out to \
 founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
-# Build argument for Craft support (disabled by default)
-# Use --build-arg ENABLE_CRAFT=true to include Node.js and opencode CLI
-# ARGs do not cross build stages, so it must be redeclared here.
-ARG ENABLE_CRAFT=false
-
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
 ENV ONYX_RUNNING_IN_DOCKER="true" \
     DO_NOT_TRACK="true" \
@@ -108,24 +103,6 @@ RUN apt-get update && \
         && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
-
-# Conditionally install Node.js 20 for Craft (required for Next.js)
-# Only installed when ENABLE_CRAFT=true
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Installing Node.js 20 for Craft support..." && \
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-        apt-get install -y nodejs && \
-        rm -rf /var/lib/apt/lists/*; \
-    fi
-
-# Conditionally install opencode CLI for Craft agent functionality
-# Only installed when ENABLE_CRAFT=true
-# TODO: download a specific, versioned release of the opencode CLI
-RUN if [ "$ENABLE_CRAFT" = "true" ]; then \
-        echo "Installing opencode CLI for Craft support..." && \
-        curl -fsSL https://opencode.ai/install | bash; \
-    fi
-ENV PATH="/root/.opencode/bin:${PATH}"
 
 # Copy the compiled Python packages and only the console scripts our services launch (api server,
 # celery workers/beat, alembic migrations, supervisord, Playwright). Both stages share the same base
