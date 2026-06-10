@@ -110,6 +110,7 @@ from onyx.kg.models import KGEntityTypeAttributes
 from onyx.kg.models import KGStage
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
+from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
@@ -4113,6 +4114,17 @@ class SecuritySettings(Base):
     )
     track_external_idp_expiry: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
+    )
+    # Stored as the SSRFProtectionLevel value (e.g. "validate_all"); None falls
+    # back to the level derived from the legacy SSRF env vars.
+    ssrf_protection_level: Mapped[SSRFProtectionLevel | None] = mapped_column(
+        Enum(
+            SSRFProtectionLevel,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
     )
     mask_credential_prefix: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None

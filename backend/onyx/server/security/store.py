@@ -17,6 +17,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
+from onyx.server.security.models import SSRFProtectionLevel
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -51,11 +52,30 @@ def _install_cache_for_test(
         _CACHE = TTLCache(maxsize=maxsize, ttl=ttl, timer=timer)
 
 
+def _derive_ssrf_level_from_env() -> SSRFProtectionLevel:
+    """Map the legacy per-path SSRF env vars to a single protection level so
+    existing deployments keep their behavior without touching the new admin
+    control. The collapse is intentionally lossy — combos that don't line up
+    with one of the three levels resolve to the closest match (an operator who
+    needs the old fine-grained behavior should pick a level explicitly):
+
+    - DISABLED      when open_url validation is off AND MCP private network is allowed
+    - VALIDATE_ALL  when the web connector validates URLs (mirrors its truthiness)
+    - VALIDATE_LLM  otherwise (the all-defaults case)
+    """
+    if not _cfg.OPEN_URL_VALIDATE_SSRF and _cfg.MCP_SERVER_ALLOW_PRIVATE_NETWORK:
+        return SSRFProtectionLevel.DISABLED
+    if _cfg.WEB_CONNECTOR_VALIDATE_URLS:
+        return SSRFProtectionLevel.VALIDATE_ALL
+    return SSRFProtectionLevel.VALIDATE_LLM
+
+
 def _build_env_defaults() -> SecuritySettings:
     """Builds from env constants at call time so tests can monkeypatch them."""
     return SecuritySettings(
         user_directory_admin_only=_cfg.USER_DIRECTORY_ADMIN_ONLY,
         track_external_idp_expiry=_cfg.TRACK_EXTERNAL_IDP_EXPIRY,
+        ssrf_protection_level=_derive_ssrf_level_from_env(),
         mask_credential_prefix=_cfg.MASK_CREDENTIAL_PREFIX,
         valid_email_domains=tuple(_cfg.VALID_EMAIL_DOMAINS),
         password_min_length=_cfg.PASSWORD_MIN_LENGTH,

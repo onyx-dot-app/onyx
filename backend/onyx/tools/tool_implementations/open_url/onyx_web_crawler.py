@@ -6,9 +6,10 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from onyx.configs.app_configs import OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED
-from onyx.configs.app_configs import OPEN_URL_VALIDATE_SSRF
 from onyx.file_processing.html_utils import ParsedHTML
 from onyx.file_processing.html_utils import web_html_cleanup
+from onyx.server.security.models import outbound_allow_private_network
+from onyx.server.security.store import get_security_settings
 from onyx.tools.tool_implementations.open_url.models import WebContent
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.utils.logger import setup_logger
@@ -171,14 +172,23 @@ class OnyxWebCrawler(WebContentProvider):
         max_pdf_size_bytes: int | None = None,
         max_html_size_bytes: int | None = None,
         playwright_fallback_enabled: bool = OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED,
-        validate_ssrf: bool = OPEN_URL_VALIDATE_SSRF,
+        validate_ssrf: bool | None = None,
     ) -> None:
         self._read_timeout_seconds = timeout_seconds
         self._connect_timeout_seconds = connect_timeout_seconds
         self._max_pdf_size_bytes = max_pdf_size_bytes
         self._max_html_size_bytes = max_html_size_bytes
         self._playwright_fallback_enabled = playwright_fallback_enabled
-        self._validate_ssrf = validate_ssrf
+        # Resolve from the admin SSRF Protection setting unless the caller pins
+        # it explicitly. Validated on every level except DISABLED; the open_url
+        # path keeps its loopback floor even when disabled (it is LLM-controlled).
+        self._validate_ssrf = (
+            validate_ssrf
+            if validate_ssrf is not None
+            else not outbound_allow_private_network(
+                get_security_settings().ssrf_protection_level
+            )
+        )
         self._headers = {
             "User-Agent": user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

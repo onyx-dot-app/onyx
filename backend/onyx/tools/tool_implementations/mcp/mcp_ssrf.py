@@ -11,8 +11,8 @@ from typing import Any
 
 import httpx
 
-from onyx.configs.app_configs import MCP_SERVER_ALLOW_LOOPBACK
-from onyx.configs.app_configs import MCP_SERVER_ALLOW_PRIVATE_NETWORK
+from onyx.server.security.models import outbound_ssrf_params
+from onyx.server.security.store import get_security_settings
 from onyx.utils.url import validate_outbound_http_url
 
 # Mirror the MCP SDK defaults (see mcp.shared._httpx_utils.create_mcp_http_client).
@@ -21,17 +21,18 @@ _MCP_DEFAULT_SSE_READ_TIMEOUT = 300.0
 
 
 def validate_mcp_outbound_url(url: str, *, resolve_dns: bool = True) -> str:
-    """SSRF guard for a URL the backend fetches in an MCP flow. Private targets
-    gated behind ``MCP_SERVER_ALLOW_PRIVATE_NETWORK``; loopback needs the
-    additional ``MCP_SERVER_ALLOW_LOOPBACK`` opt-in (it reaches the app host
-    itself); cloud-metadata/link-local always blocked. ``resolve_dns=False``
-    skips the DNS lookup at store time — the transport guard re-validates with
-    DNS on every fetch."""
+    """SSRF guard for a URL the backend fetches in an MCP flow. Validation is
+    driven by the admin ``SSRF Protection`` setting: at the VALIDATE_* levels
+    private/internal targets are blocked; when DISABLED, private + loopback
+    become reachable while cloud-metadata/link-local stays blocked.
+    ``resolve_dns=False`` skips the DNS lookup at store time — the transport
+    guard re-validates with DNS on every fetch."""
+    params = outbound_ssrf_params(get_security_settings().ssrf_protection_level)
     return validate_outbound_http_url(
         url,
-        allow_private_network=MCP_SERVER_ALLOW_PRIVATE_NETWORK,
-        block_loopback_and_link_local=not MCP_SERVER_ALLOW_LOOPBACK,
-        block_link_local_only=MCP_SERVER_ALLOW_LOOPBACK,
+        allow_private_network=params.allow_private_network,
+        block_loopback_and_link_local=params.block_loopback_and_link_local,
+        block_link_local_only=params.block_link_local_only,
         resolve_dns=resolve_dns,
     )
 
