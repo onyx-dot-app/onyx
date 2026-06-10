@@ -10,12 +10,16 @@ class CostOverrideUpsertRequest(BaseModel):
     # Negotiated rates in USD per million tokens (matches the stored columns).
     # cache_read is optional; null bills cache reads at the input rate. Rates are
     # non-negative — a negative rate would credit usage and corrupt budgets.
-    model: str
+    # Non-empty: a "" model would persist an override that never matches a lookup.
+    model: str = Field(min_length=1)
     # "" = provider-agnostic; set to price the same model per provider.
     provider: str = ""
-    input_cost_per_mtok: float = Field(ge=0)
-    output_cost_per_mtok: float = Field(ge=0)
-    cache_read_cost_per_mtok: float | None = Field(default=None, ge=0)
+    # Finite + non-negative: inf/nan would corrupt downstream cost/budget math.
+    input_cost_per_mtok: float = Field(ge=0, allow_inf_nan=False)
+    output_cost_per_mtok: float = Field(ge=0, allow_inf_nan=False)
+    cache_read_cost_per_mtok: float | None = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
 
 
 class CostOverride(BaseModel):
