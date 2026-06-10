@@ -1,7 +1,8 @@
 import copy
+import csv
+import io
 import json
 from collections.abc import Callable
-from collections.abc import Iterator
 from collections.abc import Mapping
 from datetime import datetime
 from datetime import timedelta
@@ -26,8 +27,8 @@ from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -37,13 +38,16 @@ _TIMEOUT = 60
 _NUM_RETRIES = 5
 _MAX_CALLS_PER_SECOND = 4
 _LIST_PAGE_SIZE = 100
-_EVENT_PAGE_SIZE = 200
-_SUMMARIES_PER_CALL = 10
+_BTQL_PAGE_SIZE = 500
+_MAX_TABLE_ROWS = 10_000
+_SUMMARIES_PER_CALL = 5
 _PROMPTS_PER_CALL = 50
-_MAX_PAGES_PER_CALL = 20
-# Nightly eval runs re-create every row under a new experiment, so unbounded
-# per-row indexing grows with time, not suite size. 0 disables the cutoff.
+# Nightly eval runs create a whole new experiment each time, so unbounded
+# per-run tables grow with time, not suite size. 0 disables the cutoff.
 _DEFAULT_EXPERIMENT_ROW_LOOKBACK_DAYS = 30
+
+_DATASET_COLUMNS = ["id", "created", "input", "expected", "metadata", "tags"]
+_EXPERIMENT_BASE_COLUMNS = ["id", "created", "input", "output", "expected"]
 
 
 class _TransientServerError(Exception):
@@ -52,17 +56,15 @@ class _TransientServerError(Exception):
 
 class BraintrustPhase(str, Enum):
     PROMPTS = "prompts"
-    DATASET_ROWS = "dataset_rows"
-    EXPERIMENT_SUMMARIES = "experiment_summaries"
-    EXPERIMENT_ROWS = "experiment_rows"
+    DATASETS = "datasets"
+    EXPERIMENTS = "experiments"
     DONE = "done"
 
 
 _PHASE_ORDER = [
     BraintrustPhase.PROMPTS,
-    BraintrustPhase.DATASET_ROWS,
-    BraintrustPhase.EXPERIMENT_SUMMARIES,
-    BraintrustPhase.EXPERIMENT_ROWS,
+    BraintrustPhase.DATASETS,
+    BraintrustPhase.EXPERIMENTS,
     BraintrustPhase.DONE,
 ]
 
@@ -73,14 +75,12 @@ class BraintrustObjectRef(BaseModel):
     project_id: str | None = None
     project_name: str | None = None
     base_exp_id: str | None = None
-    dataset_id: str | None = None
     created: str | None = None
 
 
 class BraintrustCheckpoint(ConnectorCheckpoint):
     phase: BraintrustPhase = BraintrustPhase.PROMPTS
     todo: list[BraintrustObjectRef] | None = None
-    cursor: str | None = None
 
 
 def _parse_time(time_str: str | None) -> datetime | None:
@@ -105,6 +105,22 @@ def _coerce_metadata(values: Mapping[str, Any]) -> dict[str, str | list[str]]:
     return {k: _render_value(v) for k, v in values.items() if v not in (None, "", {})}
 
 
+def _rows_to_csv(columns: list[str], rows: list[dict[str, Any]]) -> str:
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(columns)
+    for row in rows:
+        writer.writerow([_render_value(row.get(col)) for col in columns])
+    return out.getvalue().rstrip("\n")
+
+
+def _score_columns(rows: list[dict[str, Any]]) -> list[str]:
+    names: set[str] = set()
+    for row in rows:
+        names.update((row.get("scores") or {}).keys())
+    return sorted(names)
+
+
 class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
     def __init__(
         self,
@@ -118,9 +134,8 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
             else experiment_row_lookback_days
         )
         self._api_key: str | None = None
-        self._rate_limited_get: Callable[..., requests.Response] | None = None
+        self._rate_limited_request: Callable[..., requests.Response] | None = None
         self._project_names: dict[str, str] | None = None
-        self._experiment_objects: list[dict[str, Any]] | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         api_key = credentials.get(_API_KEY)
@@ -139,13 +154,19 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
         ),
     )
     @rate_limit_builder(max_calls=_MAX_CALLS_PER_SECOND, period=1)
-    def _raw_get(
-        self, path: str, params: dict[str, Any] | None = None
+    def _raw_request(
+        self,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
     ) -> requests.Response:
-        response = requests.get(
+        response = requests.request(
+            method,
             f"{_BASE_URL}{path}",
             headers={"Authorization": f"Bearer {self._api_key}"},
             params={k: v for k, v in (params or {}).items() if v is not None},
+            json=json_body,
             timeout=_TIMEOUT,
         )
         if response.status_code in (500, 502, 503, 504):
@@ -154,18 +175,84 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
             )
         return response
 
-    def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if not self._api_key:
             raise ConnectorMissingCredentialError("Braintrust")
-        if self._rate_limited_get is None:
-            self._rate_limited_get = wrap_request_to_handle_ratelimiting(self._raw_get)
-        response = self._rate_limited_get(path, params)
+        if self._rate_limited_request is None:
+            self._rate_limited_request = wrap_request_to_handle_ratelimiting(
+                self._raw_request
+            )
+        response = self._rate_limited_request(method, path, params, json_body)
         if response.status_code in (401, 403):
             raise CredentialInvalidError(
                 f"Braintrust API rejected the API key ({response.status_code})"
             )
         response.raise_for_status()
         return response.json()
+
+    def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self._request("GET", path, params=params)
+
+    def _btql_rows(
+        self,
+        source: str,
+        object_id: str,
+        start_dt: datetime | None = None,
+        end_dt: datetime | None = None,
+        max_rows: int = _MAX_TABLE_ROWS,
+    ) -> list[dict[str, Any]]:
+        """Fetch event rows via BTQL with the time window pushed server-side.
+
+        The fetch endpoints silently ignore a `filter` body field, so BTQL is
+        the only honest server-side filter. Pages by keyset on
+        `_pagination_key` (stable, time-ordered, returned on every row).
+        """
+        filters = []
+        if start_dt is not None:
+            filters.append(f"created >= '{start_dt.isoformat()}'")
+        if end_dt is not None:
+            filters.append(f"created <= '{end_dt.isoformat()}'")
+
+        rows: list[dict[str, Any]] = []
+        last_key: str | None = None
+        while len(rows) < max_rows:
+            page_filters = list(filters)
+            if last_key is not None:
+                page_filters.append(f"_pagination_key < '{last_key}'")
+            filter_clause = (
+                f" | filter: {' and '.join(page_filters)}" if page_filters else ""
+            )
+            query = (
+                f"select: * | from: {source}('{object_id}')"
+                f"{filter_clause} | sort: _pagination_key desc"
+                f" | limit: {_BTQL_PAGE_SIZE}"
+            )
+            data = self._request(
+                "POST", "/btql", json_body={"query": query, "fmt": "json"}
+            )
+            page = data.get("data", [])
+            rows.extend(page)
+            if len(page) < _BTQL_PAGE_SIZE:
+                break
+            last_key = page[-1]["_pagination_key"]
+        return rows[:max_rows]
+
+    def _has_rows_in_window(
+        self, source: str, object_id: str, start_dt: datetime, end_dt: datetime
+    ) -> bool:
+        query = (
+            f"select: id | from: {source}('{object_id}')"
+            f" | filter: created >= '{start_dt.isoformat()}'"
+            f" and created <= '{end_dt.isoformat()}' | limit: 1"
+        )
+        data = self._request("POST", "/btql", json_body={"query": query, "fmt": "json"})
+        return bool(data.get("data"))
 
     def _list_objects(self, object_path: str) -> list[dict[str, Any]]:
         objects: list[dict[str, Any]] = []
@@ -185,15 +272,6 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
                 return objects
             starting_after = page[-1]["id"]
 
-    def _fetch_events_page(
-        self, object_path: str, object_id: str, cursor: str | None
-    ) -> tuple[list[dict[str, Any]], str | None]:
-        data = self._get(
-            f"/v1/{object_path}/{object_id}/fetch",
-            params={"limit": _EVENT_PAGE_SIZE, "cursor": cursor},
-        )
-        return data.get("events", []), data.get("cursor")
-
     def _project_names_by_id(self) -> dict[str, str]:
         if self._project_names is None:
             self._project_names = {
@@ -202,29 +280,24 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
             }
         return self._project_names
 
-    def _list_experiments(self) -> list[dict[str, Any]]:
-        if self._experiment_objects is None:
-            self._experiment_objects = self._list_objects("experiment")
-        return self._experiment_objects
-
-    def _to_refs(
-        self, objects: list[dict[str, Any]], project_names: dict[str, str]
-    ) -> list[BraintrustObjectRef]:
-        refs = []
-        for obj in objects:
-            project_id = obj.get("project_id")
-            refs.append(
-                BraintrustObjectRef(
-                    id=obj["id"],
-                    name=obj.get("name", obj["id"]),
-                    project_id=project_id,
-                    project_name=project_names.get(project_id or "", None),
-                    base_exp_id=obj.get("base_exp_id"),
-                    dataset_id=obj.get("dataset_id"),
-                    created=obj.get("created"),
-                )
+    def _to_refs(self, objects: list[dict[str, Any]]) -> list[BraintrustObjectRef]:
+        project_names = self._project_names_by_id()
+        return [
+            BraintrustObjectRef(
+                id=obj["id"],
+                name=obj.get("name", obj["id"]),
+                project_id=obj.get("project_id"),
+                project_name=project_names.get(obj.get("project_id") or "", None),
+                base_exp_id=obj.get("base_exp_id"),
+                created=obj.get("created"),
             )
-        return refs
+            for obj in objects
+        ]
+
+    def _stage_csv(self, csv_text: str) -> str | None:
+        if self.raw_file_callback is None:
+            return None
+        return self.raw_file_callback(io.BytesIO(csv_text.encode("utf-8")), "text/csv")
 
     def _prompt_to_document(
         self, prompt: dict[str, Any], project_name: str
@@ -266,69 +339,46 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
             doc_updated_at=_parse_time(prompt.get("created")),
         )
 
-    def _event_to_document(
-        self,
-        event: dict[str, Any],
-        parent: BraintrustObjectRef,
-        object_type: str,
+    def _dataset_to_document(
+        self, ref: BraintrustObjectRef, rows: list[dict[str, Any]]
     ) -> Document:
-        scores = event.get("scores") or {}
-        lines = []
-        if object_type == "dataset_row":
-            lines.append(f"Dataset row from dataset '{parent.name}'.")
-        else:
-            lines.append(f"Experiment result row from experiment '{parent.name}'.")
-        for label, key in (
-            ("Input", "input"),
-            ("Output", "output"),
-            ("Expected", "expected"),
-        ):
-            rendered = _render_value(event.get(key))
-            if rendered:
-                lines.append(f"{label}: {rendered}")
-        if scores:
-            score_text = ", ".join(f"{name}={value}" for name, value in scores.items())
-            lines.append(f"Scores: {score_text}")
-        if event.get("metadata"):
-            lines.append(f"Metadata: {_render_value(event['metadata'])}")
-
-        id_prefix = "ds" if object_type == "dataset_row" else "exp"
+        lines = [
+            f"Braintrust dataset '{ref.name}' in project {ref.project_name}"
+            f" with {len(rows)} rows of eval cases (input and expected output per case)."
+        ]
+        if len(rows) >= _MAX_TABLE_ROWS:
+            lines.append(f"Table truncated to the {_MAX_TABLE_ROWS} most recent rows.")
+        csv_text = _rows_to_csv(_DATASET_COLUMNS, rows)
         return Document(
-            id=f"braintrust:{id_prefix}:{parent.id}:row:{event['id']}",
+            id=f"braintrust:ds:{ref.id}",
             source=DocumentSource.BRAINTRUST,
-            title=f"Braintrust {parent.name} row",
-            semantic_identifier=f"{parent.name} / row {event['id'][:8]}",
-            sections=[TextSection(text="\n".join(lines))],
+            title=f"Braintrust dataset: {ref.name}",
+            semantic_identifier=f"Dataset: {ref.name}",
+            sections=[
+                TextSection(text="\n".join(lines)),
+                TabularSection(text=csv_text, link=""),
+            ],
             metadata=_coerce_metadata(
                 {
-                    "object_type": object_type,
-                    "project": parent.project_name,
-                    "dataset"
-                    if object_type == "dataset_row"
-                    else "experiment": parent.name,
-                    "scores": {k: str(v) for k, v in scores.items()}
-                    if scores
-                    else None,
+                    "object_type": "dataset",
+                    "project": ref.project_name,
+                    "dataset": ref.name,
+                    "row_count": len(rows),
                 }
             ),
-            doc_updated_at=_parse_time(event.get("created")),
+            doc_updated_at=_parse_time(ref.created),
+            file_id=self._stage_csv(csv_text),
         )
 
-    def _experiment_summary_document(self, experiment: BraintrustObjectRef) -> Document:
-        params: dict[str, Any] = {"summarize_scores": True}
-        if experiment.base_exp_id:
-            params["comparison_experiment_id"] = experiment.base_exp_id
-        summary = self._get(f"/v1/experiment/{experiment.id}/summarize", params=params)
-
-        lines = [
-            f"Experiment '{experiment.name}' in project {experiment.project_name}."
-        ]
+    def _experiment_summary_lines(
+        self, ref: BraintrustObjectRef, summary: dict[str, Any]
+    ) -> list[str]:
+        lines = [f"Experiment '{ref.name}' in project {ref.project_name}."]
         comparison_name = summary.get("comparison_experiment_name")
 
-        scores = summary.get("scores") or {}
         score_parts = []
         delta_parts = []
-        for score_name, score_info in scores.items():
+        for score_name, score_info in (summary.get("scores") or {}).items():
             score_value = score_info.get("score")
             if score_value is not None:
                 score_parts.append(f"{score_name} {round(float(score_value), 4)}")
@@ -343,12 +393,12 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
         if score_parts:
             lines.append(f"Scores: {', '.join(score_parts)}.")
         if delta_parts:
-            baseline = comparison_name or "baseline"
-            lines.append(f"Versus {baseline}: {', '.join(delta_parts)}.")
+            lines.append(
+                f"Versus {comparison_name or 'baseline'}: {', '.join(delta_parts)}."
+            )
 
-        metrics = summary.get("metrics") or {}
         metric_parts = []
-        for metric_name, metric_info in metrics.items():
+        for metric_name, metric_info in (summary.get("metrics") or {}).items():
             metric_value = metric_info.get("metric")
             if metric_value is not None:
                 unit = metric_info.get("unit", "")
@@ -359,115 +409,103 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
             lines.append(f"Metrics: {', '.join(metric_parts)}.")
         if not score_parts and not metric_parts:
             lines.append("No score or metric summary is available for this experiment.")
+        return lines
 
-        return Document(
-            id=f"braintrust:exp:{experiment.id}",
-            source=DocumentSource.BRAINTRUST,
-            title=f"Braintrust experiment: {experiment.name}",
-            semantic_identifier=f"Experiment: {experiment.name}",
-            sections=[
-                TextSection(
-                    text="\n".join(lines),
-                    link=summary.get("experiment_url"),
-                )
-            ],
-            metadata=_coerce_metadata(
+    def _experiment_to_document(
+        self, ref: BraintrustObjectRef, include_table: bool
+    ) -> Document:
+        params: dict[str, Any] = {"summarize_scores": True}
+        if ref.base_exp_id:
+            params["comparison_experiment_id"] = ref.base_exp_id
+        summary = self._get(f"/v1/experiment/{ref.id}/summarize", params=params)
+        lines = self._experiment_summary_lines(ref, summary)
+
+        sections: list[TextSection | TabularSection] = []
+        file_id: str | None = None
+        if include_table:
+            rows = self._btql_rows("experiment", ref.id)
+            score_cols = _score_columns(rows)
+            flat_rows = [
                 {
-                    "object_type": "experiment_summary",
-                    "project": experiment.project_name,
-                    "experiment": experiment.name,
-                    "baseline_experiment": comparison_name,
+                    **row,
+                    **{
+                        name: (row.get("scores") or {}).get(name) for name in score_cols
+                    },
                 }
-            ),
-            doc_updated_at=_parse_time(experiment.created),
+                for row in rows
+            ]
+            columns = _EXPERIMENT_BASE_COLUMNS + score_cols
+            lines.append(f"Per-case results table: {len(rows)} rows.")
+            if len(rows) >= _MAX_TABLE_ROWS:
+                lines.append(
+                    f"Table truncated to the {_MAX_TABLE_ROWS} most recent rows."
+                )
+            csv_text = _rows_to_csv(columns, flat_rows)
+            sections.append(
+                TabularSection(text=csv_text, link=summary.get("experiment_url") or "")
+            )
+            file_id = self._stage_csv(csv_text)
+        sections.insert(
+            0,
+            TextSection(text="\n".join(lines), link=summary.get("experiment_url")),
         )
 
-    def _seed_phase(self, checkpoint: BraintrustCheckpoint) -> BraintrustCheckpoint:
-        project_names = self._project_names_by_id()
+        return Document(
+            id=f"braintrust:exp:{ref.id}",
+            source=DocumentSource.BRAINTRUST,
+            title=f"Braintrust experiment: {ref.name}",
+            semantic_identifier=f"Experiment: {ref.name}",
+            sections=sections,
+            metadata=_coerce_metadata(
+                {
+                    "object_type": "experiment",
+                    "project": ref.project_name,
+                    "experiment": ref.name,
+                    "baseline_experiment": summary.get("comparison_experiment_name"),
+                }
+            ),
+            doc_updated_at=_parse_time(ref.created),
+            file_id=file_id,
+        )
+
+    def _seed_phase(
+        self,
+        checkpoint: BraintrustCheckpoint,
+        start_dt: datetime,
+        end_dt: datetime,
+    ) -> CheckpointOutput[BraintrustCheckpoint]:
         if checkpoint.phase == BraintrustPhase.PROMPTS:
-            objects = self._list_objects("prompt")
-        elif checkpoint.phase == BraintrustPhase.DATASET_ROWS:
-            objects = self._list_objects("dataset")
+            refs = self._to_refs(self._list_objects("prompt"))
+        elif checkpoint.phase == BraintrustPhase.DATASETS:
+            refs = []
+            for ref in self._to_refs(self._list_objects("dataset")):
+                try:
+                    if self._has_rows_in_window("dataset", ref.id, start_dt, end_dt):
+                        refs.append(ref)
+                except Exception as e:
+                    yield ConnectorFailure(
+                        failed_entity=EntityFailure(entity_id=ref.id),
+                        failure_message=f"Failed to probe Braintrust dataset '{ref.id}': {e}",
+                        exception=e,
+                    )
         else:
-            objects = self._list_experiments()
-        refs = self._to_refs(objects, project_names)
-        if (
-            checkpoint.phase == BraintrustPhase.EXPERIMENT_ROWS
-            and self._experiment_row_lookback_days > 0
-        ):
-            cutoff = datetime.now(tz=timezone.utc) - timedelta(
-                days=self._experiment_row_lookback_days
-            )
+            # Experiments are write-once per run: only ones created in the
+            # window need (re-)indexing; older docs stay as indexed.
             refs = [
                 ref
-                for ref in refs
-                if (created := _parse_time(ref.created)) is None or created >= cutoff
+                for ref in self._to_refs(self._list_objects("experiment"))
+                if (created := _parse_time(ref.created)) is None
+                or start_dt <= created <= end_dt
             ]
         checkpoint.todo = refs
-        checkpoint.cursor = None
         return checkpoint
 
     def _advance_phase(self, checkpoint: BraintrustCheckpoint) -> BraintrustCheckpoint:
-        next_index = _PHASE_ORDER.index(checkpoint.phase) + 1
-        checkpoint.phase = _PHASE_ORDER[next_index]
+        checkpoint.phase = _PHASE_ORDER[_PHASE_ORDER.index(checkpoint.phase) + 1]
         checkpoint.todo = None
-        checkpoint.cursor = None
         if checkpoint.phase == BraintrustPhase.DONE:
             checkpoint.has_more = False
         return checkpoint
-
-    def _yield_event_docs(
-        self,
-        checkpoint: BraintrustCheckpoint,
-        object_path: str,
-        object_type: str,
-        start_dt: datetime,
-        end_dt: datetime,
-    ) -> Iterator[Document | ConnectorFailure]:
-        assert checkpoint.todo is not None
-        parent = checkpoint.todo[-1]
-        # Keep paging past fully out-of-window pages (bounded) so stale objects
-        # don't cost one checkpoint round-trip per skipped page.
-        for _ in range(_MAX_PAGES_PER_CALL):
-            try:
-                events, next_cursor = self._fetch_events_page(
-                    object_path, parent.id, checkpoint.cursor
-                )
-            except Exception as e:
-                # Skip the object (e.g. deleted upstream -> 404) so the dead ref
-                # can't pin the persisted checkpoint and wedge every resume.
-                yield ConnectorFailure(
-                    failed_entity=EntityFailure(entity_id=parent.id),
-                    failure_message=f"Failed to fetch Braintrust {object_path} '{parent.id}' events: {e}",
-                    exception=e,
-                )
-                checkpoint.todo.pop()
-                checkpoint.cursor = None
-                return
-            yielded = False
-            for event in events:
-                created = _parse_time(event.get("created"))
-                if created and not (start_dt <= created <= end_dt):
-                    continue
-                yielded = True
-                try:
-                    yield self._event_to_document(event, parent, object_type)
-                except Exception as e:
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=f"braintrust:{object_path}:{parent.id}:row:{event.get('id', 'unknown')}",
-                        ),
-                        failure_message=f"Failed to map Braintrust event: {e}",
-                        exception=e,
-                    )
-            if next_cursor and events:
-                checkpoint.cursor = next_cursor
-            else:
-                checkpoint.todo.pop()
-                checkpoint.cursor = None
-                return
-            if yielded:
-                return
 
     def load_from_checkpoint(
         self,
@@ -484,7 +522,7 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
             return checkpoint
 
         if checkpoint.todo is None:
-            return self._seed_phase(checkpoint)
+            return (yield from self._seed_phase(checkpoint, start_dt, end_dt))
 
         if not checkpoint.todo:
             return self._advance_phase(checkpoint)
@@ -498,34 +536,41 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
                     yield self._prompt_to_document(prompt, ref.project_name or "")
                 except Exception as e:
                     yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=f"braintrust:prompt:{ref.id}",
-                        ),
+                        failed_entity=EntityFailure(entity_id=ref.id),
                         failure_message=f"Failed to fetch Braintrust prompt: {e}",
                         exception=e,
                     )
-        elif checkpoint.phase == BraintrustPhase.DATASET_ROWS:
-            yield from self._yield_event_docs(
-                checkpoint, "dataset", "dataset_row", start_dt, end_dt
-            )
-        elif checkpoint.phase == BraintrustPhase.EXPERIMENT_SUMMARIES:
+        elif checkpoint.phase == BraintrustPhase.DATASETS:
+            ref = checkpoint.todo.pop()
+            try:
+                rows = self._btql_rows("dataset", ref.id)
+                yield self._dataset_to_document(ref, rows)
+            except Exception as e:
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(entity_id=ref.id),
+                    failure_message=f"Failed to build Braintrust dataset table '{ref.id}': {e}",
+                    exception=e,
+                )
+        else:
             batch = checkpoint.todo[-_SUMMARIES_PER_CALL:]
             del checkpoint.todo[-_SUMMARIES_PER_CALL:]
+            lookback = self._experiment_row_lookback_days
+            cutoff = (
+                datetime.now(tz=timezone.utc) - timedelta(days=lookback)
+                if lookback > 0
+                else None
+            )
             for ref in batch:
+                created = _parse_time(ref.created)
+                include_table = cutoff is None or created is None or created >= cutoff
                 try:
-                    yield self._experiment_summary_document(ref)
+                    yield self._experiment_to_document(ref, include_table)
                 except Exception as e:
                     yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=f"braintrust:exp:{ref.id}",
-                        ),
-                        failure_message=f"Failed to summarize Braintrust experiment: {e}",
+                        failed_entity=EntityFailure(entity_id=ref.id),
+                        failure_message=f"Failed to build Braintrust experiment doc '{ref.id}': {e}",
                         exception=e,
                     )
-        elif checkpoint.phase == BraintrustPhase.EXPERIMENT_ROWS:
-            yield from self._yield_event_docs(
-                checkpoint, "experiment", "experiment_row", start_dt, end_dt
-            )
 
         return checkpoint
 

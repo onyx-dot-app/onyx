@@ -1,3 +1,4 @@
+import re
 import time
 from collections.abc import Iterator
 from datetime import datetime
@@ -7,15 +8,14 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-import requests
 
 from onyx.connectors.braintrust.connector import BraintrustCheckpoint
 from onyx.connectors.braintrust.connector import BraintrustConnector
-from onyx.connectors.braintrust.connector import BraintrustObjectRef
-from onyx.connectors.braintrust.connector import BraintrustPhase
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import TabularSection
+from onyx.connectors.models import TextSection
 
 _PROJECT = {"id": "proj-1", "name": "agent-wiki"}
 _PROMPT = {
@@ -43,18 +43,20 @@ _EXPERIMENT = {
     "name": "merge-run-42",
     "project_id": "proj-1",
     "base_exp_id": "exp-0",
-    "created": "2026-06-02T00:00:00Z",
+    "created": "2026-06-08T00:00:00Z",
 }
-_DATASET_EVENT = {
+_DATASET_ROW = {
     "id": "row-1",
-    "created": "2026-06-02T12:00:00Z",
+    "_pagination_key": "p002",
+    "created": "2026-06-08T12:00:00Z",
     "input": {"doc": "a.md"},
     "expected": {"result": "merged"},
     "metadata": {"case": "simple"},
 }
-_EXPERIMENT_EVENT = {
+_EXPERIMENT_ROW = {
     "id": "row-2",
-    "created": "2026-06-02T13:00:00Z",
+    "_pagination_key": "p001",
+    "created": "2026-06-08T13:00:00Z",
     "input": {"doc": "b.md"},
     "output": {"result": "merged"},
     "expected": {"result": "merged"},
@@ -76,10 +78,12 @@ _SUMMARY = {
 }
 
 
-def _fake_get(
+def _fake_request(
     self: BraintrustConnector,  # noqa: ARG001
+    method: str,  # noqa: ARG001
     path: str,
     params: dict[str, Any] | None = None,  # noqa: ARG001
+    json_body: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if path == "/v1/project":
         return {"objects": [_PROJECT]}
@@ -89,15 +93,36 @@ def _fake_get(
         return _PROMPT
     if path == "/v1/dataset":
         return {"objects": [_DATASET]}
-    if path == "/v1/dataset/ds-1/fetch":
-        return {"events": [_DATASET_EVENT], "cursor": None}
     if path == "/v1/experiment":
         return {"objects": [_EXPERIMENT]}
-    if path == "/v1/experiment/exp-1/fetch":
-        return {"events": [_EXPERIMENT_EVENT], "cursor": None}
     if path == "/v1/experiment/exp-1/summarize":
         return _SUMMARY
+    if path == "/btql":
+        query = (json_body or {})["query"]
+        if "dataset('ds-1')" in query:
+            return {"data": _apply_created_filter(query, [_DATASET_ROW])}
+        if "experiment('exp-1')" in query:
+            return {"data": _apply_created_filter(query, [_EXPERIMENT_ROW])}
+        return {"data": []}
     raise AssertionError(f"unexpected path: {path}")
+
+
+def _apply_created_filter(
+    query: str, rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Mimic the live BTQL endpoint's `created >=/<=` filtering (ISO strings
+    compare lexicographically)."""
+    lower = re.search(r"created >= '([^']+)'", query)
+    upper = re.search(r"created <= '([^']+)'", query)
+    out = []
+    for row in rows:
+        created = row.get("created", "")
+        if lower and created < lower.group(1):
+            continue
+        if upper and created > upper.group(1):
+            continue
+        out.append(row)
+    return out
 
 
 def _run_connector(
@@ -123,11 +148,188 @@ def _run_connector(
     raise AssertionError("connector never finished")
 
 
+def _docs(outputs: list[Any]) -> dict[str, Document]:
+    return {o.id: o for o in outputs if isinstance(o, Document)}
+
+
 @pytest.fixture
 def connector() -> BraintrustConnector:
     connector = BraintrustConnector(experiment_row_lookback_days=0)
     connector.load_credentials({"braintrust_api_key": "test-key"})
     return connector
+
+
+def test_full_sweep_produces_prompt_dataset_experiment_docs(
+    connector: BraintrustConnector,
+) -> None:
+    """One pass yields a prompt doc, one dataset doc, and one experiment doc
+    with the documented id scheme and no failures."""
+    with patch.object(BraintrustConnector, "_request", _fake_request):
+        outputs = _run_connector(connector)
+
+    assert set(_docs(outputs)) == {
+        "braintrust:prompt:prompt-1",
+        "braintrust:ds:ds-1",
+        "braintrust:exp:exp-1",
+    }
+    assert not [o for o in outputs if isinstance(o, ConnectorFailure)]
+
+
+def test_dataset_doc_has_text_and_tabular_sections(
+    connector: BraintrustConnector,
+) -> None:
+    """The dataset doc carries a prose header section plus a CSV table of all
+    rows."""
+    with patch.object(BraintrustConnector, "_request", _fake_request):
+        doc = _docs(_run_connector(connector))["braintrust:ds:ds-1"]
+
+    text, tabular = doc.sections
+    assert isinstance(text, TextSection)
+    assert "merge-cases" in (text.text or "")
+    assert "1 rows" in (text.text or "")
+    assert isinstance(tabular, TabularSection)
+    header, row = tabular.text.split("\n")
+    assert header == "id,created,input,expected,metadata,tags"
+    assert row.startswith("row-1,")
+    assert '""doc"": ""a.md""' in row
+
+
+def test_experiment_doc_combines_summary_and_score_table(
+    connector: BraintrustConnector,
+) -> None:
+    """The experiment doc leads with the prose score summary and includes a
+    table with one flattened column per score."""
+    with patch.object(BraintrustConnector, "_request", _fake_request):
+        doc = _docs(_run_connector(connector))["braintrust:exp:exp-1"]
+
+    text, tabular = doc.sections
+    assert isinstance(text, TextSection)
+    body = text.text or ""
+    assert "correctness 0.9" in body
+    assert "merge-run-41" in body
+    assert "+0.05" in body
+    assert "3 improvements / 1 regressions" in body
+    assert isinstance(tabular, TabularSection)
+    header, row = tabular.text.split("\n")
+    assert header == "id,created,input,output,expected,correctness"
+    assert row.startswith("row-2,") and row.endswith(",0.9")
+    assert tabular.link == _SUMMARY["experiment_url"]
+
+
+def test_unchanged_dataset_not_reindexed(connector: BraintrustConnector) -> None:
+    """A dataset with no rows created inside [start, end] is probed but not
+    rebuilt, so its existing doc is left untouched."""
+    window_start = time.mktime(time.strptime("2026-06-09", "%Y-%m-%d"))
+    with patch.object(BraintrustConnector, "_request", _fake_request):
+        outputs = _run_connector(connector, start=window_start)
+
+    assert "braintrust:ds:ds-1" not in _docs(outputs)
+
+
+def test_experiment_outside_window_not_reindexed(
+    connector: BraintrustConnector,
+) -> None:
+    """Experiments are write-once: one created before the poll window is not
+    re-emitted (its previously indexed doc stands)."""
+    window_start = time.mktime(time.strptime("2026-06-09", "%Y-%m-%d"))
+    with patch.object(BraintrustConnector, "_request", _fake_request):
+        outputs = _run_connector(connector, start=window_start)
+
+    assert "braintrust:exp:exp-1" not in _docs(outputs)
+
+
+def test_lookback_drops_table_but_keeps_summary() -> None:
+    """An in-window experiment older than the lookback window gets a
+    summary-only doc with no table section."""
+    connector = BraintrustConnector(experiment_row_lookback_days=30)
+    connector.load_credentials({"braintrust_api_key": "test-key"})
+    old_created = (datetime.now(tz=timezone.utc) - timedelta(days=60)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+    def request_with_old_experiment(
+        self: BraintrustConnector,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if path == "/v1/experiment":
+            return {"objects": [{**_EXPERIMENT, "created": old_created}]}
+        return _fake_request(self, method, path, params, json_body)
+
+    with patch.object(BraintrustConnector, "_request", request_with_old_experiment):
+        doc = _docs(_run_connector(connector))["braintrust:exp:exp-1"]
+
+    assert len(doc.sections) == 1
+    assert isinstance(doc.sections[0], TextSection)
+    assert "correctness 0.9" in (doc.sections[0].text or "")
+
+
+def test_btql_keyset_pagination_accumulates_table() -> None:
+    """Full pages chain via `_pagination_key <` filters until a short page."""
+    connector = BraintrustConnector(experiment_row_lookback_days=0)
+    connector.load_credentials({"braintrust_api_key": "test-key"})
+    page1 = [
+        {**_DATASET_ROW, "id": f"row-{i}", "_pagination_key": f"p{900 - i}"}
+        for i in range(500)
+    ]
+    page2 = [{**_DATASET_ROW, "id": "row-last", "_pagination_key": "p100"}]
+    seen_filters: list[str] = []
+
+    def paged_request(
+        self: BraintrustConnector,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if path == "/btql" and "dataset('ds-1')" in (json_body or {})["query"]:
+            query = (json_body or {})["query"]
+            if "select: id" in query:
+                return {"data": [{"id": "row-1"}]}
+            seen_filters.append(query)
+            return {"data": page2 if "_pagination_key <" in query else page1}
+        return _fake_request(self, method, path, params, json_body)
+
+    with patch.object(BraintrustConnector, "_request", paged_request):
+        doc = _docs(_run_connector(connector))["braintrust:ds:ds-1"]
+
+    tabular = doc.sections[1]
+    assert isinstance(tabular, TabularSection)
+    assert len(tabular.text.split("\n")) == 1 + 501
+    assert len(seen_filters) == 2
+    assert "_pagination_key < 'p401'" in seen_filters[1]
+
+
+def test_object_failure_isolated_and_sweep_continues(
+    connector: BraintrustConnector,
+) -> None:
+    """A dataset whose row fetch fails yields an EntityFailure while prompts
+    and experiments still index."""
+
+    def request_with_dead_dataset(
+        self: BraintrustConnector,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if path == "/btql" and "dataset('ds-1')" in (json_body or {})["query"]:
+            if "select: *" in (json_body or {})["query"]:
+                raise RuntimeError("404 Not Found")
+            return {"data": [{"id": "row-1"}]}
+        return _fake_request(self, method, path, params, json_body)
+
+    with patch.object(BraintrustConnector, "_request", request_with_dead_dataset):
+        outputs = _run_connector(connector)
+
+    failures = [o for o in outputs if isinstance(o, ConnectorFailure)]
+    assert len(failures) == 1
+    assert failures[0].failed_entity is not None
+    assert failures[0].failed_entity.entity_id == "ds-1"
+    assert "braintrust:exp:exp-1" in _docs(outputs)
+    assert "braintrust:prompt:prompt-1" in _docs(outputs)
 
 
 def test_none_lookback_falls_back_to_default() -> None:
@@ -137,231 +339,9 @@ def test_none_lookback_falls_back_to_default() -> None:
     assert connector._experiment_row_lookback_days == 30
 
 
-def test_out_of_window_pages_skipped_within_one_call(
-    connector: BraintrustConnector,
-) -> None:
-    """Pages whose events all fall outside [start, end] are skipped inside a
-    single load_from_checkpoint call instead of costing one checkpoint
-    round-trip each."""
-    old_event = {**_DATASET_EVENT, "created": "2020-01-01T00:00:00Z"}
-    pages = {
-        None: ([old_event], "c1"),
-        "c1": ([old_event], "c2"),
-        "c2": ([_DATASET_EVENT], None),
-    }
-    fetch_calls: list[str | None] = []
-
-    def get_paged(
-        self: BraintrustConnector, path: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        if path == "/v1/dataset/ds-1/fetch":
-            cursor = (params or {}).get("cursor")
-            fetch_calls.append(cursor)
-            events, next_cursor = pages[cursor]
-            return {"events": events, "cursor": next_cursor}
-        return _fake_get(self, path, params)
-
-    checkpoint = BraintrustCheckpoint(
-        has_more=True,
-        phase=BraintrustPhase.DATASET_ROWS,
-        todo=[BraintrustObjectRef(id="ds-1", name="merge-cases")],
-    )
-    window_start = time.mktime(time.strptime("2026-06-01", "%Y-%m-%d"))
-
-    with patch.object(BraintrustConnector, "_get", get_paged):
-        outputs = list(
-            connector.load_from_checkpoint(window_start, time.time(), checkpoint)
-        )
-
-    assert fetch_calls == [None, "c1", "c2"]
-    assert sum(1 for o in outputs if isinstance(o, Document)) == 1
-
-
-def test_project_and_experiment_lists_fetched_once(
-    connector: BraintrustConnector,
-) -> None:
-    """Project names and the experiment list are cached on the instance, not
-    re-listed by every phase seed."""
-    list_calls: list[str] = []
-
-    def counting_get(
-        self: BraintrustConnector, path: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        if path in ("/v1/project", "/v1/experiment"):
-            list_calls.append(path)
-        return _fake_get(self, path, params)
-
-    with patch.object(BraintrustConnector, "_get", counting_get):
-        _run_connector(connector)
-
-    assert list_calls.count("/v1/project") == 1
-    assert list_calls.count("/v1/experiment") == 1
-
-
-def test_fetch_error_skips_object_and_sweep_continues(
-    connector: BraintrustConnector,
-) -> None:
-    """A non-transient fetch error (e.g. object deleted upstream -> 404) yields
-    an EntityFailure and pops the object so the sweep and later phases still
-    complete."""
-
-    def get_with_dead_dataset(
-        self: BraintrustConnector, path: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        if path == "/v1/dataset/ds-1/fetch":
-            raise requests.HTTPError("404 Client Error: Not Found")
-        return _fake_get(self, path, params)
-
-    with patch.object(BraintrustConnector, "_get", get_with_dead_dataset):
-        outputs = _run_connector(connector)
-
-    failures = [o for o in outputs if isinstance(o, ConnectorFailure)]
-    assert len(failures) == 1
-    assert failures[0].failed_entity is not None
-    assert failures[0].failed_entity.entity_id == "ds-1"
-    ids = {o.id for o in outputs if isinstance(o, Document)}
-    assert "braintrust:exp:exp-1" in ids
-    assert "braintrust:exp:exp-1:row:row-2" in ids
-
-
-def test_experiment_row_lookback_skips_old_experiments() -> None:
-    """Experiments older than the lookback window keep their summary doc but
-    contribute no per-row docs."""
-    connector = BraintrustConnector(experiment_row_lookback_days=30)
-    connector.load_credentials({"braintrust_api_key": "test-key"})
-    old_created = (datetime.now(tz=timezone.utc) - timedelta(days=60)).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
-
-    def get_with_old_experiment(
-        self: BraintrustConnector, path: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        if path == "/v1/experiment":
-            return {"objects": [{**_EXPERIMENT, "created": old_created}]}
-        return _fake_get(self, path, params)
-
-    with patch.object(BraintrustConnector, "_get", get_with_old_experiment):
-        outputs = _run_connector(connector)
-
-    ids = {o.id for o in outputs if isinstance(o, Document)}
-    assert "braintrust:exp:exp-1" in ids
-    assert not any(":row:row-2" in doc_id for doc_id in ids)
-
-
-def test_full_sweep_produces_all_doc_types(connector: BraintrustConnector) -> None:
-    """One pass over a small org yields prompt, dataset-row, experiment-summary,
-    and experiment-row documents with the documented id scheme."""
-    with patch.object(BraintrustConnector, "_get", _fake_get):
-        outputs = _run_connector(connector)
-
-    docs = [o for o in outputs if isinstance(o, Document)]
-    ids = {doc.id for doc in docs}
-    assert ids == {
-        "braintrust:prompt:prompt-1",
-        "braintrust:ds:ds-1:row:row-1",
-        "braintrust:exp:exp-1",
-        "braintrust:exp:exp-1:row:row-2",
-    }
-    assert not [o for o in outputs if isinstance(o, ConnectorFailure)]
-
-
-def test_time_window_filters_event_rows(connector: BraintrustConnector) -> None:
-    """Events created outside [start, end] are skipped; low-volume prompts and
-    experiment summaries are always refreshed."""
-    window_start = time.mktime(time.strptime("2026-06-03", "%Y-%m-%d"))
-    with patch.object(BraintrustConnector, "_get", _fake_get):
-        outputs = _run_connector(connector, start=window_start)
-
-    docs = [o for o in outputs if isinstance(o, Document)]
-    ids = {doc.id for doc in docs}
-    assert ids == {
-        "braintrust:prompt:prompt-1",
-        "braintrust:exp:exp-1",
-    }
-
-
-def test_experiment_summary_is_prose_with_scores(
-    connector: BraintrustConnector,
-) -> None:
-    """The experiment-summary body reads as prose containing aggregate scores,
-    baseline deltas, and regression counts."""
-    with patch.object(BraintrustConnector, "_get", _fake_get):
-        outputs = _run_connector(connector)
-
-    summary = next(
-        o for o in outputs if isinstance(o, Document) and o.id == "braintrust:exp:exp-1"
-    )
-    text = summary.sections[0].text or ""
-    assert "Experiment 'merge-run-42'" in text
-    assert "correctness 0.9" in text
-    assert "merge-run-41" in text
-    assert "+0.05" in text
-    assert "3 improvements / 1 regressions" in text
-    assert summary.sections[0].link == _SUMMARY["experiment_url"]
-
-
-def test_malformed_event_yields_connector_failure(
-    connector: BraintrustConnector,
-) -> None:
-    """A row that fails mapping becomes a ConnectorFailure with a populated
-    DocumentFailure instead of aborting the sweep."""
-
-    def get_with_bad_event(
-        self: BraintrustConnector, path: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        if path == "/v1/dataset/ds-1/fetch":
-            return {"events": [{"created": "2026-06-02T12:00:00Z"}], "cursor": None}
-        return _fake_get(self, path, params)
-
-    with patch.object(BraintrustConnector, "_get", get_with_bad_event):
-        outputs = _run_connector(connector)
-
-    failures = [o for o in outputs if isinstance(o, ConnectorFailure)]
-    assert len(failures) == 1
-    assert failures[0].failed_document is not None
-    docs = [o for o in outputs if isinstance(o, Document)]
-    assert {doc.id for doc in docs} == {
-        "braintrust:prompt:prompt-1",
-        "braintrust:exp:exp-1",
-        "braintrust:exp:exp-1:row:row-2",
-    }
-
-
-def test_checkpoint_resumes_mid_phase(connector: BraintrustConnector) -> None:
-    """A checkpoint serialized mid-sweep resumes from its cursor instead of
-    restarting the phase."""
-    checkpoint = BraintrustCheckpoint(
-        has_more=True,
-        phase=BraintrustPhase.DATASET_ROWS,
-        todo=[
-            BraintrustObjectRef(
-                id="ds-1",
-                name="merge-cases",
-                project_id="proj-1",
-                project_name="agent-wiki",
-            )
-        ],
-        cursor="cursor-abc",
-    )
-    seen_cursors: list[str | None] = []
-
-    def get_tracking_cursor(
-        self: BraintrustConnector, path: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
-        if path == "/v1/dataset/ds-1/fetch":
-            seen_cursors.append((params or {}).get("cursor"))
-            return {"events": [_DATASET_EVENT], "cursor": None}
-        return _fake_get(self, path, params)
-
+def test_checkpoint_roundtrip(connector: BraintrustConnector) -> None:
+    """Checkpoints serialize and restore across phases."""
+    checkpoint = connector.build_dummy_checkpoint()
     restored = connector.validate_checkpoint_json(checkpoint.model_dump_json())
-    assert restored.cursor == "cursor-abc"
-
-    with patch.object(BraintrustConnector, "_get", get_tracking_cursor):
-        generator = connector.load_from_checkpoint(0, time.time(), restored)
-        outputs = list(generator)
-
-    assert seen_cursors == ["cursor-abc"]
-    assert any(
-        isinstance(o, Document) and o.id == "braintrust:ds:ds-1:row:row-1"
-        for o in outputs
-    )
+    assert restored == checkpoint
+    assert isinstance(restored, BraintrustCheckpoint)
