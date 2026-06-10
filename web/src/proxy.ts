@@ -5,7 +5,6 @@ import {
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_TYPE,
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
-  SERVER_SIDE_ONLY__DISABLE_FRAME_PROTECTION,
   SERVER_SIDE_ONLY__DISABLE_NRF_PAGE,
 } from "./lib/constants";
 import { buildCspHeader } from "./lib/security-headers";
@@ -45,8 +44,8 @@ const EE_ROUTES = [
 // pages embedded by the Chrome extension iframes — the extension ID differs
 // between store and unpacked installs, so the scheme is allowed instead.
 // Emitted here (not next.config.js, which is resolved at build time) so the
-// DISABLE_* env switches work at runtime; see security-headers.js for why
-// the full CSP must be emitted.
+// DISABLE_NRF_PAGE env switch works at runtime; see security-headers.js for
+// why the full CSP must be emitted.
 const STRICT_CSP_HEADER = buildCspHeader("'self'");
 const EXTENSION_EMBEDDABLE_CSP_HEADER = buildCspHeader(
   "'self' chrome-extension:"
@@ -60,10 +59,6 @@ function withFrameProtectionHeaders(
   request: NextRequest,
   response: NextResponse
 ): NextResponse {
-  if (SERVER_SIDE_ONLY__DISABLE_FRAME_PROTECTION) {
-    return response;
-  }
-
   const pathname = request.nextUrl.pathname;
   const isExtensionEmbeddable =
     !SERVER_SIDE_ONLY__DISABLE_NRF_PAGE && isNrfRoute(pathname);

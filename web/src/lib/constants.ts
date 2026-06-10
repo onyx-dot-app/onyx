@@ -37,14 +37,10 @@ export const TENANT_ID_COOKIE_NAME = "onyx_tid";
 export const SERVER_SIDE_ONLY__AUTH_COOKIE_NAME =
   process.env.AUTH_COOKIE_NAME || "fastapiusersauth";
 
-// Runtime kill switch for the clickjacking headers (frame-ancestors + XFO)
-// emitted by src/proxy.ts; flipped with an env change + restart, no rebuild.
-export const SERVER_SIDE_ONLY__DISABLE_FRAME_PROTECTION =
-  process.env.DISABLE_FRAME_PROTECTION?.toLowerCase() === "true";
-
-// All-or-nothing runtime switch: src/proxy.ts redirects /nrf* to / and drops
-// the chrome-extension: frame-ancestors allowance, so nothing in the app is
-// embeddable by the Chrome extension.
+// All-or-nothing runtime switch (env change + restart, no rebuild):
+// src/proxy.ts redirects /nrf* to / and drops the chrome-extension:
+// frame-ancestors allowance, so nothing in the app is embeddable by the
+// Chrome extension.
 export const SERVER_SIDE_ONLY__DISABLE_NRF_PAGE =
   process.env.DISABLE_NRF_PAGE?.toLowerCase() === "true";
 

@@ -5,9 +5,9 @@ const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 const { buildCspHeader } = require("./src/lib/security-headers");
 
 // Fallback CSP for routes the proxy doesn't cover (static assets, /api).
-// frame-ancestors + X-Frame-Options live in src/proxy.ts (runtime-toggleable
-// via DISABLE_FRAME_PROTECTION); headers here are baked in at build time, so
-// do NOT add frame-ancestors back.
+// frame-ancestors + X-Frame-Options live in src/proxy.ts, where the
+// DISABLE_NRF_PAGE switch can vary them at runtime; headers here are baked
+// in at build time, so do NOT add frame-ancestors back.
 const baseCspHeader = buildCspHeader(null);
 
 /** @type {import('next').NextConfig} */
