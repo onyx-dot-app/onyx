@@ -96,8 +96,7 @@ class PacketException(BaseObj):
     model_config = {"arbitrary_types_allowed": True}
 
 
-# Generic chat-level heartbeat: emitted during long internal LLM generations
-# to keep the SSE connection alive past idle-proxy timeouts. Carries no payload.
+# Payload-less keepalive so idle proxies don't kill an otherwise-silent stream
 class ChatHeartbeat(BaseObj):
     type: Literal["chat_heartbeat"] = StreamingType.CHAT_HEARTBEAT.value
 
