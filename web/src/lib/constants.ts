@@ -44,6 +44,17 @@ export const SERVER_SIDE_ONLY__AUTH_COOKIE_NAME =
 export const SERVER_SIDE_ONLY__DISABLE_FRAME_PROTECTION =
   process.env.DISABLE_FRAME_PROTECTION?.toLowerCase() === "true";
 
+// All-or-nothing runtime switch for the /nrf pages (the surfaces the Chrome
+// extension embeds in its new-tab and side-panel iframes). When true,
+// src/proxy.ts redirects /nrf and /nrf/* to / and stops emitting the relaxed
+// "frame-ancestors 'self' chrome-extension:" CSP, so the whole app is
+// strictly 'self' — nothing is extension-embeddable. Lets security-conscious
+// deployments that don't use the extension remove that surface entirely.
+// Same runtime semantics as DISABLE_FRAME_PROTECTION above: env change +
+// restart, no rebuild. Server-side only: read in the proxy (middleware).
+export const SERVER_SIDE_ONLY__DISABLE_NRF_PAGE =
+  process.env.DISABLE_NRF_PAGE?.toLowerCase() === "true";
+
 export const SEARCH_TYPE_COOKIE_NAME = "search_type";
 export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
 

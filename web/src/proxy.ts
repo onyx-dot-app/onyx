@@ -6,6 +6,7 @@ import {
   SERVER_SIDE_ONLY__AUTH_TYPE,
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
   SERVER_SIDE_ONLY__DISABLE_FRAME_PROTECTION,
+  SERVER_SIDE_ONLY__DISABLE_NRF_PAGE,
 } from "./lib/constants";
 import { buildCspHeader } from "./lib/security-headers";
 
@@ -61,6 +62,10 @@ const EXTENSION_EMBEDDABLE_CSP_HEADER = buildCspHeader(
   "'self' chrome-extension:"
 );
 
+function isNrfRoute(pathname: string): boolean {
+  return pathname === "/nrf" || pathname.startsWith("/nrf/");
+}
+
 function withFrameProtectionHeaders(
   request: NextRequest,
   response: NextResponse
@@ -70,8 +75,10 @@ function withFrameProtectionHeaders(
   }
 
   const pathname = request.nextUrl.pathname;
+  // With the /nrf pages disabled there is no extension-embeddable surface,
+  // so every route (including the /nrf redirect itself) gets the strict CSP.
   const isExtensionEmbeddable =
-    pathname === "/nrf" || pathname.startsWith("/nrf/");
+    !SERVER_SIDE_ONLY__DISABLE_NRF_PAGE && isNrfRoute(pathname);
 
   response.headers.set(
     "Content-Security-Policy",
@@ -86,6 +93,19 @@ function withFrameProtectionHeaders(
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+
+  // All-or-nothing switch for the extension-embeddable /nrf pages. When
+  // disabled, the pages are unreachable and (via withFrameProtectionHeaders
+  // above) the chrome-extension: frame-ancestors allowance is never emitted,
+  // so no part of the app can be framed by the extension. The redirect
+  // target / carries frame-ancestors 'self', so inside an extension iframe
+  // the browser refuses to render it.
+  if (SERVER_SIDE_ONLY__DISABLE_NRF_PAGE && isNrfRoute(pathname)) {
+    return withFrameProtectionHeaders(
+      request,
+      NextResponse.redirect(new URL("/", request.url))
+    );
+  }
 
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)
