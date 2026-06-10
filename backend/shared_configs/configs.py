@@ -139,28 +139,35 @@ def validate_cors_origin(origin: str) -> None:
 
 
 # Examples of valid values for the environment variable:
-# - "" (allow all origins)
+# - "" (allow all origins, credentials disabled)
 # - "http://example.com" (single origin)
 # - "http://example.com,https://example.org" (multiple origins)
-# - "*" (allow all origins)
+# - "*" (allow all origins, credentials disabled)
 CORS_ALLOWED_ORIGIN_ENV = os.environ.get("CORS_ALLOWED_ORIGIN", "")
 
-# Explicitly declare the type of CORS_ALLOWED_ORIGIN
-CORS_ALLOWED_ORIGIN: List[str]
 
-if CORS_ALLOWED_ORIGIN_ENV:
-    # Split the environment variable into a list of origins
-    CORS_ALLOWED_ORIGIN = [
-        origin.strip()
-        for origin in CORS_ALLOWED_ORIGIN_ENV.split(",")
-        if origin.strip()
-    ]
-    # Validate each origin in the list
-    for origin in CORS_ALLOWED_ORIGIN:
-        validate_cors_origin(origin)
-else:
-    # If the environment variable is empty, allow all origins
-    CORS_ALLOWED_ORIGIN = ["*"]
+def parse_cors_allowed_origins(env_value: str) -> List[str]:
+    origins = [origin.strip() for origin in env_value.split(",") if origin.strip()]
+    if not origins:
+        # If the environment variable is empty, allow all origins
+        return ["*"]
+    for origin in origins:
+        if origin != "*":
+            validate_cors_origin(origin)
+    return origins
+
+
+def cors_allow_credentials(allowed_origins: List[str]) -> bool:
+    # A wildcard origin must never be paired with allow_credentials=True:
+    # browsers reject "Access-Control-Allow-Origin: *" on credentialed
+    # responses, and Starlette compensates by echoing arbitrary request
+    # Origins on preflights, which would let any site make credentialed
+    # (cookie-authenticated) cross-origin requests.
+    return "*" not in allowed_origins
+
+
+CORS_ALLOWED_ORIGIN: List[str] = parse_cors_allowed_origins(CORS_ALLOWED_ORIGIN_ENV)
+CORS_ALLOW_CREDENTIALS: bool = cors_allow_credentials(CORS_ALLOWED_ORIGIN)
 
 
 # Multi-tenancy configuration
