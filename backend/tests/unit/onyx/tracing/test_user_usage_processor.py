@@ -231,15 +231,13 @@ def test_on_span_end_never_raises_on_internal_error(
     assert _read_rows(sqlite_engine) == []
 
 
-def test_real_pricing_excludes_cache_reads_from_input(
+def test_excludes_cache_reads_from_priced_input(
     monkeypatch: pytest.MonkeyPatch, sqlite_engine: Engine
 ) -> None:
-    # Real compute_cost_cents (NOT stubbed): the span carries the litellm prompt
-    # total (input_tokens already includes cache reads). The processor must
-    # price the non-cached remainder as input and the cache reads at the cache
-    # rate — mirrors test_cost.py::test_cache_read_tokens_priced_as_input.
-    # gpt-4o: 1000 non-cached @ $2.50/Mtok + 2000 cache-read @ $1.25/Mtok =
-    # 0.25c + 0.25c = 0.5c input; 500 output tok @ $10/Mtok = 0.5c.
+    # The span's input_tokens is the litellm prompt total (cache-inclusive). The
+    # processor must price only the non-cached remainder as input and pass cache
+    # reads separately, so compute_cost_cents can't double-charge them. Asserting
+    # the args passed to compute_cost_cents keeps this independent of live pricing.
     SessionLocal = sessionmaker(bind=sqlite_engine)
 
     from contextlib import contextmanager
@@ -253,6 +251,21 @@ def test_real_pricing_excludes_cache_reads_from_input(
             session.close()
 
     monkeypatch.setattr(proc_mod, "get_session_with_tenant", _fake_session)
+
+    priced: list[tuple[int, int, int]] = []
+
+    def _capture_cost(
+        _model: str,
+        _provider: Any,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read_tokens: int = 0,
+        **_kw: Any,
+    ) -> tuple[float, float]:
+        priced.append((input_tokens, output_tokens, cache_read_tokens))
+        return (0.0, 0.0)
+
+    monkeypatch.setattr(proc_mod, "compute_cost_cents", _capture_cost)
 
     p = UserUsageTracingProcessor(flush_interval_seconds=0.05)
     try:
@@ -274,14 +287,15 @@ def test_real_pricing_excludes_cache_reads_from_input(
     finally:
         p.shutdown()
 
+    # Priced the non-cached remainder (3000 - 2000) as input; cache reads passed
+    # separately rather than folded into the input total.
+    assert priced == [(1000, 500, 2000)]
+
     rows = _read_rows(sqlite_engine)
     assert len(rows) == 1
-    row = rows[0]
     # Ledger keeps the full (cache-inclusive) input token count.
-    assert row.input_tokens == 3000
-    assert row.cache_read_tokens == 2000
-    # Cost must NOT double-charge the 2000 cache reads at the full input rate.
-    assert row.cost_cents == pytest.approx(1.0)
+    assert rows[0].input_tokens == 3000
+    assert rows[0].cache_read_tokens == 2000
 
 
 def test_flush_swallows_record_errors(

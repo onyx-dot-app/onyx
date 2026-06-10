@@ -168,7 +168,7 @@ def get_my_usage(
     """The calling user's own token/cost usage — backs the Usage tab.
 
     Aggregates the current window by default; `days` widens the per-day table to
-    a trailing N-day range. Budget fields are null until P5 enforcement exists.
+    a trailing N-day range. Budget fields are null when the user has no cost limit.
     """
     now = datetime.now(timezone.utc)
     window_start = get_window_start(now, period_hours=_PERIOD_HOURS)
@@ -204,7 +204,7 @@ def get_my_usage(
             )
 
     budget_cents, budget_remaining_cents, budget_period_hours = _user_cost_budget(
-        db_session, str(user.id)
+        db_session, user_id
     )
 
     return UserUsageResponse(
