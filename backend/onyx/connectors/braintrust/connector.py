@@ -554,19 +554,3 @@ class BraintrustConnector(CheckpointedConnector[BraintrustCheckpoint]):
             raise ConnectorValidationError(
                 "Unexpected response shape from the Braintrust API"
             )
-
-
-if __name__ == "__main__":
-    import os
-    import time
-
-    connector = BraintrustConnector(project_name=os.environ.get("BRAINTRUST_PROJECT"))
-    connector.load_credentials({_API_KEY: os.environ["BRAINTRUST_API_KEY"]})
-    connector.validate_connector_settings()
-
-    from tests.daily.connectors.utils import load_all_from_connector
-
-    for doc in load_all_from_connector(
-        connector=connector, start=0, end=time.time()
-    ).documents:
-        print(doc.to_short_descriptor())
