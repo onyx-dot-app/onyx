@@ -285,6 +285,7 @@ def upsert_cost_override(
     row = upsert_override(
         db_session,
         model=payload.model,
+        provider=payload.provider,
         input_cost_per_mtok=payload.input_cost_per_mtok,
         output_cost_per_mtok=payload.output_cost_per_mtok,
         cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
@@ -299,10 +300,11 @@ def upsert_cost_override(
 @router.delete("/{model:path}")
 def delete_cost_override(
     model: str,
+    provider: str = "",
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    if not delete_override(db_session, model):
+    if not delete_override(db_session, model, provider):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, f"No cost override for model {model}")
     db_session.commit()
     invalidate_override_cache()
