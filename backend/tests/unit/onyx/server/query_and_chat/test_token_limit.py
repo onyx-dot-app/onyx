@@ -247,13 +247,18 @@ def _cost_limit(
     return limit
 
 
+def _recent_cost_buckets(total: float) -> list[tuple[datetime.datetime, float]]:
+    """A single just-now cost bucket, so it lands inside any limit's window."""
+    return [(datetime.datetime.now(datetime.timezone.utc), total)]
+
+
 class TestWorstTriggeredCostLimit:
-    """Unit of the shared cost evaluator (no DB; cost is injected)."""
+    """Unit of the shared cost evaluator (no DB; cost buckets are injected)."""
 
     def test_over_cost_budget_returns_row(self) -> None:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
         triggered = token_limit._worst_triggered_cost_limit(
-            [limit], cost_since=lambda _cutoff: 150.0
+            [limit], _recent_cost_buckets(150.0)
         )
         assert triggered is limit
 
@@ -261,7 +266,7 @@ class TestWorstTriggeredCostLimit:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
         assert (
             token_limit._worst_triggered_cost_limit(
-                [limit], cost_since=lambda _cutoff: 99.99
+                [limit], _recent_cost_buckets(99.99)
             )
             is None
         )
@@ -270,7 +275,7 @@ class TestWorstTriggeredCostLimit:
         limit = _cost_limit(100.0, TokenRateLimitScope.USER)
         assert (
             token_limit._worst_triggered_cost_limit(
-                [limit], cost_since=lambda _cutoff: 100.0
+                [limit], _recent_cost_buckets(100.0)
             )
             is limit
         )
@@ -280,7 +285,7 @@ class TestWorstTriggeredCostLimit:
         limit = _cost_limit(None, TokenRateLimitScope.USER)
         assert (
             token_limit._worst_triggered_cost_limit(
-                [limit], cost_since=lambda _cutoff: 10**9
+                [limit], _recent_cost_buckets(10**9)
             )
             is None
         )
@@ -299,7 +304,11 @@ class TestGlobalCostRejectionPath:
         )
         # under token budget so only cost can trigger
         monkeypatch.setattr(token_limit, "_fetch_global_usage", lambda *_: _usage(1))
-        monkeypatch.setattr(token_limit, "get_total_cost_cents_since", lambda *_: 600.0)
+        monkeypatch.setattr(
+            token_limit,
+            "get_total_cost_cents_buckets_since",
+            lambda *_: _recent_cost_buckets(600.0),
+        )
 
         with pytest.raises(OnyxError) as ei:
             token_limit._user_is_rate_limited_by_global()
@@ -316,7 +325,11 @@ class TestGlobalCostRejectionPath:
             token_limit, "fetch_all_global_token_rate_limits", lambda **_: [limit]
         )
         monkeypatch.setattr(token_limit, "_fetch_global_usage", lambda *_: _usage(1))
-        monkeypatch.setattr(token_limit, "get_total_cost_cents_since", lambda *_: 100.0)
+        monkeypatch.setattr(
+            token_limit,
+            "get_total_cost_cents_buckets_since",
+            lambda *_: _recent_cost_buckets(100.0),
+        )
 
         token_limit._user_is_rate_limited_by_global()  # no raise
 
@@ -342,7 +355,11 @@ class TestGlobalCostRejectionPath:
             raise AssertionError("token aggregation ran for a cost-only limit")
 
         monkeypatch.setattr(token_limit, "_fetch_global_usage", _boom)
-        monkeypatch.setattr(token_limit, "get_total_cost_cents_since", lambda *_: 100.0)
+        monkeypatch.setattr(
+            token_limit,
+            "get_total_cost_cents_buckets_since",
+            lambda *_: _recent_cost_buckets(100.0),
+        )
 
         token_limit._user_is_rate_limited_by_global()  # no raise, no token query
 
