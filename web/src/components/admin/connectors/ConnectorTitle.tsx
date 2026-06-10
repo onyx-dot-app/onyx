@@ -67,10 +67,25 @@ export const ConnectorTitle = ({
     }
   } else if (connector.source === "jira") {
     const typedConnector = connector as Connector<JiraConfig>;
-    additionalMetadata.set(
-      "Jira Project URL",
-      typedConnector.connector_specific_config.jira_project_url
-    );
+    if (typedConnector.connector_specific_config.jira_project_url) {
+      additionalMetadata.set(
+        "Jira Project URL",
+        typedConnector.connector_specific_config.jira_project_url
+      );
+    } else if (typedConnector.connector_specific_config.jira_base_url) {
+      additionalMetadata.set(
+        "Jira Base URL",
+        typedConnector.connector_specific_config.jira_base_url
+      );
+    }
+  } else if (connector.source === "jira_service_management") {
+    const typedConnector = connector as Connector<JiraConfig>;
+    if (typedConnector.connector_specific_config.project_key) {
+      additionalMetadata.set(
+        "JSM Project Key",
+        typedConnector.connector_specific_config.project_key
+      );
+    }
   } else if (connector.source === "slack") {
     const typedConnector = connector as Connector<SlackConfig>;
     if (

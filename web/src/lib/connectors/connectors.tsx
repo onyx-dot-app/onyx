@@ -754,6 +754,59 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext:
+      "Index tickets from a specific Jira Service Management project.",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query: "Enter the Jira Service Management project key:",
+        label: "Project Key",
+        name: "project_key",
+        optional: false,
+        description:
+          "The key of the Jira Service Management project to index (e.g., 'HELP').",
+      },
+      {
+        type: "text",
+        query: "Enter an optional JQL query:",
+        label: "JQL Query",
+        name: "jql_query",
+        optional: true,
+        description:
+          "A custom JQL query to filter Jira Service Management tickets inside the configured project." +
+          "\n\nDo not include the project filter; the connector will scope the query to the project key above.",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to blacklist from comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        description:
+          "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
@@ -1981,7 +2034,8 @@ export interface ConfluenceConfig {
 }
 
 export interface JiraConfig {
-  jira_project_url: string;
+  jira_base_url?: string;
+  jira_project_url?: string;
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
