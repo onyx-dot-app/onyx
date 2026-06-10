@@ -68,6 +68,7 @@ from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
 from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
+from onyx.server.features.build.configs import SANDBOX_IMAGE_PULL_POLICY
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
@@ -205,7 +206,7 @@ def _proxy_init_container() -> client.V1Container:
     return client.V1Container(
         name="sandbox-init",
         image=SANDBOX_CONTAINER_IMAGE,
-        image_pull_policy="IfNotPresent",
+        image_pull_policy=SANDBOX_IMAGE_PULL_POLICY,
         command=["/workspace/firewall-init.sh"],
         env=[
             client.V1EnvVar(name="SANDBOX_PROXY_HOST", value=SANDBOX_PROXY_HOST),
@@ -602,7 +603,7 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_container = client.V1Container(
             name=_SANDBOX_CONTAINER_NAME,
             image=self._image,
-            image_pull_policy="IfNotPresent",
+            image_pull_policy=SANDBOX_IMAGE_PULL_POLICY,
             command=["/workspace/entrypoint.sh"],
             ports=sandbox_ports,
             env=[
@@ -707,7 +708,7 @@ class KubernetesSandboxManager(SandboxManager):
         sidecar_container = client.V1Container(
             name="sidecar",
             image=self._image,
-            image_pull_policy="IfNotPresent",
+            image_pull_policy=SANDBOX_IMAGE_PULL_POLICY,
             command=["/workspace/sidecar-entrypoint.sh"],
             ports=[
                 client.V1ContainerPort(
