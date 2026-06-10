@@ -22,6 +22,20 @@ and are pushed into sandboxes at session setup, never baked into the image.
 
 ## Building the Image
 
+### Via CI (preferred)
+
+Push a `sandbox/<docker-tag>` git tag to have `.github/workflows/sandbox-deployment.yml`
+build multi-arch and push `onyxdotapp/sandbox:<docker-tag>`:
+
+```bash
+git tag -f sandbox/dev && git push -f origin sandbox/dev
+```
+
+Ad-hoc builds never cut a `vX.Y.Z` version or move `:latest`. The nightly tag
+still cuts an auto-versioned `vX.Y.Z` + `latest` when the image context changed.
+
+### Building locally
+
 The sandbox image must be built for **amd64** architecture since our Kubernetes cluster runs on x86_64 nodes.
 
 ### Build for amd64 only (fastest)

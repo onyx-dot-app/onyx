@@ -32,6 +32,16 @@ previous nightly. It publishes `onyxdotapp/sandbox:vX.Y.Z` (auto-incremented
 patch) + `:latest`. Run it manually any time via the workflow's
 `workflow_dispatch` to cut a build on demand.
 
+For an ad-hoc build, push a `sandbox/<docker-tag>` git tag:
+
+```bash
+git tag -f sandbox/dev && git push -f origin sandbox/dev
+```
+
+This builds unconditionally and pushes `onyxdotapp/sandbox:dev`. Ad-hoc builds
+never cut a `vX.Y.Z` version or move `:latest` — those only happen on the
+nightly path.
+
 The backend does **not** track `:latest` — it pins a specific version via
 `SANDBOX_CONTAINER_IMAGE` (default in `configs.py`). Bump that pin to adopt a
 new sandbox version.

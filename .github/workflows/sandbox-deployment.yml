@@ -2,10 +2,17 @@ name: Build and Push Sandbox Image
 
 # The sandbox image is the only Craft-specific image. Build a new version on
 # the nightly tag when its build context changed, or manually on demand.
+#
+# To push an ad-hoc build, tag the commit with sandbox/<docker-tag>, e.g.
+#   git tag -f sandbox/dev && git push -f origin sandbox/dev
+# builds unconditionally and pushes onyxdotapp/sandbox:dev. Ad-hoc builds
+# never cut a vX.Y.Z version or move :latest — those only happen on the
+# nightly path.
 on:
   push:
     tags:
       - "nightly-latest-*"
+      - "sandbox/*"
   workflow_dispatch:
 
 # Restrictive defaults; jobs declare what they need.
@@ -20,6 +27,7 @@ jobs:
     outputs:
       sandbox-changed: ${{ steps.check.outputs.sandbox-changed }}
       new-version: ${{ steps.version.outputs.new-version }}
+      custom-tag: ${{ steps.check.outputs.custom-tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -38,6 +46,21 @@ jobs:
             echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
+          # sandbox/<docker-tag> tags always build and push that exact image tag.
+          case "$GITHUB_REF_NAME" in
+            sandbox/*)
+              CUSTOM_TAG="${GITHUB_REF_NAME#sandbox/}"
+              if ! printf '%s' "$CUSTOM_TAG" | grep -qE '^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$'; then
+                echo "Invalid docker tag derived from git tag: '$CUSTOM_TAG'"
+                exit 1
+              fi
+              echo "Custom sandbox tag: building and pushing :${CUSTOM_TAG}"
+              echo "custom-tag=$CUSTOM_TAG" >> "$GITHUB_OUTPUT"
+              echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
 
           # Diff the sandbox image build context against the previous nightly tag.
           CURRENT_TAG="${GITHUB_REF_NAME}"
@@ -60,7 +83,7 @@ jobs:
 
       - name: Determine new sandbox version
         id: version
-        if: steps.check.outputs.sandbox-changed == 'true'
+        if: steps.check.outputs.sandbox-changed == 'true' && steps.check.outputs.custom-tag == ''
         run: |
           # Query Docker Hub for the latest versioned tag
           LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
@@ -277,8 +300,8 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=raw,value=v${{ needs.check-sandbox-changes.outputs.new-version }}
-            type=raw,value=latest
+            ${{ needs.check-sandbox-changes.outputs.custom-tag != '' && format('type=raw,value={0}', needs.check-sandbox-changes.outputs.custom-tag) || format('type=raw,value=v{0}', needs.check-sandbox-changes.outputs.new-version) }}
+            ${{ needs.check-sandbox-changes.outputs.custom-tag == '' && 'type=raw,value=latest' || '' }}
 
       - name: Create and push manifest
         env:
