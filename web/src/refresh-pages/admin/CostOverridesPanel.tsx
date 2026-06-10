@@ -104,6 +104,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
       toast.success(`Saved rate for ${model.trim()}.`);
       onDone();
     } catch (e) {
+      console.error("Failed to save cost override", e);
       const message = e instanceof Error ? e.message : "Unknown error";
       toast.error(`Failed to save override: ${message}`);
     } finally {
@@ -218,10 +219,11 @@ function OverrideRow({ override }: OverrideRowProps) {
   async function handleDelete() {
     setDeleting(true);
     try {
-      await deleteCostOverride(override.model);
+      await deleteCostOverride(override.model, override.provider);
       await refreshCostOverrides(mutate);
       toast.success(`Removed override for ${override.model}.`);
     } catch (e) {
+      console.error("Failed to remove cost override", e);
       const message = e instanceof Error ? e.message : "Unknown error";
       toast.error(`Failed to remove override: ${message}`);
       setDeleting(false);
@@ -329,7 +331,10 @@ export default function CostOverridesPanel() {
       ) : costOverrides && costOverrides.length > 0 ? (
         <div className="flex flex-col gap-2">
           {costOverrides.map((override) => (
-            <OverrideRow key={override.model} override={override} />
+            <OverrideRow
+              key={`${override.provider}:${override.model}`}
+              override={override}
+            />
           ))}
         </div>
       ) : (
