@@ -40,7 +40,7 @@ rules:
     verbs: ["get"]
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["get", "create", "delete"]
+    verbs: ["get", "create", "delete", "patch"]
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "create", "update", "delete"]

@@ -48,16 +48,19 @@ below and set `redis.enabled: false` to skip the operator entirely.
 
 ## Onyx Craft with Kubernetes sandboxes
 
-When `configMap.ENABLE_CRAFT="true"` and `configMap.SANDBOX_BACKEND="kubernetes"`
-(the Helm default), the target cluster must run Kubernetes `>= 1.33`. Craft
-sandbox pods use native restartable init sidecar containers: `sandbox-init`
-runs and completes first, `sidecar` starts next as an `initContainers` entry
-with `restartPolicy: Always`, and the main `sandbox` app container starts
-after the sidecar is ready.
+When `configMap.ENABLE_CRAFT="true"`, the target cluster must run Kubernetes
+`>= 1.33`. Craft Helm deployments provision Kubernetes sandbox pods; Docker
+is not a Helm deployment backend for Craft and `configMap.SANDBOX_BACKEND` is
+not a bypass for this requirement.
+
+Craft sandbox pods use native restartable init sidecar containers:
+`sandbox-init` runs and completes first, `sidecar` starts next as an
+`initContainers` entry with `restartPolicy: Always`, and the main `sandbox` app
+container starts after the sidecar is ready.
 
 The chart fails during render/install on older clusters so the incompatibility
 is caught before sandbox provisioning. This guard does not apply to non-Craft
-installs or Docker sandbox deployments.
+installs.
 
 ## Using an external Redis
 

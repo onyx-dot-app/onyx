@@ -1410,10 +1410,12 @@ configMap:
   # block. The compose stack uses underscored service names (e.g. `api_server`,
   # `cache`, `inference_model_server`) which are invalid in K8s DNS labels and
   # break inter-pod traffic in ways that look like a hung service.
-  # In particular, leave these UNSET and let the chart compute correct
-  # K8s-service hostnames:
+  # In particular, avoid copying these compose-only hostnames:
   #   REDIS_HOST, INTERNAL_URL, API_SERVER_HOST,
   #   MODEL_SERVER_HOST, INDEXING_MODEL_SERVER_HOST
+  # Leave SANDBOX_PROXY_PORT unset; the chart owns the internal proxy port.
+  # SANDBOX_PROXY_HOST defaults to the chart-managed Service DNS name and may be
+  # overridden only if sandboxes must reach a different proxy host.
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
 
   # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
@@ -1537,11 +1539,6 @@ sandboxPod:
 # -- Sandbox egress proxy.
 sandboxProxy:
   replicaCount: 2
-  containerPorts:
-    proxy: 8080
-    healthz: 8081
-  service:
-    proxyPort: 8080
   terminationGracePeriodSeconds: 200
   progressDeadlineSeconds: 300
   confdirSizeLimit: 100Mi

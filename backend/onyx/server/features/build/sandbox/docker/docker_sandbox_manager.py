@@ -333,21 +333,20 @@ _NO_PROXY_LIST = "127.0.0.1,localhost"
 def _proxy_env_vars(
     *,
     sandbox_proxy_host: str,
-    sandbox_proxy_port: int,
 ) -> dict[str, str]:
     """Proxy-enabled env additions for the sandbox container.
 
     Mirrors ``kubernetes_sandbox_manager._proxy_main_container_env_vars`` but
     layered on the docker env dict instead of a list of V1EnvVars. Includes the
-    firewall-init.sh contract vars (``SANDBOX_PROXY_*``,
-    ``CA_BUNDLE_SRC``/``DST``) since the script runs as the container's
-    entrypoint wrapper and reads them from its own environment.
+    firewall-init.sh contract vars since the script runs as the container's
+    entrypoint wrapper and reads them from its own environment. Proxy ports come
+    from build config and are injected as internal env, not caller arguments.
     """
-    proxy_url = f"http://{sandbox_proxy_host}:{sandbox_proxy_port}"
+    proxy_url = f"http://{sandbox_proxy_host}:{SANDBOX_PROXY_PORT}"
     return {
         # firewall-init.sh contract.
         "SANDBOX_PROXY_HOST": sandbox_proxy_host,
-        "SANDBOX_PROXY_PORT": str(sandbox_proxy_port),
+        "SANDBOX_PROXY_PORT": str(SANDBOX_PROXY_PORT),
         "SANDBOX_PROXY_BOOTSTRAP_MODE": "entrypoint",
         "SANDBOX_PROXY_CA_BUNDLE_SRC": f"{_PROXY_CA_SOURCE_DIR}/ca.crt",
         "SANDBOX_PROXY_CA_BUNDLE_DST": _PROXY_CA_BUNDLE_FILE,
@@ -423,7 +422,6 @@ def build_container_create_kwargs(
     opencode_config_json: str,
     compose_project: str | None = None,
     sandbox_proxy_host: str | None = None,
-    sandbox_proxy_port: int | None = None,
     proxy_ca_volume_name: str | None = None,
 ) -> ContainerCreateKwargs:
     """Builds the kwargs dict for ``DockerClient.containers.create``.
@@ -449,8 +447,9 @@ def build_container_create_kwargs(
     ``--include-craft``):
 
     - Env layered with ``HTTPS_PROXY`` / SDK CA vars + the ``firewall-init.sh``
-      contract vars (``SANDBOX_PROXY_BOOTSTRAP_MODE= entrypoint``,
-      ``CA_BUNDLE_SRC``/``DST``). The legacy 4-key core is preserved; proxy keys
+      contract vars (``SANDBOX_PROXY_HOST``, ``SANDBOX_PROXY_PORT``,
+      ``SANDBOX_PROXY_BOOTSTRAP_MODE=entrypoint``, ``CA_BUNDLE_SRC``/``DST``).
+      The legacy 4-key core is preserved; proxy keys
       are layered on top.
     - ``ONYX_PAT`` and the opencode ``api_key`` are replaced with
       ``SANDBOX_PROXY_INJECTED_PLACEHOLDER``; the proxy reads the real values
@@ -515,16 +514,15 @@ def build_container_create_kwargs(
     }
 
     if sandbox_proxy_host:
-        # All-or-nothing: port + ca volume must be supplied when host is.
-        if sandbox_proxy_port is None or not proxy_ca_volume_name:
+        # All-or-nothing: ca volume must be supplied when host is.
+        if not proxy_ca_volume_name:
             raise ValueError(
-                "sandbox_proxy_host is set but sandbox_proxy_port or proxy_ca_volume_name is "
-                "missing; Proxy posture requires all three."
+                "sandbox_proxy_host is set but proxy_ca_volume_name is missing; "
+                "Proxy posture requires both."
             )
         env.update(
             _proxy_env_vars(
                 sandbox_proxy_host=sandbox_proxy_host,
-                sandbox_proxy_port=sandbox_proxy_port,
             )
         )
         volumes[proxy_ca_volume_name] = {
@@ -857,7 +855,6 @@ class DockerSandboxManager(SandboxManager):
             opencode_config_json=opencode_config_json,
             compose_project=self._compose_project,
             sandbox_proxy_host=proxy_host,
-            sandbox_proxy_port=SANDBOX_PROXY_PORT if proxy_host else None,
             proxy_ca_volume_name=(SANDBOX_PROXY_CA_VOLUME_NAME if proxy_host else None),
         )
         try:
