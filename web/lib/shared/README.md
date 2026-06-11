@@ -6,8 +6,10 @@ It holds four things, none of which depend on any UI framework:
 
 | Subpath | Contents |
 | --- | --- |
-| `@onyx-ai/shared/tokens.css` | Design tokens as **CSS custom properties** (`--sh-*`) — for web. |
-| `@onyx-ai/shared/tokens` | The same tokens as a **typed JS object** (unitless numbers) — for mobile. |
+| `@onyx-ai/shared/tokens.css` | Design tokens as **CSS custom properties** (exact Opal names: `--text-05`, `--radius-12`, …), with `:root` (primitives + light) and `.dark` (dark overrides) — for web/Opal. |
+| `@onyx-ai/shared/typography.css` | Typography **presets** as Tailwind `@utility font-*` blocks (`font-heading-h1`, `font-main-ui-body`, …) — for web/Opal. |
+| `@onyx-ai/shared/nativewind-theme` | A NativeWind/Tailwind `theme.extend` fragment (semantic colors as `var(--name)`; radius/spacing as px numbers) — for mobile's `tailwind.config.js`. |
+| `@onyx-ai/shared/native` | `{ varsLight, varsDark, textPresets }` — resolved light/dark CSS-variable maps for the mobile NativeWind `vars()` provider (the RN analog of web's `.dark` class), plus the typography presets as RN style objects. |
 | `@onyx-ai/shared/utils` | Pure TypeScript utilities (no DOM / Node / React). |
 | `@onyx-ai/shared/contracts` | Cross-platform component API contracts (React-free, generic over the platform's icon/node type). |
 | `@onyx-ai/shared/types` | Common DTOs and enums. |
@@ -30,16 +32,36 @@ When extending it:
 
 ## Tokens
 
-Edit the **source** in `tokens/**/*.json` — never the generated output in
-`dist/`. The build (Style Dictionary) regenerates both platform outputs:
+This package is the **single source of truth for Onyx's design tokens** (colors,
+spacing, radius, padding, weights, backdrop-blur, and typography metrics + font
+families + presets). Opal consumes them via `@import "@onyx-ai/shared/tokens.css"` and
+defines no design-token values of its own; mobile consumes the NativeWind fragment +
+the `vars()` maps. (Web-app-only concerns — modal/sidebar/page widths, image heights
+in Opal's `sizes.css`, and overlay stacking values in `z-index.css` — remain in Opal;
+they are not cross-platform design tokens.)
+
+Edit the **source** in `tokens/opal/*.json` — never the generated output in `dist/`.
+Token sources use the legacy `{ name, value, type }` shape; each token's key is the
+**exact** CSS variable name (no prefix). Semantic colors reference primitives
+(`"{alpha-grey-100-90}"`), which the build emits as `var(--alpha-grey-100-90)` so
+dark mode flips at runtime exactly as before. The build (Style Dictionary)
+regenerates every platform output:
 
 ```bash
-bun run build:tokens   # tokens/*.json -> dist/tokens.css + dist/tokens.js + dist/tokens.d.ts
+bun run build:tokens   # tokens/opal/*.json -> tokens.css + typography.css + nativewind-theme.cjs + native.js (+ .d.ts)
 ```
 
-The `--sh-*` prefix namespaces these variables so they never collide with
-Opal's existing `--color-*` / `--text-*`. Opal remains web's design-system
-source of record for now; this token set is the future cross-platform source.
+Typography presets live in `tokens/opal/typography-presets.json` (each preset bundles
+font-family, size, weight, line-height, letter-spacing). The build emits them as web
+`@utility font-*` blocks (`typography.css`) **and** as resolved RN style objects
+(`textPresets` in `native.js`) — one source, both platforms.
+
+### No-regression gate
+
+`bun run verify:tokens` proves the move is loss-less: it resolves every token
+variable (light **and** dark) from the new output and from Opal's pre-migration CSS
+at git HEAD, and fails on any name-set or resolved-value difference. Run it while the
+migration PR is open; it skips cleanly once the old baseline no longer exists at HEAD.
 
 ## Build
 
@@ -73,12 +95,16 @@ surface** works with no extra tooling:
 the package through its built `dist` types via the `exports` map (so run
 `bun run build` here — `prepare` also does it on a fresh install).
 
-Mobile (Metro/Expo) consumes the same package — tokens via the JS object
-(`@onyx-ai/shared/tokens`), plus types, contracts, and utils — by pointing a
-`file:` dependency at `web/lib/shared` and adding it to Metro `watchFolders`
-(with `resolver.unstable_enablePackageExports` so the subpath `exports` resolve).
-Metro has no filesystem-root fence, so the package's location under `web/` is
-invisible to it.
+Mobile (Metro/Expo) consumes the same package — tokens via the NativeWind theme
+fragment (`@onyx-ai/shared/nativewind-theme`, wired into `tailwind.config.js`) and
+the light/dark `vars()` maps (`@onyx-ai/shared/native`), plus types, contracts, and
+utils — by pointing a `file:` dependency at `web/lib/shared` and adding it to Metro
+`watchFolders` (with `resolver.unstable_enablePackageExports` so the subpath
+`exports` resolve). Metro has no filesystem-root fence, so the package's location
+under `web/` is invisible to it. Because RN cannot use CSS variables for theming,
+the semantic class (`bg-background-neutral-01`) maps to `var(--…)` and the active
+palette is supplied at the app root by a `vars()` provider that swaps `varsLight` /
+`varsDark` on color-scheme change — the RN analog of web's `.dark` class.
 
 ## Future: extract to a private npm package
 

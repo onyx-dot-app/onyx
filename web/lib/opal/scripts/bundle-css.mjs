@@ -1,7 +1,9 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import { createRequire } from "node:module";
 
+const require = createRequire(import.meta.url);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 const srcDir = join(root, "src");
@@ -66,12 +68,31 @@ function stripIntraPackageImports(source, filePath) {
   );
 }
 
+// Inline `@import "@onyx-ai/shared/*.css"` by splicing in the resolved file's
+// contents, so the published opal artifact is SELF-CONTAINED and has no runtime
+// dependency on @onyx-ai/shared. Opal still consumes shared as the build-time
+// source of truth (shared must be built first), but consumers of the published
+// package get the design tokens baked into dist/root.css. Other bare imports
+// (tailwindcss, tw-animate-css) are left untouched for the consumer's Tailwind.
+function inlineSharedImports(source) {
+  return source.replace(
+    /@import\s+['"](@onyx-ai\/shared\/[^'"]+)['"];[ \t]*\n?/gm,
+    (_match, spec) => {
+      const resolved = require.resolve(spec);
+      const css = readFileSync(resolved, "utf8").trimEnd();
+      return `/* inlined ${spec} */\n${css}\n`;
+    }
+  );
+}
+
 const parts = order.map((file) => {
   const rel = relative(srcDir, file);
   const raw = readFileSync(file, "utf8");
-  const cleaned = stripIntraPackageImports(
-    file === referenceCss ? raw : stripReferenceDirectives(raw),
-    file
+  const cleaned = inlineSharedImports(
+    stripIntraPackageImports(
+      file === referenceCss ? raw : stripReferenceDirectives(raw),
+      file
+    )
   );
   return `/* === ${rel} === */\n${cleaned.trimEnd()}\n`;
 });

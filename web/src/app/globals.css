@@ -1,5 +1,4 @@
 @import "@onyx-ai/opal/root.css";
-@import "@onyx-ai/shared/tokens.css";
 @import "./css/attachment-button.css" layer(base);
 @import "./css/button.css" layer(base);
 @import "./css/content-editable.css" layer(base);
