@@ -180,7 +180,7 @@ export default function ModelSelectorContent({
                     isSelected(GLOBAL_DEFAULT_LLM_OPTION) ? "selected" : "empty"
                   }
                   icon={(props) => <div {...(props as any)} />}
-                  title="Global Default Model"
+                  title={GLOBAL_DEFAULT_LLM_OPTION.displayName}
                   description={globalDefaultDisplayName ?? undefined}
                   onClick={() => onSelect(GLOBAL_DEFAULT_LLM_OPTION)}
                   rightChildren={
@@ -195,6 +195,7 @@ export default function ModelSelectorContent({
                 />,
               ]
             : []),
+          null,
           ...(isLoading
             ? [
                 <Text key="loading" font="secondary-body" color="text-03">
@@ -209,7 +210,7 @@ export default function ModelSelectorContent({
                 ]
               : groupedOptions.length === 1
                 ? [
-                    <Section key="single-provider" gap={1}>
+                    <Section key="single-provider" gap={0.25}>
                       {groupedOptions[0]!.options.map(renderModelItem)}
                     </Section>,
                   ]
