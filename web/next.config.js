@@ -5,6 +5,7 @@ const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 const cspHeader = `
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
+    worker-src 'self';
     object-src 'none';
     base-uri 'self';
     form-action 'self';

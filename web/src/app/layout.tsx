@@ -19,6 +19,7 @@ import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
+import { ServiceWorkerRegistration } from "@/lib/service-worker/ServiceWorkerRegistration";
 
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
@@ -95,6 +96,7 @@ export default function RootLayout({
       </head>
 
       <body className={`relative font-hanken`}>
+        <ServiceWorkerRegistration />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

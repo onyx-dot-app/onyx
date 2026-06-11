@@ -91,6 +91,7 @@ class ChatFullResponse(BaseModel):
 
     # Metadata
     message_id: int
+    user_message_id: int | None = None
     chat_session_id: UUID | None = None
     error_msg: str | None = None
 

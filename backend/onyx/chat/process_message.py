@@ -1893,6 +1893,7 @@ def gather_stream_full(
     citations: list[CitationInfo] = []
     error_msg: str | None = None
     message_id: int | None = None
+    user_message_id: int | None = None
     top_documents: list[SearchDoc] = []
     chat_session_id: UUID | None = None
 
@@ -1912,6 +1913,7 @@ def gather_stream_full(
             error_msg = packet.error
         elif isinstance(packet, MessageResponseIDInfo):
             message_id = packet.reserved_assistant_message_id
+            user_message_id = packet.user_message_id
         elif isinstance(packet, CreateChatSessionID):
             chat_session_id = packet.chat_session_id
 
@@ -1945,6 +1947,7 @@ def gather_stream_full(
         top_documents=top_documents,
         citation_info=citations,
         message_id=message_id,
+        user_message_id=user_message_id,
         chat_session_id=chat_session_id,
         error_msg=error_msg,
     )
