@@ -9,10 +9,12 @@
 #          then start runs from the web UI (host, user count, scenarios), or
 #          edit the master args to run headless (-u/-r/-t/--host).
 #
-# The default host targets the in-cluster web server service, matching the
-# browser path (/api/* proxied to the api server). Point LOCUST_HOST at the
-# external URL instead to exercise the ingress/load-balancer path — both are
-# worth measuring (LB idle timeouts are a classic killer of long streams).
+# LOCUST_HOST must be a URL that serves the browser-equivalent path, i.e.
+# routes /api/* to the api server — in practice the deployment's user-facing
+# URL (ingress/load balancer). The web server service only proxies /api/* in
+# dev-mode builds, and the in-cluster nginx routes by Host header, so neither
+# bare service name works against production images. Going through the
+# ingress also exercises LB idle timeouts — a classic killer of long streams.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -46,7 +48,7 @@ spec:
           # greenlets (and API calls) run on the workers.
           env:
             - name: LOCUST_HOST
-              value: "http://onyx-webserver:3000"
+              value: "https://<your-onyx-url>"
           resources:
             requests:
               cpu: 250m
