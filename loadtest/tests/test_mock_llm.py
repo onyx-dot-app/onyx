@@ -146,6 +146,40 @@ def test_tool_choice_none_forces_text_even_with_tools() -> None:
     assert choice["message"]["content"]
 
 
+def test_query_rephrase_flow_echoes_user_text() -> None:
+    # Query rephrase/expansion output feeds back into retrieval as the search
+    # query — detected by the prompt marker (Onyx's invoke() still streams at
+    # the wire level, so the stream flag can't discriminate). The mock must
+    # echo the question's terms, not return filler.
+    question = "what is the onboarding process for new connectors?"
+    messages = [
+        {
+            "role": "system",
+            "content": "You are an assistant that reformulates the last user "
+            "message into a standalone, self-contained query.",
+        },
+        {
+            "role": "user",
+            "content": f"Chat history above. Final user query:\n{question}",
+        },
+    ]
+    chunks = stream_chunks(messages=messages)
+    text = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks)
+    assert question.split()[-3] in text  # echo contains the question's terms
+    assert "deterministic mock answer" not in text
+
+    choice = complete(messages=messages)  # non-streaming variant too
+    assert "onboarding" in choice["message"]["content"]
+
+
+def test_normal_answer_is_filler_not_echo() -> None:
+    chunks = stream_chunks(
+        messages=[{"role": "user", "content": "what is the onboarding process?"}]
+    )
+    text = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks)
+    assert "deterministic mock answer" in text
+
+
 def test_chat_auto_with_tools_knob_emits_internal_search_with_queries_array() -> None:
     chunks = stream_chunks(
         model="mock-tools1-ttft0-itl0",
@@ -254,5 +288,6 @@ def test_forced_specific_tool_is_honored() -> None:
 
 
 def test_max_tokens_caps_answer_length() -> None:
-    choice = complete(model="mock-ttft0-itl0-len500", max_tokens=10)
-    assert len(choice["message"]["content"].split()) == 10
+    chunks = stream_chunks(model="mock-ttft0-itl0-len500", max_tokens=10)
+    text = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks)
+    assert len(text.split()) == 10

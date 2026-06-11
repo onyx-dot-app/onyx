@@ -128,17 +128,44 @@ def _assistant_called(messages: list[ChatMessage], names: tuple[str, ...]) -> bo
     return False
 
 
-def _last_user_snippet(messages: list[ChatMessage]) -> str:
+def _last_user_text(messages: list[ChatMessage]) -> str:
     for message in reversed(messages):
         if message.role != "user":
             continue
         if isinstance(message.content, str):
-            return message.content[:200]
+            return message.content
         if isinstance(message.content, list):  # multimodal content parts
             for part in message.content:
                 if isinstance(part, dict) and part.get("type") == "text":
-                    return str(part.get("text", ""))[:200]
+                    return str(part.get("text", ""))
     return "load test query"
+
+
+def _last_user_snippet(messages: list[ChatMessage]) -> str:
+    return _last_user_text(messages)[:200]
+
+
+# Stable phrases from Onyx's secondary-flow prompts whose LLM output feeds
+# back into the pipeline (backend/onyx/prompts/search_prompts.py — both the
+# semantic and keyword query-rephrase system prompts share this prefix). For
+# these calls the mock must echo the real question's terms, not filler, or
+# retrieval searches for nonsense and returns nothing.
+_ECHO_PROMPT_MARKERS = ("reformulates the last user message",)
+
+
+def _is_echo_flow(messages: list[ChatMessage]) -> bool:
+    for message in messages:
+        if message.role != "system" or not isinstance(message.content, str):
+            continue
+        if any(marker in message.content for marker in _ECHO_PROMPT_MARKERS):
+            return True
+    return False
+
+
+def _echo_answer(messages: list[ChatMessage]) -> str:
+    """Prompt templates put the actual question at the end of the user
+    message, so echo the tail."""
+    return _last_user_text(messages)[-300:]
 
 
 def _synthesize_arguments(tool: ToolDefinition, snippet: str) -> str:
@@ -282,7 +309,15 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
     n_tokens = knobs.n_tokens
     if request.effective_max_tokens is not None:
         n_tokens = min(n_tokens, max(1, request.effective_max_tokens))
-    answer = " ".join(_FILLER_WORDS[i % len(_FILLER_WORDS)] for i in range(n_tokens))
+    if _is_echo_flow(request.messages):
+        # NOTE: invoke() also streams at the litellm layer, so echo-flow
+        # detection must come from the prompt, not the stream flag.
+        answer = _echo_answer(request.messages)
+        n_tokens = len(answer.split())
+    else:
+        answer = " ".join(
+            _FILLER_WORDS[i % len(_FILLER_WORDS)] for i in range(n_tokens)
+        )
 
     if not request.stream:
         await asyncio.sleep(
@@ -364,8 +399,7 @@ async def chat_completions(request: ChatCompletionRequest) -> Response:
                     None,
                 )
             )
-            for i in range(n_tokens):
-                word = _FILLER_WORDS[i % len(_FILLER_WORDS)]
+            for word in answer.split():
                 yield _sse(
                     _make_chunk(
                         request.model,

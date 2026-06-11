@@ -32,7 +32,9 @@ provider type **`openai_compatible`** — NOT `openai`, which litellm routes
 through the OpenAI Responses API bridge that the mock doesn't implement —
 with `api_base` pointing at the server (e.g. `http://localhost:8001`), any
 api_key, and model configurations for the model names you'll use (e.g.
-`mock-model`, `mock-tools1`, `mock-agents2`).
+`mock-model`, `mock-tools1`, `mock-agents2`). Set **max input tokens ≥
+50,000** on each model configuration — deep research refuses models below
+that, and unregistered models default far lower.
 
 Behavior knobs ride in the model name (litellm passes it through verbatim):
 
