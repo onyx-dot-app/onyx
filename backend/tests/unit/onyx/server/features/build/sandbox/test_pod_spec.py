@@ -8,6 +8,7 @@ them carry the security model:
   - `sandbox` must not be able to mutate `/workspace/managed/`.
   - PID namespace sharing must be disabled (else /proc leaks the sidecar env).
   - The sidecar must expose the push/snapshot port with health probes.
+  - Neither container should receive durable-storage credentials for snapshots.
 
 Pure logic — bypasses `_initialize` so no cluster is needed.
 """
@@ -62,8 +63,7 @@ def _build_pod() -> client.V1Pod:
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
     mgr._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
-    mgr._service_account = "sandbox-file-sync"  # type: ignore[attr-defined]
-    mgr._s3_bucket = "test-bucket"  # type: ignore[attr-defined]
+    mgr._service_account = "sandbox"  # type: ignore[attr-defined]
     return mgr._create_sandbox_pod(  # type: ignore[attr-defined]
         sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
         tenant_id="t-1",
@@ -100,16 +100,6 @@ def test_pod_has_sandbox_and_sidecar_with_distinct_entrypoints(
     assert by_name["sandbox"].command != by_name["sidecar"].command
     assert by_name["sandbox"].command == ["/workspace/entrypoint.sh"]
     assert by_name["sidecar"].command == ["/workspace/sidecar-entrypoint.sh"]
-
-
-def test_irsa_skip_containers_annotation_targets_sandbox_container(
-    pod: client.V1Pod,
-) -> None:
-    annotations = pod.metadata.annotations or {}
-    assert (
-        annotations["eks.amazonaws.com/skip-containers"]
-        == _container(pod, "sandbox").name
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -186,9 +176,14 @@ def test_workspace_volume_is_shared_for_session_io(pod: client.V1Pod) -> None:
 
 
 def test_share_process_namespace_is_disabled(pod: client.V1Pod) -> None:
-    """PID-sharing would expose the sidecar's IRSA env via /proc to the
-    agent. Pin explicitly False (not just None / unset)."""
+    """PID-sharing would expose sidecar process state via /proc to the agent.
+    Pin explicitly False (not just None / unset)."""
     assert pod.spec.share_process_namespace is False
+
+
+def test_service_account_token_automount_is_disabled(pod: client.V1Pod) -> None:
+    """The sandbox pod never needs the Kubernetes API token mounted."""
+    assert pod.spec.automount_service_account_token is False
 
 
 # ---------------------------------------------------------------------------
@@ -227,12 +222,30 @@ _PROXY_ENV_NAMES = {
 
 def test_proxy_env_is_set_on_sandbox_and_sidecar(pod: client.V1Pod) -> None:
     """Both containers' outbound traffic must be routed through the proxy —
-    sandbox for the agent, sidecar for `aws s3` (the pod-wide iptables
-    lockdown blocks direct egress for either)."""
+    sandbox for the agent and sidecar for control-plane callbacks."""
     for name in ("sandbox", "sidecar"):
         env = {e.name for e in _container(pod, name).env}
         assert _PROXY_ENV_NAMES.issubset(env), (
             f"{name} container missing proxy env: {_PROXY_ENV_NAMES - env}"
+        )
+
+
+def test_snapshot_storage_credentials_are_not_in_pod_env(pod: client.V1Pod) -> None:
+    """Snapshots stream to api-server-owned FileStore persistence, so sandbox
+    pods do not need bucket names, endpoints, or AWS credentials."""
+    forbidden = {
+        "SANDBOX_S3_BUCKET",
+        "S3_ENDPOINT_URL",
+        "AWS_ENDPOINT_URL",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "S3_AWS_ACCESS_KEY_ID",
+        "S3_AWS_SECRET_ACCESS_KEY",
+    }
+    for name in ("sandbox", "sidecar"):
+        env = {e.name for e in _container(pod, name).env}
+        assert env.isdisjoint(forbidden), (
+            f"{name} leaked storage env: {env & forbidden}"
         )
 
 

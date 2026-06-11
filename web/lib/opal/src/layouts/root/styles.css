@@ -51,7 +51,7 @@
   @apply flex-1 overflow-auto;
 }
 
-/* Panel — permanent column (width is caller-supplied via className) */
+/* Panel — permanent column (width determined by child content) */
 .opal-root-layout__panel {
   @apply shrink-0 overflow-auto h-full;
 }
