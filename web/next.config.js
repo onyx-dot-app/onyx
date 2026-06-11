@@ -2,10 +2,6 @@
 const { withSentryConfig } = require("@sentry/nextjs");
 const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 
-// Content-Security-Policy is set in web/src/proxy.ts, not here: `headers()` is
-// baked into the build, which would freeze the runtime
-// WEB_FRAME_PROTECTION_ENABLED flag. The static headers below never vary.
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   productionBrowserSourceMaps: false,
