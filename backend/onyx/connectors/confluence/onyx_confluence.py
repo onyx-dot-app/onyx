@@ -26,8 +26,8 @@ from typing import TypeVar
 from urllib.parse import quote
 
 import bs4
+import requests
 from atlassian import Confluence
-from redis import Redis
 from requests import HTTPError
 
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
@@ -42,9 +42,12 @@ from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import get_start_param_from_url
 from onyx.connectors.confluence.utils import update_param_in_path
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import scoped_url
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -57,9 +60,22 @@ F = TypeVar("F", bound=Callable[..., Any])
 _PROBLEMATIC_EXPANSIONS = "body.storage.value"
 _REPLACEMENT_EXPANSIONS = "body.view.value"
 
+# CONFCLOUD-77618 / CONFCLOUD-76424: ancestor-restrictions expand on
+# content/search 404s the whole batch when an ancestor is unreadable
+# (draft / outdated / trashed). We detect the body signature and raise.
+_ANCESTOR_RESTRICTIONS_EXPAND_PREFIX = "ancestors.restrictions.read.restrictions."
+_CONFCLOUD_77618_404_BODY_SIGNATURES = (
+    "No content with id",
+    "Cannot find content. Outdated version/old_draft/trashed",
+)
+
 _USER_NOT_FOUND = "Unknown Confluence User"
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
 _USER_EMAIL_CACHE: dict[str, str | None] = {}
+# Separate cache from _USER_EMAIL_CACHE: the DC 9.1+ REST space-permissions
+# response only includes a user's userKey (CONFSERVER-100505), not their
+# username, so we have to resolve email by a different identifier.
+_USER_KEY_TO_EMAIL_CACHE: dict[str, str | None] = {}
 _DEFAULT_PAGINATION_LIMIT = 1000
 _MINIMUM_PAGINATION_LIMIT = 5
 
@@ -68,9 +84,67 @@ _SERVER_ERROR_CODES = {500, 502, 503, 504}
 _CONFLUENCE_SPACES_API_V1 = "rest/api/space"
 _CONFLUENCE_SPACES_API_V2 = "wiki/api/v2/spaces"
 
+# Atlassian KB documenting how Secure Administrator Sessions (WebSudo) breaks
+# admin JSON-RPC calls. Surfaced in the validation error so admins can act on
+# it without our help.
+_WEBSUDO_KB_URL = (
+    "https://support.atlassian.com/confluence/kb/"
+    "json-rpc-api-request-returns-websudorequiredexception-on-confluence/"
+)
+# Cap how much of an unparseable JSON-RPC response body we put in the error
+# message. WebSudo / login HTML pages are well under this; the cap is a
+# defense against a runaway response (e.g. a multi-MB error page) ending up
+# in our logs and validation surface.
+_JSONRPC_ERROR_BODY_SNIPPET_CHARS = 1000
+
+# DC 9.1.0 is the first DC release with the REST API for space permissions
+# (CONFSERVER-78176). Older DC versions still need the legacy JSON-RPC
+# fallback. Server / Data Center only -- Cloud has its own permissions API
+# and is branched on `is_cloud` upstream of any version check.
+_MIN_DC_VERSION_FOR_REST_SPACE_PERMISSIONS: tuple[int, int] = (9, 1)
+
+# Atlassian's documented Confluence DC endpoint for build information,
+# under the "Server Information" REST API group. Returns a JSON object
+# whose top-level `version` field is the upstream Confluence version
+# (e.g. "10.2.10"). Confirmed present in the v8.4, v9.3, and v10.x
+# DC REST API references; we previously probed the Jira-style
+# `/rest/api/serverInfo` slug, which 404s on Confluence DC 10.x.
+_DC_SERVER_INFORMATION_PATH = "rest/api/server-information"
+
 
 class ConfluenceRateLimitError(Exception):
     pass
+
+
+class Confcloud77618Error(Exception):
+    """Signal to the perm-sync caller that the ancestor-restrictions
+    expand 404'd on a draft / outdated / trashed ancestor and the run
+    must restart with per-page restriction lookups."""
+
+    def __init__(self, url: str, body: str) -> None:
+        super().__init__(
+            f"CONFCLOUD-77618: ancestor-restrictions expand 404 from "
+            f"{url}: {body[:500]}"
+        )
+        self.url = url
+        self.body = body
+
+
+class ConfluenceRestSpacePermissionsNotAvailableError(Exception):
+    """Raised by REST-API space-permissions calls when the endpoint is missing
+    on the upstream Confluence DC instance (e.g. DC < 9.1.0 returning 404).
+
+    Callers use this as a signal to fall back to the legacy JSON-RPC path.
+    """
+
+
+def _is_confcloud_77618_response(response: requests.Response) -> bool:
+    """Body-signature match for the CONFCLOUD-77618 / CONFCLOUD-76424 404
+    so unrelated 404s still propagate."""
+    if response.status_code != 404:
+        return False
+    body = response.text
+    return any(sig in body for sig in _CONFCLOUD_77618_404_BODY_SIGNATURES)
 
 
 class OnyxConfluence:
@@ -107,7 +181,7 @@ class OnyxConfluence:
         self._url = url.rstrip("/")
         self._credentials_provider = credentials_provider
         self.scoped_token = scoped_token
-        self.redis_client: Redis | None = None
+        self.redis_client: TenantRedisClient | None = None
         self.static_credentials: dict[str, Any] | None = None
         if self._credentials_provider.is_dynamic():
             self.redis_client = get_redis_client(
@@ -138,6 +212,13 @@ class OnyxConfluence:
             else None
         )
 
+        # Cached result of the server-information probe, populated on
+        # first `get_server_version()` call. _server_version_probed=True
+        # with _server_version=None means "we tried and the probe
+        # failed", so we don't keep retrying every space-permissions sync.
+        self._server_version: tuple[int, int] | None = None
+        self._server_version_probed: bool = False
+
     def _renew_credentials(self) -> tuple[dict[str, Any], bool]:
         """credential_json - the current json credentials
         Returns a tuple
@@ -156,9 +237,8 @@ class OnyxConfluence:
 
         # dynamic credentials need locking
         # check redis first, then fallback to the DB
-        credential_raw = self.redis_client.get(self.credential_key)
-        if credential_raw is not None:
-            credential_bytes = cast(bytes, credential_raw)
+        credential_bytes = self.redis_client.get(self.credential_key)
+        if credential_bytes is not None:
             credential_str = credential_bytes.decode("utf-8")
             credential_json: dict[str, Any] = json.loads(credential_str)
         else:
@@ -244,7 +324,13 @@ class OnyxConfluence:
         limit: int,
         space_keys: list[str] | None,
     ) -> Iterator[dict[str, Any]]:
-        """Internal helper to paginate through spaces for a specific API endpoint."""
+        """Paginate spaces. Server stops on missing ``_links.next``
+        (and empty ``results``, defensively). Don't stop on
+        ``len(results) < limit``: ``/rest/api/space`` on DC caps at
+        ``DefaultRestSpaceManager.MAX_SIZE`` (#4129). ``start`` is
+        re-derived locally; Confluence under-counts it on capped pages
+        and CONFSERVER-95272/-95312 returns records past the true end.
+        """
         start = 0
         url = self._build_spaces_url(
             is_v2, base_url, limit, space_keys, start if not is_v2 else None
@@ -261,11 +347,13 @@ class OnyxConfluence:
 
             yield from results
 
+            next_link = data.get("_links", {}).get("next", "")
+            if not next_link:
+                return
+
             if is_v2:
-                url = data.get("_links", {}).get("next", "")
+                url = next_link
             else:
-                if len(results) < limit:
-                    return
                 start += len(results)
                 url = self._build_spaces_url(is_v2, base_url, limit, space_keys, start)
 
@@ -339,9 +427,10 @@ class OnyxConfluence:
                     else:
                         if "WWW-Authenticate" in e.response.headers:
                             logger.warning(
-                                f"WWW-Authenticate: {e.response.headers['WWW-Authenticate']}"
+                                "WWW-Authenticate: %s",
+                                e.response.headers["WWW-Authenticate"],
                             )
-                            logger.warning(f"Full error: {e.response.text}")
+                            logger.warning("Full error: %s", e.response.text)
                         raise e
                 return
 
@@ -394,7 +483,8 @@ class OnyxConfluence:
             confluence = Confluence(url=url, oauth2=oauth2_dict, **kwargs)
         else:
             logger.info(
-                f"Connecting to Confluence with Personal Access Token as user: {credentials['confluence_username']}"
+                "Connecting to Confluence with Personal Access Token as user: %s",
+                credentials["confluence_username"],
             )
             if self._is_cloud:
                 confluence = Confluence(
@@ -461,7 +551,8 @@ class OnyxConfluence:
                 except HTTPError as e:
                     delay_until = _handle_http_error(e, attempt, MAX_RETRIES)
                     logger.warning(
-                        f"HTTPError in confluence call. Retrying in {delay_until} seconds..."
+                        "HTTPError in confluence call. Retrying in %s seconds...",
+                        delay_until,
                     )
                     while time.monotonic() < delay_until:
                         # in the future, check a signal here to exit
@@ -533,7 +624,7 @@ class OnyxConfluence:
                     url_suffix, "start", str(initial_start + ind)
                 )
                 temp_url_suffix = update_param_in_path(temp_url_suffix, "limit", "1")
-                logger.info(f"Making recovery confluence call to {temp_url_suffix}")
+                logger.info("Making recovery confluence call to %s", temp_url_suffix)
                 raw_response = self.get(path=temp_url_suffix, advanced_mode=True)
                 raw_response.raise_for_status()
 
@@ -543,13 +634,15 @@ class OnyxConfluence:
                 if not latest_results:
                     # no more results, break out of the loop
                     logger.info(
-                        f"No results found for call '{temp_url_suffix}'Stopping pagination."
+                        "No results found for call '%s'Stopping pagination.",
+                        temp_url_suffix,
                     )
                     found_empty_page = True
                     break
             except Exception:
                 logger.exception(
-                    f"Error in confluence call to {temp_url_suffix}. Continuing."
+                    "Error in confluence call to %s. Continuing.",
+                    temp_url_suffix,
                 )
 
         if found_empty_page:
@@ -576,7 +669,7 @@ class OnyxConfluence:
         url_suffix = update_param_in_path(url_suffix, "limit", str(current_limit))
 
         while url_suffix:
-            logger.debug(f"Making confluence call to {url_suffix}")
+            logger.debug("Making confluence call to %s", url_suffix)
             try:
                 # Only pass params if they're not already in the URL to avoid duplicate
                 # params accumulating. Confluence's _links.next already includes these.
@@ -592,26 +685,38 @@ class OnyxConfluence:
                     params=params,
                 )
             except Exception as e:
-                logger.exception(f"Error in confluence call to {url_suffix}")
+                logger.exception("Error in confluence call to %s", url_suffix)
                 raise e
 
             try:
                 raw_response.raise_for_status()
             except Exception as e:
-                logger.warning(f"Error in confluence call to {url_suffix}")
+                logger.warning("Error in confluence call to %s", url_suffix)
 
                 # If the problematic expansion is in the url, replace it
                 # with the replacement expansion and try again
                 # If that fails, raise the error
                 if _PROBLEMATIC_EXPANSIONS in url_suffix:
                     logger.warning(
-                        f"Replacing {_PROBLEMATIC_EXPANSIONS} with {_REPLACEMENT_EXPANSIONS} and trying again."
+                        "Replacing %s with %s and trying again.",
+                        _PROBLEMATIC_EXPANSIONS,
+                        _REPLACEMENT_EXPANSIONS,
                     )
                     url_suffix = url_suffix.replace(
                         _PROBLEMATIC_EXPANSIONS,
                         _REPLACEMENT_EXPANSIONS,
                     )
                     continue
+
+                # CONFCLOUD-77618 / 76424: typed signal so the perm-sync
+                # caller can restart in per-page restriction-fetch mode.
+                if (
+                    _ANCESTOR_RESTRICTIONS_EXPAND_PREFIX in url_suffix
+                    and _is_confcloud_77618_response(raw_response)
+                ):
+                    raise Confcloud77618Error(
+                        url=url_suffix, body=raw_response.text
+                    ) from e
 
                 if raw_response.status_code in _SERVER_ERROR_CODES:
                     # Try reducing the page size -- Confluence often times out
@@ -622,9 +727,12 @@ class OnyxConfluence:
                             current_limit // 2, _MINIMUM_PAGINATION_LIMIT
                         )
                         logger.warning(
-                            f"Confluence returned {raw_response.status_code}. "
-                            f"Reducing limit from {old_limit} to {current_limit} "
-                            f"and retrying."
+                            "Confluence returned %s. "
+                            "Reducing limit from %s to %s "
+                            "and retrying.",
+                            raw_response.status_code,
+                            old_limit,
+                            current_limit,
                         )
                         url_suffix = update_param_in_path(
                             url_suffix, "limit", str(current_limit)
@@ -636,12 +744,10 @@ class OnyxConfluence:
                     if not self._is_cloud:
                         initial_start = get_start_param_from_url(url_suffix)
                         # this will just yield the successful items from the batch
-                        new_url_suffix = (
-                            yield from self._try_one_by_one_for_paginated_url(
-                                url_suffix,
-                                initial_start=initial_start,
-                                limit=current_limit,
-                            )
+                        new_url_suffix = yield from self._try_one_by_one_for_paginated_url(
+                            url_suffix,
+                            initial_start=initial_start,
+                            limit=current_limit,
                         )
                         # this means we ran into an empty page
                         if new_url_suffix is None:
@@ -653,18 +759,26 @@ class OnyxConfluence:
                         continue
 
                     logger.exception(
-                        f"Error in confluence call to {url_suffix} "
-                        f"after reducing limit to {current_limit}.\n"
-                        f"Raw Response Text: {raw_response.text}\n"
-                        f"Error: {e}\n"
+                        "Error in confluence call to %s "
+                        "after reducing limit to %s.\n"
+                        "Raw Response Text: %s\n"
+                        "Error: %s\n",
+                        url_suffix,
+                        current_limit,
+                        raw_response.text,
+                        e,
                     )
                     raise
 
                 logger.exception(
-                    f"Error in confluence call to {url_suffix} \n"
-                    f"Raw Response Text: {raw_response.text} \n"
-                    f"Full Response: {raw_response.__dict__} \n"
-                    f"Error: {e} \n"
+                    "Error in confluence call to %s \n"
+                    "Raw Response Text: %s \n"
+                    "Full Response: %s \n"
+                    "Error: %s \n",
+                    url_suffix,
+                    raw_response.text,
+                    raw_response.__dict__,
+                    e,
                 )
                 raise
 
@@ -672,60 +786,37 @@ class OnyxConfluence:
                 next_response = raw_response.json()
             except Exception as e:
                 logger.exception(
-                    f"Failed to parse response as JSON. Response: {raw_response.__dict__}"
+                    "Failed to parse response as JSON. Response: %s",
+                    raw_response.__dict__,
                 )
                 raise e
 
             # Yield the results individually.
             results = cast(list[dict[str, Any]], next_response.get("results", []))
 
-            # Note 1:
-            # Make sure we don't update the start by more than the amount
-            # of results we were able to retrieve. The Confluence API has a
-            # weird behavior where if you pass in a limit that is too large for
-            # the configured server, it will artificially limit the amount of
-            # results returned BUT will not apply this to the start parameter.
-            # This will cause us to miss results.
-            #
-            # Note 2:
-            # We specifically perform manual yielding (i.e., `for x in xs: yield x`) as opposed to using a `yield from xs`
-            # because we *have to call the `next_page_callback`* prior to yielding the last element!
-            #
-            # If we did:
-            #
-            # ```py
-            # yield from results
-            # if next_page_callback:
-            #   next_page_callback(url_suffix)
-            # ```
-            #
-            # then the logic would fail since the iterator would finish (and the calling scope would exit out of its driving
-            # loop) prior to the callback being called.
-
+            # #4129: DC silently caps page size and under-counts the
+            # ``start`` it embeds in ``_links.next``; re-derive it
+            # ourselves. Manual yielding (not ``yield from``) so we can
+            # fire ``next_page_callback`` before the last yield --
+            # otherwise the iterator may never resume.
             old_url_suffix = url_suffix
-            updated_start = get_start_param_from_url(old_url_suffix)
+            next_start = get_start_param_from_url(old_url_suffix) + len(results)
             url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))
             if url_suffix and current_limit != limit:
                 url_suffix = update_param_in_path(
                     url_suffix, "limit", str(current_limit)
                 )
-            for i, result in enumerate(results):
-                updated_start += 1
-                if url_suffix and next_page_callback and i == len(results) - 1:
-                    # update the url if we're on the last result in the page
-                    if not self._is_cloud:
-                        # If confluence claims there are more results, we update the start param
-                        # based on how many results were returned and try again.
-                        url_suffix = update_param_in_path(
-                            url_suffix, "start", str(updated_start)
-                        )
-                    # notify the caller of the new url
-                    next_page_callback(url_suffix)
+            if url_suffix and not self._is_cloud and results:
+                url_suffix = update_param_in_path(url_suffix, "start", str(next_start))
 
-                elif force_offset_pagination and i == len(results) - 1:
-                    url_suffix = update_param_in_path(
-                        old_url_suffix, "start", str(updated_start)
-                    )
+            for i, result in enumerate(results):
+                if i == len(results) - 1:
+                    if url_suffix and next_page_callback:
+                        next_page_callback(url_suffix)
+                    elif force_offset_pagination:
+                        url_suffix = update_param_in_path(
+                            old_url_suffix, "start", str(next_start)
+                        )
 
                 yield result
 
@@ -734,13 +825,32 @@ class OnyxConfluence:
             # stop paginating.
             if url_suffix and not results:
                 logger.info(
-                    f"No results found for call '{old_url_suffix}' despite next link being present. Stopping pagination."
+                    "No results found for call '%s' despite next link being present. Stopping pagination.",
+                    old_url_suffix,
                 )
                 break
 
     def build_cql_url(self, cql: str, expand: str | None = None) -> str:
         expand_string = f"&expand={expand}" if expand else ""
         return f"rest/api/content/search?cql={cql}{expand_string}"
+
+    def fetch_content_read_restrictions(
+        self,
+        content_id: str,
+    ) -> dict[str, Any] | None:
+        """Fetch a single page's restrictions via the dedicated
+        ``content/{id}/restriction/byOperation`` endpoint. Returns
+        ``None`` on 403/404 so unreadable ancestors (drafts owned by
+        another user) resolve as "no inheritable restriction here".
+        ``advanced_mode=True`` bypasses the rate-limit wrapper's 7x
+        403-retry loop which would otherwise burn ~70s per draft."""
+        path = f"rest/api/content/{quote(content_id, safe='')}/restriction/byOperation"
+        response: requests.Response = self.get(path, advanced_mode=True)
+        if response.status_code in (403, 404):
+            return None
+        response.raise_for_status()
+        body = response.json()
+        return cast(dict[str, Any], body or {})
 
     def paginated_cql_retrieval(
         self,
@@ -771,7 +881,7 @@ class OnyxConfluence:
                 cql_url, limit=limit, next_page_callback=next_page_callback
             )
         except Exception as e:
-            logger.exception(f"Error in paginated_page_retrieval: {e}")
+            logger.exception("Error in paginated_page_retrieval: %s", e)
             raise e
 
     def cql_paginate_all_expansions(
@@ -780,10 +890,8 @@ class OnyxConfluence:
         expand: str | None = None,
         limit: int | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """
-        This function will paginate through the top level query first, then
-        paginate through all of the expansions.
-        """
+        """Paginate the top-level query, then each `_links.next` discovered
+        in the expansions."""
 
         def _traverse_and_update(data: dict | list) -> None:
             if isinstance(data, dict):
@@ -923,16 +1031,35 @@ class OnyxConfluence:
         space_key: str,
     ) -> list[dict[str, Any]]:
         """
-        This is a confluence server/data center specific method that can be used to
-        fetch the permissions of a space.
+        Fetches a space's permissions via the legacy JSON-RPC API.
 
-        NOTE: This uses the JSON-RPC API which is the ONLY way to get space permissions
-        on Confluence Server/Data Center. The REST API equivalent (expand=permissions)
-        is Cloud-only and not available on Data Center as of version 8.9.x.
+        This is the only space-permissions API available on Confluence Data
+        Center < 9.1.0. DC 9.1.0+ ships a proper REST API at
+        /rest/api/space/{spaceKey}/permissions (CONFSERVER-78176) which is
+        preferred wherever available; this method is the fallback for older
+        Server / Data Center deployments.
 
-        If this fails with 401 Unauthorized, the customer needs to enable JSON-RPC:
-        Confluence Admin -> General Configuration -> Further Configuration
-        -> Enable "Remote API (XML-RPC & SOAP)"
+        Failure modes handled here:
+
+        - HTTP 401: the JSON-RPC plugin is disabled. Confluence Admin ->
+          General Configuration -> Further Configuration -> Enable
+          "Remote API (XML-RPC & SOAP)".
+        - HTTP 200 with a non-JSON body (Confluence 7.7+): "Secure
+          Administrator Sessions" / WebSudo is intercepting admin JSON-RPC
+          calls and serving the login HTML or a WebSudoRequiredException
+          page instead of a JSON-RPC envelope. We surface the actual HTTP
+          status, Content-Type, and a body snippet so the admin can confirm
+          which of the documented failure modes they're hitting (rather
+          than guessing) and act on it.
+
+        We use atlassian-python-api's `advanced_mode=True` to get the raw
+        requests.Response back. Without it, the library's _response_handler
+        catches the JSON parse error and silently coerces the body to None,
+        which throws away every signal we'd need to debug the failure.
+        Trade-off: the library no longer raises HTTPError on 4xx/5xx in
+        advanced mode, so this call no longer benefits from the
+        __getattr__ wrapper's retry-on-5xx; we call raise_for_status
+        ourselves to preserve the "blow up on server error" behavior.
         """
         url = "rpc/json-rpc/confluenceservice-v2"
         data = {
@@ -941,25 +1068,204 @@ class OnyxConfluence:
             "id": 7,
             "params": [space_key],
         }
+        response: requests.Response = self.post(url, data=data, advanced_mode=True)
+
+        if response.status_code == 401:
+            raise HTTPError(
+                "Unauthorized (401) when calling JSON-RPC API for space permissions. "
+                "This is likely because the Remote API is disabled. "
+                "To fix: Confluence Admin -> General Configuration -> Further Configuration "
+                "-> Enable 'Remote API (XML-RPC & SOAP)'",
+                response=response,
+            )
+        response.raise_for_status()
+
         try:
-            response = self.post(url, data=data)
-        except HTTPError as e:
-            if e.response is not None and e.response.status_code == 401:
-                raise HTTPError(
-                    "Unauthorized (401) when calling JSON-RPC API for space permissions. "
-                    "This is likely because the Remote API is disabled. "
-                    "To fix: Confluence Admin -> General Configuration -> Further Configuration "
-                    "-> Enable 'Remote API (XML-RPC & SOAP)'",
-                    response=e.response,
-                ) from e
-            raise
-        logger.debug(f"jsonrpc response: {response}")
-        if not response.get("result"):
-            logger.warning(
-                f"No jsonrpc response for space permissions for space {space_key}\nResponse: {response}"
+            payload = response.json()
+        except ValueError:
+            content_type = response.headers.get("Content-Type", "<unset>")
+            body_snippet = response.text[:_JSONRPC_ERROR_BODY_SNIPPET_CHARS]
+            raise ConnectorValidationError(
+                f"Confluence JSON-RPC returned a non-JSON response for space "
+                f"'{space_key}' (HTTP {response.status_code}, "
+                f"Content-Type={content_type}). This typically happens on "
+                "Confluence Server / Data Center 7.7+ when 'Secure "
+                "Administrator Sessions' (WebSudo) intercepts admin JSON-RPC "
+                "calls. To fix, either (1) disable Secure Administrator "
+                "Sessions in General Configuration -> Security Configuration, "
+                "or (2) upgrade to Confluence Data Center 9.1+ where the REST "
+                f"space-permissions API replaces JSON-RPC. See "
+                f"{_WEBSUDO_KB_URL}\n"
+                f"Response body (first {_JSONRPC_ERROR_BODY_SNIPPET_CHARS} "
+                f"chars): {body_snippet!r}"
             )
 
-        return response.get("result", [])
+        logger.debug("jsonrpc response: %s", payload)
+        if not payload.get("result"):
+            logger.warning(
+                "No jsonrpc response for space permissions for space %s\nResponse: %s",
+                space_key,
+                payload,
+            )
+
+        return payload.get("result", [])
+
+    def get_server_version(self) -> tuple[int, int] | None:
+        """Returns the (major, minor) version of the upstream Confluence
+        Data Center instance, or None for Cloud or when the probe fails.
+
+        Probed once per OnyxConfluence instance via Atlassian's
+        documented "Server Information" endpoint
+        (/rest/api/server-information). The result is cached on the
+        instance, including the negative result, so a one-off network
+        blip doesn't cause us to re-probe on every space-permissions
+        sync.
+
+        Used to gate features that only exist on newer DC versions, such
+        as the REST space-permissions API introduced in DC 9.1.0
+        (CONFSERVER-78176). When the probe fails (returns None), callers
+        intentionally fall back to the legacy JSON-RPC path, on the
+        assumption that probe failure most often correlates with older
+        DC builds where the REST permissions API isn't available
+        anyway. Most callers should prefer the higher-level feature
+        predicates (e.g. supports_rest_space_permissions) over
+        comparing the version tuple directly.
+        """
+        if self._is_cloud:
+            return None
+        if self._server_version_probed:
+            return self._server_version
+
+        self._server_version = self._probe_server_version()
+        self._server_version_probed = True
+        if self._server_version is not None:
+            logger.info(
+                "Detected Confluence Data Center version %s.%s",
+                self._server_version[0],
+                self._server_version[1],
+            )
+        return self._server_version
+
+    def _probe_server_version(self) -> tuple[int, int] | None:
+        try:
+            info = self.get(_DC_SERVER_INFORMATION_PATH)
+        except Exception as e:
+            logger.warning("Failed to probe Confluence server version: %s", e)
+            return None
+        if not isinstance(info, dict):
+            return None
+        version_str = info.get("version") or ""
+        return _parse_dc_version(version_str)
+
+    def supports_rest_space_permissions(self) -> bool:
+        """Whether the upstream instance has the DC 9.1+ space-permissions
+        REST API (CONFSERVER-78176). Always False for Cloud (different API
+        surface, branched on `is_cloud` upstream of any version check) and
+        for DC instances older than 9.1.0 or where the version probe fails.
+        """
+        version = self.get_server_version()
+        return (
+            version is not None
+            and version >= _MIN_DC_VERSION_FOR_REST_SPACE_PERMISSIONS
+        )
+
+    def get_all_space_permissions_server_rest(
+        self,
+        space_key: str,
+    ) -> list[dict[str, Any]]:
+        """Confluence DC 9.1+ REST API for space permissions.
+
+        GET /rest/api/space/{spaceKey}/permissions returns a flat list of
+        {operation, subject, spaceKey, spaceId} entries (CONFSERVER-78176).
+
+        Failure modes:
+
+        - 401: handled identically to the JSON-RPC path (token missing /
+          expired).
+        - 404: the endpoint isn't available on this Confluence DC version
+          (i.e. < 9.1.0). Surfaced as
+          ConfluenceRestSpacePermissionsNotAvailableError so the caller
+          can fall back to the legacy JSON-RPC path.
+        - 500: per CONFSERVER-99908, callers without
+          Confluence-admin/space-admin rights receive HTTP 500 (rather
+          than the more correct 403). Surfaced as
+          InsufficientPermissionsError with that ticket referenced so
+          the operator knows the actual remediation is "grant the bot
+          account admin", not "investigate a server-side bug".
+        """
+        path = f"rest/api/space/{quote(space_key, safe='')}/permissions"
+        response: requests.Response = self.get(path, advanced_mode=True)
+
+        if response.status_code == 404:
+            raise ConfluenceRestSpacePermissionsNotAvailableError(
+                f"REST space-permissions endpoint not available on this "
+                f"Confluence instance (HTTP 404 for space '{space_key}'). "
+                "The endpoint requires Confluence Data Center 9.1.0+."
+            )
+        if response.status_code == 401:
+            raise HTTPError(
+                "Unauthorized (401) when calling REST space-permissions API. "
+                "The credential is missing or expired.",
+                response=response,
+            )
+        if response.status_code == 500:
+            raise InsufficientPermissionsError(
+                f"Confluence returned HTTP 500 for "
+                f"GET /rest/api/space/{space_key}/permissions. Per "
+                "CONFSERVER-99908 this endpoint returns 500 (rather than "
+                "403) when the calling account lacks Confluence-admin or "
+                "space-admin rights. Grant the bot account admin "
+                "permissions on this space (or globally) and retry."
+            )
+        response.raise_for_status()
+
+        payload = response.json()
+        if not isinstance(payload, list):
+            logger.warning(
+                "Unexpected REST space-permissions payload shape for space "
+                "%s: expected list, got %s",
+                space_key,
+                type(payload).__name__,
+            )
+            return []
+        return payload
+
+    def get_anonymous_space_permissions_server_rest(
+        self,
+        space_key: str,
+    ) -> list[dict[str, Any]]:
+        """Confluence DC 9.1+ anonymous space-permissions endpoint.
+
+        GET /rest/api/space/{spaceKey}/permissions/anonymous returns the
+        operations the anonymous role has on the space. Distinct from the
+        bulk endpoint, which on the JSON-RPC path used to return an
+        anonymous "row" inline.
+
+        404 is treated as "no anonymous access" rather than fatal; some
+        9.x patch versions had this endpoint missing or moved before it
+        stabilized, and "missing endpoint" should not be louder than
+        "no anonymous access" for our use case.
+        """
+        path = f"rest/api/space/{quote(space_key, safe='')}/permissions/anonymous"
+        response: requests.Response = self.get(path, advanced_mode=True)
+
+        if response.status_code == 404:
+            return []
+        if response.status_code == 500:
+            # CONFSERVER-99908 again -- same remediation, different endpoint.
+            raise InsufficientPermissionsError(
+                f"Confluence returned HTTP 500 for "
+                f"GET /rest/api/space/{space_key}/permissions/anonymous. "
+                "Per CONFSERVER-99908 this endpoint returns 500 (rather "
+                "than 403) when the calling account lacks "
+                "Confluence-admin or space-admin rights."
+            )
+        response.raise_for_status()
+
+        payload = response.json()
+        if not isinstance(payload, list):
+            return []
+        return payload
 
     def get_current_user(self, expand: str | None = None) -> Any:
         """
@@ -999,18 +1305,76 @@ def get_user_email_from_username__server(
         except HTTPError as e:
             status_code = e.response.status_code if e.response is not None else "N/A"
             logger.warning(
-                f"Failed to get confluence email for {user_name}: HTTP {status_code} - {e}"
+                "Failed to get confluence email for %s: HTTP %s - %s",
+                user_name,
+                status_code,
+                e,
             )
             # For now, we'll just return None and log a warning. This means
             # we will keep retrying to get the email every group sync.
             email = None
         except Exception as e:
             logger.warning(
-                f"Failed to get confluence email for {user_name}: {type(e).__name__} - {e}"
+                "Failed to get confluence email for %s: %s - %s",
+                user_name,
+                type(e).__name__,
+                e,
             )
             email = None
         _USER_EMAIL_CACHE[user_name] = email
     return _USER_EMAIL_CACHE[user_name]
+
+
+def get_user_email_from_userkey__server(
+    confluence_client: OnyxConfluence, user_key: str
+) -> str | None:
+    """userKey -> email resolver for Confluence Data Center.
+
+    Parallels get_user_email_from_username__server but keyed on userKey
+    instead of username, because the DC 9.1+ space-permissions REST API
+    only exposes userKey on user subjects (CONFSERVER-100505 -- still
+    unresolved as of the 10.x line).
+
+    Cached separately from _USER_EMAIL_CACHE because the keyspaces are
+    different (userKey is opaque hex, username is human-readable).
+    """
+    global _USER_KEY_TO_EMAIL_CACHE
+    if user_key not in _USER_KEY_TO_EMAIL_CACHE:
+        try:
+            response = confluence_client.get_user_details_by_userkey(user_key)
+            email = response.get("email") if isinstance(response, dict) else None
+        except HTTPError as e:
+            status_code = e.response.status_code if e.response is not None else "N/A"
+            logger.warning(
+                "Failed to get confluence email for userKey %s: HTTP %s - %s",
+                user_key,
+                status_code,
+                e,
+            )
+            email = None
+        except Exception as e:
+            logger.warning(
+                "Failed to get confluence email for userKey %s: %s - %s",
+                user_key,
+                type(e).__name__,
+                e,
+            )
+            email = None
+        _USER_KEY_TO_EMAIL_CACHE[user_key] = email
+    return _USER_KEY_TO_EMAIL_CACHE[user_key]
+
+
+def _parse_dc_version(version_str: str) -> tuple[int, int] | None:
+    """Parse 'X.Y.Z[...]' into (X, Y); returns None on malformed input."""
+    if not version_str:
+        return None
+    parts = version_str.split(".")
+    if len(parts) < 2:
+        return None
+    try:
+        return (int(parts[0]), int(parts[1]))
+    except ValueError:
+        return None
 
 
 def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
@@ -1072,6 +1436,9 @@ def extract_text_from_confluence_html(
 
     _remove_macro_stylings(soup=soup)
 
+    for date_span in soup.findAll("span", {"class": "date-lozenger-container"}):
+        date_span.replaceWith(date_span.get_text())
+
     for user in soup.findAll("ri:user"):
         user_id = (
             user.attrs["ri:account-id"]
@@ -1080,7 +1447,8 @@ def extract_text_from_confluence_html(
         )
         if not user_id:
             logger.warning(
-                f"ri:userkey not found in ri:user element. Found attrs: {user.attrs}"
+                "ri:userkey not found in ri:user element. Found attrs: %s",
+                user.attrs,
             )
             continue
         # Include @ sign for tagging, more clear for LLM
@@ -1094,7 +1462,8 @@ def extract_text_from_confluence_html(
         page_data = html_page_reference.find("ri:page")
         if not page_data:
             logger.warning(
-                f"Skipping retrieval of {html_page_reference} because because page data is missing"
+                "Skipping retrieval of %s because because page data is missing",
+                html_page_reference,
             )
             continue
 
@@ -1102,13 +1471,14 @@ def extract_text_from_confluence_html(
         if not page_title:
             # only fetch pages that have a title
             logger.warning(
-                f"Skipping retrieval of {html_page_reference} because it has no title"
+                "Skipping retrieval of %s because it has no title",
+                html_page_reference,
             )
             continue
 
         if page_title in fetched_titles:
             # prevent recursive fetching of pages
-            logger.debug(f"Skipping {page_title} because it has already been fetched")
+            logger.debug("Skipping %s because it has already been fetched", page_title)
             continue
 
         fetched_titles.add(page_title)
@@ -1128,7 +1498,9 @@ def extract_text_from_confluence_html(
                 break
         except Exception as e:
             logger.warning(
-                f"Error getting page contents for object {confluence_object}: {e}"
+                "Error getting page contents for object %s: %s",
+                confluence_object,
+                e,
             )
             continue
 
@@ -1150,7 +1522,7 @@ def extract_text_from_confluence_html(
             text_from_link = html_link_body.text
             html_link_body.replaceWith(f"(LINK TEXT: {text_from_link})")
         except Exception as e:
-            logger.warning(f"Error processing ac:link-body: {e}")
+            logger.warning("Error processing ac:link-body: %s", e)
 
     for html_attachment in soup.findAll("ri:attachment"):
         # This extracts the text from inline attachments in the page so they can be
@@ -1160,7 +1532,7 @@ def extract_text_from_confluence_html(
                 f"<attachment>{sanitize_attachment_title(html_attachment.attrs['ri:filename'])}</attachment>"
             )  # to be replaced later
         except Exception as e:
-            logger.warning(f"Error processing ac:attachment: {e}")
+            logger.warning("Error processing ac:attachment: %s", e)
 
     return format_document_soup(soup)
 

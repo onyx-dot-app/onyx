@@ -1,0 +1,16 @@
+cryptography==46.0.7
+defusedxml==0.7.1
+fastapi==0.115.12
+google-genai==2.2.0
+lxml==6.1.0
+matplotlib==3.9.1
+matplotlib-inline==0.2.2
+numpy==1.26.4
+onyx-cli==1.0.4
+openpyxl==3.1.5
+pandas==2.2.2
+pdfplumber==0.11.9
+Pillow==12.2.0
+pydantic==2.12.2
+python-pptx==1.0.2
+uvicorn[standard]==0.34.3

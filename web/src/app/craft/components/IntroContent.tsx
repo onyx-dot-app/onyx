@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { motion } from "motion/react";
 import { track, AnalyticsEvent } from "@/lib/analytics";
 import { OnyxLogoTypeIcon } from "@/components/icons/icons";
-import Text from "@/refresh-components/texts/Text";
+import RefreshText from "@/refresh-components/texts/Text";
 import BigButton from "@/app/craft/components/BigButton";
 
 interface BuildModeIntroContentProps {
@@ -41,19 +41,19 @@ export default function BuildModeIntroContent({
                 style={{ transform: "translateX(-0.6em)" }}
               >
                 <span className="relative inline-block leading-[3.5]">
-                  <Text
+                  <RefreshText
                     headingH1
-                    className="!text-9xl !text-white relative inline-block"
+                    className="text-9xl! text-white! relative inline-block"
                     style={{
                       fontFamily: "var(--font-kh-teka)",
                       fontWeight: 500,
                     }}
                   >
                     Craft
-                  </Text>
+                  </RefreshText>
                 </span>
                 <span
-                  className="pointer-events-none absolute top-3 -right-14 text-[1em] uppercase tracking-[0.2em] !text-white"
+                  className="pointer-events-none absolute top-3 -right-14 text-[1em] uppercase tracking-[0.2em] text-white!"
                   style={{ fontFamily: "var(--font-kh-teka)", fontWeight: 500 }}
                 >
                   BETA
@@ -70,7 +70,7 @@ export default function BuildModeIntroContent({
         >
           <BigButton
             secondary
-            className="!border-white !text-white hover:!bg-white/10 active:!bg-white/20 !w-[160px]"
+            className="border-white! text-white! hover:bg-white/10! active:bg-white/20! w-[160px]!"
             onClick={(e) => {
               e.stopPropagation();
               track(AnalyticsEvent.CLICKED_GO_HOME);
@@ -81,7 +81,7 @@ export default function BuildModeIntroContent({
           </BigButton>
           <BigButton
             primary
-            className="!bg-white !text-black hover:!bg-gray-200 active:!bg-gray-300 !w-[160px]"
+            className="bg-white! text-black! hover:bg-gray-200! active:bg-gray-300! w-[160px]!"
             onClick={(e) => {
               e.stopPropagation();
               track(AnalyticsEvent.CLICKED_TRY_CRAFT);

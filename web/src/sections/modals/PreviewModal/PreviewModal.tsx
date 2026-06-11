@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SvgSimpleLoader } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
 import mime from "mime";
@@ -89,7 +89,7 @@ export default function PreviewModal({
         response.headers.get("Content-Type") || "application/octet-stream";
       const resolvedMime =
         rawContentType === "application/octet-stream"
-          ? mime.getType(originalFileName) ?? rawContentType
+          ? (mime.getType(originalFileName) ?? rawContentType)
           : rawContentType;
       setMimeType(resolvedMime);
 
@@ -176,7 +176,7 @@ export default function PreviewModal({
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden w-full bg-background-tint-01">
           {isLoading ? (
             <Section>
-              <SimpleLoader className="h-8 w-8" />
+              <SvgSimpleLoader className="h-8 w-8" />
             </Section>
           ) : loadError ? (
             <Section padding={1}>

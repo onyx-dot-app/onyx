@@ -18,6 +18,7 @@ class StreamingType(Enum):
     STOP = "stop"
     TOP_LEVEL_BRANCHING = "top_level_branching"
     ERROR = "error"
+    CHAT_HEARTBEAT = "chat_heartbeat"
 
     MESSAGE_START = "message_start"
     MESSAGE_DELTA = "message_delta"
@@ -55,6 +56,13 @@ class StreamingType(Enum):
     INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
     INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
 
+    CODING_AGENT_START = "coding_agent_start"
+    CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta"
+    CODING_AGENT_FINAL = "coding_agent_final"
+
+    BASH_TOOL_START = "bash_tool_start"
+    BASH_TOOL_DELTA = "bash_tool_delta"
+
 
 class BaseObj(BaseModel):
     type: str = ""
@@ -86,6 +94,11 @@ class PacketException(BaseObj):
 
     exception: Exception = Field(exclude=True)
     model_config = {"arbitrary_types_allowed": True}
+
+
+# Payload-less keepalive so idle proxies don't kill an otherwise-silent stream
+class ChatHeartbeat(BaseObj):
+    type: Literal["chat_heartbeat"] = StreamingType.CHAT_HEARTBEAT.value
 
 
 ################################################
@@ -368,6 +381,43 @@ class IntermediateReportCitedDocs(BaseObj):
 
 
 ################################################
+# Coding Agent Packets
+################################################
+class CodingAgentStart(BaseObj):
+    type: Literal["coding_agent_start"] = StreamingType.CODING_AGENT_START.value
+    query: str
+    repo: str
+
+
+class CodingAgentThinkingDelta(BaseObj):
+    type: Literal["coding_agent_thinking_delta"] = (
+        StreamingType.CODING_AGENT_THINKING_DELTA.value
+    )
+    content: str
+
+
+class CodingAgentFinal(BaseObj):
+    type: Literal["coding_agent_final"] = StreamingType.CODING_AGENT_FINAL.value
+    answer: str
+
+
+################################################
+# Bash Tool Packets
+################################################
+class BashToolStart(BaseObj):
+    type: Literal["bash_tool_start"] = StreamingType.BASH_TOOL_START.value
+    cmd: str
+
+
+class BashToolDelta(BaseObj):
+    type: Literal["bash_tool_delta"] = StreamingType.BASH_TOOL_DELTA.value
+    stdout: str = ""
+    stderr: str = ""
+    exit_code: int | None = None
+    timed_out: bool = False
+
+
+################################################
 # Packet Object
 ################################################
 # Discriminated union of all possible packet object types
@@ -377,6 +427,7 @@ PacketObj = Union[
     SectionEnd,
     TopLevelBranching,
     PacketException,
+    ChatHeartbeat,
     # Agent Response Packets
     AgentResponseStart,
     AgentResponseDelta,
@@ -415,6 +466,13 @@ PacketObj = Union[
     IntermediateReportStart,
     IntermediateReportDelta,
     IntermediateReportCitedDocs,
+    # Coding Agent Packets
+    CodingAgentStart,
+    CodingAgentThinkingDelta,
+    CodingAgentFinal,
+    # Bash Tool Packets
+    BashToolStart,
+    BashToolDelta,
 ]
 
 

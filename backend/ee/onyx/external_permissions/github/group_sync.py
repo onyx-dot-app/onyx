@@ -45,7 +45,9 @@ def github_group_sync(
             for external_group in get_external_user_group(
                 repo, github_connector.github_client
             ):
-                logger.info(f"External group: {external_group}")
+                logger.info("External group: %s", external_group)
                 yield external_group
         except Exception as e:
-            logger.error(f"Error processing repository {repo.id} ({repo.name}): {e}")
+            logger.error(
+                "Error processing repository %s (%s): %s", repo.id, repo.name, e
+            )

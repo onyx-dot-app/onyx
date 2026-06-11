@@ -25,6 +25,7 @@ from onyx.configs.app_configs import SENDGRID_API_KEY
 from onyx.configs.app_configs import SMTP_PASS
 from onyx.configs.app_configs import SMTP_PORT
 from onyx.configs.app_configs import SMTP_SERVER
+from onyx.configs.app_configs import SMTP_STARTTLS
 from onyx.configs.app_configs import SMTP_USER
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
@@ -243,7 +244,7 @@ def send_email_with_sendgrid(
     sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
     response = sg.client.mail.send.post(request_body=mail_json)  # can raise
     if response.status_code != 202:
-        logger.warning(f"Unexpected status code {response.status_code}")
+        logger.warning("Unexpected status code %s", response.status_code)
 
 
 def send_email_with_smtplib(
@@ -254,13 +255,13 @@ def send_email_with_smtplib(
     mail_from: str = EMAIL_FROM,
     inline_png: tuple[str, bytes] | None = None,
 ) -> None:
-
     # Create a multipart/alternative message - this indicates these are alternative versions of the same content
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["To"] = user_email
-    if mail_from:
-        msg["From"] = mail_from
+    if not mail_from:
+        raise ValueError("EMAIL_FROM must be set when SMTP_USER is not provided")
+    msg["From"] = mail_from
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain="onyx.app")
 
@@ -290,8 +291,10 @@ def send_email_with_smtplib(
         msg.attach(html_part)
 
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
-        s.starttls()
-        s.login(SMTP_USER, SMTP_PASS)
+        if SMTP_STARTTLS:
+            s.starttls()
+        if SMTP_USER and SMTP_PASS:
+            s.login(SMTP_USER, SMTP_PASS)
         s.send_message(msg)
 
 

@@ -53,7 +53,7 @@
  *   options={modelOptions}
  *   placeholder="Select model"
  *   isError={!!error}
- *   rightSection={<RefreshButton />}
+ *   rightChildren={<RefreshButton />}
  * />
  * ```
  *
@@ -91,8 +91,9 @@ import {
   shift,
   size,
 } from "@floating-ui/react-dom";
-import { cn, noProp } from "@/lib/utils";
-import InputTypeIn from "../InputTypeIn";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
+import { InputTypeIn } from "@opal/components";
 import { FieldContext } from "../../form/FieldContext";
 import { Button } from "@opal/components";
 import { FieldMessage } from "../../messages/FieldMessage";
@@ -113,7 +114,7 @@ import { ComboBoxDropdown } from "./components/ComboBoxDropdown";
 // Types
 import { InputComboBoxProps, ComboBoxOption } from "./types";
 import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 
 const InputComboBox = ({
   value,
@@ -126,8 +127,8 @@ const InputComboBox = ({
   isError: externalIsError,
   onValidationError,
   name,
-  leftSearchIcon = false,
-  rightSection,
+  searchIcon = false,
+  rightChildren,
   separatorLabel = "Other options",
   createPrefix,
   showOtherOptions = false,
@@ -383,11 +384,10 @@ const InputComboBox = ({
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           variant={disabled ? "disabled" : !isValid ? "error" : undefined}
-          leftSearchIcon={leftSearchIcon}
-          showClearButton={false}
-          rightSection={
+          searchIcon={searchIcon}
+          rightChildren={
             <>
-              {rightSection && (
+              {rightChildren && (
                 <div
                   className="flex items-center"
                   onPointerDown={(e) => {
@@ -397,7 +397,7 @@ const InputComboBox = ({
                     e.stopPropagation();
                   }}
                 >
-                  {rightSection}
+                  {rightChildren}
                 </div>
               )}
               {hasOptions && (

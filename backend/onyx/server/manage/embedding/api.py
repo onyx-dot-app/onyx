@@ -24,7 +24,6 @@ from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 
-
 logger = setup_logger()
 
 
@@ -60,7 +59,7 @@ def test_embedding_configuration(
 
     except Exception as e:
         error_msg = "An error occurred while testing your embedding model. Please check your configuration."
-        logger.error(f"{error_msg} Error message: {e}", exc_info=True)
+        logger.error("%s Error message: %s", error_msg, e, exc_info=True)
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, error_msg)
 
 

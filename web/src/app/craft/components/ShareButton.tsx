@@ -1,14 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Popover, Text } from "@opal/components";
 import { SvgLink, SvgCopy, SvgCheck, SvgX } from "@opal/icons";
 import { setSessionSharing } from "@/app/craft/services/apiServices";
 import type { SharingScope } from "@/app/craft/types/streamingTypes";
-import { cn } from "@/lib/utils";
-import Popover from "@/refresh-components/Popover";
-import Truncated from "@/refresh-components/texts/Truncated";
+import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
 
@@ -156,9 +153,9 @@ export default function ShareButton({
                   height="fit"
                 >
                   <div className="min-w-0 flex-1 overflow-hidden">
-                    <Truncated secondaryBody text03>
+                    <Text font="secondary-body" color="text-03" maxLines={1}>
                       {shareUrl}
-                    </Truncated>
+                    </Text>
                   </div>
                   <Button
                     variant="action"

@@ -1,6 +1,6 @@
 "use client";
 
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
@@ -27,10 +27,9 @@ import { FiTag } from "react-icons/fi";
 import { PageSelector } from "@/components/PageSelector";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { TableHeader } from "@/components/ui/table";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgEdit, SvgTrash } from "@opal/icons";
+import { SvgEdit, SvgPlusCircle, SvgTrash } from "@opal/icons";
 import { Button } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 const NUM_RESULTS_PER_PAGE = 10;
@@ -241,7 +240,7 @@ const StandardAnswersTable = ({
         <MagnifyingGlass />
         <textarea
           autoFocus
-          className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
+          className="grow ml-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"
           role="textarea"
           aria-multiline
           placeholder="Find standard answers by keyword/phrase..."
@@ -403,9 +402,13 @@ function Main() {
       )}
       <div className="mb-2"></div>
 
-      <CreateButton href="/admin/standard-answer/new">
+      <Button
+        icon={SvgPlusCircle}
+        prominence="secondary"
+        href="/admin/standard-answer/new"
+      >
         New Standard Answer
-      </CreateButton>
+      </Button>
 
       <Divider />
 
@@ -423,7 +426,7 @@ function Main() {
 export default function Page() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

@@ -39,6 +39,13 @@ server {
     # Conditionally include MCP location configuration
     include /etc/nginx/conf.d/mcp.conf.inc;
 
+    # First-party health probe served directly by nginx (no upstreams),
+    # used by the container healthcheck.
+    location = /nginx-health {
+        access_log off;
+        return 200 "ok\n";
+    }
+
     location ~ ^/scim(/.*)?$ {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

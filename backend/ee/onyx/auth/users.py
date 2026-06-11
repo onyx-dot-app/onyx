@@ -18,7 +18,6 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -29,7 +28,7 @@ def verify_auth_setting() -> None:
         logger.warning(
             "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."
         )
-    logger.notice(f"Using Auth Type: {AUTH_TYPE.value}")
+    logger.notice("Using Auth Type: %s", AUTH_TYPE.value)
 
 
 def get_default_admin_user_emails_() -> list[str]:

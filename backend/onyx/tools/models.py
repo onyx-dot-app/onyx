@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from enum import Enum
 from typing import Any
+from typing import Callable
 from typing import Literal
 from uuid import UUID
 
@@ -17,12 +18,13 @@ from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.memory import UserMemoryContext
+from onyx.file_store.models import install_lazy_content_loader
+from onyx.file_store.models import maybe_materialize_lazy_content
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
-
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
@@ -149,6 +151,8 @@ class ChatMinimalTextMessage(BaseModel):
 class DynamicSchemaInfo(BaseModel):
     chat_session_id: UUID | None
     message_id: int | None
+    user_id: UUID | None = None
+    user_email: str | None = None
 
 
 class WebSearchToolOverrideKwargs(BaseModel):
@@ -183,6 +187,7 @@ class SearchToolOverrideKwargs(BaseModel):
     num_hits: int | None = NUM_RETURNED_HITS
     # Number of chunks (token approx) to include in the string to the LLM
     max_llm_chunks: int | None = MAX_CHUNKS_FED_TO_CHAT
+    include_link: bool = False
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -194,6 +199,28 @@ class ChatFile(BaseModel):
     content: bytes
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @classmethod
+    def lazy_from_filename(
+        cls,
+        *,
+        filename: str,
+        loader: Callable[[], bytes],
+    ) -> "ChatFile":
+        """Construct a ChatFile whose ``content`` is loaded on first access.
+
+        Existing eager construction (``ChatFile(filename=..., content=...)``)
+        is unchanged. PythonTool's ``.content`` access transparently triggers
+        the loader and memoizes the result.
+        """
+        inst = cls(filename=filename, content=b"")
+        install_lazy_content_loader(inst, loader)
+        return inst
+
+    def __getattribute__(self, name: str):  # type: ignore[no-untyped-def]
+        if name == "content":
+            maybe_materialize_lazy_content(self)
+        return object.__getattribute__(self, name)
 
 
 class PythonToolRichResponse(BaseModel):
@@ -253,6 +280,8 @@ class ToolCallInfo(BaseModel):
 
 CHAT_SESSION_ID_PLACEHOLDER = "CHAT_SESSION_ID"
 MESSAGE_ID_PLACEHOLDER = "MESSAGE_ID"
+USER_ID_PLACEHOLDER = "USER_ID"
+USER_EMAIL_PLACEHOLDER = "USER_EMAIL"
 
 
 class BaseCiteableToolResult(BaseModel):

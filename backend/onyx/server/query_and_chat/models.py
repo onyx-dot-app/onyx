@@ -19,7 +19,6 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import Packet
 
-
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
 
 
@@ -236,7 +235,9 @@ class ChatMessageDetail(BaseModel):
         self, *args: list, **kwargs: dict[str, Any]
     ) -> dict[str, Any]:
         initial_dict = super().model_dump(
-            mode="json", *args, **kwargs  # ty: ignore[invalid-argument-type]
+            mode="json",
+            *args,
+            **kwargs,  # ty: ignore[invalid-argument-type]
         )
         initial_dict["time_sent"] = self.time_sent.isoformat()
         return initial_dict

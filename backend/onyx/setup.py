@@ -34,11 +34,13 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import update_current_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_all_document_indices
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.opensearch_document_index import set_cluster_state
-from onyx.document_index.vespa.index import VespaIndex
+from onyx.document_index.vespa.vespa_document_index import (
+    register_multitenant_vespa_indices,
+)
 from onyx.indexing.models import IndexingSetting
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -56,7 +58,6 @@ from shared_configs.configs import ALT_INDEX_SUFFIX
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
-
 
 logger = setup_logger()
 
@@ -103,16 +104,10 @@ def setup_onyx(
     # Expire all old embedding models indexing attempts, technically redundant
     cancel_indexing_attempts_past_model(db_session)
 
-    logger.notice(f'Using Embedding model: "{search_settings.model_name}"')
+    logger.notice('Using Embedding model: "%s"', search_settings.model_name)
     if search_settings.query_prefix or search_settings.passage_prefix:
-        logger.notice(f'Query embedding prefix: "{search_settings.query_prefix}"')
-        logger.notice(f'Passage embedding prefix: "{search_settings.passage_prefix}"')
-
-    if search_settings:
-        if search_settings.multilingual_expansion:
-            logger.notice(
-                f"Multilingual query expansion is enabled with {search_settings.multilingual_expansion}."
-            )
+        logger.notice('Query embedding prefix: "%s"', search_settings.query_prefix)
+        logger.notice('Passage embedding prefix: "%s"', search_settings.passage_prefix)
 
     # setup Postgres with default credential, llm providers, etc.
     setup_postgres(db_session)
@@ -141,18 +136,15 @@ def setup_onyx(
         success = setup_document_indices(
             document_indices,
             IndexingSetting.from_db_model(search_settings),
-            (
-                IndexingSetting.from_db_model(secondary_search_settings)
-                if secondary_search_settings
-                else None
-            ),
         )
         if not success:
             raise RuntimeError(
                 "Could not connect to a document index within the specified timeout."
             )
 
-        logger.notice(f"Model Server: http://{MODEL_SERVER_HOST}:{MODEL_SERVER_PORT}")
+        logger.notice(
+            "Model Server: http://%s:%s", MODEL_SERVER_HOST, MODEL_SERVER_PORT
+        )
         if search_settings.provider_type is None:
             # In integration tests, do not block API startup on warm-up
             warm_up_bi_encoder(
@@ -172,7 +164,7 @@ def mark_reindex_flag(db_session: Session) -> None:
     kv_store = get_kv_store()
     try:
         value = kv_store.load(KV_REINDEX_KEY)
-        logger.debug(f"Re-indexing flag has value {value}")
+        logger.debug("Re-indexing flag has value %s", value)
         return
     except KvKeyNotFoundError:
         # Only need to update the flag if it hasn't been set
@@ -192,7 +184,6 @@ def mark_reindex_flag(db_session: Session) -> None:
 def setup_document_indices(
     document_indices: list[DocumentIndex],
     index_setting: IndexingSetting,
-    secondary_index_setting: IndexingSetting | None,
     num_attempts: int = VESPA_NUM_ATTEMPTS_ON_STARTUP,
 ) -> bool:
     """Sets up all input document indices.
@@ -207,40 +198,35 @@ def setup_document_indices(
         for x in range(num_attempts):
             try:
                 logger.notice(
-                    f"Setting up document index {document_index.__class__.__name__} (attempt {x + 1}/{num_attempts})..."
+                    "Setting up document index %s (attempt %s/%s)...",
+                    document_index.__class__.__name__,
+                    x + 1,
+                    num_attempts,
                 )
-                document_index.ensure_indices_exist(
-                    primary_embedding_dim=index_setting.final_embedding_dim,
-                    primary_embedding_precision=index_setting.embedding_precision,
-                    secondary_index_embedding_dim=(
-                        secondary_index_setting.final_embedding_dim
-                        if secondary_index_setting
-                        else None
-                    ),
-                    secondary_index_embedding_precision=(
-                        secondary_index_setting.embedding_precision
-                        if secondary_index_setting
-                        else None
-                    ),
+                document_index.verify_and_create_index_if_necessary(
+                    embedding_dim=index_setting.final_embedding_dim,
+                    embedding_precision=index_setting.embedding_precision,
                 )
 
                 logger.notice(
-                    f"Document index {document_index.__class__.__name__} setup complete."
+                    "Document index %s setup complete.",
+                    document_index.__class__.__name__,
                 )
                 document_index_setup_success = True
                 break
             except Exception:
                 logger.exception(
-                    f"Document index {document_index.__class__.__name__} setup did not succeed. "
-                    "The relevant service may not be ready yet. "
-                    f"Retrying in {WAIT_SECONDS} seconds."
+                    "Document index %s setup did not succeed. The relevant service may not be ready yet. Retrying in %s seconds.",
+                    document_index.__class__.__name__,
+                    WAIT_SECONDS,
                 )
                 time.sleep(WAIT_SECONDS)
 
         if not document_index_setup_success:
             logger.error(
-                f"Document index {document_index.__class__.__name__} setup did not succeed. "
-                f"Attempt limit reached. ({num_attempts})"
+                "Document index %s setup did not succeed. Attempt limit reached. (%s)",
+                document_index.__class__.__name__,
+                num_attempts,
             )
             return False
 
@@ -293,18 +279,18 @@ def setup_postgres(db_session: Session) -> None:
 def update_default_multipass_indexing(db_session: Session) -> None:
     docs_exist = check_docs_exist(db_session)
     connectors_exist = check_connectors_exist(db_session)
-    logger.debug(f"Docs exist: {docs_exist}, Connectors exist: {connectors_exist}")
+    logger.debug("Docs exist: %s, Connectors exist: %s", docs_exist, connectors_exist)
 
     if not docs_exist and not connectors_exist:
         logger.info(
             "No existing docs or connectors found. Checking GPU availability for multipass indexing."
         )
         gpu_available = gpu_status_request(indexing=True)
-        logger.info(f"GPU available: {gpu_available}")
+        logger.info("GPU available: %s", gpu_available)
 
         current_settings = get_current_search_settings(db_session)
 
-        logger.notice(f"Updating multipass indexing setting to: {gpu_available}")
+        logger.notice("Updating multipass indexing setting to: %s", gpu_available)
         updated_settings = SavedSearchSettings.from_db_model(current_settings)
         # Enable multipass indexing if GPU is available or if using a cloud provider
         updated_settings.multipass_indexing = (
@@ -316,7 +302,7 @@ def update_default_multipass_indexing(db_session: Session) -> None:
         settings = load_settings()
         settings.gpu_enabled = gpu_available
         store_settings(settings)
-        logger.notice(f"Updated settings with GPU availability: {gpu_available}")
+        logger.notice("Updated settings with GPU availability: %s", gpu_available)
 
     else:
         logger.debug(
@@ -349,8 +335,8 @@ def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) ->
     VESPA_ATTEMPTS = 5
     for x in range(VESPA_ATTEMPTS):
         try:
-            logger.notice(f"Setting up Vespa (attempt {x + 1}/{VESPA_ATTEMPTS})...")
-            VespaIndex.register_multitenant_indices(
+            logger.notice("Setting up Vespa (attempt %s/%s)...", x + 1, VESPA_ATTEMPTS)
+            register_multitenant_vespa_indices(
                 indices=[index.index_name for index in supported_indices]
                 + [
                     f"{index.index_name}{ALT_INDEX_SUFFIX}"
@@ -369,11 +355,12 @@ def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) ->
             return True
         except Exception:
             logger.notice(
-                f"Vespa setup did not succeed. The Vespa service may not be ready yet. Retrying in {WAIT_SECONDS} seconds."
+                "Vespa setup did not succeed. The Vespa service may not be ready yet. Retrying in %s seconds.",
+                WAIT_SECONDS,
             )
             time.sleep(WAIT_SECONDS)
 
     logger.error(
-        f"Vespa setup did not succeed. Attempt limit reached. ({VESPA_ATTEMPTS})"
+        "Vespa setup did not succeed. Attempt limit reached. (%s)", VESPA_ATTEMPTS
     )
     return False

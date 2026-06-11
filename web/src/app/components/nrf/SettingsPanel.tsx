@@ -1,16 +1,17 @@
 "use client";
 
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import Text from "@/refresh-components/texts/Text";
 import { SvgX, SvgSettings, SvgSun, SvgMoon, SvgCheck } from "@opal/icons";
 import { Button } from "@opal/components";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import {
   CHAT_BACKGROUND_OPTIONS,
   CHAT_BACKGROUND_NONE,
+  ChatBackgroundOption,
 } from "@/lib/constants/chatBackgrounds";
 
 interface SettingRowProps {
@@ -95,7 +96,8 @@ export const SettingsPanel = ({
 }) => {
   const { useOnyxAsNewTab } = useNRFPreferences();
   const { theme, setTheme } = useTheme();
-  const { user, updateUserChatBackground } = useUser();
+  const { user, updateUserChatBackground, updateUserThemePreference } =
+    useUser();
 
   const currentBackgroundId = user?.preferences?.chat_background ?? "none";
   const isDark = theme === "dark";
@@ -104,10 +106,19 @@ export const SettingsPanel = ({
     setTheme(isDark ? "light" : "dark");
   };
 
-  const handleBackgroundChange = (backgroundId: string) => {
-    updateUserChatBackground(
-      backgroundId === CHAT_BACKGROUND_NONE ? null : backgroundId
-    );
+  const handleBackgroundChange = async (bg: ChatBackgroundOption) => {
+    try {
+      await updateUserChatBackground(
+        bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+      );
+      if (bg.theme) {
+        setTheme(bg.theme);
+        await updateUserThemePreference(bg.theme);
+      }
+    } catch {
+      // errors are already logged and state is rolled back via refreshUser
+      // inside the update functions
+    }
   };
 
   return (
@@ -115,7 +126,7 @@ export const SettingsPanel = ({
       {/* Backdrop overlay */}
       <div
         className={cn(
-          "fixed inset-0 bg-mask-03 backdrop-blur-sm z-40 transition-opacity duration-300",
+          "fixed inset-0 bg-mask-03 backdrop-blur-xs z-40 transition-opacity duration-300",
           settingsOpen
             ? "opacity-100 pointer-events-auto"
             : "opacity-0 pointer-events-none"
@@ -126,15 +137,15 @@ export const SettingsPanel = ({
       {/* Settings panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 w-[25rem] h-full z-50",
-          "bg-gradient-to-b from-background-tint-02 to-background-tint-01",
-          "backdrop-blur-[24px] border-l border-border-01 overflow-y-auto",
+          "fixed top-0 right-0 w-100 h-full z-50",
+          "bg-linear-to-b from-background-tint-02 to-background-tint-01",
+          "backdrop-blur-xl border-l border-border-01 overflow-y-auto",
           "transition-transform duration-300 ease-out",
           settingsOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-gradient-to-b from-background-tint-02 to-transparent pb-4">
+        <div className="sticky top-0 z-10 bg-linear-to-b from-background-tint-02 to-transparent pb-4">
           <div className="flex items-center justify-between px-6 pt-6 pb-2">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-background-tint-02">
@@ -191,7 +202,7 @@ export const SettingsPanel = ({
                   label={bg.label}
                   isNone={bg.src === CHAT_BACKGROUND_NONE}
                   isSelected={currentBackgroundId === bg.id}
-                  onClick={() => handleBackgroundChange(bg.id)}
+                  onClick={() => handleBackgroundChange(bg)}
                 />
               ))}
             </div>

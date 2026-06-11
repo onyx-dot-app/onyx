@@ -1,5 +1,4 @@
 from datetime import datetime
-from enum import Enum
 from typing import Any
 from typing import TYPE_CHECKING
 from typing import Union
@@ -9,15 +8,17 @@ from pydantic import BaseModel
 from onyx.configs.constants import MessageType
 from onyx.db.enums import ArtifactType
 from onyx.db.enums import BuildSessionStatus
+from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
-from onyx.server.features.build.sandbox.models import (
-    FilesystemEntry as FileSystemEntry,
-)
+from onyx.server.features.build.sandbox.models import FilesystemEntry as FileSystemEntry
 
 if TYPE_CHECKING:
-    from onyx.db.models import Sandbox
     from onyx.db.models import BuildSession
+    from onyx.db.models import Sandbox
+    from onyx.server.features.build.interactive_turns.state import InteractiveTurn
 
 
 # ===== Session Models =====
@@ -25,12 +26,12 @@ class SessionCreateRequest(BaseModel):
     """Request to create a new build session."""
 
     name: str | None = None  # Optional session name
-    demo_data_enabled: bool = True  # Whether to enable demo org_info data in sandbox
-    user_work_area: str | None = None  # User's work area (e.g., "engineering")
-    user_level: str | None = None  # User's level (e.g., "ic", "manager")
     # LLM selection from user's cookie
     llm_provider_type: str | None = None  # Provider type (e.g., "anthropic", "openai")
     llm_model_name: str | None = None  # Model name (e.g., "claude-opus-4-5")
+    # Skip Next.js dev server startup. Used by integration tests that don't
+    # exercise the webapp proxy and don't want to pay the ~20s startup wait.
+    headless: bool = False
 
 
 class SessionUpdateRequest(BaseModel):
@@ -109,6 +110,9 @@ class SessionResponse(BaseModel):
     sandbox: SandboxResponse | None
     artifacts: list[ArtifactResponse]
     sharing_scope: SharingScope
+    origin: SessionOrigin
+    agent_provider: str | None
+    agent_model: str | None
 
     @classmethod
     def from_model(
@@ -132,6 +136,9 @@ class SessionResponse(BaseModel):
             sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
             artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
             sharing_scope=session.sharing_scope,
+            origin=session.origin,
+            agent_provider=session.agent_provider,
+            agent_model=session.agent_model,
         )
 
 
@@ -180,12 +187,42 @@ class MessageRequest(BaseModel):
     """Request to send a message to the CLI agent."""
 
     content: str
+    client_request_id: str | None = None
+    # Per-message model override from the composer; both set together.
+    provider: str | None = None
+    model: str | None = None
+
+
+class InteractiveTurnResponse(BaseModel):
+    """Interactive turn lifecycle response."""
+
+    turn_id: str
+    session_id: str
+    status: str
+    turn_index: int
+
+    @classmethod
+    def from_turn(cls, turn: "InteractiveTurn") -> "InteractiveTurnResponse":
+        return cls(
+            turn_id=str(turn.turn_id),
+            session_id=str(turn.session_id),
+            status=turn.status,
+            turn_index=turn.turn_index,
+        )
+
+
+class MessageInterruptResponse(BaseModel):
+    """Response to an interrupt request. ``interrupted`` is False when there was
+    no directly-interruptible turn (no running sandbox or no opencode session);
+    the interrupt fence is set regardless."""
+
+    interrupted: bool
 
 
 class MessageResponse(BaseModel):
     """Response containing message details.
 
-    All message data is stored in message_metadata as JSON (the raw ACP packet).
+    All message data is stored in message_metadata as JSON (the raw sandbox event packet).
     The turn_index groups all assistant responses under the user prompt they respond to.
 
     Packet types in message_metadata:
@@ -291,69 +328,174 @@ class PreProvisionedCheckResponse(BaseModel):
     session_id: str | None = None  # Session ID if valid, None otherwise
 
 
-# ===== Build Connector Models =====
-class BuildConnectorStatus(str, Enum):
-    """Status of a build connector."""
-
-    NOT_CONNECTED = "not_connected"
-    CONNECTED = "connected"
-    CONNECTED_WITH_ERRORS = "connected_with_errors"
-    INDEXING = "indexing"
-    ERROR = "error"
-    DELETING = "deleting"
-
-
-class BuildConnectorInfo(BaseModel):
-    """Simplified connector info for build admin panel."""
-
-    cc_pair_id: int
-    connector_id: int
-    credential_id: int
-    source: str
-    name: str
-    status: BuildConnectorStatus
-    docs_indexed: int
-    last_indexed: datetime | None
-    error_message: str | None = None
-
-
-class BuildConnectorListResponse(BaseModel):
-    """List of build connectors."""
-
-    connectors: list[BuildConnectorInfo]
-
-
-# ===== Suggestion Bubble Models =====
-class SuggestionTheme(str, Enum):
-    """Theme/category of a follow-up suggestion."""
-
-    ADD = "add"
-    QUESTION = "question"
-
-
-class SuggestionBubble(BaseModel):
-    """A single follow-up suggestion bubble."""
-
-    theme: SuggestionTheme
-    text: str
-
-
-class GenerateSuggestionsRequest(BaseModel):
-    """Request to generate follow-up suggestions."""
-
-    user_message: str  # First user message
-    assistant_message: str  # First assistant text response (accumulated)
-
-
-class GenerateSuggestionsResponse(BaseModel):
-    """Response containing generated suggestions."""
-
-    suggestions: list[SuggestionBubble]
-
-
 class PptxPreviewResponse(BaseModel):
     """Response with PPTX slide preview metadata."""
 
     slide_count: int
     slide_paths: list[str]  # Relative paths to slide JPEGs within session workspace
     cached: bool  # Whether result was served from cache
+
+
+# ===== External App Models =====
+class CreateBuiltInExternalAppRequest(BaseModel):
+    """Create a built-in external app (``POST /admin/apps/built-in``).
+
+    Built-in providers only — ``app_type=CUSTOM`` is rejected (custom apps use
+    ``POST /admin/apps/custom``). Updates go through ``PATCH /admin/apps/{id}``.
+
+    A new row is inserted (and a backing ``Skill`` row is created in the same
+    transaction). ``upstream_url_patterns`` is a list of regex patterns matched
+    by the egress proxy against outbound request URLs. ``enabled`` (stored on
+    the linked skill) is the kill switch the proxy checks before injecting
+    credentials.
+
+    Skill identity (slug, bundle bytes, sharing scope) is derived server-side
+    from ``app_type``; admins don't supply it.
+    """
+
+    name: str
+    description: str
+    enabled: bool
+    app_type: ExternalAppType
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, Any]
+    organization_credentials: dict[str, str]
+    # Map full-replaces stored overrides (empty clears); None defaults every
+    # action. Keyed by catalog action id; validated on create.
+    action_policies: dict[str, EndpointPolicy] | None = None
+
+
+class UpdateExternalAppRequest(BaseModel):
+    """Partial update of an existing app, keyed solely by the path ``id``
+    (``PATCH /admin/apps/{id}``). Every field is optional; ``None`` means "leave
+    untouched", so a narrow request (e.g. just ``enabled``) won't blank the rest.
+
+    This is the single update path for built-in apps. For Onyx-managed built-ins
+    (cloud) the gateway-config fields (``upstream_url_patterns``,
+    ``auth_template``, ``organization_credentials``) are Onyx-owned and ignored —
+    only ``enabled`` + ``action_policies`` take effect. Custom-app field edits
+    (and bundle replacement) go through ``POST /admin/apps/custom`` instead, since
+    that path is multipart.
+    """
+
+    enabled: bool | None = None
+    name: str | None = None
+    description: str | None = None
+    upstream_url_patterns: list[str] | None = None
+    auth_template: dict[str, Any] | None = None
+    organization_credentials: dict[str, str] | None = None
+    # Full-replace stored overrides when present (empty clears); None leaves them.
+    action_policies: dict[str, EndpointPolicy] | None = None
+
+
+class ActionPolicyView(BaseModel):
+    """One action of a built-in app, with its effective policy — the admin's
+    stored override if set, otherwise the action's ``default_policy``."""
+
+    action_id: str
+    normalised_name: str
+    description: str
+    state: EndpointPolicy
+
+
+class ExternalAppAdminResponse(BaseModel):
+    """Admin-facing view of an external app (includes org credentials)."""
+
+    id: int
+    name: str
+    description: str
+    app_type: ExternalAppType
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, Any]
+    organization_credentials: dict[str, Any]
+    enabled: bool
+    # The merged per-action policy view (built-in apps; empty for custom).
+    actions: list[ActionPolicyView]
+    # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;
+    # admin may only enable/disable + set policies. UI hides the rest.
+    is_onyx_managed: bool = False
+
+
+class UpsertUserCredentialsRequest(BaseModel):
+    """User-supplied credentials for a specific external app."""
+
+    user_credentials: dict[str, Any]
+
+
+class ExternalAppUserResponse(BaseModel):
+    """User-facing view of an external app.
+
+    `credential_keys` are the parameter names the calling user must supply —
+    derived from the app's `auth_template` minus whatever the organization
+    has already filled in. `credential_values` are the values the user has
+    previously stored for those keys (intersection — stale keys from
+    deleted/migrated templates are filtered out). `authenticated` is true
+    iff `credential_values` covers every key in `credential_keys`.
+
+    Admin-only fields (``organization_credentials``, ``auth_template``,
+    ``upstream_url_patterns``, ``enabled``) are intentionally omitted.
+    ``app_type`` is included — it's the non-sensitive provider
+    discriminator the UI needs to render the app.
+    """
+
+    id: int
+    name: str
+    description: str
+    slug: str
+    app_type: ExternalAppType
+    credential_keys: list[str]
+    credential_values: dict[str, Any]
+    authenticated: bool
+
+
+class OAuthStartResponse(BaseModel):
+    authorize_url: str
+
+
+class OAuthCallbackRequest(BaseModel):
+    code: str
+    state: str
+
+
+class OAuthCallbackResponse(BaseModel):
+    success: bool
+    external_app_id: int
+
+
+class OrgCredentialFieldDescriptor(BaseModel):
+    """One credential field the admin must fill in to configure a
+    built-in provider."""
+
+    key: str
+    label: str
+    description: str
+    secret: bool
+
+
+class EndpointDescriptor(BaseModel):
+    """One action in a built-in provider's catalog, flattened for the admin UI.
+    The admin picks a policy per action; recognition rules stay backend-side."""
+
+    action_id: str
+    normalised_name: str
+    description: str
+    # The policy a new app's instance of this action defaults to; the create
+    # form seeds each action's selector with it (the admin can still override).
+    default_policy: EndpointPolicy
+
+
+class BuiltInExternalAppDescriptor(BaseModel):
+    """Backend-defined preset for a built-in OAuth provider. The admin
+    UI fetches these and uses them to render the Configure modal +
+    POST body, so adding a new provider is a backend-only change."""
+
+    app_type: ExternalAppType
+    name: str
+    description: str
+    upstream_url_patterns: list[str]
+    auth_template: dict[str, str]
+    required_org_credential_fields: list[OrgCredentialFieldDescriptor]
+    setup_instructions: str
+    # The catalog of actions an admin can govern (empty for providers without
+    # a catalog).
+    actions: list[EndpointDescriptor]

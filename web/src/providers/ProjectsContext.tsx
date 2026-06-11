@@ -275,17 +275,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
 
   const deleteProject = useCallback(
     async (projectId: number): Promise<void> => {
-      try {
-        await svcDeleteProject(projectId);
-        await fetchProjects();
-        if (currentProjectId === projectId) {
-          setCurrentProjectDetails(null);
-          setAllCurrentProjectFiles([]);
-          projectToUploadFilesMapRef.current.delete(projectId);
-          route();
-        }
-      } catch (err) {
-        throw err;
+      await svcDeleteProject(projectId);
+      await fetchProjects();
+      if (currentProjectId === projectId) {
+        setCurrentProjectDetails(null);
+        setAllCurrentProjectFiles([]);
+        projectToUploadFilesMapRef.current.delete(projectId);
+        route();
       }
     },
     [fetchProjects, currentProjectId, projectToUploadFilesMapRef, route]
@@ -495,30 +491,23 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       files: File[],
       projectId?: number | null
     ): Promise<CategorizedFiles> => {
-      try {
-        const uploaded: CategorizedFiles = await svcUploadFiles(
-          files,
-          projectId
-        );
-        const uploadedFiles = uploaded.user_files || [];
-        // Track these uploaded file IDs for targeted polling
-        if (uploadedFiles.length > 0) {
-          setTrackedUploadIds((prev) => {
-            const next = new Set(prev);
-            for (const f of uploadedFiles) next.add(f.id);
-            return next;
-          });
-        }
-
-        // Refresh canonical sources instead of manual merges
-        if (projectId && currentProjectId === projectId) {
-          await refreshCurrentProjectDetails();
-        }
-        await refreshRecentFiles();
-        return uploaded;
-      } catch (err) {
-        throw err;
+      const uploaded: CategorizedFiles = await svcUploadFiles(files, projectId);
+      const uploadedFiles = uploaded.user_files || [];
+      // Track these uploaded file IDs for targeted polling
+      if (uploadedFiles.length > 0) {
+        setTrackedUploadIds((prev) => {
+          const next = new Set(prev);
+          for (const f of uploadedFiles) next.add(f.id);
+          return next;
+        });
       }
+
+      // Refresh canonical sources instead of manual merges
+      if (projectId && currentProjectId === projectId) {
+        await refreshCurrentProjectDetails();
+      }
+      await refreshRecentFiles();
+      return uploaded;
     },
     [currentProjectId, refreshCurrentProjectDetails, refreshRecentFiles]
   );

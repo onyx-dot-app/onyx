@@ -4,17 +4,120 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 import requests
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import MCP_SERVER_ALLOW_LOOPBACK
+from onyx.configs.app_configs import MCP_SERVER_ALLOW_PRIVATE_NETWORK
 from onyx.db.models import OAuthConfig
 from onyx.db.models import OAuthUserToken
 from onyx.db.oauth_config import get_user_oauth_token
 from onyx.db.oauth_config import upsert_user_oauth_token
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
+from onyx.utils.url import validate_outbound_http_url
+
+
+def validate_oauth_endpoint_url(url: str, *, resolve_dns: bool = True) -> None:
+    """SSRF guard for admin-configured OAuth endpoints, shared by store-time
+    (MCP upsert) and fetch-time (token exchange/refresh) so the policy can't
+    drift. Private targets gated behind ``MCP_SERVER_ALLOW_PRIVATE_NETWORK``;
+    loopback needs the additional ``MCP_SERVER_ALLOW_LOOPBACK`` opt-in;
+    cloud-metadata always blocked. ``https_only`` since OAuth endpoints must be
+    TLS. ``resolve_dns=False`` skips the DNS lookup at store time; fetch time
+    still resolves."""
+    validate_outbound_http_url(
+        url,
+        allow_private_network=MCP_SERVER_ALLOW_PRIVATE_NETWORK,
+        https_only=True,
+        block_loopback_and_link_local=not MCP_SERVER_ALLOW_LOOPBACK,
+        block_link_local_only=MCP_SERVER_ALLOW_LOOPBACK,
+        resolve_dns=resolve_dns,
+    )
 
 
 logger = setup_logger()
+
+OAUTH_RESPONSE_TYPE_CODE = "code"
+OAUTH_GRANT_TYPE_AUTHORIZATION_CODE = "authorization_code"
+OAUTH_PKCE_CHALLENGE_METHOD_S256 = "S256"
+
+
+class OAuthFlowParams(BaseModel):
+    """Stateless inputs for the OAuth 2.0 authorization-code grant, decoupled
+    from any storage model so both `OAuthConfig`-backed tool OAuth and MCP
+    known-provider OAuth can share the wire primitives below."""
+
+    authorization_url: str
+    token_url: str
+    client_id: str
+    client_secret: str | None = None
+    scopes: list[str] | None = None
+    additional_params: dict[str, Any] | None = None
+
+
+def build_oauth_authorization_url(
+    params: OAuthFlowParams,
+    redirect_uri: str,
+    state: str,
+    *,
+    code_challenge: str | None = None,
+    resource: str | None = None,
+) -> str:
+    """Construct an authorization-code-grant authorize URL. `code_challenge`
+    adds PKCE (S256); `resource` adds the RFC 8707 resource indicator. Both are
+    off by default so non-PKCE callers get an unchanged URL."""
+    query: dict[str, Any] = {
+        "client_id": params.client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": OAUTH_RESPONSE_TYPE_CODE,
+        "state": state,
+    }
+    if params.scopes:
+        query["scope"] = " ".join(params.scopes)
+    if code_challenge:
+        query["code_challenge"] = code_challenge
+        query["code_challenge_method"] = OAUTH_PKCE_CHALLENGE_METHOD_S256
+    if resource:
+        query["resource"] = resource
+    if params.additional_params:
+        query.update(params.additional_params)
+
+    separator = "&" if "?" in params.authorization_url else "?"
+    return f"{params.authorization_url}{separator}{urlencode(query)}"
+
+
+def exchange_oauth_code_for_token(
+    params: OAuthFlowParams,
+    code: str,
+    redirect_uri: str,
+    *,
+    code_verifier: str | None = None,
+) -> dict[str, Any]:
+    """Exchange an authorization code for tokens at the token endpoint. Sends
+    `code_verifier` when provided (PKCE). Returns the raw provider payload with
+    a computed `expires_at`; raises `requests.HTTPError` on a non-2xx response."""
+    data: dict[str, str] = {
+        "grant_type": OAUTH_GRANT_TYPE_AUTHORIZATION_CODE,
+        "code": code,
+        "client_id": params.client_id,
+        "redirect_uri": redirect_uri,
+    }
+    if params.client_secret:
+        data["client_secret"] = params.client_secret
+    if code_verifier:
+        data["code_verifier"] = code_verifier
+
+    validate_oauth_endpoint_url(params.token_url)
+    response = requests.post(
+        params.token_url, data=data, headers={"Accept": "application/json"}
+    )
+    response.raise_for_status()
+
+    token_data = response.json()
+    if "expires_in" in token_data:
+        token_data["expires_at"] = int(time.time()) + token_data["expires_in"]
+    return token_data
 
 
 class OAuthTokenManager:
@@ -46,7 +149,7 @@ class OAuthTokenManager:
                 try:
                     return self.refresh_token(user_token)
                 except Exception as e:
-                    logger.warning(f"Failed to refresh token: {e}")
+                    logger.warning("Failed to refresh token: %s", e)
                     return None
             else:
                 return None
@@ -76,6 +179,7 @@ class OAuthTokenManager:
                 self.oauth_config.client_secret
             ),
         }
+        validate_oauth_endpoint_url(self.oauth_config.token_url)
         response = requests.post(
             self.oauth_config.token_url,
             data=data,
@@ -134,29 +238,9 @@ class OAuthTokenManager:
                 "OAuth client_id and client_secret are required for code exchange"
             )
 
-        data: dict[str, str] = {
-            "grant_type": "authorization_code",
-            "code": code,
-            "client_id": self._unwrap_sensitive_str(self.oauth_config.client_id),
-            "client_secret": self._unwrap_sensitive_str(
-                self.oauth_config.client_secret
-            ),
-            "redirect_uri": redirect_uri,
-        }
-        response = requests.post(
-            self.oauth_config.token_url,
-            data=data,
-            headers={"Accept": "application/json"},
+        return exchange_oauth_code_for_token(
+            self._flow_params(self.oauth_config), code, redirect_uri
         )
-        response.raise_for_status()
-
-        token_data = response.json()
-
-        # Calculate expires_at if expires_in is present
-        if "expires_in" in token_data:
-            token_data["expires_at"] = int(time.time()) + token_data["expires_in"]
-
-        return token_data
 
     @staticmethod
     def build_authorization_url(
@@ -165,28 +249,27 @@ class OAuthTokenManager:
         """Build OAuth authorization URL"""
         if oauth_config.client_id is None:
             raise ValueError("OAuth client_id is required to build authorization URL")
+        return build_oauth_authorization_url(
+            OAuthTokenManager._flow_params(oauth_config), redirect_uri, state
+        )
 
-        params: dict[str, Any] = {
-            "client_id": OAuthTokenManager._unwrap_sensitive_str(
-                oauth_config.client_id
-            ),
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "state": state,
-        }
-
-        # Add scopes if configured
-        if oauth_config.scopes:
-            params["scope"] = " ".join(oauth_config.scopes)
-
-        # Add any additional provider-specific parameters
-        if oauth_config.additional_params:
-            params.update(oauth_config.additional_params)
-
-        # Check if URL already has query parameters
-        separator = "&" if "?" in oauth_config.authorization_url else "?"
-
-        return f"{oauth_config.authorization_url}{separator}{urlencode(params)}"
+    @staticmethod
+    def _flow_params(oauth_config: OAuthConfig) -> OAuthFlowParams:
+        if oauth_config.client_id is None:
+            raise ValueError("OAuth client_id is required")
+        client_secret = (
+            OAuthTokenManager._unwrap_sensitive_str(oauth_config.client_secret)
+            if oauth_config.client_secret is not None
+            else None
+        )
+        return OAuthFlowParams(
+            authorization_url=oauth_config.authorization_url,
+            token_url=oauth_config.token_url,
+            client_id=OAuthTokenManager._unwrap_sensitive_str(oauth_config.client_id),
+            client_secret=client_secret,
+            scopes=oauth_config.scopes,
+            additional_params=oauth_config.additional_params,
+        )
 
     @staticmethod
     def _unwrap_sensitive_str(value: SensitiveValue[str] | str) -> str:

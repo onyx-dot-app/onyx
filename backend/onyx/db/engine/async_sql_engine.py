@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from typing import Any
 from typing import AsyncContextManager
 
-import asyncpg
 from fastapi import HTTPException
 from sqlalchemy import event
 from sqlalchemy import pool
@@ -14,7 +13,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
-from onyx.configs.app_configs import POSTGRES_DB
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
@@ -32,25 +30,8 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import get_current_tenant_id
 
-
 # Global so we don't create more than one engine per process
 _ASYNC_ENGINE: AsyncEngine | None = None
-
-
-async def get_async_connection() -> Any:
-    """
-    Custom connection function for async engine when using IAM auth.
-    """
-    host = POSTGRES_HOST
-    port = POSTGRES_PORT
-    user = POSTGRES_USER
-    db = POSTGRES_DB
-    token = get_iam_auth_token(host, port, user, AWS_REGION_NAME)
-
-    # asyncpg requires 'ssl="require"' if SSL needed
-    return await asyncpg.connect(
-        user=user, password=token, host=host, port=int(port), database=db, ssl="require"
-    )
 
 
 def get_sqlalchemy_async_engine() -> AsyncEngine:
@@ -67,6 +48,12 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
             connect_args["server_settings"] = {"application_name": app_name}
 
         connect_args["ssl"] = create_ssl_context_if_iam()
+
+        # Disable asyncpg's named prepared-statement cache. Cache-vs-server
+        # desync produces intermittent `MissingGreenlet` /
+        # `prepared statement does not exist` errors under poolers and on
+        # cold async connects.
+        connect_args["statement_cache_size"] = 0
 
         engine_kwargs = {
             "connect_args": connect_args,
@@ -103,6 +90,20 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
                 cparams["ssl"] = create_ssl_context_if_iam()
 
     return _ASYNC_ENGINE
+
+
+async def reset_sqlalchemy_async_engine() -> None:
+    """Dispose the process-global async engine and drop the reference so a
+    subsequent ``get_sqlalchemy_async_engine()`` rebuilds it from scratch.
+
+    Must be awaited so asyncpg's pool can close its connections (rather than
+    leaking them when the worker exits — uvicorn ``--reload`` exercises this
+    path on every file change).
+    """
+    global _ASYNC_ENGINE
+    if _ASYNC_ENGINE is not None:
+        await _ASYNC_ENGINE.dispose()
+        _ASYNC_ENGINE = None
 
 
 async def get_async_session(

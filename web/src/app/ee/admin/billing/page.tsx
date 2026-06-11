@@ -1,4 +1,4 @@
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import BillingInformationPage from "./BillingInformationPage";
 import { SvgCreditCard } from "@opal/icons";
 
@@ -22,7 +22,7 @@ export default function page() {
       <SettingsLayouts.Header
         icon={SvgCreditCard}
         title="Billing Information"
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <BillingInformationPage />

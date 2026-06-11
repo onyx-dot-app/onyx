@@ -8,17 +8,22 @@ import type { ProjectFile } from "../../projects/projectsService";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { Button, Divider } from "@opal/components";
 
-import AddInstructionModal from "@/components/modals/AddInstructionModal";
-import UserFilesModal from "@/components/modals/UserFilesModal";
+import AddInstructionModal from "@/sections/modals/AddInstructionModal";
+import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import Text from "@/refresh-components/texts/Text";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { FileCard, FileCardSkeleton } from "@/sections/cards/FileCard";
 import { hasNonImageFiles } from "@/lib/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import { UserFileStatus } from "../../projects/projectsService";
-import { SvgAddLines, SvgEdit, SvgFiles, SvgFolderOpen } from "@opal/icons";
+import {
+  SvgAddLines,
+  SvgEdit,
+  SvgFiles,
+  SvgFolderOpen,
+  SvgPlusCircle,
+} from "@opal/icons";
 import { Hoverable } from "@opal/core";
 
 export interface ProjectContextPanelProps {
@@ -130,7 +135,7 @@ export default function ProjectContextPanel({
           }}
         />
       </projectFilesModal.Provider>
-      <div className="flex flex-col gap-6 w-full max-w-[var(--app-page-main-content-width)] mx-auto p-4 pt-14 pb-6">
+      <div className="flex flex-col gap-6 w-full max-w-(--app-page-main-content-width) mx-auto p-4 pt-14 pb-6">
         <div className="flex flex-col gap-1 text-text-04">
           <SvgFolderOpen className="h-8 w-8 text-text-04" />
           <Hoverable.Root group="projectName" width="fit">
@@ -152,10 +157,7 @@ export default function ProjectContextPanel({
                     {projectName}
                   </Text>
                   {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                  <Hoverable.Item
-                    group="projectName"
-                    variant="opacity-on-hover"
-                  >
+                  <Hoverable.Item group="projectName" variant="appear-on-hover">
                     <IconButton
                       icon={SvgEdit}
                       internal
@@ -176,7 +178,7 @@ export default function ProjectContextPanel({
               Instructions
             </Text>
             {isLoadingProjectDetails && !currentProjectDetails ? (
-              <div className="h-5 w-3/4 rounded bg-background-tint-02 animate-pulse" />
+              <div className="h-5 w-3/4 rounded-sm bg-background-tint-02 animate-pulse" />
             ) : currentProjectDetails?.project?.instructions ? (
               <Text as="p" text02 secondaryBody className="truncate">
                 {currentProjectDetails.project.instructions}
@@ -210,11 +212,13 @@ export default function ProjectContextPanel({
             </div>
             <FilePickerPopover
               trigger={(open) => (
-                // The `secondary={undefined}` is required here because `CreateButton` sets it to true.
-                // Therefore, we need to first remove the truthiness before passing in the other `tertiary` flag.
-                <CreateButton secondary={undefined} tertiary transient={open}>
+                <Button
+                  icon={SvgPlusCircle}
+                  prominence="tertiary"
+                  interaction={open ? "active" : "rest"}
+                >
                   Add Files
-                </CreateButton>
+                </Button>
               )}
               onFileClick={handleOnView}
               onPickRecent={async (file) => {
@@ -255,7 +259,7 @@ export default function ProjectContextPanel({
               {/* Mobile / small screens: just show a button to view files */}
               <div className="sm:hidden">
                 <button
-                  className="w-full rounded-xl px-3 py-3 text-left bg-transparent hover:bg-accent-background-hovered hover:dark:bg-neutral-800/75 transition-colors"
+                  className="w-full rounded-xl px-3 py-3 text-left bg-transparent hover:bg-accent-background-hovered dark:hover:bg-neutral-800/75 transition-colors"
                   onClick={() => projectFilesModal.toggle(true)}
                 >
                   <div className="flex flex-col overflow-hidden">

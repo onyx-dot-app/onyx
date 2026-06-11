@@ -11,6 +11,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -26,7 +27,6 @@ from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_markdown_image_references
-
 
 logger = setup_logger()
 
@@ -155,6 +155,7 @@ class TestRailConnector(LoadConnector, PollConnector):
                 url,
                 auth=(self.username, self.api_key),
                 params=params,
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
@@ -204,7 +205,7 @@ class TestRailConnector(LoadConnector, PollConnector):
             fields = self._api_get("get_case_fields")
             return fields if isinstance(fields, list) else []
         except Exception as e:
-            logger.warning(f"Failed to fetch case fields from TestRail: {e}")
+            logger.warning("Failed to fetch case fields from TestRail: %s", e)
             return []
 
     def _parse_items_string(self, items_str: str) -> dict[str, str]:
@@ -262,7 +263,7 @@ class TestRailConnector(LoadConnector, PollConnector):
                             )
 
         except Exception as e:
-            logger.warning(f"Failed to build field maps from TestRail: {e}")
+            logger.warning("Failed to build field maps from TestRail: %s", e)
 
         return field_labels, value_maps
 
@@ -453,7 +454,9 @@ class TestRailConnector(LoadConnector, PollConnector):
         full_text = "\n".join(text_lines)
         if len(full_text) > self.skip_doc_absolute_chars:
             logger.warning(
-                f"Skipping TestRail case {case_id} due to excessive size: {len(full_text)} chars"
+                "Skipping TestRail case %s due to excessive size: %s chars",
+                case_id,
+                len(full_text),
             )
             return None
 
@@ -537,11 +540,9 @@ class TestRailConnector(LoadConnector, PollConnector):
 
 
 if __name__ == "__main__":
-    from onyx.configs.app_configs import (
-        TESTRAIL_API_KEY,
-        TESTRAIL_BASE_URL,
-        TESTRAIL_USERNAME,
-    )
+    from onyx.configs.app_configs import TESTRAIL_API_KEY
+    from onyx.configs.app_configs import TESTRAIL_BASE_URL
+    from onyx.configs.app_configs import TESTRAIL_USERNAME
 
     connector = TestRailConnector()
 

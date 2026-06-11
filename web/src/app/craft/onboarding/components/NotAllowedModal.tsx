@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgLock, SvgArrowRight } from "@opal/icons";
 import { logout } from "@/lib/user";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 interface NotAllowedModalProps {
   open: boolean;
@@ -34,7 +34,7 @@ export default function NotAllowedModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" />
 
       {/* Modal */}
       <div className="relative z-10 w-full max-w-xl mx-4 bg-background-tint-01 rounded-16 shadow-lg border border-border-01">
@@ -47,15 +47,15 @@ export default function NotAllowedModal({
             </div>
 
             {/* Header */}
-            <div className="flex flex-col items-center gap-2 text-center">
-              <Text headingH2 text05>
+            <div className="flex flex-col items-center gap-2 text-center max-w-sm">
+              <Text font="heading-h2" color="text-05">
                 Custom Crafting Restricted
               </Text>
-              <Text mainUiBody text03 className="max-w-sm">
+              <Text font="main-ui-body" color="text-03">
                 Unfortunately, connecting your own data to Craft requires admin
                 permissions.
-                <br />
-                <br />
+              </Text>
+              <Text font="main-ui-body" color="text-03">
                 Luckily, you can create a new Onyx account to become an admin
                 and craft with your own data!
               </Text>
@@ -69,7 +69,9 @@ export default function NotAllowedModal({
               onClick={onClose}
               className="flex items-center gap-1.5 px-4 py-2 rounded-12 border border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-02 transition-colors"
             >
-              <Text mainUiAction>Go Back</Text>
+              <Text font="main-ui-action" color="text-05">
+                Go Back
+              </Text>
             </button>
             <button
               type="button"
@@ -83,10 +85,8 @@ export default function NotAllowedModal({
               )}
             >
               <Text
-                mainUiAction
-                className={cn(
-                  !isLoading ? "text-white dark:text-black" : "text-text-02"
-                )}
+                font="main-ui-action"
+                color={!isLoading ? "text-inverted-05" : "text-02"}
               >
                 {isLoading ? "Signing out..." : "Create a new account"}
               </Text>

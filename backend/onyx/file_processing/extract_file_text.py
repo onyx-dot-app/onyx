@@ -93,10 +93,24 @@ def is_text_file(file: IO[bytes]) -> bool:
 
 
 def detect_encoding(file: IO[bytes]) -> str:
+    """Detect the character encoding of a binary file.
+
+    Tries UTF-8 first — if the bytes decode cleanly, they are definitively UTF-8
+    (UTF-8 is self-validating). Falls back to chardet only when UTF-8 fails, since
+    chardet can misidentify valid UTF-8 text (e.g. Cyrillic) as a legacy encoding
+    like windows-1251, producing mojibake. Defaults to utf-8 if chardet gives up.
+
+    Resets the file cursor to 0 after sampling so callers can still read the full file.
+    """
     raw_data = file.read(50000)
     file.seek(0)
-    encoding = chardet.detect(raw_data)["encoding"] or "utf-8"
-    return encoding
+    try:
+        raw_data.decode("utf-8")
+        return "utf-8"
+    except UnicodeDecodeError:
+        # utf-8 failed — bytes are genuinely non-UTF-8, let chardet guess
+        encoding = chardet.detect(raw_data)["encoding"] or "utf-8"
+        return encoding
 
 
 def is_macos_resource_fork_file(file_name: str) -> bool:
@@ -346,10 +360,17 @@ def read_pdf_file(
 
         return text, metadata, extracted_images
 
-    except PdfStreamError:
-        logger.exception("Invalid PDF file")
-    except Exception:
-        logger.exception("Failed to read PDF")
+    except PdfStreamError as e:
+        # Malformed/truncated PDF content — a per-document content issue, not
+        # a platform bug. The function returns empty text and the connector
+        # continues with the next doc; no need to ship a stack trace to
+        # Sentry for every corrupt file we encounter.
+        logger.warning("Invalid PDF file, skipping content extraction: %s", e)
+    except Exception as e:
+        # Unknown PDF parsing failure — elevate just the message, not a
+        # traceback, for the same reason. Callers treat empty text as a
+        # non-fatal skip.
+        logger.warning("Failed to read PDF, skipping content extraction: %s", e)
 
     return "", metadata, []
 
@@ -417,11 +438,9 @@ def read_docx_file(
     The images list returned is empty in this case.
     """
     md = get_markitdown_converter()
-    from markitdown import (
-        StreamInfo,
-        FileConversionException,
-        UnsupportedFormatException,
-    )
+    from markitdown import FileConversionException
+    from markitdown import StreamInfo
+    from markitdown import UnsupportedFormatException
 
     try:
         doc = md.convert(
@@ -434,7 +453,9 @@ def read_docx_file(
         UnsupportedFormatException,
     ) as e:
         logger.warning(
-            f"Failed to extract docx {file_name or 'docx file'}: {e}. Attempting to read as text file."
+            "Failed to extract docx %s: %s. Attempting to read as text file.",
+            file_name or "docx file",
+            e,
         )
 
         # May be an invalid docx, but still a valid text file
@@ -459,13 +480,25 @@ def read_docx_file(
     return doc.markdown, []
 
 
+def extract_pptx_images(pptx_bytes: IO[Any]) -> Iterator[tuple[bytes, str]]:
+    """
+    Given the bytes of a pptx file, extract all the images.
+    Returns an iterator of tuples (image_bytes, image_name).
+    """
+    try:
+        with zipfile.ZipFile(pptx_bytes) as z:
+            for name in z.namelist():
+                if name.startswith("ppt/media/"):
+                    yield (z.read(name), name.split("/")[-1])
+    except Exception:
+        logger.exception("Failed to extract all pptx images")
+
+
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
     md = get_markitdown_converter()
-    from markitdown import (
-        StreamInfo,
-        FileConversionException,
-        UnsupportedFormatException,
-    )
+    from markitdown import FileConversionException
+    from markitdown import StreamInfo
+    from markitdown import UnsupportedFormatException
 
     stream_info = StreamInfo(
         mimetype=PRESENTATION_MIME_TYPE, filename=file_name or None, extension=".pptx"
@@ -482,6 +515,31 @@ def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
         logger.warning(error_str)
         return ""
     return presentation.markdown
+
+
+def read_pptx_file(
+    file: IO[Any],
+    file_name: str = "",
+    extract_images: bool = False,
+    image_callback: Callable[[bytes, str], None] | None = None,
+) -> tuple[str, Sequence[tuple[bytes, str]]]:
+    """
+    Extract text and optionally images from a pptx.
+    Return (text_content, list_of_images).
+    """
+    text = pptx_to_text(file, file_name=file_name)
+
+    file.seek(0)
+
+    if extract_images:
+        if image_callback is None:
+            return text, list(extract_pptx_images(to_bytesio(file)))
+        try:
+            for img_file_bytes, img_file_name in extract_pptx_images(to_bytesio(file)):
+                image_callback(img_file_bytes, img_file_name)
+        except Exception:
+            logger.exception("Failed to stream pptx images")
+    return text, []
 
 
 def _columns_to_keep(col_has_data: bytearray, max_empty: int) -> list[int]:
@@ -581,8 +639,10 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
         return []
     except Exception as e:
         if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
-            logger.error(
-                f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
+            logger.warning(
+                "Failed to extract text from %s. This happens due to a bug in openpyxl. %s",
+                file_name or "xlsx file",
+                e,
             )
             return []
         raise
@@ -620,7 +680,8 @@ def eml_to_text(file: IO[Any]) -> str:
             raw_file = text_file.detach()
         except Exception as detach_error:
             logger.warning(
-                f"Failed to detach TextIOWrapper for EML upload, using original file: {detach_error}"
+                "Failed to detach TextIOWrapper for EML upload, using original file: %s",
+                detach_error,
             )
             raw_file = file
         try:
@@ -637,7 +698,7 @@ def eml_to_text(file: IO[Any]) -> str:
             elif isinstance(payload, list):
                 text_content.extend(item for item in payload if isinstance(item, str))
             else:
-                logger.warning(f"Unexpected payload type: {type(payload)}")
+                logger.warning("Unexpected payload type: %s", type(payload))
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
@@ -686,7 +747,8 @@ def extract_file_text(
                 return unstructured_to_text(file, file_name)
             except Exception as unstructured_error:
                 logger.error(
-                    f"Failed to process with Unstructured: {str(unstructured_error)}. Falling back to normal processing."
+                    "Failed to process with Unstructured: %s. Falling back to normal processing.",
+                    str(unstructured_error),
                 )
         if extension is None:
             extension = get_file_ext(file_name)
@@ -708,7 +770,7 @@ def extract_file_text(
             raise RuntimeError(
                 f"Failed to process file {file_name or 'Unknown'}: {str(e)}"
             ) from e
-        logger.warning(f"Failed to process file {file_name or 'Unknown'}: {str(e)}")
+        logger.warning("Failed to process file %s: %s", file_name or "Unknown", str(e))
         return ""
 
 
@@ -765,7 +827,7 @@ def extract_text_and_images(
     )
     # Clean up any temporary objects and force garbage collection
     unreachable = gc.collect()
-    logger.info(f"Unreachable objects: {unreachable}")
+    logger.info("Unreachable objects: %s", unreachable)
 
     return res
 
@@ -787,7 +849,8 @@ def _extract_text_and_images(
             )
         except Exception as e:
             logger.error(
-                f"Failed to process with Unstructured: {str(e)}. Falling back to normal processing."
+                "Failed to process with Unstructured: %s. Falling back to normal processing.",
+                str(e),
             )
             file.seek(0)  # Reset file pointer just in case
 
@@ -823,13 +886,12 @@ def _extract_text_and_images(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata
             )
 
-        # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.
-        # You can do something similar to docx if needed.
         if extension == ".pptx":
+            text_content, images = read_pptx_file(
+                file, file_name, extract_images=True, image_callback=image_callback
+            )
             return ExtractionResult(
-                text_content=pptx_to_text(file, file_name=file_name),
-                embedded_images=[],
-                metadata={},
+                text_content=text_content, embedded_images=images, metadata={}
             )
 
         if extension == ".xlsx":
@@ -865,7 +927,7 @@ def _extract_text_and_images(
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
     except Exception as e:
-        logger.exception(f"Failed to extract text/images from {file_name}: {e}")
+        logger.exception("Failed to extract text/images from %s: %s", file_name, e)
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
 

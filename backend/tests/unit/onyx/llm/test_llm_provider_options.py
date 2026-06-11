@@ -3,9 +3,7 @@ from datetime import timezone
 
 import pytest
 
-from onyx.llm.well_known_providers.auto_update_models import (
-    LLMProviderRecommendation,
-)
+from onyx.llm.well_known_providers.auto_update_models import LLMProviderRecommendation
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
@@ -13,6 +11,35 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     model_configurations_for_provider,
 )
 from onyx.llm.well_known_providers.models import SimpleKnownModel
+
+
+def test_get_visible_models_dedupes_default_and_prefers_display_name() -> None:
+    # The default is repeated in additional_visible_models (where it carries a
+    # display name); get_visible_models must return it once, with the name.
+    recommendations = LLMRecommendations(
+        version="test",
+        updated_at=datetime.now(timezone.utc),
+        providers={
+            "anthropic": LLMProviderRecommendation(
+                default_model=SimpleKnownModel(name="claude-opus-4-8"),
+                additional_visible_models=[
+                    SimpleKnownModel(
+                        name="claude-opus-4-8", display_name="Claude Opus 4.8"
+                    ),
+                    SimpleKnownModel(
+                        name="claude-sonnet-4-6", display_name="Claude Sonnet 4.6"
+                    ),
+                ],
+            )
+        },
+    )
+
+    visible = recommendations.get_visible_models("anthropic")
+
+    assert [(m.name, m.display_name) for m in visible] == [
+        ("claude-opus-4-8", "Claude Opus 4.8"),
+        ("claude-sonnet-4-6", "Claude Sonnet 4.6"),
+    ]
 
 
 def _build_recommendations(
@@ -69,6 +96,58 @@ def test_model_configurations_vertex_are_sorted_by_name(
         True,
         False,
     ]
+
+
+def test_model_configurations_carry_display_name_and_dedupe_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The default is repeated in additional_visible_models (where it carries a
+    # display name); the result must be deduped and carry that display name.
+    monkeypatch.setattr(
+        "onyx.llm.well_known_providers.llm_provider_options.fetch_models_for_provider",
+        lambda _provider_name: [],
+    )
+    monkeypatch.setattr(
+        "onyx.llm.well_known_providers.llm_provider_options.get_max_input_tokens",
+        lambda _model_name, _provider_name: None,
+    )
+    monkeypatch.setattr(
+        "onyx.llm.well_known_providers.llm_provider_options.model_supports_image_input",
+        lambda _model_name, _provider_name: False,
+    )
+
+    recommendations = LLMRecommendations(
+        version="test",
+        updated_at=datetime.now(timezone.utc),
+        providers={
+            "anthropic": LLMProviderRecommendation(
+                default_model=SimpleKnownModel(name="claude-opus-4-8"),
+                additional_visible_models=[
+                    SimpleKnownModel(
+                        name="claude-opus-4-8", display_name="Claude Opus 4.8"
+                    ),
+                    SimpleKnownModel(
+                        name="claude-sonnet-4-6", display_name="Claude Sonnet 4.6"
+                    ),
+                ],
+            )
+        },
+    )
+
+    model_configurations = model_configurations_for_provider(
+        "anthropic", recommendations
+    )
+
+    assert [m.name for m in model_configurations] == [
+        "claude-opus-4-8",
+        "claude-sonnet-4-6",
+    ]
+    by_name = {m.name: m for m in model_configurations}
+    assert by_name["claude-opus-4-8"].display_name == "Claude Opus 4.8"
+    assert all(m.is_visible for m in model_configurations)
+    # Only the config's default model is flagged as the recommended default.
+    assert by_name["claude-opus-4-8"].is_recommended_default is True
+    assert by_name["claude-sonnet-4-6"].is_recommended_default is False
 
 
 def test_model_configurations_non_vertex_preserve_provider_order(

@@ -5,11 +5,10 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import Modal from "@/refresh-components/Modal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getSecondsUntilExpiration } from "@/lib/time";
-import { refreshToken } from "@/lib/user";
+import { logout, refreshToken } from "@/lib/user";
+import { getSecondsUntilExpiration } from "@opal/time";
 import { NEXT_PUBLIC_CUSTOM_REFRESH_URL } from "@/lib/constants";
 import { Button } from "@opal/components";
-import { logout } from "@/lib/user";
 import { usePathname, useRouter } from "next/navigation";
 import { SvgAlertTriangle, SvgLogOut } from "@opal/icons";
 import { Content } from "@opal/layouts";
@@ -22,8 +21,12 @@ export default function AppHealthBanner() {
   const [expired, setExpired] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const pathname = usePathname();
-  const expirationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const refreshIntervalRef = useRef<NodeJS.Timer | null>(null);
+  const expirationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
   // Latches true once we see an authed user — separates mid-session logout
   // from a fresh unauth load.
   const hasSeenAuthenticatedUserRef = useRef(false);
@@ -96,8 +99,23 @@ export default function AppHealthBanner() {
   useEffect(() => {
     if (!user) return;
 
-    const secondsUntilExpiration = getSecondsUntilExpiration(user);
-    if (secondsUntilExpiration === null) return;
+    const expiries: Date[] = [];
+    if (
+      user.current_token_created_at &&
+      user.current_token_expiry_length !== undefined
+    ) {
+      const createdAt = new Date(user.current_token_created_at);
+      expiries.push(
+        new Date(createdAt.getTime() + user.current_token_expiry_length * 1000)
+      );
+    }
+    if (user.oidc_expiry) {
+      expiries.push(new Date(user.oidc_expiry));
+    }
+    if (expiries.length === 0) return;
+    const secondsUntilExpiration = Math.min(
+      ...expiries.map(getSecondsUntilExpiration)
+    );
 
     // Set up expiration timeout based on current user data
     setupExpirationTimeout(secondsUntilExpiration);
@@ -138,9 +156,28 @@ export default function AppHealthBanner() {
 
             if (updatedUser) {
               // Reset expiration timeout with new expiration time
-              const newSecondsUntilExpiration =
-                getSecondsUntilExpiration(updatedUser);
-              if (newSecondsUntilExpiration !== null) {
+              const newExpiries: Date[] = [];
+              if (
+                updatedUser.current_token_created_at &&
+                updatedUser.current_token_expiry_length !== undefined
+              ) {
+                const newCreatedAt = new Date(
+                  updatedUser.current_token_created_at
+                );
+                newExpiries.push(
+                  new Date(
+                    newCreatedAt.getTime() +
+                      updatedUser.current_token_expiry_length * 1000
+                  )
+                );
+              }
+              if (updatedUser.oidc_expiry) {
+                newExpiries.push(new Date(updatedUser.oidc_expiry));
+              }
+              if (newExpiries.length > 0) {
+                const newSecondsUntilExpiration = Math.min(
+                  ...newExpiries.map(getSecondsUntilExpiration)
+                );
                 setupExpirationTimeout(newSecondsUntilExpiration);
                 console.debug(
                   `Token refreshed, new expiration in ${newSecondsUntilExpiration} seconds`
@@ -216,7 +253,7 @@ export default function AppHealthBanner() {
     return null;
   } else {
     return (
-      <div className="fixed top-0 left-0 z-[101] w-full bg-status-error-01 p-3">
+      <div className="fixed top-0 left-0 z-101 w-full bg-status-error-01 p-3">
         <Content
           icon={SvgAlertTriangle}
           title="The backend is currently unavailable"

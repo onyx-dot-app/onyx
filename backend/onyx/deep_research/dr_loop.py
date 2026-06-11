@@ -18,6 +18,7 @@ from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
+from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.chat_configs import SKIP_DEEP_RESEARCH_CLARIFICATION
 from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -163,7 +164,7 @@ def generate_final_report(
             max_tokens=MAX_FINAL_REPORT_TOKENS,
             is_deep_research=True,
             pre_answer_processing_time=pre_answer_processing_time,
-            timeout_override=300,  # 5 minute read timeout for long report generation
+            timeout_override=DR_REPORT_LLM_TIMEOUT_S,
         )
 
         # Save citation mapping to state_container so citations are persisted
@@ -211,6 +212,7 @@ def run_deep_research_llm_loop(
         metadata={
             "tenant_id": get_current_tenant_id(),
             "chat_session_id": chat_session_id,
+            "user_id": user_identity.user_id if user_identity else None,
         },
     ):
         # Here for lazy load LiteLLM
@@ -426,9 +428,7 @@ def run_deep_research_llm_loop(
             reasoning_cycles = 0
             most_recent_reasoning: str | None = None
             citation_mapping: CitationMapping = {}
-            final_turn_index: int = (
-                orchestrator_start_turn_index  # Track the final turn_index for stop packet
-            )
+            final_turn_index: int = orchestrator_start_turn_index  # Track the final turn_index for stop packet
             for cycle in range(max_orchestrator_cycles):
                 # Check if we've exceeded the time limit or reached the last cycle
                 # - if so, skip LLM and generate final report
@@ -439,8 +439,9 @@ def run_deep_research_llm_loop(
                 if timed_out or is_last_cycle:
                     if timed_out:
                         logger.info(
-                            f"Deep research exceeded {DEEP_RESEARCH_FORCE_REPORT_SECONDS}s "
-                            f"(elapsed: {elapsed_seconds:.1f}s), forcing final report generation"
+                            "Deep research exceeded %ss (elapsed: %ss), forcing final report generation",
+                            DEEP_RESEARCH_FORCE_REPORT_SECONDS,
+                            format(elapsed_seconds, ".1f"),
                         )
                     report_turn_index = (
                         orchestrator_start_turn_index + cycle + reasoning_cycles
@@ -568,9 +569,7 @@ def run_deep_research_llm_loop(
                 special_tool_calls = check_special_tool_calls(tool_calls=tool_calls)
 
                 if special_tool_calls.generate_report_tool_call:
-                    report_turn_index = (
-                        special_tool_calls.generate_report_tool_call.placement.turn_index
-                    )
+                    report_turn_index = special_tool_calls.generate_report_tool_call.placement.turn_index
                     report_reasoned = generate_final_report(
                         history=simple_chat_history,
                         research_plan=research_plan,
@@ -632,7 +631,7 @@ def run_deep_research_llm_loop(
                     for tool_call in tool_calls:
                         if tool_call.tool_name != RESEARCH_AGENT_TOOL_NAME:
                             logger.warning(
-                                f"Unexpected tool call: {tool_call.tool_name}"
+                                "Unexpected tool call: %s", tool_call.tool_name
                             )
                             continue
 
@@ -728,10 +727,26 @@ def run_deep_research_llm_loop(
                         research_results.intermediate_reports
                     ):
                         if report is None:
-                            # The LLM will not see that this research was even attempted, it may try
-                            # something similar again but this is not bad.
+                            # Every tool_use id in the preceding assistant message must have a
+                            # matching TOOL_CALL_RESPONSE or strict providers (e.g. AWS Bedrock
+                            # Converse) reject the next request with 400 "Expected toolResult
+                            # blocks at messages.N.content for the following Ids: ...". Emit a
+                            # synthetic failure response so the invariant holds and the LLM
+                            # knows the call failed.
                             logger.error(
-                                f"Research agent call at tab_index {tab_index} failed, skipping"
+                                "Research agent call at tab_index %s failed; emitting synthetic failure response",
+                                tab_index,
+                            )
+                            failed_tool_call = research_agent_calls[tab_index]
+                            failure_message = "Research agent call failed. Try a different approach or continue without this result."
+                            simple_chat_history.append(
+                                ChatMessageSimple(
+                                    message=failure_message,
+                                    token_count=token_counter(failure_message),
+                                    message_type=MessageType.TOOL_CALL_RESPONSE,
+                                    tool_call_id=failed_tool_call.tool_call_id,
+                                    image_files=None,
+                                )
                             )
                             continue
 

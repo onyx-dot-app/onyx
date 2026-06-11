@@ -3,7 +3,6 @@ from onyx.indexing.chunking.tabular_section_chunker.util import label
 from onyx.indexing.chunking.tabular_section_chunker.util import pack_lines
 from onyx.natural_language_processing.utils import BaseTokenizer
 
-
 MAX_NUMERIC_COLS = 12
 MAX_CATEGORICAL_COLS = 6
 MAX_CATEGORICAL_WITH_SAMPLES = 4
@@ -55,8 +54,7 @@ def build_sheet_descriptor_chunks(
 
 def _overview_line(a: SheetAnalysis) -> str:
     return (
-        "Sheet overview.\n"
-        f"This sheet has {a.row_count} rows and {a.num_cols} columns."
+        f"Sheet overview.\nThis sheet has {a.row_count} rows and {a.num_cols} columns."
     )
 
 

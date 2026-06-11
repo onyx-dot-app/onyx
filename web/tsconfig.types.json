@@ -1,6 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "target": "ES2017",
+    "moduleResolution": "bundler",
     "paths": {
       "@/*": ["./src/*"],
       "@tests/*": ["./tests/*"],
@@ -16,5 +18,5 @@
     ".next/dev/types/**/*.ts",
     "types/**/*.d.ts"
   ],
-  "exclude": ["node_modules", "lib/opal"]
+  "exclude": ["node_modules", "lib/opal", "lib/shared"]
 }

@@ -25,7 +25,6 @@ from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import UserSpecificAssistantPreference
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -127,7 +126,7 @@ def get_latest_access_token_for_user(
         )
         return result.scalar_one_or_none()
     except Exception as e:
-        logger.error(f"Error fetching AccessToken: {e}")
+        logger.error("Error fetching AccessToken: %s", e)
         return None
 
 
@@ -155,6 +154,20 @@ def update_user_shortcut_enabled(
         update(User)
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(shortcut_enabled=shortcut_enabled)
+    )
+    db_session.commit()
+
+
+def update_user_paste_as_tile(
+    user_id: UUID,
+    paste_as_tile: bool,
+    db_session: Session,
+) -> None:
+    """Update user's paste-as-tile setting."""
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(paste_as_tile=paste_as_tile)
     )
     db_session.commit()
 

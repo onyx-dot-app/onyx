@@ -1,4 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import {
   selectModelFromInputPopover,
@@ -23,7 +24,7 @@ function uniqueName(prefix: string): string {
 async function openChat(page: Page): Promise<void> {
   await page.goto("/app");
   await page.waitForLoadState("networkidle");
-  await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
+  await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
 }
 
 async function loginWithCleanCookies(
@@ -215,7 +216,7 @@ test.describe("LLM Runtime Selection", () => {
     ]);
 
     await loginWithCleanCookies(page, testInfo.workerIndex);
-    await openChat(page);
+    await new ChatPage(page).goto();
 
     let turn = 0;
     await page.route("**/api/chat/send-chat-message", async (route) => {
@@ -246,7 +247,7 @@ test.describe("LLM Runtime Selection", () => {
 
     await page.reload();
     await page.waitForLoadState("networkidle");
-    await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
+    await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
 
     await verifyCurrentModel(page, selectedModelDisplay);
 
@@ -262,7 +263,7 @@ test.describe("LLM Runtime Selection", () => {
   test("regenerate with alternate model preserves version history semantics", async ({
     page,
   }) => {
-    await openChat(page);
+    await new ChatPage(page).goto();
 
     let turn = 0;
     await page.route("**/api/chat/send-chat-message", async (route) => {
@@ -403,7 +404,7 @@ test.describe("LLM Runtime Selection", () => {
       });
     });
 
-    await openChat(page);
+    await new ChatPage(page).goto();
 
     await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
@@ -425,7 +426,7 @@ test.describe("LLM Runtime Selection", () => {
     // Use a new session so runtime selection is not overwritten by the previous
     // chat session's persisted model override.
     await startNewChat(page);
-    await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
+    await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
 
     await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });
@@ -508,7 +509,7 @@ test.describe("LLM Runtime Selection", () => {
     providersToCleanup.push(restrictedProviderId);
 
     await loginWithCleanCookies(page, testInfo.workerIndex);
-    await openChat(page);
+    await new ChatPage(page).goto();
 
     await page.getByTestId("model-selector").locator("button").last().click();
     await page.waitForSelector('[role="dialog"]', { state: "visible" });

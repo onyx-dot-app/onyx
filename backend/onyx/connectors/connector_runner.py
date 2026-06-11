@@ -17,7 +17,6 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
@@ -125,7 +124,9 @@ class ConnectorRunner(Generic[CT]):
         self.doc_batch: list[Document] = []
         self.hierarchy_node_batch: list[HierarchyNode] = []
 
-    def run(self, checkpoint: CT) -> Generator[
+    def run(
+        self, checkpoint: CT
+    ) -> Generator[
         tuple[
             list[Document] | None,
             list[HierarchyNode] | None,
@@ -214,7 +215,8 @@ class ConnectorRunner(Generic[CT]):
                 yield None, None, None, next_checkpoint
 
                 logger.debug(
-                    f"Connector took {time.monotonic() - start} seconds to get to the next checkpoint."
+                    "Connector took %s seconds to get to the next checkpoint.",
+                    time.monotonic() - start,
                 )
 
             else:
@@ -265,7 +267,9 @@ class ConnectorRunner(Generic[CT]):
                 f"{key}: {value}" for key, value in local_vars.items()
             )
             logger.error(
-                f"Error in connector. type: {exc_type};\nlocal_vars below -> \n{local_vars_str[:1024]}"
+                "Error in connector. type: %s;\nlocal_vars below -> \n%s",
+                exc_type,
+                local_vars_str[:1024],
             )
             raise
 

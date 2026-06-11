@@ -6,11 +6,15 @@ import Link from "next/link";
 import type { Route } from "next";
 import Cookies from "js-cookie";
 import { SvgX } from "@opal/icons";
+import { dismissNotification } from "@/lib/notifications/api";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useSWRConfig } from "swr";
 const DISMISSED_NOTIFICATION_COOKIE_PREFIX = "dismissed_notification_";
 const COOKIE_EXPIRY_DAYS = 1;
 
 export function AnnouncementBanner() {
   const settings = useContext(SettingsContext);
+  const { mutate } = useSWRConfig();
   const [localNotifications, setLocalNotifications] = useState(
     settings?.settings.notifications || []
   );
@@ -31,26 +35,18 @@ export function AnnouncementBanner() {
 
   const handleDismiss = async (notificationId: number) => {
     try {
-      const response = await fetch(
-        `/api/notifications/${notificationId}/dismiss`,
-        {
-          method: "POST",
-        }
+      await dismissNotification(notificationId);
+      Cookies.set(
+        `${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${notificationId}`,
+        "true",
+        { expires: COOKIE_EXPIRY_DAYS }
       );
-      if (response.ok) {
-        Cookies.set(
-          `${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${notificationId}`,
-          "true",
-          { expires: COOKIE_EXPIRY_DAYS }
-        );
-        setLocalNotifications((prevNotifications) =>
-          prevNotifications.filter(
-            (notification) => notification.id !== notificationId
-          )
-        );
-      } else {
-        console.error("Failed to dismiss notification");
-      }
+      setLocalNotifications((prevNotifications) =>
+        prevNotifications.filter(
+          (notification) => notification.id !== notificationId
+        )
+      );
+      void mutate(SWR_KEYS.notificationsSummary);
     } catch (error) {
       console.error("Error dismissing notification:", error);
     }
@@ -64,14 +60,14 @@ export function AnnouncementBanner() {
           return (
             <div
               key={notification.id}
-              className="absolute top-0 left-1/2 transform -translate-x-1/2 bg-blue-600 rounded-sm text-white px-4 pr-8 py-3 mx-auto"
+              className="absolute top-0 left-1/2 transform -translate-x-1/2 bg-blue-600 rounded-xs text-white px-4 pr-8 py-3 mx-auto"
             >
               {notification.notif_type == "reindex" ? (
                 <p className="text-center">
                   Your index is out of date - we strongly recommend updating
                   your search settings.{" "}
                   <Link
-                    href={"/admin/configuration/search"}
+                    href={"/admin/configuration/index-settings" as Route}
                     className="ml-2 underline cursor-pointer"
                   >
                     Update here
@@ -79,8 +75,9 @@ export function AnnouncementBanner() {
                 </p>
               ) : notification.notif_type == "two_day_trial_ending" ? (
                 <p className="text-center">
-                  Your trial is ending soon - submit your billing information to
-                  continue using Onyx.{" "}
+                  Your Enterprise trial is ending soon - submit your billing
+                  information to keep these features, or your workspace will
+                  revert to the Business plan.{" "}
                   <Link
                     href={"/admin/billing" as Route}
                     className="ml-2 underline cursor-pointer"

@@ -1,8 +1,8 @@
 "use client";
 
 import SimpleTabs from "@/refresh-components/SimpleTabs";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
-import { Text } from "@opal/components";
+import { SettingsLayouts } from "@opal/layouts";
+import { Button, Text } from "@opal/components";
 import { useState } from "react";
 import {
   insertGlobalTokenRateLimit,
@@ -15,9 +15,9 @@ import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
 import CreateRateLimitModal from "./CreateRateLimitModal";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { SvgGlobe, SvgUser, SvgUsers } from "@opal/icons";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
+import { SvgGlobe, SvgPlusCircle, SvgUser, SvgUsers } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
@@ -65,7 +65,7 @@ function Main() {
   const [tabIndex, setTabIndex] = useState(0);
   const [modalIsOpen, setModalIsOpen] = useState(false);
 
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const updateTable = (target_scope: Scope) => {
     if (target_scope === Scope.GLOBAL) {
@@ -116,7 +116,7 @@ function Main() {
             spend.
           </Text>
         </li>
-        {isPaidEnterpriseFeaturesEnabled && (
+        {enterpriseTier && (
           <>
             <li>
               <Text as="p">
@@ -137,11 +137,15 @@ function Main() {
         </li>
       </ul>
 
-      <CreateButton onClick={() => setModalIsOpen(true)}>
+      <Button
+        icon={SvgPlusCircle}
+        prominence="secondary"
+        onClick={() => setModalIsOpen(true)}
+      >
         Create a Token Rate Limit
-      </CreateButton>
+      </Button>
 
-      {isPaidEnterpriseFeaturesEnabled ? (
+      {enterpriseTier ? (
         <SimpleTabs
           tabs={{
             "0": {
@@ -201,9 +205,7 @@ function Main() {
         isOpen={modalIsOpen}
         setIsOpen={() => setModalIsOpen(false)}
         onSubmit={handleSubmit}
-        forSpecificScope={
-          isPaidEnterpriseFeaturesEnabled ? undefined : Scope.GLOBAL
-        }
+        forSpecificScope={enterpriseTier ? undefined : Scope.GLOBAL}
       />
     </Section>
   );
@@ -212,7 +214,7 @@ function Main() {
 export default function Page() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header title={route.title} icon={route.icon} separator />
+      <SettingsLayouts.Header title={route.title} icon={route.icon} divider />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

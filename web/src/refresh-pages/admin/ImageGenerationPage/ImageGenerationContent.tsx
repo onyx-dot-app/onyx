@@ -7,7 +7,10 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { LLMProviderResponse, LLMProviderView } from "@/interfaces/llm";
+import {
+  LLMProviderResponse,
+  LLMProviderView,
+} from "@/lib/languageModels/types";
 import {
   IMAGE_PROVIDER_GROUPS,
   ImageProvider,
@@ -18,30 +21,17 @@ import {
   unsetDefaultImageGenerationConfig,
   deleteImageGenerationConfig,
 } from "@/refresh-pages/admin/ImageGenerationPage/svc";
-import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { Button, MessageCard, SelectCard, Text } from "@opal/components";
-import { Content, Card } from "@opal/layouts";
-import { Hoverable } from "@opal/core";
-import {
-  SvgArrowExchange,
-  SvgArrowRightCircle,
-  SvgCheckSquare,
-  SvgSettings,
-  SvgSlash,
-  SvgUnplug,
-} from "@opal/icons";
+import { Button, MessageCard, Text } from "@opal/components";
+import { Content } from "@opal/layouts";
+import { SvgSlash, SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { getImageGenForm } from "@/refresh-pages/admin/ImageGenerationPage/forms";
+import ProviderCard from "@/sections/admin/ProviderCard";
+import { getModelIcon } from "@/lib/languageModels";
 
 const NO_DEFAULT_VALUE = "__none__";
-
-const STATUS_TO_STATE = {
-  disconnected: "empty",
-  connected: "filled",
-  selected: "selected",
-} as const;
 
 export default function ImageGenerationContent() {
   const {
@@ -238,106 +228,23 @@ export default function ImageGenerationContent() {
               const isSelected = status === "selected";
 
               return (
-                <Hoverable.Root
+                <ProviderCard
                   key={provider.image_provider_id}
-                  group="image-gen/ProviderCard"
-                >
-                  <SelectCard
-                    state={STATUS_TO_STATE[status]}
-                    padding="sm"
-                    rounding="lg"
-                    aria-label={`image-gen-provider-${provider.image_provider_id}`}
-                    onClick={
-                      isDisconnected
-                        ? () => handleConnect(provider)
-                        : isSelected
-                          ? () => handleDeselect(provider)
-                          : undefined
-                    }
-                  >
-                    <Card.Header
-                      headerPadding="sm"
-                      headerChildren={
-                        <Content
-                          sizePreset="main-ui"
-                          variant="section"
-                          icon={() => (
-                            <ModelIcon
-                              provider={provider.provider_name}
-                              size={16}
-                            />
-                          )}
-                          title={provider.title}
-                          description={provider.description}
-                        />
-                      }
-                      topRightChildren={
-                        isDisconnected ? (
-                          <Button
-                            prominence="tertiary"
-                            rightIcon={SvgArrowExchange}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConnect(provider);
-                            }}
-                          >
-                            Connect
-                          </Button>
-                        ) : isConnected ? (
-                          <Button
-                            prominence="tertiary"
-                            rightIcon={SvgArrowRightCircle}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelect(provider);
-                            }}
-                          >
-                            Set as Default
-                          </Button>
-                        ) : isSelected ? (
-                          <div className="p-2">
-                            <Content
-                              title="Current Default"
-                              sizePreset="main-ui"
-                              variant="section"
-                              icon={SvgCheckSquare}
-                            />
-                          </div>
-                        ) : undefined
-                      }
-                      bottomRightChildren={
-                        !isDisconnected ? (
-                          <div className="flex flex-row px-1 pb-1">
-                            <Hoverable.Item group="image-gen/ProviderCard">
-                              <Button
-                                icon={SvgUnplug}
-                                tooltip="Disconnect"
-                                aria-label={`Disconnect ${provider.title}`}
-                                prominence="tertiary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDisconnectProvider(provider);
-                                }}
-                                size="md"
-                              />
-                            </Hoverable.Item>
-                            <Button
-                              icon={SvgSettings}
-                              tooltip="Edit"
-                              aria-label={`Edit ${provider.title}`}
-                              prominence="tertiary"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEdit(provider);
-                              }}
-                              size="md"
-                            />
-                          </div>
-                        ) : undefined
-                      }
-                    />
-                  </SelectCard>
-                </Hoverable.Root>
+                  icon={getModelIcon(provider.provider_name)}
+                  title={provider.title}
+                  description={provider.description}
+                  status={status}
+                  aria-label={`image-gen-provider-${provider.image_provider_id}`}
+                  onConnect={() => handleConnect(provider)}
+                  onSelect={() => handleSelect(provider)}
+                  onDeselect={() => handleDeselect(provider)}
+                  onEdit={() => handleEdit(provider)}
+                  onDisconnect={() => setDisconnectProvider(provider)}
+                  disconnectModalOpen={
+                    disconnectProvider?.image_provider_id ===
+                    provider.image_provider_id
+                  }
+                />
               );
             })}
           </div>
@@ -390,12 +297,7 @@ export default function ImageGenerationContent() {
                             <InputSelect.Item
                               key={p.image_provider_id}
                               value={p.image_provider_id}
-                              icon={() => (
-                                <ModelIcon
-                                  provider={p.provider_name}
-                                  size={16}
-                                />
-                              )}
+                              icon={getModelIcon(p.provider_name)}
                             >
                               {p.title}
                             </InputSelect.Item>

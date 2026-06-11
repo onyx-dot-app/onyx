@@ -4,10 +4,9 @@ import type { Route } from "next";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { SvgExternalLink, SvgUsers } from "@opal/icons";
+import { SvgExternalLink, SvgUsers, SvgSimpleLoader } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SettingsLayouts } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -29,7 +28,7 @@ function GroupsPage() {
   return (
     <SettingsLayouts.Root>
       <div data-testid="groups-page-heading">
-        <SettingsLayouts.Header icon={SvgUsers} title="Groups" separator>
+        <SettingsLayouts.Header icon={SvgUsers} title="Groups" divider>
           <MessageCard
             variant="info"
             title="Upcoming changes to permissions"
@@ -63,7 +62,7 @@ function GroupsPage() {
           actionLabel="New Group"
         />
 
-        {isLoading && <SimpleLoader />}
+        {isLoading && <SvgSimpleLoader />}
 
         {error && (
           <IllustrationContent

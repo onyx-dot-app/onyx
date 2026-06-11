@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback, useEffect, useState } from "react";
+import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
 import {
@@ -17,16 +17,17 @@ import {
   SvgKey,
   SvgLock,
   SvgMinusCircle,
+  SvgPlusCircle,
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
 import { getSourceMetadata } from "@/lib/sources";
 import Card from "@/refresh-components/cards/Card";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
@@ -40,15 +41,14 @@ import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useFilter from "@/hooks/useFilter";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
-import { Button, Divider } from "@opal/components";
+import { Button, Divider, Checkbox, Text } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ValidSources } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
-import Text from "@/refresh-components/texts/Text";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import Code from "@/refresh-components/Code";
+import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import { Code, CopyButton } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/interfaces";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
@@ -61,12 +61,14 @@ import {
   CHAT_BACKGROUND_NONE,
 } from "@/lib/constants/chatBackgrounds";
 import { SvgCheck } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Interactive } from "@opal/core";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
+import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 
 interface PAT {
   id: number;
@@ -75,12 +77,122 @@ interface PAT {
   created_at: string;
   expires_at: string | null;
   last_used_at: string | null;
+  scopes: string[] | null;
 }
+
+interface PatScopeOption {
+  scope: string;
+  group_label: string;
+  label: string;
+  description: string;
+  implies: string[];
+}
+
+type AccessMode = "full" | "limited";
 
 interface CreatedTokenState {
   id: number;
   token: string;
   name: string;
+}
+
+interface ScopeGroup {
+  label: string;
+  rows: PatScopeOption[];
+}
+
+interface ScopeSelectorProps {
+  scopeOptions: PatScopeOption[];
+  selectedScopes: string[];
+  toggleScope: (scope: string) => void;
+  scopesError: boolean;
+  disabled: boolean;
+}
+
+// Data-driven from the /scopes payload, so new scopes need no change here.
+function ScopeSelector({
+  scopeOptions,
+  selectedScopes,
+  toggleScope,
+  scopesError,
+  disabled,
+}: ScopeSelectorProps) {
+  const groups = useMemo(() => {
+    const byLabel = new Map<string, ScopeGroup>();
+    for (const option of scopeOptions) {
+      const group = byLabel.get(option.group_label);
+      if (group) {
+        group.rows.push(option);
+      } else {
+        byLabel.set(option.group_label, {
+          label: option.group_label,
+          rows: [option],
+        });
+      }
+    }
+    return Array.from(byLabel.values());
+  }, [scopeOptions]);
+
+  if (scopesError) {
+    return (
+      <Text font="secondary-body" color="text-03">
+        Couldn&apos;t load permissions.
+      </Text>
+    );
+  }
+  if (scopeOptions.length === 0) {
+    return (
+      <Text font="secondary-body" color="text-03">
+        Loading permissions...
+      </Text>
+    );
+  }
+
+  // scope -> label of a selected scope that implies it (so it's auto-included).
+  const lockedBy = new Map<string, string>();
+  for (const scope of selectedScopes) {
+    const option = scopeOptions.find((o) => o.scope === scope);
+    option?.implies.forEach((implied) => lockedBy.set(implied, option.label));
+  }
+
+  return (
+    <div className="grid grid-cols-2 items-start">
+      {groups.map((group) => (
+        <div key={group.label} className="flex flex-col items-start gap-1">
+          <Text font="main-ui-action" color="text-04">
+            {group.label}
+          </Text>
+          {group.rows.map((option) => {
+            const lockReason = lockedBy.get(option.scope);
+            const locked = lockReason !== undefined;
+            return (
+              <div key={option.scope} className="flex items-start gap-2 pl-2">
+                <Checkbox
+                  checked={selectedScopes.includes(option.scope) || locked}
+                  disabled={disabled || locked}
+                  onCheckedChange={() => toggleScope(option.scope)}
+                  aria-label={`${group.label} ${option.label}`}
+                />
+                <div className="flex flex-col">
+                  <Text font="main-ui-body" color="text-04">
+                    {locked
+                      ? `${option.label} (included with ${lockReason})`
+                      : option.label}
+                  </Text>
+                  {/* Fixed 2-line slot so every row is the same height. */}
+                  <div className="h-8 overflow-hidden">
+                    <Text font="secondary-body" color="text-03" maxLines={2}>
+                      {option.description}
+                    </Text>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 interface PATModalProps {
@@ -89,6 +201,12 @@ interface PATModalProps {
   setNewTokenName: (name: string) => void;
   expirationDays: string;
   setExpirationDays: (days: string) => void;
+  accessMode: AccessMode;
+  setAccessMode: (mode: AccessMode) => void;
+  scopeOptions: PatScopeOption[];
+  scopesError: boolean;
+  selectedScopes: string[];
+  toggleScope: (scope: string) => void;
   onClose: () => void;
   onCreate: () => void;
   createdToken: CreatedTokenState | null;
@@ -100,10 +218,46 @@ function PATModal({
   setNewTokenName,
   expirationDays,
   setExpirationDays,
+  accessMode,
+  setAccessMode,
+  scopeOptions,
+  scopesError,
+  selectedScopes,
+  toggleScope,
   onClose,
   onCreate,
   createdToken,
 }: PATModalProps) {
+  if (createdToken?.token) {
+    return (
+      <Modal open onOpenChange={(open) => !open && onClose()}>
+        <Modal.Content width="sm" height="sm">
+          <Modal.Header
+            title="Access Token"
+            icon={SvgKey}
+            onClose={onClose}
+            description="Save this token before continuing. It won't be shown again."
+          />
+          <Modal.Body>
+            <Code showCopyButton={false}>{createdToken.token}</Code>
+          </Modal.Body>
+          <Modal.Footer>
+            <BasicModalFooter
+              submit={
+                <CopyButton
+                  getCopyText={() => createdToken.token}
+                  prominence="primary"
+                >
+                  Copy Token
+                </CopyButton>
+              }
+            />
+          </Modal.Footer>
+        </Modal.Content>
+      </Modal>
+    );
+  }
+
   return (
     <ConfirmationModalLayout
       icon={SvgKey}
@@ -111,72 +265,92 @@ function PATModal({
       description="All API requests using this token will inherit your access permissions and be attributed to you as an individual."
       onClose={onClose}
       submit={
-        !!createdToken?.token ? (
-          <Button onClick={onClose}>Done</Button>
-        ) : (
-          <Button
-            disabled={isCreating || !newTokenName.trim()}
-            onClick={onCreate}
-          >
-            {isCreating ? "Creating Token..." : "Create Token"}
-          </Button>
-        )
+        <Button
+          disabled={
+            isCreating ||
+            !newTokenName.trim() ||
+            (accessMode === "limited" && selectedScopes.length === 0)
+          }
+          onClick={onCreate}
+        >
+          {isCreating ? "Creating Token..." : "Create Token"}
+        </Button>
       }
-      hideCancel={!!createdToken}
     >
       <Section gap={1}>
-        {/* Token Creation*/}
-        {!!createdToken?.token ? (
-          <InputVertical title="Token Value" withLabel>
-            <Code>{createdToken.token}</Code>
-          </InputVertical>
-        ) : (
-          <>
-            <InputVertical title="Token Name" withLabel>
-              <InputTypeIn
-                placeholder="Name your token"
-                value={newTokenName}
-                onChange={(e) => setNewTokenName(e.target.value)}
-                variant={isCreating ? "disabled" : undefined}
-                autoComplete="new-password"
-              />
-            </InputVertical>
-            <InputVertical
-              title="Expires in"
-              subDescription={
-                expirationDays === "null"
-                  ? undefined
-                  : (() => {
-                      const expiryDate = new Date();
-                      expiryDate.setUTCDate(
-                        expiryDate.getUTCDate() + parseInt(expirationDays)
-                      );
-                      expiryDate.setUTCHours(23, 59, 59, 999);
-                      return `This token will expire at: ${expiryDate
-                        .toISOString()
-                        .replace("T", " ")
-                        .replace(".999Z", " UTC")}`;
-                    })()
-              }
-              withLabel
-            >
-              <InputSelect
-                value={expirationDays}
-                onValueChange={setExpirationDays}
-                disabled={isCreating}
-              >
-                <InputSelect.Trigger placeholder="Select expiration" />
-                <InputSelect.Content>
-                  <InputSelect.Item value="7">7 days</InputSelect.Item>
-                  <InputSelect.Item value="30">30 days</InputSelect.Item>
-                  <InputSelect.Item value="365">365 days</InputSelect.Item>
-                  <InputSelect.Item value="null">
-                    No expiration
-                  </InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelect>
-            </InputVertical>
-          </>
+        <InputVertical title="Token Name" withLabel>
+          <InputTypeIn
+            placeholder="Name your token"
+            value={newTokenName}
+            onChange={(e) => setNewTokenName(e.target.value)}
+            variant={isCreating ? "disabled" : undefined}
+            autoComplete="new-password"
+          />
+        </InputVertical>
+        <InputVertical
+          title="Expires in"
+          subDescription={
+            expirationDays === "null"
+              ? undefined
+              : (() => {
+                  const expiryDate = new Date();
+                  expiryDate.setUTCDate(
+                    expiryDate.getUTCDate() + parseInt(expirationDays)
+                  );
+                  expiryDate.setUTCHours(23, 59, 59, 999);
+                  return `This token will expire at: ${expiryDate
+                    .toISOString()
+                    .replace("T", " ")
+                    .replace(".999Z", " UTC")}`;
+                })()
+          }
+          withLabel
+        >
+          <InputSelect
+            value={expirationDays}
+            onValueChange={setExpirationDays}
+            disabled={isCreating}
+          >
+            <InputSelect.Trigger placeholder="Select expiration" />
+            <InputSelect.Content>
+              <InputSelect.Item value="7">7 days</InputSelect.Item>
+              <InputSelect.Item value="30">30 days</InputSelect.Item>
+              <InputSelect.Item value="365">365 days</InputSelect.Item>
+              <InputSelect.Item value="null">No expiration</InputSelect.Item>
+            </InputSelect.Content>
+          </InputSelect>
+        </InputVertical>
+        <InputVertical
+          title="Permissions"
+          subDescription={
+            accessMode === "full"
+              ? "Inherits all of your permissions."
+              : "Limit this token to specific capabilities."
+          }
+          withLabel
+        >
+          <InputSelect
+            value={accessMode}
+            onValueChange={(value) => setAccessMode(value as AccessMode)}
+            disabled={isCreating}
+          >
+            <InputSelect.Trigger placeholder="Select permissions" />
+            <InputSelect.Content>
+              <InputSelect.Item value="full">Full access</InputSelect.Item>
+              <InputSelect.Item value="limited">
+                Limited access
+              </InputSelect.Item>
+            </InputSelect.Content>
+          </InputSelect>
+        </InputVertical>
+        {accessMode === "limited" && (
+          <ScopeSelector
+            scopeOptions={scopeOptions}
+            selectedScopes={selectedScopes}
+            toggleScope={toggleScope}
+            scopesError={scopesError}
+            disabled={isCreating}
+          />
         )}
       </Section>
     </ConfirmationModalLayout>
@@ -191,6 +365,24 @@ function GeneralSettings() {
     updateUserChatBackground,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
+
+  const applyBackground = useCallback(
+    async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
+      try {
+        await updateUserChatBackground(
+          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+        );
+        if (bg.theme) {
+          setTheme(bg.theme);
+          await updateUserThemePreference(bg.theme);
+        }
+      } catch {
+        // errors are already logged and state is rolled back via refreshUser
+        // inside the update functions
+      }
+    },
+    [updateUserChatBackground, setTheme, updateUserThemePreference]
+  );
   const { refreshChatSessions } = useChatSessions();
   const router = useRouter();
   const pathname = usePathname();
@@ -254,11 +446,13 @@ function GeneralSettings() {
           }
         >
           <Section gap={0.5} alignItems="start">
-            <Text>
+            <Text color="text-05">
               All your chat sessions and history will be permanently deleted.
               Deletion cannot be undone.
             </Text>
-            <Text>Are you sure you want to delete all chats?</Text>
+            <Text color="text-05">
+              Are you sure you want to delete all chats?
+            </Text>
           </Section>
         </ConfirmationModalLayout>
       )}
@@ -394,11 +588,7 @@ function GeneralSettings() {
                   return (
                     <button
                       key={bg.id}
-                      onClick={() =>
-                        updateUserChatBackground(
-                          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
-                        )
-                      }
+                      onClick={() => applyBackground(bg)}
                       className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
                       title={bg.label}
                       aria-label={`${bg.label} background${
@@ -755,14 +945,19 @@ function ChatPreferencesSettings() {
     updateUserPersonalization,
     updateUserAutoScroll,
     updateUserShortcuts,
+    updateUserPasteAsTile,
     updateUserDefaultModel,
     updateUserDefaultAppMode,
     updateUserVoiceSettings,
   } = useUser();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const settings = useSettingsContext();
   const { isSearchModeAvailable: searchUiEnabled } = settings;
   const llmManager = useLlmManager();
+  const {
+    enabled: smoothStreamingEnabled,
+    setEnabled: setSmoothStreamingEnabled,
+  } = useSmoothStreaming();
 
   const {
     personalizationValues,
@@ -860,7 +1055,31 @@ function ChatPreferencesSettings() {
             />
           </InputHorizontal>
 
-          {isPaidEnterpriseFeaturesEnabled && (
+          <InputHorizontal
+            title="Smooth Streaming"
+            description="Animate streamed responses character-by-character. Disable to render chunks as they arrive."
+            withLabel
+          >
+            <Switch
+              checked={smoothStreamingEnabled}
+              onCheckedChange={setSmoothStreamingEnabled}
+            />
+          </InputHorizontal>
+
+          <InputHorizontal
+            title="Collapse Large Pastes"
+            description="When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text."
+            withLabel
+          >
+            <Switch
+              checked={user?.preferences?.paste_as_tile ?? false}
+              onCheckedChange={(checked) => {
+                updateUserPasteAsTile(checked);
+              }}
+            />
+          </InputHorizontal>
+
+          {businessTier && (
             <Tooltip
               tooltip={
                 searchUiEnabled
@@ -1080,6 +1299,8 @@ function AccountsAccessSettings() {
   const [isCreating, setIsCreating] = useState(false);
   const [newTokenName, setNewTokenName] = useState("");
   const [expirationDays, setExpirationDays] = useState<string>("30");
+  const [accessMode, setAccessMode] = useState<AccessMode>("full");
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
   const [newlyCreatedToken, setNewlyCreatedToken] =
     useState<CreatedTokenState | null>(null);
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
@@ -1105,6 +1326,31 @@ function AccountsAccessSettings() {
     }
   );
 
+  const { data: scopeOptions = [], error: scopeOptionsError } = useSWR<
+    PatScopeOption[]
+  >(
+    showTokensSection && canCreateTokens ? SWR_KEYS.userPatScopes : null,
+    errorHandlingFetcher,
+    { fallbackData: [] }
+  );
+
+  const scopeLabels = useMemo(
+    () =>
+      new Map(
+        scopeOptions.map((o) => [
+          o.scope,
+          `${o.label} ${o.group_label.toLowerCase()}`,
+        ])
+      ),
+    [scopeOptions]
+  );
+
+  const toggleScope = useCallback((scope: string) => {
+    setSelectedScopes((prev) =>
+      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
+    );
+  }, []);
+
   // Use filter hook for searching tokens
   const {
     query,
@@ -1118,6 +1364,12 @@ function AccountsAccessSettings() {
       toast.error("Failed to load tokens");
     }
   }, [error]);
+
+  useEffect(() => {
+    if (scopeOptionsError) {
+      toast.error("Failed to load permission options");
+    }
+  }, [scopeOptionsError]);
 
   const createPAT = useCallback(async () => {
     if (!newTokenName.trim()) {
@@ -1134,6 +1386,7 @@ function AccountsAccessSettings() {
           name: newTokenName,
           expiration_days:
             expirationDays === "null" ? null : parseInt(expirationDays),
+          scopes: accessMode === "limited" ? selectedScopes : null,
         }),
       });
 
@@ -1157,7 +1410,7 @@ function AccountsAccessSettings() {
     } finally {
       setIsCreating(false);
     }
-  }, [newTokenName, expirationDays, mutate]);
+  }, [newTokenName, expirationDays, accessMode, selectedScopes, mutate]);
 
   const deletePAT = useCallback(
     async (patId: number) => {
@@ -1225,10 +1478,18 @@ function AccountsAccessSettings() {
           setNewTokenName={setNewTokenName}
           expirationDays={expirationDays}
           setExpirationDays={setExpirationDays}
+          accessMode={accessMode}
+          setAccessMode={setAccessMode}
+          scopeOptions={scopeOptions}
+          scopesError={Boolean(scopeOptionsError)}
+          selectedScopes={selectedScopes}
+          toggleScope={toggleScope}
           onClose={() => {
             setShowCreateModal(false);
             setNewTokenName("");
             setExpirationDays("30");
+            setAccessMode("full");
+            setSelectedScopes([]);
             setNewlyCreatedToken(null);
           }}
           onCreate={createPAT}
@@ -1251,13 +1512,12 @@ function AccountsAccessSettings() {
           }
         >
           <Section gap={0.5} alignItems="start">
-            <Text>
-              Any application using the token{" "}
-              <Text className="!font-bold">{tokenToDelete.name}</Text>{" "}
-              <Text secondaryMono>({tokenToDelete.token_display})</Text> will
-              lose access to Onyx. This action cannot be undone.
+            <Text color="text-05">
+              {`Any application using the token ${tokenToDelete.name} (${tokenToDelete.token_display}) will lose access to Onyx. This action cannot be undone.`}
             </Text>
-            <Text>Are you sure you want to revoke this token?</Text>
+            <Text color="text-05">
+              Are you sure you want to revoke this token?
+            </Text>
           </Section>
         </ConfirmationModalLayout>
       )}
@@ -1373,7 +1633,7 @@ function AccountsAccessSettings() {
               description="Your account email address."
               center
             >
-              <Text>{user?.email ?? "anonymous"}</Text>
+              <Text color="text-05">{user?.email ?? "anonymous"}</Text>
             </InputHorizontal>
 
             {showPasswordSection && (
@@ -1409,7 +1669,7 @@ function AccountsAccessSettings() {
                   <Section flexDirection="row" padding={0.25} gap={0.5}>
                     {pats.length === 0 ? (
                       <Section padding={0.5} alignItems="start">
-                        <Text text03 secondaryBody>
+                        <Text font="secondary-body" color="text-03">
                           {isLoading
                             ? "Loading tokens..."
                             : "No access tokens created."}
@@ -1420,19 +1680,20 @@ function AccountsAccessSettings() {
                         placeholder="Search..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        leftSearchIcon
+                        searchIcon
                         variant="internal"
                       />
                     )}
-                    <CreateButton
-                      onClick={() => setShowCreateModal(true)}
-                      secondary={false}
-                      internal
-                      transient={showCreateModal}
-                      rightIcon
-                    >
-                      New Access Token
-                    </CreateButton>
+                    <div className="shrink-0">
+                      <Button
+                        rightIcon={SvgPlusCircle}
+                        prominence="internal"
+                        interaction={showCreateModal ? "active" : "rest"}
+                        onClick={() => setShowCreateModal(true)}
+                      >
+                        New Access Token
+                      </Button>
+                    </div>
                   </Section>
 
                   <Section gap={0.25}>
@@ -1456,9 +1717,21 @@ function AccountsAccessSettings() {
                         }`;
                       }
 
-                      const middleText = `Created ${daysSinceCreation} day${
-                        daysSinceCreation === 1 ? "" : "s"
-                      } ago - ${expiryText}`;
+                      const scopeText =
+                        pat.scopes === null
+                          ? "Full access"
+                          : pat.scopes
+                              .map((scope) => scopeLabels.get(scope) ?? scope)
+                              .join(", ");
+
+                      const createdText =
+                        daysSinceCreation === 0
+                          ? "Created today"
+                          : `Created ${daysSinceCreation} day${
+                              daysSinceCreation === 1 ? "" : "s"
+                            } ago`;
+
+                      const middleText = `${createdText} - ${expiryText} - ${scopeText}`;
 
                       return (
                         <Interactive.Container
@@ -1492,7 +1765,7 @@ function AccountsAccessSettings() {
             ) : (
               <Card>
                 <Section flexDirection="row" justifyContent="between">
-                  <Text text03 secondaryBody>
+                  <Text font="secondary-body" color="text-03">
                     Access tokens require an active paid subscription.
                   </Text>
                   <Button prominence="secondary" href="/admin/billing">
@@ -1583,14 +1856,11 @@ function FederatedConnectorCard({
           }
         >
           <Section gap={0.5} alignItems="start">
-            <Text>
-              Onyx will no longer be able to access or search content from your{" "}
-              <Text className="!font-bold">{sourceMetadata.displayName}</Text>{" "}
-              account.
+            <Text color="text-05">
+              {`Onyx will no longer be able to access or search content from your ${sourceMetadata.displayName} account.`}
             </Text>
-            <Text>
-              You can still continue existing sessions referencing{" "}
-              {sourceMetadata.displayName} content.
+            <Text color="text-05">
+              {`You can still continue existing sessions referencing ${sourceMetadata.displayName} content.`}
             </Text>
           </Section>
         </ConfirmationModalLayout>

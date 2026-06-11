@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import LineItem, { LineItemProps } from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
@@ -14,8 +14,8 @@ import {
 } from "@/refresh-components/inputs/styles";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgChevronDownSmall } from "@opal/icons";
-import Separator, { SeparatorProps } from "@/refresh-components/Separator";
-import { WithoutStyles } from "@/types";
+import { Divider } from "@opal/components";
+import type { PaddingVariants, WithoutStyles } from "@opal/types";
 
 // ============================================================================
 // Context
@@ -87,10 +87,9 @@ const useInputSelectContext = () => {
  * </InputSelect>
  * ```
  */
-interface InputSelectRootProps
-  extends WithoutStyles<
-    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>
-  > {
+interface InputSelectRootProps extends WithoutStyles<
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>
+> {
   /** Whether to show error styling */
   error?: boolean;
   /** Whether the select is disabled */
@@ -153,7 +152,7 @@ function InputSelectRoot({
   );
 
   return (
-    <div className="w-full min-w-[var(--block-width-form-input-min)] relative">
+    <div className="w-full min-w-(--block-width-form-input-min) relative">
       <InputSelectContext.Provider value={contextValue}>
         <SelectPrimitive.Root
           {...(isControlled ? { value: currentValue } : { defaultValue })}
@@ -188,8 +187,9 @@ function InputSelectRoot({
  * <InputSelect.Trigger placeholder="Select..." rightSection={<Badge>New</Badge>} />
  * ```
  */
-interface InputSelectTriggerProps
-  extends WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Trigger>> {
+interface InputSelectTriggerProps extends WithoutStyles<
+  React.ComponentProps<typeof SelectPrimitive.Trigger>
+> {
   /** Placeholder when no value selected */
   placeholder?: React.ReactNode;
   /** Content to render on the right side of the trigger */
@@ -237,7 +237,7 @@ function InputSelectTrigger({
     <SelectPrimitive.Trigger
       ref={ref}
       className={cn(
-        "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 focus:outline-none",
+        "group/InputSelect flex w-full items-center justify-between p-1.5 rounded-08 focus:outline-hidden",
         wrapperClasses[variant],
         variant === "primary" && "data-[state=open]:border-border-05"
       )}
@@ -291,7 +291,7 @@ function InputSelectContent({
       <SelectPrimitive.Content
         ref={ref}
         className={cn(
-          "z-popover w-[var(--radix-select-trigger-width)] max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
+          "z-popover w-(--radix-select-trigger-width) max-h-72 overflow-auto rounded-12 border bg-background-neutral-00 p-1",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
           "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
@@ -332,8 +332,9 @@ function InputSelectContent({
  * </InputSelect.Item>
  * ```
  */
-interface InputSelectItemProps
-  extends WithoutStyles<Omit<LineItemProps, "heavyForced" | "ref">> {
+interface InputSelectItemProps extends WithoutStyles<
+  Omit<LineItemProps, "heavyForced" | "ref">
+> {
   /** Unique value for this option */
   value: string;
   /** Optional callback when item is selected */
@@ -372,7 +373,7 @@ function InputSelectItem({
     <SelectPrimitive.Item
       ref={ref}
       value={value}
-      className="outline-none focus:outline-none rounded-08 data-[highlighted]:bg-background-tint-02"
+      className="outline-hidden focus:outline-hidden rounded-08 data-highlighted:bg-background-tint-02"
       onSelect={onClick}
     >
       {/* Hidden ItemText for Radix to track selection */}
@@ -446,38 +447,19 @@ function InputSelectLabel({
   );
 }
 
-// ============================================================================
-// InputSelect Separator
-// ============================================================================
+interface InputSelectSeparatorProps {
+  paddingParallel?: PaddingVariants;
+  paddingPerpendicular?: PaddingVariants;
+}
 
-/**
- * InputSelect Separator Component
- *
- * A visual divider between items in the dropdown.
- * Uses the app's standard Separator component with appropriate defaults for dropdown menus.
- *
- * @example
- * ```tsx
- * <InputSelect.Content>
- *   <InputSelect.Item value="1">Option 1</InputSelect.Item>
- *   <InputSelect.Separator />
- *   <InputSelect.Item value="2">Option 2</InputSelect.Item>
- * </InputSelect.Content>
- * ```
- */
 function InputSelectSeparator({
-  noPadding = true,
-  ref,
-  ...props
-}: WithoutStyles<SeparatorProps> & {
-  ref?: React.Ref<React.ComponentRef<typeof Separator>>;
-}) {
+  paddingParallel,
+  paddingPerpendicular,
+}: InputSelectSeparatorProps) {
   return (
-    <Separator
-      ref={ref}
-      noPadding={noPadding}
-      className="px-2 py-1"
-      {...props}
+    <Divider
+      paddingParallel={paddingParallel}
+      paddingPerpendicular={paddingPerpendicular}
     />
   );
 }

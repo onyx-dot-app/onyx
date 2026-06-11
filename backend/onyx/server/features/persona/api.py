@@ -4,7 +4,10 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
+from fastapi import Request
+from fastapi import Response
 from fastapi import UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -19,6 +22,7 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
 from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
@@ -38,6 +42,8 @@ from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared
 from onyx.db.persona import update_persona_visibility
 from onyx.db.persona import update_personas_display_priority
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.server.documents.models import PaginatedReturn
@@ -49,7 +55,7 @@ from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.manage.llm.api import get_valid_model_names_for_persona
+from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -525,15 +531,73 @@ def get_persona(
         is_for_edit=False,
     )
 
-    # Validate and fix default model if it's no longer valid for this persona's restrictions
-    if persona.llm_model_version_override:
-        valid_models = get_valid_model_names_for_persona(persona_id, user, db_session)
-
-        # If current default model is not in the valid list, update to first valid or None
-        if persona.llm_model_version_override not in valid_models:
-            persona.llm_model_version_override = (
-                valid_models[0] if valid_models else None
-            )
+    # Validate and clear the model override if the referenced model is no longer
+    # accessible to this persona (e.g. provider was restricted after the persona was saved).
+    if persona.default_model_configuration_id:
+        valid_ids = get_valid_model_configuration_ids_for_persona(
+            persona, user, db_session
+        )
+        if persona.default_model_configuration_id not in valid_ids:
+            persona.default_model_configuration_id = None
             db_session.commit()
 
     return FullPersonaSnapshot.from_model(persona)
+
+
+@basic_router.get("/{persona_id}/avatar")
+def get_persona_avatar(
+    persona_id: int,
+    request: Request,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    # Mirror `fetch_chat_file`: return 404 (not 403) for any failure so
+    # callers cannot probe persona existence or avatar ownership.
+    try:
+        persona = get_persona_by_id(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            is_for_edit=False,
+        )
+    except ValueError:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+
+    file_id = persona.uploaded_image_id
+    if not file_id:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+
+    # Defense-in-depth: reject file_ids that weren't produced by the
+    # avatar upload endpoint, so a crafted PATCH cannot rebind a persona
+    # to another user's USER_FILE / CHAT_IMAGE_GEN asset.
+    file_record = get_filerecord_by_file_id_optional(file_id, db_session)
+    if not file_record:
+        logger.warning(
+            "Persona %s references avatar file %s with no matching FileRecord; rejecting.",
+            persona_id,
+            file_id,
+        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+    if file_record.file_origin != FileOrigin.CHAT_UPLOAD:
+        logger.warning(
+            "Persona %s avatar references file %s with unexpected origin %s; rejecting.",
+            persona_id,
+            file_id,
+            file_record.file_origin,
+        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+
+    etag = f'"{file_id}"'
+    cache_headers = {
+        "Cache-Control": "private, max-age=31536000, immutable",
+        "ETag": etag,
+        "Vary": "Cookie",
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=cache_headers)
+
+    file_store = get_default_file_store()
+    file_io = file_store.read_file(file_id, mode="b")
+    return StreamingResponse(
+        file_io, media_type=file_record.file_type, headers=cache_headers
+    )

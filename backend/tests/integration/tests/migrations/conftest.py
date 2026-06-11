@@ -27,6 +27,28 @@ from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.sql_engine import SYNC_DB_API
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
+# Override the parent integration conftest's autouse session fixtures.
+# Migration tests only need Postgres (provided by the workflow) and the
+# pytest-alembic fixtures below — they must NOT pre-migrate the schema
+# (would break pytest-alembic's test_upgrade) and must NOT start the
+# FastAPI app (its lifespan calls setup_onyx() which requires Vespa, and
+# the database-tests workflow doesn't start Vespa).
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _run_migrations() -> None:
+    return None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _start_celery_workers() -> Generator[None, None, None]:
+    yield None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _test_client() -> Generator[None, None, None]:
+    yield None
+
 
 def _create_sync_engine() -> Engine:
     """Create a synchronous SQLAlchemy engine for pytest-alembic."""

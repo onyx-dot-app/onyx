@@ -243,6 +243,15 @@ export const connectorConfigs: Record<
         description: "Index issues from repositories",
         optional: true,
       },
+      {
+        type: "checkbox",
+        query: "Include documents?",
+        label: "Include Documents?",
+        name: "include_files",
+        description:
+          "Index text-based documents (markdown, text, etc.) from the default branch of repositories",
+        optional: true,
+      },
     ],
     advanced_values: [],
   },
@@ -1359,6 +1368,17 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
       },
       {
         type: "text",
+        query: "Enter the AWS region:",
+        label: "AWS Region",
+        name: "region_name",
+        description:
+          "The AWS region of the bucket (e.g. us-east-1). Required for buckets in " +
+          "non-default partitions such as GovCloud (us-gov-west-1); otherwise the " +
+          "default region resolution is used.",
+        optional: true,
+      },
+      {
+        type: "text",
         label: "Bucket Type",
         name: "bucket_type",
         optional: false,
@@ -1641,6 +1661,32 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [],
     advanced_values: [],
   },
+  braintrust: {
+    description: "Configure Braintrust connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Braintrust project name to index:",
+        label: "Project Name",
+        name: "project_name",
+        optional: true,
+        description:
+          "Only index prompts, datasets, and experiments from this project. Leave empty to index the whole organization.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        query: "Enter the experiment row lookback window in days:",
+        label: "Experiment Row Lookback (days)",
+        name: "experiment_row_lookback_days",
+        optional: true,
+        default: 30,
+        description:
+          "Only index per-row results for experiments created within this many days. Experiment summaries are always indexed. Set to 0 to index rows for all experiments.",
+      },
+    ],
+  },
   egnyte: {
     description: "Configure Egnyte connector",
     values: [
@@ -1873,8 +1919,6 @@ export function createConnectorValidationSchema(
 
   return object;
 }
-
-export const defaultPruneFreqHours = 720; // 30 days in hours
 export const defaultRefreshFreqMinutes = 30; // 30 minutes
 
 // CONNECTORS
@@ -1923,6 +1967,7 @@ export interface GithubConfig {
   repositories: string; // Comma-separated list of repository names
   include_prs: boolean;
   include_issues: boolean;
+  include_files: boolean;
 }
 
 export interface GitlabConfig {

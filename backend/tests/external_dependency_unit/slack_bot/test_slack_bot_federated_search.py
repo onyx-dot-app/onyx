@@ -17,9 +17,9 @@ os.environ["DISABLE_MODEL_SERVER"] = "true"
 os.environ["MODEL_SERVER_HOST"] = "disabled"
 os.environ["MODEL_SERVER_PORT"] = "9000"
 
+from slack_sdk.errors import SlackApiError
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
-from slack_sdk.errors import SlackApiError
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.federated.slack_search import fetch_and_cache_channel_metadata
@@ -33,12 +33,12 @@ from onyx.db.models import Persona__Tool
 from onyx.db.models import SlackBot
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
+from onyx.db.tools import get_builtin_tool
+from onyx.llm.constants import LlmProviderNames
 from onyx.onyxbot.slack.listener import process_message
 from onyx.onyxbot.slack.models import ChannelType
-from onyx.db.tools import get_builtin_tool
 from onyx.tools.built_in_tools import SearchTool
 from tests.external_dependency_unit.conftest import create_test_user
-from onyx.llm.constants import LlmProviderNames
 
 
 def _create_test_persona_with_slack_config(db_session: Session) -> Persona | None:
@@ -456,7 +456,8 @@ class TestSlackBotFederatedSearch:
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
     @patch(
-        "onyx.document_index.vespa.index.VespaIndex.hybrid_retrieval", return_value=[]
+        "onyx.document_index.vespa.vespa_document_index.VespaDocumentIndex.hybrid_retrieval",
+        return_value=[],
     )
     def test_slack_bot_public_channel_filtering(
         self,
@@ -487,16 +488,16 @@ class TestSlackBotFederatedSearch:
             mock_client.web_client.chat_postMessage.assert_called()
             post_message_calls = mock_client.web_client.chat_postMessage.call_args_list
             last_call = post_message_calls[-1]
-            assert (
-                last_call[1]["channel"] == channel_id
-            ), f"Response should be sent to {channel_id}"
+            assert last_call[1]["channel"] == channel_id, (
+                f"Response should be sent to {channel_id}"
+            )
 
             response_text = last_call[1].get("text", "")
             assert len(response_text) > 0, "Bot should have sent a non-empty response"
 
-            assert hasattr(
-                self, "_captured_filtering_params"
-            ), "query_slack should have been called"
+            assert hasattr(self, "_captured_filtering_params"), (
+                "query_slack should have been called"
+            )
             params = self._captured_filtering_params
 
             assert (
@@ -515,7 +516,8 @@ class TestSlackBotFederatedSearch:
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
     @patch(
-        "onyx.document_index.vespa.index.VespaIndex.hybrid_retrieval", return_value=[]
+        "onyx.document_index.vespa.vespa_document_index.VespaDocumentIndex.hybrid_retrieval",
+        return_value=[],
     )
     def test_slack_bot_private_channel_filtering(
         self,
@@ -546,16 +548,16 @@ class TestSlackBotFederatedSearch:
             mock_client.web_client.chat_postMessage.assert_called()
             post_message_calls = mock_client.web_client.chat_postMessage.call_args_list
             last_call = post_message_calls[-1]
-            assert (
-                last_call[1]["channel"] == channel_id
-            ), f"Response should be sent to {channel_id}"
+            assert last_call[1]["channel"] == channel_id, (
+                f"Response should be sent to {channel_id}"
+            )
 
             response_text = last_call[1].get("text", "")
             assert len(response_text) > 0, "Bot should have sent a non-empty response"
 
-            assert hasattr(
-                self, "_captured_filtering_params"
-            ), "query_slack should have been called"
+            assert hasattr(self, "_captured_filtering_params"), (
+                "query_slack should have been called"
+            )
             params = self._captured_filtering_params
 
             assert (
@@ -574,7 +576,8 @@ class TestSlackBotFederatedSearch:
 
     @patch("onyx.utils.gpu_utils.fast_gpu_status_request", return_value=False)
     @patch(
-        "onyx.document_index.vespa.index.VespaIndex.hybrid_retrieval", return_value=[]
+        "onyx.document_index.vespa.vespa_document_index.VespaDocumentIndex.hybrid_retrieval",
+        return_value=[],
     )
     def test_slack_bot_dm_filtering(
         self,
@@ -605,16 +608,16 @@ class TestSlackBotFederatedSearch:
             mock_client.web_client.chat_postMessage.assert_called()
             post_message_calls = mock_client.web_client.chat_postMessage.call_args_list
             last_call = post_message_calls[-1]
-            assert (
-                last_call[1]["channel"] == channel_id
-            ), f"Response should be sent to {channel_id}"
+            assert last_call[1]["channel"] == channel_id, (
+                f"Response should be sent to {channel_id}"
+            )
 
             response_text = last_call[1].get("text", "")
             assert len(response_text) > 0, "Bot should have sent a non-empty response"
 
-            assert hasattr(
-                self, "_captured_filtering_params"
-            ), "query_slack should have been called"
+            assert hasattr(self, "_captured_filtering_params"), (
+                "query_slack should have been called"
+            )
             params = self._captured_filtering_params
 
             assert (

@@ -16,7 +16,6 @@ from pywikibot.scripts.generate_user_files import pywikibot
 
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 pywikibot.config.base_dir = tempfile.TemporaryDirectory().name
@@ -160,7 +159,8 @@ if __name__ == "__main__":
         pages,
         *[
             pagegenerators.CategorizedPageGenerator(
-                category, recurse=recursion_depth  # ty: ignore[invalid-argument-type]
+                category,  # ty: ignore[invalid-argument-type]
+                recurse=recursion_depth,
             )
             for category in categories
         ],

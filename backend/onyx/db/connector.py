@@ -46,8 +46,8 @@ def check_user_files_exist(db_session: Session) -> bool:
     when there are no regular connectors but there are user files
     (User Knowledge mode).
     """
-    from onyx.db.models import UserFile
     from onyx.db.enums import UserFileStatus
+    from onyx.db.models import UserFile
 
     stmt = select(exists(UserFile).where(UserFile.status == UserFileStatus.COMPLETED))
     result = db_session.execute(stmt)
@@ -400,5 +400,5 @@ def get_kg_enabled_connectors(db_session: Session) -> list[KGConnectorData]:
         return connector_results
 
     except Exception as e:
-        logger.error(f"Error fetching unprocessed connector IDs: {str(e)}")
+        logger.error("Error fetching unprocessed connector IDs: %s", str(e))
         raise e

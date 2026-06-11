@@ -7,7 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import { InputVertical } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
@@ -238,19 +238,23 @@ function FormContent({
           withLabel="definition"
           title="OpenAPI Schema Definition"
           subDescription={markdown(
-            `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
+            `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. ` +
+              `You can use the placeholders \`CHAT_SESSION_ID\`, \`MESSAGE_ID\`, \`USER_ID\`, and \`USER_EMAIL\` ` +
+              `anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the ` +
+              `current request's values at call time. ` +
+              `Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
           )}
         >
           <Hoverable.Root group="definitionField" width="full">
             <div className="relative w-full">
               {values.definition.trim() && (
-                <div className="absolute z-[100000] top-2 right-2 bg-background-tint-00">
+                <div className="absolute z-100000 top-2 right-2 bg-background-tint-00">
                   <Hoverable.Item
                     group="definitionField"
-                    variant="opacity-on-hover"
+                    variant="appear-on-hover"
                   >
                     <div className="flex">
-                      <CopyIconButton
+                      <CopyButton
                         prominence="tertiary"
                         size="sm"
                         getCopyText={() => values.definition}

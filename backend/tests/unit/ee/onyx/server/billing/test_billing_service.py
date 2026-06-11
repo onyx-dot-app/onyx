@@ -7,8 +7,6 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from .conftest import make_mock_http_client
-from .conftest import make_mock_response
 from ee.onyx.server.billing.models import BillingInformationResponse
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
@@ -16,6 +14,9 @@ from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.billing.models import SubscriptionStatusResponse
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+
+from .conftest import make_mock_http_client
+from .conftest import make_mock_response
 
 
 class TestMakeBillingRequest:
@@ -184,6 +185,22 @@ class TestCreateCheckoutSession:
         assert call_kwargs["path"] == "/create-checkout-session"
         assert call_kwargs["body"]["billing_period"] == "monthly"
         assert call_kwargs["body"]["email"] == "test@example.com"
+
+    @pytest.mark.asyncio
+    @patch("ee.onyx.server.billing.service._make_billing_request")
+    async def test_raises_when_no_url_returned(
+        self,
+        mock_request: AsyncMock,
+    ) -> None:
+        """A success response without a url surfaces a clear error, not null."""
+        from ee.onyx.server.billing.service import create_checkout_session
+
+        mock_request.return_value = {"sessionId": "cs_test_123"}
+
+        with pytest.raises(OnyxError) as exc_info:
+            await create_checkout_session(email="test@example.com")
+
+        assert exc_info.value.error_code is OnyxErrorCode.INTERNAL_ERROR
 
 
 class TestCreateCustomerPortalSession:

@@ -17,9 +17,9 @@ class FederatedConnectorMissingException(Exception):
 
 
 # Cache for already imported federated connector classes
-_federated_connector_cache: dict[FederatedConnectorSource, Type[FederatedConnector]] = (
-    {}
-)
+_federated_connector_cache: dict[
+    FederatedConnectorSource, Type[FederatedConnector]
+] = {}
 
 
 def _load_federated_connector_class(

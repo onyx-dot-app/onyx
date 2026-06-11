@@ -5,8 +5,10 @@ from collections.abc import MutableMapping
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
+from onyx.utils.platform_utils import is_running_in_container
 from onyx.utils.tenant import get_tenant_id_short_string
 from shared_configs.configs import DEV_LOGGING_ENABLED
+from shared_configs.configs import JSON_LOGGING
 from shared_configs.configs import LOG_FILE_NAME
 from shared_configs.configs import LOG_LEVEL
 from shared_configs.configs import MULTI_TENANT
@@ -15,7 +17,6 @@ from shared_configs.configs import SLACK_CHANNEL_ID
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
-
 
 logging.addLevelName(logging.INFO + 5, "NOTICE")
 
@@ -61,6 +62,11 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
     def process(
         self, msg: str, kwargs: MutableMapping[str, Any]
     ) -> tuple[str, MutableMapping[str, Any]]:
+        # In JSON mode, emit context as discrete structured fields instead of
+        # prefixing the message string, so they can be queried by log aggregators.
+        if JSON_LOGGING:
+            return self._inject_context_fields(msg, kwargs)
+
         # If this is an indexing job, add the attempt ID to the log message
         # This helps filter the logs for this specific indexing
         while True:
@@ -110,6 +116,62 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
 
         return msg, kwargs
 
+    def _inject_context_fields(
+        self, msg: str, kwargs: MutableMapping[str, Any]
+    ) -> tuple[str, MutableMapping[str, Any]]:
+        """JSON mode counterpart to the message-prefixing in ``process``: collect
+        the same contextual values and attach them as structured record fields
+        (via ``extra``) so the JSON formatter promotes them to top-level keys."""
+        fields: dict[str, Any] = {}
+
+        # Mutually exclusive context groups, mirroring the text-prefix branches.
+        pruning_ctx_dict = pruning_ctx.get()
+        doc_permission_sync_ctx_dict = doc_permission_sync_ctx.get()
+        if pruning_ctx_dict:
+            if "request_id" in pruning_ctx_dict:
+                fields["prune_request_id"] = pruning_ctx_dict["request_id"]
+            if "cc_pair_id" in pruning_ctx_dict:
+                fields["cc_pair_id"] = pruning_ctx_dict["cc_pair_id"]
+        elif doc_permission_sync_ctx_dict:
+            if "request_id" in doc_permission_sync_ctx_dict:
+                fields["doc_permission_sync_request_id"] = doc_permission_sync_ctx_dict[
+                    "request_id"
+                ]
+            if "cc_pair_id" in doc_permission_sync_ctx_dict:
+                fields["cc_pair_id"] = doc_permission_sync_ctx_dict["cc_pair_id"]
+        else:
+            index_attempt_info = INDEX_ATTEMPT_INFO_CONTEXTVAR.get()
+            if index_attempt_info:
+                cc_pair_id, index_attempt_id = index_attempt_info
+                fields["index_attempt_id"] = index_attempt_id
+                fields["cc_pair_id"] = cc_pair_id
+
+        if MULTI_TENANT:
+            tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
+            if tenant_id != POSTGRES_DEFAULT_SCHEMA and tenant_id is not None:
+                fields["tenant_id"] = get_tenant_id_short_string(tenant_id)
+
+        fastapi_request_id = ONYX_REQUEST_ID_CONTEXTVAR.get()
+        if fastapi_request_id:
+            fields["request_id"] = fastapi_request_id
+
+        channel_id = self.extra.get(SLACK_CHANNEL_ID) if self.extra else None
+        if channel_id:
+            fields["slack_channel_id"] = channel_id
+
+        if fields:
+            # A caller may pass extra=None explicitly; normalize to a dict
+            # before merging so we never call .setdefault() on None.
+            extra = kwargs.get("extra")
+            if not isinstance(extra, dict):
+                extra = {}
+                kwargs["extra"] = extra
+            # An explicit extra passed by the caller wins over injected context.
+            for key, value in fields.items():
+                extra.setdefault(key, value)
+
+        return msg, kwargs
+
     def notice(self, msg: Any, *args: Any, **kwargs: Any) -> None:
         # Stacklevel is set to 2 to point to the actual caller of notice instead of here
         self.log(
@@ -153,27 +215,44 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
-def get_uvicorn_standard_formatter() -> ColoredFormatter:
-    """Returns a standard colored logging formatter."""
+def get_json_formatter() -> logging.Formatter:
+    """Returns a structured single-line JSON formatter. Standard record
+    attributes are emitted as fields and any ``extra`` keys are merged in.
+
+    The ``pythonjsonlogger`` import is deferred to this call site (only reached
+    when ``LOG_FORMAT=json``) so that importing this module never hard-fails in
+    environments where the optional dependency is absent."""
+    from pythonjsonlogger.json import JsonFormatter
+
+    return JsonFormatter(
+        "%(asctime)s %(levelname)s %(name)s %(filename)s %(lineno)d %(message)s",
+        rename_fields={
+            "asctime": "timestamp",
+            "levelname": "level",
+            "name": "logger",
+        },
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
+    )
+
+
+def get_uvicorn_standard_formatter() -> logging.Formatter:
+    """Returns the configured uvicorn access-log formatter (JSON or colored text)."""
+    if JSON_LOGGING:
+        return get_json_formatter()
     return ColoredFormatter(
         "%(asctime)s %(filename)30s %(lineno)4s: [%(request_id)s] %(message)s",
         datefmt="%m/%d/%Y %I:%M:%S %p",
     )
 
 
-def get_standard_formatter() -> ColoredFormatter:
-    """Returns a standard colored logging formatter."""
+def get_standard_formatter() -> logging.Formatter:
+    """Returns the configured standard formatter (JSON or colored text)."""
+    if JSON_LOGGING:
+        return get_json_formatter()
     return ColoredFormatter(
         "%(asctime)s %(filename)30s %(lineno)4s: %(message)s",
         datefmt="%m/%d/%Y %I:%M:%S %p",
     )
-
-
-DANSWER_DOCKER_ENV_STR = "DANSWER_RUNNING_IN_DOCKER"
-
-
-def is_running_in_container() -> bool:
-    return os.getenv(DANSWER_DOCKER_ENV_STR) == "true"
 
 
 def setup_logger(

@@ -15,9 +15,9 @@ import { Card } from "@/refresh-components/cards";
 import { Button, Divider } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Switch from "@/refresh-components/inputs/Switch";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { Switch } from "@opal/components";
+import { Checkbox } from "@opal/components";
+import { InputTypeIn } from "@opal/components";
 import {
   SvgPlusCircle,
   SvgArrowUpRight,
@@ -30,12 +30,9 @@ import { ValidSources, DocumentSetSummary } from "@/lib/types";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ConnectedSource } from "@/lib/hierarchy/interfaces";
 import { ProjectFile } from "@/app/app/projects/projectsService";
-import {
-  AttachedDocumentSnapshot,
-  HierarchyNodeSnapshot,
-} from "@/app/admin/agents/interfaces";
-import { timeAgo } from "@/lib/time";
-import Spacer from "@/refresh-components/Spacer";
+import { AgentAttachedDocument, AgentHierarchyNode } from "@/lib/agents/types";
+import { timeAgo } from "@opal/time";
+import { Spacer } from "@opal/components";
 import { Disabled } from "@opal/core";
 import SourceHierarchyBrowser from "./SourceHierarchyBrowser";
 
@@ -203,7 +200,7 @@ function KnowledgeTable<T>({
         {onSearchChange !== undefined && (
           <GeneralLayouts.Section height="auto">
             <InputTypeIn
-              leftSearchIcon
+              searchIcon
               value={searchValue ?? ""}
               onChange={(e) => onSearchChange?.(e.target.value)}
               placeholder={searchPlaceholder}
@@ -373,7 +370,7 @@ interface SourcesTableContentProps {
   onSetFolderIds: (ids: number[]) => void;
   onDeselectAllDocuments: () => void;
   onDeselectAllFolders: () => void;
-  initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  initialAttachedDocuments?: AgentAttachedDocument[];
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
 }
 
@@ -540,7 +537,7 @@ interface KnowledgeTwoColumnViewProps {
   onDeselectAllFolders: () => void;
   onUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   hasProcessingFiles: boolean;
-  initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  initialAttachedDocuments?: AgentAttachedDocument[];
   onSelectionCountChange: (source: ValidSources, count: number) => void;
   vectorDbEnabled: boolean;
 }
@@ -849,9 +846,9 @@ interface AgentKnowledgePaneProps {
   onUploadChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   hasProcessingFiles: boolean;
   // Initial attached documents for existing agents (to populate selectedDocumentDetails)
-  initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  initialAttachedDocuments?: AgentAttachedDocument[];
   // Initial hierarchy nodes for existing agents (to calculate per-source counts)
-  initialHierarchyNodes?: HierarchyNodeSnapshot[];
+  initialHierarchyNodes?: AgentHierarchyNode[];
   // When false, hides document sets, connected sources, and hierarchy nodes
   // (these require a vector DB). User files are still shown.
   vectorDbEnabled?: boolean;

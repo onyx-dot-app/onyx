@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 interface CalloutProps {
   icon?: React.ReactNode;
@@ -33,7 +33,7 @@ export function Callout({
       {icon && <span className="mr-4 text-2xl">{icon}</span>}
       <div className="flex-1">
         {title && (
-          <div className="font-medium mb-1 flex items-center dark:text-[#fff]">
+          <div className="font-medium mb-1 flex items-center dark:text-white">
             {title}
           </div>
         )}

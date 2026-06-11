@@ -3,6 +3,7 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from ee.onyx.utils.license_expiry import ExpiryWarningStage
 from onyx.server.settings.models import ApplicationStatus
 
 
@@ -14,6 +15,13 @@ class PlanType(str, Enum):
 class LicenseSource(str, Enum):
     AUTO_FETCH = "auto_fetch"
     MANUAL_UPLOAD = "manual_upload"
+
+
+class CustomerTier(str, Enum):
+    """Paid-tier wire format from the control plane (no COMMUNITY)."""
+
+    BUSINESS = "BUSINESS"
+    ENTERPRISE = "ENTERPRISE"
 
 
 class LicensePayload(BaseModel):
@@ -30,6 +38,7 @@ class LicensePayload(BaseModel):
     grace_period_days: int = 30
     stripe_subscription_id: str | None = None
     stripe_customer_id: str | None = None
+    customer_tier: CustomerTier | None = None
 
 
 class LicenseData(BaseModel):
@@ -51,8 +60,10 @@ class LicenseMetadata(BaseModel):
     expires_at: datetime
     grace_period_end: datetime | None = None
     status: ApplicationStatus
+    expiry_warning_stage: ExpiryWarningStage = ExpiryWarningStage.NONE
     source: LicenseSource | None = None
     stripe_subscription_id: str | None = None
+    customer_tier: CustomerTier | None = None
 
 
 class LicenseStatusResponse(BaseModel):
@@ -66,6 +77,7 @@ class LicenseStatusResponse(BaseModel):
     expires_at: datetime | None = None
     grace_period_end: datetime | None = None
     status: ApplicationStatus | None = None
+    expiry_warning_stage: ExpiryWarningStage = ExpiryWarningStage.NONE
     source: LicenseSource | None = None
 
 

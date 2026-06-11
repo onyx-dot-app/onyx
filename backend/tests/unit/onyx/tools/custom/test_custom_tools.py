@@ -12,9 +12,11 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
 from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
-from onyx.tools.tool_implementations.custom.custom_tool import (
-    validate_openapi_schema,
+from onyx.tools.tool_implementations.custom.custom_tool import validate_openapi_schema
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_method_specs,
 )
+from onyx.tools.tool_name import sanitize_tool_name
 from onyx.utils.headers import HeaderItemDict
 
 
@@ -243,6 +245,139 @@ class TestCustomTool(unittest.TestCase):
         with self.assertRaises(ValueError) as _:
             validate_openapi_schema(invalid_schema)
 
+    @patch("onyx.tools.tool_implementations.custom.custom_tool.requests.request")
+    def test_custom_tool_user_placeholders(
+        self, mock_request: unittest.mock.MagicMock
+    ) -> None:
+        """USER_ID and USER_EMAIL placeholders are substituted across the
+        OpenAPI schema (server URL, paths, headers) at tool-build time."""
+        mock_response = unittest.mock.MagicMock()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"ok": True}
+        mock_request.return_value = mock_response
+
+        user_id = uuid.uuid4()
+        user_email = "alice@example.com"
+
+        schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {
+                "version": "1.0.0",
+                "title": "User-aware API",
+                "description": "Schema with USER_ID/USER_EMAIL placeholders",
+            },
+            "servers": [{"url": "http://localhost:8080/users/USER_ID"}],
+            "paths": {
+                "/by-email/{email}": {
+                    "GET": {
+                        "summary": "Lookup by email",
+                        "operationId": "lookupByEmail",
+                        "parameters": [
+                            {
+                                "name": "email",
+                                "in": "path",
+                                "required": True,
+                                "schema": {
+                                    "type": "string",
+                                    "default": "USER_EMAIL",
+                                },
+                            }
+                        ],
+                    }
+                }
+            },
+        }
+        validate_openapi_schema(schema)
+
+        tools = build_custom_tools_from_openapi_schema_and_headers(
+            tool_id=-1,
+            openapi_schema=schema,
+            custom_headers=[
+                {"key": "X-Onyx-User-Id", "value": "USER_ID"},
+                {
+                    "key": "X-Onyx-User-Email",  # pragma: allowlist secret
+                    "value": "USER_EMAIL",
+                },
+            ],
+            dynamic_schema_info=DynamicSchemaInfo(
+                chat_session_id=None,
+                message_id=None,
+                user_id=user_id,
+                user_email=user_email,
+            ),
+        )
+
+        tools[0].run(
+            placement=Placement(turn_index=0, tab_index=0),
+            override_kwargs=None,
+            email=user_email,
+        )
+
+        expected_url = f"http://localhost:8080/users/{user_id}/by-email/{user_email}"
+        # Custom headers do NOT receive placeholder substitution today;
+        # only the OpenAPI schema string is templated.
+        expected_headers = {
+            "X-Onyx-User-Id": "USER_ID",
+            "X-Onyx-User-Email": "USER_EMAIL",
+        }
+        mock_request.assert_called_once_with(
+            "GET", expected_url, json=None, headers=expected_headers
+        )
+
+    @patch("onyx.tools.tool_implementations.custom.custom_tool.requests.request")
+    def test_custom_tool_user_placeholders_unset_are_left_alone(
+        self, mock_request: unittest.mock.MagicMock
+    ) -> None:
+        """When user_id/user_email aren't provided (e.g. anonymous user),
+        the literal placeholders remain in the schema rather than being
+        replaced with empty strings."""
+        mock_response = unittest.mock.MagicMock()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = {"ok": True}
+        mock_request.return_value = mock_response
+
+        schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {
+                "version": "1.0.0",
+                "title": "User-aware API",
+                "description": "Schema with USER_ID placeholder but no user",
+            },
+            "servers": [{"url": "http://localhost:8080/users/USER_ID"}],
+            "paths": {
+                "/ping": {
+                    "GET": {
+                        "summary": "Ping",
+                        "operationId": "ping",
+                    }
+                }
+            },
+        }
+        validate_openapi_schema(schema)
+
+        tools = build_custom_tools_from_openapi_schema_and_headers(
+            tool_id=-1,
+            openapi_schema=schema,
+            dynamic_schema_info=DynamicSchemaInfo(
+                chat_session_id=None,
+                message_id=None,
+                user_id=None,
+                user_email=None,
+            ),
+        )
+
+        tools[0].run(
+            placement=Placement(turn_index=0, tab_index=0),
+            override_kwargs=None,
+        )
+
+        mock_request.assert_called_once_with(
+            "GET",
+            "http://localhost:8080/users/USER_ID/ping",
+            json=None,
+            headers={},
+        )
+
     def test_custom_tool_final_result(self) -> None:
         """
         Test extracting the final result from a custom tool response.
@@ -265,6 +400,91 @@ class TestCustomTool(unittest.TestCase):
             {"id": "789", "name": "Final Assistant"},
             "Final result does not match expected output",
         )
+
+
+class TestSanitizeToolName(unittest.TestCase):
+    """Tool names sent to Bedrock as toolUse.name must match [a-zA-Z0-9_-]+.
+    User-supplied Tool.name and OpenAPI operationId can contain spaces or dots,
+    so anything outside that set must be replaced with an underscore before the
+    name reaches the LLM (in tool definitions or in message-history replay)."""
+
+    def test_replaces_dots_and_spaces(self) -> None:
+        self.assertEqual(
+            sanitize_tool_name("ServiceNow.GetIncident"),
+            "ServiceNow_GetIncident",
+        )
+        self.assertEqual(
+            sanitize_tool_name("ServiceNow API"),
+            "ServiceNow_API",
+        )
+
+    def test_preserves_valid_characters(self) -> None:
+        self.assertEqual(
+            sanitize_tool_name("get_assistant-v2"),
+            "get_assistant-v2",
+        )
+
+    def test_operation_id_with_invalid_chars_is_sanitized(self) -> None:
+        schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "description": "d", "version": "1.0.0"},
+            "servers": [{"url": "http://x"}],
+            "paths": {
+                "/incidents": {
+                    "get": {
+                        "summary": "get incidents",
+                        "operationId": "ServiceNow.list incidents",
+                    }
+                }
+            },
+        }
+        specs = openapi_to_method_specs(schema)
+        self.assertEqual(specs[0].name, "ServiceNow_list_incidents")
+        # raw_name preserves the original operationId so the UI keeps showing
+        # what the user wrote, even though the LLM sees the sanitized form.
+        self.assertEqual(specs[0].raw_name, "ServiceNow.list incidents")
+        self.assertEqual(
+            specs[0].to_tool_definition()["function"]["name"],
+            "ServiceNow_list_incidents",
+        )
+
+    def test_colliding_sanitized_names_raise(self) -> None:
+        # Two distinct operationIds that sanitize to the same value would
+        # silently overwrite each other in tools_by_name; surface a clear error.
+        schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "description": "d", "version": "1.0.0"},
+            "servers": [{"url": "http://x"}],
+            "paths": {
+                "/a": {
+                    "get": {"summary": "a", "operationId": "foo.bar"},
+                },
+                "/b": {
+                    "get": {"summary": "b", "operationId": "foo_bar"},
+                },
+            },
+        }
+        with pytest.raises(ValueError, match="sanitize to 'foo_bar'"):
+            openapi_to_method_specs(schema)
+
+    def test_duplicate_operation_id_raises(self) -> None:
+        # The OpenAPI spec requires operationIds to be unique; a repeated
+        # operationId would also collide in tools_by_name.
+        schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "description": "d", "version": "1.0.0"},
+            "servers": [{"url": "http://x"}],
+            "paths": {
+                "/a": {
+                    "get": {"summary": "a", "operationId": "doThing"},
+                },
+                "/b": {
+                    "get": {"summary": "b", "operationId": "doThing"},
+                },
+            },
+        }
+        with pytest.raises(ValueError, match="Duplicate operation ID 'doThing'"):
+            openapi_to_method_specs(schema)
 
 
 if __name__ == "__main__":

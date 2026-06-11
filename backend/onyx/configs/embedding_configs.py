@@ -42,6 +42,11 @@ _BASE_EMBEDDING_MODELS = [
         index_name="danswer_chunk_embed_english_light_v3_0",
     ),
     _BaseEmbeddingModel(
+        name="cohere/embed-v4.0",
+        dim=1536,
+        index_name="danswer_chunk_cohere_embed_v4_0",
+    ),
+    _BaseEmbeddingModel(
         name="openai/text-embedding-3-large",
         dim=3072,
         index_name="danswer_chunk_openai_text_embedding_3_large",
@@ -70,6 +75,11 @@ _BASE_EMBEDDING_MODELS = [
         name="google/text-embedding-005",
         dim=768,
         index_name="danswer_chunk_text_embedding_005",
+    ),
+    _BaseEmbeddingModel(
+        name="google/gemini-embedding-2-preview",
+        dim=3072,
+        index_name="danswer_chunk_gemini_embedding_2_preview",
     ),
     _BaseEmbeddingModel(
         name="voyage/voyage-large-2-instruct",

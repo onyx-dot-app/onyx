@@ -1,4 +1,7 @@
 #!/bin/bash
+# DEPRECATED: Use `ods compose dev` instead. This script does not support
+# worktree isolation (per-worktree Docker Compose projects with separate ports).
+# It will be removed in a future release.
 set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"

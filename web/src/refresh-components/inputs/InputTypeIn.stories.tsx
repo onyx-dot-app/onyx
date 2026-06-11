@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import InputTypeIn from "./InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof InputTypeIn> = {
@@ -35,14 +35,14 @@ export const WithPrefix: Story = {
 
 export const WithSearchIcon: Story = {
   args: {
-    leftSearchIcon: true,
+    searchIcon: true,
     placeholder: "Search...",
   },
 };
 
 export const WithClearButton: Story = {
   args: {
-    showClearButton: true,
+    clearButton: true,
     value: "Some text to clear",
     onChange: () => {},
   },

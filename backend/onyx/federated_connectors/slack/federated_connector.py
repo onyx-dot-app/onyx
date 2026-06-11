@@ -57,10 +57,10 @@ class SlackFederatedConnector(FederatedConnector):
             SlackEntities(**entities)
             return True
         except ValidationError as e:
-            logger.warning(f"Validation error for Slack entities: {e}")
+            logger.warning("Validation error for Slack entities: %s", e)
             return False
         except Exception as e:
-            logger.error(f"Error validating Slack entities: {e}")
+            logger.error("Error validating Slack entities: %s", e)
             return False
 
     @classmethod
@@ -290,7 +290,7 @@ class SlackFederatedConnector(FederatedConnector):
         Returns:
             Search results in SlackSearchResponse format
         """
-        logger.debug(f"Slack federated search called with entities: {entities}")
+        logger.debug("Slack federated search called with entities: %s", entities)
 
         # Get team_id from Slack API for caching and filtering
         team_id = None
@@ -304,9 +304,9 @@ class SlackFederatedConnector(FederatedConnector):
                 auth_response.data
             )
             team_id = auth_data.get("team_id")
-            logger.debug(f"Slack team_id: {team_id}")
+            logger.debug("Slack team_id: %s", team_id)
         except Exception as e:
-            logger.warning(f"Could not fetch team_id from Slack API: {e}")
+            logger.warning("Could not fetch team_id from Slack API: %s", e)
 
         with get_session_with_current_tenant() as db_session:
             return slack_retrieval(

@@ -1,5 +1,5 @@
 # Docker Compose Override for Development/Testing
-# This file exposes service ports for development and testing purposes
+# This file exposes service ports for development and testing purposes.
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
@@ -25,24 +25,11 @@ services:
 
   relational_db:
     ports:
-      - "5432:5432"
-
-  index:
-    ports:
-      - "19071:19071"
-      - "8081:8081"
-    healthcheck:
-      # We use 19071 because the application server at 8010 is not ready until
-      # it is activated/configured by the application.
-      test: ["CMD-SHELL", "curl -sf http://localhost:19071/state/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
 
   opensearch:
     ports:
-      - "9200:9200"
+      - "${OPENSEARCH_HOST_PORT:-9200}:9200"
     # Rootless Docker can reject the base OpenSearch ulimit settings, so clear
     # the inherited block entirely in the dev override.
     ulimits: !reset null
@@ -51,18 +38,18 @@ services:
 
   inference_model_server:
     ports:
-      - "9000:9000"
+      - "${MODEL_SERVER_HOST_PORT:-9000}:9000"
 
   cache:
     ports:
-      - "6379:6379"
+      - "${REDIS_HOST_PORT:-6379}:6379"
 
   minio:
-    # use different ports to avoid conflicts with model servers
+    # Use different ports to avoid conflicts with model servers.
     ports:
-      - "9004:9000"
-      - "9005:9001"
+      - "${MINIO_API_HOST_PORT:-9004}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9005}:9001"
 
   code-interpreter:
     ports:
-      - "8000:8000"
+      - "${CODE_INTERPRETER_HOST_PORT:-8000}:8000"

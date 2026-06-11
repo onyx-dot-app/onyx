@@ -9,7 +9,7 @@ import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { constructCurrentMemoryState } from "./memoryStateUtils";
 import Text from "@/refresh-components/texts/Text";
 import { SvgEditBig, SvgMaximize2 } from "@opal/icons";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Button } from "@opal/components";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -109,7 +109,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
       {memoryText ? (
         <div className={cn("w-full flex")}>
           <div className="flex-1 min-w-0">
-            <Text as="p" text02 className="text-sm break-words">
+            <Text as="p" text02 className="text-sm wrap-break-word">
               {memoryText}
             </Text>
           </div>

@@ -5,20 +5,22 @@ import { Button, Divider } from "@opal/components";
 import { SvgUsers, SvgUser, SvgLogOut, SvgCheck } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import Modal from "@/refresh-components/Modal";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import ShadowDiv from "@/refresh-components/ShadowDiv";
+import { ShadowDiv } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import useGroups from "@/hooks/useGroups";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";
 import type { UserRow } from "./interfaces";
-import { cn } from "../../../lib/utils";
+import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -49,7 +51,8 @@ export default function EditUserModal({
   onClose,
   onMutate,
 }: EditUserModalProps) {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const { user: currentUser, mutateUser } = useCurrentUser();
   const { data: allGroups, isLoading: groupsLoading } = useGroups();
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,7 +90,7 @@ export default function EditUserModal({
     );
   }, [memberGroupIds, initialMemberGroupIds]);
 
-  const visibleRoles = isPaidEnterpriseFeaturesEnabled
+  const visibleRoles = businessTier
     ? ASSIGNABLE_ROLES
     : ASSIGNABLE_ROLES.filter((r) => r !== UserRole.GLOBAL_CURATOR);
 
@@ -142,6 +145,13 @@ export default function EditUserModal({
         selectedRole !== user.role
       ) {
         await setUserRole(user.email, selectedRole);
+        // If an admin demoted themselves (or flipped their own curator
+        // flag), the cached /api/me would otherwise hold the old role for
+        // the full useCurrentUser dedup window. Force a refetch so the
+        // sidebar and gating checks see the new role immediately.
+        if (currentUser && currentUser.id === user.id) {
+          await mutateUser();
+        }
       }
 
       onMutate();
@@ -197,7 +207,7 @@ export default function EditUserModal({
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       placeholder="Search groups to join..."
-                      leftSearchIcon
+                      searchIcon
                     />
                   </div>
                 </Popover.Trigger>
@@ -220,9 +230,7 @@ export default function EditUserModal({
                   ) : (
                     <ShadowDiv
                       shadowHeight="0.75rem"
-                      className={cn(
-                        "flex flex-col gap-1 max-h-[15rem] rounded-08"
-                      )}
+                      className={cn("flex flex-col gap-1 max-h-60 rounded-08")}
                     >
                       {dropdownGroups.map((group) => {
                         const isMember = memberGroupIds.has(group.id);
@@ -247,7 +255,7 @@ export default function EditUserModal({
               </Popover>
 
               <ShadowDiv
-                className={cn(" max-h-[11rem] flex flex-col gap-1 rounded-08")}
+                className={cn(" max-h-44 flex flex-col gap-1 rounded-08")}
                 shadowHeight="0.75rem"
               >
                 {joinedGroups.length === 0 ? (

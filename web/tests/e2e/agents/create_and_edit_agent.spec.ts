@@ -1,7 +1,7 @@
 import { test, expect, Page, Browser } from "@playwright/test";
 import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
-import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
+import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
 // --- Locator Helper Functions ---
 const getNameInput = (page: Page) => page.locator('input[name="name"]');
@@ -292,13 +292,40 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(agentIdMatch).toBeTruthy();
       const agentId = agentIdMatch ? agentIdMatch[1] : null;
       expect(agentId).not.toBeNull();
-      await expectScreenshot(page, {
-        name: "welcome-page-with-assistant",
+      // Split the previous full-page screenshot into two scoped element
+      // screenshots. The full-page variant was flaky because the sidebar can
+      // pick up agents/projects/recents created by other tests; scoping to the
+      // Agents section and the main container isolates the relevant UI.
+      //
+      // Locate the Agents SidebarSection by its title rather than a dedicated
+      // test id: SidebarSection roots are the only elements carrying
+      // `data-hover-group="sidebar-section"`, and we filter to the one whose
+      // section title is exactly "Agents".
+      const agentsSidebarSection = page
+        .locator('[data-hover-group="sidebar-section"]')
+        .filter({ has: page.getByText("Agents", { exact: true }) });
+      await expect(agentsSidebarSection).toBeVisible();
+      await expectElementScreenshot(agentsSidebarSection, {
+        name: "welcome-page-with-assistant-agents-sidebar",
+      });
+
+      const mainContainer = page.locator("[data-main-container]");
+      await expect(mainContainer).toBeVisible();
+      await expectElementScreenshot(mainContainer, {
+        name: "welcome-page-with-assistant-main",
         hide: ["[data-testid='model-selector']"],
       });
 
       // Store assistant ID for cleanup
       knowledgeAssistantId = Number(agentId);
+
+      // Verify SearchTool is persisted in the agent's tools via API
+      const createdAgent =
+        await onyxApiClient.getAssistant(knowledgeAssistantId);
+      expect(
+        createdAgent.tools.some((t) => t.in_code_tool_id === "SearchTool"),
+        "Agent created with knowledge enabled should have SearchTool in tools"
+      ).toBe(true);
 
       // Navigate directly to the edit page
       await page.goto(`/app/agents/edit/${agentId}`);
@@ -345,6 +372,15 @@ test.describe("Assistant Creation and Edit Verification", () => {
       // Verify redirection back to the chat page
       await page.waitForURL(/.*\/app\?agentId=\d+.*/);
       expect(page.url()).toContain(`agentId=${agentId}`);
+
+      // Verify SearchTool persists after editing (knowledge still enabled)
+      const editedAgent = await onyxApiClient.getAssistant(
+        knowledgeAssistantId!
+      );
+      expect(
+        editedAgent.tools.some((t) => t.in_code_tool_id === "SearchTool"),
+        "Agent should still have SearchTool after edit with knowledge enabled"
+      ).toBe(true);
 
       // --- Navigate to Edit Page Again and Verify Edited Values ---
       await page.goto(`/app/agents/edit/${agentId}`);

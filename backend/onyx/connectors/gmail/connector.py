@@ -48,7 +48,6 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
-
 logger = setup_logger()
 
 # This is for the initial list call to get the thread ids
@@ -444,7 +443,9 @@ class GmailConnector(
         query = _build_time_range_query(time_range_start, time_range_end)
         slim_doc_batch: list[SlimDocument | HierarchyNode] = []
         logger.info(
-            f"Fetching {'slim' if is_slim else 'full'} threads for user: {user_email}"
+            "Fetching %s threads for user: %s",
+            "slim" if is_slim else "full",
+            user_email,
         )
         gmail_service = get_gmail_service(self.creds, user_email)
         try:

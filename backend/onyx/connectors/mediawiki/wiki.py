@@ -26,7 +26,6 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 pywikibot.config.base_dir = tempfile.TemporaryDirectory().name
@@ -201,7 +200,7 @@ class MediaWikiConnector(LoadConnector, PollConnector):
         )
         for page in all_pages:
             logger.info(
-                f"MediaWikiConnector: title='{page.title()}' url={page.full_url()}"
+                "MediaWikiConnector: title='%s' url=%s", page.title(), page.full_url()
             )
             doc_batch.append(
                 get_doc_from_page(page, self.site, self.document_source_type)

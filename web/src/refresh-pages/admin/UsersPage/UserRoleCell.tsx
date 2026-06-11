@@ -2,14 +2,15 @@
 
 import { useState, useRef } from "react";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { OpenButton } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SvgCheck, SvgGlobe, SvgUser, SvgUserManage } from "@opal/icons";
 import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { toast } from "@/hooks/useToast";
 import { setUserRole } from "./svc";
@@ -35,7 +36,7 @@ interface UserRoleCellProps {
 export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [open, setOpen] = useState(false);
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const isUpdatingRef = useRef(false);
 
   if (!user.role) {
@@ -74,7 +75,7 @@ export default function UserRoleCell({ user, onMutate }: UserRoleCellProps) {
 
   const currentIcon = ROLE_ICONS[user.role] ?? SvgUser;
 
-  const visibleRoles = isPaidEnterpriseFeaturesEnabled
+  const visibleRoles = businessTier
     ? SELECTABLE_ROLES
     : SELECTABLE_ROLES.filter((r) => r !== UserRole.GLOBAL_CURATOR);
 

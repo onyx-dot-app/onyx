@@ -6,6 +6,8 @@
  * circular imports and gives every consumer a single source of truth.
  */
 
+import "@opal/root.css";
+
 import type {
   SizeVariants,
   OverridableExtremaSizeVariants,
@@ -21,14 +23,16 @@ import type {
  * Each entry maps a named preset to Tailwind utility classes for
  * `height`, `min-width`, and `padding`.
  *
- * | Key   | Height        | Padding  |
- * |-------|---------------|----------|
- * | `lg`  | 2.25rem (36px)| `p-2`   |
- * | `md`  | 1.75rem (28px)| `p-1`   |
- * | `sm`  | 1.5rem (24px) | `p-1`   |
- * | `xs`  | 1.25rem (20px)| `p-0.5` |
- * | `2xs` | 1rem (16px)   | `p-0.5` |
- * | `fit` | h-fit         | `p-0`   |
+ * Heights are driven by CSS custom properties defined in `@opal/root.css`.
+ *
+ * | Key   | Height                          | Padding  |
+ * |-------|---------------------------------|----------|
+ * | `lg`  | `--height-line-h1-headline`     | `p-2`   |
+ * | `md`  | `--height-line-h3-section`      | `p-1`   |
+ * | `sm`  | `--height-line-label`           | `p-1`   |
+ * | `xs`  | `--height-line-main`            | `p-0.5` |
+ * | `2xs` | `--height-line-secondary`       | `p-0.5` |
+ * | `fit` | `h-fit`                         | `p-0`   |
  */
 type ContainerProperties = {
   height: string;
@@ -40,15 +44,31 @@ const containerSizeVariants: Record<
   ContainerProperties
 > = {
   fit: { height: "h-fit", minWidth: "", padding: "p-0" },
-  lg: { height: "h-[2.25rem]", minWidth: "min-w-[2.25rem]", padding: "p-2" },
-  md: { height: "h-[1.75rem]", minWidth: "min-w-[1.75rem]", padding: "p-1" },
-  sm: { height: "h-[1.5rem]", minWidth: "min-w-[1.5rem]", padding: "p-1" },
+  lg: {
+    height: "h-(--height-line-h1-headline)",
+    minWidth: "min-w-(--height-line-h1-headline)",
+    padding: "p-2",
+  },
+  md: {
+    height: "h-(--height-line-h3-section)",
+    minWidth: "min-w-(--height-line-h3-section)",
+    padding: "p-1",
+  },
+  sm: {
+    height: "h-(--height-line-label)",
+    minWidth: "min-w-(--height-line-label)",
+    padding: "p-1",
+  },
   xs: {
-    height: "h-[1.25rem]",
-    minWidth: "min-w-[1.25rem]",
+    height: "h-(--height-line-main)",
+    minWidth: "min-w-(--height-line-main)",
     padding: "p-0.5",
   },
-  "2xs": { height: "h-[1rem]", minWidth: "min-w-[1rem]", padding: "p-0.5" },
+  "2xs": {
+    height: "h-(--height-line-secondary)",
+    minWidth: "min-w-(--height-line-secondary)",
+    padding: "p-0.5",
+  },
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -128,6 +148,7 @@ const paddingYVariants: Record<PaddingVariants, string> = {
 };
 
 const cardRoundingVariants: Record<RoundingVariants, string> = {
+  xl: "rounded-20",
   lg: "rounded-16",
   md: "rounded-12",
   sm: "rounded-08",
@@ -135,6 +156,7 @@ const cardRoundingVariants: Record<RoundingVariants, string> = {
 };
 
 const cardTopRoundingVariants: Record<RoundingVariants, string> = {
+  xl: "rounded-t-20",
   lg: "rounded-t-16",
   md: "rounded-t-12",
   sm: "rounded-t-08",
@@ -142,6 +164,7 @@ const cardTopRoundingVariants: Record<RoundingVariants, string> = {
 };
 
 const cardBottomRoundingVariants: Record<RoundingVariants, string> = {
+  xl: "rounded-b-20",
   lg: "rounded-b-16",
   md: "rounded-b-12",
   sm: "rounded-b-08",

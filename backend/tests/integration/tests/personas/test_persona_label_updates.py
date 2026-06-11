@@ -1,9 +1,8 @@
 from uuid import uuid4
 
-import requests
-
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.persona import PersonaLabelManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestPersonaLabel
@@ -33,15 +32,14 @@ def test_update_persona_with_null_label_ids_preserves_labels(
         datetime_aware=persona.datetime_aware,
         document_set_ids=persona.document_set_ids,
         is_public=persona.is_public,
-        llm_model_provider_override=persona.llm_model_provider_override,
-        llm_model_version_override=persona.llm_model_version_override,
+        default_model_configuration_id=persona.default_model_configuration_id,
         tool_ids=persona.tool_ids,
         users=[],
         groups=[],
         label_ids=None,
     )
 
-    response = requests.patch(
+    response = client.patch(
         f"{API_SERVER_URL}/persona/{persona.id}",
         json=update_request.model_dump(mode="json", exclude_none=False),
         headers=admin_user.headers,
@@ -49,7 +47,7 @@ def test_update_persona_with_null_label_ids_preserves_labels(
     )
     response.raise_for_status()
 
-    fetched = requests.get(
+    fetched = client.get(
         f"{API_SERVER_URL}/persona/{persona.id}",
         headers=admin_user.headers,
         cookies=admin_user.cookies,

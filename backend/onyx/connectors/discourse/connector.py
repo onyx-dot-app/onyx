@@ -10,11 +10,10 @@ from pydantic import BaseModel
 from requests import Response
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
-)
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -42,7 +41,9 @@ def discourse_request(
 ) -> Response:
     headers = {"Api-Key": perms.api_key, "Api-Username": perms.api_username}
 
-    response = requests.get(endpoint, headers=headers, params=params)
+    response = requests.get(
+        endpoint, headers=headers, params=params, timeout=REQUEST_TIMEOUT_SECONDS
+    )
     response.raise_for_status()
 
     return response

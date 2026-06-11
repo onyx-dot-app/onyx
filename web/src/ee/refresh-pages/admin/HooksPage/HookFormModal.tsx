@@ -115,14 +115,13 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
       suffix="(seconds)"
       subDescription={`Maximum time Onyx will wait for the endpoint to respond before applying the fail strategy. Must be greater than 0 and at most ${MAX_TIMEOUT_SECONDS} seconds.`}
     >
-      <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono [&_input]:![appearance:textfield] [&_input::-webkit-outer-spin-button]:!appearance-none [&_input::-webkit-inner-spin-button]:!appearance-none w-full">
+      <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono [&_input]:[appearance:textfield]! [&_input::-webkit-outer-spin-button]:appearance-none! [&_input::-webkit-inner-spin-button]:appearance-none! w-full">
         <InputTypeInField
           name="timeout_seconds"
           type="number"
           placeholder={spec ? String(spec.default_timeout_seconds) : undefined}
           variant={isSubmitting ? "disabled" : undefined}
-          showClearButton={false}
-          rightSection={
+          rightChildren={
             spec?.default_timeout_seconds !== undefined &&
             values.timeout_seconds !== String(spec.default_timeout_seconds) ? (
               <Button
@@ -282,7 +281,7 @@ export default function HookFormModal({
                           variant="body"
                           icon={SvgShareWebhook}
                           title="Hook Point"
-                          prominence="muted"
+                          color="muted"
                           width="fit"
                         />
                         {docsUrl && (
@@ -365,8 +364,8 @@ export default function HookFormModal({
                       name="api_key"
                       placeholder={
                         isEdit
-                          ? hook?.api_key_masked ??
-                            "Leave blank to keep current key"
+                          ? (hook?.api_key_masked ??
+                            "Leave blank to keep current key")
                           : undefined
                       }
                       disabled={isSubmitting}

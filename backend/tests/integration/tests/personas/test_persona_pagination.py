@@ -1,8 +1,7 @@
-import requests
-
 from onyx.server.features.persona.constants import ADMIN_AGENTS_RESOURCE
 from onyx.server.features.persona.constants import AGENTS_RESOURCE
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -16,7 +15,7 @@ def _get_agents_paginated(
     include_default: bool = True,
 ) -> tuple[dict, int]:
     """Fetches a paginated page of agents, with status code."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}{AGENTS_RESOURCE}",
         params={
             "page_num": page_num,
@@ -40,7 +39,7 @@ def _get_agents_admin_paginated(
     include_default: bool = True,
 ) -> tuple[dict, int]:
     """Fetches a paginated page of agents (admin endpoint) with status code."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}{ADMIN_AGENTS_RESOURCE}",
         params={
             "page_num": page_num,
@@ -94,7 +93,6 @@ def test_persona_pagination_basic(
 
 
 def test_persona_pagination_ordering(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test ordering - display_priority ASC nulls last, then ID ASC."""
@@ -146,7 +144,6 @@ def test_persona_pagination_ordering(
 
 
 def test_persona_pagination_admin_endpoint(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test admin paginated endpoint returns PersonaSnapshot format."""
@@ -177,7 +174,6 @@ def test_persona_pagination_admin_endpoint(
 
 
 def test_persona_pagination_with_deleted(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     """Test pagination with include_deleted parameter."""
@@ -267,20 +263,19 @@ def test_persona_pagination_count_accuracy(
     for page_num in range(num_pages_needed):
         page, _ = _get_agents_paginated(admin_user, page_num=page_num, page_size=5)
         # All pages should report the same total.
-        assert (
-            page["total_items"] == total_items
-        ), f"Page {page_num} has inconsistent total_items"
+        assert page["total_items"] == total_items, (
+            f"Page {page_num} has inconsistent total_items"
+        )
         all_ids_from_pages.update(p["id"] for p in page["items"])
 
     # Our created personas should all appear.
     our_ids = {p.id for p in created_personas}
-    assert our_ids.issubset(
-        all_ids_from_pages
-    ), "All created personas should appear in paginated results"
+    assert our_ids.issubset(all_ids_from_pages), (
+        "All created personas should appear in paginated results"
+    )
 
 
 def test_persona_pagination_user_permissions(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:

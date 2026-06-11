@@ -15,7 +15,6 @@ from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
-
 logger = setup_logger()
 
 celery_app = Celery(__name__)
@@ -63,7 +62,7 @@ def on_worker_init(sender: Any, **kwargs: Any) -> None:
     global _prometheus_collectors_ok
 
     logger.info("worker_init signal received.")
-    logger.info(f"Multiprocessing start method: {multiprocessing.get_start_method()}")
+    logger.info("Multiprocessing start method: %s", multiprocessing.get_start_method())
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_MONITORING_APP_NAME)
     SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=3)

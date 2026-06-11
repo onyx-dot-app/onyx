@@ -1,6 +1,7 @@
 "use client";
 
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgPlus, SvgX } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -81,7 +82,7 @@ const inputImageClasses = {
         "group-hover:stroke-text-03",
         "group-active:stroke-text-04",
         "group-focus-visible:stroke-text-02",
-        "group-focus-visible:group-hover:stroke-text-03",
+        "group-hover:group-focus-visible:stroke-text-03",
       ],
       disabled: ["stroke-text-01"],
     },
@@ -224,12 +225,12 @@ export default function InputImage({
           {/* Edit overlay - shows on hover/focus when image is uploaded */}
           {showEditOverlay && isInteractive && hasImage && !isDragActive && (
             <div className="absolute bottom-0 left-0 right-0 pointer-events-none">
-              <Hoverable.Item group="inputImage" variant="opacity-on-hover">
+              <Hoverable.Item group="inputImage" variant="appear-on-hover">
                 <div
                   className={cn(
                     "flex items-center justify-center",
                     "pb-2.5 pt-1.5",
-                    "backdrop-blur-sm bg-mask-01",
+                    "backdrop-blur-xs bg-mask-01",
                     "pointer-events-none"
                   )}
                 >
@@ -259,14 +260,14 @@ export default function InputImage({
         {/* Remove button - top left corner (only when image is uploaded) */}
         {isInteractive && hasImage && onRemove && (
           <div className="absolute top-1 left-1">
-            <Hoverable.Item group="inputImage" variant="opacity-on-hover">
+            <Hoverable.Item group="inputImage" variant="appear-on-hover">
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <IconButton
                 icon={SvgX}
                 onClick={noProp(onRemove)}
                 type="button"
                 primary
-                className="!w-5 !h-5 !p-0.5 !rounded-04"
+                className="w-5! h-5! p-0.5! rounded-04!"
                 aria-label="Remove image"
               />
             </Hoverable.Item>

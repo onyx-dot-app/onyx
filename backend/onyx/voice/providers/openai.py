@@ -1,14 +1,9 @@
 """OpenAI voice provider for STT and TTS.
 
-OpenAI supports:
-- **STT**: Whisper (batch transcription via REST) and Realtime API (streaming
-  transcription via WebSocket with server-side VAD). Audio is sent as base64-encoded
-  PCM16 at 24kHz mono. The Realtime API returns transcript deltas and completed
-  transcription events per VAD-detected utterance.
-- **TTS**: HTTP streaming endpoint that returns audio chunks progressively.
-  Supported models: tts-1 (standard) and tts-1-hd (high quality).
-
-See https://platform.openai.com/docs for API reference.
+- STT chunked: `/v1/audio/transcriptions` with the provider's `stt_model`.
+- STT streaming: GA Realtime WS, always `gpt-realtime-whisper`. No server-side
+  VAD on this model, so `close()` sends an explicit `input_audio_buffer.commit`.
+- TTS: HTTP streaming, tts-1 / tts-1-hd.
 """
 
 import asyncio
@@ -17,10 +12,13 @@ import io
 import json
 from collections.abc import AsyncIterator
 from enum import StrEnum
+from typing import Any
 from typing import TYPE_CHECKING
 
 import aiohttp
 
+from onyx.tracing.flows import LLMFlow
+from onyx.tracing.llm_utils import traced_llm_call
 from onyx.voice.interface import StreamingSynthesizerProtocol
 from onyx.voice.interface import StreamingTranscriberProtocol
 from onyx.voice.interface import TranscriptResult
@@ -33,8 +31,15 @@ if TYPE_CHECKING:
 DEFAULT_OPENAI_API_BASE = "https://api.openai.com"
 
 
+# GA Realtime WS needs two model slots: the realtime *session* model in the
+# URL `?model=` (omit → `missing_model`), and the *transcription* model in
+# `audio.input.transcription.model`. Other STT models stay HTTP-only.
+OPENAI_REALTIME_SESSION_MODEL = "gpt-realtime-1.5"
+OPENAI_REALTIME_STT_MODEL = "gpt-realtime-whisper"
+
+
 class OpenAIRealtimeMessageType(StrEnum):
-    """Message types from OpenAI Realtime transcription API."""
+    """Message types from OpenAI Realtime transcription API (GA shape)."""
 
     ERROR = "error"
     SPEECH_STARTED = "input_audio_buffer.speech_started"
@@ -42,8 +47,8 @@ class OpenAIRealtimeMessageType(StrEnum):
     BUFFER_COMMITTED = "input_audio_buffer.committed"
     TRANSCRIPTION_DELTA = "conversation.item.input_audio_transcription.delta"
     TRANSCRIPTION_COMPLETED = "conversation.item.input_audio_transcription.completed"
-    SESSION_CREATED = "transcription_session.created"
-    SESSION_UPDATED = "transcription_session.updated"
+    SESSION_CREATED = "session.created"
+    SESSION_UPDATED = "session.updated"
     ITEM_CREATED = "conversation.item.created"
 
 
@@ -62,7 +67,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
     def __init__(
         self,
         api_key: str,
-        model: str = "whisper-1",
+        model: str = OPENAI_REALTIME_STT_MODEL,
         api_base: str | None = None,
     ):
         # Import logger first
@@ -71,7 +76,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         self._logger = setup_logger()
 
         self._logger.info(
-            f"OpenAIStreamingTranscriber: initializing with model {model}"
+            "OpenAIStreamingTranscriber: initializing with model %s", model
         )
         self.api_key = api_key
         self.model = model
@@ -83,45 +88,50 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         self._accumulated_transcript = ""  # Accumulated across all turns
         self._receive_task: asyncio.Task | None = None
         self._closed = False
+        # OpenAI keeps the WS open on protocol errors, so we cache the last
+        # error event for callers to fail fast on a poisoned session.
+        self._last_error: dict[str, Any] | None = None
 
     async def connect(self) -> None:
-        """Establish WebSocket connection to OpenAI Realtime API."""
+        """Establish WebSocket connection to OpenAI Realtime API (GA shape)."""
         self._session = aiohttp.ClientSession()
 
-        # OpenAI Realtime transcription endpoint
+        # `?model=` must be the realtime session model — a transcription
+        # model here yields `invalid_model`. The Beta `?intent=transcription`
+        # form now returns `beta_api_shape_disabled`.
         ws_base = _http_to_ws_url(self.api_base.rstrip("/"))
-        url = f"{ws_base}/v1/realtime?intent=transcription"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "OpenAI-Beta": "realtime=v1",
-        }
+        url = f"{ws_base}/v1/realtime?model={OPENAI_REALTIME_SESSION_MODEL}"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
 
         try:
             self._ws = await self._session.ws_connect(url, headers=headers)
             self._logger.info("Connected to OpenAI Realtime API")
         except Exception as e:
-            self._logger.error(f"Failed to connect to OpenAI Realtime API: {e}")
+            self._logger.error("Failed to connect to OpenAI Realtime API: %s", e)
             raise
 
-        # Configure the session for transcription
-        # Enable server-side VAD (Voice Activity Detection) for automatic speech detection
+        # `session.type` must be `"realtime"`. GA has no transcription-only
+        # session type on the WS — transcription is a side-effect configured
+        # via `audio.input.transcription.model`. `"transcription"` here →
+        # "Passing a transcription session update event to a realtime
+        # session is not allowed". `turn_detection: None` because
+        # gpt-realtime-whisper has no server-side VAD; `close()` drives
+        # turn boundaries via `input_audio_buffer.commit`.
         config_message = {
-            "type": "transcription_session.update",
+            "type": "session.update",
             "session": {
-                "input_audio_format": "pcm16",  # 16-bit PCM at 24kHz mono
-                "input_audio_transcription": {
-                    "model": self.model,
-                },
-                "turn_detection": {
-                    "type": "server_vad",
-                    "threshold": 0.5,
-                    "prefix_padding_ms": 300,
-                    "silence_duration_ms": 500,
+                "type": "realtime",
+                "audio": {
+                    "input": {
+                        "format": {"type": "audio/pcm", "rate": 24000},
+                        "transcription": {"model": self.model},
+                        "turn_detection": None,
+                    },
                 },
             },
         }
         await self._ws.send_str(json.dumps(config_message))
-        self._logger.info(f"Sent config for model: {self.model} with server VAD")
+        self._logger.info("Sent config for model: %s", self.model)
 
         # Start receiving transcripts
         self._receive_task = asyncio.create_task(self._receive_loop())
@@ -136,24 +146,24 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     data = json.loads(msg.data)
                     msg_type = data.get("type", "")
-                    self._logger.debug(f"Received message type: {msg_type}")
+                    self._logger.debug("Received message type: %s", msg_type)
 
-                    # Handle errors
+                    # WS stays open on protocol errors — cache for callers.
                     if msg_type == OpenAIRealtimeMessageType.ERROR:
                         error = data.get("error", {})
-                        self._logger.error(f"OpenAI error: {error}")
+                        self._last_error = error
+                        self._logger.error("OpenAI error: %s", error)
                         continue
 
-                    # Handle VAD events
+                    # speech_started/stopped are no-ops on gpt-realtime-whisper
+                    # (no server VAD) but kept defensively. buffer_committed
+                    # fires once per session from close()'s manual commit.
                     if msg_type == OpenAIRealtimeMessageType.SPEECH_STARTED:
                         self._logger.info("OpenAI: Speech started")
-                        # Reset current turn transcript for new speech
                         self._current_turn_transcript = ""
                         continue
                     elif msg_type == OpenAIRealtimeMessageType.SPEECH_STOPPED:
-                        self._logger.info(
-                            "OpenAI: Speech stopped (VAD detected silence)"
-                        )
+                        self._logger.info("OpenAI: Speech stopped")
                         continue
                     elif msg_type == OpenAIRealtimeMessageType.BUFFER_COMMITTED:
                         self._logger.info("OpenAI: Audio buffer committed")
@@ -163,7 +173,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     if msg_type == OpenAIRealtimeMessageType.TRANSCRIPTION_DELTA:
                         delta = data.get("delta", "")
                         if delta:
-                            self._logger.info(f"OpenAI: Transcription delta: {delta}")
+                            self._logger.info("OpenAI: Transcription delta: %s", delta)
                             self._current_turn_transcript += delta
                             # Show accumulated + current turn transcript
                             full_transcript = self._accumulated_transcript
@@ -177,7 +187,8 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                         transcript = data.get("transcript", "")
                         if transcript:
                             self._logger.info(
-                                f"OpenAI: Transcription completed (VAD turn end): {transcript[:50]}..."
+                                "OpenAI: Transcription completed (VAD turn end): %s...",
+                                transcript[:50],
                             )
                             # This is the final transcript for this VAD turn
                             self._current_turn_transcript = transcript
@@ -200,17 +211,17 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     ):
                         # Log any other message types we might be missing
                         self._logger.info(
-                            f"OpenAI: Unhandled message type '{msg_type}': {data}"
+                            "OpenAI: Unhandled message type '%s': %s", msg_type, data
                         )
 
                 elif msg.type == aiohttp.WSMsgType.ERROR:
-                    self._logger.error(f"WebSocket error: {self._ws.exception()}")
+                    self._logger.error("WebSocket error: %s", self._ws.exception())
                     break
                 elif msg.type == aiohttp.WSMsgType.CLOSED:
                     self._logger.info("WebSocket closed by server")
                     break
         except Exception as e:
-            self._logger.error(f"Error in receive loop: {e}")
+            self._logger.error("Error in receive loop: %s", e)
         finally:
             await self._transcript_queue.put(None)
 
@@ -222,8 +233,10 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             # So chunk_bytes / 48000 = duration in seconds
             duration_ms = (len(chunk) / 48000) * 1000
             self._logger.debug(
-                f"Sending {len(chunk)} bytes ({duration_ms:.1f}ms) of audio to OpenAI. "
-                f"First 10 bytes: {chunk[:10].hex() if len(chunk) >= 10 else chunk.hex()}"
+                "Sending %s bytes (%sms) of audio to OpenAI. First 10 bytes: %s",
+                len(chunk),
+                format(duration_ms, ".1f"),
+                chunk[:10].hex() if len(chunk) >= 10 else chunk.hex(),
             )
             message = {
                 "type": "input_audio_buffer.append",
@@ -248,14 +261,14 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         """Close session and return final transcript."""
         self._closed = True
         if self._ws:
-            # With server VAD, the buffer is auto-committed when speech stops.
-            # But we should still commit any remaining audio and wait for transcription.
+            # Sole trigger for the final TRANSCRIPTION_COMPLETED event
+            # (gpt-realtime-whisper has no server VAD).
             try:
                 await self._ws.send_str(
                     json.dumps({"type": "input_audio_buffer.commit"})
                 )
             except Exception as e:
-                self._logger.debug(f"Error sending commit (may be expected): {e}")
+                self._logger.debug("Error sending commit (may be expected): %s", e)
 
             # Wait for *new* transcription to arrive (up to 5 seconds)
             self._logger.info("Waiting for transcription to complete...")
@@ -264,7 +277,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                 await asyncio.sleep(0.1)
                 if self._accumulated_transcript != transcript_before_commit:
                     self._logger.info(
-                        f"Got final transcript: {self._accumulated_transcript[:50]}..."
+                        "Got final transcript: %s...", self._accumulated_transcript[:50]
                     )
                     break
             else:
@@ -292,7 +305,8 @@ OPENAI_VOICES = [
     {"id": "shimmer", "name": "Shimmer"},
 ]
 
-# OpenAI available STT models (all support streaming via Realtime API)
+# Models for the chunked HTTP path only — streaming is locked to
+# OPENAI_REALTIME_STT_MODEL regardless of selection.
 OPENAI_STT_MODELS = [
     {"id": "whisper-1", "name": "Whisper v1"},
     {"id": "gpt-4o-transcribe", "name": "GPT-4o Transcribe"},
@@ -385,7 +399,7 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                self._logger.error(f"Error processing text queue: {e}")
+                self._logger.error("Error processing text queue: %s", e)
 
     async def _synthesize_text(self, text: str) -> None:
         """Make HTTP TTS request and stream audio to queue."""
@@ -411,7 +425,7 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    self._logger.error(f"OpenAI TTS error: {error_text}")
+                    self._logger.error("OpenAI TTS error: %s", error_text)
                     return
 
                 # Use 8192 byte chunks for smoother streaming
@@ -422,7 +436,7 @@ class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
                     if chunk:
                         await self._audio_queue.put(chunk)
         except Exception as e:
-            self._logger.error(f"OpenAIStreamingSynthesizer synthesis error: {e}")
+            self._logger.error("OpenAIStreamingSynthesizer synthesis error: %s", e)
 
     async def send_text(self, text: str) -> None:
         """Queue text to be synthesized via HTTP streaming."""
@@ -515,26 +529,28 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         return self._client
 
     async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
-        """
-        Transcribe audio using OpenAI Whisper.
-
-        Args:
-            audio_data: Raw audio bytes
-            audio_format: Audio format (e.g., "webm", "wav", "mp3")
-
-        Returns:
-            Transcribed text
-        """
+        """Transcribe audio via `/v1/audio/transcriptions`."""
         client = self._get_client()
+
+        # /v1/audio/transcriptions doesn't accept raw PCM — wrap as WAV
+        # (24kHz mono matches the browser capture format).
+        if audio_format == "pcm16":
+            audio_data = _create_wav_header(len(audio_data)) + audio_data
+            audio_format = "wav"
 
         # Create a file-like object from the audio bytes
         audio_file = io.BytesIO(audio_data)
         audio_file.name = f"audio.{audio_format}"
 
-        response = await client.audio.transcriptions.create(
+        with traced_llm_call(
+            flow=LLMFlow.STT,
             model=self.stt_model,
-            file=audio_file,
-        )
+            provider="openai",
+        ):
+            response = await client.audio.transcriptions.create(
+                model=self.stt_model,
+                file=audio_file,
+            )
 
         return response.text
 
@@ -560,19 +576,26 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         # Use with_streaming_response for proper async streaming
         # Using 8192 byte chunks for better streaming performance
         # (larger chunks = fewer round-trips, more complete MP3 frames)
-        async with client.audio.speech.with_streaming_response.create(
+        with traced_llm_call(
+            flow=LLMFlow.TTS,
             model=self.tts_model,
-            voice=voice or self.default_voice,
-            input=text,
-            speed=speed,
-            response_format="mp3",
-        ) as response:
-            async for chunk in response.iter_bytes(chunk_size=8192):
-                yield chunk
+            provider="openai",
+            input_messages=[{"role": "user", "content": text}],
+        ):
+            async with client.audio.speech.with_streaming_response.create(
+                model=self.tts_model,
+                voice=voice or self.default_voice,
+                input=text,
+                speed=speed,
+                response_format="mp3",
+            ) as response:
+                async for chunk in response.iter_bytes(chunk_size=8192):
+                    yield chunk
 
     async def validate_credentials(self) -> None:
         """Validate OpenAI API key by listing models."""
-        from openai import AuthenticationError, PermissionDeniedError
+        from openai import AuthenticationError
+        from openai import PermissionDeniedError
 
         client = self._get_client()
         try:
@@ -595,7 +618,8 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         return OPENAI_TTS_MODELS.copy()
 
     def supports_streaming_stt(self) -> bool:
-        """OpenAI supports streaming via Realtime API for all STT models."""
+        # Streaming WS is locked to OPENAI_REALTIME_STT_MODEL; stt_model
+        # only governs the chunked HTTP path.
         return True
 
     def supports_streaming_tts(self) -> bool:
@@ -605,12 +629,13 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
     async def create_streaming_transcriber(  # ty: ignore[invalid-method-override]
         self, _audio_format: str = "webm"
     ) -> OpenAIStreamingTranscriber:
-        """Create a streaming transcription session using Realtime API."""
+        # Streaming always uses OPENAI_REALTIME_STT_MODEL — other STT models
+        # are not Realtime-streamable.
         if not self.api_key:
             raise ValueError("API key required for streaming transcription")
         transcriber = OpenAIStreamingTranscriber(
             api_key=self.api_key,
-            model=self.stt_model,
+            model=OPENAI_REALTIME_STT_MODEL,
             api_base=self.api_base,
         )
         await transcriber.connect()

@@ -28,6 +28,9 @@ class ResourceLogger(WorkerPlugin):
             memory_available_gb = psutil.virtual_memory().available / (1024.0**3)
             # You can now log these values or send them to a monitoring service
             logger.debug(
-                f"Worker {self.worker.address}: CPU usage {cpu_percent}%, Memory available {memory_available_gb}GB"
+                "Worker %s: CPU usage %s%%, Memory available %sGB",
+                self.worker.address,
+                cpu_percent,
+                memory_available_gb,
             )
             await asyncio.sleep(self.log_interval)

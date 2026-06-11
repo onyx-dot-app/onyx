@@ -1,7 +1,6 @@
-import requests
-
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
+from tests.integration.common_utils.http_client import client
 
 
 def test_create_chat_session_and_send_messages() -> None:
@@ -15,7 +14,7 @@ def test_create_chat_session_and_send_messages() -> None:
     headers = {"Authorization": f"Bearer {test_user.id}"}
 
     # Create a new chat session
-    create_session_response = requests.post(
+    create_session_response = client.post(
         f"{base_url}/chat/create-chat-session",
         json={
             "description": "Test Chat",
@@ -28,7 +27,7 @@ def test_create_chat_session_and_send_messages() -> None:
 
     # Send first message
     first_message = "Hello, this is a test message."
-    send_message_response = requests.post(
+    send_message_response = client.post(
         f"{base_url}/chat/send-chat-message",
         json={
             "chat_session_id": chat_session_id,
@@ -42,7 +41,7 @@ def test_create_chat_session_and_send_messages() -> None:
 
     # Send second message
     second_message = "Can you provide more information?"
-    send_message_response = requests.post(
+    send_message_response = client.post(
         f"{base_url}/chat/send-chat-message",
         json={
             "chat_session_id": chat_session_id,
@@ -55,7 +54,7 @@ def test_create_chat_session_and_send_messages() -> None:
     assert send_message_response.status_code == 200
 
     # Verify chat session details
-    get_session_response = requests.get(
+    get_session_response = client.get(
         f"{base_url}/chat/get-chat-session/{chat_session_id}", headers=headers
     )
     assert get_session_response.status_code == 200

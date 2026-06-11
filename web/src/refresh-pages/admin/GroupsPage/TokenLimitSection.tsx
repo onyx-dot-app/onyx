@@ -3,6 +3,9 @@
 import { useRef } from "react";
 import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button } from "@opal/components";
+import { Disabled } from "@opal/core";
+import type { RichStr } from "@opal/types";
+import { planTagProps } from "@/lib/tier-badge";
 import { Section } from "@/layouts/general-layouts";
 import Card from "@/refresh-components/cards/Card";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
@@ -22,13 +25,20 @@ export interface TokenLimit {
 interface TokenLimitSectionProps {
   limits: TokenLimit[];
   onLimitsChange: (limits: TokenLimit[]) => void;
+  disabled?: boolean;
+  disabledTooltip?: string | RichStr;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
+function TokenLimitSection({
+  limits,
+  onLimitsChange,
+  disabled,
+  disabledTooltip,
+}: TokenLimitSectionProps) {
   const nextKeyRef = useRef(limits.length);
   const keysRef = useRef<number[]>(limits.map((_, i) => i));
 
@@ -72,74 +82,82 @@ function TokenLimitSection({ limits, onLimitsChange }: TokenLimitSectionProps) {
       <SimpleCollapsible.Header
         title="Token Rate Limit"
         description="Limit number of tokens this group can use within a given time period."
+        tag={
+          disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined
+        }
       />
       <SimpleCollapsible.Content>
-        <Card>
-          <Section
-            gap={0.5}
-            height="auto"
-            alignItems="stretch"
-            justifyContent="start"
-            width="full"
-          >
-            {/* Column headers */}
-            <div className="flex flex-wrap items-center gap-1 pr-[40px]">
-              <div className="flex-1 flex items-center min-w-[160px]">
-                <Text mainUiAction text04>
-                  Token Limit
-                </Text>
-                <Text mainUiMuted text03 className="ml-0.5">
-                  (thousand tokens)
-                </Text>
-              </div>
-              <div className="flex-1 flex items-center min-w-[160px]">
-                <Text mainUiAction text04>
-                  Time Window
-                </Text>
-                <Text mainUiMuted text03 className="ml-0.5">
-                  (hours)
-                </Text>
-              </div>
-            </div>
-
-            {/* Limit rows */}
-            {limits.map((limit, i) => (
-              <div key={keysRef.current[i]} className="flex items-center gap-1">
-                <div className="flex-1">
-                  <InputNumber
-                    value={limit.tokenBudget}
-                    onChange={(v) => updateLimit(i, "tokenBudget", v)}
-                    min={0}
-                    placeholder="Token limit in thousands"
-                  />
-                </div>
-                <div className="flex-1">
-                  <InputNumber
-                    value={limit.periodHours}
-                    onChange={(v) => updateLimit(i, "periodHours", v)}
-                    min={1}
-                    placeholder="24"
-                  />
-                </div>
-                <IconButton
-                  small
-                  icon={SvgMinusCircle}
-                  onClick={() => removeLimit(i)}
-                />
-              </div>
-            ))}
-
-            {/* Add button */}
-            <Button
-              icon={SvgPlusCircle}
-              prominence="secondary"
-              size="md"
-              onClick={addLimit}
+        <Disabled disabled={disabled} tooltip={disabledTooltip}>
+          <Card>
+            <Section
+              gap={0.5}
+              height="auto"
+              alignItems="stretch"
+              justifyContent="start"
+              width="full"
             >
-              Add Limit
-            </Button>
-          </Section>
-        </Card>
+              {/* Column headers */}
+              <div className="flex flex-wrap items-center gap-1 pr-[40px]">
+                <div className="flex-1 flex items-center min-w-[160px]">
+                  <Text mainUiAction text04>
+                    Token Limit
+                  </Text>
+                  <Text mainUiMuted text03 className="ml-0.5">
+                    (thousand tokens)
+                  </Text>
+                </div>
+                <div className="flex-1 flex items-center min-w-[160px]">
+                  <Text mainUiAction text04>
+                    Time Window
+                  </Text>
+                  <Text mainUiMuted text03 className="ml-0.5">
+                    (hours)
+                  </Text>
+                </div>
+              </div>
+
+              {/* Limit rows */}
+              {limits.map((limit, i) => (
+                <div
+                  key={keysRef.current[i]}
+                  className="flex items-center gap-1"
+                >
+                  <div className="flex-1">
+                    <InputNumber
+                      value={limit.tokenBudget}
+                      onChange={(v) => updateLimit(i, "tokenBudget", v)}
+                      min={0}
+                      placeholder="Token limit in thousands"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <InputNumber
+                      value={limit.periodHours}
+                      onChange={(v) => updateLimit(i, "periodHours", v)}
+                      min={1}
+                      placeholder="24"
+                    />
+                  </div>
+                  <IconButton
+                    small
+                    icon={SvgMinusCircle}
+                    onClick={() => removeLimit(i)}
+                  />
+                </div>
+              ))}
+
+              {/* Add button */}
+              <Button
+                icon={SvgPlusCircle}
+                prominence="secondary"
+                size="md"
+                onClick={addLimit}
+              >
+                Add Limit
+              </Button>
+            </Section>
+          </Card>
+        </Disabled>
       </SimpleCollapsible.Content>
     </SimpleCollapsible>
   );

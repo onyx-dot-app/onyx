@@ -7,13 +7,14 @@ import {
   moveChatSession as moveChatSessionService,
   removeChatSessionFromProject as removeChatSessionFromProjectService,
 } from "@/app/app/projects/projectsService";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import { FiMoreHorizontal } from "react-icons/fi";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCallback, useState, useMemo } from "react";
-import MoveCustomAgentChatModal from "@/components/modals/MoveCustomAgentChatModal";
+import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 // PopoverMenu already imported above
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { Button } from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
@@ -227,7 +228,7 @@ export function ChatSessionMorePopup({
           >
             <div
               className={cn(
-                "p-1 rounded cursor-pointer select-none transition-opacity duration-150",
+                "p-1 rounded-sm cursor-pointer select-none transition-opacity duration-150",
                 isVisible || popoverOpen
                   ? "opacity-100 pointer-events-auto"
                   : "opacity-0 pointer-events-none"

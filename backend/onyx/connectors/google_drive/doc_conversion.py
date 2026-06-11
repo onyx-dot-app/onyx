@@ -13,6 +13,9 @@ from pydantic import BaseModel
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    extract_and_stage_tabular_file,
+)
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     tabular_file_to_sections,
@@ -36,13 +39,16 @@ from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import pptx_to_text
 from onyx.file_processing.extract_file_text import read_docx_file
 from onyx.file_processing.extract_file_text import read_pdf_file
+from onyx.file_processing.extract_file_text import read_pptx_file
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.file_types import OnyxMimeTypes
+from onyx.file_processing.file_types import PRESENTATION_MIME_TYPE
 from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPE
+from onyx.file_processing.image_utils import make_image_callback
 from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -50,6 +56,12 @@ from onyx.utils.variable_functionality import (
 from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
+
+
+class FileExtractionResult(BaseModel):
+    sections: list[TextSection | ImageSection | TabularSection]
+    staged_file_id: str | None = None
+
 
 # Cache for folder path lookups to avoid redundant API calls
 # Maps folder_id -> (folder_name, parent_id)
@@ -79,7 +91,7 @@ def _get_folder_info(
         _folder_cache[folder_id] = (folder_name, parent_id)
         return folder_name, parent_id
     except HttpError as e:
-        logger.warning(f"Failed to get folder info for {folder_id}: {e}")
+        logger.warning("Failed to get folder info for %s: %s", folder_id, e)
         _folder_cache[folder_id] = ("Unknown", None)
         return "Unknown", None
 
@@ -100,7 +112,7 @@ def _get_drive_name(service: GoogleDriveService, drive_id: str) -> str:
         _folder_cache[cache_key] = (drive_name, None)
         return drive_name
     except HttpError as e:
-        logger.warning(f"Failed to get drive name for {drive_id}: {e}")
+        logger.warning("Failed to get drive name for %s: %s", drive_id, e)
         _folder_cache[cache_key] = (f"Shared Drive {drive_id}", None)
         return f"Shared Drive {drive_id}"
 
@@ -205,14 +217,7 @@ CHUNK_SIZE_BUFFER = 64  # extra bytes past the limit to read
 GOOGLE_MIME_TYPES_TO_EXPORT = {
     GDriveMimeType.DOC.value: "text/plain",
     GDriveMimeType.SPREADSHEET.value: "text/csv",
-    GDriveMimeType.PPT.value: "text/plain",
-}
-
-# Define Google MIME types mapping
-GOOGLE_MIME_TYPES = {
-    GDriveMimeType.DOC.value: "text/plain",
-    GDriveMimeType.SPREADSHEET.value: "text/csv",
-    GDriveMimeType.PPT.value: "text/plain",
+    GDriveMimeType.PPT.value: PRESENTATION_MIME_TYPE,
 }
 
 
@@ -284,13 +289,15 @@ def _download_request(request: Any, file_id: str, size_threshold: int) -> bytes:
         )
         if download_progress.resumable_progress > size_threshold:
             logger.warning(
-                f"File {file_id} exceeds size threshold of {size_threshold}. Skipping2."
+                "File %s exceeds size threshold of %s. Skipping2.",
+                file_id,
+                size_threshold,
             )
             return bytes()
 
     response = response_bytes.getvalue()
     if not response:
-        logger.warning(f"Failed to download {file_id}")
+        logger.warning("Failed to download %s", file_id)
         return bytes()
     return response
 
@@ -300,7 +307,8 @@ def _download_and_extract_sections_basic(
     service: GoogleDriveService,
     allow_images: bool,
     size_threshold: int,
-) -> list[TextSection | ImageSection | TabularSection]:
+    raw_file_callback: RawFileCallback | None = None,
+) -> FileExtractionResult:
     """Extract text and images from a Google Drive file."""
     file_id = file["id"]
     file_name = file["name"]
@@ -313,10 +321,35 @@ def _download_and_extract_sections_basic(
     def response_call() -> bytes:
         return download_request(service, file_id, size_threshold)
 
+    def _extract_tabular(
+        raw_bytes: bytes, name: str, content_type: str
+    ) -> FileExtractionResult:
+        staged_file_id: str | None = None
+        if raw_file_callback is not None:
+            result = extract_and_stage_tabular_file(
+                file=io.BytesIO(raw_bytes),
+                file_name=name,
+                content_type=content_type,
+                raw_file_callback=raw_file_callback,
+                link=link,
+            )
+            tabular_sections = result.sections
+            staged_file_id = result.staged_file_id
+        else:
+            tabular_sections = tabular_file_to_sections(
+                io.BytesIO(raw_bytes),
+                file_name=name,
+                link=link,
+            )
+        sections: list[TextSection | ImageSection | TabularSection] = list(
+            tabular_sections
+        )
+        return FileExtractionResult(sections=sections, staged_file_id=staged_file_id)
+
     if mime_type in OnyxMimeTypes.IMAGE_MIME_TYPES:
         # Skip images if not explicitly enabled
         if not allow_images:
-            return []
+            return FileExtractionResult(sections=[])
 
         # Store images for later processing
         sections: list[TextSection | ImageSection | TabularSection] = []
@@ -331,8 +364,8 @@ def _download_and_extract_sections_basic(
             )
             sections.append(section)
         except Exception as e:
-            logger.error(f"Failed to process image {file_name}: {e}")
-        return sections
+            logger.error("Failed to process image %s: %s", file_name, e)
+        return FileExtractionResult(sections=sections)
 
     # For Google Docs, Sheets, and Slides, export via the Drive API
     if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
@@ -342,38 +375,50 @@ def _download_and_extract_sections_basic(
         )
         response = _download_request(request, file_id, size_threshold)
         if not response:
-            logger.warning(f"Failed to export {file_name} as {export_mime_type}")
-            return []
+            logger.warning("Failed to export %s as %s", file_name, export_mime_type)
+            return FileExtractionResult(sections=[])
 
         if export_mime_type in OnyxMimeTypes.TABULAR_MIME_TYPES:
             # Synthesize an extension on the filename
             ext = ".xlsx" if export_mime_type == SPREADSHEET_MIME_TYPE else ".csv"
-            return list(
-                tabular_file_to_sections(
-                    io.BytesIO(response),
-                    file_name=f"{file_name}{ext}",
-                    link=link,
-                )
+            return _extract_tabular(
+                raw_bytes=response,
+                name=f"{file_name}{ext}",
+                content_type=export_mime_type,
             )
 
+        if export_mime_type == PRESENTATION_MIME_TYPE:
+            pptx_sections: list[TextSection | ImageSection | TabularSection] = []
+            text, _ = read_pptx_file(
+                io.BytesIO(response),
+                file_name=file_name,
+                extract_images=allow_images,
+                image_callback=make_image_callback(
+                    pptx_sections, file_id, file_name, link
+                ),
+            )
+            if text:
+                pptx_sections.insert(0, TextSection(link=link, text=text))
+            return FileExtractionResult(sections=pptx_sections)
+
         text = response.decode("utf-8")
-        return [TextSection(link=link, text=text)]
+        return FileExtractionResult(sections=[TextSection(link=link, text=text)])
 
     # Process based on mime type
     if mime_type == "text/plain":
         try:
             text = response_call().decode("utf-8")
-            return [TextSection(link=link, text=text)]
+            return FileExtractionResult(sections=[TextSection(link=link, text=text)])
         except UnicodeDecodeError as e:
-            logger.warning(f"Failed to extract text from {file_name}: {e}")
-            return []
+            logger.warning("Failed to extract text from %s: %s", file_name, e)
+            return FileExtractionResult(sections=[])
 
     elif (
         mime_type
         == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ):
         text, _ = read_docx_file(io.BytesIO(response_call()))
-        return [TextSection(link=link, text=text)]
+        return FileExtractionResult(sections=[TextSection(link=link, text=text)])
 
     elif (
         mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -389,20 +434,23 @@ def _download_and_extract_sections_basic(
             and not is_tabular_file(file_name)
         ):
             tabular_file_name = f"{file_name}.xlsx"
-        return list(
-            tabular_file_to_sections(
-                io.BytesIO(response_call()),
-                file_name=tabular_file_name,
-                link=link,
-            )
+        return _extract_tabular(
+            response_call(), name=tabular_file_name, content_type=mime_type
         )
 
-    elif (
-        mime_type
-        == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    ):
-        text = pptx_to_text(io.BytesIO(response_call()), file_name=file_name)
-        return [TextSection(link=link, text=text)] if text else []
+    elif mime_type == PRESENTATION_MIME_TYPE:
+        pptx_sections_native: list[TextSection | ImageSection | TabularSection] = []
+        text, _ = read_pptx_file(
+            io.BytesIO(response_call()),
+            file_name=file_name,
+            extract_images=allow_images,
+            image_callback=make_image_callback(
+                pptx_sections_native, file_id, file_name, link
+            ),
+        )
+        if text:
+            pptx_sections_native.insert(0, TextSection(link=link, text=text))
+        return FileExtractionResult(sections=pptx_sections_native)
 
     elif mime_type == "application/pdf":
         text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_call()))
@@ -421,21 +469,21 @@ def _download_and_extract_sections_basic(
                 )
                 pdf_sections.append(section)
         except Exception as e:
-            logger.error(f"Failed to process PDF images in {file_name}: {e}")
-        return pdf_sections
+            logger.error("Failed to process PDF images in %s: %s", file_name, e)
+        return FileExtractionResult(sections=pdf_sections)
 
     # Final attempt at extracting text
     file_ext = get_file_ext(file.get("name", ""))
     if file_ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
-        logger.warning(f"Skipping file {file.get('name')} due to extension.")
-        return []
+        logger.warning("Skipping file %s due to extension.", file.get("name"))
+        return FileExtractionResult(sections=[])
 
     try:
         text = extract_file_text(io.BytesIO(response_call()), file_name)
-        return [TextSection(link=link, text=text)]
+        return FileExtractionResult(sections=[TextSection(link=link, text=text)])
     except Exception as e:
-        logger.warning(f"Failed to extract text from {file_name}: {e}")
-        return []
+        logger.warning("Failed to extract text from %s: %s", file_name, e)
+        return FileExtractionResult(sections=[])
 
 
 def _find_nth(haystack: str, needle: str, n: int, start: int = 0) -> int:
@@ -476,7 +524,8 @@ def align_basic_advanced(
         ).strip()
         if heading_key == "":
             logger.warning(
-                f"Cannot match heading: {heading}, its link will come from the following section"
+                "Cannot match heading: %s, its link will come from the following section",
+                heading,
             )
             continue
         heading_offset = heading.find(heading_key)
@@ -491,7 +540,9 @@ def align_basic_advanced(
         )
         if heading_start < 0:
             logger.warning(
-                f"Heading key {heading_key} from heading {heading} not found in basic text"
+                "Heading key %s from heading %s not found in basic text",
+                heading_key,
+                heading,
             )
             heading_start = prev_start
             continue
@@ -564,6 +615,7 @@ def convert_drive_item_to_document(
     permission_sync_context: PermissionSyncContext | None,
     retriever_emails: list[str],
     file: GoogleDriveFileType,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> Document | ConnectorFailure | None:
     """
     Attempt to convert a drive item to a document with each retriever email
@@ -590,6 +642,7 @@ def convert_drive_item_to_document(
             retriever_email,
             file,
             permission_sync_context,
+            raw_file_callback,
         )
 
         # There are a variety of permissions-based errors that occasionally occur
@@ -618,9 +671,11 @@ def convert_drive_item_to_document(
         # This SHOULD happen very rarely, and we don't want to break the indexing process when
         # a high volume of 403s occurs early. We leave a verbose log to help investigate.
         logger.error(
-            f"Skipping file id: {file.get('id')} name: {file.get('name')} due to 403 error."
-            f"Attempted to retrieve with {retriever_emails},"
-            f"got the following errors: {first_error.failure_message}"
+            "Skipping file id: %s name: %s due to 403 error.Attempted to retrieve with %s,got the following errors: %s",
+            file.get("id"),
+            file.get("name"),
+            retriever_emails,
+            first_error.failure_message,
         )
         return None
     return first_error
@@ -635,11 +690,13 @@ def _convert_drive_item_to_document(
     # if not specified, we will not sync permissions
     # will also be a no-op if EE is not enabled
     permission_sync_context: PermissionSyncContext | None,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
     """
     sections: list[TextSection | ImageSection | TabularSection] = []
+    staged_file_id: str | None = None
 
     # Only construct these services when needed
     def _get_drive_service() -> GoogleDriveService:
@@ -661,18 +718,20 @@ def _convert_drive_item_to_document(
             try:
                 size_int = int(size_str)
             except ValueError:
-                logger.warning(f"Parsing string to int failed: size_str={size_str}")
+                logger.warning("Parsing string to int failed: size_str=%s", size_str)
             else:
                 if size_int > size_threshold:
                     logger.warning(
-                        f"{file.get('name')} exceeds size threshold of {size_threshold}. Skipping."
+                        "%s exceeds size threshold of %s. Skipping.",
+                        file.get("name"),
+                        size_threshold,
                     )
                     return None
 
         # If it's a Google Doc, we might do advanced parsing
         if file.get("mimeType") == GDriveMimeType.DOC.value:
             try:
-                logger.debug(f"starting advanced parsing for {file.get('name')}")
+                logger.debug("starting advanced parsing for %s", file.get("name"))
                 # get_document_sections is the advanced approach for Google Docs
                 doc_sections = get_document_sections(
                     docs_service=_get_docs_service(),
@@ -684,26 +743,41 @@ def _convert_drive_item_to_document(
                     )
                     if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
                         logger.debug(
-                            f"found smart chips in {file.get('name')}, aligning with basic sections"
+                            "found smart chips in %s, aligning with basic sections",
+                            file.get("name"),
                         )
-                        basic_sections = _download_and_extract_sections_basic(
-                            file, _get_drive_service(), allow_images, size_threshold
+                        basic_extraction = _download_and_extract_sections_basic(
+                            file,
+                            _get_drive_service(),
+                            allow_images,
+                            size_threshold,
+                            raw_file_callback,
                         )
-                        sections = align_basic_advanced(basic_sections, doc_sections)
+                        sections = align_basic_advanced(
+                            basic_extraction.sections, doc_sections
+                        )
+                        staged_file_id = basic_extraction.staged_file_id
 
             except Exception as e:
                 logger.warning(
-                    f"Error in advanced parsing: {e}. Falling back to basic extraction."
+                    "Error in advanced parsing: %s. Falling back to basic extraction.",
+                    e,
                 )
         # Not Google Doc, attempt basic extraction
         else:
-            sections = _download_and_extract_sections_basic(
-                file, _get_drive_service(), allow_images, size_threshold
+            basic_extraction = _download_and_extract_sections_basic(
+                file,
+                _get_drive_service(),
+                allow_images,
+                size_threshold,
+                raw_file_callback,
             )
+            sections = basic_extraction.sections
+            staged_file_id = basic_extraction.staged_file_id
 
         # If we still don't have any sections, skip this file
         if not sections:
-            logger.warning(f"No content extracted from {file.get('name')}. Skipping.")
+            logger.warning("No content extracted from %s. Skipping.", file.get("name"))
             return None
 
         doc_id = onyx_document_id_from_drive_file(file)
@@ -760,13 +834,14 @@ def _convert_drive_item_to_document(
             ),
             external_access=external_access,
             parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
+            file_id=staged_file_id,
         )
     except Exception as e:
         doc_id = "unknown"
         try:
             doc_id = onyx_document_id_from_drive_file(file)
         except Exception as e2:
-            logger.warning(f"Error getting document id from file: {e2}")
+            logger.warning("Error getting document id from file: %s", e2)
 
         file_name = file.get("name")
         error_str = (
@@ -774,9 +849,9 @@ def _convert_drive_item_to_document(
         )
         if isinstance(e, HttpError) and e.status_code == 403:
             logger.warning(
-                f"Uncommon permissions error while downloading file. User "
-                f"{retriever_email} was able to see file {file_name} "
-                "but cannot download it."
+                "Uncommon permissions error while downloading file. User %s was able to see file %s but cannot download it.",
+                retriever_email,
+                file_name,
             )
             logger.warning(error_str)
 

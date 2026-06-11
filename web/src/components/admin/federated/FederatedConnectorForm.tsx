@@ -29,11 +29,10 @@ import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-
 import { toast } from "@/hooks/useToast";
 
 import { Badge } from "@/components/ui/badge";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Tooltip } from "@opal/components";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
-import { SvgSettings } from "@opal/icons";
+import { Checkbox } from "@opal/components";
+import { SvgSettings, SvgSimpleLoader } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -871,7 +870,7 @@ export function FederatedConnectorForm({
                 type="submit"
                 disabled={isSubmitting || !formState.schema}
                 className="flex"
-                leftIcon={isSubmitting ? SimpleLoader : undefined}
+                leftIcon={isSubmitting ? SvgSimpleLoader : undefined}
               >
                 {isSubmitting
                   ? isEditMode

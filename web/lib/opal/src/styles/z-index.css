@@ -1,0 +1,19 @@
+:root {
+  /* Must sit above sticky table headers so the settings page header scrolls
+     over pinned columns without being obscured. */
+  --z-settings-header: 11;
+
+  /* Interactive overlays */
+  --z-popover: 1200;
+  --z-tooltip: 1300;
+}
+
+.z-settings-header {
+  z-index: var(--z-settings-header);
+}
+.z-popover {
+  z-index: var(--z-popover);
+}
+.z-tooltip {
+  z-index: var(--z-tooltip);
+}

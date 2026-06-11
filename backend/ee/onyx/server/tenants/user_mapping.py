@@ -48,7 +48,7 @@ def get_tenant_id_for_email(email: str) -> str:
                     db_session.commit()
                     tenant_id = mapping.tenant_id
     except Exception as e:
-        logger.exception(f"Error getting tenant id for email {email}: {e}")
+        logger.exception("Error getting tenant id for email %s: %s", email, e)
         raise exceptions.UserNotExists()
 
     if tenant_id is None:
@@ -68,13 +68,11 @@ def user_owns_a_tenant(email: str) -> bool:
 
 def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     """
-    Add users to a tenant with proper transaction handling.
-    Checks if users already have a tenant mapping to avoid duplicates.
+    Add users to a tenant. If a user has an active mapping elsewhere,
+    they get an inactive (invitation) mapping until they accept.
 
-    If a user already has an active mapping to a different tenant, they receive
-    an inactive mapping (invitation) to this tenant. They can accept the
-    invitation later to switch tenants.
-
+    Calls ``enforce_cloud_seat_limit`` before inserting any new active
+    mapping so Stripe auto-billing fails the request closed on decline.
     """
     unique_emails = set(emails)
     if not unique_emails:
@@ -109,6 +107,26 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
             )
             emails_with_active_mapping = {m.email for m in active_mappings}
 
+            # Emails that will produce a NEW active mapping (consume a
+            # seat). Invitations to other tenants don't count.
+            new_active_seat_emails = [
+                email
+                for email in unique_emails
+                if email not in emails_with_mapping
+                and email not in emails_with_active_mapping
+            ]
+
+            if new_active_seat_emails:
+                from ee.onyx.server.tenants.billing import enforce_cloud_seat_limit
+
+                # Lock + bill held across the inserts below; rolled back
+                # on Stripe decline by the outer ``except Exception``.
+                enforce_cloud_seat_limit(
+                    seats_needed=len(new_active_seat_emails),
+                    tenant_id=tenant_id,
+                    db_session=db_session,
+                )
+
             # Add mappings for emails that don't already have one to this tenant
             for email in unique_emails:
                 if email in emails_with_mapping:
@@ -126,10 +144,10 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
 
             # Commit the transaction
             db_session.commit()
-            logger.info(f"Successfully added users {emails} to tenant {tenant_id}")
+            logger.info("Successfully added users %s to tenant %s", emails, tenant_id)
 
         except Exception:
-            logger.exception(f"Failed to add users to tenant {tenant_id}")
+            logger.exception("Failed to add users to tenant %s", tenant_id)
             db_session.rollback()
             raise
 
@@ -152,7 +170,7 @@ def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
             db_session.commit()
         except Exception as e:
             logger.exception(
-                f"Failed to remove users from tenant {tenant_id}: {str(e)}"
+                "Failed to remove users from tenant %s: %s", tenant_id, str(e)
             )
             db_session.rollback()
 
@@ -229,7 +247,9 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
             if active_mapping:
                 db_session.delete(active_mapping)
                 logger.info(
-                    f"Deleted existing active mapping for user {email} in tenant {tenant_id}"
+                    "Deleted existing active mapping for user %s in tenant %s",
+                    email,
+                    tenant_id,
                 )
 
             # Find the inactive mapping for this user and tenant
@@ -253,16 +273,21 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
                 # Activate this mapping
                 mapping.active = True
                 db_session.commit()
-                logger.info(f"User {email} accepted invitation to tenant {tenant_id}")
+                logger.info(
+                    "User %s accepted invitation to tenant %s", email, tenant_id
+                )
             else:
                 logger.warning(
-                    f"No invitation found for user {email} in tenant {tenant_id}"
+                    "No invitation found for user %s in tenant %s", email, tenant_id
                 )
 
         except Exception as e:
             db_session.rollback()
             logger.exception(
-                f"Failed to accept invitation for user {email} to tenant {tenant_id}: {str(e)}"
+                "Failed to accept invitation for user %s to tenant %s: %s",
+                email,
+                tenant_id,
+                str(e),
             )
             raise
 
@@ -273,7 +298,7 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
         if email in invited_users:
             invited_users.remove(email)
             write_invited_users(invited_users)
-            logger.info(f"Removed {email} from invited users list after acceptance")
+            logger.info("Removed %s from invited users list after acceptance", email)
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
@@ -297,10 +322,10 @@ def deny_user_invite(email: str, tenant_id: str) -> None:
 
         db_session.commit()
         if result:
-            logger.info(f"User {email} denied invitation to tenant {tenant_id}")
+            logger.info("User %s denied invitation to tenant %s", email, tenant_id)
         else:
             logger.warning(
-                f"No invitation found for user {email} in tenant {tenant_id}"
+                "No invitation found for user %s in tenant %s", email, tenant_id
             )
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:

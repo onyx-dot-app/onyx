@@ -4,14 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { renderAsync } from "docx-preview";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import Text from "@/refresh-components/texts/Text";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SvgSimpleLoader } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
-import {
-  CopyButton,
-  DownloadButton,
-} from "@/sections/modals/PreviewModal/variants/shared";
+import { CopyButton } from "@opal/components";
+import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 
 const DOCX_MIMES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -107,7 +105,7 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
     >
       {isLoading && (
         <Section>
-          <SimpleLoader className="h-8 w-8" />
+          <SvgSimpleLoader className="h-8 w-8" />
         </Section>
       )}
       {/* Style container for docx-preview generated styles */}
@@ -167,7 +165,11 @@ export const docxVariant: PreviewVariant = {
   renderFooterRight: (ctx: PreviewContext) => (
     <Section flexDirection="row" width="fit">
       {lastDocxResult && (
-        <CopyButton getText={() => lastDocxResult?.plainText ?? ""} />
+        <CopyButton
+          size="sm"
+          tooltip="Copy content"
+          getCopyText={() => lastDocxResult?.plainText ?? ""}
+        />
       )}
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />
     </Section>

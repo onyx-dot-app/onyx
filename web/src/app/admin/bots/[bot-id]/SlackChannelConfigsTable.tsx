@@ -2,7 +2,7 @@
 
 import { PageSelector } from "@/components/PageSelector";
 import { toast } from "@/hooks/useToast";
-import { EditIcon } from "@/components/icons/icons";
+import { SvgEdit } from "@opal/icons";
 import { SlackChannelConfig } from "@/lib/types";
 import {
   Table,
@@ -17,9 +17,8 @@ import type { Route } from "next";
 import { useState } from "react";
 import { deleteSlackChannelConfig, isPersonaASlackBotPersona } from "./lib";
 import { Card } from "@/components/ui/card";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
 import { Button } from "@opal/components";
-import { SvgSettings, SvgTrash } from "@opal/icons";
+import { SvgPlusCircle, SvgSettings, SvgTrash } from "@opal/icons";
 const numToDisplay = 50;
 
 export interface SlackChannelConfigsTableProps {
@@ -52,9 +51,13 @@ export default function SlackChannelConfigsTable({
         >
           Edit Default Configuration
         </Button>
-        <CreateButton href={`/admin/bots/${slackBotId}/channels/new`} secondary>
+        <Button
+          icon={SvgPlusCircle}
+          prominence="secondary"
+          href={`/admin/bots/${slackBotId}/channels/new`}
+        >
           New Channel Configuration
-        </CreateButton>
+        </Button>
       </div>
 
       <div>
@@ -84,7 +87,10 @@ export default function SlackChannelConfigsTable({
                       <TableCell>
                         <div className="flex gap-x-2">
                           <div className="my-auto">
-                            <EditIcon className="text-muted-foreground" />
+                            <SvgEdit
+                              size={16}
+                              className="text-muted-foreground"
+                            />
                           </div>
                           <div className="my-auto">
                             {"#" +

@@ -27,9 +27,7 @@ from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_PDF_SIZE_BYTES,
 )
-from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
-    OnyxWebCrawler,
-)
+from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
@@ -75,7 +73,11 @@ def _get_active_search_provider(
         provider_type=WebSearchProviderType(provider_model.provider_type),
         is_active=provider_model.is_active,
         config=provider_model.config or {},
-        has_api_key=bool(provider_model.api_key),
+        masked_api_key=(
+            provider_model.api_key.get_value(apply_mask=True)
+            if provider_model.api_key
+            else None
+        ),
     )
 
     if provider_model.api_key is None:
@@ -143,7 +145,11 @@ def _get_active_content_provider(
         provider_type=provider_type,
         is_active=provider_model.is_active,
         config=provider_model.config or WebContentProviderConfig(),
-        has_api_key=bool(provider_model.api_key),
+        masked_api_key=(
+            provider_model.api_key.get_value(apply_mask=True)
+            if provider_model.api_key
+            else None
+        ),
     )
 
     return provider_view, provider

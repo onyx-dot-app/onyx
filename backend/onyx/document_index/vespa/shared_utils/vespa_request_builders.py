@@ -4,7 +4,7 @@ from datetime import timezone
 
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
-from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.document_index.vespa.internal_types import VespaChunkRequest
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
@@ -155,7 +155,7 @@ def build_vespa_filters(
         try:
             pid = int(persona_id)
         except Exception:
-            logger.warning(f"Invalid persona ID: {persona_id}")
+            logger.warning("Invalid persona ID: %s", persona_id)
             return ""
         return f'({PERSONAS} contains "{pid}")'
 

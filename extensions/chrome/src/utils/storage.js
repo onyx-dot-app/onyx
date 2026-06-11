@@ -13,7 +13,7 @@ export async function getOnyxDomain() {
 export function setOnyxDomain(domain, callback) {
   chrome.storage.local.set(
     { [CHROME_SPECIFIC_STORAGE_KEYS.ONYX_DOMAIN]: domain },
-    callback,
+    callback
   );
 }
 

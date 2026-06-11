@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,14 +21,22 @@ import (
 )
 
 // Client is the Onyx API client.
+//
+// Three http.Clients are kept so each call site can pick a timeout matched to
+// its expected work: 3min for quick JSON endpoints, 5min for /search (which
+// runs LLM query expansion + relevance selection), and 5min for streaming
+// chat responses and uploads.
 type Client struct {
-	baseURL        string
-	apiKey         string
-	httpClient     *http.Client // default 30s timeout for quick requests
-	longHTTPClient *http.Client // 5min timeout for streaming/uploads
+	baseURL             string
+	apiKey              string
+	httpClient          *http.Client
+	searchHTTPClient    *http.Client
+	streamingHTTPClient *http.Client
 }
 
 // NewClient creates a new API client from config.
+// ServerURL is the server origin (e.g. "https://cloud.onyx.app").
+// APIURL appends the /api prefix to form the API base URL.
 func NewClient(cfg config.OnyxCliConfig) *Client {
 	var transport *http.Transport
 	if t, ok := http.DefaultTransport.(*http.Transport); ok {
@@ -35,23 +45,21 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 		transport = &http.Transport{}
 	}
 	return &Client{
-		baseURL: strings.TrimRight(cfg.ServerURL, "/"),
+		baseURL: config.APIURL(cfg.ServerURL),
 		apiKey:  cfg.APIKey,
 		httpClient: &http.Client{
-			Timeout:   30 * time.Second,
+			Timeout:   3 * time.Minute,
 			Transport: transport,
 		},
-		longHTTPClient: &http.Client{
+		searchHTTPClient: &http.Client{
+			Timeout:   5 * time.Minute,
+			Transport: transport,
+		},
+		streamingHTTPClient: &http.Client{
 			Timeout:   5 * time.Minute,
 			Transport: transport,
 		},
 	}
-}
-
-// UpdateConfig replaces the client's config.
-func (c *Client) UpdateConfig(cfg config.OnyxCliConfig) {
-	c.baseURL = strings.TrimRight(cfg.ServerURL, "/")
-	c.apiKey = cfg.APIKey
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
@@ -67,7 +75,37 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 	return req, nil
 }
 
-func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, result any) error {
+func checkResponse(resp *http.Response) error {
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if isHTMLResponse(resp.Header.Get("Content-Type"), body) {
+		return &OnyxAPIError{
+			StatusCode: resp.StatusCode,
+			Detail:     "server returned HTML instead of JSON — check that your server URL is correct",
+		}
+	}
+	return &OnyxAPIError{StatusCode: resp.StatusCode, Detail: string(body)}
+}
+
+func isHTMLResponse(contentType string, body []byte) bool {
+	if strings.Contains(contentType, "text/html") {
+		return true
+	}
+	lower := strings.ToLower(strings.TrimSpace(string(body)))
+	return strings.HasPrefix(lower, "<!doctype") || strings.HasPrefix(lower, "<html")
+}
+
+func wrapTimeoutError(err error) error {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return &OnyxAPIError{StatusCode: 408, Detail: fmt.Sprintf("request timed out: %v", err)}
+	}
+	return err
+}
+
+func (c *Client) doJSONWith(ctx context.Context, httpClient *http.Client, method, path string, reqBody any, result any) error {
 	var body io.Reader
 	if reqBody != nil {
 		data, err := json.Marshal(reqBody)
@@ -85,21 +123,33 @@ func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, r
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
-		return err
+		return wrapTimeoutError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return &OnyxAPIError{StatusCode: resp.StatusCode, Detail: string(respBody)}
+	if err := checkResponse(resp); err != nil {
+		return err
 	}
 
 	if result != nil {
 		return json.NewDecoder(resp.Body).Decode(result)
 	}
 	return nil
+}
+
+func (c *Client) doJSON(ctx context.Context, method, path string, reqBody any, result any) error {
+	return c.doJSONWith(ctx, c.httpClient, method, path, reqBody, result)
+}
+
+// Search calls POST /api/search and returns the response.
+func (c *Client) Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error) {
+	var resp models.SearchResponse
+	if err := c.doJSONWith(ctx, c.searchHTTPClient, "POST", "/search", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
 // TestConnection checks if the server is reachable and credentials are valid.
@@ -121,13 +171,13 @@ func (c *Client) TestConnection(ctx context.Context) error {
 
 	if resp.StatusCode == 403 {
 		if strings.Contains(serverHeader, "awselb") || strings.Contains(serverHeader, "amazons3") {
-			return fmt.Errorf("blocked by AWS load balancer (HTTP 403 on all requests).\n  Your IP address may not be in the ALB's security group or WAF allowlist")
+			return &AuthError{Message: "blocked by AWS load balancer (HTTP 403 on all requests).\n  Your IP address may not be in the ALB's security group or WAF allowlist"}
 		}
-		return fmt.Errorf("HTTP 403 on base URL — the server is blocking all traffic.\n  This is likely a firewall, WAF, or IP allowlist restriction")
+		return &AuthError{Message: "HTTP 403 on base URL — the server is blocking all traffic.\n  This is likely a firewall, WAF, or IP allowlist restriction"}
 	}
 
 	// Step 2: Authenticated check
-	req2, err := c.newRequest(ctx, "GET", "/api/me", nil)
+	req2, err := c.newRequest(ctx, "GET", "/me", nil)
 	if err != nil {
 		return fmt.Errorf("server reachable but API error: %w", err)
 	}
@@ -152,22 +202,22 @@ func (c *Client) TestConnection(ctx context.Context) error {
 			return &AuthError{Message: fmt.Sprintf("HTTP %d from a reverse proxy (not the Onyx backend).\n  Check your deployment's ingress / proxy configuration", resp2.StatusCode)}
 		}
 		if resp2.StatusCode == 401 {
-			return &AuthError{Message: fmt.Sprintf("invalid API key or token.\n  %s", body)}
+			return &AuthError{Message: fmt.Sprintf("invalid personal access token.\n  %s", body)}
 		}
-		return &AuthError{Message: fmt.Sprintf("access denied — check that the API key is valid.\n  %s", body)}
+		return &AuthError{Message: fmt.Sprintf("access denied — check that the personal access token is valid.\n  %s", body)}
 	}
 
 	detail := fmt.Sprintf("HTTP %d", resp2.StatusCode)
 	if body != "" {
 		detail += fmt.Sprintf("\n  Response: %s", body)
 	}
-	return fmt.Errorf("%s", detail)
+	return &OnyxAPIError{StatusCode: resp2.StatusCode, Detail: detail}
 }
 
 // ListAgents returns visible agents.
 func (c *Client) ListAgents(ctx context.Context) ([]models.AgentSummary, error) {
 	var raw []models.AgentSummary
-	if err := c.doJSON(ctx, "GET", "/api/persona", nil, &raw); err != nil {
+	if err := c.doJSON(ctx, "GET", "/persona", nil, &raw); err != nil {
 		return nil, err
 	}
 	var result []models.AgentSummary
@@ -184,7 +234,7 @@ func (c *Client) ListChatSessions(ctx context.Context) ([]models.ChatSessionDeta
 	var resp struct {
 		Sessions []models.ChatSessionDetails `json:"sessions"`
 	}
-	if err := c.doJSON(ctx, "GET", "/api/chat/get-user-chat-sessions", nil, &resp); err != nil {
+	if err := c.doJSON(ctx, "GET", "/chat/get-user-chat-sessions", nil, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Sessions, nil
@@ -193,7 +243,7 @@ func (c *Client) ListChatSessions(ctx context.Context) ([]models.ChatSessionDeta
 // GetChatSession returns full details for a session.
 func (c *Client) GetChatSession(ctx context.Context, sessionID string) (*models.ChatSessionDetailResponse, error) {
 	var resp models.ChatSessionDetailResponse
-	if err := c.doJSON(ctx, "GET", "/api/chat/get-chat-session/"+sessionID, nil, &resp); err != nil {
+	if err := c.doJSON(ctx, "GET", "/chat/get-chat-session/"+sessionID, nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -210,7 +260,7 @@ func (c *Client) RenameChatSession(ctx context.Context, sessionID string, name *
 	var resp struct {
 		NewName string `json:"new_name"`
 	}
-	if err := c.doJSON(ctx, "PUT", "/api/chat/rename-chat-session", payload, &resp); err != nil {
+	if err := c.doJSON(ctx, "PUT", "/chat/rename-chat-session", payload, &resp); err != nil {
 		return "", err
 	}
 	return resp.NewName, nil
@@ -236,21 +286,20 @@ func (c *Client) UploadFile(ctx context.Context, filePath string) (*models.FileD
 	}
 	_ = writer.Close()
 
-	req, err := c.newRequest(ctx, "POST", "/api/user/projects/file/upload", &buf)
+	req, err := c.newRequest(ctx, "POST", "/user/projects/file/upload", &buf)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := c.longHTTPClient.Do(req)
+	resp, err := c.streamingHTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, wrapTimeoutError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, &OnyxAPIError{StatusCode: resp.StatusCode, Detail: string(body)}
+	if err := checkResponse(resp); err != nil {
+		return nil, err
 	}
 
 	var snapshot models.CategorizedFilesSnapshot
@@ -270,12 +319,12 @@ func (c *Client) UploadFile(ctx context.Context, filePath string) (*models.FileD
 	}, nil
 }
 
-// GetBackendVersion fetches the backend version string from /api/version.
+// GetBackendVersion fetches the backend version string.
 func (c *Client) GetBackendVersion(ctx context.Context) (string, error) {
 	var resp struct {
 		BackendVersion string `json:"backend_version"`
 	}
-	if err := c.doJSON(ctx, "GET", "/api/version", nil, &resp); err != nil {
+	if err := c.doJSON(ctx, "GET", "/version", nil, &resp); err != nil {
 		return "", err
 	}
 	return resp.BackendVersion, nil
@@ -283,7 +332,7 @@ func (c *Client) GetBackendVersion(ctx context.Context) (string, error) {
 
 // StopChatSession sends a stop signal for a streaming session (best-effort).
 func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
-	req, err := c.newRequest(ctx, "POST", "/api/chat/stop-chat-session/"+sessionID, nil)
+	req, err := c.newRequest(ctx, "POST", "/chat/stop-chat-session/"+sessionID, nil)
 	if err != nil {
 		return
 	}
@@ -293,3 +342,19 @@ func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
 	}
 	_ = resp.Body.Close()
 }
+
+// ClientAPI is the interface satisfied by Client.
+type ClientAPI interface {
+	TestConnection(ctx context.Context) error
+	ListAgents(ctx context.Context) ([]models.AgentSummary, error)
+	ListChatSessions(ctx context.Context) ([]models.ChatSessionDetails, error)
+	GetChatSession(ctx context.Context, sessionID string) (*models.ChatSessionDetailResponse, error)
+	RenameChatSession(ctx context.Context, sessionID string, name *string) (string, error)
+	UploadFile(ctx context.Context, filePath string) (*models.FileDescriptorPayload, error)
+	GetBackendVersion(ctx context.Context) (string, error)
+	StopChatSession(ctx context.Context, sessionID string)
+	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload) <-chan models.StreamEvent
+	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
+}
+
+var _ ClientAPI = (*Client)(nil)

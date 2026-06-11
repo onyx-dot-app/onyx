@@ -47,7 +47,7 @@ spec:
       - name: model-server-inference
         image: "{{ .Values.inferenceCapability.image.repository }}:{{ .Values.inferenceCapability.image.tag | default .Values.global.version }}"
         imagePullPolicy: {{ .Values.global.pullPolicy }}
-        command: [ "uvicorn", "model_server.main:app", "--host", "{{ .Values.global.host }}", "--port", "{{ .Values.inferenceCapability.containerPorts.server }}" ]
+        command: [ {{ include "onyx.customCACerts.commandPrefix" . }}"uvicorn", "model_server.main:app", "--host", "{{ .Values.global.host }}", "--port", "{{ .Values.inferenceCapability.containerPorts.server }}" ]
         ports:
         - name: model-server
           containerPort: {{ .Values.inferenceCapability.containerPorts.server }}
@@ -57,6 +57,12 @@ spec:
             name: {{ .Values.config.envConfigMapName }}
         env:
           {{- include "onyx.envSecrets" . | nindent 12}}
+          {{- with include "onyx.customCACerts.env" . }}
+          {{- . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.inferenceCapability.extraEnv }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
         {{- if .Values.inferenceCapability.securityContext }}
         securityContext:
           {{- toYaml .Values.inferenceCapability.securityContext | nindent 10 }}
@@ -77,4 +83,10 @@ spec:
         livenessProbe:
           {{- toYaml . | nindent 10 }}
         {{- end }}
+        {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.inferenceCapability.volumeMounts) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.inferenceCapability.volumes) }}
+      {{- . | nindent 6 }}
+      {{- end }}
 {{- end }}

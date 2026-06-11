@@ -35,6 +35,7 @@ interface UserContextType {
   authTypeMetadata: AuthTypeMetadata;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
+  updateUserPasteAsTile: (enabled: boolean) => Promise<void>;
   toggleAgentPinnedStatus: (
     currentPinnedAgentIDs: number[],
     agentId: number,
@@ -61,7 +62,8 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser } = useCurrentUser();
-  const { authTypeMetadata } = useAuthTypeMetadata();
+  const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
+    useAuthTypeMetadata();
   const updatedSettings = useContext(SettingsContext);
   const posthog = usePostHog();
 
@@ -116,7 +118,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const onRefreshFail = useCallback(async () => {
     await mutateUser();
   }, [mutateUser]);
-  useTokenRefresh(upToDateUser, authTypeMetadata, onRefreshFail);
+  useTokenRefresh(
+    upToDateUser,
+    authTypeMetadata,
+    authTypeMetadataLoading,
+    onRefreshFail
+  );
 
   // Sync user's theme preference from DB to next-themes on load
   const { setTheme, theme } = useTheme();
@@ -212,6 +219,41 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Error updating user shortcut setting:", error);
+      throw error;
+    }
+  };
+
+  const updateUserPasteAsTile = async (enabled: boolean) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              paste_as_tile: enabled,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(
+        `/api/paste-as-tile?paste_as_tile=${enabled}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update paste tile setting");
+      }
+    } catch (error) {
+      console.error("Error updating paste tile setting:", error);
       throw error;
     }
   };
@@ -510,6 +552,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         authTypeMetadata,
         updateUserAutoScroll,
         updateUserShortcuts,
+        updateUserPasteAsTile,
         updateUserTemperatureOverrideEnabled,
         updateUserPersonalization,
         updateUserThemePreference,

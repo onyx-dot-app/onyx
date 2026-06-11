@@ -2,13 +2,14 @@ import io
 import json
 import os
 
+import httpx
 import pytest
-import requests
 
 from onyx.db.enums import AccessType
 from onyx.db.models import UserRole
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -26,7 +27,7 @@ def _upload_connector_file(
     headers = user_performing_action.headers.copy()
     headers.pop("Content-Type", None)
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/manage/admin/connector/file/upload",
         files=[("files", (file_name, io.BytesIO(content), "text/plain"))],
         headers=headers,
@@ -43,11 +44,11 @@ def _update_connector_files(
     file_ids_to_remove: list[str],
     new_file_name: str,
     new_file_content: bytes,
-) -> requests.Response:
+) -> httpx.Response:
     headers = user_performing_action.headers.copy()
     headers.pop("Content-Type", None)
 
-    return requests.post(
+    return client.post(
         f"{API_SERVER_URL}/manage/admin/connector/{connector_id}/files/update",
         data={"file_ids_to_remove": json.dumps(file_ids_to_remove)},
         files=[("files", (new_file_name, io.BytesIO(new_file_content), "text/plain"))],
@@ -59,8 +60,8 @@ def _list_connector_files(
     *,
     connector_id: int,
     user_performing_action: DATestUser,
-) -> requests.Response:
-    return requests.get(
+) -> httpx.Response:
+    return client.get(
         f"{API_SERVER_URL}/manage/admin/connector/{connector_id}/files",
         headers=user_performing_action.headers,
     )

@@ -8,13 +8,13 @@ import CommandMenu, {
 } from "@/refresh-components/commandmenu/CommandMenu";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import CreateProjectModal from "@/components/modals/CreateProjectModal";
+import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import {
   formatDisplayTime,
   highlightMatch,
 } from "@/sections/sidebar/chatSearchUtils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { useCurrentAgent } from "@/hooks/useAgents";
+import { useCurrentAgent } from "@/lib/agents/hooks";
 import Text from "@/refresh-components/texts/Text";
 import {
   useChatSearchOptimistic,
@@ -354,7 +354,7 @@ export default function ChatSearchCommandMenu({
                 </CommandMenu.Action>
               )}
 
-            {/* No more results separator - shown when no results for the active filter */}
+            {/* No more results divider - shown when no results for the active filter */}
             {((activeFilter === "chats" && displayedChats.length === 0) ||
               (activeFilter === "projects" && displayedProjects.length === 0) ||
               (activeFilter === "all" &&

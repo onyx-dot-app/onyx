@@ -1,62 +1,18 @@
-import React, { useMemo } from "react";
-import { cn } from "@/lib/utils";
-import { Button } from "@opal/components";
-import Logo from "@/refresh-components/Logo";
-import { SvgSidebar } from "@opal/icons";
+"use client";
+
+import React from "react";
+import { SidebarWrapper as OpalSidebarWrapper } from "@opal/layouts";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import Logo from "@/refresh-components/Logo";
 
-interface LogoSectionProps {
-  folded?: boolean;
-  onFoldClick?: () => void;
-}
-
-function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
-  const settings = useSettingsContext();
-  const logoDisplayStyle = settings.enterpriseSettings?.logo_display_style;
-
-  const logo = useMemo(
-    () => (
-      <div className="px-1">
-        <Logo folded={folded} size={28} />
-      </div>
-    ),
-    [folded]
-  );
-  const closeButton = useMemo(
-    () => (
-      <div className="px-1">
-        <Button
-          icon={SvgSidebar}
-          prominence="tertiary"
-          tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
-          tooltipSide={folded ? "right" : "bottom"}
-          size="md"
-          onClick={onFoldClick}
-        />
-      </div>
-    ),
-    [folded, onFoldClick]
-  );
-
+/**
+ * Renders the app-branded logo for use as the `logo` prop on sidebar primitives.
+ * Exported so other sidebar entry points (e.g. AdminSidebar) can reuse it.
+ */
+export function renderAppLogo(folded: boolean | undefined): React.ReactNode {
   return (
-    <div className="flex flex-row justify-between items-start pt-3 px-2">
-      {folded === undefined ? (
-        logo
-      ) : folded && logoDisplayStyle !== "name_only" ? (
-        <>
-          <div className="group-hover/SidebarWrapper:hidden">{logo}</div>
-          <div className="hidden group-hover/SidebarWrapper:flex">
-            {closeButton}
-          </div>
-        </>
-      ) : folded ? (
-        closeButton
-      ) : (
-        <>
-          {logo}
-          {closeButton}
-        </>
-      )}
+    <div className="px-1">
+      <Logo folded={folded} size={28} />
     </div>
   );
 }
@@ -67,24 +23,27 @@ export interface SidebarWrapperProps {
   children?: React.ReactNode;
 }
 
+/**
+ * App-specific sidebar wrapper. Thin shell around the Opal `SidebarWrapper`
+ * that injects the enterprise-aware logo and show/hide rules.
+ */
 export default function SidebarWrapper({
   folded,
   onFoldClick,
   children,
 }: SidebarWrapperProps) {
+  const settings = useSettingsContext();
+  const showLogoWhenFolded =
+    settings.enterpriseSettings?.logo_display_style !== "name_only";
+
   return (
-    // This extra `div` wrapping needs to be present (for some reason).
-    // Without, the widths of the sidebars don't properly get set to the explicitly declared widths (i.e., `4rem` folded and `15rem` unfolded).
-    <div>
-      <div
-        className={cn(
-          "h-screen flex flex-col bg-background-tint-02 py-2 gap-4 group/SidebarWrapper transition-width duration-200 ease-in-out",
-          folded ? "w-[3.25rem]" : "w-[15rem]"
-        )}
-      >
-        <LogoSection folded={folded} onFoldClick={onFoldClick} />
-        {children}
-      </div>
-    </div>
+    <OpalSidebarWrapper
+      folded={folded}
+      onFoldClick={onFoldClick}
+      logo={renderAppLogo}
+      showLogoWhenFolded={showLogoWhenFolded}
+    >
+      {children}
+    </OpalSidebarWrapper>
   );
 }

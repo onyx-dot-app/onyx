@@ -1,5 +1,5 @@
 import React, { FunctionComponent } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { IconProps } from "@opal/types";
 import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
 import {
@@ -65,7 +65,7 @@ export function StepContainer({
   const iconNode = StepIconComponent ? (
     <StepIconComponent
       className={cn(
-        "h-[var(--timeline-icon-size)] w-[var(--timeline-icon-size)] stroke-text-02",
+        "h-(--timeline-icon-size) w-(--timeline-icon-size) stroke-text-02",
         isHover && "stroke-text-04"
       )}
     />

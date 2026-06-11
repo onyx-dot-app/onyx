@@ -19,9 +19,7 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
-from onyx.db.connector_credential_pair import (
-    update_connector_credential_pair_from_id,
-)
+from onyx.db.connector_credential_pair import update_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import Permission
@@ -201,7 +199,8 @@ def create_deletion_attempt_for_connector_id(
     )
 
     logger.info(
-        f"create_deletion_attempt_for_connector_id - running check_for_connector_deletion: cc_pair={cc_pair.id}"
+        "create_deletion_attempt_for_connector_id - running check_for_connector_deletion: cc_pair=%s",
+        cc_pair.id,
     )
 
     if cc_pair.connector.source == DocumentSource.FILE:

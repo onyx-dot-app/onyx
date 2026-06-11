@@ -91,11 +91,10 @@ def _add_user_filters(
             user_groups = user_groups.where(
                 User__UserGroup.is_curator == True  # noqa: E712
             )
-        where_clause &= (
-            ~exists()
-            .where(UG__CCpair.cc_pair_id == ConnectorCredentialPair.id)
-            .where(~UG__CCpair.user_group_id.in_(user_groups))
-            .correlate(ConnectorCredentialPair)
+        where_clause &= ~exists().where(
+            UG__CCpair.cc_pair_id == ConnectorCredentialPair.id
+        ).where(~UG__CCpair.user_group_id.in_(user_groups)).correlate(
+            ConnectorCredentialPair
         )
         where_clause |= ConnectorCredentialPair.creator_id == user.id
     else:
@@ -127,9 +126,9 @@ def get_connector_credential_pairs_for_user(
             to avoid fetching large JSONB blobs when they aren't needed.
     """
     if eager_load_user:
-        assert (
-            eager_load_credential
-        ), "eager_load_credential must be True if eager_load_user is True"
+        assert eager_load_credential, (
+            "eager_load_credential must be True if eager_load_user is True"
+        )
     stmt = select(ConnectorCredentialPair).distinct()
 
     if eager_load_connector:
@@ -331,6 +330,7 @@ def get_last_successful_attempt_poll_range_end(
     earliest_index: float,
     search_settings: SearchSettings,
     db_session: Session,
+    ignore_targeted_reindex: bool = True,
 ) -> float:
     """Used to get the latest `poll_range_end` for a given connector and credential.
 
@@ -339,7 +339,7 @@ def get_last_successful_attempt_poll_range_end(
     Note that the attempts time_started is not necessarily correct - that gets set
     separately and is similar but not exactly the same as the `poll_range_end`.
     """
-    latest_successful_index_attempt = (
+    query = (
         db_session.query(IndexAttempt)
         .join(
             ConnectorCredentialPair,
@@ -350,9 +350,12 @@ def get_last_successful_attempt_poll_range_end(
             IndexAttempt.search_settings_id == search_settings.id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
         )
-        .order_by(IndexAttempt.poll_range_end.desc())
-        .first()
     )
+    if ignore_targeted_reindex:
+        query = query.filter(IndexAttempt.targeted_reindex_job_id.is_(None))
+    latest_successful_index_attempt = query.order_by(
+        IndexAttempt.poll_range_end.desc()
+    ).first()
     if (
         not latest_successful_index_attempt
         or not latest_successful_index_attempt.poll_range_end
@@ -397,7 +400,8 @@ def update_connector_credential_pair_from_id(
     )
     if not cc_pair:
         logger.warning(
-            f"Attempted to update pair for Connector Credential Pair '{cc_pair_id}' but it does not exist"
+            "Attempted to update pair for Connector Credential Pair '%s' but it does not exist",
+            cc_pair_id,
         )
         return
 
@@ -425,7 +429,9 @@ def update_connector_credential_pair(
     )
     if not cc_pair:
         logger.warning(
-            f"Attempted to update pair for connector id {connector_id} and credential id {credential_id}"
+            "Attempted to update pair for connector id %s and credential id %s",
+            connector_id,
+            credential_id,
         )
         return
 
@@ -540,6 +546,11 @@ def add_credential_to_connector(
         raise HTTPException(status_code=404, detail="Connector does not exist")
 
     if access_type == AccessType.SYNC:
+        fetch_ee_implementation_or_noop(
+            "onyx.utils.tier",
+            "require_business_tier_for_sync_access",
+            noop_return_value=None,
+        )(access_type)
         if not fetch_ee_implementation_or_noop(
             "onyx.external_permissions.sync_params",
             "check_if_valid_sync_source",
@@ -728,6 +739,7 @@ def resync_cc_pair(
                 ConnectorCredentialPair.connector_id == connector_id,
                 ConnectorCredentialPair.credential_id == credential_id,
                 IndexAttempt.search_settings_id == search_settings_id,
+                IndexAttempt.targeted_reindex_job_id.is_(None),
             )
         )
 

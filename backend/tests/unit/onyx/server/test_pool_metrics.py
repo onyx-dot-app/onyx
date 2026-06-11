@@ -1,6 +1,5 @@
 """Unit tests for SQLAlchemy connection pool Prometheus metrics."""
 
-import time
 from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -15,7 +14,6 @@ from onyx.server.metrics.postgres_connection_pool import (
 )
 from onyx.utils.middleware import _build_route_map
 from onyx.utils.middleware import _match_route
-
 
 # --- PoolStateCollector tests ---
 
@@ -150,7 +148,11 @@ def test_checkin_event_observes_hold_duration() -> None:
     conn_record = _make_conn_record()
     conn_record.info["_metrics_endpoint"] = "/api/search"
     conn_record.info["_metrics_tenant_id"] = "tenant_abc"
-    conn_record.info["_metrics_checkout_time"] = time.monotonic() - 0.5
+    # Use a deterministic, mocked monotonic clock so the observed hold
+    # duration is exact and not subject to wall-clock timing on slow CI.
+    checkout_time = 1000.0
+    checkin_time = checkout_time + 0.5
+    conn_record.info["_metrics_checkout_time"] = checkout_time
 
     with (
         patch(
@@ -160,6 +162,10 @@ def test_checkin_event_observes_hold_duration() -> None:
             "onyx.server.metrics.postgres_connection_pool._hold_seconds"
         ) as mock_hist,
         patch("onyx.server.metrics.postgres_connection_pool._checkin_total"),
+        patch(
+            "onyx.server.metrics.postgres_connection_pool.time.monotonic",
+            return_value=checkin_time,
+        ),
     ):
         mock_labels = MagicMock()
         mock_gauge.labels.return_value = mock_labels
@@ -174,9 +180,9 @@ def test_checkin_event_observes_hold_duration() -> None:
         mock_labels.dec.assert_called_once()
         mock_hist.labels.assert_called_with(handler="/api/search", engine="sync")
         mock_hist_labels.observe.assert_called_once()
-        # Verify the observed duration is roughly 0.5s
+        # Observed duration is exactly checkin_time - checkout_time == 0.5s
         observed = mock_hist_labels.observe.call_args[0][0]
-        assert 0.4 < observed < 1.0
+        assert observed == 0.5
 
     # conn_record.info should be cleaned up
     assert "_metrics_endpoint" not in conn_record.info

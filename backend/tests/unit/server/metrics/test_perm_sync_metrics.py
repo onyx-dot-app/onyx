@@ -23,7 +23,6 @@ from onyx.server.metrics.perm_sync_metrics import observe_doc_perm_sync_duration
 from onyx.server.metrics.perm_sync_metrics import observe_group_sync_duration
 from onyx.server.metrics.perm_sync_metrics import observe_group_sync_upsert_duration
 
-
 # --- Doc permission sync: overall duration ---
 
 

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { ButtonType, IconFunctionComponent } from "@opal/types";
+import type { ButtonType, IconFunctionComponent, RichStr } from "@opal/types";
 import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
@@ -42,6 +42,9 @@ interface SidebarTabProps {
 
   /** Content rendered on the right side (e.g. action buttons). */
   rightChildren?: React.ReactNode;
+
+  /** Tooltip shown on hover. Takes precedence over the folded-name tooltip. */
+  tooltip?: string | RichStr;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +70,7 @@ function SidebarTab({
   type,
   icon,
   rightChildren,
+  tooltip,
   children,
 }: SidebarTabProps) {
   const Icon =
@@ -98,13 +102,13 @@ function SidebarTab({
             <Link
               href={href as Route}
               scroll={false}
-              className="absolute z-[99] inset-0 rounded-08"
+              className="absolute z-99 inset-0 rounded-08"
               tabIndex={-1}
             />
           )}
 
           {!folded && rightChildren && (
-            <div className="absolute z-[100] right-1.5 top-0 bottom-0 flex flex-col justify-center items-center pointer-events-auto">
+            <div className="absolute z-100 right-1.5 top-0 bottom-0 flex flex-col justify-center items-center pointer-events-auto">
               {rightChildren}
             </div>
           )}
@@ -115,6 +119,7 @@ function SidebarTab({
               title={folded ? "" : children}
               sizePreset="main-ui"
               variant="body"
+              color="interactive"
               width="full"
               padding="fit"
               rightChildren={truncationSpacer}
@@ -123,7 +128,7 @@ function SidebarTab({
             <div className="flex flex-row items-center gap-2 w-full">
               {Icon && (
                 <div className="flex items-center justify-center p-0.5">
-                  <Icon className="h-[1rem] w-[1rem] text-text-03" />
+                  <Icon className="h-4 w-4 text-text-03" />
                 </div>
               )}
               {children}
@@ -135,10 +140,20 @@ function SidebarTab({
     </div>
   );
 
-  if (typeof children !== "string") return content;
-  if (folded) {
+  if (typeof children !== "string") {
+    if (tooltip) {
+      return (
+        <Tooltip tooltip={tooltip} side="right">
+          {content}
+        </Tooltip>
+      );
+    }
+    return content;
+  }
+  const resolvedTooltip = tooltip ?? (folded ? children : undefined);
+  if (resolvedTooltip) {
     return (
-      <Tooltip tooltip={children} side="right">
+      <Tooltip tooltip={resolvedTooltip} side="right">
         {content}
       </Tooltip>
     );

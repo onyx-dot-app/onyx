@@ -7,10 +7,7 @@ metadata:
 data:
   INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort | default 8080 }}"
   {{- if .Values.postgresql.enabled }}
-  POSTGRES_HOST: {{ .Release.Name }}-{{ default "postgresql" .Values.postgresql.nameOverride }}-rw
-  {{- end }}
-  {{- if .Values.vespa.enabled }}
-  VESPA_HOST: {{ .Values.vespa.name }}.{{ .Values.vespa.service.name }}.{{ .Release.Namespace }}.svc.cluster.local
+  POSTGRES_HOST: {{ .Release.Name }}-pg-rw
   {{- end }}
   {{- if .Values.opensearch.enabled }}
   OPENSEARCH_HOST: {{ .Values.opensearch.clusterName }}-{{ .Values.opensearch.nodeGroup }}.{{ .Release.Namespace }}.svc.cluster.local
@@ -19,7 +16,9 @@ data:
   ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX: "false"
   {{- end }}
   {{- if .Values.redis.enabled }}
-  REDIS_HOST: {{ .Values.redis.redisStandalone.name | default .Release.Name }}-master
+  # Standalone Redis CR produces a Service named after the CR (no `-master`
+  # suffix — that suffix is only for RedisReplication CRs).
+  REDIS_HOST: {{ .Values.redis.redisStandalone.name | default .Release.Name }}
   {{- end }}
   MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-inference-model-service"
   {{- if .Values.vectorDB.enabled }}
@@ -38,4 +37,14 @@ data:
   {{- end }}
   {{- if .Values.codeInterpreter.enabled }}
   CODE_INTERPRETER_BASE_URL: "http://{{ .Release.Name }}-code-interpreter:{{ .Values.codeInterpreter.service.port }}"
+  {{- end }}
+  {{- if eq (include "onyx.craftEnabled" .) "true" }}
+  SANDBOX_PROXY_HOST: "{{ include "onyx.fullname" . }}-sandbox-proxy.{{ .Release.Namespace }}.svc.cluster.local"
+  SANDBOX_PROXY_PORT: "{{ (((.Values.sandboxProxy | default dict).service | default dict).proxyPort | default 8080) }}"
+  {{- end }}
+  {{- if and (toString (index .Values.configMap "ENABLE_CRAFT" | default "") | eq "true") (not (index .Values.configMap "SANDBOX_API_SERVER_URL")) }}
+  {{- fail "configMap.SANDBOX_API_SERVER_URL must be set when configMap.ENABLE_CRAFT is enabled" }}
+  {{- end }}
+  {{- if and (toString (index .Values.configMap "ENABLE_CRAFT" | default "") | eq "true") (not .Values.auth.sandboxPushSecret.enabled) }}
+  {{- fail "auth.sandboxPushSecret.enabled must be true when configMap.ENABLE_CRAFT is enabled" }}
   {{- end }}

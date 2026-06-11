@@ -1,4 +1,5 @@
 import re
+import time
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
@@ -9,8 +10,32 @@ from typing import TypeVar
 
 import requests
 from hubspot import HubSpot
+from hubspot.crm.companies.models import (
+    BatchReadInputSimplePublicObjectId as CompaniesBatchReadInput,
+)
+from hubspot.crm.companies.models import SimplePublicObjectId as CompanyObjectId
+from hubspot.crm.contacts.models import (
+    BatchReadInputSimplePublicObjectId as ContactsBatchReadInput,
+)
+from hubspot.crm.contacts.models import Filter
+from hubspot.crm.contacts.models import FilterGroup
+from hubspot.crm.contacts.models import PublicObjectSearchRequest
+from hubspot.crm.contacts.models import SimplePublicObjectId as ContactObjectId
+from hubspot.crm.deals.models import (
+    BatchReadInputSimplePublicObjectId as DealsBatchReadInput,
+)
+from hubspot.crm.deals.models import SimplePublicObjectId as DealObjectId
+from hubspot.crm.objects.notes.models import (
+    BatchReadInputSimplePublicObjectId as NotesBatchReadInput,
+)
+from hubspot.crm.objects.notes.models import SimplePublicObjectId as NoteObjectId
+from hubspot.crm.tickets.models import (
+    BatchReadInputSimplePublicObjectId as TicketsBatchReadInput,
+)
+from hubspot.crm.tickets.models import SimplePublicObjectId as TicketObjectId
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.hubspot.rate_limit import HubSpotRateLimiter
 from onyx.connectors.interfaces import GenerateDocumentsOutput
@@ -30,6 +55,28 @@ HUBSPOT_API_URL = "https://api.hubapi.com/integrations/v1/me"
 AVAILABLE_OBJECT_TYPES = {"tickets", "companies", "deals", "contacts"}
 
 HUBSPOT_PAGE_SIZE = 100
+# HubSpot Search API rejects cursors beyond this offset.
+HUBSPOT_SEARCH_LIMIT = 10_000
+
+ASSOC_CONTACT_PROPERTIES = ["firstname", "lastname", "email", "company", "jobtitle"]
+ASSOC_COMPANY_PROPERTIES = ["name", "domain", "industry", "city", "state"]
+ASSOC_DEAL_PROPERTIES = ["dealname", "amount", "dealstage", "closedate", "pipeline"]
+ASSOC_TICKET_PROPERTIES = ["subject", "content", "hs_ticket_priority"]
+ASSOC_NOTE_PROPERTIES = [
+    "hs_note_body",
+    "hs_timestamp",
+    "hs_created_by",
+    "hubspot_owner_id",
+]
+
+
+_T = TypeVar("_T")
+
+
+def _chunked(items: list[_T], size: int) -> Generator[list[_T], None, None]:
+    for i in range(0, len(items), size):
+        yield items[i : i + size]
+
 
 T = TypeVar("T")
 
@@ -89,6 +136,38 @@ class HubSpotConnector(LoadConnector, PollConnector):
     def _call_hubspot(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         return self._rate_limiter.call(func, *args, **kwargs)
 
+    def _batch_read(
+        self,
+        batch_fn: Callable[..., Any],
+        batch_input: Any,
+        object_type: str,
+        chunk: list[Any],
+    ) -> list[dict[str, Any]]:
+        """Call batch_fn with one retry; logs dropped IDs if both attempts fail."""
+        last_exc: Exception | None = None
+        for attempt in range(2):
+            try:
+                resp = self._call_hubspot(batch_fn, batch_input)
+                return [obj.to_dict() for obj in (resp.results or [])]
+            except Exception as e:
+                last_exc = e
+                if attempt == 0:
+                    logger.warning(
+                        "Batch fetch of %s %s failed, retrying: %s",
+                        len(chunk),
+                        object_type,
+                        e,
+                    )
+                    time.sleep(1)
+        logger.warning(
+            "Failed to batch-fetch %s %s %s after retry: %s",
+            len(chunk),
+            object_type,
+            chunk,
+            last_exc,
+        )
+        return []
+
     def _paginated_results(
         self,
         fetch_page: Callable[..., Any],
@@ -117,6 +196,131 @@ class HubSpotConnector(LoadConnector, PollConnector):
             if after is None:
                 break
 
+    def _build_time_filter_group(
+        self,
+        start: datetime | None,
+        end: datetime | None,
+        property_name: str,
+    ) -> FilterGroup:
+        filters: list[Filter] = []
+        if start is not None:
+            filters.append(
+                Filter(
+                    property_name=property_name,
+                    operator="GTE",
+                    value=str(int(start.timestamp() * 1000)),
+                )
+            )
+        if end is not None:
+            filters.append(
+                Filter(
+                    property_name=property_name,
+                    operator="LTE",
+                    value=str(int(end.timestamp() * 1000)),
+                )
+            )
+        return FilterGroup(filters=filters)
+
+    def _search_paginated_results(
+        self,
+        search_fn: Callable[..., Any],
+        properties: list[str],
+        filter_group: FilterGroup,
+        sorts: list[str] | None = None,
+    ) -> Generator[Any, None, None]:
+        after: str | None = None
+        while True:
+            request = PublicObjectSearchRequest(
+                filter_groups=[filter_group],
+                limit=HUBSPOT_PAGE_SIZE,
+                properties=properties,
+                after=after,
+                sorts=sorts,
+            )
+            page = self._call_hubspot(search_fn, public_object_search_request=request)
+            results = getattr(page, "results", [])
+            for result in results:
+                yield result
+
+            paging = getattr(page, "paging", None)
+            next_page = getattr(paging, "next", None) if paging else None
+            if next_page is None:
+                break
+            after = getattr(next_page, "after", None)
+            if after is None:
+                break
+
+    def _search_time_range(
+        self,
+        search_fn: Callable[..., Any],
+        properties: list[str],
+        start: datetime,
+        end: datetime,
+        modified_date_prop: str,
+    ) -> Generator[Any, None, None]:
+        """Search [start, end] sorted by modified date ASC.
+
+        If results hit the 10,000-record hard cap, yield all fetched results
+        and continue from the last seen modified timestamp. Documents sharing
+        that exact timestamp may be yielded twice (acceptable — re-indexing is
+        idempotent).
+
+        Note: PublicObjectSearchRequest does not support an `associations`
+        parameter, so objects returned here will not have inline association
+        data. _extract_inline_association_ids will return None for each object,
+        falling back to a v4 associations API call per association type per
+        record (O(N×M) extra calls). This is acceptable for poll windows, which
+        are small by design (typically tens to low hundreds of changed objects
+        per 15-second window).
+        """
+        filter_group = self._build_time_filter_group(start, end, modified_date_prop)
+        results: list[Any] = []
+        for result in self._search_paginated_results(
+            search_fn, properties, filter_group, sorts=[modified_date_prop]
+        ):
+            results.append(result)
+            if len(results) >= HUBSPOT_SEARCH_LIMIT:
+                break
+
+        yield from results
+
+        if len(results) < HUBSPOT_SEARCH_LIMIT:
+            return
+
+        # Hit the cap — continue from the last seen modified timestamp.
+        last_ts_ms = (results[-1].properties or {}).get(modified_date_prop)
+        if last_ts_ms is None:
+            logger.error(
+                "HubSpot search limit reached but last modified timestamp is "
+                "unavailable; records after the 10,000th may be missing."
+            )
+            return
+
+        try:
+            # Search API returns ISO 8601 strings; filter values use ms epoch.
+            next_start = datetime.fromisoformat(last_ts_ms.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            try:
+                next_start = datetime.fromtimestamp(
+                    int(last_ts_ms) / 1000, tz=timezone.utc
+                )
+            except (ValueError, TypeError):
+                logger.error(
+                    "HubSpot search limit reached but last modified timestamp has unrecognized format (%r); records after the 10,000th may be missing.",
+                    last_ts_ms,
+                )
+                return
+        if next_start <= start:
+            logger.error(
+                "HubSpot search limit reached but timestamp did not advance; "
+                "records after the 10,000th may be missing."
+            )
+            return
+
+        yield from self._search_time_range(
+            search_fn, properties, next_start, end, modified_date_prop
+        )
+
     def _clean_html_content(self, html_content: str) -> str:
         """Clean HTML content and extract raw text"""
         if not html_content:
@@ -144,7 +348,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             "Content-Type": "application/json",
         }
 
-        response = requests.get(HUBSPOT_API_URL, headers=headers)
+        response = requests.get(
+            HUBSPOT_API_URL, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS
+        )
         if response.status_code != 200:
             raise Exception("Error fetching portal ID")
 
@@ -181,97 +387,119 @@ class HubSpotConnector(LoadConnector, PollConnector):
         else:
             return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/{object_type}/{object_id}"
 
+    def _extract_inline_association_ids(
+        self,
+        obj: Any,
+        assoc_type: str,
+    ) -> list[str] | None:
+        """Extract association IDs already returned inline by get_page.
+
+        Returns None when the inline data is incomplete (overflow) or when
+        associations is not a dict (not fetched or unexpected SDK type), so the
+        caller falls back to a dedicated v4 associations API call instead.
+        Returns [] when the type simply has no associations.
+        """
+        associations = getattr(obj, "associations", None)
+        if not isinstance(associations, dict):
+            return None
+        assoc_collection = associations.get(assoc_type)
+        if assoc_collection is None:
+            return []
+        if assoc_collection.paging and assoc_collection.paging.next:
+            return None
+        return list(dict.fromkeys(r.id for r in (assoc_collection.results or [])))
+
     def _get_associated_objects(
         self,
         api_client: HubSpot,
         object_id: str,
         from_object_type: str,
         to_object_type: str,
+        inline_association_ids: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Get associated objects for a given object"""
         try:
-            associations_iter = self._paginated_results(
-                api_client.crm.associations.v4.basic_api.get_page,
-                object_type=from_object_type,
-                object_id=object_id,
-                to_object_type=to_object_type,
-            )
-
-            object_ids = [assoc.to_object_id for assoc in associations_iter]
+            if inline_association_ids is not None:
+                object_ids = inline_association_ids
+            else:
+                associations_iter = self._paginated_results(
+                    api_client.crm.associations.v4.basic_api.get_page,
+                    object_type=from_object_type,
+                    object_id=object_id,
+                    to_object_type=to_object_type,
+                )
+                object_ids = list(
+                    dict.fromkeys(
+                        str(assoc.to_object_id) for assoc in associations_iter
+                    )
+                )
 
             associated_objects: list[dict[str, Any]] = []
 
             if to_object_type == "contacts":
-                for obj_id in object_ids:
-                    try:
-                        obj = self._call_hubspot(
-                            api_client.crm.contacts.basic_api.get_by_id,
-                            contact_id=obj_id,
-                            properties=[
-                                "firstname",
-                                "lastname",
-                                "email",
-                                "company",
-                                "jobtitle",
-                            ],
+                for chunk in _chunked(object_ids, HUBSPOT_PAGE_SIZE):
+                    associated_objects.extend(
+                        self._batch_read(
+                            api_client.crm.contacts.batch_api.read,
+                            ContactsBatchReadInput(
+                                properties=ASSOC_CONTACT_PROPERTIES,
+                                inputs=[ContactObjectId(id=i) for i in chunk],
+                            ),
+                            "contacts",
+                            chunk,
                         )
-                        associated_objects.append(obj.to_dict())
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch contact {obj_id}: {e}")
+                    )
 
             elif to_object_type == "companies":
-                for obj_id in object_ids:
-                    try:
-                        obj = self._call_hubspot(
-                            api_client.crm.companies.basic_api.get_by_id,
-                            company_id=obj_id,
-                            properties=[
-                                "name",
-                                "domain",
-                                "industry",
-                                "city",
-                                "state",
-                            ],
+                for chunk in _chunked(object_ids, HUBSPOT_PAGE_SIZE):
+                    associated_objects.extend(
+                        self._batch_read(
+                            api_client.crm.companies.batch_api.read,
+                            CompaniesBatchReadInput(
+                                properties=ASSOC_COMPANY_PROPERTIES,
+                                inputs=[CompanyObjectId(id=i) for i in chunk],
+                            ),
+                            "companies",
+                            chunk,
                         )
-                        associated_objects.append(obj.to_dict())
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch company {obj_id}: {e}")
+                    )
 
             elif to_object_type == "deals":
-                for obj_id in object_ids:
-                    try:
-                        obj = self._call_hubspot(
-                            api_client.crm.deals.basic_api.get_by_id,
-                            deal_id=obj_id,
-                            properties=[
-                                "dealname",
-                                "amount",
-                                "dealstage",
-                                "closedate",
-                                "pipeline",
-                            ],
+                for chunk in _chunked(object_ids, HUBSPOT_PAGE_SIZE):
+                    associated_objects.extend(
+                        self._batch_read(
+                            api_client.crm.deals.batch_api.read,
+                            DealsBatchReadInput(
+                                properties=ASSOC_DEAL_PROPERTIES,
+                                inputs=[DealObjectId(id=i) for i in chunk],
+                            ),
+                            "deals",
+                            chunk,
                         )
-                        associated_objects.append(obj.to_dict())
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch deal {obj_id}: {e}")
+                    )
 
             elif to_object_type == "tickets":
-                for obj_id in object_ids:
-                    try:
-                        obj = self._call_hubspot(
-                            api_client.crm.tickets.basic_api.get_by_id,
-                            ticket_id=obj_id,
-                            properties=["subject", "content", "hs_ticket_priority"],
+                for chunk in _chunked(object_ids, HUBSPOT_PAGE_SIZE):
+                    associated_objects.extend(
+                        self._batch_read(
+                            api_client.crm.tickets.batch_api.read,
+                            TicketsBatchReadInput(
+                                properties=ASSOC_TICKET_PROPERTIES,
+                                inputs=[TicketObjectId(id=i) for i in chunk],
+                            ),
+                            "tickets",
+                            chunk,
                         )
-                        associated_objects.append(obj.to_dict())
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch ticket {obj_id}: {e}")
+                    )
 
             return associated_objects
 
         except Exception as e:
             logger.warning(
-                f"Failed to get associations from {from_object_type} to {to_object_type}: {e}"
+                "Failed to get associations from %s to %s: %s",
+                from_object_type,
+                to_object_type,
+                e,
             )
             return []
 
@@ -292,29 +520,27 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             note_ids = [assoc.to_object_id for assoc in associations_iter]
 
-            associated_notes = []
+            associated_notes: list[dict[str, Any]] = []
 
-            for note_id in note_ids:
-                try:
-                    # Notes are engagements in HubSpot, use the engagements API
-                    note = self._call_hubspot(
-                        api_client.crm.objects.notes.basic_api.get_by_id,
-                        note_id=note_id,
-                        properties=[
-                            "hs_note_body",
-                            "hs_timestamp",
-                            "hs_created_by",
-                            "hubspot_owner_id",
-                        ],
+            for chunk in _chunked(note_ids, HUBSPOT_PAGE_SIZE):
+                associated_notes.extend(
+                    self._batch_read(
+                        api_client.crm.objects.notes.batch_api.read,
+                        NotesBatchReadInput(
+                            properties=ASSOC_NOTE_PROPERTIES,
+                            inputs=[NoteObjectId(id=str(nid)) for nid in chunk],
+                        ),
+                        "notes",
+                        chunk,
                     )
-                    associated_notes.append(note.to_dict())
-                except Exception as e:
-                    logger.warning(f"Failed to fetch note {note_id}: {e}")
+                )
 
             return associated_notes
 
         except Exception as e:
-            logger.warning(f"Failed to get notes for {object_type} {object_id}: {e}")
+            logger.warning(
+                "Failed to get notes for %s %s: %s", object_type, object_id, e
+            )
             return []
 
     def _create_object_section(
@@ -403,27 +629,32 @@ class HubSpotConnector(LoadConnector, PollConnector):
     ) -> GenerateDocumentsOutput:
         api_client = HubSpot(access_token=self.access_token)
 
-        tickets_iter = self._paginated_results(
-            api_client.crm.tickets.basic_api.get_page,
-            properties=[
-                "subject",
-                "content",
-                "hs_ticket_priority",
-                "createdate",
+        ticket_properties = [
+            "subject",
+            "content",
+            "hs_ticket_priority",
+            "createdate",
+            "hs_lastmodifieddate",
+        ]
+
+        if start is not None or end is not None:
+            tickets_iter = self._search_time_range(
+                api_client.crm.tickets.search_api.do_search,
+                ticket_properties,
+                start or datetime.min.replace(tzinfo=timezone.utc),
+                end or datetime.max.replace(tzinfo=timezone.utc),
                 "hs_lastmodifieddate",
-            ],
-            associations=["contacts", "companies", "deals"],
-        )
+            )
+        else:
+            tickets_iter = self._paginated_results(
+                api_client.crm.tickets.basic_api.get_page,
+                properties=ticket_properties,
+                associations=["contacts", "companies", "deals"],
+            )
 
         doc_batch: list[Document | HierarchyNode] = []
 
         for ticket in tickets_iter:
-            updated_at = ticket.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start.replace(tzinfo=None):
-                continue
-            if end is not None and updated_at > end.replace(tzinfo=None):
-                continue
-
             title = ticket.properties.get("subject") or f"Ticket {ticket.id}"
             link = self._get_object_url("tickets", ticket.id)
             content_text = ticket.properties.get("content") or ""
@@ -446,7 +677,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated contacts
             associated_contacts = self._get_associated_objects(
-                api_client, ticket.id, "tickets", "contacts"
+                api_client,
+                ticket.id,
+                "tickets",
+                "contacts",
+                inline_association_ids=self._extract_inline_association_ids(
+                    ticket, "contacts"
+                ),
             )
             for contact in associated_contacts:
                 sections.append(self._create_object_section(contact, "contacts"))
@@ -454,7 +691,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated companies
             associated_companies = self._get_associated_objects(
-                api_client, ticket.id, "tickets", "companies"
+                api_client,
+                ticket.id,
+                "tickets",
+                "companies",
+                inline_association_ids=self._extract_inline_association_ids(
+                    ticket, "companies"
+                ),
             )
             for company in associated_companies:
                 sections.append(self._create_object_section(company, "companies"))
@@ -462,7 +705,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated deals
             associated_deals = self._get_associated_objects(
-                api_client, ticket.id, "tickets", "deals"
+                api_client,
+                ticket.id,
+                "tickets",
+                "deals",
+                inline_association_ids=self._extract_inline_association_ids(
+                    ticket, "deals"
+                ),
             )
             for deal in associated_deals:
                 sections.append(self._create_object_section(deal, "deals"))
@@ -513,30 +762,35 @@ class HubSpotConnector(LoadConnector, PollConnector):
     ) -> GenerateDocumentsOutput:
         api_client = HubSpot(access_token=self.access_token)
 
-        companies_iter = self._paginated_results(
-            api_client.crm.companies.basic_api.get_page,
-            properties=[
-                "name",
-                "domain",
-                "industry",
-                "city",
-                "state",
-                "description",
-                "createdate",
+        company_properties = [
+            "name",
+            "domain",
+            "industry",
+            "city",
+            "state",
+            "description",
+            "createdate",
+            "hs_lastmodifieddate",
+        ]
+
+        if start is not None or end is not None:
+            companies_iter = self._search_time_range(
+                api_client.crm.companies.search_api.do_search,
+                company_properties,
+                start or datetime.min.replace(tzinfo=timezone.utc),
+                end or datetime.max.replace(tzinfo=timezone.utc),
                 "hs_lastmodifieddate",
-            ],
-            associations=["contacts", "deals", "tickets"],
-        )
+            )
+        else:
+            companies_iter = self._paginated_results(
+                api_client.crm.companies.basic_api.get_page,
+                properties=company_properties,
+                associations=["contacts", "deals", "tickets"],
+            )
 
         doc_batch: list[Document | HierarchyNode] = []
 
         for company in companies_iter:
-            updated_at = company.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start.replace(tzinfo=None):
-                continue
-            if end is not None and updated_at > end.replace(tzinfo=None):
-                continue
-
             title = company.properties.get("name") or f"Company {company.id}"
             link = self._get_object_url("companies", company.id)
 
@@ -578,7 +832,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated contacts
             associated_contacts = self._get_associated_objects(
-                api_client, company.id, "companies", "contacts"
+                api_client,
+                company.id,
+                "companies",
+                "contacts",
+                inline_association_ids=self._extract_inline_association_ids(
+                    company, "contacts"
+                ),
             )
             for contact in associated_contacts:
                 sections.append(self._create_object_section(contact, "contacts"))
@@ -586,7 +846,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated deals
             associated_deals = self._get_associated_objects(
-                api_client, company.id, "companies", "deals"
+                api_client,
+                company.id,
+                "companies",
+                "deals",
+                inline_association_ids=self._extract_inline_association_ids(
+                    company, "deals"
+                ),
             )
             for deal in associated_deals:
                 sections.append(self._create_object_section(deal, "deals"))
@@ -594,7 +860,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated tickets
             associated_tickets = self._get_associated_objects(
-                api_client, company.id, "companies", "tickets"
+                api_client,
+                company.id,
+                "companies",
+                "tickets",
+                inline_association_ids=self._extract_inline_association_ids(
+                    company, "tickets"
+                ),
             )
             for ticket in associated_tickets:
                 sections.append(self._create_object_section(ticket, "tickets"))
@@ -645,30 +917,35 @@ class HubSpotConnector(LoadConnector, PollConnector):
     ) -> GenerateDocumentsOutput:
         api_client = HubSpot(access_token=self.access_token)
 
-        deals_iter = self._paginated_results(
-            api_client.crm.deals.basic_api.get_page,
-            properties=[
-                "dealname",
-                "amount",
-                "dealstage",
-                "closedate",
-                "pipeline",
-                "description",
-                "createdate",
+        deal_properties = [
+            "dealname",
+            "amount",
+            "dealstage",
+            "closedate",
+            "pipeline",
+            "description",
+            "createdate",
+            "hs_lastmodifieddate",
+        ]
+
+        if start is not None or end is not None:
+            deals_iter = self._search_time_range(
+                api_client.crm.deals.search_api.do_search,
+                deal_properties,
+                start or datetime.min.replace(tzinfo=timezone.utc),
+                end or datetime.max.replace(tzinfo=timezone.utc),
                 "hs_lastmodifieddate",
-            ],
-            associations=["contacts", "companies", "tickets"],
-        )
+            )
+        else:
+            deals_iter = self._paginated_results(
+                api_client.crm.deals.basic_api.get_page,
+                properties=deal_properties,
+                associations=["contacts", "companies", "tickets"],
+            )
 
         doc_batch: list[Document | HierarchyNode] = []
 
         for deal in deals_iter:
-            updated_at = deal.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start.replace(tzinfo=None):
-                continue
-            if end is not None and updated_at > end.replace(tzinfo=None):
-                continue
-
             title = deal.properties.get("dealname") or f"Deal {deal.id}"
             link = self._get_object_url("deals", deal.id)
 
@@ -710,7 +987,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated contacts
             associated_contacts = self._get_associated_objects(
-                api_client, deal.id, "deals", "contacts"
+                api_client,
+                deal.id,
+                "deals",
+                "contacts",
+                inline_association_ids=self._extract_inline_association_ids(
+                    deal, "contacts"
+                ),
             )
             for contact in associated_contacts:
                 sections.append(self._create_object_section(contact, "contacts"))
@@ -718,7 +1001,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated companies
             associated_companies = self._get_associated_objects(
-                api_client, deal.id, "deals", "companies"
+                api_client,
+                deal.id,
+                "deals",
+                "companies",
+                inline_association_ids=self._extract_inline_association_ids(
+                    deal, "companies"
+                ),
             )
             for company in associated_companies:
                 sections.append(self._create_object_section(company, "companies"))
@@ -726,7 +1015,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated tickets
             associated_tickets = self._get_associated_objects(
-                api_client, deal.id, "deals", "tickets"
+                api_client,
+                deal.id,
+                "deals",
+                "tickets",
+                inline_association_ids=self._extract_inline_association_ids(
+                    deal, "tickets"
+                ),
             )
             for ticket in associated_tickets:
                 sections.append(self._create_object_section(ticket, "tickets"))
@@ -775,32 +1070,37 @@ class HubSpotConnector(LoadConnector, PollConnector):
     ) -> GenerateDocumentsOutput:
         api_client = HubSpot(access_token=self.access_token)
 
-        contacts_iter = self._paginated_results(
-            api_client.crm.contacts.basic_api.get_page,
-            properties=[
-                "firstname",
-                "lastname",
-                "email",
-                "company",
-                "jobtitle",
-                "phone",
-                "city",
-                "state",
-                "createdate",
+        contact_properties = [
+            "firstname",
+            "lastname",
+            "email",
+            "company",
+            "jobtitle",
+            "phone",
+            "city",
+            "state",
+            "createdate",
+            "lastmodifieddate",
+        ]
+
+        if start is not None or end is not None:
+            contacts_iter = self._search_time_range(
+                api_client.crm.contacts.search_api.do_search,
+                contact_properties,
+                start or datetime.min.replace(tzinfo=timezone.utc),
+                end or datetime.max.replace(tzinfo=timezone.utc),
                 "lastmodifieddate",
-            ],
-            associations=["companies", "deals", "tickets"],
-        )
+            )
+        else:
+            contacts_iter = self._paginated_results(
+                api_client.crm.contacts.basic_api.get_page,
+                properties=contact_properties,
+                associations=["companies", "deals", "tickets"],
+            )
 
         doc_batch: list[Document | HierarchyNode] = []
 
         for contact in contacts_iter:
-            updated_at = contact.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start.replace(tzinfo=None):
-                continue
-            if end is not None and updated_at > end.replace(tzinfo=None):
-                continue
-
             # Build contact name
             name_parts = []
             if contact.properties.get("firstname"):
@@ -858,7 +1158,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated companies
             associated_companies = self._get_associated_objects(
-                api_client, contact.id, "contacts", "companies"
+                api_client,
+                contact.id,
+                "contacts",
+                "companies",
+                inline_association_ids=self._extract_inline_association_ids(
+                    contact, "companies"
+                ),
             )
             for company in associated_companies:
                 sections.append(self._create_object_section(company, "companies"))
@@ -866,7 +1172,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated deals
             associated_deals = self._get_associated_objects(
-                api_client, contact.id, "contacts", "deals"
+                api_client,
+                contact.id,
+                "contacts",
+                "deals",
+                inline_association_ids=self._extract_inline_association_ids(
+                    contact, "deals"
+                ),
             )
             for deal in associated_deals:
                 sections.append(self._create_object_section(deal, "deals"))
@@ -874,7 +1186,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated tickets
             associated_tickets = self._get_associated_objects(
-                api_client, contact.id, "contacts", "tickets"
+                api_client,
+                contact.id,
+                "contacts",
+                "tickets",
+                inline_association_ids=self._extract_inline_association_ids(
+                    contact, "tickets"
+                ),
             )
             for ticket in associated_tickets:
                 sections.append(self._create_object_section(ticket, "tickets"))
@@ -938,15 +1256,20 @@ class HubSpotConnector(LoadConnector, PollConnector):
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
         end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
 
-        # Process each object type with time filtering based on configuration
+        # Epoch 0 means no prior successful sync — full scan using get_page with
+        # inline associations (avoids O(N×M) v4 association calls on initial load).
+        is_full_scan = start == 0
+        effective_start = None if is_full_scan else start_datetime
+        effective_end = None if is_full_scan else end_datetime
+
         if "tickets" in self.object_types:
-            yield from self._process_tickets(start_datetime, end_datetime)
+            yield from self._process_tickets(effective_start, effective_end)
         if "companies" in self.object_types:
-            yield from self._process_companies(start_datetime, end_datetime)
+            yield from self._process_companies(effective_start, effective_end)
         if "deals" in self.object_types:
-            yield from self._process_deals(start_datetime, end_datetime)
+            yield from self._process_deals(effective_start, effective_end)
         if "contacts" in self.object_types:
-            yield from self._process_contacts(start_datetime, end_datetime)
+            yield from self._process_contacts(effective_start, effective_end)
 
 
 if __name__ == "__main__":

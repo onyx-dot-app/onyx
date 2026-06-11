@@ -20,7 +20,6 @@ from onyx.connectors.models import OnyxMetadata
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import is_valid_email
 
-
 T = TypeVar("T")
 U = TypeVar("U")
 logger = setup_logger()
@@ -128,7 +127,7 @@ def _parse_document_source(connector_type: Any) -> DocumentSource | None:
         return connector_type
 
     if not isinstance(connector_type, str):
-        logger.warning(f"Invalid connector_type type: {type(connector_type).__name__}")
+        logger.warning("Invalid connector_type type: %s", type(connector_type).__name__)
         return None
 
     normalized = re.sub(r"[\s\-]+", "_", connector_type.strip().lower())
@@ -136,7 +135,9 @@ def _parse_document_source(connector_type: Any) -> DocumentSource | None:
         return DocumentSource(normalized)
     except ValueError:
         logger.warning(
-            f"Invalid connector_type value: '{connector_type}' (normalized: '{normalized}')"
+            "Invalid connector_type value: '%s' (normalized: '%s')",
+            connector_type,
+            normalized,
         )
         return None
 

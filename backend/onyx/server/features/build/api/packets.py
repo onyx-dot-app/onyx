@@ -1,13 +1,14 @@
 """Build Mode packet types for streaming agent responses.
 
-This module defines CUSTOM Onyx packet types that extend ACP (Agent Client Protocol).
-ACP events are passed through directly from the agent - this module only contains
-Onyx-specific extensions like artifacts and file operations.
+Custom Onyx packet types layered on top of the sandbox-event schema
+(:mod:`sandbox.event_schema`). Sandbox events pass through directly from
+the agent; this module only contains Onyx-specific extensions like
+artifacts and file operations.
 
-All packets use SSE (Server-Sent Events) format with `event: message` and include
-a `type` field to distinguish packet types.
+All packets use SSE (Server-Sent Events) format with `event: message` and
+include a `type` field to distinguish packet types.
 
-ACP events (passed through directly from acp.schema):
+Sandbox events (re-emitted from :mod:`sandbox.event_schema`):
 - agent_message_chunk: Text/image content from agent
 - agent_thought_chunk: Agent's internal reasoning
 - tool_call_start: Tool invocation started
@@ -19,19 +20,17 @@ ACP events (passed through directly from acp.schema):
 
 Custom Onyx packets (defined here):
 - error: Onyx-specific errors (e.g., session not found)
-
-Based on:
-- Agent Client Protocol (ACP): https://agentclientprotocol.com
+- subagent_started: A child opencode session was created under a parent turn
 """
 
 from datetime import datetime
 from datetime import timezone
 from typing import Any
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
-
 
 # =============================================================================
 # Base Packet Type
@@ -61,8 +60,28 @@ class ErrorPacket(BasePacket):
     details: dict[str, Any] | None = None
 
 
+class ApprovalRequestedPacket(BasePacket):
+    """A new approval awaits the user's decision.
+
+    Carries only ids; the FE refetches card contents via the /live endpoint
+    so Postgres stays the single source of truth.
+    """
+
+    type: Literal["approval_requested"] = "approval_requested"
+    approval_id: UUID
+    session_id: UUID
+
+
+class SubagentStartedPacket(BasePacket):
+    """A child opencode session was created for a parent task tool call."""
+
+    type: Literal["subagent_started"] = "subagent_started"
+    subagent_session_id: str
+    parent_session_id: str
+
+
 # =============================================================================
 # Union Type for Custom Onyx Packets
 # =============================================================================
 
-BuildPacket = ErrorPacket
+BuildPacket = ErrorPacket | ApprovalRequestedPacket | SubagentStartedPacket

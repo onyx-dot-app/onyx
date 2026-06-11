@@ -5,7 +5,7 @@ import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { useStreamingDuration } from "../hooks/useStreamingDuration";
-import { formatDurationSeconds } from "@/lib/time";
+import { formatDurationSeconds } from "@opal/time";
 
 export interface StreamingHeaderProps {
   headerText: string;
@@ -39,7 +39,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
 
   return (
     <>
-      <div className="px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+      <div className="px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
         <Text as="p" mainUiAction text03 className="shimmer-text">
           {headerText}
         </Text>

@@ -32,8 +32,9 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import enforce_seat_limit
+from onyx.auth.users import enforce_seat_limit_locked
 from onyx.auth.users import optional_user
+from onyx.auth.users import scope_exempt
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
@@ -44,8 +45,6 @@ from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import USER_DIRECTORY_ADMIN_ONLY
-from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.api_key import is_api_key_email_address
@@ -70,6 +69,7 @@ from onyx.db.user_preferences import update_user_auto_scroll
 from onyx.db.user_preferences import update_user_chat_background
 from onyx.db.user_preferences import update_user_default_app_mode
 from onyx.db.user_preferences import update_user_default_model
+from onyx.db.user_preferences import update_user_paste_as_tile
 from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
 from onyx.db.user_preferences import update_user_role
@@ -116,8 +116,10 @@ from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.server.models import UserGroupInfo
+from onyx.server.security.store import get_security_settings
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.csv_utils import sanitize_csv_cell
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import (
@@ -383,8 +385,7 @@ def list_all_users(
             accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
         ],
         slack_users=[FullUserSnapshot.from_user_model(user) for user in slack_users][
-            slack_users_page
-            * USERS_PAGE_SIZE : (slack_users_page + 1)
+            slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
             * USERS_PAGE_SIZE
         ],
         invited=[InvitedUserSnapshot(email=email) for email in invited_emails][
@@ -412,11 +413,13 @@ def download_users_csv(
     # Write CSV header
     writer.writerow(["Email", "Role", "Status"])
 
-    # Write user data
+    # Write user data. Emails are user-supplied (a local part can legally
+    # start with a formula trigger like `=`), so sanitize to prevent
+    # CSV/formula injection against the admin opening the export.
     for user in users:
         writer.writerow(
             [
-                user.email,
+                sanitize_csv_cell(user.email),
                 user.role.value if user.role else "",
                 "Active" if user.is_active else "Inactive",
             ]
@@ -469,10 +472,10 @@ def bulk_invite_users(
         if e not in existing_users and e not in already_invited
     ]
 
-    # Check seat availability for new users. Must run before the counter
-    # reservation below — a seat-limit failure must not burn trial quota.
+    # Must run before the trial counter reservation — a seat-limit
+    # failure must not burn trial quota.
     if emails_needing_seats:
-        enforce_seat_limit(db_session, seats_needed=len(emails_needing_seats))
+        enforce_seat_limit_locked(db_session, seats_needed=len(emails_needing_seats))
 
     # Enforce the trial invite cap via the monotonic `tenant_invite_counter`.
     # The UPSERT holds a row-level lock on `tenant_id` during the UPDATE, so
@@ -508,7 +511,7 @@ def bulk_invite_users(
             )(new_invited_emails, tenant_id)
 
         except Exception as e:
-            logger.error(f"Failed to add users to tenant {tenant_id}: {str(e)}")
+            logger.error("Failed to add users to tenant %s: %s", tenant_id, str(e))
 
     initial_invited_users = get_invited_users()
 
@@ -548,7 +551,7 @@ def bulk_invite_users(
                 send_user_email_invite(email, current_user, AUTH_TYPE)
             email_invite_status = EmailInviteStatus.SENT
         except Exception as e:
-            logger.error(f"Error sending email invite to invited users: {e}")
+            logger.error("Error sending email invite to invited users: %s", e)
             email_invite_status = EmailInviteStatus.SEND_FAILED
 
     if MULTI_TENANT and not DEV_MODE:
@@ -559,7 +562,7 @@ def bulk_invite_users(
                 "onyx.server.tenants.billing", "register_tenant_users", None
             )(tenant_id, get_live_users_count(db_session))
         except Exception as e:
-            logger.error(f"Failed to register tenant users: {str(e)}")
+            logger.error("Failed to register tenant users: %s", str(e))
             logger.info(
                 "Reverting changes: removing users from tenant and resetting invited users"
             )
@@ -650,7 +653,7 @@ def deactivate_user_api(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_to_deactivate.is_active is False:
-        logger.warning("{} is already deactivated".format(user_to_deactivate.email))
+        logger.warning("%s is already deactivated", user_to_deactivate.email)
 
     deactivate_user(user_to_deactivate, db_session)
 
@@ -675,9 +678,7 @@ async def delete_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_to_delete.is_active is True:
-        logger.warning(
-            "{} must be deactivated before deleting".format(user_to_delete.email)
-        )
+        logger.warning("%s must be deactivated before deleting", user_to_delete.email)
         raise HTTPException(
             status_code=400, detail="User must be deactivated before deleting"
         )
@@ -691,7 +692,7 @@ async def delete_user(
             "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
         )([user_email.user_email], tenant_id)
         delete_user_from_db(user_to_delete, db_session)
-        logger.info(f"Deleted user {user_to_delete.email}")
+        logger.info("Deleted user %s", user_to_delete.email)
 
         # Invalidate license cache so used_seats reflects the new count
         # Only for self-hosted (non-multi-tenant) deployments
@@ -702,7 +703,7 @@ async def delete_user(
 
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Error deleting user {user_to_delete.email}: {str(e)}")
+        logger.error("Error deleting user %s: %s", user_to_delete.email, str(e))
         raise HTTPException(status_code=500, detail="Error deleting user")
 
 
@@ -719,12 +720,10 @@ def activate_user_api(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_to_activate.is_active is True:
-        logger.warning("{} is already activated".format(user_to_activate.email))
+        logger.warning("%s is already activated", user_to_activate.email)
         return
 
-    # Check seat availability before activating
-    # Only for self-hosted (non-multi-tenant) deployments
-    enforce_seat_limit(db_session)
+    enforce_seat_limit_locked(db_session)
 
     activate_user(user_to_activate, db_session)
 
@@ -740,7 +739,7 @@ def activate_user_api(
 def get_valid_domains(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[str]:
-    return VALID_EMAIL_DOMAINS
+    return list(get_security_settings().valid_email_domains)
 
 
 """Endpoints for all"""
@@ -753,7 +752,7 @@ def list_all_users_basic_info(
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
     if (
-        USER_DIRECTORY_ADMIN_ONLY
+        get_security_settings().user_directory_admin_only
         and Permission.READ_USERS not in get_effective_permissions(user)
     ):
         raise OnyxError(
@@ -816,7 +815,7 @@ def get_current_auth_token_creation_redis(
         return token_creation_time
 
     except Exception as e:
-        logger.error(f"Error retrieving token expiration from Redis: {e}")
+        logger.error("Error retrieving token expiration from Redis: %s", e)
         return None
 
 
@@ -877,7 +876,7 @@ def get_current_user_permissions(
     return sorted(p.value for p in get_effective_permissions(user))
 
 
-@router.get("/me", tags=PUBLIC_API_TAGS)
+@router.get("/me", tags=PUBLIC_API_TAGS, dependencies=[Depends(scope_exempt)])
 def verify_user_logged_in(
     request: Request,
     user: User | None = Depends(optional_user),
@@ -934,6 +933,7 @@ def verify_user_logged_in(
 
     user_info = UserInfo.from_model(
         user,
+        track_external_idp_expiry=get_security_settings().track_external_idp_expiry,
         current_token_created_at=token_created_at,
         expiry_length=SESSION_EXPIRE_TIME_SECONDS,
         is_cloud_superuser=user.email in super_users_list,
@@ -973,6 +973,15 @@ def update_user_shortcut_enabled_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
+
+
+@router.patch("/paste-as-tile")
+def update_user_paste_as_tile_api(
+    paste_as_tile: bool,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_paste_as_tile(user.id, paste_as_tile, db_session)
 
 
 @router.patch("/auto-scroll")
@@ -1111,7 +1120,10 @@ def update_user_assistant_visibility_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_preferences = UserInfo.from_model(user).preferences
+    user_preferences = UserInfo.from_model(
+        user,
+        track_external_idp_expiry=get_security_settings().track_external_idp_expiry,
+    ).preferences
     updated_preferences = update_assistant_visibility(
         user_preferences, assistant_id, show
     )

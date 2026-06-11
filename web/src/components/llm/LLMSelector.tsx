@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
-import { DefaultModel, LLMProviderDescriptor } from "@/interfaces/llm";
-import { getModelIcon } from "@/lib/llmConfig";
+import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
+import {
+  DefaultModel,
+  LLMProviderDescriptor,
+} from "@/lib/languageModels/types";
+import { getModelIcon, getProvider } from "@/lib/languageModels";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { createIcon } from "@/components/icons/icons";
 
@@ -78,17 +81,21 @@ export default function LLMSelector({
           return;
         }
 
+        // For nameless providers, fall back to the provider ID so the
+        // structured value is always unique and non-empty.
+        const providerLabel =
+          provider.name ?? getProvider(provider.provider).productName;
         const option: LLMOption = {
           name: displayName,
           value: structureValue(
-            provider.name,
+            provider.name ?? String(provider.id),
             provider.provider,
             modelConfiguration.name
           ),
           icon: getModelIcon(provider.provider, modelConfiguration.name),
           modelName: modelConfiguration.name,
           providerId: provider.id,
-          providerName: provider.name,
+          providerName: providerLabel,
           provider: provider.provider,
           supportsImageInput,
           vendor: modelConfiguration.vendor || null,

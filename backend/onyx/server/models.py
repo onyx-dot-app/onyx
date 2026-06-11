@@ -10,7 +10,6 @@ from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 
-
 DataT = TypeVar("DataT")
 
 

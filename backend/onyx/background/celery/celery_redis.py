@@ -12,7 +12,6 @@ from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
 
-
 _broker_client: Redis | None = None
 _broker_url: str | None = None
 _broker_client_lock = threading.Lock()
@@ -81,14 +80,21 @@ def celery_get_unacked_task_ids(queue: str, r: Redis) -> set[str]:
 
     Unacked entries belonging to the indexing queues are "prefetched", so this gives
     us crucial visibility as to what tasks are in that state.
+
+    Uses a bytes-substring pre-filter to skip the json.loads call for entries
+    whose serialized message doesn't even contain the queue name. With a large
+    unacked backlog (10k+ entries) this avoids parsing tens of megabytes of
+    JSON per call — the dominant memory cost on the monitoring worker.
     """
     tasks: set[str] = set()
+    queue_marker = f'"{queue}"'.encode("utf-8")
 
     for _, v in r.hscan_iter("unacked"):
         v_bytes = cast(bytes, v)
-        v_str = v_bytes.decode("utf-8")
-        task = json.loads(v_str)
+        if queue_marker not in v_bytes:
+            continue
 
+        task = json.loads(v_bytes)
         task_description = task[0]
         task_queue = task[2]
 

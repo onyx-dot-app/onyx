@@ -51,7 +51,8 @@ from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import model_to_dict
 from onyx.db.utils import SortOrder
-from onyx.document_index.interfaces import DocumentMetadata
+from onyx.document_index.document_metadata import DocumentMetadata
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
@@ -169,7 +170,6 @@ def get_documents_for_connector_credential_pair_limited_columns(
     credential_id: int,
     sort_order: SortOrder | None = None,
 ) -> Sequence[DocumentRow]:
-
     doc_ids_subquery = select(DocumentByConnectorCredentialPair.id).where(
         and_(
             DocumentByConnectorCredentialPair.connector_id == connector_id,
@@ -719,7 +719,7 @@ def upsert_documents(
         # Use COALESCE to preserve existing permissions when new values are NULL.
         # This prevents subsequent indexing runs (which don't fetch permissions)
         # from overwriting permissions set by permission sync jobs.
-        update_set.update(
+        update_set.update(  # ty: ignore[no-matching-overload]
             {
                 "external_user_emails": func.coalesce(
                     insert_stmt.excluded.external_user_emails,
@@ -830,6 +830,19 @@ def update_docs_chunk_count__no_commit(
         doc.chunk_count = doc_id_to_chunk_count[doc.id]
 
 
+def update_docs_content_hash__no_commit(
+    ids_to_new_hash: dict[str, str],
+    db_session: Session,
+) -> None:
+    documents_to_update = (
+        db_session.query(DbDocument)
+        .filter(DbDocument.id.in_(ids_to_new_hash.keys()))
+        .all()
+    )
+    for doc in documents_to_update:
+        doc.content_hash = ids_to_new_hash[doc.id]
+
+
 def mark_document_as_modified(
     document_id: str,
     db_session: Session,
@@ -927,6 +940,38 @@ def delete_documents__no_commit(db_session: Session, document_ids: list[str]) ->
     db_session.execute(delete(DbDocument).where(DbDocument.id.in_(document_ids)))
 
 
+def get_file_ids_for_document_ids(
+    db_session: Session,
+    document_ids: list[str],
+) -> list[str]:
+    """Return the non-null `file_id` values attached to the given documents."""
+    if not document_ids:
+        return []
+    rows = (
+        db_session.query(DbDocument.file_id)
+        .filter(DbDocument.id.in_(document_ids))
+        .filter(DbDocument.file_id.isnot(None))
+        .all()
+    )
+    return [row.file_id for row in rows if row.file_id is not None]
+
+
+def get_document_id_to_file_id_map(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, str]:
+    """Return a `{document_id: file_id}` map for docs that have a file_id."""
+    if not document_ids:
+        return {}
+    rows = (
+        db_session.query(DbDocument.id, DbDocument.file_id)
+        .filter(DbDocument.id.in_(document_ids))
+        .filter(DbDocument.file_id.isnot(None))
+        .all()
+    )
+    return {doc_id: file_id for doc_id, file_id in rows}
+
+
 def delete_documents_complete__no_commit(
     db_session: Session, document_ids: list[str]
 ) -> None:
@@ -970,6 +1015,27 @@ def delete_documents_complete__no_commit(
     delete_documents__no_commit(db_session, document_ids)
 
 
+def delete_documents_complete(
+    db_session: Session,
+    document_ids: list[str],
+) -> None:
+    """Fully remove documents AND best-effort delete their attached files.
+
+    To be used when a document is finished and should be disposed of.
+    Removes the row and the potentially associated file.
+    """
+    file_ids_to_delete = get_file_ids_for_document_ids(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+    delete_documents_complete__no_commit(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+    db_session.commit()
+    delete_files_best_effort(file_ids_to_delete)
+
+
 def delete_all_documents_for_connector_credential_pair(
     db_session: Session,
     connector_id: int,
@@ -1001,10 +1067,9 @@ def delete_all_documents_for_connector_credential_pair(
         if not document_ids:
             break
 
-        delete_documents_complete__no_commit(
+        delete_documents_complete(
             db_session=db_session, document_ids=list(document_ids)
         )
-        db_session.commit()
 
         if time.monotonic() - start_time > timeout:
             raise RuntimeError("Timeout reached while deleting documents")
@@ -1057,20 +1122,33 @@ def prepare_to_modify_documents(
 
     lock_acquired = False
     for i in range(_NUM_LOCK_ATTEMPTS):
+        yielded = False
         try:
             with db_session.begin() as transaction:
                 lock_acquired = acquire_document_locks(
                     db_session=db_session, document_ids=document_ids
                 )
                 if lock_acquired:
+                    yielded = True
                     yield transaction
-                    break
-        except OperationalError as e:
+                    return
+        except Exception as e:
+            if yielded:
+                # Exception came from the caller's body (after yield), not from
+                # lock acquisition. Re-raise regardless of type so the generator
+                # terminates — looping would cause a second yield and
+                # "RuntimeError: generator didn't stop after throw()".
+                raise
+            if not isinstance(e, OperationalError):
+                raise
             logger.warning(
-                f"Failed to acquire locks for documents on attempt {i}, retrying. Error: {e}"
+                "Failed to acquire locks for documents on attempt %s, retrying. Error: %s",
+                i,
+                e,
             )
 
-        time.sleep(retry_delay)
+        if i < _NUM_LOCK_ATTEMPTS - 1:
+            time.sleep(retry_delay)
 
     if not lock_acquired:
         raise RuntimeError(

@@ -16,9 +16,9 @@ import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { parseLlmDescriptor } from "@/lib/llmConfig/utils";
+import { parseLlmDescriptor } from "@/lib/languageModels/utils";
 import { LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
@@ -253,7 +253,7 @@ export default function MessageToolbar({
               </div>
             )}
 
-            <CopyIconButton
+            <CopyButton
               getCopyText={() =>
                 convertMarkdownTablesToTsv(
                   removeThinkingTokens(getTextContent(rawPackets)) as string

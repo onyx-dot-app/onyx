@@ -2,19 +2,11 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { OpenButton } from "@opal/components";
 import { Disabled as DisabledProvider } from "@opal/core";
 import { SvgSettings } from "@opal/icons";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 const meta: Meta<typeof OpenButton> = {
   title: "opal/components/OpenButton",
   component: OpenButton,
   tags: ["autodocs"],
-  decorators: [
-    (Story) => (
-      <TooltipPrimitive.Provider>
-        <Story />
-      </TooltipPrimitive.Provider>
-    ),
-  ],
 };
 
 export default meta;

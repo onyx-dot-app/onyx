@@ -1,10 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
-import InputTypeIn, {
-  InputTypeInProps,
-} from "@/refresh-components/inputs/InputTypeIn";
+import { cn } from "@opal/utils";
+import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 
 /**
  * InputSearch Component
@@ -30,8 +28,10 @@ import InputTypeIn, {
  * />
  * ```
  */
-export interface InputSearchProps
-  extends Omit<InputTypeInProps, "variant" | "leftSearchIcon"> {
+export interface InputSearchProps extends Omit<
+  InputTypeInProps,
+  "variant" | "searchIcon"
+> {
   /**
    * Ref to the underlying input element.
    */
@@ -45,25 +45,13 @@ export interface InputSearchProps
 export default function InputSearch({
   ref,
   disabled,
-  className,
   ...props
 }: InputSearchProps) {
   return (
     <InputTypeIn
       ref={ref}
       variant={disabled ? "disabled" : "internal"}
-      leftSearchIcon
-      className={cn(
-        "[&_input]:font-main-ui-muted [&_input]:text-text-02 [&_input]:placeholder:text-text-02",
-        !disabled && [
-          "border border-transparent",
-          "hover:border-border-03",
-          "active:border-border-05",
-          "focus-within:shadow-[0px_0px_0px_2px_var(--background-tint-04)]",
-          "focus-within:hover:border-border-03",
-        ],
-        className
-      )}
+      searchIcon
       {...props}
     />
   );

@@ -8,7 +8,6 @@ from onyx.configs.constants import FederatedConnectorSource
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 
-
 _STUB_DS_SUMMARY = DocumentSetSummary(
     id=1,
     name="stub",
@@ -37,8 +36,7 @@ def _make_persona(**overrides: object) -> MagicMock:
     p.hierarchy_nodes = []
     p.attached_documents = []
     p.user_files = []
-    p.llm_model_version_override = None
-    p.llm_model_provider_override = None
+    p.default_model_configuration_id = None
     p.uploaded_image_id = None
     p.icon_name = None
     p.is_public = True

@@ -65,7 +65,7 @@ def _get_all_folders(
         ):
             folder_id = folder["id"]
             if folder_id in seen_folder_ids:
-                logger.debug(f"Folder {folder_id} has already been seen. Skipping.")
+                logger.debug("Folder %s has already been seen. Skipping.", folder_id)
                 continue
 
             seen_folder_ids.add(folder_id)
@@ -94,7 +94,7 @@ def _get_all_folders(
             ]
 
             if not permissions and skip_folders_without_permissions:
-                logger.debug(f"Folder {folder_id} has no permissions. Skipping.")
+                logger.debug("Folder %s has no permissions. Skipping.", folder_id)
                 continue
 
             all_folders.append(
@@ -111,8 +111,17 @@ def _get_all_folders(
             _get_all_folders_for_user(
                 google_drive_connector, skip_folders_without_permissions, user_email
             )
-        except Exception:
-            logger.exception(f"Error getting folders for user {user_email}")
+        except Exception as e:
+            # 401 indicates a customer-side credential issue (token revoked /
+            # expired), not a bug — surface as a warning instead of an error.
+            if isinstance(e, HttpError) and e.status_code == 401:
+                logger.warning(
+                    "Google Drive returned 401 for user %s; credentials may need to be reconnected. %s",
+                    user_email,
+                    e,
+                )
+            else:
+                logger.exception("Error getting folders for user %s", user_email)
             failed_count += 1
 
             if failed_count > MAX_FAILED_PERCENTAGE * len(user_emails):
@@ -135,14 +144,18 @@ def _drive_folder_to_onyx_group(
         if permission.type == PermissionType.USER:
             if permission.email_address is None:
                 logger.warning(
-                    f"User email is None for folder {folder.id} permission {permission}"
+                    "User email is None for folder %s permission %s",
+                    folder.id,
+                    permission,
                 )
                 continue
             folder_member_emails.add(permission.email_address)
         elif permission.type == PermissionType.GROUP:
             if permission.email_address not in group_email_to_member_emails_map:
                 logger.warning(
-                    f"Group email {permission.email_address} for folder {folder.id} not found in group_email_to_member_emails_map"
+                    "Group email %s for folder %s not found in group_email_to_member_emails_map",
+                    permission.email_address,
+                    folder.id,
                 )
                 continue
             folder_member_emails.update(
@@ -182,11 +195,26 @@ def _get_drive_members(
         google_drive_connector.primary_admin_email,
     )
 
-    admin_user_info = (
-        admin_service.users()  # ty: ignore[unresolved-attribute]
-        .get(userKey=google_drive_connector.primary_admin_email)
-        .execute()
-    )
+    try:
+        admin_user_info = (
+            admin_service.users()  # ty: ignore[unresolved-attribute]
+            .get(userKey=google_drive_connector.primary_admin_email)
+            .execute()
+        )
+    except HttpError as e:
+        # A 403 here means the configured primary admin lacks authority on
+        # the Google Workspace directory — the connector is misconfigured
+        # (primary admin is not an admin, or delegation isn't granted).
+        # Raise PermissionError so the caller marks the sync attempt as a
+        # clean failure instead of treating this as an unhandled crash.
+        if e.status_code == 403:
+            raise PermissionError(
+                f"Primary admin {google_drive_connector.primary_admin_email} "
+                "is not authorized on the Google Workspace directory API. "
+                "Reconnect the connector with an account that has admin "
+                "directory access."
+            ) from e
+        raise
     is_admin = admin_user_info.get("isAdmin", False) or admin_user_info.get(
         "isDelegatedAdmin", False
     )
@@ -213,11 +241,13 @@ def _get_drive_members(
                 elif permission["type"] == PermissionType.USER:
                     user_emails.add(permission["emailAddress"])
         except HttpError as e:
-            if e.status_code == 404:
+            if e.status_code in (403, 404):
                 logger.warning(
-                    f"Error getting permissions for drive id {drive_id}. "
-                    f"User '{google_drive_connector.primary_admin_email}' likely "
-                    f"does not have access to this drive. Exception: {e}"
+                    "Error getting permissions for drive id %s. User '%s' likely does not have access to this drive (status=%s). Exception: %s",
+                    drive_id,
+                    google_drive_connector.primary_admin_email,
+                    e.status_code,
+                    e,
                 )
             else:
                 raise e
@@ -237,7 +267,9 @@ def _drive_member_map_to_onyx_groups(
         for group_email in group_emails:
             if group_email not in group_email_to_member_emails_map:
                 logger.warning(
-                    f"Group email {group_email} for drive {drive_id} not found in group_email_to_member_emails_map"
+                    "Group email %s for drive %s not found in group_email_to_member_emails_map",
+                    group_email,
+                    drive_id,
                 )
                 continue
             drive_member_emails.update(group_email_to_member_emails_map[group_email])
@@ -324,7 +356,9 @@ def _build_onyx_groups(
         for group_email in group_emails:
             if group_email not in group_email_to_member_emails_map:
                 logger.warning(
-                    f"Group email {group_email} for drive {drive_id} not found in group_email_to_member_emails_map"
+                    "Group email %s for drive %s not found in group_email_to_member_emails_map",
+                    group_email,
+                    drive_id,
                 )
                 continue
             drive_member_emails.update(group_email_to_member_emails_map[group_email])
@@ -343,15 +377,18 @@ def _build_onyx_groups(
             if permission.type == PermissionType.USER:
                 if permission.email_address is None:
                     logger.warning(
-                        f"User email is None for folder {folder.id} permission {permission}"
+                        "User email is None for folder %s permission %s",
+                        folder.id,
+                        permission,
                     )
                     continue
                 folder_member_emails.add(permission.email_address)
             elif permission.type == PermissionType.GROUP:
                 if permission.email_address not in group_email_to_member_emails_map:
                     logger.warning(
-                        f"Group email {permission.email_address} for folder {folder.id} "
-                        "not found in group_email_to_member_emails_map"
+                        "Group email %s for folder %s not found in group_email_to_member_emails_map",
+                        permission.email_address,
+                        folder.id,
                     )
                     continue
                 folder_member_emails.update(

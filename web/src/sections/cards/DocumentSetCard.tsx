@@ -1,12 +1,12 @@
 "use client";
 
 import { DocumentSetSummary } from "@/lib/types";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Checkbox } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import { SvgFiles } from "@opal/icons";
 import { Interactive } from "@opal/core";
 import { AttachmentItemLayout } from "@/layouts/general-layouts";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 
 export interface DocumentSetCardProps {
   documentSet: DocumentSetSummary;
@@ -27,7 +27,7 @@ export default function DocumentSetCard({
     <Tooltip
       tooltip={disabled && disabledTooltip ? disabledTooltip : undefined}
     >
-      <div className="max-w-[12rem]">
+      <div className="max-w-48">
         <Interactive.Simple
           onClick={
             disabled || isSelected === undefined
@@ -60,7 +60,7 @@ export default function DocumentSetCard({
                 )
               }
             />
-            <Spacer horizontal rem={0.5} />
+            <Spacer orientation="horizontal" rem={0.5} />
           </Interactive.Container>
         </Interactive.Simple>
       </div>

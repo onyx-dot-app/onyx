@@ -4,8 +4,8 @@ This file provides guidance to AI agents when working with code in this reposito
 
 ## KEY NOTES
 
-- If you run into any missing python dependency errors, try running your command with `source .venv/bin/activate` \
-  to assume the python venv.
+- Python deps live in a `uv`-managed virtualenv at `.venv` (repo root). If it doesn't exist yet, create it \
+  with `uv sync --frozen`, then `source .venv/bin/activate`.
 - To make tests work, check the `.env` file at the root of the project to find an OpenAI key.
 - If using `playwright` to explore the frontend, you can usually log in with username `a@example.com` and password
   `a`. The app can be accessed at `http://localhost:3000`.
@@ -27,18 +27,21 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
 #### Worker Types
 
 1. **Primary Worker** (`celery_app.py`)
+
    - Coordinates core background tasks and system-wide operations
    - Handles connector management, document sync, pruning, and periodic checks
    - Runs with 4 threads concurrency
    - Tasks: connector deletion, vespa sync, pruning, LLM model updates, user file sync
 
 2. **Docfetching Worker** (`docfetching`)
+
    - Fetches documents from external data sources (connectors)
    - Spawns docprocessing tasks for each document batch
    - Implements watchdog monitoring for stuck connectors
    - Configurable concurrency (default from env)
 
 3. **Docprocessing Worker** (`docprocessing`)
+
    - Processes fetched documents through the indexing pipeline:
      - Upserts documents to PostgreSQL
      - Chunks documents and adds contextual information
@@ -48,33 +51,31 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
    - Configurable concurrency (default from env)
 
 4. **Light Worker** (`light`)
+
    - Handles lightweight, fast operations
    - Tasks: vespa metadata sync, connector deletion, doc permissions upsert, checkpoint cleanup, index attempt cleanup
    - Higher concurrency for quick tasks
 
 5. **Heavy Worker** (`heavy`)
+
    - Handles resource-intensive operations
    - Tasks: connector pruning, document permissions sync, external group sync, CSV generation
    - Runs with 4 threads concurrency
 
-6. **KG Processing Worker** (`kg_processing`)
-   - Handles Knowledge Graph processing and clustering
-   - Builds relationships between documents
-   - Runs clustering algorithms
-   - Configurable concurrency
+6. **Monitoring Worker** (`monitoring`)
 
-7. **Monitoring Worker** (`monitoring`)
    - System health monitoring and metrics collection
    - Monitors Celery queues, process memory, and system status
    - Single thread (monitoring doesn't need parallelism)
    - Cloud-specific monitoring tasks
 
-8. **User File Processing Worker** (`user_file_processing`)
+7. **User File Processing Worker** (`user_file_processing`)
+
    - Processes user-uploaded files
    - Handles user file indexing and project synchronization
    - Configurable concurrency
 
-9. **Beat Worker** (`beat`)
+8. **Beat Worker** (`beat`)
    - Celery's scheduler for periodic tasks
    - Uses DynamicTenantScheduler for multi-tenant support
    - Schedules tasks like:
@@ -82,7 +83,6 @@ Onyx uses Celery for asynchronous task processing with multiple specialized work
      - Connector deletion checks (every 20 seconds)
      - Vespa sync checks (every 20 seconds)
      - Pruning checks (every 20 seconds)
-     - KG processing (every 60 seconds)
      - Monitoring tasks (every 5 minutes)
      - Cleanup tasks (hourly)
 
@@ -118,7 +118,7 @@ If you make any updates to a celery worker and you want to test these changes, y
 to ask me to restart the celery worker. There is no auto-restart on code-change mechanism.
 
 **Task Time Limits**:
-Since all tasks are executed in thread pools, the time limit features of Celery are silently 
+Since all tasks are executed in thread pools, the time limit features of Celery are silently
 disabled and won't work. Timeout logic must be implemented within the task itself.
 
 ### Code Quality
@@ -135,7 +135,7 @@ NOTE: Always make sure everything is strictly typed (both in Python and Typescri
 
 ### Technology Stack
 
-- **Backend**: Python 3.11, FastAPI, SQLAlchemy, Alembic, Celery
+- **Backend**: Python 3.13, FastAPI, SQLAlchemy, Alembic, Celery
 - **Frontend**: Next.js 15+, React 18, TypeScript, Tailwind CSS
 - **Database**: PostgreSQL with Redis caching
 - **Search**: Vespa vector database
@@ -195,9 +195,17 @@ Write the migration manually and place it in the file that alembic creates when 
 
 ## Testing Strategy
 
-First, you must activate the virtual environment with `source .venv/bin/activate`.
+First, activate the virtualenv: `source .venv/bin/activate`. If `.venv` doesn't exist yet, create it first with `uv sync --frozen`.
 
 There are 4 main types of tests within Onyx:
+
+### Model choice for tests that make real LLM calls
+
+When a test makes a real LLM call (e.g. External Dependency Unit / integration tests
+that hit a live provider), use the cheap-and-fast tier for each provider:
+
+- **OpenAI**: `gpt-5-mini` (never `gpt-4o` / `gpt-4o-mini`)
+- **Anthropic**: `claude-haiku-4-5`
 
 ### Unit Tests
 
@@ -264,7 +272,7 @@ Tests are located at `web/tests/e2e`. Tests are written in TypeScript.
 To run them:
 
 ```bash
-npx playwright test <TEST_NAME>
+bunx playwright test <TEST_NAME>
 ```
 
 For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.
@@ -290,6 +298,19 @@ will be tailing their logs to this file.
 - Streaming support for real-time responses
 - Token management and rate limiting
 - Custom prompts and agent actions
+
+### Tracing — every LLM invocation must be tagged
+
+Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-classification call must open a generation span tagged with a value from the `LLMFlow` registry in `backend/onyx/tracing/flows.py`. Use one of:
+
+- `llm_generation_span(llm=..., flow=LLMFlow.X, input_messages=...)` for calls going through an `LLM` subclass.
+- `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., input_messages=...)` for direct provider SDK / `litellm` / model_server HTTP calls that bypass the `LLM` abstraction.
+
+Rules:
+
+1. Add a new `LLMFlow` enum value before instrumenting a new operation. Don't pass raw strings.
+2. Flow tags name the **operation** (e.g. `IMAGE_EDIT`, `RERANK`) — not the provider. Provider lives in `model_config["model_provider"]`.
+3. The auto-wrap fallback in `onyx/llm/tracing_wrap.py` emits `LLMFlow.UNTAGGED_INVOKE` / `UNTAGGED_STREAM` for calls that reach `LLM.invoke` / `LLM.stream` without an explicit span. These sentinels are visible in dashboards and indicate missing instrumentation — fix the call site, don't rely on the fallback.
 
 ## Creating a Plan
 

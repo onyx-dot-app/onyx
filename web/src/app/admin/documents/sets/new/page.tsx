@@ -1,6 +1,6 @@
 "use client";
 
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
@@ -65,7 +65,7 @@ export default function Page() {
       <SettingsLayouts.Header
         icon={route.icon}
         title="New Document Set"
-        separator
+        divider
         backButton
       />
       <SettingsLayouts.Body>

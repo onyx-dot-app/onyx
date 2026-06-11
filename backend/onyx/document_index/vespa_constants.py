@@ -82,7 +82,7 @@ FULL_CHUNK_EMBEDDING_KEY = "full_chunk"
 
 
 YQL_BASE = (
-    f"select "
+    f"select "  # noqa: S608 - Vespa YQL with static column-name constants, not SQL
     f"documentid, "
     f"{DOCUMENT_ID}, "
     f"{CHUNK_ID}, "

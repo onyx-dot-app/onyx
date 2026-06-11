@@ -2,7 +2,6 @@ import "./globals.css";
 
 import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
 import { Metadata } from "next";
-
 import AppProvider from "@/providers/AppProvider";
 import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
@@ -14,8 +13,9 @@ import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/AppHealthBanner";
+import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
@@ -106,6 +106,7 @@ export default function RootLayout({
               <PHProvider>
                 <SWRConfigProvider>
                   <AppHealthBanner />
+                  <LicenseExpiryBanner />
                   <AppProvider>
                     <DynamicMetadata />
                     <CustomAnalyticsScript />

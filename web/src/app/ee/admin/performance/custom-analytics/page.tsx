@@ -1,9 +1,9 @@
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { CUSTOM_ANALYTICS_ENABLED } from "@/lib/constants";
 import { Callout } from "@/components/ui/callout";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Text } from "@opal/components";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { CustomAnalyticsUpdateForm } from "./CustomAnalyticsUpdateForm";
 
 const route = ADMIN_ROUTES.CUSTOM_ANALYTICS;
@@ -40,7 +40,7 @@ function Main() {
 export default function Page() {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

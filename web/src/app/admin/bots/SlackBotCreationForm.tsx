@@ -4,7 +4,7 @@ import CardSection from "@/components/admin/CardSection";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SlackTokensForm } from "./SlackTokensForm";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { SvgSlack } from "@opal/logos";
 
 export function NewSlackBotForm() {
@@ -22,7 +22,7 @@ export function NewSlackBotForm() {
       <SettingsLayouts.Header
         icon={SvgSlack}
         title="New Slack Bot"
-        separator
+        divider
         backButton
       />
       <SettingsLayouts.Body>

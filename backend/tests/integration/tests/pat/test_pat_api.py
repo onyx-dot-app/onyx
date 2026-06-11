@@ -15,10 +15,9 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
-import requests
-
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -121,7 +120,7 @@ def test_pat_user_isolation_and_authentication(
 
     # Verify user A cannot delete user B's token using their PAT
     assert user_a_pats[0].token is not None
-    delete_response = requests.delete(
+    delete_response = client.delete(
         f"{API_SERVER_URL}/user/pats/{user_b_pats[0].id}",
         headers=PATManager.get_auth_headers(user_a_pats[0].token),
         timeout=60,
@@ -133,7 +132,7 @@ def test_pat_user_isolation_and_authentication(
     assert len(user_b_list_after) == 2
 
     # Verify deleting non-existent token returns 404
-    delete_fake = requests.delete(
+    delete_fake = client.delete(
         f"{API_SERVER_URL}/user/pats/999999",
         headers=user_a.headers,
         timeout=60,
@@ -195,7 +194,7 @@ def test_pat_validation_errors(reset: None) -> None:  # noqa: ARG001
     user: DATestUser = UserManager.create(name="validation_user")
 
     # Empty name should fail
-    empty_name_response = requests.post(
+    empty_name_response = client.post(
         f"{API_SERVER_URL}/user/pats",
         json={"name": "", "expiration_days": 30},
         headers=user.headers,
@@ -205,7 +204,7 @@ def test_pat_validation_errors(reset: None) -> None:  # noqa: ARG001
 
     # Name too long should fail
     long_name = "a" * 101
-    long_name_response = requests.post(
+    long_name_response = client.post(
         f"{API_SERVER_URL}/user/pats",
         json={"name": long_name, "expiration_days": 30},
         headers=user.headers,
@@ -214,7 +213,7 @@ def test_pat_validation_errors(reset: None) -> None:  # noqa: ARG001
     assert long_name_response.status_code == 422
 
     # Negative expiration should fail
-    negative_exp_response = requests.post(
+    negative_exp_response = client.post(
         f"{API_SERVER_URL}/user/pats",
         json={"name": "Test Token", "expiration_days": -1},
         headers=user.headers,
@@ -223,7 +222,7 @@ def test_pat_validation_errors(reset: None) -> None:  # noqa: ARG001
     assert negative_exp_response.status_code == 422
 
     # Zero expiration should fail
-    zero_exp_response = requests.post(
+    zero_exp_response = client.post(
         f"{API_SERVER_URL}/user/pats",
         json={"name": "Test Token", "expiration_days": 0},
         headers=user.headers,
@@ -241,7 +240,7 @@ def test_pat_validation_errors(reset: None) -> None:  # noqa: ARG001
     assert valid_pat.id is not None
 
     # Missing name should fail
-    missing_name_response = requests.post(
+    missing_name_response = client.post(
         f"{API_SERVER_URL}/user/pats",
         json={"expiration_days": 30},
         headers=user.headers,
@@ -373,7 +372,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
 
     # Test admin-only endpoint access
     print("\n[Test] Admin PAT accessing admin-only endpoint...")
-    admin_endpoint_response = requests.get(
+    admin_endpoint_response = client.get(
         f"{API_SERVER_URL}/admin/api-key",
         headers=PATManager.get_auth_headers(admin_pat.token),
         timeout=60,
@@ -382,7 +381,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     print("[✓] Admin PAT successfully accessed /admin/api-key")
 
     print("\n[Test] Basic PAT accessing admin endpoint...")
-    basic_admin_response = requests.get(
+    basic_admin_response = client.get(
         f"{API_SERVER_URL}/admin/api-key",
         headers=PATManager.get_auth_headers(basic_pat.token),
         timeout=60,
@@ -391,7 +390,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     print("[✓] Basic PAT correctly denied access (403) to /admin/api-key")
 
     print("\n[Test] Curator PAT accessing admin-only endpoint...")
-    curator_admin_response = requests.get(
+    curator_admin_response = client.get(
         f"{API_SERVER_URL}/admin/api-key",
         headers=PATManager.get_auth_headers(curator_pat.token),
         timeout=60,
@@ -400,7 +399,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     print("[✓] Curator PAT correctly denied access (403) to /admin/api-key")
 
     print("\n[Test] Global Curator PAT accessing admin-only endpoint...")
-    global_curator_admin_response = requests.get(
+    global_curator_admin_response = client.get(
         f"{API_SERVER_URL}/admin/api-key",
         headers=PATManager.get_auth_headers(global_curator_pat.token),
         timeout=60,
@@ -411,7 +410,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     # Test management endpoint access
     print("\n[Test] Testing management endpoint access for curators...")
 
-    admin_manage_response = requests.get(
+    admin_manage_response = client.get(
         f"{API_SERVER_URL}/manage/admin/connector",
         headers=PATManager.get_auth_headers(admin_pat.token),
         timeout=60,
@@ -419,7 +418,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     assert admin_manage_response.status_code == 200
     print("[✓] Admin PAT can access /manage/admin/connector")
 
-    curator_manage_response = requests.get(
+    curator_manage_response = client.get(
         f"{API_SERVER_URL}/manage/admin/connector",
         headers=PATManager.get_auth_headers(curator_pat.token),
         timeout=60,
@@ -427,7 +426,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     assert curator_manage_response.status_code == 200
     print("[✓] Curator PAT can access /manage/admin/connector")
 
-    global_curator_manage_response = requests.get(
+    global_curator_manage_response = client.get(
         f"{API_SERVER_URL}/manage/admin/connector",
         headers=PATManager.get_auth_headers(global_curator_pat.token),
         timeout=60,
@@ -435,7 +434,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     assert global_curator_manage_response.status_code == 200
     print("[✓] Global Curator PAT can access /manage/admin/connector")
 
-    basic_manage_response = requests.get(
+    basic_manage_response = client.get(
         f"{API_SERVER_URL}/manage/admin/connector",
         headers=PATManager.get_auth_headers(basic_pat.token),
         timeout=60,
@@ -479,7 +478,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
         (global_curator_pat, "Global Curator"),
     ]:
         assert pat.token is not None
-        persona_response = requests.get(
+        persona_response = client.get(
             f"{API_SERVER_URL}/persona",
             headers=PATManager.get_auth_headers(pat.token),
             timeout=60,

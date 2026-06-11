@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
-import { structureValue } from "@/lib/llmConfig/utils";
-import { getModelIcon } from "@/lib/llmConfig";
-import { AGGREGATOR_PROVIDERS } from "@/lib/llmConfig/svc";
+import { structureValue } from "@/lib/languageModels/utils";
+import { getModelIcon } from "@/lib/languageModels";
+import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/providers/UserProvider";
 import Text from "@/refresh-components/texts/Text";
@@ -150,7 +150,7 @@ export default function LLMPopover({
         (m) => m.name === currentModel
       );
       if (config) {
-        return config.display_name || config.name;
+        return config.custom_display_name || config.display_name || config.name;
       }
     }
     return currentModel;

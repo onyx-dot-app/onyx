@@ -7,19 +7,15 @@ from typing import Optional
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.standard_answer import (
-    create_initial_default_standard_answer_category,
-)
+from ee.onyx.db.standard_answer import create_initial_default_standard_answer_category
 from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
 from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
 from ee.onyx.server.enterprise_settings.models import NavigationItem
 from ee.onyx.server.enterprise_settings.store import store_analytics_script
-from ee.onyx.server.enterprise_settings.store import (
-    store_settings as store_ee_settings,
-)
+from ee.onyx.server.enterprise_settings.store import store_settings as store_ee_settings
 from ee.onyx.server.enterprise_settings.store import upload_logo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import Tool
@@ -83,8 +79,8 @@ def _seed_custom_tools(db_session: Session, tools: List[CustomToolSeed]) -> None
         logger.notice("Seeding Custom Tools")
         for tool in tools:
             try:
-                logger.debug(f"Attempting to seed tool: {tool.name}")
-                logger.debug(f"Reading definition from: {tool.definition_path}")
+                logger.debug("Attempting to seed tool: %s", tool.name)
+                logger.debug("Reading definition from: %s", tool.definition_path)
                 with open(tool.definition_path, "r") as file:
                     file_content = file.read()
                     if not file_content.strip():
@@ -100,19 +96,21 @@ def _seed_custom_tools(db_session: Session, tools: List[CustomToolSeed]) -> None
                     user_id=tool.user_id,
                 )
                 db_session.add(db_tool)
-                logger.debug(f"Successfully added tool: {tool.name}")
+                logger.debug("Successfully added tool: %s", tool.name)
             except FileNotFoundError:
                 logger.error(
-                    f"Definition file not found for tool {tool.name}: {tool.definition_path}"
+                    "Definition file not found for tool %s: %s",
+                    tool.name,
+                    tool.definition_path,
                 )
             except json.JSONDecodeError as e:
                 logger.error(
-                    f"Invalid JSON in definition file for tool {tool.name}: {str(e)}"
+                    "Invalid JSON in definition file for tool %s: %s", tool.name, str(e)
                 )
             except Exception as e:
-                logger.error(f"Failed to seed tool {tool.name}: {str(e)}")
+                logger.error("Failed to seed tool %s: %s", tool.name, str(e))
         db_session.commit()
-        logger.notice(f"Successfully seeded {len(tools)} Custom Tools")
+        logger.notice("Successfully seeded %s Custom Tools", len(tools))
 
 
 def _seed_llms(
@@ -123,7 +121,15 @@ def _seed_llms(
 
     logger.notice("Seeding LLMs")
     for request in llm_upsert_requests:
-        existing = fetch_existing_llm_provider(name=request.name, db_session=db_session)
+        if not request.name:
+            # Nameless requests can't be safely matched to an existing provider
+            # without risking overwriting a user-created provider. Skip lookup.
+            continue
+        existing = fetch_existing_llm_provider_by_name_and_type(
+            name=request.name,
+            provider_type=request.provider,
+            db_session=db_session,
+        )
         if existing:
             request.id = existing.id
     seeded_providers: list[LLMProviderView] = []
@@ -168,8 +174,7 @@ def _seed_personas(db_session: Session, personas: list[PersonaUpsertRequest]) ->
                     name=persona.name,
                     description=persona.description,
                     document_set_ids=persona.document_set_ids,
-                    llm_model_provider_override=persona.llm_model_provider_override,
-                    llm_model_version_override=persona.llm_model_version_override,
+                    default_model_configuration_id=persona.default_model_configuration_id,
                     starter_messages=persona.starter_messages,
                     is_public=persona.is_public,
                     db_session=db_session,
@@ -193,7 +198,7 @@ def _seed_settings(settings: Settings) -> None:
         store_base_settings(settings)
         logger.notice("Successfully seeded Settings")
     except ValueError as e:
-        logger.error(f"Failed to seed Settings: {str(e)}")
+        logger.error("Failed to seed Settings: %s", str(e))
 
 
 def _seed_enterprise_settings(seed_config: SeedConfiguration) -> None:
@@ -247,10 +252,10 @@ def _seed_analytics_script(seed_config: SeedConfiguration) -> None:
             store_analytics_script(analytics_script)
         except FileNotFoundError:
             logger.error(
-                f"Analytics script file not found: {seed_config.analytics_script_path}"
+                "Analytics script file not found: %s", seed_config.analytics_script_path
             )
         except ValueError as e:
-            logger.error(f"Failed to seed analytics script: {str(e)}")
+            logger.error("Failed to seed analytics script: %s", str(e))
 
 
 def get_seed_config() -> SeedConfiguration | None:

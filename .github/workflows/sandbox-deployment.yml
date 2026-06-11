@@ -1,9 +1,19 @@
-name: Build and Push Sandbox Image on Tag
+name: Build and Push Sandbox Image
 
+# The sandbox image is the only Craft-specific image. Build a new version on
+# the nightly tag when its build context changed, or manually on demand.
+#
+# To push an ad-hoc dev build:
+#   git tag -f sandbox-dev && git push -f origin sandbox-dev
+# builds unconditionally and pushes onyxdotapp/sandbox:dev. Dev builds never
+# cut a vX.Y.Z version or move :latest — those only happen on the nightly
+# path. Only sandbox-dev is supported, to keep Docker Hub free of one-off tags.
 on:
   push:
     tags:
-      - "experimental-cc4a.*"
+      - "nightly-latest-*"
+      - "sandbox-dev"
+  workflow_dispatch:
 
 # Restrictive defaults; jobs declare what they need.
 permissions: {}
@@ -16,7 +26,9 @@ jobs:
       contents: read
     outputs:
       sandbox-changed: ${{ steps.check.outputs.sandbox-changed }}
-      new-version: ${{ steps.version.outputs.new-version }}
+      # metadata-action tags input: set by the check step for dev builds,
+      # otherwise by the version step.
+      image-tags: ${{ steps.check.outputs.image-tags || steps.version.outputs.image-tags }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -24,40 +36,48 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Check for sandbox-relevant file changes
+      - name: Check for sandbox image changes
         id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          # Get the previous tag to diff against
-          CURRENT_TAG="${GITHUB_REF_NAME}"
-          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep '^experimental-cc4a\.' | grep -v "^${CURRENT_TAG}$" | head -n 1)
+          # Manual runs always build.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "Manual dispatch: building unconditionally"
+            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
+          # The sandbox-dev tag always builds and pushes the :dev image tag.
+          if [ "$GITHUB_REF_NAME" = "sandbox-dev" ]; then
+            echo "Dev tag: building and pushing :dev"
+            echo "image-tags=type=raw,value=dev" >> "$GITHUB_OUTPUT"
+            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Diff the sandbox image build context against the previous nightly tag.
+          CURRENT_TAG="${GITHUB_REF_NAME}"
+          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep '^nightly-latest-' | grep -v "^${CURRENT_TAG}$" | head -n 1)
           if [ -z "$PREVIOUS_TAG" ]; then
-            echo "No previous experimental-cc4a tag found, building unconditionally"
+            echo "No previous nightly tag; building unconditionally"
             echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "Comparing ${PREVIOUS_TAG}..${CURRENT_TAG}"
-
-          # Check if any sandbox-relevant files changed
-          SANDBOX_PATHS=(
-            "backend/onyx/server/features/build/sandbox/"
-          )
-
-          CHANGED=false
-          for path in "${SANDBOX_PATHS[@]}"; do
-            if git diff --name-only "${PREVIOUS_TAG}..${CURRENT_TAG}" -- "$path" | grep -q .; then
-              echo "Changes detected in: $path"
-              CHANGED=true
-              break
-            fi
-          done
-
-          echo "sandbox-changed=$CHANGED" >> "$GITHUB_OUTPUT"
+          if git diff --name-only "${PREVIOUS_TAG}..${CURRENT_TAG}" -- \
+              "backend/onyx/server/features/build/sandbox/image/" | grep -q .; then
+            echo "Sandbox image changed"
+            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No sandbox image changes"
+            echo "sandbox-changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Determine new sandbox version
         id: version
-        if: steps.check.outputs.sandbox-changed == 'true'
+        if: steps.check.outputs.sandbox-changed == 'true' && steps.check.outputs.image-tags == ''
         run: |
           # Query Docker Hub for the latest versioned tag
           LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
@@ -82,7 +102,12 @@ jobs:
           fi
 
           echo "New version: $NEW_VERSION"
-          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "image-tags<<EOF"
+            echo "type=raw,value=v${NEW_VERSION}"
+            echo "type=raw,value=latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
   build-sandbox-amd64:
     needs: check-sandbox-changes
@@ -102,7 +127,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -110,7 +135,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -125,7 +150,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # ratchet:docker/metadata-action@v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           flavor: |
@@ -135,17 +160,17 @@ jobs:
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
-          context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
-          file: ./backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile
+          context: ./backend/onyx/server/features/build/sandbox/image
+          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
@@ -172,7 +197,7 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -180,7 +205,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -195,7 +220,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # ratchet:docker/metadata-action@v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           flavor: |
@@ -205,17 +230,17 @@ jobs:
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
-          context: ./backend/onyx/server/features/build/sandbox/kubernetes/docker
-          file: ./backend/onyx/server/features/build/sandbox/kubernetes/docker/Dockerfile
+          context: ./backend/onyx/server/features/build/sandbox/image
+          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
@@ -241,10 +266,10 @@ jobs:
     env:
       REGISTRY_IMAGE: onyxdotapp/sandbox
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -261,21 +286,19 @@ jobs:
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # ratchet:docker/metadata-action@v6.0.0
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
         with:
           images: ${{ env.REGISTRY_IMAGE }}
           flavor: |
             latest=false
-          tags: |
-            type=raw,value=v${{ needs.check-sandbox-changes.outputs.new-version }}
-            type=raw,value=latest
+          tags: ${{ needs.check-sandbox-changes.outputs.image-tags }}
 
       - name: Create and push manifest
         env:

@@ -22,7 +22,7 @@ def clean_header_list(headers_to_clean: list[HeaderItemDict]) -> dict[str, str]:
         value = item["value"]
         if key in cleaned_headers:
             logger.warning(
-                f"Duplicate header {key} found in custom headers, ignoring..."
+                "Duplicate header %s found in custom headers, ignoring...", key
             )
             continue
         cleaned_headers[key] = value

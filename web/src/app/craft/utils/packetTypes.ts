@@ -1,7 +1,7 @@
 /**
  * Packet Types
  *
- * Type definitions for raw and parsed ACP packets.
+ * Type definitions for raw and parsed sandbox event packets.
  * Centralizes all snake_case / camelCase field resolution.
  * Defines the ParsedPacket discriminated union consumed by both
  * useBuildStreaming (live SSE) and useBuildSessionStore (DB reload).
@@ -42,6 +42,15 @@ export function getToolNameRaw(p: Record<string, unknown>): string {
   const explicit = (p.tool_name ?? p.toolName ?? "") as string;
   if (explicit) return explicit.toLowerCase();
 
+  // ACP _meta is the extensibility slot. The opencode-serve translator
+  // stuffs the raw opencode tool name in here (since ACP's strict pydantic
+  // schema drops unknown top-level fields).
+  const meta = p._meta as Record<string, unknown> | undefined;
+  if (meta && typeof meta === "object") {
+    const fromMeta = (meta.toolName ?? meta.tool_name ?? "") as string;
+    if (fromMeta) return fromMeta.toLowerCase();
+  }
+
   // Fall back to title only if it looks like a simple tool name
   // (no spaces or newlines — otherwise it's a human-readable description)
   const title = (p.title ?? "") as string;
@@ -65,16 +74,31 @@ export type ToolName =
   | "todowrite"
   | "webfetch"
   | "websearch"
+  // opencode 1.15.x additions:
+  | "lsp"
+  | "apply_patch"
+  | "skill"
+  | "list"
+  | "question"
+  | "invalid"
   | "unknown";
 
 export interface ParsedTextChunk {
   type: "text_chunk";
   text: string;
+  /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
+  sessionId: string | null;
+  /** Non-null only for subagent child events — the parent opencode session. */
+  parentSessionId: string | null;
 }
 
 export interface ParsedThinkingChunk {
   type: "thinking_chunk";
   text: string;
+  /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
+  sessionId: string | null;
+  /** Non-null only for subagent child events — the parent opencode session. */
+  parentSessionId: string | null;
 }
 
 export interface ParsedToolCallStart {
@@ -83,6 +107,20 @@ export interface ParsedToolCallStart {
   toolName: ToolName;
   kind: import("../types/displayTypes").ToolCallKind;
   isTodo: boolean;
+  /** Best-effort title resolved from toolName/kind, shown until progress arrives. */
+  title: string;
+  /** Display description resolved from rawInput, used before progress arrives. */
+  description: string;
+  /** Command or task prompt resolved from rawInput, used before progress arrives. */
+  command: string;
+  /** For task tool calls: the subagent type, when provided. */
+  subagentType: string | null;
+  /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
+  sessionId: string | null;
+  /** Non-null only for subagent child events — the parent opencode session. */
+  parentSessionId: string | null;
+  /** On a parent `task` event, the child session it spawned; else null. */
+  subagentSessionId: string | null;
 }
 
 export interface ParsedToolCallProgress {
@@ -99,6 +137,7 @@ export interface ParsedToolCallProgress {
   rawOutput: string;
   filePath: string; // Session-relative
   subagentType: string | null;
+  skillName: string | null;
   // Edit-specific
   isNewFile: boolean;
   oldContent: string;
@@ -107,6 +146,12 @@ export interface ParsedToolCallProgress {
   todos: TodoItem[];
   // Task-specific
   taskOutput: string | null;
+  /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
+  sessionId: string | null;
+  /** Non-null only for subagent child events — the parent opencode session. */
+  parentSessionId: string | null;
+  /** On a parent `task` event, the child session it spawned; else null. */
+  subagentSessionId: string | null;
 }
 
 export interface ParsedPromptResponse {
@@ -129,6 +174,18 @@ export interface ParsedError {
   message: string;
 }
 
+export interface ParsedApprovalRequested {
+  type: "approval_requested";
+  approvalId: string;
+  sessionId: string;
+}
+
+export interface ParsedSubagentStarted {
+  type: "subagent_started";
+  subagentSessionId: string;
+  parentSessionId: string | null;
+}
+
 export interface ParsedUnknown {
   type: "unknown";
 }
@@ -140,5 +197,7 @@ export type ParsedPacket =
   | ParsedToolCallProgress
   | ParsedPromptResponse
   | ParsedArtifact
+  | ParsedApprovalRequested
+  | ParsedSubagentStarted
   | ParsedError
   | ParsedUnknown;

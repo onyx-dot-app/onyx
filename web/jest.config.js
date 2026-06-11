@@ -144,11 +144,13 @@ module.exports = {
         "**/src/app/**/services/*.test.ts",
         "**/src/app/**/utils/*.test.ts",
         "**/src/app/**/hooks/*.test.ts", // Pure packet processor tests
+        "**/src/app/**/__tests__/*.test.ts",
         "**/src/hooks/**/*.test.ts",
         "**/src/refresh-components/**/*.test.ts",
         "**/src/refresh-pages/**/*.test.ts",
         "**/src/sections/**/*.test.ts",
         "**/src/components/**/*.test.ts",
+        "**/lib/opal/**/*.test.ts",
         // Add more patterns here as you add more unit tests
       ],
     },
@@ -163,6 +165,7 @@ module.exports = {
         "**/src/lib/**/*.test.tsx",
         "**/src/providers/**/*.test.tsx",
         "**/src/refresh-components/**/*.test.tsx",
+        "**/src/refresh-pages/**/*.test.tsx",
         "**/src/hooks/**/*.test.tsx",
         "**/src/sections/**/*.test.tsx",
         // Add more patterns here as you add more integration tests

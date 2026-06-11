@@ -5,13 +5,13 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
-import CreateButton from "@/refresh-components/buttons/CreateButton";
+import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import Card from "@/refresh-components/cards/Card";
-import { SvgKey } from "@opal/icons";
+import { SvgKey, SvgPlusCircle } from "@opal/icons";
 import {
   useDiscordGuilds,
   useDiscordBotConfig,
@@ -88,7 +88,7 @@ function DiscordBotContent() {
                 <Text text03 secondaryMono>
                   !register {registrationKey}
                 </Text>
-                <CopyIconButton
+                <CopyButton
                   getCopyText={() => `!register ${registrationKey}`}
                 />
               </Section>
@@ -106,12 +106,14 @@ function DiscordBotContent() {
           <Text mainContentEmphasis text05>
             Server Configurations
           </Text>
-          <CreateButton
+          <Button
+            icon={SvgPlusCircle}
+            prominence="secondary"
             onClick={handleCreateGuild}
             disabled={isCreating || !isBotAvailable}
           >
             {isCreating ? "Creating..." : "Add Server"}
-          </CreateButton>
+          </Button>
         </Section>
         <DiscordGuildsTable guilds={guilds} onRefresh={refreshGuilds} />
       </Card>

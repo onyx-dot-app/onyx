@@ -8,13 +8,13 @@ from typing import Any
 from typing import cast
 from typing import IO
 from typing import NotRequired
+from typing import TYPE_CHECKING
 from typing import TypedDict
 
 import boto3
 import puremagic
 from botocore.config import Config
 from botocore.exceptions import ClientError
-from mypy_boto3_s3 import S3Client
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AWS_REGION_NAME
@@ -39,6 +39,11 @@ from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
+
+    from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 logger = setup_logger()
 
@@ -183,7 +188,7 @@ class S3BackedFileStore(FileStore):
         s3_prefix: str | None = None,
         s3_verify_ssl: bool = True,
     ) -> None:
-        self._s3_client: S3Client | None = None
+        self._s3_client: "S3Client | None" = None
         self._bucket_name = bucket_name
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
@@ -192,7 +197,7 @@ class S3BackedFileStore(FileStore):
         self._s3_prefix = s3_prefix or "onyx-files"
         self._s3_verify_ssl = s3_verify_ssl
 
-    def _get_s3_client(self) -> S3Client:
+    def _get_s3_client(self) -> "S3Client":
         """Initialize S3 client if not already done"""
         if self._s3_client is None:
             try:
@@ -231,7 +236,7 @@ class S3BackedFileStore(FileStore):
                     self._s3_client = boto3.client(**client_kwargs)
 
             except Exception as e:
-                logger.error(f"Failed to initialize S3 client: {e}")
+                logger.error("Failed to initialize S3 client: %s", e)
                 raise RuntimeError(f"Failed to initialize S3 client: {e}")
 
         return self._s3_client
@@ -255,7 +260,7 @@ class S3BackedFileStore(FileStore):
 
         # Log if truncation occurred (when the key is exactly at the limit)
         if len(s3_key) == 1024:
-            logger.info(f"File name was too long and was truncated: {file_name}")
+            logger.info("File name was too long and was truncated: %s", file_name)
 
         return s3_key
 
@@ -267,12 +272,12 @@ class S3BackedFileStore(FileStore):
         # Check if bucket exists
         try:
             s3_client.head_bucket(Bucket=bucket_name)
-            logger.info(f"S3 bucket '{bucket_name}' already exists")
+            logger.info("S3 bucket '%s' already exists", bucket_name)
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
             if error_code == "404":
                 # Bucket doesn't exist, create it
-                logger.info(f"Creating S3 bucket '{bucket_name}'")
+                logger.info("Creating S3 bucket '%s'", bucket_name)
 
                 # For AWS S3, we need to handle region-specific bucket creation
                 region = (
@@ -291,7 +296,7 @@ class S3BackedFileStore(FileStore):
                     # For us-east-1 or MinIO/other S3-compatible services
                     s3_client.create_bucket(Bucket=bucket_name)
 
-                logger.info(f"Successfully created S3 bucket '{bucket_name}'")
+                logger.info("Successfully created S3 bucket '%s'", bucket_name)
             elif error_code == "403":
                 # Bucket exists but we don't have permission to access it
                 logger.warning(
@@ -302,7 +307,7 @@ class S3BackedFileStore(FileStore):
                 )
             else:
                 # Some other error occurred
-                logger.error(f"Failed to check S3 bucket '{bucket_name}': {e}")
+                logger.error("Failed to check S3 bucket '%s': %s", bucket_name, e)
                 raise RuntimeError(f"Failed to check S3 bucket '{bucket_name}': {e}")
 
     def has_file(
@@ -405,7 +410,7 @@ class S3BackedFileStore(FileStore):
                 Bucket=file_record.bucket_name, Key=file_record.object_key
             )
         except ClientError:
-            logger.error(f"Failed to read file {file_id} from S3")
+            logger.error("Failed to read file %s from S3", file_id)
             raise
 
         # FIX: Stream file content instead of loading entire file into memory
@@ -451,7 +456,7 @@ class S3BackedFileStore(FileStore):
             )
             return response.get("ContentLength")
         except Exception as e:
-            logger.warning(f"Error getting file size for {file_id}: {e}")
+            logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
 
     def delete_file(
@@ -473,8 +478,9 @@ class S3BackedFileStore(FileStore):
                     return
                 if not file_record.bucket_name:
                     logger.error(
-                        f"File record {file_id} with key {file_record.object_key} "
-                        "has no bucket name, cannot delete from filestore"
+                        "File record %s with key %s has no bucket name, cannot delete from filestore",
+                        file_id,
+                        file_record.object_key,
                     )
                     delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                     db_session.commit()
@@ -491,8 +497,9 @@ class S3BackedFileStore(FileStore):
                     # since the end goal (object not existing) is achieved
                     if e.response.get("Error", {}).get("Code") == "NoSuchKey":
                         logger.warning(
-                            f"delete_file: File {file_id} not found in file store (key: {file_record.object_key}), "
-                            "cleaning up database record."
+                            "delete_file: File %s not found in file store (key: %s), cleaning up database record.",
+                            file_id,
+                            file_record.object_key,
                         )
                     else:
                         raise
@@ -564,7 +571,10 @@ class S3BackedFileStore(FileStore):
             except Exception as e:
                 db_session.rollback()
                 logger.exception(
-                    f"Failed to change file ID from {old_file_id} to {new_file_id}: {e}"
+                    "Failed to change file ID from %s to %s: %s",
+                    old_file_id,
+                    new_file_id,
+                    e,
                 )
                 raise
 
@@ -614,25 +624,57 @@ def get_s3_file_store() -> S3BackedFileStore:
     )
 
 
+def get_gcs_file_store() -> "GCSBackedFileStore":
+    """Returns the GCS file store implementation."""
+    from onyx.configs.app_configs import GCS_FILE_STORE_BUCKET_NAME
+    from onyx.configs.app_configs import GCS_FILE_STORE_PREFIX
+    from onyx.configs.app_configs import GCS_PROJECT_ID
+    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_JSON
+    from onyx.configs.app_configs import GCS_SERVICE_ACCOUNT_KEY_PATH
+    from onyx.file_store.gcs_file_store import GCSBackedFileStore
+
+    bucket_name = GCS_FILE_STORE_BUCKET_NAME
+    if not bucket_name:
+        raise RuntimeError("GCS_FILE_STORE_BUCKET_NAME is required for GCS file store")
+
+    return GCSBackedFileStore(
+        bucket_name=bucket_name,
+        gcs_prefix=GCS_FILE_STORE_PREFIX,
+        project_id=GCS_PROJECT_ID,
+        service_account_key_path=GCS_SERVICE_ACCOUNT_KEY_PATH,
+        service_account_key_json=GCS_SERVICE_ACCOUNT_KEY_JSON,
+    )
+
+
 def get_default_file_store() -> FileStore:
     """
     Returns the configured file store implementation based on FILE_STORE_BACKEND.
 
-    When FILE_STORE_BACKEND=postgres (default):
+    When FILE_STORE_BACKEND=postgres:
     - Files are stored in PostgreSQL using Large Objects.
     - No external storage service (S3/MinIO) is required.
 
-    When FILE_STORE_BACKEND=s3:
+    When FILE_STORE_BACKEND=s3 (default):
     - Supports AWS S3, MinIO, and other S3-compatible storage.
     - Configuration via environment variables:
       - S3_FILE_STORE_BUCKET_NAME, S3_ENDPOINT_URL, S3_AWS_ACCESS_KEY_ID, etc.
+
+    When FILE_STORE_BACKEND=gcs:
+    - Uses Google Cloud Storage with ADC/Workload Identity or service account keys.
+    - Configuration via environment variables:
+      - GCS_FILE_STORE_BUCKET_NAME, GCS_PROJECT_ID, GCS_SERVICE_ACCOUNT_KEY_PATH, etc.
     """
     from onyx.configs.app_configs import FILE_STORE_BACKEND
     from onyx.configs.constants import FileStoreType
 
-    if FileStoreType(FILE_STORE_BACKEND) == FileStoreType.POSTGRES:
+    backend = FileStoreType(FILE_STORE_BACKEND)
+
+    if backend == FileStoreType.POSTGRES:
         from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 
         return PostgresBackedFileStore()
+
+    if backend == FileStoreType.GCS:
+        return get_gcs_file_store()
 
     return get_s3_file_store()

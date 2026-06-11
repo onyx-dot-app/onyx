@@ -10,20 +10,19 @@ from datetime import timezone
 from typing import Any
 
 from celery import Celery
+from celery import current_app
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
-from fastapi import HTTPException
 from pydantic import BaseModel
-from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy import exists
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_broker_client
+from onyx.background.celery.celery_redis import celery_get_queued_task_ids
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
@@ -33,6 +32,9 @@ from onyx.background.celery.tasks.docfetching.task_creation_utils import (
 )
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
 from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
+from onyx.background.celery.tasks.docprocessing.targeted_reindex_task import (  # noqa: F401  # registers @shared_task with celery
+    targeted_reindex_task,
+)
 from onyx.background.celery.tasks.docprocessing.utils import IndexingCallback
 from onyx.background.celery.tasks.docprocessing.utils import is_in_repeated_error_state
 from onyx.background.celery.tasks.docprocessing.utils import should_index
@@ -42,14 +44,16 @@ from onyx.background.indexing.checkpointing_utils import (
     get_index_attempts_with_old_checkpoints,
 )
 from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
-from onyx.background.indexing.index_attempt_utils import get_old_index_attempts
+from onyx.background.indexing.index_attempt_utils import get_old_index_attempt_ids
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import MANAGED_VESPA
+from onyx.configs.app_configs import PERSISTENT_INDEXING
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import OnyxCeleryPriority
@@ -77,13 +81,16 @@ from onyx.db.enums import SwitchoverType
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
+from onyx.db.index_attempt import get_stale_not_started_index_attempts
 from onyx.db.index_attempt import IndexAttemptError
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.index_attempt import mark_attempt_partially_succeeded
 from onyx.db.index_attempt import mark_attempt_succeeded
+from onyx.db.index_attempt_metrics import IndexAttemptStage
+from onyx.db.index_attempt_metrics import safe_record_single_event
+from onyx.db.index_attempt_metrics import time_stage
 from onyx.db.indexing_coordination import CoordinationStatus
-from onyx.db.indexing_coordination import INDEXING_PROGRESS_TIMEOUT_HOURS
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
@@ -93,23 +100,29 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_all_document_indices
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
+from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
 )
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
+from onyx.indexing.persistent_indexing import build_generic_connector_failure
+from onyx.indexing.persistent_indexing import record_generic_failure
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
+from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.redis_utils import is_fence
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.connector_health_metrics import on_connector_error_state_change
 from onyx.server.metrics.connector_health_metrics import on_connector_indexing_success
 from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
@@ -128,11 +141,14 @@ from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger()
 
-DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER = 4
-DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 24
-# Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead
-# This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
+# Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead.
+# This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s).
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+# How long a NOT_STARTED attempt must sit before we scan the broker.
+# After this window we check Redis directly — if the task is still there we
+# leave it alone, so this threshold does not cause false positives for
+# legitimately queued tasks under heavy load.
+NOT_STARTED_SCAN_THRESHOLD_HOURS = 12
 INDEX_ATTEMPT_BATCH_SIZE = 500
 
 
@@ -173,6 +189,10 @@ def validate_active_indexing_attempts(
                 select(IndexAttempt).where(
                     IndexAttempt.status.in_([IndexingStatus.IN_PROGRESS]),
                     IndexAttempt.celery_task_id.isnot(None),
+                    # Synthetic attempts spawned by the targeted-reindex flow
+                    # have their own lifecycle owner and do not increment
+                    # the docprocessing heartbeat counter.
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
                 )
             )
             .scalars()
@@ -225,11 +245,6 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
-            if fresh_attempt.total_batches and fresh_attempt.completed_batches == 0:
-                heartbeat_timeout_seconds = (
-                    HEARTBEAT_TIMEOUT_SECONDS
-                    * DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER
-                )
             cutoff_time = datetime.now(timezone.utc) - timedelta(
                 seconds=heartbeat_timeout_seconds
             )
@@ -241,13 +256,66 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
-            # No heartbeat for too long - mark as failed
-            failure_reason = (
-                f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
-            )
+            # Heartbeat is stale. If docfetching has finished (total_batches is
+            # set), use the Redis counters to decide whether to invalidate:
+            #
+            #   in_flight > 0               → workers crashed holding batches → invalidate
+            #   in_flight = 0, pending > 0  → batches in queue, no crash → wait
+            #   in_flight = 0, pending = 0  → no work anywhere, stuck → invalidate
+            #
+            # If total_batches is not set yet, docfetching is still running;
+            # fall through to immediate invalidation (base timeout elapsed).
+            if fresh_attempt.total_batches is not None:
+                in_flight = 0
+                pending = 0
+                try:
+                    r = get_redis_client()
+                    rd = RedisDocprocessing(fresh_attempt.id, r)
+                    in_flight = rd.in_flight()
+                    pending = rd.pending()
+                except Exception:
+                    task_logger.exception(
+                        f"Failed to read batch counters for attempt {fresh_attempt.id}, "
+                        f"falling back to invalidation"
+                    )
+
+                task_logger.warning(
+                    f"Stale heartbeat for attempt {fresh_attempt.id}: "
+                    f"in_flight={in_flight} pending={pending} "
+                    f"completed={fresh_attempt.completed_batches}/{fresh_attempt.total_batches}"
+                )
+
+                if in_flight == 0 and pending > 0:
+                    # Batches are sitting in the queue waiting for workers —
+                    # no crash, just backlog. Do not invalidate.
+                    task_logger.info(
+                        f"Attempt {fresh_attempt.id} has {pending} batches in queue, "
+                        f"no workers crashed — waiting for workers to free up"
+                    )
+                    continue
+
+                if in_flight > 0:
+                    failure_reason = (
+                        f"Heartbeat stale for {heartbeat_timeout_seconds}s with "
+                        f"{in_flight} in-flight batches — workers crashed holding batches"
+                    )
+                else:
+                    # in_flight == 0, pending == 0: no work anywhere, no forward
+                    # progress possible — all batches either failed or were lost.
+                    failure_reason = (
+                        f"Heartbeat stale for {heartbeat_timeout_seconds}s with "
+                        f"no pending or in-flight batches — all batches failed or lost"
+                    )
+            else:
+                # total_batches is None: docfetching is still running but the
+                # worker process died. The heartbeat thread runs independently
+                # of rate limiting, so a stale heartbeat here means a real crash.
+                failure_reason = (
+                    f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
+                )
 
             task_logger.warning(
-                f"Heartbeat timeout for attempt {fresh_attempt.id}: "
+                f"Invalidating attempt {fresh_attempt.id}: "
                 f"last_heartbeat_time={last_check_time} "
                 f"cutoff_time={cutoff_time} "
                 f"counter={current_counter}"
@@ -268,6 +336,51 @@ def validate_active_indexing_attempts(
                 task_logger.exception(
                     f"Failed to mark attempt {fresh_attempt.id} as failed due to heartbeat timeout"
                 )
+
+        # Separately handle NOT_STARTED attempts. Their heartbeat_counter never
+        # advances (the task hasn't started), so the heartbeat loop above cannot
+        # be used. Docfetching tasks have no expires= so a task can legitimately
+        # sit in the queue for hours under heavy load — we gate on
+        # NOT_STARTED_SCAN_THRESHOLD_HOURS before scanning Redis, then confirm
+        # the Celery task is truly gone before marking failed.
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            hours=NOT_STARTED_SCAN_THRESHOLD_HOURS
+        )
+        stale_not_started = get_stale_not_started_index_attempts(db_session, cutoff)
+        if stale_not_started:
+            redis_celery = celery_get_broker_client(current_app)
+            queued_ids = celery_get_queued_task_ids(
+                OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
+            )
+            unacked_ids = celery_get_unacked_task_ids(
+                OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
+            )
+            live_ids = queued_ids | unacked_ids
+            for attempt in stale_not_started:
+                lock_beat.reacquire()
+                if not attempt.celery_task_id or attempt.celery_task_id in live_ids:
+                    continue
+                # Brief sleep to rule out the race where the task was just
+                # dequeued but the status flip to IN_PROGRESS hasn't committed.
+                time.sleep(1)
+                fresh = get_index_attempt(db_session, attempt.id)
+                if not fresh or fresh.status != IndexingStatus.NOT_STARTED:
+                    continue
+                task_logger.error(
+                    f"Attempt {attempt.id} has been NOT_STARTED for over "
+                    f"{NOT_STARTED_SCAN_THRESHOLD_HOURS}h and its Celery task "
+                    f"{attempt.celery_task_id} no longer exists — marking failed."
+                )
+                try:
+                    mark_attempt_failed(
+                        attempt.id,
+                        db_session,
+                        failure_reason="Task never started — Celery task lost before pickup",
+                    )
+                except Exception:
+                    task_logger.exception(
+                        f"Failed to mark lost NOT_STARTED attempt {attempt.id} as failed"
+                    )
 
 
 class ConnectorIndexingLogBuilder:
@@ -292,7 +405,7 @@ class ConnectorIndexingLogBuilder:
 
 
 def monitor_indexing_attempt_progress(
-    attempt: IndexAttempt, tenant_id: str, db_session: Session, task: Task
+    attempt: IndexAttempt, tenant_id: str, db_session: Session
 ) -> None:
     """
     TODO: rewrite this docstring
@@ -356,12 +469,12 @@ def monitor_indexing_attempt_progress(
 
     # Check task completion using Celery
     try:
-        check_indexing_completion(
-            attempt.id, coordination_status, storage, tenant_id, task
-        )
+        check_indexing_completion(attempt.id, coordination_status, storage, tenant_id)
     except Exception as e:
         logger.exception(
-            f"Failed to monitor document processing completion: attempt={attempt.id} error={str(e)}"
+            "Failed to monitor document processing completion: attempt=%s error=%s",
+            attempt.id,
+            str(e),
         )
 
         # Mark the attempt as failed if monitoring fails
@@ -379,7 +492,7 @@ def monitor_indexing_attempt_progress(
 
         # Try to clean up storage
         try:
-            logger.info(f"Cleaning up storage after monitoring failure: {storage}")
+            logger.info("Cleaning up storage after monitoring failure: %s", storage)
             storage.cleanup_all_batches()
         except Exception:
             logger.exception("Failed to cleanup storage after monitoring failure")
@@ -406,10 +519,11 @@ def check_indexing_completion(
     coordination_status: CoordinationStatus,
     storage: DocumentBatchStorage,
     tenant_id: str,
-    task: Task,
 ) -> None:
     logger.info(
-        f"Checking for indexing completion: attempt={index_attempt_id} tenant={tenant_id}"
+        "Checking for indexing completion: attempt=%s tenant=%s",
+        index_attempt_id,
+        tenant_id,
     )
 
     # Check if indexing is complete and all batches are processed
@@ -420,88 +534,14 @@ def check_indexing_completion(
     )
 
     logger.info(
-        f"Indexing status: "
-        f"indexing_completed={indexing_completed} "
-        f"batches_processed={batches_processed}/{batches_total if batches_total is not None else '?'} "
-        f"total_docs={coordination_status.total_docs} "
-        f"total_chunks={coordination_status.total_chunks} "
-        f"total_failures={coordination_status.total_failures}"
+        "Indexing status: indexing_completed=%s batches_processed=%s/%s total_docs=%s total_chunks=%s total_failures=%s",
+        indexing_completed,
+        batches_processed,
+        batches_total if batches_total is not None else "?",
+        coordination_status.total_docs,
+        coordination_status.total_chunks,
+        coordination_status.total_failures,
     )
-
-    # Update progress tracking and check for stalls
-    with get_session_with_current_tenant() as db_session:
-        stalled_timeout_hours = INDEXING_PROGRESS_TIMEOUT_HOURS
-        # Index attempts that are waiting between docfetching and
-        # docprocessing get a generous stalling timeout
-        if batches_total is not None and batches_processed == 0:
-            stalled_timeout_hours = (
-                stalled_timeout_hours * DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER
-            )
-
-        timed_out = not IndexingCoordination.update_progress_tracking(
-            db_session,
-            index_attempt_id,
-            batches_processed,
-            timeout_hours=stalled_timeout_hours,
-        )
-
-        # Check for stalls (3-6 hour timeout). Only applies to in-progress attempts.
-        attempt = get_index_attempt(db_session, index_attempt_id)
-        if attempt and timed_out:
-            if attempt.status == IndexingStatus.IN_PROGRESS:
-                logger.error(
-                    f"Indexing attempt {index_attempt_id} has been indexing for "
-                    f"{stalled_timeout_hours // 2}-{stalled_timeout_hours} hours without progress. "
-                    f"Marking it as failed."
-                )
-                mark_attempt_failed(
-                    index_attempt_id, db_session, failure_reason="Stalled indexing"
-                )
-            elif (
-                attempt.status == IndexingStatus.NOT_STARTED and attempt.celery_task_id
-            ):
-                # Check if the task exists in the celery queue
-                # This handles the case where Redis dies after task creation but before task execution
-                redis_celery = celery_get_broker_client(task.app)
-                task_exists = celery_find_task(
-                    attempt.celery_task_id,
-                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
-                    redis_celery,
-                )
-                unacked_task_ids = celery_get_unacked_task_ids(
-                    OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, redis_celery
-                )
-
-                if not task_exists and attempt.celery_task_id not in unacked_task_ids:
-                    # there is a race condition where the docfetching task has been taken off
-                    # the queues (i.e. started) but the indexing attempt still has a status of
-                    # Not Started because the switch to in progress takes like 0.1 seconds.
-                    # sleep a bit and confirm that the attempt is still not in progress.
-                    time.sleep(1)
-                    attempt = get_index_attempt(db_session, index_attempt_id)
-                    if attempt and attempt.status == IndexingStatus.NOT_STARTED:
-                        logger.error(
-                            f"Task {attempt.celery_task_id} attached to indexing attempt "
-                            f"{index_attempt_id} does not exist in the queue. "
-                            f"Marking indexing attempt as failed."
-                        )
-                        mark_attempt_failed(
-                            index_attempt_id,
-                            db_session,
-                            failure_reason="Task not in queue",
-                        )
-            else:
-                logger.info(
-                    f"Indexing attempt {index_attempt_id} is {attempt.status}. 3-6 hours without heartbeat "
-                    "but task is in the queue. Likely underprovisioned docfetching worker."
-                )
-                # Update last progress time so we won't time out again for another 3 hours
-                IndexingCoordination.update_progress_tracking(
-                    db_session,
-                    index_attempt_id,
-                    batches_processed,
-                    force_update_progress=True,
-                )
 
     # check again on the next check_for_indexing task
     # TODO: on the cloud this is currently 25 minutes at most, which
@@ -511,7 +551,7 @@ def check_indexing_completion(
         return
 
     # If processing is complete, handle completion
-    logger.info(f"Connector indexing finished for index attempt {index_attempt_id}.")
+    logger.info("Connector indexing finished for index attempt %s.", index_attempt_id)
 
     # All processing is complete
     total_failures = coordination_status.total_failures
@@ -519,11 +559,13 @@ def check_indexing_completion(
     with get_session_with_current_tenant() as db_session:
         if total_failures == 0:
             attempt = mark_attempt_succeeded(index_attempt_id, db_session)
-            logger.info(f"Index attempt {index_attempt_id} completed successfully")
+            logger.info("Index attempt %s completed successfully", index_attempt_id)
         else:
             attempt = mark_attempt_partially_succeeded(index_attempt_id, db_session)
             logger.info(
-                f"Index attempt {index_attempt_id} completed with {total_failures} failures"
+                "Index attempt %s completed with %s failures",
+                index_attempt_id,
+                total_failures,
             )
 
         # Update CC pair status if successful
@@ -605,7 +647,7 @@ def check_indexing_completion(
 
             if attempt.status == IndexingStatus.SUCCESS:
                 logger.info(
-                    f"Resolving indexing entity errors for attempt {index_attempt_id}"
+                    "Resolving indexing entity errors for attempt %s", index_attempt_id
                 )
                 _resolve_indexing_entity_errors(
                     cc_pair_id=attempt.connector_credential_pair_id,
@@ -614,12 +656,29 @@ def check_indexing_completion(
 
     # Clean up FileStore storage (still needed for document batches during transition)
     try:
-        logger.info(f"Cleaning up storage after indexing completion: {storage}")
+        logger.info("Cleaning up storage after indexing completion: %s", storage)
         storage.cleanup_all_batches()
     except Exception:
         logger.exception("Failed to clean up document batches - continuing")
 
-    logger.info(f"Database coordination completed for attempt {index_attempt_id}")
+    # Reap any STAGING files this attempt staged but never promoted.
+    # Safe to run here: indexing_completed guarantees every docprocessing
+    # batch has finished, so anything still STAGING for this attempt is a
+    # genuine drop (connector emitted no Document, or the Document was
+    # filtered as stale by `index_doc_batch_prepare`).
+    try:
+        with get_session_with_current_tenant() as cleanup_session:
+            cleanup_staged_files_for_attempt(
+                index_attempt_id=index_attempt_id,
+                db_session=cleanup_session,
+            )
+    except Exception:
+        logger.exception(
+            "Failed to run attempt-end staging cleanup; orphans will be "
+            "caught by the next attempt's start-of-run sweep."
+        )
+
+    logger.info("Database coordination completed for attempt %s", index_attempt_id)
 
 
 def active_indexing_attempt(
@@ -685,7 +744,7 @@ def _kickoff_indexing_tasks(
     search_settings: SearchSettings,
     cc_pair_ids: list[int],
     secondary_index_building: bool,
-    redis_client: Redis,
+    redis_client: TenantRedisClient,
     lock_beat: RedisLock,
     tenant_id: str,
 ) -> _KickoffResult:
@@ -837,7 +896,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 if is_fence(key_bytes) and not redis_client.sismember(
                     OnyxRedisConstants.ACTIVE_FENCES, key_bytes
                 ):
-                    logger.warning(f"Adding {key_bytes} to the lookup table.")
+                    logger.warning("Adding %s to the lookup table.", key_bytes)
                     redis_client.sadd(OnyxRedisConstants.ACTIVE_FENCES, key_bytes)
 
             redis_client.set(
@@ -1034,6 +1093,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                             [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
                         ),
                         IndexAttempt.celery_task_id.is_(None),
+                        IndexAttempt.targeted_reindex_job_id.is_(None),
                     )
                 )
                 .scalars()
@@ -1092,7 +1152,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     select(IndexAttempt).where(
                         IndexAttempt.status.in_(
                             [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                        )
+                        ),
+                        IndexAttempt.targeted_reindex_job_id.is_(None),
                     )
                 )
                 .scalars()
@@ -1101,9 +1162,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
             for attempt in active_attempts:
                 try:
-                    monitor_indexing_attempt_progress(
-                        attempt, tenant_id, db_session, self
-                    )
+                    monitor_indexing_attempt_progress(attempt, tenant_id, db_session)
                 except Exception:
                     task_logger.exception(f"Error monitoring attempt {attempt.id}")
 
@@ -1250,25 +1309,25 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
         locked = True
         batch_size = INDEX_ATTEMPT_BATCH_SIZE
         with get_session_with_current_tenant() as db_session:
-            old_attempts = get_old_index_attempts(db_session)
+            old_attempt_ids = get_old_index_attempt_ids(db_session)
             # We need to batch this because during the initial run, the system might have a large number
             # of index attempts since they were never deleted. After that, the number will be
             # significantly lower.
-            if len(old_attempts) == 0:
+            if len(old_attempt_ids) == 0:
                 task_logger.info(
                     "check_for_index_attempt_cleanup - No index attempts to cleanup"
                 )
                 return
 
-            for i in range(0, len(old_attempts), batch_size):
-                batch = old_attempts[i : i + batch_size]
+            for i in range(0, len(old_attempt_ids), batch_size):
+                batch = old_attempt_ids[i : i + batch_size]
                 task_logger.info(
                     f"check_for_index_attempt_cleanup - Cleaning up index attempts {len(batch)}"
                 )
                 self.app.send_task(
                     OnyxCeleryTask.CLEANUP_INDEX_ATTEMPT,
                     kwargs={
-                        "index_attempt_ids": [attempt.id for attempt in batch],
+                        "index_attempt_ids": batch,
                         "tenant_id": tenant_id,
                     },
                     queue=OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
@@ -1337,13 +1396,19 @@ def _check_failure_threshold(
     1. We have more than 3 failures AND
     2. Failures account for more than 10% of processed documents
     """
+    # Persistent indexing: never abort on failure volume.
+    if PERSISTENT_INDEXING:
+        return
+
     failure_ratio = total_failures / (document_count or 1)
 
     FAILURE_THRESHOLD = 3
     FAILURE_RATIO_THRESHOLD = 0.1
     if total_failures > FAILURE_THRESHOLD and failure_ratio > FAILURE_RATIO_THRESHOLD:
         logger.error(
-            f"Connector run failed with '{total_failures}' errors after '{batch_num}' batches."
+            "Connector run failed with '%s' errors after '%s' batches.",
+            total_failures,
+            batch_num,
         )
         if last_failure and last_failure.exception:
             raise last_failure.exception from last_failure.exception
@@ -1387,7 +1452,7 @@ def _resolve_indexing_document_errors(
             if document_id not in doc_id_to_unresolved_errors:
                 continue
 
-            logger.info(f"Resolving IndexAttemptError for document '{document_id}'")
+            logger.info("Resolving IndexAttemptError for document '%s'", document_id)
             for error in doc_id_to_unresolved_errors[document_id]:
                 error.is_resolved = True
                 db_session_temp.add(error)
@@ -1405,18 +1470,26 @@ def docprocessing_task(
     cc_pair_id: int,
     tenant_id: str,
     batch_num: int,
+    enqueue_time_ms: int | None = None,
 ) -> None:
     """Process a batch of documents through the indexing pipeline.
 
     This task retrieves documents from storage and processes them through
     the indexing pipeline (embedding + vector store indexing).
+
+    ``enqueue_time_ms`` is the wall-clock millisecond timestamp at which
+    docfetching enqueued this task. Used to compute the QUEUE_WAIT stage
+    metric. Optional + defaults to None so in-flight tasks queued by an older
+    docfetching deployment continue to work across rolling deploys.
     """
     # Start heartbeat for this indexing attempt
     heartbeat_thread, stop_event = start_heartbeat(index_attempt_id)
     try:
         # Cannot use the TaskSingleton approach here because the worker is multithreaded
         token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set((cc_pair_id, index_attempt_id))
-        _docprocessing_task(index_attempt_id, cc_pair_id, tenant_id, batch_num)
+        _docprocessing_task(
+            index_attempt_id, cc_pair_id, tenant_id, batch_num, enqueue_time_ms
+        )
     finally:
         stop_heartbeat(heartbeat_thread, stop_event)  # Stop heartbeat before exiting
         INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
@@ -1442,25 +1515,145 @@ def _check_chunk_usage_limit(tenant_id: str) -> None:
         )
 
 
+def _record_docprocessing_failure_persistent(
+    *,
+    exc: BaseException,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    batch_num: int,
+    documents: list[Document] | None,
+    cross_batch_db_lock: RedisLock | None,
+) -> None:
+    """Catch-all recovery for `_docprocessing_task` under PERSISTENT_INDEXING.
+
+    Records per-doc `DocumentFailure`s (when `documents` was loaded) or a single
+    `EntityFailure` (when the batch never made it past load), then marks the
+    batch complete with zero counts so `check_indexing_completion` can resolve
+    the attempt as `COMPLETED_WITH_ERRORS`.
+
+    Every step is wrapped so a follow-on error here does not re-raise out of
+    the Celery task — we have already swallowed the original exception."""
+    task_logger.info(
+        "PERSISTENT_INDEXING enabled; recording docprocessing failure for "
+        "attempt=%s batch=%s",
+        index_attempt_id,
+        batch_num,
+    )
+
+    # Source lookup is best-effort; only used for Sentry tagging.
+    source: DocumentSource = DocumentSource.NOT_APPLICABLE
+    try:
+        with get_session_with_current_tenant() as db_session:
+            cc_pair = get_connector_credential_pair_from_id(
+                db_session, cc_pair_id, eager_load_connector=True
+            )
+            if cc_pair is not None:
+                source = cc_pair.connector.source
+    except Exception:
+        task_logger.exception(
+            "Failed to look up source for cc_pair %s during persistent indexing "
+            "recovery; falling back to NOT_APPLICABLE",
+            cc_pair_id,
+        )
+
+    if documents:
+        for doc in documents:
+            record_generic_failure(
+                index_attempt_id=index_attempt_id,
+                cc_pair_id=cc_pair_id,
+                source=source,
+                tenant_id=tenant_id,
+                failure=build_generic_connector_failure(exc=exc, document=doc),
+            )
+    else:
+        record_generic_failure(
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            source=source,
+            tenant_id=tenant_id,
+            failure=build_generic_connector_failure(
+                exc=exc,
+                entity_id=(
+                    f"docprocessing:attempt_{index_attempt_id}:batch_{batch_num}"
+                ),
+            ),
+        )
+
+    # Mark the batch complete with zero counts so check_indexing_completion
+    # doesn't wait forever for this batch. Best-effort: if the lock or DB
+    # write fails we still return cleanly.
+    try:
+        if cross_batch_db_lock is not None:
+            with (
+                get_session_with_current_tenant() as db_session,
+                cross_batch_db_lock,
+            ):
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=0,
+                    new_docs_indexed=0,
+                    total_chunks=0,
+                )
+        else:
+            with get_session_with_current_tenant() as db_session:
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=0,
+                    new_docs_indexed=0,
+                    total_chunks=0,
+                )
+    except Exception:
+        task_logger.exception(
+            "Failed to mark batch %s complete during persistent indexing "
+            "recovery for attempt %s",
+            batch_num,
+            index_attempt_id,
+        )
+
+
 def _docprocessing_task(
     index_attempt_id: int,
     cc_pair_id: int,
     tenant_id: str,
     batch_num: int,
+    enqueue_time_ms: int | None = None,
 ) -> None:
     start_time = time.monotonic()
 
     if tenant_id:
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-    # Check if chunk indexing usage limit has been exceeded before processing
+    # Record queue wait latency before any other instrumented work. Tenant
+    # context must be set first so the metric write lands in the correct
+    # schema. If ``enqueue_time_ms`` is missing (older docfetching
+    # deployment during a rolling deploy), skip silently.
+    if enqueue_time_ms is not None:
+        queue_wait_ms = max(0, int(time.time() * 1000) - enqueue_time_ms)
+        safe_record_single_event(
+            IndexAttemptStage.QUEUE_WAIT, index_attempt_id, queue_wait_ms
+        )
+
+    # ``setup_start`` anchors DOCPROCESSING_SETUP. ``batch_load_ms`` is
+    # subtracted at the end of setup so DOCPROCESSING_SETUP only reflects
+    # genuine setup overhead (and not the document-load cost, which is
+    # captured separately as BATCH_LOAD).
+    setup_start = time.monotonic()
+
+    # Check if chunk indexing usage limit has been exceeded before processing.
+    # check_usage_and_raise raises OnyxError; hitting a trial/paid usage limit
+    # is an expected user-facing condition (not an actionable error), so we
+    # mark the attempt failed and return cleanly instead of raising (which
+    # would ship ONYX-BACKEND-H6ED to Sentry on every queued batch of an
+    # over-limit tenant).
     if USAGE_LIMITS_ENABLED:
         try:
             _check_chunk_usage_limit(tenant_id)
-        except HTTPException as e:
-            # Log the error and fail the indexing attempt
-            task_logger.error(
-                f"Chunk indexing usage limit exceeded for tenant {tenant_id}: {e}"
+        except OnyxError as e:
+            task_logger.warning(
+                f"Chunk indexing usage limit exceeded for tenant {tenant_id}: {e.detail}"
             )
             with get_session_with_current_tenant() as db_session:
                 from onyx.db.index_attempt import mark_attempt_failed
@@ -1468,9 +1661,9 @@ def _docprocessing_task(
                 mark_attempt_failed(
                     index_attempt_id=index_attempt_id,
                     db_session=db_session,
-                    failure_reason=str(e),
+                    failure_reason=e.detail,
                 )
-            raise
+            return
 
     task_logger.info(
         f"Processing document batch: attempt={index_attempt_id} batch_num={batch_num} "
@@ -1492,6 +1685,12 @@ def _docprocessing_task(
 
     # dummy lock to satisfy linter
     per_batch_lock: RedisLock | None = None
+
+    # Hoisted so the except block can safely reference them under
+    # PERSISTENT_INDEXING when the failure happens mid-try.
+    documents: list[Document] | None = None
+    cross_batch_db_lock: RedisLock | None = None
+
     try:
         # FIX: Monitor memory before loading documents to track problematic batches
         emit_process_memory(
@@ -1506,8 +1705,15 @@ def _docprocessing_task(
             },
         )
 
-        # Retrieve documents from storage
+        # Retrieve documents from storage. Time recorded as BATCH_LOAD; we
+        # also keep the millisecond delta so DOCPROCESSING_SETUP can subtract
+        # it to avoid double-counting.
+        batch_load_start = time.monotonic()
         documents = storage.get_batch(batch_num)
+        batch_load_ms = max(0, int((time.monotonic() - batch_load_start) * 1000))
+        safe_record_single_event(
+            IndexAttemptStage.BATCH_LOAD, index_attempt_id, batch_load_ms
+        )
         if not documents:
             task_logger.error(f"No documents found for batch {batch_num}")
             return
@@ -1526,6 +1732,8 @@ def _docprocessing_task(
             },
         )
 
+        # Phase 1: fast DB reads to set up the pipeline. Session closes before
+        # the slow embedding + Vespa work begins, returning the connection to the pool.
         with get_session_with_current_tenant() as db_session:
             # matches parts of _run_indexing
             index_attempt = get_index_attempt(
@@ -1584,35 +1792,53 @@ def _docprocessing_task(
                 batch_num=batch_num,
             )
 
-            # Process documents through indexing pipeline
-            connector_source = (
+            # Capture primitives needed after session close
+            connector_source: str = (
                 index_attempt.connector_credential_pair.connector.source.value
             )
-            task_logger.info(
-                f"Processing {len(documents)} documents through indexing pipeline: "
-                f"cc_pair_id={cc_pair_id}, source={connector_source}, "
-                f"batch_num={batch_num}"
-            )
+            search_settings_id: int = index_attempt.search_settings.id
+            from_beginning: bool = index_attempt.from_beginning
 
-            adapter = DocumentIndexingBatchAdapter(
-                db_session=db_session,
-                connector_id=index_attempt.connector_credential_pair.connector.id,
-                credential_id=index_attempt.connector_credential_pair.credential.id,
-                tenant_id=tenant_id,
-                index_attempt_metadata=index_attempt_metadata,
-            )
+        # Session is now closed; no connection held during embedding.
 
-            # real work happens here!
-            index_pipeline_result = run_indexing_pipeline(
-                embedder=embedding_model,
-                document_indices=document_indices,
-                ignore_time_skip=True,  # Documents are already filtered during extraction
-                db_session=db_session,
-                tenant_id=tenant_id,
-                document_batch=documents,
-                request_id=index_attempt_metadata.request_id,
-                adapter=adapter,
-            )
+        task_logger.info(
+            f"Processing {len(documents)} documents through indexing pipeline: "
+            f"cc_pair_id={cc_pair_id}, source={connector_source}, "
+            f"batch_num={batch_num}"
+        )
+
+        # The adapter manages its own short-lived sessions per phase.
+        adapter = DocumentIndexingBatchAdapter(
+            connector_id=index_attempt_metadata.connector_id,
+            credential_id=index_attempt_metadata.credential_id,
+            tenant_id=tenant_id,
+            index_attempt_metadata=index_attempt_metadata,
+        )
+
+        # Setup is complete. Record DOCPROCESSING_SETUP (everything from the
+        # top of the task minus BATCH_LOAD, which is tracked separately).
+        # BATCH_TOTAL starts immediately after; it spans run_indexing_pipeline
+        # plus all post-indexing bookkeeping in this try block.
+        setup_total_ms = max(0, int((time.monotonic() - setup_start) * 1000))
+        docprocessing_setup_ms = max(0, setup_total_ms - batch_load_ms)
+        safe_record_single_event(
+            IndexAttemptStage.DOCPROCESSING_SETUP,
+            index_attempt_id,
+            docprocessing_setup_ms,
+        )
+        batch_total_start = time.monotonic()
+
+        # real work happens here!
+        index_pipeline_result = run_indexing_pipeline(
+            embedder=embedding_model,
+            document_indices=document_indices,
+            ignore_time_skip=True,  # Documents are already filtered during extraction
+            tenant_id=tenant_id,
+            document_batch=documents,
+            request_id=index_attempt_metadata.request_id,
+            adapter=adapter,
+            from_beginning=from_beginning,
+        )
 
         # Track chunk indexing usage for cloud usage limits
         if USAGE_LIMITS_ENABLED and index_pipeline_result.total_chunks > 0:
@@ -1634,13 +1860,14 @@ def _docprocessing_task(
         # Update batch completion and document counts atomically using database coordination
 
         with get_session_with_current_tenant() as db_session, cross_batch_db_lock:
-            IndexingCoordination.update_batch_completion_and_docs(
-                db_session=db_session,
-                index_attempt_id=index_attempt_id,
-                total_docs_indexed=index_pipeline_result.total_docs,
-                new_docs_indexed=index_pipeline_result.new_docs,
-                total_chunks=index_pipeline_result.total_chunks,
-            )
+            with time_stage(IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id):
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=index_pipeline_result.total_docs,
+                    new_docs_indexed=index_pipeline_result.new_docs,
+                    total_chunks=index_pipeline_result.total_chunks,
+                )
 
             _resolve_indexing_document_errors(
                 cc_pair_id,
@@ -1686,7 +1913,7 @@ def _docprocessing_task(
                 "cc_pair_id": cc_pair_id,
                 "current_docs_indexed": coordination_status.total_docs,
                 "current_chunks_indexed": coordination_status.total_chunks,
-                "source": index_attempt.connector_credential_pair.connector.source.value,
+                "source": connector_source,
                 "completed_batches": coordination_status.completed_batches,
                 "total_batches": coordination_status.total_batches,
             },
@@ -1699,7 +1926,9 @@ def _docprocessing_task(
         # This helps prevent memory accumulation across multiple batches
         # NOTE: Thread-local event loops in embedding threads are cleaned up automatically
         # via the _cleanup_thread_local decorator in search_nlp_models.py
-        del documents
+        # NOTE: We assign None rather than `del` so the variable stays bound;
+        # the except block under PERSISTENT_INDEXING needs to safely inspect it.
+        documents = None
         gc.collect()
 
         # FIX: Log final memory usage to track problematic tenants/CC pairs
@@ -1716,12 +1945,21 @@ def _docprocessing_task(
             },
         )
 
+        # Record BATCH_TOTAL on the successful path. We deliberately do not
+        # record on the exception path -- a partially-completed batch's total
+        # would skew the average. BATCH_TOTAL spans run_indexing_pipeline and
+        # all post-indexing bookkeeping (coord update, telemetry, cleanup).
+        batch_total_ms = max(0, int((time.monotonic() - batch_total_start) * 1000))
+        safe_record_single_event(
+            IndexAttemptStage.BATCH_TOTAL, index_attempt_id, batch_total_ms
+        )
+
         elapsed_time = time.monotonic() - start_time
         task_logger.info(
             f"Completed document batch processing: "
             f"index_attempt={index_attempt_id} "
             f"cc_pair={cc_pair_id} "
-            f"search_settings={index_attempt.search_settings.id} "
+            f"search_settings={search_settings_id} "
             f"batch_num={batch_num} "
             f"docs={len(index_pipeline_result.failures) + index_pipeline_result.total_docs} "
             f"chunks={index_pipeline_result.total_chunks} "
@@ -1729,12 +1967,24 @@ def _docprocessing_task(
             f"elapsed={elapsed_time:.2f}s"
         )
 
-    except Exception:
+    except Exception as e:
         task_logger.exception(
             f"Document batch processing failed: batch_num={batch_num} attempt={index_attempt_id} "
         )
 
-        raise
+        if not PERSISTENT_INDEXING:
+            raise
+
+        _record_docprocessing_failure_persistent(
+            exc=e,
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            batch_num=batch_num,
+            documents=documents,
+            cross_batch_db_lock=cross_batch_db_lock,
+        )
+        return
     finally:
         if per_batch_lock and per_batch_lock.owned():
             per_batch_lock.release()

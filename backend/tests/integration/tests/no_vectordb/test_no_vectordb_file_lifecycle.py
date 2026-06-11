@@ -10,10 +10,9 @@ when the server is running with vector DB enabled.
 import time
 from uuid import UUID
 
-import requests
-
 from onyx.db.enums import UserFileStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.project import ProjectManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
@@ -31,11 +30,11 @@ def _poll_file_status(
     """Poll GET /user/projects/file/{file_id} until the file reaches *target_status*."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        resp = requests.get(
+        resp = client.get(
             f"{API_SERVER_URL}/user/projects/file/{file_id}",
             headers=user.headers,
         )
-        if resp.ok:
+        if not resp.is_error:
             status = resp.json().get("status")
             if status == target_status.value:
                 return
@@ -49,7 +48,7 @@ def _file_is_gone(file_id: UUID, user: DATestUser, timeout: int = 15) -> None:
     """Poll until GET /user/projects/file/{file_id} returns 404."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        resp = requests.get(
+        resp = client.get(
             f"{API_SERVER_URL}/user/projects/file/{file_id}",
             headers=user.headers,
         )
@@ -62,7 +61,6 @@ def _file_is_gone(file_id: UUID, user: DATestUser, timeout: int = 15) -> None:
 
 
 def test_file_upload_process_delete_lifecycle(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
@@ -89,41 +87,40 @@ def test_file_upload_process_delete_lifecycle(
     _poll_file_status(file_id, admin_user, UserFileStatus.COMPLETED)
 
     project_files = ProjectManager.get_project_files(project.id, admin_user)
-    assert any(
-        f.id == file_id for f in project_files
-    ), "File should be listed in project files after processing"
+    assert any(f.id == file_id for f in project_files), (
+        "File should be listed in project files after processing"
+    )
 
     # Unlink the file from the project so the delete endpoint will proceed
-    unlink_resp = requests.delete(
+    unlink_resp = client.delete(
         f"{API_SERVER_URL}/user/projects/{project.id}/files/{file_id}",
         headers=admin_user.headers,
     )
-    assert (
-        unlink_resp.status_code == 204
-    ), f"Expected 204 on unlink, got {unlink_resp.status_code}: {unlink_resp.text}"
+    assert unlink_resp.status_code == 204, (
+        f"Expected 204 on unlink, got {unlink_resp.status_code}: {unlink_resp.text}"
+    )
 
-    delete_resp = requests.delete(
+    delete_resp = client.delete(
         f"{API_SERVER_URL}/user/projects/file/{file_id}",
         headers=admin_user.headers,
     )
-    assert (
-        delete_resp.ok
-    ), f"Delete request failed: {delete_resp.status_code} {delete_resp.text}"
+    assert not delete_resp.is_error, (
+        f"Delete request failed: {delete_resp.status_code} {delete_resp.text}"
+    )
     body = delete_resp.json()
-    assert (
-        body["has_associations"] is False
-    ), f"File still has associations after unlink: {body}"
+    assert body["has_associations"] is False, (
+        f"File still has associations after unlink: {body}"
+    )
 
     _file_is_gone(file_id, admin_user)
 
     project_files_after = ProjectManager.get_project_files(project.id, admin_user)
-    assert not any(
-        f.id == file_id for f in project_files_after
-    ), "Deleted file should not appear in project files"
+    assert not any(f.id == file_id for f in project_files_after), (
+        "Deleted file should not appear in project files"
+    )
 
 
 def test_delete_blocked_while_associated(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
@@ -143,17 +140,17 @@ def test_delete_blocked_while_associated(
     _poll_file_status(file_id, admin_user, UserFileStatus.COMPLETED)
 
     # Attempt to delete while still linked
-    delete_resp = requests.delete(
+    delete_resp = client.delete(
         f"{API_SERVER_URL}/user/projects/file/{file_id}",
         headers=admin_user.headers,
     )
-    assert delete_resp.ok
+    assert not delete_resp.is_error
     body = delete_resp.json()
     assert body["has_associations"] is True, "Should report existing associations"
     assert project.name in body["project_names"]
 
     # File should still be accessible
-    get_resp = requests.get(
+    get_resp = client.get(
         f"{API_SERVER_URL}/user/projects/file/{file_id}",
         headers=admin_user.headers,
     )

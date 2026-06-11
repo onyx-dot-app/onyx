@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 from urllib.parse import urlparse
 
+import pytest
+
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from tests.daily.connectors.google_drive.consts_and_utils import _pick
@@ -58,9 +60,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    PILL_FOLDER_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import PILL_FOLDER_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
     RESTRICTED_ACCESS_FOLDER_ID,
 )
@@ -75,9 +75,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_DRIVE_B_FOLDER_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_1_DRIVE_B_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_DRIVE_B_ID
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_DRIVE_1_ID,
@@ -92,19 +90,16 @@ from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FIL
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_MY_DRIVE_FOLDER_ID,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_1_MY_DRIVE_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_2_MY_DRIVE,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_MY_DRIVE
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import (
-    TEST_USER_3_MY_DRIVE_ID,
-)
+from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_MY_DRIVE_ID
+from tests.utils.secret_names import TestSecret
+
+pytestmark = pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 
 
 @patch(
@@ -737,6 +732,6 @@ def test_slim_retrieval_does_not_call_permissions_list(
         for c in mock_paginated.call_args_list
         if "permissions" in str(c.kwargs.get("retrieval_function", ""))
     ]
-    assert (
-        len(permissions_calls) == 0
-    ), f"permissions().list was called {len(permissions_calls)} time(s) during pruning"
+    assert len(permissions_calls) == 0, (
+        f"permissions().list was called {len(permissions_calls)} time(s) during pruning"
+    )

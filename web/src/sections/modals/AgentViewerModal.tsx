@@ -3,16 +3,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { FullPersona } from "@/app/admin/agents/interfaces";
+import { FullAgent } from "@/lib/agents/types";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
-import {
-  Card as CardLayout,
-  Content,
-  ContentAction,
-  InputHorizontal,
-} from "@opal/layouts";
+import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Card, Divider } from "@opal/components";
@@ -26,11 +21,11 @@ import {
   SvgStar,
   SvgUser,
 } from "@opal/icons";
-import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
+import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
 import { EmptyMessageCard } from "@opal/components";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
@@ -39,8 +34,8 @@ import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
-import { getDisplayName } from "@/lib/llmConfig/utils";
-import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { getDisplayName } from "@/lib/languageModels/utils";
+import { useLLMProviders } from "@/hooks/useLanguageModels";
 import { Interactive } from "@opal/core";
 
 /**
@@ -80,18 +75,14 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
         ) : undefined
       }
     >
-      <CardLayout.Header
-        headerChildren={
-          <ContentAction
-            icon={serverIcon}
-            title={server.name}
-            description={server.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding="fit"
-          />
-        }
-        topRightChildren={
+      <ContentAction
+        icon={serverIcon}
+        title={server.name}
+        description={server.description}
+        sizePreset="main-ui"
+        variant="section"
+        padding="lg"
+        rightChildren={
           <Button
             prominence="internal"
             rightIcon={expanded ? SvgFold : SvgExpand}
@@ -111,17 +102,13 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
  */
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
-    <Card border="solid" rounding="lg" padding="sm">
-      <CardLayout.Header
-        headerChildren={
-          <Content
-            icon={SvgActions}
-            title={tool.display_name}
-            description={tool.description}
-            sizePreset="main-ui"
-            variant="section"
-          />
-        }
+    <Card border="solid" rounding="lg" padding="md">
+      <Content
+        icon={SvgActions}
+        title={tool.display_name}
+        description={tool.description}
+        sizePreset="main-ui"
+        variant="section"
       />
     </Card>
   );
@@ -132,7 +119,7 @@ function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
  * On submit, navigates to the agent's chat with the message pre-filled.
  */
 interface AgentChatInputProps {
-  agent: FullPersona;
+  agent: FullAgent;
   onSubmit: (message: string) => void;
 }
 function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
@@ -179,7 +166,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
  * - Advanced options (model, sharing status)
  */
 export interface AgentViewerModalProps {
-  agent: FullPersona;
+  agent: FullAgent;
 }
 export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const agentViewerModal = useModal();
@@ -275,7 +262,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
               title={agent.owner?.email ?? "Onyx"}
               sizePreset="main-ui"
               variant="body"
-              prominence="muted"
+              color="muted"
               width="fit"
             />
             {agent.is_public && (
@@ -284,7 +271,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 title="Public to your organization"
                 sizePreset="main-ui"
                 variant="body"
-                prominence="muted"
+                color="muted"
                 width="fit"
               />
             )}
@@ -381,7 +368,6 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 <InputHorizontal
                   title="Overwrite System Prompts"
                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
-                  withLabel
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />
                 </InputHorizontal>
@@ -424,7 +410,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                         title={starter.message}
                         sizePreset="main-ui"
                         variant="body"
-                        prominence="muted"
+                        color="muted"
                         width="full"
                       />
                     </Interactive.Container>

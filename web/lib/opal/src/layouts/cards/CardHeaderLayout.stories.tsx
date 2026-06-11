@@ -1,27 +1,18 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Card, Content } from "@opal/layouts";
+import { Card, ContentAction } from "@opal/layouts";
 import { Button } from "@opal/components";
 import {
   SvgArrowExchange,
   SvgCheckSquare,
   SvgGlobe,
   SvgSettings,
-  SvgUnplug,
 } from "@opal/icons";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import type { Decorator } from "@storybook/react";
-
-const withTooltipProvider: Decorator = (Story) => (
-  <TooltipPrimitive.Provider>
-    <Story />
-  </TooltipPrimitive.Provider>
-);
 
 const meta = {
   title: "Layouts/Card.Header",
   component: Card.Header,
   tags: ["autodocs"],
-  decorators: [withTooltipProvider],
+
   parameters: {
     layout: "centered",
   },
@@ -37,142 +28,128 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => (
-    <div className="w-[28rem] border rounded-16">
-      <Card.Header
-        headerChildren={
-          <Content
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgGlobe}
-            title="Google Search"
-            description="Web search provider"
-          />
-        }
-        topRightChildren={
-          <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
-            Connect
-          </Button>
-        }
-      />
+    <div className="w-112 border rounded-16">
+      <Card.Header>
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgGlobe}
+          title="Google Search"
+          description="Web search provider"
+          padding="fit"
+          rightChildren={
+            <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
+              Connect
+            </Button>
+          }
+        />
+      </Card.Header>
     </div>
   ),
 };
 
-export const WithBothSlots: Story = {
+export const WithCurrentDefault: Story = {
   render: () => (
-    <div className="w-[28rem] border rounded-16">
-      <Card.Header
-        headerChildren={
-          <Content
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgGlobe}
-            title="Google Search"
-            description="Currently the default provider."
-          />
-        }
-        topRightChildren={
-          <Button variant="action" prominence="tertiary" icon={SvgCheckSquare}>
-            Current Default
-          </Button>
-        }
-        bottomRightChildren={
-          <>
+    <div className="w-112 border rounded-16">
+      <Card.Header>
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgGlobe}
+          title="Google Search"
+          description="Currently the default provider."
+          padding="fit"
+          rightChildren={
             <Button
-              icon={SvgUnplug}
-              tooltip="Disconnect"
+              variant="action"
               prominence="tertiary"
-              size="sm"
-            />
+              icon={SvgCheckSquare}
+            >
+              Current Default
+            </Button>
+          }
+        />
+      </Card.Header>
+    </div>
+  ),
+};
+
+export const NoRightAction: Story = {
+  render: () => (
+    <div className="w-112 border rounded-16">
+      <Card.Header>
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgGlobe}
+          title="Section Header"
+          description="No actions on the right."
+          padding="fit"
+        />
+      </Card.Header>
+    </div>
+  ),
+};
+
+export const WithBottomChildren: Story = {
+  render: () => (
+    <div className="w-112 border rounded-16">
+      <Card.Header
+        bottomChildren={
+          <div className="flex gap-1 px-2 pb-2">
             <Button
               icon={SvgSettings}
               tooltip="Edit"
               prominence="tertiary"
               size="sm"
             />
-          </>
+          </div>
         }
-      />
-    </div>
-  ),
-};
-
-export const RightChildrenOnly: Story = {
-  render: () => (
-    <div className="w-[28rem] border rounded-16">
-      <Card.Header
-        headerChildren={
-          <Content
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgGlobe}
-            title="OpenAI"
-            description="Not configured"
-          />
-        }
-        topRightChildren={
-          <Button prominence="tertiary" rightIcon={SvgArrowExchange}>
-            Connect
-          </Button>
-        }
-      />
-    </div>
-  ),
-};
-
-export const NoRightChildren: Story = {
-  render: () => (
-    <div className="w-[28rem] border rounded-16">
-      <Card.Header
-        headerChildren={
-          <Content
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgGlobe}
-            title="Section Header"
-            description="No actions on the right."
-          />
-        }
-      />
+      >
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgGlobe}
+          title="MCP Server"
+          description="12 tools available"
+          padding="fit"
+          rightChildren={
+            <Button
+              variant="action"
+              prominence="tertiary"
+              icon={SvgCheckSquare}
+            >
+              Current Default
+            </Button>
+          }
+        />
+      </Card.Header>
     </div>
   ),
 };
 
 export const LongContent: Story = {
   render: () => (
-    <div className="w-[28rem] border rounded-16">
-      <Card.Header
-        headerChildren={
-          <Content
-            sizePreset="main-ui"
-            variant="section"
-            icon={SvgGlobe}
-            title="Very Long Provider Name That Should Truncate"
-            description="This is a much longer description that tests how the layout handles overflow when the content area needs to shrink."
-          />
-        }
-        topRightChildren={
-          <Button variant="action" prominence="tertiary" icon={SvgCheckSquare}>
-            Current Default
-          </Button>
-        }
-        bottomRightChildren={
-          <>
+    <div className="w-112 border rounded-16">
+      <Card.Header>
+        <ContentAction
+          sizePreset="main-ui"
+          variant="section"
+          icon={SvgGlobe}
+          title="Very Long Provider Name That Should Truncate"
+          description="This is a much longer description that tests how the layout handles overflow when the content area needs to shrink."
+          padding="fit"
+          rightChildren={
             <Button
-              icon={SvgUnplug}
+              variant="action"
               prominence="tertiary"
-              size="sm"
-              tooltip="Disconnect"
-            />
-            <Button
-              icon={SvgSettings}
-              prominence="tertiary"
-              size="sm"
-              tooltip="Edit"
-            />
-          </>
-        }
-      />
+              icon={SvgCheckSquare}
+            >
+              Current Default
+            </Button>
+          }
+        />
+      </Card.Header>
     </div>
   ),
 };

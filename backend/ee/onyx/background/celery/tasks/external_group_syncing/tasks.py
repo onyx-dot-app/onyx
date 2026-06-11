@@ -1,4 +1,5 @@
 import time
+import traceback
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -51,15 +52,9 @@ from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import complete_external_group_sync_attempt
-from onyx.db.permission_sync_attempt import (
-    create_external_group_sync_attempt,
-)
-from onyx.db.permission_sync_attempt import (
-    mark_external_group_sync_attempt_failed,
-)
-from onyx.db.permission_sync_attempt import (
-    mark_external_group_sync_attempt_in_progress,
-)
+from onyx.db.permission_sync_attempt import create_external_group_sync_attempt
+from onyx.db.permission_sync_attempt import mark_external_group_sync_attempt_failed
+from onyx.db.permission_sync_attempt import mark_external_group_sync_attempt_in_progress
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.redis.redis_connector import RedisConnector
@@ -70,6 +65,7 @@ from onyx.redis.redis_connector_ext_group_sync import (
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.metrics.perm_sync_metrics import inc_group_sync_errors
 from onyx.server.metrics.perm_sync_metrics import inc_group_sync_groups_processed
 from onyx.server.metrics.perm_sync_metrics import inc_group_sync_users_processed
@@ -267,7 +263,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
 def try_creating_external_group_sync_task(
     app: Celery,
     cc_pair_id: int,
-    r: Redis,  # noqa: ARG001
+    r: TenantRedisClient,  # noqa: ARG001
     tenant_id: str,
 ) -> str | None:
     """Returns an int if syncing is needed. The int represents the number of sync tasks generated.
@@ -280,7 +276,8 @@ def try_creating_external_group_sync_task(
         # Dont kick off a new sync if the previous one is still running
         if redis_connector.external_group_sync.fenced:
             logger.warning(
-                f"Skipping external group sync for CC Pair {cc_pair_id} - already running."
+                "Skipping external group sync for CC Pair %s - already running.",
+                cc_pair_id,
             )
             return None
 
@@ -394,16 +391,16 @@ def connector_external_group_sync_generator_task(
 
         if payload.celery_task_id is None:
             logger.info(
-                f"connector_external_group_sync_generator_task - Waiting for fence: "
-                f"fence={redis_connector.external_group_sync.fence_key}"
+                "connector_external_group_sync_generator_task - Waiting for fence: fence=%s",
+                redis_connector.external_group_sync.fence_key,
             )
             time.sleep(1)
             continue
 
         logger.info(
-            f"connector_external_group_sync_generator_task - Fence found, continuing...: "
-            f"fence={redis_connector.external_group_sync.fence_key} "
-            f"payload_id={payload.id}"
+            "connector_external_group_sync_generator_task - Fence found, continuing...: fence=%s payload_id=%s",
+            redis_connector.external_group_sync.fence_key,
+            payload.id,
         )
         break
 
@@ -415,9 +412,9 @@ def connector_external_group_sync_generator_task(
 
     acquired = lock.acquire(blocking=False)
     if not acquired:
-        msg = f"External group sync task already running, exiting...: cc_pair={cc_pair_id}"
-        emit_background_error(msg, cc_pair_id=cc_pair_id)
-        task_logger.error(msg)
+        task_logger.warning(
+            f"External group sync task already running, exiting...: cc_pair={cc_pair_id}"
+        )
         return None
 
     try:
@@ -485,7 +482,9 @@ def _perform_external_group_sync(
             db_session=db_session,
         )
         logger.info(
-            f"Created external group sync attempt: {attempt_id} for cc_pair={cc_pair_id}"
+            "Created external group sync attempt: %s for cc_pair=%s",
+            attempt_id,
+            cc_pair_id,
         )
 
     try:
@@ -538,22 +537,25 @@ def _timed_perform_external_group_sync(
         # idle_in_transaction_session_timeout during long API calls), stale
         # rows would accumulate indefinitely.
         logger.info(
-            f"Removing stale external groups from prior cycle for {source_type} "
-            f"for cc_pair: {cc_pair_id}"
+            "Removing stale external groups from prior cycle for %s for cc_pair: %s",
+            source_type,
+            cc_pair_id,
         )
         remove_stale_external_groups(db_session, cc_pair_id)
 
         logger.info(
-            f"Marking old external groups as stale for {source_type} for cc_pair: {cc_pair_id}"
+            "Marking old external groups as stale for %s for cc_pair: %s",
+            source_type,
+            cc_pair_id,
         )
         mark_old_external_groups_as_stale(db_session, cc_pair_id)
 
         # Mark attempt as in progress
         mark_external_group_sync_attempt_in_progress(attempt_id, db_session)
-        logger.info(f"Marked external group sync attempt {attempt_id} as in progress")
+        logger.info("Marked external group sync attempt %s as in progress", attempt_id)
 
         logger.info(
-            f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"
+            "Syncing external groups for %s for cc_pair: %s", source_type, cc_pair_id
         )
         external_user_group_batch: list[ExternalUserGroup] = []
         seen_users: set[str] = set()  # Track unique users across all groups
@@ -586,7 +588,7 @@ def _timed_perform_external_group_sync(
 
                 if len(external_user_group_batch) >= _EXTERNAL_GROUP_BATCH_SIZE:
                     logger.debug(
-                        f"New external user groups: {external_user_group_batch}"
+                        "New external user groups: %s", external_user_group_batch
                     )
                     upsert_start = time.monotonic()
                     upsert_external_groups(
@@ -599,7 +601,7 @@ def _timed_perform_external_group_sync(
                     external_user_group_batch = []
 
             if external_user_group_batch:
-                logger.debug(f"New external user groups: {external_user_group_batch}")
+                logger.debug("New external user groups: %s", external_user_group_batch)
                 upsert_start = time.monotonic()
                 upsert_external_groups(
                     db_session=db_session,
@@ -613,20 +615,28 @@ def _timed_perform_external_group_sync(
 
             # Mark as failed (this also updates progress to show partial progress)
             mark_external_group_sync_attempt_failed(
-                attempt_id, db_session, error_message=str(e)
+                attempt_id,
+                db_session,
+                error_message=str(e),
+                full_exception_trace=traceback.format_exc(),
             )
 
             # TODO: add some notification to the admins here
             inc_group_sync_errors(connector_type)
             logger.exception(
-                f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
+                "Error syncing external groups for %s for cc_pair: %s %s",
+                source_type,
+                cc_pair_id,
+                e,
             )
             raise e
 
         observe_group_sync_upsert_duration(cumulative_upsert_time, connector_type)
 
         logger.info(
-            f"Removing stale external groups for {source_type} for cc_pair: {cc_pair_id}"
+            "Removing stale external groups for %s for cc_pair: %s",
+            source_type,
+            cc_pair_id,
         )
         remove_stale_external_groups(db_session, cc_pair_id)
 
@@ -643,9 +653,11 @@ def _timed_perform_external_group_sync(
             errors_encountered=0,
         )
         logger.info(
-            f"Completed external group sync attempt {attempt_id}: "
-            f"{total_groups_processed} groups, {total_users_processed} users, "
-            f"{total_group_memberships_synced} memberships"
+            "Completed external group sync attempt %s: %s groups, %s users, %s memberships",
+            attempt_id,
+            total_groups_processed,
+            total_users_processed,
+            total_group_memberships_synced,
         )
 
         inc_group_sync_groups_processed(connector_type, total_groups_processed)
@@ -659,8 +671,8 @@ def _timed_perform_external_group_sync(
 def validate_external_group_sync_fences(
     tenant_id: str,
     celery_app: Celery,  # noqa: ARG001
-    r: Redis,  # noqa: ARG001
-    r_replica: Redis,
+    r: TenantRedisClient,  # noqa: ARG001
+    r_replica: TenantRedisClient,
     r_celery: Redis,
     lock_beat: RedisLock,
 ) -> None:
@@ -764,24 +776,20 @@ def validate_external_group_sync_fence(
     )
     if found:
         # the celery task exists in the redis queue
-        # redis_connector_index.set_active()
+        redis_connector.external_group_sync.set_active()
         return
 
     if payload.celery_task_id in reserved_tasks:
         # the celery task was prefetched and is reserved within the indexing worker
-        # redis_connector_index.set_active()
+        redis_connector.external_group_sync.set_active()
         return
-
-    # we may want to enable this check if using the active task list somehow isn't good enough
-    # if redis_connector_index.generator_locked():
-    #     logger.info(f"{payload.celery_task_id} is currently executing.")
 
     # if we get here, we didn't find any direct indication that the associated celery tasks exist,
     # but they still might be there due to gaps in our ability to check states during transitions
     # Checking the active signal safeguards us against these transition periods
     # (which has a duration that allows us to bridge those gaps)
-    # if redis_connector_index.active():
-    # return
+    if redis_connector.external_group_sync.active():
+        return
 
     # celery tasks don't exist and the active signal has expired, possibly due to a crash. Clean it up.
     emit_background_error(

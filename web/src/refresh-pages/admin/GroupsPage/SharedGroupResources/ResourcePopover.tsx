@@ -4,11 +4,11 @@ import { useState } from "react";
 import { SvgEmpty } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import { Divider } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import type { ResourcePopoverProps } from "@/refresh-pages/admin/GroupsPage/SharedGroupResources/interfaces";
 
 function ResourcePopover({

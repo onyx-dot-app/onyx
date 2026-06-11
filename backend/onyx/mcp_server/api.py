@@ -37,8 +37,8 @@ mcp_server = FastMCP(
 
 # Import tools and resources AFTER mcp_server is created to avoid circular imports
 # Components register themselves via decorators on the shared mcp_server instance
-from onyx.mcp_server.tools import search  # noqa: E402, F401
 from onyx.mcp_server.resources import indexed_sources  # noqa: E402, F401
+from onyx.mcp_server.tools import search  # noqa: E402, F401
 
 logger.info("MCP server instance created")
 
@@ -97,7 +97,7 @@ def create_mcp_fastapi_app() -> FastAPI:
     # Authentication is handled by FastMCP's OnyxTokenVerifier (see auth.py)
 
     if MCP_SERVER_CORS_ORIGINS:
-        logger.info(f"CORS origins: {MCP_SERVER_CORS_ORIGINS}")
+        logger.info("CORS origins: %s", MCP_SERVER_CORS_ORIGINS)
         app.add_middleware(
             CORSMiddleware,
             allow_origins=MCP_SERVER_CORS_ORIGINS,

@@ -3,7 +3,7 @@
 import { Button, Card } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgPlusCircle } from "@opal/icons";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 
 interface AdminListHeaderProps {
   /** Whether items exist — controls search bar vs empty-state card. */
@@ -73,7 +73,7 @@ export default function AdminListHeader({
             title={emptyStateText}
             sizePreset="main-ui"
             variant="body"
-            prominence="muted"
+            color="muted"
             width="fit"
           />
           {actionButton}
@@ -86,11 +86,10 @@ export default function AdminListHeader({
     <div className="flex flex-row gap-3 items-center px-2 pb-3">
       <InputTypeIn
         variant="internal"
-        leftSearchIcon
+        searchIcon
         placeholder={placeholder}
         value={searchQuery}
         onChange={(e) => onSearchQueryChange(e.target.value)}
-        showClearButton={false}
       />
       {actionButton}
     </div>

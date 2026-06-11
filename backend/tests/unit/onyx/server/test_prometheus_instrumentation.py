@@ -98,7 +98,11 @@ def test_setup_attaches_instrumentator_to_app() -> None:
                 10.0,
             ),
         )
-        mock_instance.expose.assert_called_once_with(app)
+        mock_instance.expose.assert_called_once()
+        expose_args, expose_kwargs = mock_instance.expose.call_args
+        assert expose_args == (app,)
+        assert list(expose_kwargs) == ["dependencies"]
+        assert len(expose_kwargs["dependencies"]) == 1
 
 
 def test_per_tenant_callback_increments_with_tenant_id() -> None:

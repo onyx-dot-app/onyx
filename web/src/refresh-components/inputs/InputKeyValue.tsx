@@ -69,8 +69,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { cn } from "@/lib/utils";
-import InputTypeIn from "./InputTypeIn";
+import { cn } from "@opal/utils";
+import { InputTypeIn } from "@opal/components";
 import { Button, EmptyMessageCard } from "@opal/components";
 import type { WithoutStyles } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
@@ -126,7 +126,6 @@ function KeyValueInputItem({
           onChange={(e) => onChange({ ...item, key: e.target.value })}
           aria-label={`${keyPlaceholder || "Key"} ${index + 1}`}
           aria-invalid={!!error?.key}
-          showClearButton={false}
         />
         {error?.key && <InputErrorText>{error.key}</InputErrorText>}
       </div>
@@ -137,7 +136,6 @@ function KeyValueInputItem({
           onChange={(e) => onChange({ ...item, value: e.target.value })}
           aria-label={`${valuePlaceholder || "Value"} ${index + 1}`}
           aria-invalid={!!error?.value}
-          showClearButton={false}
         />
         {error?.value && <InputErrorText>{error.value}</InputErrorText>}
       </div>
@@ -152,10 +150,9 @@ function KeyValueInputItem({
   );
 }
 
-export interface KeyValueInputProps
-  extends WithoutStyles<
-    Omit<React.HTMLAttributes<HTMLDivElement>, "onChange">
-  > {
+export interface KeyValueInputProps extends WithoutStyles<
+  Omit<React.HTMLAttributes<HTMLDivElement>, "onChange">
+> {
   /** Title for the key column */
   keyTitle?: string;
 

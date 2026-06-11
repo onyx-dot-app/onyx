@@ -10,6 +10,7 @@ import pytest
 from onyx.auth import captcha as captcha_module
 from onyx.auth.captcha import _replay_cache_key
 from onyx.auth.captcha import _reserve_token_or_raise
+from onyx.auth.captcha import CaptchaAction
 from onyx.auth.captcha import CaptchaVerificationError
 from onyx.auth.captcha import verify_captcha_token
 
@@ -69,7 +70,7 @@ def test_replay_cache_key_is_sha256_prefixed() -> None:
 
 @pytest.mark.asyncio
 async def test_reservation_released_when_google_unreachable() -> None:
-    """If Google's siteverify itself errors (our side, not the token's), the
+    """If the Assessment API itself errors (our side, not the token's), the
     replay reservation must be released so the user can retry with the same
     still-valid token instead of getting 'already used' for 120s."""
     fake_redis = MagicMock()
@@ -91,7 +92,7 @@ async def test_reservation_released_when_google_unreachable() -> None:
         patch.object(captcha_module.httpx, "AsyncClient", return_value=fake_client),
     ):
         with pytest.raises(CaptchaVerificationError, match="service unavailable"):
-            await verify_captcha_token("valid-token", expected_action="signup")
+            await verify_captcha_token("valid-token", CaptchaAction.SIGNUP)
 
     # The reservation was claimed and then released.
     fake_redis.set.assert_awaited_once()
@@ -107,9 +108,6 @@ async def test_reservation_released_on_unexpected_response_shape() -> None:
     fake_redis.set = AsyncMock(return_value=True)
     fake_redis.delete = AsyncMock(return_value=1)
 
-    # Simulate Google returning something that json() still succeeds on but
-    # fails RecaptchaResponse validation (e.g. success=true but with a wrong
-    # shape that Pydantic rejects when coerced).
     fake_httpx_response = MagicMock()
     fake_httpx_response.raise_for_status = MagicMock()
     fake_httpx_response.json = MagicMock(side_effect=ValueError("not valid JSON"))
@@ -128,7 +126,7 @@ async def test_reservation_released_on_unexpected_response_shape() -> None:
         patch.object(captcha_module.httpx, "AsyncClient", return_value=fake_client),
     ):
         with pytest.raises(CaptchaVerificationError, match="service unavailable"):
-            await verify_captcha_token("valid-token", expected_action="signup")
+            await verify_captcha_token("valid-token", CaptchaAction.SIGNUP)
 
     fake_redis.set.assert_awaited_once()
     fake_redis.delete.assert_awaited_once()
@@ -136,9 +134,9 @@ async def test_reservation_released_on_unexpected_response_shape() -> None:
 
 @pytest.mark.asyncio
 async def test_reservation_kept_when_google_rejects_token() -> None:
-    """If Google itself says the token is invalid (success=false, or score
-    too low), the reservation must NOT be released — that token is known-bad
-    for its entire lifetime and shouldn't be retryable."""
+    """If Google itself says the token is invalid (tokenProperties.valid=false),
+    the reservation must NOT be released — that token is known-bad for its
+    entire lifetime and shouldn't be retryable."""
     fake_redis = MagicMock()
     fake_redis.set = AsyncMock(return_value=True)
     fake_redis.delete = AsyncMock(return_value=1)
@@ -147,8 +145,12 @@ async def test_reservation_kept_when_google_rejects_token() -> None:
     fake_httpx_response.raise_for_status = MagicMock()
     fake_httpx_response.json = MagicMock(
         return_value={
-            "success": False,
-            "error-codes": ["invalid-input-response"],
+            "name": "projects/154649423065/assessments/abc",
+            "tokenProperties": {
+                "valid": False,
+                "invalidReason": "MALFORMED",
+            },
+            "riskAnalysis": {"score": 0.0, "reasons": []},
         }
     )
     fake_client = MagicMock()
@@ -165,8 +167,8 @@ async def test_reservation_kept_when_google_rejects_token() -> None:
         ),
         patch.object(captcha_module.httpx, "AsyncClient", return_value=fake_client),
     ):
-        with pytest.raises(CaptchaVerificationError, match="invalid-input-response"):
-            await verify_captcha_token("bad-token", expected_action="signup")
+        with pytest.raises(CaptchaVerificationError, match="MALFORMED"):
+            await verify_captcha_token("bad-token", CaptchaAction.SIGNUP)
 
     fake_redis.set.assert_awaited_once()
     fake_redis.delete.assert_not_awaited()

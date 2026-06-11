@@ -3,9 +3,6 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
-import requests
-
-import generated.onyx_openapi_client.onyx_openapi_client as api  # ty: ignore[unresolved-import]
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -15,9 +12,9 @@ from onyx.server.documents.models import ConnectorIndexingStatusLite
 from onyx.server.documents.models import ConnectorStatus
 from onyx.server.documents.models import DocumentSource
 from onyx.server.documents.models import DocumentSyncStatus
-from tests.integration.common_utils.config import api_config
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.test_models import DATestCCPair
@@ -34,22 +31,20 @@ def _cc_pair_creator(
 ) -> DATestCCPair:
     name = f"{name}-cc-pair" if name else f"test-cc-pair-{uuid4()}"
 
-    with api.ApiClient(api_config) as api_client:
-        api_instance = api.DefaultApi(api_client)
-        connector_credential_pair_metadata = api.ConnectorCredentialPairMetadata(
-            name=name, access_type=access_type, groups=groups or []
-        )
-        api_response: api.StatusResponseInt = (
-            api_instance.associate_credential_to_connector(
-                connector_id,
-                credential_id,
-                connector_credential_pair_metadata,
-                _headers=user_performing_action.headers,
-            )
-        )
+    response = client.put(
+        f"{API_SERVER_URL}/manage/connector/{connector_id}/credential/{credential_id}",
+        json={
+            "name": name,
+            "access_type": access_type.value,
+            "groups": groups or [],
+        },
+        headers=user_performing_action.headers,
+    )
+    response.raise_for_status()
+    payload = response.json()
 
     return DATestCCPair(
-        id=int(api_response.data),
+        id=int(payload["data"]),
         name=name,
         connector_id=connector_id,
         credential_id=credential_id,
@@ -123,7 +118,7 @@ class CCPairManager:
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser,
     ) -> None:
-        result = requests.put(
+        result = client.put(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/status",
             json={"status": "PAUSED"},
             headers=user_performing_action.headers,
@@ -135,7 +130,7 @@ class CCPairManager:
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser,
     ) -> None:
-        result = requests.put(
+        result = client.put(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/status",
             json={"status": "ACTIVE"},
             headers=user_performing_action.headers,
@@ -151,7 +146,7 @@ class CCPairManager:
             connector_id=cc_pair.connector_id,
             credential_id=cc_pair.credential_id,
         )
-        result = requests.post(
+        result = client.post(
             url=f"{API_SERVER_URL}/manage/admin/deletion-attempt",
             json=cc_pair_identifier.model_dump(),
             headers=user_performing_action.headers,
@@ -163,7 +158,7 @@ class CCPairManager:
         cc_pair_id: int,
         user_performing_action: DATestUser,
     ) -> CCPairFullInfo | None:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}",
             headers=user_performing_action.headers,
         )
@@ -176,7 +171,7 @@ class CCPairManager:
         cc_pair_id: int,
         user_performing_action: DATestUser,
     ) -> ConnectorIndexingStatusLite | None:
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/manage/admin/connector/indexing-status",
             headers=user_performing_action.headers,
             json={"get_all_connectors": True},
@@ -195,7 +190,7 @@ class CCPairManager:
     def get_indexing_statuses(
         user_performing_action: DATestUser,
     ) -> list[ConnectorIndexingStatusLite]:
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/manage/admin/connector/indexing-status",
             headers=user_performing_action.headers,
             json={"get_all_connectors": True},
@@ -213,7 +208,7 @@ class CCPairManager:
     def get_connector_statuses(
         user_performing_action: DATestUser,
     ) -> list[ConnectorStatus]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/manage/admin/connector/status",
             headers=user_performing_action.headers,
         )
@@ -258,7 +253,7 @@ class CCPairManager:
             "credential_ids": [cc_pair.credential_id],
             "from_beginning": from_beginning,
         }
-        result = requests.post(
+        result = client.post(
             url=f"{API_SERVER_URL}/manage/admin/connector/run-once",
             json=body,
             headers=user_performing_action.headers,
@@ -393,7 +388,7 @@ class CCPairManager:
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser,
     ) -> None:
-        result = requests.post(
+        result = client.post(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/prune",
             headers=user_performing_action.headers,
         )
@@ -404,7 +399,7 @@ class CCPairManager:
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser,
     ) -> datetime | None:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
             headers=user_performing_action.headers,
         )
@@ -455,14 +450,14 @@ class CCPairManager:
         Naming / intent of this function probably could use improvement, but currently it's letting
         409 Conflict pass through since if it's running that's what we were trying to do anyway.
         """
-        result = requests.post(
+        result = client.post(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-permissions",
             headers=user_performing_action.headers,
         )
         if result.status_code != 409:
             result.raise_for_status()
 
-        group_sync_result = requests.post(
+        group_sync_result = client.post(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-groups",
             headers=user_performing_action.headers,
         )
@@ -475,7 +470,7 @@ class CCPairManager:
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser,
     ) -> datetime | None:
-        doc_sync_response = requests.get(
+        doc_sync_response = client.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-permissions",
             headers=user_performing_action.headers,
         )
@@ -496,7 +491,7 @@ class CCPairManager:
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser,
     ) -> datetime | None:
-        group_sync_response = requests.get(
+        group_sync_response = client.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-groups",
             headers=user_performing_action.headers,
         )
@@ -517,7 +512,7 @@ class CCPairManager:
         cc_pair: DATestCCPair,
         user_performing_action: DATestUser,
     ) -> list[DocumentSyncStatus]:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
             headers=user_performing_action.headers,
         )

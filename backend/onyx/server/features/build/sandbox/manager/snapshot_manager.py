@@ -1,8 +1,8 @@
 """Snapshot management for sandbox state persistence."""
 
-import tarfile
 import tempfile
 from pathlib import Path
+from typing import IO
 from uuid import uuid4
 
 from onyx.configs.constants import FileOrigin
@@ -13,17 +13,37 @@ logger = setup_logger()
 
 # File type for snapshot archives
 SNAPSHOT_FILE_TYPE = "application/gzip"
+MAX_SNAPSHOT_ARCHIVE_BYTES = 100 * 1024 * 1024
+_SNAPSHOT_COPY_CHUNK_BYTES = 8 * 1024 * 1024
+
+
+def _copy_snapshot_stream_with_limit(
+    source: IO[bytes],
+    target: IO[bytes],
+) -> int:
+    size_bytes = 0
+    while True:
+        chunk = source.read(_SNAPSHOT_COPY_CHUNK_BYTES)
+        if not chunk:
+            break
+        size_bytes += len(chunk)
+        if size_bytes > MAX_SNAPSHOT_ARCHIVE_BYTES:
+            raise RuntimeError(
+                f"snapshot archive exceeds {MAX_SNAPSHOT_ARCHIVE_BYTES} byte limit"
+            )
+        target.write(chunk)
+    return size_bytes
 
 
 class SnapshotManager:
     """Manages sandbox snapshot creation and restoration.
 
-    Snapshots are tar.gz archives of the sandbox's outputs directory,
-    stored using the file store abstraction (S3-compatible storage).
+    Snapshots are tar.gz archives of sandbox session state, stored using the
+    file store abstraction.
 
     Responsible for:
-    - Creating snapshots of outputs directories
-    - Restoring snapshots to target directories
+    - Persisting sandbox-produced snapshot streams
+    - Restoring stored snapshot streams back to sandbox managers
     - Deleting snapshots from storage
     """
 
@@ -35,58 +55,48 @@ class SnapshotManager:
         """
         self._file_store = file_store
 
-    def create_snapshot(
+    def create_snapshot_from_stream(
         self,
-        sandbox_path: Path,
+        stream: IO[bytes],
         sandbox_id: str,
         tenant_id: str,
     ) -> tuple[str, str, int]:
-        """Create a snapshot of the outputs directory.
+        """Persist an already-built tar.gz byte stream as a snapshot.
 
-        Creates a tar.gz archive of the sandbox's outputs directory
-        and uploads it to the file store.
+        This is used by backends (e.g. Docker) that produce the tar stream
+        inside the sandbox container via exec and stream it back to the
+        api_server, so no on-host outputs directory ever exists. The caller
+        is responsible for producing a valid tar.gz stream.
 
         Args:
-            sandbox_path: Path to the sandbox directory
-            sandbox_id: Sandbox identifier
-            tenant_id: Tenant identifier for multi-tenant isolation
+            stream: Binary, readable stream of tar.gz bytes.
+            sandbox_id: Sandbox identifier (string form).
+            tenant_id: Tenant identifier for multi-tenant isolation.
 
         Returns:
-            Tuple of (snapshot_id, storage_path, size_bytes)
-
-        Raises:
-            FileNotFoundError: If outputs directory doesn't exist
-            RuntimeError: If snapshot creation fails
+            Tuple of (snapshot_id, storage_path, size_bytes).
         """
         snapshot_id = str(uuid4())
-        outputs_path = sandbox_path / "outputs"
+        storage_path = (
+            f"sandbox-snapshots/{tenant_id}/{sandbox_id}/{snapshot_id}.tar.gz"
+        )
+        display_name = f"sandbox-snapshot-{sandbox_id}-{snapshot_id}.tar.gz"
+        metadata = {
+            "sandbox_id": sandbox_id,
+            "tenant_id": tenant_id,
+            "snapshot_id": snapshot_id,
+        }
 
-        if not outputs_path.exists():
-            raise FileNotFoundError(f"Outputs directory not found: {outputs_path}")
-
-        # Create tar.gz in temp location
+        # Spool to a temp file so we can enforce the real stream size before
+        # handing bytes to the file store and report exact snapshot metadata.
         tmp_path: str | None = None
         try:
             with tempfile.NamedTemporaryFile(
                 suffix=".tar.gz", delete=False
             ) as tmp_file:
                 tmp_path = tmp_file.name
+                size_bytes = _copy_snapshot_stream_with_limit(stream, tmp_file)
 
-            # Create the tar archive
-            with tarfile.open(tmp_path, "w:gz") as tar:
-                tar.add(outputs_path, arcname="outputs")
-
-            # Get size
-            size_bytes = Path(tmp_path).stat().st_size
-
-            # Generate storage path for file store
-            # Format: sandbox-snapshots/{tenant_id}/{sandbox_id}/{snapshot_id}.tar.gz
-            storage_path = (
-                f"sandbox-snapshots/{tenant_id}/{sandbox_id}/{snapshot_id}.tar.gz"
-            )
-            display_name = f"sandbox-snapshot-{sandbox_id}-{snapshot_id}.tar.gz"
-
-            # Upload to file store
             with open(tmp_path, "rb") as f:
                 self._file_store.save_file(
                     content=f,
@@ -94,103 +104,58 @@ class SnapshotManager:
                     file_origin=FileOrigin.SANDBOX_SNAPSHOT,
                     file_type=SNAPSHOT_FILE_TYPE,
                     file_id=storage_path,
-                    file_metadata={
-                        "sandbox_id": sandbox_id,
-                        "tenant_id": tenant_id,
-                        "snapshot_id": snapshot_id,
-                    },
+                    file_metadata=metadata,
                 )
 
             logger.info(
-                f"Created snapshot {snapshot_id} for sandbox {sandbox_id}, size: {size_bytes} bytes"
+                "Created snapshot %s for sandbox %s, size: %s bytes",
+                snapshot_id,
+                sandbox_id,
+                size_bytes,
             )
-
             return snapshot_id, storage_path, size_bytes
-
         except Exception as e:
-            logger.error(f"Failed to create snapshot for sandbox {sandbox_id}: {e}")
+            logger.error(
+                "Failed to create streamed snapshot for sandbox %s: %s",
+                sandbox_id,
+                e,
+            )
             raise RuntimeError(f"Failed to create snapshot: {e}") from e
         finally:
-            # Cleanup temp file
             if tmp_path:
                 try:
                     Path(tmp_path).unlink(missing_ok=True)
                 except Exception as cleanup_error:
                     logger.warning(
-                        f"Failed to cleanup temp file {tmp_path}: {cleanup_error}"
+                        "Failed to cleanup temp file %s: %s",
+                        tmp_path,
+                        cleanup_error,
                     )
 
-    def restore_snapshot(
+    def restore_snapshot_to_stream(
         self,
         storage_path: str,
-        target_path: Path,
+        write_stream: IO[bytes],
     ) -> None:
-        """Restore a snapshot to target directory.
+        """Stream a stored snapshot's bytes into a caller-provided writer.
 
-        Downloads the snapshot from file store and extracts the outputs/
-        directory to the target path.
+        Used by backends (e.g. Docker) that extract the archive inside the
+        sandbox container by piping bytes into a remote ``tar -x`` process,
+        avoiding an on-host extraction step.
 
         Args:
-            storage_path: The file store path of the snapshot
-            target_path: Directory to extract the snapshot into
-
-        Raises:
-            FileNotFoundError: If snapshot doesn't exist in file store
-            RuntimeError: If restoration fails
+            storage_path: The file store path of the snapshot.
+            write_stream: Binary writable stream the bytes are written into.
         """
-        tmp_path: str | None = None
         file_io = None
         try:
-            # Download from file store
             file_io = self._file_store.read_file(storage_path, use_tempfile=True)
-
-            # Write to temp file for tarfile extraction
-            with tempfile.NamedTemporaryFile(
-                suffix=".tar.gz", delete=False
-            ) as tmp_file:
-                tmp_path = tmp_file.name
-                # Read from the IO object and write to temp file
-                content = file_io.read()
-                tmp_file.write(content)
-
-            # Ensure target path exists
-            target_path.mkdir(parents=True, exist_ok=True)
-
-            # Extract with security filter
-            with tarfile.open(tmp_path, "r:gz") as tar:
-                # Use data filter for safe extraction (prevents path traversal)
-                # Available in Python 3.11.4+
-                try:
-                    tar.extractall(target_path, filter="data")
-                except TypeError:
-                    # Fallback for older Python versions without filter support
-                    # Manually validate paths for security
-                    for member in tar.getmembers():
-                        # Check for path traversal attempts
-                        member_path = Path(target_path) / member.name
-                        try:
-                            member_path.resolve().relative_to(target_path.resolve())
-                        except ValueError:
-                            raise RuntimeError(
-                                f"Path traversal attempt detected: {member.name}"
-                            )
-                    tar.extractall(target_path)
-
-            logger.info(f"Restored snapshot from {storage_path} to {target_path}")
-
+            _copy_snapshot_stream_with_limit(file_io, write_stream)
+            logger.info("Streamed snapshot %s to caller writer", storage_path)
         except Exception as e:
-            logger.error(f"Failed to restore snapshot {storage_path}: {e}")
-            raise RuntimeError(f"Failed to restore snapshot: {e}") from e
+            logger.error("Failed to stream snapshot %s to writer: %s", storage_path, e)
+            raise RuntimeError(f"Failed to stream snapshot: {e}") from e
         finally:
-            # Cleanup temp file
-            if tmp_path:
-                try:
-                    Path(tmp_path).unlink(missing_ok=True)
-                except Exception as cleanup_error:
-                    logger.warning(
-                        f"Failed to cleanup temp file {tmp_path}: {cleanup_error}"
-                    )
-            # Close the file IO if it's still open
             try:
                 if file_io:
                     file_io.close()
@@ -208,10 +173,10 @@ class SnapshotManager:
         """
         try:
             self._file_store.delete_file(storage_path)
-            logger.info(f"Deleted snapshot: {storage_path}")
+            logger.info("Deleted snapshot: %s", storage_path)
         except Exception as e:
             # Log but don't fail if snapshot doesn't exist
-            logger.warning(f"Failed to delete snapshot {storage_path}: {e}")
+            logger.warning("Failed to delete snapshot %s: %s", storage_path, e)
             raise RuntimeError(f"Failed to delete snapshot: {e}") from e
 
     def get_snapshot_size(self, storage_path: str) -> int | None:

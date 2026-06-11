@@ -7,7 +7,6 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
 
-
 _DUMMY_OPENAI_API_KEY = "sk-mock-llm-workflow-tests"
 
 
@@ -20,9 +19,9 @@ def _get_internal_search_tool_id(admin_user: DATestUser) -> int:
 
 
 def _assert_integration_mode_enabled() -> None:
-    assert (
-        app_configs.INTEGRATION_TESTS_MODE is True
-    ), "Integration tests require INTEGRATION_TESTS_MODE=true."
+    assert app_configs.INTEGRATION_TESTS_MODE is True, (
+        "Integration tests require INTEGRATION_TESTS_MODE=true."
+    )
 
 
 def _seed_connector_for_search_tool(admin_user: DATestUser) -> None:

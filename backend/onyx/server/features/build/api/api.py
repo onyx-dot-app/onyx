@@ -1,6 +1,8 @@
-import re
-from collections.abc import Iterator
+import asyncio
+from collections.abc import AsyncGenerator
 from pathlib import Path
+from urllib.parse import parse_qsl
+from urllib.parse import urlencode
 from uuid import UUID
 
 import httpx
@@ -9,33 +11,51 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
+from fastapi import WebSocketException
 from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
+from fastapi_users.authentication.strategy.base import Strategy
+from fastapi_users.manager import BaseUserManager
 from sqlalchemy.orm import Session
+from starlette.websockets import WebSocketState
+from websockets.asyncio.client import ClientConnection
+from websockets.asyncio.client import connect as websocket_connect
+from websockets.exceptions import ConnectionClosed
 
+from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
+from onyx.auth.users import auth_backend
+from onyx.auth.users import get_user_manager
 from onyx.auth.users import optional_user
-from onyx.configs.constants import DocumentSource
-from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
+from onyx.cache.factory import get_cache_backend
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
 from onyx.db.enums import Permission
-from onyx.db.enums import ProcessingMode
 from onyx.db.enums import SharingScope
-from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
-from onyx.db.models import BuildSession
 from onyx.db.models import User
+from onyx.server.features.build.api.debug_api import router as debug_router
+from onyx.server.features.build.api.external_apps_api import (
+    router as external_apps_router,
+)
+from onyx.server.features.build.api.external_apps_oauth_api import (
+    router as external_apps_oauth_router,
+)
 from onyx.server.features.build.api.messages_api import router as messages_router
-from onyx.server.features.build.api.models import BuildConnectorInfo
-from onyx.server.features.build.api.models import BuildConnectorListResponse
-from onyx.server.features.build.api.models import BuildConnectorStatus
 from onyx.server.features.build.api.models import RateLimitResponse
 from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
+from onyx.server.features.build.api.turns_api import router as turns_router
 from onyx.server.features.build.api.user_library import router as user_library_router
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.approvals.api import router as approvals_router
+from onyx.server.features.build.db.build_session import get_webapp_access_async
+from onyx.server.features.build.db.build_session import get_webapp_target_async
+from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.scheduled_tasks.api import (
+    router as scheduled_tasks_router,
+)
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.utils import is_onyx_craft_enabled
 from onyx.utils.logger import setup_logger
@@ -43,16 +63,38 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
-_WEBAPP_HMR_FIXER_TEMPLATE = (_TEMPLATES_DIR / "webapp_hmr_fixer.js").read_text()
+
+# Lazy-init so importing this module (e.g. in tests) doesn't leak an open client.
+_ASYNC_PROXY_CLIENT: httpx.AsyncClient | None = None
+
+
+def _get_proxy_client() -> httpx.AsyncClient:
+    global _ASYNC_PROXY_CLIENT
+    if _ASYNC_PROXY_CLIENT is None:
+        _ASYNC_PROXY_CLIENT = httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True,
+            limits=httpx.Limits(max_keepalive_connections=50, max_connections=200),
+        )
+    return _ASYNC_PROXY_CLIENT
+
+
+# Redis-backed so cache entries are shared across pods. Only grants are cached.
+_SANDBOX_URL_TTL = 60
+_WEBAPP_ACCESS_TTL = 30
+
+
+def _sandbox_url_cache_key(session_id: UUID) -> str:
+    return f"craft:webapp:url:{session_id}"
+
+
+def _webapp_access_cache_key(session_id: UUID, user_id: UUID) -> str:
+    return f"craft:webapp:access:{session_id}:{user_id}"
 
 
 def require_onyx_craft_enabled(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> User:
-    """
-    Dependency that checks if Onyx Craft is enabled for the user.
-    Raises HTTP 403 if Onyx Craft is disabled via feature flag.
-    """
     if not is_onyx_craft_enabled(user):
         raise HTTPException(
             status_code=403,
@@ -66,7 +108,13 @@ router = APIRouter(prefix="/build", dependencies=[Depends(require_onyx_craft_ena
 # Include sub-routers for sessions, messages, and user library
 router.include_router(sessions_router, tags=["build"])
 router.include_router(messages_router, tags=["build"])
+router.include_router(turns_router, tags=["build"])
 router.include_router(user_library_router, tags=["build"])
+router.include_router(scheduled_tasks_router, tags=["build"])
+router.include_router(external_apps_router, tags=["build"])
+router.include_router(external_apps_oauth_router, tags=["build"])
+router.include_router(debug_router, tags=["build-debug"])
+router.include_router(approvals_router, tags=["build"])
 
 
 # -----------------------------------------------------------------------------
@@ -83,152 +131,7 @@ def get_rate_limit(
     return get_user_rate_limit_status(user, db_session)
 
 
-# -----------------------------------------------------------------------------
-# Build Connectors
-# -----------------------------------------------------------------------------
-
-
-@router.get("/connectors", response_model=BuildConnectorListResponse)
-def get_build_connectors(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> BuildConnectorListResponse:
-    """Get all connectors for the build admin panel.
-
-    Returns connector-credential pairs with simplified status information.
-    On the build configure page, all users (including admins) only see connectors
-    they own/created. Users can create new connectors if they don't have one of a type.
-    """
-    # Fetch both FILE_SYSTEM (standard connectors) and RAW_BINARY (User Library) connectors
-    file_system_cc_pairs = get_connector_credential_pairs_for_user(
-        db_session=db_session,
-        user=user,
-        get_editable=False,
-        eager_load_connector=True,
-        eager_load_credential=True,
-        processing_mode=ProcessingMode.FILE_SYSTEM,
-    )
-    raw_binary_cc_pairs = get_connector_credential_pairs_for_user(
-        db_session=db_session,
-        user=user,
-        get_editable=False,
-        eager_load_connector=True,
-        eager_load_credential=True,
-        processing_mode=ProcessingMode.RAW_BINARY,
-    )
-    cc_pairs = file_system_cc_pairs + raw_binary_cc_pairs
-
-    # Filter to only show connectors created by the current user
-    # All users (including admins) must create their own connectors on the build configure page
-    if user:
-        cc_pairs = [cc_pair for cc_pair in cc_pairs if cc_pair.creator_id == user.id]
-
-    connectors: list[BuildConnectorInfo] = []
-    for cc_pair in cc_pairs:
-        # Skip ingestion API connectors and default pairs
-        if cc_pair.connector.source == DocumentSource.INGESTION_API:
-            continue
-        if cc_pair.name == "DefaultCCPair":
-            continue
-
-        # Determine status
-        error_message: str | None = None
-        has_ever_succeeded = cc_pair.last_successful_index_time is not None
-
-        if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
-            status = BuildConnectorStatus.DELETING
-        elif cc_pair.status == ConnectorCredentialPairStatus.INVALID:
-            # If connector has succeeded before but credentials are now invalid,
-            # show as connected_with_errors so user can still disable demo data
-            if has_ever_succeeded:
-                status = BuildConnectorStatus.CONNECTED_WITH_ERRORS
-                error_message = "Connector credentials are invalid"
-            else:
-                status = BuildConnectorStatus.ERROR
-                error_message = "Connector credentials are invalid"
-        else:
-            # Check latest index attempt for errors
-            latest_attempt = get_latest_index_attempt_for_cc_pair_id(
-                db_session=db_session,
-                connector_credential_pair_id=cc_pair.id,
-                secondary_index=False,
-                only_finished=True,
-            )
-
-            if latest_attempt and latest_attempt.status == IndexingStatus.FAILED:
-                # If connector has succeeded before but latest attempt failed,
-                # show as connected_with_errors
-                if has_ever_succeeded:
-                    status = BuildConnectorStatus.CONNECTED_WITH_ERRORS
-                else:
-                    status = BuildConnectorStatus.ERROR
-                error_message = latest_attempt.error_msg
-            elif (
-                latest_attempt
-                and latest_attempt.status == IndexingStatus.COMPLETED_WITH_ERRORS
-            ):
-                # Completed with errors - if it has succeeded before, show as connected_with_errors
-                if has_ever_succeeded:
-                    status = BuildConnectorStatus.CONNECTED_WITH_ERRORS
-                else:
-                    status = BuildConnectorStatus.ERROR
-                error_message = "Indexing completed with errors"
-            elif cc_pair.status == ConnectorCredentialPairStatus.PAUSED:
-                status = BuildConnectorStatus.CONNECTED
-            elif cc_pair.last_successful_index_time is None:
-                # Never successfully indexed - check if currently indexing
-                # First check cc_pair status for scheduled/initial indexing
-                if cc_pair.status in (
-                    ConnectorCredentialPairStatus.SCHEDULED,
-                    ConnectorCredentialPairStatus.INITIAL_INDEXING,
-                ):
-                    status = BuildConnectorStatus.INDEXING
-                else:
-                    in_progress_attempt = get_latest_index_attempt_for_cc_pair_id(
-                        db_session=db_session,
-                        connector_credential_pair_id=cc_pair.id,
-                        secondary_index=False,
-                        only_finished=False,
-                    )
-                    if (
-                        in_progress_attempt
-                        and in_progress_attempt.status == IndexingStatus.IN_PROGRESS
-                    ):
-                        status = BuildConnectorStatus.INDEXING
-                    elif (
-                        in_progress_attempt
-                        and in_progress_attempt.status == IndexingStatus.NOT_STARTED
-                    ):
-                        status = BuildConnectorStatus.INDEXING
-                    else:
-                        # Has a finished attempt but never succeeded - likely error
-                        status = BuildConnectorStatus.ERROR
-                        error_message = (
-                            latest_attempt.error_msg
-                            if latest_attempt
-                            else "Initial indexing failed"
-                        )
-            else:
-                status = BuildConnectorStatus.CONNECTED
-
-        connectors.append(
-            BuildConnectorInfo(
-                cc_pair_id=cc_pair.id,
-                connector_id=cc_pair.connector.id,
-                credential_id=cc_pair.credential.id,
-                source=cc_pair.connector.source.value,
-                name=cc_pair.name or cc_pair.connector.name or "Unnamed",
-                status=status,
-                docs_indexed=0,  # Would need to query for this
-                last_indexed=cc_pair.last_successful_index_time,
-                error_message=error_message,
-            )
-        )
-
-    return BuildConnectorListResponse(connectors=connectors)
-
-
-# Headers to skip when proxying.
+# Response headers to skip when proxying back from the sandbox.
 # Hop-by-hop headers must not be forwarded, and set-cookie is stripped to
 # prevent LLM-generated apps from setting cookies on the parent Onyx domain.
 EXCLUDED_HEADERS = {
@@ -239,248 +142,298 @@ EXCLUDED_HEADERS = {
     "set-cookie",
 }
 
-
-def _stream_response(response: httpx.Response) -> Iterator[bytes]:
-    """Stream the response content in chunks."""
-    for chunk in response.iter_bytes(chunk_size=8192):
-        yield chunk
-
-
-def _inject_hmr_fixer(content: bytes, session_id: str) -> bytes:
-    """Inject a script that stubs root-scoped Next HMR websocket connections."""
-    base = f"/api/build/sessions/{session_id}/webapp"
-    script = f"<script>{_WEBAPP_HMR_FIXER_TEMPLATE.replace('__WEBAPP_BASE__', base)}</script>"
-    text = content.decode("utf-8")
-    text = re.sub(
-        r"(<head\b[^>]*>)",
-        lambda m: m.group(0) + script,
-        text,
-        count=1,
-        flags=re.IGNORECASE,
-    )
-    return text.encode("utf-8")
-
-
-def _rewrite_asset_paths(content: bytes, session_id: str) -> bytes:
-    """Rewrite Next.js asset paths to go through the proxy."""
-    webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
-    escaped_webapp_base_path = webapp_base_path.replace("/", r"\/")
-    hmr_paths = ("/_next/webpack-hmr", "/_next/hmr")
-
-    text = content.decode("utf-8")
-    # Anchor on delimiter so already-prefixed URLs (from assetPrefix) aren't double-rewritten.
-    for delim in ('"', "'", "("):
-        text = text.replace(f"{delim}/_next/", f"{delim}{webapp_base_path}/_next/")
-        text = re.sub(
-            rf"{re.escape(delim)}https?://[^/\"')]+/_next/",
-            f"{delim}{webapp_base_path}/_next/",
-            text,
-        )
-        text = re.sub(
-            rf"{re.escape(delim)}wss?://[^/\"')]+/_next/",
-            f"{delim}{webapp_base_path}/_next/",
-            text,
-        )
-    text = text.replace(r"\/_next\/", rf"{escaped_webapp_base_path}\/_next\/")
-    text = re.sub(
-        r"https?:\\\/\\\/[^\"']+?\\\/_next\\\/",
-        rf"{escaped_webapp_base_path}\/_next\/",
-        text,
-    )
-    text = re.sub(
-        r"wss?:\\\/\\\/[^\"']+?\\\/_next\\\/",
-        rf"{escaped_webapp_base_path}\/_next\/",
-        text,
-    )
-    for hmr_path in hmr_paths:
-        escaped_hmr_path = hmr_path.replace("/", r"\/")
-        text = text.replace(
-            f"{webapp_base_path}{hmr_path}",
-            hmr_path,
-        )
-        text = text.replace(
-            f"{escaped_webapp_base_path}{escaped_hmr_path}",
-            escaped_hmr_path,
-        )
-    text = re.sub(
-        r'"(/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\.json)"',
-        f'"{webapp_base_path}\\1"',
-        text,
-    )
-    text = re.sub(
-        r"'(/(?:[a-zA-Z0-9_-]+/)*[a-zA-Z0-9_-]+\.json)'",
-        f"'{webapp_base_path}\\1'",
-        text,
-    )
-    text = text.replace('"/favicon.ico', f'"{webapp_base_path}/favicon.ico')
-    return text.encode("utf-8")
-
-
-def _rewrite_proxy_response_headers(
-    headers: dict[str, str], session_id: str
-) -> dict[str, str]:
-    """Rewrite response headers that can leak root-scoped asset URLs."""
-    link = headers.get("link")
-    if link:
-        webapp_base_path = f"/api/build/sessions/{session_id}/webapp"
-        rewritten_link = re.sub(
-            r"<https?://[^>]+/_next/",
-            f"<{webapp_base_path}/_next/",
-            link,
-        )
-        rewritten_link = rewritten_link.replace(
-            "</_next/", f"<{webapp_base_path}/_next/"
-        )
-        headers["link"] = rewritten_link
-    return headers
-
-
-# Content types that may contain asset path references that need rewriting
-REWRITABLE_CONTENT_TYPES = {
-    "text/html",
-    "text/css",
-    "application/javascript",
-    "text/javascript",
-    "application/x-javascript",
+# Request headers stripped before forwarding to the sandbox. The sandbox runs
+# LLM-generated webapp code and must never receive the viewer's Onyx
+# credentials, CSRF tokens, or client-identity headers
+#
+# Entries must be lowercase — the filter compares against `key.lower()`.
+EXCLUDED_REQUEST_HEADERS = {
+    # End-to-end but unsafe to forward verbatim.
+    "host",
+    "content-length",
+    # Hop-by-hop (RFC 7230 §6.1).
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    # Credentials.
+    "cookie",
+    "authorization",
+    "x-api-key",
+    "x-auth-token",
+    # CSRF.
+    "x-csrf-token",
+    "x-xsrf-token",
+    # Client identity (RFC 7239 + common ingress/IDP conventions).
+    "forwarded",
+    "x-forwarded-for",
+    "x-forwarded-host",
+    "x-forwarded-port",
+    "x-forwarded-proto",
+    "x-forwarded-server",
+    "x-real-ip",
+    "x-client-ip",
+    "cf-connecting-ip",
+    "true-client-ip",
+    # IDP-injected identity (oauth2-proxy / similar).
+    "x-forwarded-user",
+    "x-forwarded-email",
+    "x-forwarded-preferred-username",
 }
 
 
-def _get_sandbox_url(session_id: UUID, db_session: Session) -> str:
-    """Get the internal URL for a session's Next.js server.
+async def _get_sandbox_url(session_id: UUID) -> str:
+    """Resolve a session's Next.js server URL; cache hits open no DB connection."""
+    cache = get_cache_backend()
+    key = _sandbox_url_cache_key(session_id)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached.decode()
 
-    Uses the sandbox manager to get the correct URL for both local and
-    Kubernetes environments.
+    async with get_async_session_context_manager() as db_session:
+        target = await get_webapp_target_async(db_session, session_id)
 
-    Args:
-        session_id: The build session ID
-        db_session: Database session
-
-    Returns:
-        Internal URL to proxy requests to
-
-    Raises:
-        HTTPException: If session not found, port not allocated, or sandbox not found
-    """
-
-    session = db_session.get(BuildSession, session_id)
-    if not session:
+    if target is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    if session.nextjs_port is None:
+    sandbox_id, nextjs_port = target
+    if nextjs_port is None:
         raise HTTPException(status_code=503, detail="Session port not allocated")
-    if session.user_id is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    sandbox = get_sandbox_by_user_id(db_session, session.user_id)
-    if sandbox is None:
+    if sandbox_id is None:
         raise HTTPException(status_code=404, detail="Sandbox not found")
 
-    sandbox_manager = get_sandbox_manager()
-    return sandbox_manager.get_webapp_url(sandbox.id, session.nextjs_port)
+    url = get_sandbox_manager().get_webapp_url(sandbox_id, nextjs_port)
+    cache.set(key, url, ex=_SANDBOX_URL_TTL)
+    return url
 
 
-def _proxy_request(
-    path: str, request: Request, session_id: UUID, db_session: Session
+async def _aiter_and_close(response: httpx.Response) -> AsyncGenerator[bytes, None]:
+    # Runs on client disconnect (GeneratorExit) too, so the connection can't leak.
+    try:
+        async for chunk in response.aiter_bytes(chunk_size=8192):
+            yield chunk
+    finally:
+        await response.aclose()
+
+
+def _webapp_next_path(session_id: UUID, path: str = "") -> str:
+    session_str = str(session_id)
+    rel_path = path.lstrip("/")
+    base_path = f"api/build/sessions/{session_str}/webapp"
+    return f"{base_path}/{rel_path}" if rel_path else base_path
+
+
+async def _proxy_request(
+    path: str, request: Request, session_id: UUID
 ) -> StreamingResponse | Response:
     """Proxy a request to the sandbox's Next.js server."""
-    base_url = _get_sandbox_url(session_id, db_session)
+    rel_path = path.lstrip("/")
+    base_url = await _get_sandbox_url(session_id)
+    upstream_path = _webapp_next_path(session_id, rel_path)
 
-    # Build the target URL
-    target_url = f"{base_url}/{path.lstrip('/')}"
-
-    # Include query params if present
+    target_url = f"{base_url}/{upstream_path}"
     if request.query_params:
         target_url = f"{target_url}?{request.query_params}"
 
-    logger.debug(f"Proxying request to: {target_url}")
+    logger.debug("Proxying request to: %s", target_url)
 
+    forwarded_headers = {
+        key: value
+        for key, value in request.headers.items()
+        if not (
+            (lowered := key.lower()) in EXCLUDED_REQUEST_HEADERS
+            or lowered.startswith("x-onyx-")
+        )
+    }
+
+    client = _get_proxy_client()
+    req = client.build_request("GET", target_url, headers=forwarded_headers)
     try:
-        # Make the request to the target URL
-        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
-            response = client.get(
-                target_url,
-                headers={
-                    key: value
-                    for key, value in request.headers.items()
-                    if key.lower() not in ("host", "content-length")
-                },
-            )
-
-            # Build response headers, excluding hop-by-hop headers
-            response_headers = {
-                key: value
-                for key, value in response.headers.items()
-                if key.lower() not in EXCLUDED_HEADERS
-            }
-            response_headers = _rewrite_proxy_response_headers(
-                response_headers, str(session_id)
-            )
-
-            content_type = response.headers.get("content-type", "")
-
-            # For HTML/CSS/JS responses, rewrite asset paths
-            if any(ct in content_type for ct in REWRITABLE_CONTENT_TYPES):
-                content = _rewrite_asset_paths(response.content, str(session_id))
-                if "text/html" in content_type:
-                    content = _inject_hmr_fixer(content, str(session_id))
-                return Response(
-                    content=content,
-                    status_code=response.status_code,
-                    headers=response_headers,
-                    media_type=content_type,
-                )
-
-            return StreamingResponse(
-                content=_stream_response(response),
-                status_code=response.status_code,
-                headers=response_headers,
-                media_type=content_type or None,
-            )
-
+        response = await client.send(req, stream=True)
     except httpx.TimeoutException:
-        logger.error(f"Timeout while proxying request to {target_url}")
+        logger.error("Timeout while proxying request to %s", target_url)
         raise HTTPException(status_code=504, detail="Gateway timeout")
     except httpx.RequestError as e:
-        logger.error(f"Error proxying request to {target_url}: {e}")
+        logger.error("Error proxying request to %s: %s", target_url, e)
         raise HTTPException(status_code=502, detail="Bad gateway")
 
+    # aclose() is idempotent: one guarded finally covers every exit except a
+    # successful StreamingResponse handoff, which passes ownership to _aiter_and_close.
+    handed_off = False
+    try:
+        response_headers = {
+            key: value
+            for key, value in response.headers.items()
+            if key.lower() not in EXCLUDED_HEADERS
+        }
 
-def _check_webapp_access(
-    session_id: UUID, user: User | None, db_session: Session
-) -> BuildSession:
-    """Check if user can access a session's webapp.
+        # Only /_next/static/media/* is content-hashed (safe forever). Dev chunk/CSS
+        # URLs are stable but mutable, so immutable would serve stale code after edits.
+        if rel_path.startswith("_next/static/media/"):
+            response_headers["cache-control"] = "public, max-age=31536000, immutable"
+            response_headers.pop("pragma", None)
+            response_headers.pop("expires", None)
 
-    - public_global: accessible by anyone (no auth required)
-    - public_org: accessible by any authenticated user
-    - private: only accessible by the session owner
-    """
-    session = db_session.get(BuildSession, session_id)
-    if not session:
+        content_type = response.headers.get("content-type", "")
+
+        # Next is configured with the proxy base path, so responses pass through
+        # without URL rewriting or HMR script injection.
+        stream = _aiter_and_close(response)
+        handed_off = True
+        return StreamingResponse(
+            stream,
+            status_code=response.status_code,
+            headers=response_headers,
+            media_type=content_type or None,
+        )
+    finally:
+        if not handed_off:
+            await response.aclose()
+
+
+def _webapp_hmr_query_string(query_string: str) -> str:
+    return urlencode(
+        [
+            (key, value)
+            for key, value in parse_qsl(query_string, keep_blank_values=True)
+            if key == "id"
+        ]
+    )
+
+
+def _webapp_hmr_websocket_url(
+    session_id: UUID, base_url: str, query_string: str
+) -> str:
+    scheme = "wss" if base_url.startswith("https://") else "ws"
+    host_and_path = base_url.split("://", 1)[1].rstrip("/")
+    target_url = (
+        f"{scheme}://{host_and_path}/"
+        f"{_webapp_next_path(session_id, '_next/webpack-hmr')}"
+    )
+    hmr_query_string = _webapp_hmr_query_string(query_string)
+    if hmr_query_string:
+        target_url = f"{target_url}?{hmr_query_string}"
+    return target_url
+
+
+async def _current_webapp_websocket_user(
+    websocket: WebSocket,
+    user_manager: BaseUserManager[User, UUID] = Depends(get_user_manager),
+    strategy: Strategy[User, UUID] = Depends(auth_backend.get_strategy),
+) -> User:
+    token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    user = await strategy.read_token(token, user_manager)
+    if user is None or not user.is_active:
+        raise WebSocketException(code=1008)
+    if Permission.BASIC_ACCESS not in get_effective_permissions(user):
+        raise WebSocketException(code=1008)
+    return user
+
+
+_current_webapp_websocket_user._is_websocket_auth_dependency = True  # ty: ignore[unresolved-attribute]
+
+
+async def _pump_webapp_to_upstream(
+    websocket: WebSocket, upstream: ClientConnection
+) -> None:
+    while True:
+        message = await websocket.receive()
+        message_type = message["type"]
+        if message_type == "websocket.disconnect":
+            await upstream.close()
+            return
+        if "text" in message:
+            await upstream.send(message["text"])
+        elif "bytes" in message:
+            await upstream.send(message["bytes"])
+
+
+async def _pump_upstream_to_webapp(
+    websocket: WebSocket, upstream: ClientConnection
+) -> None:
+    async for message in upstream:
+        if isinstance(message, str):
+            await websocket.send_text(message)
+        else:
+            await websocket.send_bytes(message)
+
+
+async def _proxy_webapp_hmr_websocket(session_id: UUID, websocket: WebSocket) -> None:
+    base_url = await _get_sandbox_url(session_id)
+    upstream_url = _webapp_hmr_websocket_url(session_id, base_url, websocket.url.query)
+    logger.debug("Proxying websocket to: %s", upstream_url)
+
+    try:
+        async with websocket_connect(
+            upstream_url,
+            additional_headers=None,
+            compression=None,
+            extensions=None,
+            origin=None,
+            proxy=None,
+            subprotocols=None,
+            user_agent_header=None,
+        ) as upstream:
+            await websocket.accept()
+            webapp_task = asyncio.create_task(
+                _pump_webapp_to_upstream(websocket, upstream)
+            )
+            upstream_task = asyncio.create_task(
+                _pump_upstream_to_webapp(websocket, upstream)
+            )
+            done, pending = await asyncio.wait(
+                {webapp_task, upstream_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                task.result()
+    except (ConnectionClosed, WebSocketDisconnect):
+        return
+    except Exception as e:
+        logger.warning("Error proxying webapp HMR websocket: %s", e)
+        if websocket.application_state == WebSocketState.CONNECTED:
+            await websocket.close(code=1011)
+
+
+async def _check_webapp_access(session_id: UUID, user: User | None) -> None:
+    # Only grants are cached — a 404 (missing session) must still beat 401 (unauth).
+    cache = get_cache_backend()
+    if user is not None and cache.get(_webapp_access_cache_key(session_id, user.id)):
+        return
+
+    async with get_async_session_context_manager() as db_session:
+        access = await get_webapp_access_async(db_session, session_id)
+
+    if access is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    if session.sharing_scope == SharingScope.PUBLIC_GLOBAL:
-        return session
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
-    if session.sharing_scope == SharingScope.PRIVATE and session.user_id != user.id:
+    sharing_scope, owner_id = access
+    if sharing_scope == SharingScope.PRIVATE and owner_id != user.id:
         raise HTTPException(status_code=404, detail="Session not found")
-    return session
+
+    cache.set(
+        _webapp_access_cache_key(session_id, user.id), b"1", ex=_WEBAPP_ACCESS_TTL
+    )
 
 
-_OFFLINE_HTML_PATH = _TEMPLATES_DIR / "webapp_offline.html"
+_OFFLINE_HTML = (_TEMPLATES_DIR / "webapp_offline.html").read_text()
 
 
 def _offline_html_response() -> Response:
-    """Return a branded Craft HTML page when the sandbox is not reachable.
-
-    Design mirrors the default Craft web template (outputs/web/app/page.tsx):
-    terminal window aesthetic with Minecraft-themed typing animation.
-
-    """
-    html = _OFFLINE_HTML_PATH.read_text()
-    return Response(content=html, status_code=503, media_type="text/html")
+    return Response(content=_OFFLINE_HTML, status_code=503, media_type="text/html")
 
 
-# Public router for webapp proxy — no authentication required
-# (access controlled per-session via sharing_scope)
+# Router for the webapp proxy. The route is exempted from the global auth
+# middleware (see PUBLIC_ENDPOINT_SPECS in auth_check.py) so the handler can
+# return a friendly redirect to /auth/login for unauthenticated browsers
+# instead of a bare 401. Auth is enforced inside the handler via
+# _check_webapp_access; never wire a handler here that doesn't enforce it.
 public_build_router = APIRouter(prefix="/build")
 
 
@@ -488,30 +441,40 @@ public_build_router = APIRouter(prefix="/build")
 @public_build_router.get(
     "/sessions/{session_id}/webapp/{path:path}", response_model=None
 )
-def get_webapp(
+async def get_webapp(
     session_id: UUID,
     request: Request,
     path: str = "",
     user: User | None = Depends(optional_user),
-    db_session: Session = Depends(get_session),
 ) -> StreamingResponse | Response:
-    """Proxy the webapp for a specific session (root and subpaths).
-
-    Accessible without authentication when sharing_scope is public_global.
-    Returns a friendly offline page when the sandbox is not running.
-    """
     try:
-        _check_webapp_access(session_id, user, db_session)
+        await _check_webapp_access(session_id, user)
     except HTTPException as e:
         if e.status_code == 401:
             return RedirectResponse(url="/auth/login", status_code=302)
         raise
     try:
-        return _proxy_request(path, request, session_id, db_session)
+        return await _proxy_request(path, request, session_id)
     except HTTPException as e:
         if e.status_code in (502, 503, 504):
+            # Cached URL may point at a dead/recreated pod; drop it to force re-resolve.
+            get_cache_backend().delete(_sandbox_url_cache_key(session_id))
             return _offline_html_response()
         raise
+
+
+@public_build_router.websocket("/sessions/{session_id}/webapp/_next/webpack-hmr")
+async def websocket_webapp_hmr(
+    session_id: UUID,
+    websocket: WebSocket,
+    user: User = Depends(_current_webapp_websocket_user),
+) -> None:
+    try:
+        await _check_webapp_access(session_id, user)
+    except HTTPException:
+        raise WebSocketException(code=1008)
+
+    await _proxy_webapp_hmr_websocket(session_id, websocket)
 
 
 # =============================================================================
@@ -546,7 +509,7 @@ def reset_sandbox(
         raise
     except Exception as e:
         db_session.rollback()
-        logger.error(f"Failed to reset sandbox for user {user.id}: {e}")
+        logger.error("Failed to reset sandbox for user %s: %s", user.id, e)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to reset sandbox: {e}",

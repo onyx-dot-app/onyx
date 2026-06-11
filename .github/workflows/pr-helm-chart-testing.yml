@@ -22,7 +22,6 @@ jobs:
       [
         runs-on,
         runner=8cpu-linux-x64,
-        hdd=256,
         "run-id=${{ github.run_id }}-helm-chart-check",
       ]
     timeout-minutes: 45
@@ -94,13 +93,11 @@ jobs:
           helm repo add code-interpreter https://onyx-dot-app.github.io/python-sandbox/
           helm repo update
 
-      - name: Install Redis operator
+      - name: Verify CNPG CRDs are in sync
         if: steps.list-changed.outputs.changed == 'true'
-        shell: bash
         run: |
-          echo "=== Installing redis-operator CRDs ==="
-          helm upgrade --install redis-operator ot-container-kit/redis-operator \
-            --namespace redis-operator --create-namespace --wait --timeout 300s
+          helm dependency build deployment/helm/charts/onyx
+          deployment/helm/charts/onyx/scripts/check-cnpg-crds.sh
 
       - name: Pre-pull required images
         if: steps.list-changed.outputs.changed == 'true'
@@ -211,6 +208,7 @@ jobs:
               --set=celery_worker_light.replicaCount=0 \
               --set=celery_worker_monitoring.replicaCount=0 \
               --set=celery_worker_primary.replicaCount=0 \
+              --set=celery_worker_scheduled_tasks.replicaCount=0 \
               --set=celery_worker_user_file_processing.replicaCount=0 \
               --set=celery_worker_user_files_indexing.replicaCount=0" \
             --helm-extra-args="--timeout 900s --debug" \

@@ -31,6 +31,20 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
+Build a child resource name as `<fullname>-<suffix>`, truncated to 63 chars to
+satisfy the Kubernetes DNS-1123 label limit that applies to Services, Pods,
+Deployments, HPAs, etc. Use this in place of
+  {{ include "onyx.fullname" . }}-<suffix>
+whenever the suffix could push the rendered name over 63 chars for a long
+release name. Callers must pass `(list . "<suffix>")`.
+*/}}
+{{- define "onyx.resourceName" -}}
+{{- $ctx := index . 0 -}}
+{{- $suffix := index . 1 -}}
+{{- printf "%s-%s" (include "onyx.fullname" $ctx) $suffix | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+
+{{/*
 Common labels
 */}}
 {{- define "onyx.labels" -}}
@@ -69,11 +83,28 @@ Set secret name
 {{- end }}
 
 {{/*
-Create env vars from secrets
+Create env vars from secrets (global secrets only — skips entries with allPods: false)
 */}}
 {{- define "onyx.envSecrets" -}}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if and (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
+    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) (ne (toString (index $secretContent "allPods" | default "true")) "false") }}
+    {{- range $name, $key := $secretContent.secretKeys }}
+- name: {{ $name | upper | replace "-" "_" | quote }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "onyx.secretName" $secretContent }}
+      key: {{ default $name $key }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+{{- end }}
+
+{{/*
+Create env vars from secrets restricted to specific pods (entries with allPods: false)
+*/}}
+{{- define "onyx.envSecretsRestricted" -}}
+    {{- range $secretSuffix, $secretContent := .Values.auth }}
+    {{- if and (ne (toString $secretContent.enabled) "false") ($secretContent.secretKeys) (eq (toString (index $secretContent "allPods" | default "true")) "false") }}
     {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:
@@ -122,8 +153,9 @@ checksum/pginto: {{ include (print $.Template.BasePath "/tooling-pginto-configma
 
 {{- define "onyx.renderVolumeMounts" -}}
 {{- $pginto := include "onyx.pgInto.volumeMount" .ctx -}}
+{{- $ca := include "onyx.customCACerts.volumeMount" .ctx -}}
 {{- $existing := .volumeMounts -}}
-{{- if or $pginto $existing -}}
+{{- if or $pginto $ca $existing -}}
 volumeMounts:
 {{- if $pginto }}
 {{ $pginto | nindent 2 }}
@@ -131,19 +163,26 @@ volumeMounts:
 {{- if $existing }}
 {{ toYaml $existing | nindent 2 }}
 {{- end }}
+{{- if $ca }}
+{{ $ca | nindent 2 }}
+{{- end }}
 {{- end -}}
 {{- end }}
 
 {{- define "onyx.renderVolumes" -}}
 {{- $pginto := include "onyx.pgInto.volume" .ctx -}}
+{{- $ca := include "onyx.customCACerts.volume" .ctx -}}
 {{- $existing := .volumes -}}
-{{- if or $pginto $existing -}}
+{{- if or $pginto $ca $existing -}}
 volumes:
 {{- if $pginto }}
 {{ $pginto | nindent 2 }}
 {{- end }}
 {{- if $existing }}
 {{ toYaml $existing | nindent 2 }}
+{{- end }}
+{{- if $ca }}
+{{ $ca | nindent 2 }}
 {{- end }}
 {{- end -}}
 {{- end }}
@@ -154,4 +193,129 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- define "onyx.autoscaling.engine" -}}
 {{- $engine := default "hpa" .Values.autoscaling.engine -}}
 {{- $engine | lower -}}
+{{- end }}
+
+{{/*
+"true" when ENABLE_CRAFT is set in configMap, empty otherwise.
+*/}}
+{{- define "onyx.craftEnabled" -}}
+{{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
+{{- end }}
+
+{{/* Sandbox egress-proxy env. Mirrors _proxy_main_container_env_vars(). */}}
+{{- define "onyx.sandboxProxyEnv" -}}
+{{- $proxyUrl := printf "http://sandbox-proxy:%v" .proxyPort }}
+- { name: HTTPS_PROXY, value: "{{ $proxyUrl }}" }
+- { name: HTTP_PROXY, value: "{{ $proxyUrl }}" }
+- { name: https_proxy, value: "{{ $proxyUrl }}" }
+- { name: http_proxy, value: "{{ $proxyUrl }}" }
+- { name: NO_PROXY, value: "127.0.0.1,localhost" }
+- { name: no_proxy, value: "127.0.0.1,localhost" }
+- { name: NODE_EXTRA_CA_CERTS, value: "{{ .caBundleFile }}" }
+- { name: REQUESTS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
+- { name: SSL_CERT_FILE, value: "{{ .caBundleFile }}" }
+- { name: AWS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
+- { name: CURL_CA_BUNDLE, value: "{{ .caBundleFile }}" }
+- { name: GIT_SSL_CAINFO, value: "{{ .caBundleFile }}" }
+{{- end }}
+
+{{/*
+"true" when custom CA certificates are configured, empty otherwise.
+*/}}
+{{- define "onyx.customCACerts.enabled" -}}
+{{- if and .Values.customCACerts .Values.customCACerts.enabled -}}true{{- end -}}
+{{- end }}
+
+{{/*
+Volume sourcing the custom CA certificates from a Secret or ConfigMap.
+*/}}
+{{- define "onyx.customCACerts.volume" -}}
+{{- if include "onyx.customCACerts.enabled" . -}}
+{{- if and .Values.customCACerts.secretName .Values.customCACerts.configMapName -}}
+{{- fail "customCACerts.secretName and customCACerts.configMapName are mutually exclusive; set exactly one" -}}
+{{- end -}}
+{{- if .Values.customCACerts.secretName -}}
+- name: custom-ca-certs
+  secret:
+    secretName: {{ .Values.customCACerts.secretName }}
+{{- else if .Values.customCACerts.configMapName -}}
+- name: custom-ca-certs
+  configMap:
+    name: {{ .Values.customCACerts.configMapName }}
+{{- else -}}
+{{- fail "customCACerts.enabled is true but neither customCACerts.secretName nor customCACerts.configMapName is set" -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Mount for the custom CA certificates. update-ca-certificates picks up
+PEM files with a .crt suffix from /usr/local/share/ca-certificates.
+*/}}
+{{- define "onyx.customCACerts.volumeMount" -}}
+{{- if include "onyx.customCACerts.enabled" . -}}
+- name: custom-ca-certs
+  mountPath: /usr/local/share/ca-certificates
+  readOnly: true
+{{- end -}}
+{{- end }}
+
+{{/*
+Env vars so Python HTTP clients (which default to certifi's bundle) trust
+the system bundle regenerated by update-ca-certificates.
+*/}}
+{{- define "onyx.customCACerts.env" -}}
+{{- if include "onyx.customCACerts.enabled" . -}}
+- name: REQUESTS_CA_BUNDLE
+  value: /etc/ssl/certs/ca-certificates.crt
+- name: SSL_CERT_FILE
+  value: /etc/ssl/certs/ca-certificates.crt
+{{- end -}}
+{{- end }}
+
+{{/*
+Items to prepend to an exec-form container command so update-ca-certificates
+runs first; sh passes the original command through via "$0" "$@".
+Emits a single line ending with a comma.
+*/}}
+{{- define "onyx.customCACerts.commandPrefix" -}}
+{{- if include "onyx.customCACerts.enabled" . -}}
+"/bin/sh", "-c", "update-ca-certificates && exec \"$0\" \"$@\"",
+{{- end -}}
+{{- end }}
+
+{{/*
+Render a volumeMounts block combining pod-specific mounts with the custom CA
+mount. Usage: include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" <list>)
+*/}}
+{{- define "onyx.volumeMountsWithCA" -}}
+{{- $ca := include "onyx.customCACerts.volumeMount" .ctx -}}
+{{- $existing := .volumeMounts -}}
+{{- if or $ca $existing -}}
+volumeMounts:
+{{- if $existing }}
+{{ toYaml $existing | nindent 2 }}
+{{- end }}
+{{- if $ca }}
+{{ $ca | nindent 2 }}
+{{- end }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Render a volumes block combining pod-specific volumes with the custom CA
+volume. Usage: include "onyx.volumesWithCA" (dict "ctx" . "volumes" <list>)
+*/}}
+{{- define "onyx.volumesWithCA" -}}
+{{- $ca := include "onyx.customCACerts.volume" .ctx -}}
+{{- $existing := .volumes -}}
+{{- if or $ca $existing -}}
+volumes:
+{{- if $existing }}
+{{ toYaml $existing | nindent 2 }}
+{{- end }}
+{{- if $ca }}
+{{ $ca | nindent 2 }}
+{{- end }}
+{{- end -}}
 {{- end }}

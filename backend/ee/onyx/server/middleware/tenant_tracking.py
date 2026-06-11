@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import Awaitable
 from collections.abc import Callable
@@ -6,12 +7,18 @@ from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
+from fastapi.responses import JSONResponse
 
 from ee.onyx.auth.users import decode_anonymous_user_jwt_token
+from ee.onyx.configs.multi_tenant_gating_config import (
+    MULTI_TENANT_GATING_ALLOWED_PREFIXES,
+)
+from ee.onyx.server.tenants.product_gating import is_tenant_gated
 from onyx.auth.utils import extract_tenant_from_auth_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -37,11 +44,62 @@ def add_api_server_tenant_id_middleware(
                 tenant_id = POSTGRES_DEFAULT_SCHEMA
 
             CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+            # Block tenants whose subscription has lapsed (`application_status =
+            # GATED_ACCESS` in the cloud control plane → `gated_tenants` Redis
+            # set) from reaching anything outside the resubscribe surface. The
+            # frontend ProductGatingWrapper only swaps UI; direct API callers
+            # (bots with stored auth, PATs, scripts) used to walk past it and
+            # keep burning the cloud LLM key. Skip the lookup for the default
+            # schema (unauthenticated requests) — it is never in the gated set
+            # and the round-trip is wasted. Allowlist is the cloud-only
+            # `MULTI_TENANT_GATING_ALLOWED_PREFIXES` (auth, /me, /settings,
+            # billing endpoints) — see that constant for the exact surface.
+            if (
+                MULTI_TENANT
+                and tenant_id != POSTGRES_DEFAULT_SCHEMA
+                and not _is_path_allowed(request.url.path)
+            ):
+                try:
+                    # `is_tenant_gated` uses the sync Redis client; offload so
+                    # the SISMEMBER round-trip does not block the event loop.
+                    gated = await asyncio.to_thread(is_tenant_gated, tenant_id)
+                except Exception:
+                    # Fail open on Redis errors — don't lock paying tenants out
+                    # because of cache connectivity issues.
+                    logger.warning(
+                        "[tenant_tracking] is_tenant_gated check failed; allowing request"
+                    )
+                    gated = False
+
+                if gated:
+                    logger.info(
+                        "[tenant_tracking] Blocking gated tenant: tenant=%s path=%s",
+                        tenant_id,
+                        request.url.path,
+                    )
+                    code, status = OnyxErrorCode.SUBSCRIPTION_INACTIVE.value
+                    return JSONResponse(
+                        status_code=status,
+                        content={
+                            "error_code": code,
+                            "detail": "Your subscription is inactive. Update your billing to restore access.",
+                        },
+                    )
+
             return await call_next(request)
 
         except Exception as e:
-            logger.exception(f"Error in tenant ID middleware: {str(e)}")
+            logger.exception("Error in tenant ID middleware: %s", str(e))
             raise
+
+
+def _is_path_allowed(path: str) -> bool:
+    if path.startswith("/api/"):
+        path = path[4:]
+    return any(
+        path.startswith(prefix) for prefix in MULTI_TENANT_GATING_ALLOWED_PREFIXES
+    )
 
 
 async def _get_tenant_id_from_request(
@@ -97,7 +155,7 @@ async def _get_tenant_id_from_request(
                 return tenant_id
 
             except Exception as e:
-                logger.error(f"Error decoding anonymous user cookie: {str(e)}")
+                logger.error("Error decoding anonymous user cookie: %s", str(e))
                 # Continue and attempt to authenticate
 
         logger.debug(
@@ -110,7 +168,7 @@ async def _get_tenant_id_from_request(
         return POSTGRES_DEFAULT_SCHEMA
 
     except Exception as e:
-        logger.error(f"Unexpected error in _get_tenant_id_from_request: {str(e)}")
+        logger.error("Unexpected error in _get_tenant_id_from_request: %s", str(e))
         raise HTTPException(status_code=500, detail="Internal server error")
 
     finally:

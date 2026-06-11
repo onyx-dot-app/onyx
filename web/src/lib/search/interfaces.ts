@@ -1,6 +1,6 @@
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { Tag, ValidSources } from "../types";
-import { Persona } from "@/app/admin/agents/interfaces";
+import { Agent } from "@/lib/agents/types";
 
 export const FlowType = {
   SEARCH: "search",
@@ -167,7 +167,7 @@ export interface SearchRequestArgs {
   documentSets: string[];
   timeRange: DateRangePickerValue | null;
   tags: Tag[];
-  persona: Persona;
+  persona: Agent;
   updateDocumentRelevance: (relevance: any) => void;
   updateCurrentAnswer: (val: string) => void;
   updateQuotes: (quotes: Quote[]) => void;

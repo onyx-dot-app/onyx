@@ -24,10 +24,9 @@ from ee.onyx.server.middleware.license_enforcement import (
 from ee.onyx.server.middleware.tenant_tracking import (
     add_api_server_tenant_id_middleware,
 )
+from ee.onyx.server.middleware.tier_gate import add_tier_gate_middleware
 from ee.onyx.server.oauth.api import router as ee_oauth_router
-from ee.onyx.server.query_and_chat.query_backend import (
-    basic_router as ee_query_router,
-)
+from ee.onyx.server.query_and_chat.query_backend import basic_router as ee_query_router
 from ee.onyx.server.query_and_chat.search_backend import router as search_router
 from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
@@ -44,6 +43,8 @@ from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
+from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import USER_AUTH_SECRET
@@ -54,9 +55,7 @@ from onyx.main import include_auth_router_with_prefix
 from onyx.main import include_router_with_global_prefix_prepended
 from onyx.main import lifespan as lifespan_base
 from onyx.main import use_route_function_names_as_operation_ids
-from onyx.server.query_and_chat.query_backend import (
-    basic_router as query_router,
-)
+from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
@@ -87,6 +86,13 @@ def get_application() -> FastAPI:
 
     application = get_application_base(lifespan_override=lifespan)
 
+    # Register tier_gate FIRST so it becomes the innermost middleware: Starlette
+    # executes middleware in reverse registration order, and tier_gate must run
+    # AFTER tenant_tracking has populated CURRENT_TENANT_ID_CONTEXTVAR.
+    # Tier gate attaches in both modes; get_tier() resolves per deployment
+    # internally. Reads the unified PATH_PREFIX_MIN_TIER map.
+    add_tier_gate_middleware(application, logger)
+
     if MULTI_TENANT:
         add_api_server_tenant_id_middleware(application, logger)
     else:
@@ -99,11 +105,14 @@ def get_application() -> FastAPI:
         # For Google OAuth, refresh tokens are requested by:
         # 1. Adding the right scopes
         # 2. Properly configuring OAuth in Google Cloud Console to allow offline access
+        google_login_scopes = list(
+            GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES
+        )
+
         oauth_client = GoogleOAuth2(
             OAUTH_CLIENT_ID,
             OAUTH_CLIENT_SECRET,
-            # Use standard scopes that include profile and email
-            scopes=["openid", "email", "profile"],
+            scopes=google_login_scopes,
         )
         include_auth_router_with_prefix(
             application,

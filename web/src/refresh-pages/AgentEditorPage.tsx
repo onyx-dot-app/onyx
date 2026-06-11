@@ -2,12 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
-import { FullPersona } from "@/app/admin/agents/interfaces";
-import { buildImgUrl } from "@/app/app/components/files/images/utils";
+import { FullAgent } from "@/lib/agents/types";
+import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -22,8 +22,8 @@ import {
 } from "@opal/layouts";
 import { useFormikContext } from "formik";
 import LLMSelector from "@/components/llm/LLMSelector";
-import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
-import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
+import { useLLMProviders } from "@/hooks/useLanguageModels";
 import {
   STARTER_MESSAGES_EXAMPLES,
   MAX_CHARACTERS_STARTER_MESSAGE,
@@ -35,6 +35,7 @@ import {
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
+  CODING_AGENT_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -44,12 +45,12 @@ import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
-import UserFilesModal from "@/components/modals/UserFilesModal";
+import UserFilesModal from "@/sections/modals/UserFilesModal";
 import {
   ProjectFile,
   UserFileStatus,
 } from "@/app/app/projects/projectsService";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgActions,
@@ -61,24 +62,22 @@ import {
   SvgSliders,
   SvgUsers,
   SvgTrash,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
 } from "@/refresh-components/avatars/CustomAgentAvatar";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
-import { useAgents } from "@/hooks/useAgents";
-import {
-  createPersona,
-  updatePersona,
-  PersonaUpsertParameters,
-} from "@/app/admin/agents/lib";
-import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
+import { useAgents } from "@/lib/agents/hooks";
+import { createAgent, updateAgent } from "@/lib/agents/svc";
+import { AgentUpsertParameters } from "@/lib/agents/types";
+import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -87,18 +86,18 @@ import {
   deleteAgent,
   updateAgentFeaturedStatus,
   updateAgentSharedStatus,
-} from "@/lib/agents";
+} from "@/lib/agents/svc";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 
 interface AgentIconEditorProps {
-  existingAgent?: FullPersona | null;
+  existingAgent?: FullAgent | null;
 }
 
 function FormWarningsEffect() {
@@ -176,14 +175,14 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
 
   const imageSrc = uploadedImagePreview
     ? uploadedImagePreview
-    : values.uploaded_image_id
-      ? buildImgUrl(values.uploaded_image_id)
+    : values.uploaded_image_id && existingAgent?.id != null
+      ? buildAgentAvatarUrl(existingAgent.id)
       : values.icon_name
         ? undefined
         : values.remove_image
           ? undefined
           : existingAgent?.uploaded_image_id
-            ? buildImgUrl(existingAgent.uploaded_image_id)
+            ? buildAgentAvatarUrl(existingAgent.id)
             : undefined;
 
   function handleIconClick(iconName: string | null) {
@@ -212,7 +211,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <Popover.Trigger asChild>
           <Hoverable.Root group="inputAvatar" width="fit">
-            <InputAvatar className="relative flex flex-col items-center justify-center h-[7.5rem] w-[7.5rem]">
+            <InputAvatar className="relative flex flex-col items-center justify-center h-30 w-30">
               {/* We take the `InputAvatar`'s height/width (in REM) and multiply it by 16 (the REM -> px conversion factor). */}
               <CustomAgentAvatar
                 size={imageSrc ? 7.5 * 16 : 40}
@@ -222,7 +221,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               />
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 mb-2">
-                <Hoverable.Item group="inputAvatar" variant="opacity-on-hover">
+                <Hoverable.Item group="inputAvatar" variant="appear-on-hover">
                   <Button prominence="secondary" size="md">
                     Edit
                   </Button>
@@ -243,7 +242,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                 Upload Image
               </LineItem>,
               null,
-              <div className="grid grid-cols-4 gap-1">
+              <div key="icon-grid" className="grid grid-cols-4 gap-1">
                 <SquareButton
                   key="default-icon"
                   icon={() => (
@@ -279,20 +278,15 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <Card border="solid" rounding="lg" padding="sm">
-      <CardLayout.Header
-        headerChildren={
-          <ContentAction
-            icon={SvgActions}
-            title={tool.display_name || tool.name}
-            description={tool.description}
-            sizePreset="main-ui"
-            variant="section"
-            padding="fit"
-          />
-        }
-        topRightChildren={<SwitchField name={toolFieldName} />}
-      />
+    <Card border="solid" rounding="lg">
+      <InputHorizontal
+        icon={SvgActions}
+        title={tool.display_name || tool.name}
+        description={tool.description}
+        withLabel={toolFieldName}
+      >
+        <SwitchField name={toolFieldName} />
+      </InputHorizontal>
     </Card>
   );
 }
@@ -331,32 +325,28 @@ function MCPServerCard({
     cardContent = (
       <div className="flex flex-col gap-2 p-2">
         <GeneralLayouts.Section padding={1}>
-          <SimpleLoader />
+          <SvgSimpleLoader />
         </GeneralLayouts.Section>
       </div>
     );
   } else if (hasTools) {
     cardContent = (
-      <div className="flex flex-col gap-2 p-2">
+      <GeneralLayouts.Section gap={0.5} padding={0.5}>
         {filteredTools.map((tool) => {
           const toolDisabled =
             !tool.isAvailable ||
             !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
           return (
             <Disabled key={tool.id} disabled={toolDisabled}>
-              <Card border="solid" rounding="lg" padding="sm">
-                <CardLayout.Header
-                  headerChildren={
-                    <ContentAction
-                      icon={tool.icon ?? SvgSliders}
-                      title={tool.name}
-                      description={tool.description}
-                      sizePreset="main-ui"
-                      variant="section"
-                      padding="fit"
-                    />
-                  }
-                  topRightChildren={
+              <Card border="solid" rounding="md" padding="sm">
+                <ContentAction
+                  icon={tool.icon ?? SvgSliders}
+                  title={tool.name}
+                  description={tool.description}
+                  sizePreset="main-ui"
+                  variant="section"
+                  padding="fit"
+                  rightChildren={
                     <SwitchField
                       name={`${serverFieldName}.tool_${tool.id}`}
                       disabled={!isServerEnabled}
@@ -367,7 +357,7 @@ function MCPServerCard({
             </Disabled>
           );
         })}
-      </div>
+      </GeneralLayouts.Section>
     );
   }
 
@@ -381,7 +371,28 @@ function MCPServerCard({
       expandedContent={cardContent}
     >
       <CardLayout.Header
-        headerChildren={
+        bottomChildren={
+          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+            <InputTypeIn
+              placeholder="Search tools..."
+              variant="internal"
+              searchIcon
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {enabledTools.length > 0 && (
+              <Button
+                prominence="internal"
+                rightIcon={isFolded ? SvgExpand : SvgFold}
+                onClick={() => setIsFolded((prev) => !prev)}
+              >
+                {isFolded ? "Expand" : "Fold"}
+              </Button>
+            )}
+          </GeneralLayouts.Section>
+        }
+      >
+        <div className="p-2">
           <ContentAction
             icon={getActionIcon(server.server_url, server.name)}
             title={server.name}
@@ -415,33 +426,13 @@ function MCPServerCard({
               </GeneralLayouts.Section>
             }
           />
-        }
-        bottomChildren={
-          <GeneralLayouts.Section flexDirection="row" gap={0.5}>
-            <InputTypeIn
-              placeholder="Search tools..."
-              variant="internal"
-              leftSearchIcon
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {enabledTools.length > 0 && (
-              <Button
-                prominence="internal"
-                rightIcon={isFolded ? SvgExpand : SvgFold}
-                onClick={() => setIsFolded((prev) => !prev)}
-              >
-                {isFolded ? "Expand" : "Fold"}
-              </Button>
-            )}
-          </GeneralLayouts.Section>
-        }
-      />
+        </div>
+      </CardLayout.Header>
     </Card>
   );
 }
 
-function StarterMessages() {
+function AgentStarterMessages() {
   const max_starters = STARTER_MESSAGES_EXAMPLES.length;
 
   const { values } = useFormikContext<{
@@ -485,7 +476,7 @@ function StarterMessages() {
 }
 
 export interface AgentEditorPageProps {
-  agent?: FullPersona;
+  agent?: FullAgent;
   refreshAgent?: () => void;
 }
 
@@ -501,41 +492,7 @@ export default function AgentEditorPage({
   const { isAdmin, isCurator } = useUser();
   const canUpdateFeaturedStatus = isAdmin || isCurator;
   const vectorDbEnabled = useVectorDbEnabled();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-
-  // LLM Model Selection
-  const getCurrentLlm = useCallback(
-    (values: any, llmProviders: any) =>
-      values.llm_model_version_override && values.llm_model_provider_override
-        ? (() => {
-            const provider = llmProviders?.find(
-              (p: any) => p.name === values.llm_model_provider_override
-            );
-            return structureValue(
-              values.llm_model_provider_override,
-              provider?.provider || "",
-              values.llm_model_version_override
-            );
-          })()
-        : null,
-    []
-  );
-
-  const onLlmSelect = useCallback(
-    (selected: string | null, setFieldValue: any) => {
-      if (selected === null) {
-        setFieldValue("llm_model_version_override", null);
-        setFieldValue("llm_model_provider_override", null);
-      } else {
-        const { modelName, name } = parseLlmDescriptor(selected);
-        if (modelName && name) {
-          setFieldValue("llm_model_version_override", modelName);
-          setFieldValue("llm_model_provider_override", name);
-        }
-      }
-    },
-    []
-  );
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   // Hooks for Knowledge section
   const { allRecentFiles, beginUpload } = useProjectsContext();
@@ -550,6 +507,48 @@ export default function AgentEditorPage({
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
     useOpenApiTools();
   const { llmProviders } = useLLMProviders(existingAgent?.id);
+
+  // LLM Model Selection — placed after llmProviders so the callbacks can close over it
+  const getCurrentLlm = useCallback((values: any, providers: any) => {
+    // Canonical path: resolve from model configuration ID.
+    if (values.default_model_configuration_id != null) {
+      for (const p of providers ?? []) {
+        const mc = p.model_configurations?.find(
+          (m: any) => m.id === values.default_model_configuration_id
+        );
+        if (mc) {
+          return structureValue(p.name ?? String(p.id), p.provider, mc.name);
+        }
+      }
+    }
+    return null;
+  }, []);
+
+  const onLlmSelect = useCallback(
+    (selected: string | null, setFieldValue: any) => {
+      if (selected === null) {
+        setFieldValue("default_model_configuration_id", null);
+      } else {
+        const { modelName, name } = parseLlmDescriptor(selected);
+        if (modelName) {
+          // `name` is either the display name or String(provider.id) for nameless
+          // providers, so we match by both.
+          const provider = llmProviders?.find(
+            (p: any) => p.name === name || String(p.id) === name
+          );
+          const modelConfig = provider?.model_configurations?.find(
+            (mc: any) => mc.name === modelName
+          );
+          setFieldValue(
+            "default_model_configuration_id",
+            modelConfig?.id ?? null
+          );
+        }
+      }
+    },
+    [llmProviders]
+  );
+
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
 
@@ -574,6 +573,9 @@ export default function AgentEditorPage({
   );
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
+  );
+  const codingAgentTool = availableTools?.find(
+    (t) => t.in_code_tool_id === CODING_AGENT_TOOL_ID
   );
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
@@ -633,10 +635,8 @@ export default function AgentEditorPage({
     selected_sources: [] as ValidSources[],
 
     // Advanced
-    llm_model_provider_override:
-      existingAgent?.llm_model_provider_override ?? null,
-    llm_model_version_override:
-      existingAgent?.llm_model_version_override ?? null,
+    default_model_configuration_id:
+      existingAgent?.default_model_configuration_id ?? null,
     knowledge_cutoff_date: existingAgent?.search_start_date
       ? new Date(existingAgent.search_start_date)
       : null,
@@ -668,6 +668,12 @@ export default function AgentEditorPage({
       !!codeInterpreterTool &&
       (existingAgent?.tools?.some(
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
+      ) ??
+        false),
+    coding_agent:
+      !!codingAgentTool &&
+      (existingAgent?.tools?.some(
+        (tool) => tool.in_code_tool_id === CODING_AGENT_TOOL_ID
       ) ??
         false),
     // MCP servers - dynamically add fields for each server with nested tool fields
@@ -745,8 +751,7 @@ export default function AgentEditorPage({
     selected_sources: Yup.array().of(Yup.string()),
 
     // Advanced
-    llm_model_provider_override: Yup.string().nullable().optional(),
-    llm_model_version_override: Yup.string().nullable().optional(),
+    default_model_configuration_id: Yup.number().nullable().optional(),
     knowledge_cutoff_date: Yup.date()
       .nullable()
       .optional()
@@ -786,7 +791,7 @@ export default function AgentEditorPage({
         }));
 
       // Send null instead of empty array if no starter messages
-      const finalStarterMessages =
+      const finalAgentStarterMessages =
         starterMessages.length > 0 ? starterMessages : null;
 
       // Always look up tools in availableTools to ensure we can find all tools
@@ -808,6 +813,9 @@ export default function AgentEditorPage({
       }
       if (values.code_interpreter && codeInterpreterTool) {
         toolIds.push(codeInterpreterTool.id);
+      }
+      if (values.coding_agent && codingAgentTool) {
+        toolIds.push(codingAgentTool.id);
       }
 
       // Collect enabled MCP tool IDs
@@ -842,16 +850,16 @@ export default function AgentEditorPage({
       });
 
       // Build submission data
-      const submissionData: PersonaUpsertParameters = {
+      const submissionData: AgentUpsertParameters = {
         name: values.name,
         description: values.description,
         document_set_ids: values.enable_knowledge
           ? values.document_set_ids
           : [],
         is_public: values.is_public,
-        llm_model_provider_override: values.llm_model_provider_override || null,
-        llm_model_version_override: values.llm_model_version_override || null,
-        starter_messages: finalStarterMessages,
+        default_model_configuration_id:
+          (values as any).default_model_configuration_id ?? null,
+        starter_messages: finalAgentStarterMessages,
         users: values.shared_user_ids,
         groups: values.shared_group_ids,
         tool_ids: toolIds,
@@ -878,10 +886,10 @@ export default function AgentEditorPage({
 
       // Call API
       let personaResponse;
-      if (!!existingAgent) {
-        personaResponse = await updatePersona(existingAgent.id, submissionData);
+      if (existingAgent) {
+        personaResponse = await updateAgent(existingAgent.id, submissionData);
       } else {
-        personaResponse = await createPersona(submissionData);
+        personaResponse = await createAgent(submissionData);
       }
 
       // Handle response
@@ -921,16 +929,19 @@ export default function AgentEditorPage({
   async function handleDeleteAgent() {
     if (!existingAgent) return;
 
-    const error = await deleteAgent(existingAgent.id);
-
-    if (error) {
-      toast.error(`Failed to delete agent: ${error}`);
-    } else {
+    try {
+      await deleteAgent(existingAgent.id);
       toast.success("Agent deleted successfully");
-
       deleteAgentModal.toggle(false);
       await refreshAgents();
       router.push("/app/agents");
+    } catch (e) {
+      console.error("Delete agent error:", e);
+      toast.error(
+        `Failed to delete agent: ${
+          e instanceof Error ? e.message : "Unknown error"
+        }`
+      );
     }
   }
 
@@ -1163,7 +1174,7 @@ export default function AgentEditorPage({
                           userIds,
                           groupIds,
                           isPublic,
-                          isPaidEnterpriseFeaturesEnabled,
+                          businessTier,
                           labelIds
                         );
                       } catch (error) {
@@ -1290,7 +1301,7 @@ export default function AgentEditorPage({
                         </div>
                       }
                       backButton
-                      separator
+                      divider
                     />
 
                     {/* Agent Form Content */}
@@ -1354,7 +1365,7 @@ export default function AgentEditorPage({
                           description="Example messages that help users understand what this agent can do and how to interact with it effectively."
                           suffix="optional"
                         >
-                          <StarterMessages />
+                          <AgentStarterMessages />
                         </InputVertical>
                       </GeneralLayouts.Section>
 
@@ -1485,9 +1496,25 @@ export default function AgentEditorPage({
                               </Card>
                             </Disabled>
 
+                            <Disabled disabled={!codingAgentTool}>
+                              <Card border="solid" rounding="lg">
+                                <InputHorizontal
+                                  withLabel="coding_agent"
+                                  title="Coding Agent"
+                                  description="Investigate a GitHub repository and answer questions about its code."
+                                  disabled={!codingAgentTool}
+                                >
+                                  <SwitchField
+                                    name="coding_agent"
+                                    disabled={!codingAgentTool}
+                                  />
+                                </InputHorizontal>
+                              </Card>
+                            </Disabled>
+
                             {/* Tools */}
                             <>
-                              {/* render the separator if there is at least one mcp-server or open-api-tool */}
+                              {/* render the divider if there is at least one mcp-server or open-api-tool */}
                               {(mcpServers.length > 0 ||
                                 openApiTools.length > 0) && (
                                 <Divider

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Button } from "@opal/components";
 import {
   Variants,
@@ -158,7 +158,7 @@ export default function InputNumber({
         onChange={handleInputChange}
         onBlur={handleBlur}
         className={cn(
-          "w-full h-[1.5rem] bg-transparent p-0.5 focus:outline-none",
+          "w-full h-6 bg-transparent p-0.5 focus:outline-hidden",
           innerClasses[variant],
           textClasses[variant]
         )}
