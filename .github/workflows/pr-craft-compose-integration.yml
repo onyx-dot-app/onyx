@@ -3,9 +3,8 @@
 # docker-specific posture invariants the K8s lane can't catch by construction
 # (image ENTRYPOINT concat, HOME after setpriv, curl httpoxy on the bridge).
 #
-# Not per-PR. The narrower pr-craft-compose-tests lane keeps PR feedback fast;
-# this one runs nightly, on every merge to main that touches the relevant paths,
-# and on demand.
+# Runs on PRs that touch the relevant paths, in the merge queue, nightly, and on
+# demand.
 
 name: Craft Docker-Compose Integration
 
@@ -16,7 +15,8 @@ concurrency:
 on:
   schedule:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
-  push:
+  merge_group:
+  pull_request:
     branches: [main]
     paths:
       - "backend/onyx/sandbox_proxy/**"
@@ -29,6 +29,9 @@ on:
       - "backend/tests/integration/tests/craft/docker_e2e/**"
       - ".github/workflows/pr-craft-compose-integration.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
+  push:
+    tags:
+      - "v*.*.*"
   workflow_dispatch:
 
 permissions:
@@ -64,7 +67,7 @@ jobs:
       - volume=100gb
       - run-id=${{ github.run_id }}-craft-compose-integration
       - extras=ecr-cache
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     env:
       PYTHONPATH: ./backend
@@ -134,7 +137,7 @@ jobs:
             -f docker-compose.dev.yml \
             -f docker-compose.craft.yml \
             --env-file env.template \
-            up -d --wait --wait-timeout 600 \
+            up -d --wait --wait-timeout 180 \
             api_server background sandbox-proxy
 
       - name: Sanity check stack health
@@ -146,7 +149,7 @@ jobs:
             http://localhost:8080/health
 
       - name: Run integration tests
-        timeout-minutes: 15
+        timeout-minutes: 10
         shell: bash
         # Working dir = backend/ so alembic.ini is a relative path for the
         # reset_all() fixture.
