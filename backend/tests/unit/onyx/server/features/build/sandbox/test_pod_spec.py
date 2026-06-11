@@ -10,14 +10,24 @@ them carry the security model:
   - The sidecar must expose the push/snapshot port with health probes.
   - Neither container should receive durable-storage credentials for snapshots.
 
-Pure logic — bypasses `_initialize` so no cluster is needed.
+The static pod shape now lives in the Helm-rendered ``sandbox-pod`` PodTemplate
+(templates/sandbox-podtemplate.yaml); `_create_sandbox_pod` reads it and overlays
+the per-pod fields. This suite renders that chart template, feeds it through the
+overlay (via a mocked ``read_namespaced_pod_template``), and asserts the
+invariants on the result — so it verifies the Helm template + Python overlay
+end to end. Skips if the ``helm`` binary or chart deps are unavailable.
 """
 
 from __future__ import annotations
 
 import base64
+import json
+import shutil
+import subprocess
+from pathlib import Path
 
 import pytest
+import yaml
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import NoEncryption
@@ -32,6 +42,10 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     PUSH_DAEMON_PORT,
 )
+
+# backend/tests/unit/onyx/server/features/build/sandbox/ -> repo root
+_REPO_ROOT = Path(__file__).resolve().parents[8]
+_CHART_DIR = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
 
 
 def _gen_key_b64() -> str:
@@ -59,15 +73,62 @@ def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _render_pod_template() -> client.V1PodTemplate:
+    """Render the sandbox-pod PodTemplate from the chart and deserialize it
+    into the same model the K8s API would return."""
+    helm = shutil.which("helm")
+    if helm is None:
+        pytest.skip("helm binary not available")
+    result = subprocess.run(
+        [
+            helm,
+            "template",
+            "onyx",
+            str(_CHART_DIR),
+            "-n",
+            "onyx",
+            "-f",
+            str(_CHART_DIR / "values-ci.yaml"),
+            "--show-only",
+            "templates/sandbox-podtemplate.yaml",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        pytest.skip(f"helm template failed (chart deps?): {result.stderr.strip()}")
+    rendered = yaml.safe_load(result.stdout)
+
+    class _Resp:
+        def __init__(self, obj: dict) -> None:
+            self.data = json.dumps(obj)
+
+    return client.ApiClient().deserialize(_Resp(rendered), "V1PodTemplate")
+
+
 def _build_pod() -> client.V1Pod:
+    pod_template = _render_pod_template()
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
-    mgr._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
-    mgr._service_account = "sandbox"  # type: ignore[attr-defined]
+    mgr._core_api = _FakeCoreApi(pod_template)  # type: ignore[attr-defined]
     return mgr._create_sandbox_pod(  # type: ignore[attr-defined]
         sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
         tenant_id="t-1",
     )
+
+
+class _FakeCoreApi:
+    """Returns the rendered PodTemplate from read_namespaced_pod_template."""
+
+    def __init__(self, pod_template: client.V1PodTemplate) -> None:
+        self._pod_template = pod_template
+
+    def read_namespaced_pod_template(
+        self,
+        name: str,  # noqa: ARG002
+        namespace: str,  # noqa: ARG002
+    ) -> client.V1PodTemplate:
+        return self._pod_template
 
 
 @pytest.fixture
@@ -272,6 +333,14 @@ def test_ca_bundle_mounted_read_only_on_both_containers(pod: client.V1Pod) -> No
         mount = _mount(_container(pod, name), "sandbox-ca-bundle")
         assert mount.read_only is True
         assert mount.mount_path == "/etc/ssl/sandbox"
+
+
+def test_missing_container_raises_clear_error_on_version_skew() -> None:
+    """A chart/api-server version skew (template missing an expected container)
+    must surface as an actionable RuntimeError, not an opaque StopIteration."""
+    spec = client.V1PodSpec(containers=[client.V1Container(name="sandbox")])
+    with pytest.raises(RuntimeError, match="sidecar"):
+        KubernetesSandboxManager._require_container(spec, "sidecar")
 
 
 def test_service_exposes_push_daemon_port() -> None:

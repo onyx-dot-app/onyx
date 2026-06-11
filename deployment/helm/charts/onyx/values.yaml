@@ -1523,6 +1523,17 @@ craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
   extraBoundServiceAccounts: []
 
+# -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
+# Image/resources/ports come from the configMap.SANDBOX_* keys.
+sandboxPod:
+  nodeSelector:
+    onyx.app/workload: sandbox
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: sandbox
+      effect: NoSchedule
+
 # -- Sandbox egress proxy.
 sandboxProxy:
   replicaCount: 2
