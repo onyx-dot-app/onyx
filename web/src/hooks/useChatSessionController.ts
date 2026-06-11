@@ -281,9 +281,12 @@ export default function useChatSessionController({
         messageMap: Map<number, Message>
       ) {
         const node = messageMap.get(runId);
-        if (!node) {
+        if (!node || resumingRuns.has(runId)) {
           return;
         }
+        // Added and deleted in this function only, so an entry can never
+        // outlive its tail.
+        resumingRuns.add(runId);
         // The reserved row's placeholder text would render above the live
         // timeline.
         node.message = "";
@@ -334,10 +337,8 @@ export default function useChatSessionController({
       const currentRun = chatSession.current_run;
       if (
         currentRun &&
-        !resumingRuns.has(currentRun.run_id) &&
         newMessageMap.get(currentRun.run_id)?.type === "assistant"
       ) {
-        resumingRuns.add(currentRun.run_id);
         void resumeInFlightRun(
           chatSession.chat_session_id,
           currentRun.run_id,

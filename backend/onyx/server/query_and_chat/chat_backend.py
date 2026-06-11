@@ -1054,7 +1054,12 @@ def resume_chat_stream(
             if read.done:
                 return
             # A dead writer never marks done; its fence lapsing is the signal.
+            # One final read drains anything written between the poll above
+            # and this check (including the done marker's last chunks).
             if not is_chat_session_processing(session_id, cache):
+                read = read_stream_chunks(cache, session_id, run_id, chunk_cursor)
+                if read is not None and not read.gap and read.blocks:
+                    yield "".join(read.blocks)
                 return
             now = time.monotonic()
             if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:

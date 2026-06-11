@@ -1394,9 +1394,11 @@ def _run_models(
         except Exception:
             logger.exception("chat stream writer crashed")
         finally:
-            _run_post_steps()
+            # Mark done before _run_post_steps clears the fence so resume
+            # readers never see a fence-less, not-done buffer and drop the tail.
             if stream_buffer is not None:
                 stream_buffer.mark_done()
+            _run_post_steps()
             tee.put(_STREAM_DONE)
             executor.shutdown(wait=False)
 
