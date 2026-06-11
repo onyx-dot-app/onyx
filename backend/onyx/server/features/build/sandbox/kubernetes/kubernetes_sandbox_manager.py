@@ -564,9 +564,9 @@ class KubernetesSandboxManager(SandboxManager):
             if e.status == 404:
                 raise RuntimeError(
                     f"Sandbox PodTemplate '{_PODTEMPLATE_NAME}' not found in "
-                    f"namespace '{self._namespace}'. Apply the onyx Helm chart "
-                    f"with ENABLE_CRAFT=true so templates/sandbox-podtemplate.yaml "
-                    f"is rendered."
+                    f"namespace '{self._namespace}'. It must be applied to the "
+                    f"cluster (by the deploy tooling when Craft is enabled) "
+                    f"before sandboxes can be provisioned."
                 ) from e
             raise
 
@@ -637,17 +637,17 @@ class KubernetesSandboxManager(SandboxManager):
     def _require_container(spec: client.V1PodSpec, name: str) -> client.V1Container:
         """Find a container in the PodTemplate by name, or raise a clear error.
 
-        A bare ``next()`` would surface a chart/version skew (template missing
-        the expected container) as an opaque ``StopIteration``; this names the
-        container and the fix, matching the 404 PodTemplate error above.
+        A bare ``next()`` would surface a PodTemplate/version skew (template
+        missing the expected container) as an opaque ``StopIteration``; this
+        names the container and the fix, matching the 404 PodTemplate error.
         """
         for container in spec.containers or []:
             if container.name == name:
                 return container
         raise RuntimeError(
             f"PodTemplate '{_PODTEMPLATE_NAME}' has no '{name}' container. "
-            f"The chart and api-server versions are likely out of sync — "
-            f"apply the matching onyx Helm chart."
+            f"The PodTemplate and api-server versions are likely out of sync — "
+            f"apply the matching sandbox PodTemplate."
         )
 
     def _create_sandbox_service(
