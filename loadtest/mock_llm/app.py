@@ -32,7 +32,7 @@ deep_research/dr_loop.py):
 - tool_choice forced to one function → call exactly that tool.
 - tool_choice REQUIRED               → must emit a tool call. Priority:
   `research_agent` if not yet called in this history (DR orchestrator),
-  else a search-ish tool if not yet called (DR research-agent loop),
+  else a retrieval tool if not yet called (DR research-agent loop),
   else `generate_report`, else the first offered tool.
 - tool_choice AUTO                   → `generate_plan` if offered (DR
   clarification phase — always taken so a load-test DR turn never ends in a
@@ -55,6 +55,7 @@ import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi import HTTPException
@@ -91,7 +92,7 @@ _FILLER_WORDS = (
 ).split()
 
 # Tool names from Onyx's chat / deep-research loops (see module docstring).
-_SEARCHISH_TOOLS = ("internal_search", "web_search", "open_url")
+_RETRIEVAL_TOOLS = ("internal_search", "web_search", "open_url")
 _RESEARCH_AGENT = "research_agent"
 _GENERATE_REPORT = "generate_report"
 _GENERATE_PLAN = "generate_plan"
@@ -129,16 +130,25 @@ def _assistant_called(messages: list[ChatMessage], names: tuple[str, ...]) -> bo
     return False
 
 
+def _content_text(content: str | list[Any] | None) -> str | None:
+    """Extract text from message content, which is either a plain string or
+    a list of multimodal content parts."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                return str(part.get("text", ""))
+    return None
+
+
 def _last_user_text(messages: list[ChatMessage]) -> str:
     for message in reversed(messages):
         if message.role != "user":
             continue
-        if isinstance(message.content, str):
-            return message.content
-        if isinstance(message.content, list):  # multimodal content parts
-            for part in message.content:
-                if isinstance(part, dict) and part.get("type") == "text":
-                    return str(part.get("text", ""))
+        text = _content_text(message.content)
+        if text is not None:
+            return text
     return "load test query"
 
 
@@ -246,9 +256,9 @@ def _pick_tool(request: ChatCompletionRequest, knobs: Knobs) -> list[ToolCall]:
             if _GENERATE_REPORT in by_name:
                 return [make(by_name[_GENERATE_REPORT])]
         # DR research-agent loop: search once, then ask for the report.
-        searchish = next((n for n in _SEARCHISH_TOOLS if n in by_name), None)
-        if searchish and not _assistant_called(messages, _SEARCHISH_TOOLS):
-            return [make(by_name[searchish])]
+        retrieval_tool = next((n for n in _RETRIEVAL_TOOLS if n in by_name), None)
+        if retrieval_tool and not _assistant_called(messages, _RETRIEVAL_TOOLS):
+            return [make(by_name[retrieval_tool])]
         if _GENERATE_REPORT in by_name:
             return [make(by_name[_GENERATE_REPORT])]
         return [make(tools[0])]
@@ -258,8 +268,8 @@ def _pick_tool(request: ChatCompletionRequest, knobs: Knobs) -> list[ToolCall]:
     if _GENERATE_PLAN in by_name:
         return [make(by_name[_GENERATE_PLAN])]
     if knobs.tools_on_auto and not has_tool_result:
-        searchish = next((n for n in _SEARCHISH_TOOLS if n in by_name), None)
-        target = by_name.get(searchish) if searchish else tools[0]
+        retrieval_tool = next((n for n in _RETRIEVAL_TOOLS if n in by_name), None)
+        target = by_name.get(retrieval_tool) if retrieval_tool else tools[0]
         if target is not None:
             return [make(target)]
     return []
