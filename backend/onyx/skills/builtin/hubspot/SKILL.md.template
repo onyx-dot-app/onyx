@@ -1,0 +1,85 @@
+---
+name: hubspot
+description: Read, search, create, and update CRM records (contacts, companies, deals, tickets) in HubSpot on the user's behalf via a light REST wrapper.
+---
+
+# HubSpot
+
+Call HubSpot's CRM as the connected user via the bundled helper. **You are
+already authenticated** — the egress proxy injects the user's token on the wire,
+so never pass credentials.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/hubspot/hubspot_api.py <command> [args]
+
+Most commands take an `object_type` — one of `contacts`, `companies`, `deals`,
+`tickets` (any custom object type works too). Read commands prune empty fields;
+use `--raw` to keep them. `python hubspot_api.py <command> -h` shows its flags.
+
+### List records
+
+```
+python hubspot_api.py list contacts [--properties a,b,c] [--limit N]
+```
+
+### Get one record by id
+
+```
+python hubspot_api.py get deals 123456 [--properties a,b] [--associations contacts,companies]
+```
+
+### Search / filter records
+
+```
+python hubspot_api.py search contacts --query "acme"
+python hubspot_api.py search deals --filter "dealstage EQ closedwon"
+```
+
+### Inspect an object type's properties (field names)
+
+```
+python hubspot_api.py properties contacts
+```
+
+### List owners (users)
+
+```
+python hubspot_api.py owners [--limit N]
+```
+
+### Create a record (write)
+
+```
+python hubspot_api.py create contacts firstname=Jane lastname=Doe email=jane@acme.com
+```
+
+### Update a record (write)
+
+```
+python hubspot_api.py update deals 123456 dealstage=closedwon amount=5000
+```
+
+### Archive a record (write)
+
+```
+python hubspot_api.py archive contacts 123456
+```
+
+## Output
+
+JSON on stdout. Read commands return `{"ok": true, "results": [...],
+"count": N, ...}`; single-record commands return `{"ok": true, "result": {...}}`.
+Failures print the HubSpot error to stderr and exit non-zero — surface the error
+rather than retrying blindly.
+
+## Notes
+
+- Use `properties <object_type>` first when unsure which field names exist;
+  HubSpot property names (e.g. `dealname`, `hs_pipeline_stage`) aren't always
+  the labels shown in the UI.
+- `--filter` takes a single `property OPERATOR value` triple (operators include
+  `EQ`, `NEQ`, `GT`, `LT`, `CONTAINS_TOKEN`). For richer queries, prefer
+  `--query` full-text search.
