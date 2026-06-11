@@ -33,9 +33,7 @@ import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { toast } from "@/hooks/useToast";
-import ModelSelector, {
-  findModelConfigId,
-} from "@/sections/model-selector/ModelSelector";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
@@ -72,6 +70,7 @@ import { useSettingsContext } from "@/providers/SettingsProvider";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
+import { findModelConfigId } from "@/lib/languageModels/options";
 
 interface PAT {
   id: number;

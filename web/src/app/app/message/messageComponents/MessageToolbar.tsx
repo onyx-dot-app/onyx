@@ -17,9 +17,7 @@ import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { CopyButton } from "@opal/components";
-import ModelSelector, {
-  findModelConfigId,
-} from "@/sections/model-selector/ModelSelector";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { SvgRefreshCw } from "@opal/icons";
 import { OpenButton } from "@opal/components";
 import { LlmManager } from "@/lib/hooks";
@@ -35,6 +33,7 @@ import { Button, SelectButton } from "@opal/components";
 import TTSButton from "./TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
+import { findModelConfigId } from "@/lib/languageModels/options";
 
 // Wrapper component for SourceTag in toolbar to handle memoization
 const SourcesTagWrapper = React.memo(function SourcesTagWrapper({

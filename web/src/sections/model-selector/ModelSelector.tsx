@@ -1,18 +1,21 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Popover } from "@opal/components";
-import { OpenButton } from "@opal/components";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
+import { Popover, OpenButton, Text } from "@opal/components";
 import { Slider } from "@/components/ui/slider";
 import { getModelIcon } from "@/lib/languageModels";
-import { LLMOption, findModelConfigId } from "@/lib/languageModels/options";
+import { LLMOption } from "@/lib/languageModels/options";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { useUser } from "@/providers/UserProvider";
-import Text from "@/refresh-components/texts/Text";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
-import type { ReactNode } from "react";
 
-export interface TemperatureManager {
+interface TemperatureManager {
   temperature: number;
   updateTemperature: (value: number) => void;
   maxTemperature: number;
@@ -24,16 +27,19 @@ export interface ModelSelectorProps {
   value: number | null;
   onChange: (option: LLMOption) => void;
   requiresImageInput?: boolean;
+
   /**
    * Custom trigger element. When omitted the default OpenButton (icon +
    * display name) is rendered.
    */
-  renderTrigger?: () => ReactNode;
+  renderTrigger?: () => React.ReactNode;
+
   /**
    * When provided, a temperature slider is shown at the bottom of the
    * popover (gated on user.preferences.temperature_override_enabled).
    */
   temperatureManager?: TemperatureManager;
+
   disabled?: boolean;
   isLoading?: boolean;
 }
@@ -124,10 +130,10 @@ export default function ModelSelector({
             className="w-full"
           />
           <div className="flex flex-row items-center justify-between">
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               Temperature (creativity)
             </Text>
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {localTemperature.toFixed(1)}
             </Text>
           </div>
@@ -168,5 +174,3 @@ export default function ModelSelector({
     </Popover>
   );
 }
-
-export { findModelConfigId };
