@@ -36,6 +36,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.enums import SharingScope
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.api.debug_api import router as debug_router
 from onyx.server.features.build.api.external_apps_api import (
     router as external_apps_router,
@@ -500,19 +502,13 @@ def reset_sandbox(
     try:
         success = session_manager.terminate_user_sandbox(user.id)
         if not success:
-            raise HTTPException(
-                status_code=404,
-                detail="No sandbox found for user",
-            )
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "No sandbox found for user")
         db_session.commit()
-    except HTTPException:
+    except OnyxError:
         raise
     except Exception as e:
         db_session.rollback()
         logger.error("Failed to reset sandbox for user %s: %s", user.id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to reset sandbox: {e}",
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to reset sandbox: {e}")
 
     return Response(status_code=204)
