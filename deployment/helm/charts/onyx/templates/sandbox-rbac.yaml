@@ -34,6 +34,10 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch", "create", "delete"]
+  # _create_sandbox_pod reads the sandbox-pod PodTemplate to build the pod.
+  - apiGroups: [""]
+    resources: ["podtemplates"]
+    verbs: ["get"]
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["get", "create", "delete"]

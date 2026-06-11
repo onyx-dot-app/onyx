@@ -53,17 +53,7 @@ env:
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
-  # CI runs on a 4 vCPU runner, and tests like test_skill_push provision
-  # up to 4 sandbox pods concurrently (pool + 3 cohort). With prod-default
-  # requests of 1 CPU/pod, the 4th pod stays Pending and trips the 60s
-  # readiness ceiling. Override to tiny requests so kind's scheduler can
-  # fit all four — kind isn't enforcing fairness here, just placement.
-  SANDBOX_POD_CPU_REQUEST: "100m"
-  SANDBOX_POD_MEMORY_REQUEST: "256Mi"
-  SANDBOX_POD_CPU_LIMIT: "2000m"
-  SANDBOX_POD_MEMORY_LIMIT: "4Gi"
-  # Placeholder — only injected as ONYX_SERVER_URL into the pod; the
-  # tests never call back to it, so the URL doesn't need to resolve.
+  # Sandbox pod resource requests live in values-ci.yaml (configMap.SANDBOX_POD_*).
   SANDBOX_API_SERVER_URL: "http://api-server.onyx-ci.invalid"
 
   # Proxy lives in release namespace `onyx`. SANDBOX_PROXY_HOST is set
@@ -80,6 +70,11 @@ env:
   SANDBOX_TURN_TIMEOUT_SECONDS: "120"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
+
+  # Must match the helm values-ci.yaml redis_password the proxy reads from its
+  # onyx-redis secret. Compose Redis is set to require this password right after
+  # startup (see Start Postgres step).
+  REDIS_PASSWORD: "password"
 
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
@@ -233,6 +228,7 @@ jobs:
             --set "celery_shared.image.tag=ci" \
             --show-only templates/sandbox-namespace.yaml \
             --show-only templates/sandbox-rbac.yaml \
+            --show-only templates/sandbox-podtemplate.yaml \
             --show-only templates/sandbox-proxy/deployment.yaml \
             --show-only templates/sandbox-proxy/service.yaml \
             --show-only templates/sandbox-proxy/rbac.yaml \
@@ -319,6 +315,17 @@ jobs:
             relational_db \
             cache
 
+          # The proxy chart bakes in REDIS_PASSWORD=password (helm
+          # values-ci.yaml). Compose Redis ships without requirepass, so a
+          # CONFIG SET aligns the daemon with what the proxy expects -- without
+          # it, the proxy's grant-cache check trips NOAUTH and the approval row
+          # gets terminalized.
+          REDIS_ID=$(docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.dev.yml \
+            ps -q cache)
+          docker exec "$REDIS_ID" redis-cli CONFIG SET requirepass password
+
       - name: Expose Postgres inside the kind cluster
         run: |
           set -eo pipefail
@@ -361,6 +368,43 @@ jobs:
                 - ip: ${PG_IP}
               ports:
                 - port: 5432
+                  protocol: TCP
+          EOF
+
+      # Same selector-less Service trick as Postgres above. The configmap
+      # renders REDIS_HOST as the helm release name (`onyx`); The proxy uses it
+      # for the approval-grant cache check.
+      - name: Expose Redis inside the kind cluster
+        run: |
+          set -eo pipefail
+          REDIS_ID=$(cd deployment/docker_compose && \
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q cache)
+          docker network connect kind "$REDIS_ID" --alias cache
+          REDIS_IP=$(docker inspect "$REDIS_ID" \
+            --format '{{ (index .NetworkSettings.Networks "kind").IPAddress }}')
+          echo "redis on kind network at $REDIS_IP"
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: onyx
+            namespace: onyx
+          spec:
+            ports:
+              - port: 6379
+                targetPort: 6379
+                protocol: TCP
+          ---
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: onyx
+            namespace: onyx
+          subsets:
+            - addresses:
+                - ip: ${REDIS_IP}
+              ports:
+                - port: 6379
                   protocol: TCP
           EOF
 

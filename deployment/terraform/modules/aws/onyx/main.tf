@@ -74,6 +74,8 @@ module "eks" {
   tags            = local.merged_tags
   s3_bucket_names = [local.bucket_name]
 
+  irsa_additional_service_account_names = var.irsa_additional_service_account_names
+
   enable_craft_sandbox_node_group   = var.enable_craft_sandbox_node_group
   craft_sandbox_node_instance_types = var.craft_sandbox_node_instance_types
   craft_sandbox_node_min_size       = var.craft_sandbox_node_min_size

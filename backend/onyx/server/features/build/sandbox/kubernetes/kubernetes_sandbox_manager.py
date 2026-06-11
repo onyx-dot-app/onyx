@@ -36,6 +36,7 @@ Use get_sandbox_manager() from base.py to get the appropriate implementation.
 
 import base64
 import binascii
+import copy
 import hashlib
 import io
 import ipaddress
@@ -71,15 +72,9 @@ from onyx.server.features.build.configs import OPENCODE_SERVE_PORT
 from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
 from onyx.server.features.build.configs import SANDBOX_CONTAINER_IMAGE
-from onyx.server.features.build.configs import SANDBOX_IMAGE_PULL_POLICY
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
-from onyx.server.features.build.configs import SANDBOX_POD_CPU_LIMIT
-from onyx.server.features.build.configs import SANDBOX_POD_CPU_REQUEST
-from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_LIMIT
-from onyx.server.features.build.configs import SANDBOX_POD_MEMORY_REQUEST
-from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
 from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
@@ -140,15 +135,17 @@ RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 _PUSH_PRIVATE_KEY_ENV = "ONYX_SANDBOX_PUSH_PRIVATE_KEY"
 _PUSH_PUBLIC_KEY_ENV = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
 
+# Proxy CA bundle path; still referenced by _proxy_main_container_env_vars().
 _PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
 _PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
-_PROXY_CA_SOURCE_DIR = "/sandbox-ca"
-_PROXY_CA_BUNDLE_VOLUME = "sandbox-ca-bundle"
-_PROXY_CA_SOURCE_VOLUME = "sandbox-ca-source"
 # Pinned to the proxy IP via pod hostAliases — the iptables lockdown blocks DNS,
 # so the sandbox can't resolve it on its own.
 _PROXY_ALIAS = "sandbox-proxy"
 _SANDBOX_CONTAINER_NAME = "sandbox"
+_SIDECAR_CONTAINER_NAME = "sidecar"
+
+# Helm-rendered PodTemplate carrying the static sandbox pod shape.
+_PODTEMPLATE_NAME = "sandbox-pod"
 
 # Per-session egress tagging plugin, baked into the sandbox image (see
 # docker/Dockerfile). Path must match the COPY destination there.
@@ -197,53 +194,6 @@ def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
         client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
         client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
     ]
-
-
-def _proxy_init_container() -> client.V1Container:
-    return client.V1Container(
-        name="sandbox-init",
-        image=SANDBOX_CONTAINER_IMAGE,
-        image_pull_policy=SANDBOX_IMAGE_PULL_POLICY,
-        command=["/workspace/firewall-init.sh"],
-        env=[
-            client.V1EnvVar(name="SANDBOX_PROXY_HOST", value=SANDBOX_PROXY_HOST),
-            client.V1EnvVar(name="SANDBOX_PROXY_PORT", value=str(SANDBOX_PROXY_PORT)),
-            client.V1EnvVar(name="SANDBOX_PROXY_BOOTSTRAP_MODE", value="initcontainer"),
-            client.V1EnvVar(
-                name="SANDBOX_PROXY_CA_BUNDLE_SRC",
-                value=f"{_PROXY_CA_SOURCE_DIR}/ca.crt",
-            ),
-            client.V1EnvVar(
-                name="SANDBOX_PROXY_CA_BUNDLE_DST",
-                value=_PROXY_CA_BUNDLE_FILE,
-            ),
-        ],
-        volume_mounts=[
-            client.V1VolumeMount(
-                name=_PROXY_CA_SOURCE_VOLUME,
-                mount_path=_PROXY_CA_SOURCE_DIR,
-                read_only=True,
-            ),
-            client.V1VolumeMount(
-                name=_PROXY_CA_BUNDLE_VOLUME,
-                mount_path=_PROXY_CA_BUNDLE_DIR,
-            ),
-        ],
-        resources=client.V1ResourceRequirements(
-            requests={"cpu": "50m", "memory": "32Mi"},
-            limits={"cpu": "500m", "memory": "128Mi"},
-        ),
-        security_context=client.V1SecurityContext(
-            # Overrides pod-level runAsNonRoot so this container can
-            # run iptables.
-            run_as_non_root=False,
-            run_as_user=0,
-            allow_privilege_escalation=False,
-            read_only_root_filesystem=False,
-            privileged=False,
-            capabilities=client.V1Capabilities(drop=["ALL"], add=["NET_ADMIN"]),
-        ),
-    )
 
 
 _push_private_key: Ed25519PrivateKey | None = None
@@ -602,215 +552,26 @@ class KubernetesSandboxManager(SandboxManager):
         sandbox_id: str,
         tenant_id: str,
     ) -> client.V1Pod:
-        """Create Pod specification for sandbox (user-level).
-
-        Creates pod with:
-        - sessions/ directory for per-session workspaces
-
-        NOTE: Session-specific setup is done via setup_session_workspace().
-        """
+        """Build the sandbox Pod from the Helm PodTemplate, overlaying the
+        dynamic fields the template can't carry."""
         pod_name = self._get_pod_name(sandbox_id)
 
-        # Sandbox container — runs the agent. It never receives durable-storage
-        # credentials; snapshots stream through the sidecar to api-server-owned
-        # FileStore persistence.
-        sandbox_ports = [
-            client.V1ContainerPort(name="opencode", container_port=OPENCODE_SERVE_PORT),
-        ]
-        for port in range(SANDBOX_NEXTJS_PORT_START, SANDBOX_NEXTJS_PORT_END):
-            sandbox_ports.append(
-                client.V1ContainerPort(name=f"nextjs-{port}", container_port=port)
+        try:
+            pod_template = self._core_api.read_namespaced_pod_template(
+                name=_PODTEMPLATE_NAME, namespace=self._namespace
             )
+        except ApiException as e:
+            if e.status == 404:
+                raise RuntimeError(
+                    f"Sandbox PodTemplate '{_PODTEMPLATE_NAME}' not found in "
+                    f"namespace '{self._namespace}'. It must be applied to the "
+                    f"cluster (by the deploy tooling when Craft is enabled) "
+                    f"before sandboxes can be provisioned."
+                ) from e
+            raise
 
-        sandbox_container = client.V1Container(
-            name=_SANDBOX_CONTAINER_NAME,
-            image=self._image,
-            image_pull_policy=SANDBOX_IMAGE_PULL_POLICY,
-            command=["/workspace/entrypoint.sh"],
-            ports=sandbox_ports,
-            env=[
-                client.V1EnvVar(
-                    name="ONYX_PAT", value=SANDBOX_PROXY_INJECTED_PLACEHOLDER
-                ),
-                client.V1EnvVar(name="ONYX_SERVER_URL", value=SANDBOX_API_SERVER_URL),
-                client.V1EnvVar(
-                    name="GH_TOKEN", value=SANDBOX_PROXY_INJECTED_PLACEHOLDER
-                ),
-                client.V1EnvVar(name="GH_NO_UPDATE_NOTIFIER", value="1"),
-                client.V1EnvVar(
-                    name=OPENCODE_SERVER_PASSWORD,
-                    value_from=client.V1EnvVarSource(
-                        secret_key_ref=client.V1SecretKeySelector(
-                            name=self._get_opencode_secret_name(sandbox_id),
-                            key=self._OPENCODE_PASSWORD_SECRET_KEY,
-                        )
-                    ),
-                ),
-                client.V1EnvVar(
-                    name="OPENCODE_CONFIG_CONTENT",
-                    value_from=client.V1EnvVarSource(
-                        secret_key_ref=client.V1SecretKeySelector(
-                            name=self._get_opencode_secret_name(sandbox_id),
-                            key=self._OPENCODE_CONFIG_SECRET_KEY,
-                        )
-                    ),
-                ),
-                *_proxy_main_container_env_vars(),
-            ],
-            volume_mounts=[
-                client.V1VolumeMount(
-                    name="workspace", mount_path="/workspace/sessions"
-                ),
-                client.V1VolumeMount(
-                    name="managed", mount_path="/workspace/managed", read_only=True
-                ),
-                client.V1VolumeMount(
-                    name=_PROXY_CA_BUNDLE_VOLUME,
-                    mount_path=_PROXY_CA_BUNDLE_DIR,
-                    read_only=True,
-                ),
-            ],
-            resources=client.V1ResourceRequirements(
-                requests={
-                    "cpu": SANDBOX_POD_CPU_REQUEST,
-                    "memory": SANDBOX_POD_MEMORY_REQUEST,
-                },
-                limits={
-                    "cpu": SANDBOX_POD_CPU_LIMIT,
-                    "memory": SANDBOX_POD_MEMORY_LIMIT,
-                },
-            ),
-            security_context=client.V1SecurityContext(
-                allow_privilege_escalation=False,
-                read_only_root_filesystem=False,
-                privileged=False,
-                capabilities=client.V1Capabilities(drop=["ALL"]),
-            ),
-        )
-
-        # Sidecar container — runs the push daemon + snapshot filesystem API
-        # on port 8731. It does not persist snapshots; the api-server streams
-        # tarballs to/from the main Onyx FileStore.
-        _, push_public_key_b64 = _get_push_key_pair()
-        sidecar_env = [
-            client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
-            *_proxy_main_container_env_vars(),
-        ]
-        sidecar_container = client.V1Container(
-            name="sidecar",
-            image=self._image,
-            image_pull_policy=SANDBOX_IMAGE_PULL_POLICY,
-            command=["/workspace/sidecar-entrypoint.sh"],
-            ports=[
-                client.V1ContainerPort(
-                    name="push-daemon", container_port=PUSH_DAEMON_PORT
-                ),
-            ],
-            env=sidecar_env,
-            volume_mounts=[
-                client.V1VolumeMount(
-                    name="workspace", mount_path="/workspace/sessions"
-                ),
-                client.V1VolumeMount(name="managed", mount_path="/workspace/managed"),
-                client.V1VolumeMount(
-                    name=_PROXY_CA_BUNDLE_VOLUME,
-                    mount_path=_PROXY_CA_BUNDLE_DIR,
-                    read_only=True,
-                ),
-            ],
-            resources=client.V1ResourceRequirements(
-                requests={"cpu": "100m", "memory": "256Mi"},
-                limits={"cpu": "500m", "memory": "512Mi"},
-            ),
-            security_context=client.V1SecurityContext(
-                allow_privilege_escalation=False,
-                read_only_root_filesystem=False,
-                privileged=False,
-                capabilities=client.V1Capabilities(drop=["ALL"]),
-            ),
-            liveness_probe=client.V1Probe(
-                http_get=client.V1HTTPGetAction(path="/health", port=PUSH_DAEMON_PORT),
-                initial_delay_seconds=5,
-                period_seconds=30,
-            ),
-            readiness_probe=client.V1Probe(
-                http_get=client.V1HTTPGetAction(path="/health", port=PUSH_DAEMON_PORT),
-                initial_delay_seconds=1,
-                period_seconds=2,
-                failure_threshold=10,
-            ),
-        )
-
-        volumes = [
-            client.V1Volume(
-                name="workspace",
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="50Gi"),
-            ),
-            client.V1Volume(
-                name="managed",
-                empty_dir=client.V1EmptyDirVolumeSource(size_limit="5Gi"),
-            ),
-        ]
-
-        volumes.extend(
-            [
-                client.V1Volume(
-                    name=_PROXY_CA_SOURCE_VOLUME,
-                    config_map=client.V1ConfigMapVolumeSource(
-                        name=SANDBOX_PROXY_CA_CONFIGMAP,
-                        optional=False,
-                    ),
-                ),
-                client.V1Volume(
-                    name=_PROXY_CA_BUNDLE_VOLUME,
-                    empty_dir=client.V1EmptyDirVolumeSource(),
-                ),
-            ]
-        )
-        # kubelet injects hostAliases into every container's /etc/hosts;
-        # initContainer mutations don't propagate, so we set it here.
-        host_aliases = [
-            client.V1HostAlias(ip=self._resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
-        ]
-
-        pod_spec = client.V1PodSpec(
-            service_account_name=self._service_account,
-            automount_service_account_token=False,
-            init_containers=[_proxy_init_container()],
-            containers=[sandbox_container, sidecar_container],
-            host_aliases=host_aliases,
-            share_process_namespace=False,
-            volumes=volumes,
-            restart_policy="Never",
-            termination_grace_period_seconds=10,  # Fast pod termination
-            # CRITICAL: Disable service environment variable injection
-            # Without this, Kubernetes injects env vars for ALL services in the namespace,
-            # which can exceed ARG_MAX (2.6MB) when there are many sandbox pods.
-            # With 40+ sandboxes × 100 ports × 4 env vars each = ~16k env vars (~2.2MB)
-            # This causes "exec /bin/sh: argument list too long" errors.
-            enable_service_links=False,
-            # Node selection for sandbox nodes
-            node_selector={"onyx.app/workload": "sandbox"},
-            tolerations=[
-                client.V1Toleration(
-                    key="workload",
-                    operator="Equal",
-                    value="sandbox",
-                    effect="NoSchedule",
-                ),
-            ],
-            # Security context for pod
-            security_context=client.V1PodSecurityContext(
-                run_as_non_root=True,
-                run_as_user=1000,
-                fs_group=1000,
-                seccomp_profile=client.V1SeccompProfile(type="RuntimeDefault"),
-            ),
-            # Disable host access
-            host_network=False,
-            host_pid=False,
-            host_ipc=False,
-        )
+        spec: client.V1PodSpec = copy.deepcopy(pod_template.template.spec)
+        self._overlay_dynamic_fields(spec, sandbox_id)
 
         return client.V1Pod(
             api_version="v1",
@@ -819,14 +580,74 @@ class KubernetesSandboxManager(SandboxManager):
                 name=pod_name,
                 namespace=self._namespace,
                 labels={
+                    **(pod_template.template.metadata.labels or {}),
                     LABEL_K8S_COMPONENT: LABEL_K8S_COMPONENT_SANDBOX,
                     LABEL_K8S_MANAGED_BY: LABEL_K8S_MANAGED_BY_ONYX,
                     LABEL_SANDBOX_ID: sandbox_id,
                     LABEL_TENANT_ID: tenant_id,
-                    "admission.datadoghq.com/enabled": "false",
                 },
             ),
-            spec=pod_spec,
+            spec=spec,
+        )
+
+    def _overlay_dynamic_fields(self, spec: client.V1PodSpec, sandbox_id: str) -> None:
+        """Inject the per-pod values the deploy-time PodTemplate can't carry.
+
+        These are the *only* parts of the pod spec set from Python:
+        - hostAliases pinning the proxy ClusterIP (resolved at runtime; the
+          firewall blocks DNS so the pod can't resolve it itself)
+        - the opencode-auth secretKeyRef env (the Secret name is per-pod)
+        - the push public key on the sidecar (derived from the api-server's
+          private key, so it's never in the chart; sidecar only)
+        """
+        spec.host_aliases = [
+            client.V1HostAlias(ip=self._resolve_proxy_ip(), hostnames=[_PROXY_ALIAS])
+        ]
+
+        secret_name = self._get_opencode_secret_name(sandbox_id)
+        sandbox_container = self._require_container(spec, _SANDBOX_CONTAINER_NAME)
+        sandbox_container.env = list(sandbox_container.env or []) + [
+            client.V1EnvVar(
+                name=OPENCODE_SERVER_PASSWORD,
+                value_from=client.V1EnvVarSource(
+                    secret_key_ref=client.V1SecretKeySelector(
+                        name=secret_name,
+                        key=self._OPENCODE_PASSWORD_SECRET_KEY,
+                    )
+                ),
+            ),
+            client.V1EnvVar(
+                name="OPENCODE_CONFIG_CONTENT",
+                value_from=client.V1EnvVarSource(
+                    secret_key_ref=client.V1SecretKeySelector(
+                        name=secret_name,
+                        key=self._OPENCODE_CONFIG_SECRET_KEY,
+                    )
+                ),
+            ),
+        ]
+
+        _, push_public_key_b64 = _get_push_key_pair()
+        sidecar_container = self._require_container(spec, _SIDECAR_CONTAINER_NAME)
+        sidecar_container.env = list(sidecar_container.env or []) + [
+            client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
+        ]
+
+    @staticmethod
+    def _require_container(spec: client.V1PodSpec, name: str) -> client.V1Container:
+        """Find a container in the PodTemplate by name, or raise a clear error.
+
+        A bare ``next()`` would surface a PodTemplate/version skew (template
+        missing the expected container) as an opaque ``StopIteration``; this
+        names the container and the fix, matching the 404 PodTemplate error.
+        """
+        for container in spec.containers or []:
+            if container.name == name:
+                return container
+        raise RuntimeError(
+            f"PodTemplate '{_PODTEMPLATE_NAME}' has no '{name}' container. "
+            f"The PodTemplate and api-server versions are likely out of sync — "
+            f"apply the matching sandbox PodTemplate."
         )
 
     def _create_sandbox_service(

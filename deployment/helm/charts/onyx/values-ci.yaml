@@ -10,6 +10,20 @@ configMap:
   # Placeholder; the K8s sandbox tests don't call back to it. Required to
   # satisfy the chart's fail() guard for ENABLE_CRAFT=true.
   SANDBOX_API_SERVER_URL: "http://api.invalid"
+  # Sandbox image the kind cluster pulls (built+pushed by the CI workflow).
+  SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
+  # Tiny requests so the 4 vCPU runner can fit 4 concurrent sandbox pods.
+  SANDBOX_POD_CPU_REQUEST: "100m"
+  SANDBOX_POD_MEMORY_REQUEST: "256Mi"
+  SANDBOX_POD_CPU_LIMIT: "2000m"
+  SANDBOX_POD_MEMORY_LIMIT: "4Gi"
+
+# test_sigterm_drain_unblocks_parked_request deletes "the" proxy pod via an
+# arbitrary `items[0]` from the label selector and expects that pod to be the
+# one parking the request. With a default other than 1, the test deletes the
+# wrong replica and the curl never unblocks.
+sandboxProxy:
+  replicaCount: 1
 
 # Placeholder secret values so auth-secrets.yaml renders without erroring.
 # Postgres/Redis run in docker-compose alongside the kind

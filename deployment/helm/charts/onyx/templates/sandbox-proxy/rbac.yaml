@@ -1,5 +1,11 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- $sandboxProxyServiceAccount := .Values.sandboxProxy.serviceAccount | default dict }}
+{{- $sandboxProxyServiceAccountAutomount := true }}
+{{- if hasKey $sandboxProxyServiceAccount "automount" }}
+{{- $sandboxProxyServiceAccountAutomount = $sandboxProxyServiceAccount.automount }}
+{{- end }}
+{{- $proxyServiceAccountAnnotations := $sandboxProxyServiceAccount.annotations | default dict }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -7,6 +13,11 @@ metadata:
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     app.kubernetes.io/component: sandbox-proxy
+  {{- with $proxyServiceAccountAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: {{ $sandboxProxyServiceAccountAutomount }}
 ---
 # CA Secret access, scoped to the single named Secret.
 apiVersion: rbac.authorization.k8s.io/v1
