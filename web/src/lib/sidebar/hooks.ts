@@ -2,11 +2,32 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import useSWRInfinite from "swr/infinite";
+import { useSettingsContext } from "@/providers/SettingsProvider";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ChatSearchResponse } from "@/app/app/interfaces";
 import { UNNAMED_CHAT } from "@/lib/constants";
+
+// ---------------------------------------------------------------------------
+// useShowLogoWhenFolded
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns whether the app logo should remain visible in the sidebar when it
+ * is folded. When an enterprise `logo_display_style` of `"name_only"` is
+ * configured, the logo is hidden in the folded state so only the text name
+ * would be shown — but since there's no room for text when folded, the logo
+ * is suppressed entirely in that case.
+ */
+export function useShowLogoWhenFolded(): boolean {
+  const settings = useSettingsContext();
+  return settings.enterpriseSettings?.logo_display_style !== "name_only";
+}
+
+// ---------------------------------------------------------------------------
+// useChatSearchOptimistic
+// ---------------------------------------------------------------------------
 
 interface FilterableChat {
   id: string;
@@ -16,15 +37,23 @@ interface FilterableChat {
 
 interface UseChatSearchOptimisticOptions {
   searchQuery: string;
+  /** When `false`, no API calls are made and the hook returns only locally
+   *  cached data. Defaults to `true`. */
   enabled?: boolean;
 }
 
 interface UseChatSearchOptimisticResult {
+  /** Merged, deduplicated, sorted list of matching chats. */
   results: FilterableChat[];
+  /** `true` while the first API page is loading. */
   isSearching: boolean;
+  /** `true` when there are additional pages to fetch. */
   hasMore: boolean;
+  /** Fetches the next page of results. */
   fetchMore: () => Promise<void>;
+  /** `true` while a subsequent (non-first) page is loading. */
   isLoadingMore: boolean;
+  /** Attach to the sentinel element to trigger infinite scroll. */
   sentinelRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -49,13 +78,22 @@ function filterLocalSessions(
   sessions: FilterableChat[],
   searchQuery: string
 ): FilterableChat[] {
-  if (!searchQuery.trim()) {
-    return sessions;
-  }
+  if (!searchQuery.trim()) return sessions;
   const term = searchQuery.toLowerCase();
   return sessions.filter((chat) => chat.label.toLowerCase().includes(term));
 }
 
+/**
+ * Optimistic search over chat sessions and projects.
+ *
+ * The hook immediately returns results from the already-cached SWR data
+ * (instant display), then replaces them with paginated API results as they
+ * arrive. While no SWR data is available the hook filters the locally cached
+ * sessions instead, giving a snappy feel even on slow connections.
+ *
+ * Infinite scroll is driven by an `IntersectionObserver` attached to the
+ * `sentinelRef` element — place it at the bottom of the result list.
+ */
 export default function useChatSearchOptimistic(
   options: UseChatSearchOptimisticOptions
 ): UseChatSearchOptimisticResult {
@@ -107,10 +145,7 @@ export default function useChatSearchOptimistic(
       const params = new URLSearchParams();
       params.set("page", page.toString());
       params.set("page_size", PAGE_SIZE.toString());
-
-      if (debouncedQuery.trim()) {
-        params.set("query", debouncedQuery);
-      }
+      if (debouncedQuery.trim()) params.set("query", debouncedQuery);
 
       return `/api/chat/search?${params.toString()}`;
     },
@@ -129,9 +164,7 @@ export default function useChatSearchOptimistic(
     if (!data || data.length === 0) return [];
 
     const allChats: FilterableChat[] = [];
-    for (const page of data) {
-      allChats.push(...transformApiResponse(page));
-    }
+    for (const page of data) allChats.push(...transformApiResponse(page));
 
     const seen = new Set<string>();
     return allChats.filter((chat) => {
@@ -143,19 +176,13 @@ export default function useChatSearchOptimistic(
 
   const hasMore = useMemo(() => {
     if (!data || data.length === 0) return true;
-    const lastPage = data[data.length - 1];
-    return lastPage?.has_more ?? false;
+    return data[data.length - 1]?.has_more ?? false;
   }, [data]);
 
   const results = useMemo<FilterableChat[]>(() => {
-    if (swrResults.length > 0) {
-      return swrResults;
-    }
-
-    if (searchQuery.trim()) {
+    if (swrResults.length > 0) return swrResults;
+    if (searchQuery.trim())
       return filterLocalSessions(fallbackSessions, searchQuery);
-    }
-
     return fallbackSessions;
   }, [swrResults, fallbackSessions, searchQuery]);
 
@@ -163,9 +190,7 @@ export default function useChatSearchOptimistic(
   const isLoadingMore = isValidating && size > 1;
 
   const fetchMore = useCallback(async () => {
-    if (!enabled || isValidating || !hasMore) {
-      return;
-    }
+    if (!enabled || isValidating || !hasMore) return;
     await setSize(size + 1);
   }, [enabled, isValidating, hasMore, setSize, size]);
 
@@ -176,9 +201,7 @@ export default function useChatSearchOptimistic(
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
-        if (entry?.isIntersecting && hasMore && !isValidating) {
-          fetchMore();
-        }
+        if (entry?.isIntersecting && hasMore && !isValidating) fetchMore();
       },
       { root: null, rootMargin: "100px", threshold: 0 }
     );

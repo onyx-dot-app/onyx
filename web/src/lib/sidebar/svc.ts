@@ -4,6 +4,14 @@ import { toast } from "@/hooks/useToast";
 import { moveChatSession } from "@/app/app/projects/projectsService";
 import type { MoveOperationParams } from "@/lib/sidebar/utils";
 
+/**
+ * Moves a chat session to the given project, then refreshes all stale data.
+ *
+ * On success, the function resolves once both `refreshChatSessions` and the
+ * appropriate project refresh (current-project details or full project list)
+ * have settled. On failure it shows an error toast and re-throws so the
+ * caller can handle the error (e.g. to dismiss a loading state).
+ */
 export const handleMoveOperation = async ({
   chatSession,
   targetProjectId,

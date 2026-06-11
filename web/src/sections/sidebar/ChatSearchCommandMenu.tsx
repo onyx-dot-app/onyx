@@ -9,7 +9,7 @@ import CommandMenu, {
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
-import { formatDisplayTime } from "@opal/time";
+import { timeAgo } from "@opal/time";
 import { highlightMatch } from "@/lib/sidebar/utils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { useCurrentAgent } from "@/lib/agents/hooks";
@@ -265,7 +265,7 @@ export default function ChatSearchCommandMenu({
                           </Text>
                         ) : (
                           <Text secondaryBody text03>
-                            {formatDisplayTime(chat.time)}
+                            {timeAgo(chat.time)}
                           </Text>
                         )
                       }
@@ -322,7 +322,7 @@ export default function ChatSearchCommandMenu({
                         </Text>
                       ) : (
                         <Text secondaryBody text03>
-                          {formatDisplayTime(project.time)}
+                          {timeAgo(project.time)}
                         </Text>
                       )
                     }

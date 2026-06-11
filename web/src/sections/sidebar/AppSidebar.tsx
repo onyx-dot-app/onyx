@@ -43,13 +43,12 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
 import type { Project } from "@/app/app/projects/projectsService";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import {
-  renderAppLogo,
-  useShowLogoWhenFolded,
-} from "@/sections/sidebar/SidebarWrapper";
+import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { showErrorNotification } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
@@ -431,7 +430,8 @@ const AppSidebar = memo(function AppSidebarInner() {
             LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
           ) === "true";
 
-        const isChatUsingDefaultAgent = chatSession.persona_id === 0;
+        const isChatUsingDefaultAgent =
+          chatSession.persona_id === DEFAULT_AGENT_ID;
 
         if (!isChatUsingDefaultAgent && !hideModal) {
           setPendingMoveChatSession(chatSession);

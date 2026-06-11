@@ -1,8 +1,5 @@
 function conditionallyAddPlural(noun: string, cnt: number): string {
-  if (cnt > 1) {
-    return `${noun}s`;
-  }
-  return noun;
+  return cnt === 1 ? noun : `${noun}s`;
 }
 
 /**
@@ -208,54 +205,6 @@ export function formatDurationMs(ms: number): string {
   const hours = Math.floor(minutes / 60);
   const remMinutes = minutes % 60;
   return remMinutes > 0 ? `${hours}h ${remMinutes}m` : `${hours}h`;
-}
-
-/**
- * Formats a date string for compact chat-list display. Unlike {@link timeAgo},
- * which always returns a relative string, this function uses abbreviated
- * relative labels for recent dates and falls back to a calendar date
- * ("Month Day") for items older than a week. Includes a special "yesterday"
- * case and uses short unit abbreviations ("mins", not "minutes").
- *
- * @example
- * formatDisplayTime(new Date(Date.now() - 30_000).toISOString())            // "just now"
- * formatDisplayTime(new Date(Date.now() - 5 * 60_000).toISOString())        // "5 mins ago"
- * formatDisplayTime(new Date(Date.now() - 3 * 3_600_000).toISOString())     // "3 hours ago"
- * formatDisplayTime(yesterdayIso)                                            // "yesterday"
- * formatDisplayTime(new Date(Date.now() - 3 * 86_400_000).toISOString())    // "3 days ago"
- * formatDisplayTime(new Date(Date.now() - 30 * 86_400_000).toISOString())   // "October 23"
- */
-export function formatDisplayTime(isoDate: string): string {
-  const date = new Date(isoDate);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-
-  if (diffMs < 0) return "just now";
-
-  const diffMins = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60)
-    return `${diffMins} ${diffMins === 1 ? "min" : "mins"} ago`;
-  if (diffHours < 24)
-    return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
-
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (
-    date.getDate() === yesterday.getDate() &&
-    date.getMonth() === yesterday.getMonth() &&
-    date.getFullYear() === yesterday.getFullYear()
-  ) {
-    return "yesterday";
-  }
-
-  if (diffDays <= 7)
-    return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
-
-  return date.toLocaleDateString("en-US", { month: "long", day: "numeric" });
 }
 
 /**

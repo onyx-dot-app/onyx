@@ -18,10 +18,8 @@ import {
   useSidebarState,
 } from "@opal/layouts";
 import RefreshText from "@/refresh-components/texts/Text";
-import {
-  renderAppLogo,
-  useShowLogoWhenFolded,
-} from "@/sections/sidebar/SidebarWrapper";
+import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { Popover, PopoverMenu } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
