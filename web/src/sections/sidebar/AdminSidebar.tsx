@@ -236,7 +236,7 @@ export default function AdminSidebar() {
   const disabledGroups = groupBySection(disabled);
 
   return (
-    <SidebarLayouts.Root foldable>
+    <SidebarLayouts.Root>
       <SidebarLayouts.Header
         logo={renderAppLogo}
         showLogoWhenFolded={showLogoWhenFolded}
