@@ -34,20 +34,19 @@ spec:
     spec:
       containers:
         - name: locust-master
-          image: onyxdotapp/onyx-loadtest:latest
-          imagePullPolicy: Always
+          # Pinned tag: in distributed mode every pod must run the same build
+          # or results are silently corrupted.
+          image: onyxdotapp/onyx-loadtest:v0.1.0
+          imagePullPolicy: IfNotPresent
           args: ["--master"]
           ports:
             - containerPort: 8089 # web UI
             - containerPort: 5557 # worker communication
+          # No ONYX_API_KEY here: the master only coordinates — user
+          # greenlets (and API calls) run on the workers.
           env:
             - name: LOCUST_HOST
               value: "http://onyx-webserver:3000"
-            - name: ONYX_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: onyx-loadtest
-                  key: ONYX_API_KEY
           resources:
             requests:
               cpu: 250m
@@ -101,8 +100,8 @@ spec:
       # tolerations: [{ key: loadtest, operator: Exists, effect: NoSchedule }]
       containers:
         - name: locust-worker
-          image: onyxdotapp/onyx-loadtest:latest
-          imagePullPolicy: Always
+          image: onyxdotapp/onyx-loadtest:v0.1.0
+          imagePullPolicy: IfNotPresent
           args: ["--worker", "--master-host", "onyx-loadtest-master"]
           env:
             - name: ONYX_API_KEY

@@ -22,8 +22,10 @@ spec:
     spec:
       containers:
         - name: mock-llm
-          image: onyxdotapp/onyx-mock-llm:latest
-          imagePullPolicy: Always
+          # Pin the tag: master/workers and mid-run restarts must never pick
+          # up a different build (bump deliberately when publishing).
+          image: onyxdotapp/onyx-mock-llm:v0.1.0
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
           # Default timing knobs; per-request knobs ride in the model name.
