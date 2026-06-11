@@ -87,8 +87,8 @@ import {
 } from "@/hooks/useSearchSettings";
 import { useLlmDefaults } from "@/hooks/useLanguageModels";
 import useFilter from "@/hooks/useFilter";
-import ModelListContent from "@/refresh-components/popovers/ModelListContent";
-import type { LLMOption } from "@/refresh-components/popovers/interfaces";
+import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
+import type { LLMOption } from "@/lib/languageModels/options";
 import type { RichStr } from "@opal/types";
 import { getModelIcon } from "@/lib/languageModels";
 import { ProviderCredentialsModal } from "@/refresh-pages/admin/IndexSettingsPage/modals";
@@ -287,7 +287,7 @@ function LlmPicker({
         </OpenButton>
       </Popover.Trigger>
       <Popover.Content side="top" align="end" width="xl">
-        <ModelListContent
+        <ModelSelectorContent
           llmProviders={llmProviders}
           isLoading={isLoading}
           onSelect={handleSelect}

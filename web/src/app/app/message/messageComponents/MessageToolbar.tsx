@@ -17,8 +17,11 @@ import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { CopyButton } from "@opal/components";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { parseLlmDescriptor } from "@/lib/languageModels/utils";
+import ModelSelector, {
+  findModelConfigId,
+} from "@/sections/model-selector/ModelSelector";
+import { SvgRefreshCw } from "@opal/icons";
+import { OpenButton } from "@opal/components";
 import { LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/interfaces";
 import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
@@ -297,18 +300,31 @@ export default function MessageToolbar({
               parentMessage &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
-                  <LLMPopover
-                    llmManager={llmManager}
-                    currentModelName={currentModelName}
-                    onSelect={(modelName) => {
-                      const llmDescriptor = parseLlmDescriptor(modelName);
+                  <ModelSelector
+                    llmProviders={llmManager.llmProviders}
+                    value={findModelConfigId(
+                      llmManager.llmProviders,
+                      llmManager.currentLlm.provider,
+                      currentModelName ?? llmManager.currentLlm.modelName
+                    )}
+                    renderTrigger={() => (
+                      <OpenButton icon={SvgRefreshCw} foldable>
+                        {currentModelName ?? llmManager.currentLlm.modelName}
+                      </OpenButton>
+                    )}
+                    onChange={(opt) => {
                       const regenerator = onRegenerate({
                         messageId,
                         parentMessage,
                       });
-                      regenerator(llmDescriptor);
+                      regenerator({
+                        name: opt.name,
+                        provider: opt.provider,
+                        modelName: opt.modelName,
+                      });
                     }}
-                    foldable
+                    temperatureManager={llmManager}
+                    isLoading={llmManager.isLoadingProviders}
                   />
                 </div>
               )}

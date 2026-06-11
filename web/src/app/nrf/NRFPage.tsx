@@ -46,7 +46,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
-import ModelSelector from "@/refresh-components/popovers/ModelSelector";
+import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
 import { Section } from "@/layouts/general-layouts";
 
 const SearchUI = paidTierGated(EESearchUI);
@@ -501,7 +501,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 >
                   <WelcomeMessage isDefaultAgent />
                   {liveAgent && !llmManager.isLoadingProviders && (
-                    <ModelSelector
+                    <MultiModelSelector
                       llmManager={llmManager}
                       selectedModels={multiModel.selectedModels}
                       onAdd={multiModel.addModel}
@@ -524,7 +524,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             >
               {hasMessages && liveAgent && !llmManager.isLoadingProviders && (
                 <div className="pb-1">
-                  <ModelSelector
+                  <MultiModelSelector
                     llmManager={llmManager}
                     selectedModels={multiModel.selectedModels}
                     onAdd={multiModel.addModel}

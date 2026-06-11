@@ -1,5 +1,8 @@
-import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
-import { LLMOption } from "./interfaces";
+import {
+  buildLlmOptions,
+  groupLlmOptions,
+  LLMOption,
+} from "@/lib/languageModels/options";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { makeProvider } from "@tests/setup/llmProviderTestUtils";
 

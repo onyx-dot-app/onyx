@@ -33,7 +33,10 @@ import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { toast } from "@/hooks/useToast";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
+import ModelSelector, {
+  findModelConfigId,
+} from "@/sections/model-selector/ModelSelector";
+import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -1034,11 +1037,25 @@ function ChatPreferencesSettings() {
             description="This model will be used by Onyx by default in your chats."
             withLabel
           >
-            <LLMPopover
-              llmManager={llmManager}
-              onSelect={(selected) => {
-                void updateUserDefaultModel(selected);
+            <ModelSelector
+              llmProviders={llmManager.llmProviders}
+              value={findModelConfigId(
+                llmManager.llmProviders,
+                llmManager.currentLlm.provider,
+                llmManager.currentLlm.modelName
+              )}
+              onChange={(opt) => {
+                llmManager.updateCurrentLlm({
+                  name: opt.name,
+                  provider: opt.provider,
+                  modelName: opt.modelName,
+                });
+                void updateUserDefaultModel(
+                  structureValue(opt.name, opt.provider, opt.modelName)
+                );
               }}
+              temperatureManager={llmManager}
+              isLoading={llmManager.isLoadingProviders}
             />
           </InputHorizontal>
 

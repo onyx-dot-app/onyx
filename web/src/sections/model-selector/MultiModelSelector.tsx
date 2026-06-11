@@ -6,8 +6,8 @@ import { getModelIcon } from "@/lib/languageModels";
 import { Button, SelectButton, Popover, Divider } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { LLMOption } from "@/refresh-components/popovers/interfaces";
-import ModelListContent from "@/refresh-components/popovers/ModelListContent";
+import { LLMOption } from "@/lib/languageModels/options";
+import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 
 export const MAX_MODELS = 3;
 
@@ -18,7 +18,7 @@ export interface SelectedModel {
   displayName: string;
 }
 
-export interface ModelSelectorProps {
+export interface MultiModelSelectorProps {
   llmManager: LlmManager;
   selectedModels: SelectedModel[];
   onAdd: (model: SelectedModel) => void;
@@ -30,17 +30,15 @@ function modelKey(provider: string, modelName: string): string {
   return `${provider}:${modelName}`;
 }
 
-export default function ModelSelector({
+export default function MultiModelSelector({
   llmManager,
   selectedModels,
   onAdd,
   onRemove,
   onReplace,
-}: ModelSelectorProps) {
+}: MultiModelSelectorProps) {
   const [open, setOpen] = useState(false);
-  // null = add mode (via + button), number = replace mode (via pill click)
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
-  // Virtual anchor ref — points to the clicked pill so the popover positions above it
   const anchorRef = useRef<HTMLElement | null>(null);
 
   const settings = useSettingsContext();
@@ -107,7 +105,6 @@ export default function ModelSelector({
       onRemove(existingIndex);
     } else if (!atMax) {
       onAdd(model);
-      // Close the popover only when we've reached the max model count
       if (selectedModels.length + 1 >= MAX_MODELS) {
         setOpen(false);
       }
@@ -214,7 +211,7 @@ export default function ModelSelector({
 
       {!(atMax && replacingIndex === null) && (
         <Popover.Content side="top" align="end" width="xl">
-          <ModelListContent
+          <ModelSelectorContent
             llmProviders={llmManager.llmProviders}
             isLoading={llmManager.isLoadingProviders}
             onSelect={handleSelect}

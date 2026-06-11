@@ -6,8 +6,11 @@ import { InputTypeIn } from "@opal/components";
 import { Button, LineItemButton, Text } from "@opal/components";
 import { SvgCheck, SvgChevronRight } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { LLMOption } from "./interfaces";
-import { buildLlmOptions, groupLlmOptions } from "./LLMPopover";
+import {
+  LLMOption,
+  buildLlmOptions,
+  groupLlmOptions,
+} from "@/lib/languageModels/options";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
   Collapsible,
@@ -18,7 +21,7 @@ import { cn } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
 
-export interface ModelListContentProps {
+export interface ModelSelectorContentProps {
   llmProviders: LLMProviderDescriptor[] | undefined;
   currentModelName?: string;
   requiresImageInput?: boolean;
@@ -30,7 +33,7 @@ export interface ModelListContentProps {
   footer?: React.ReactNode;
 }
 
-export default function ModelListContent({
+export default function ModelSelectorContent({
   llmProviders,
   currentModelName,
   requiresImageInput,
@@ -40,7 +43,7 @@ export default function ModelListContent({
   scrollContainerRef: externalScrollRef,
   isLoading,
   footer,
-}: ModelListContentProps) {
+}: ModelSelectorContentProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;
@@ -72,7 +75,6 @@ export default function ModelListContent({
     [filteredOptions]
   );
 
-  // Find which group contains a currently-selected model (for auto-expand)
   const defaultGroupKey = useMemo(() => {
     for (const group of groupedOptions) {
       if (group.options.some((opt) => isSelected(opt))) {
@@ -86,7 +88,6 @@ export default function ModelListContent({
     new Set([defaultGroupKey])
   );
 
-  // Reset expanded groups when default changes (e.g. popover re-opens)
   useEffect(() => {
     setExpandedGroups(new Set([defaultGroupKey]));
   }, [defaultGroupKey]);
@@ -123,7 +124,7 @@ export default function ModelListContent({
         icon={(props) => <div {...(props as any)} />}
         title={option.displayName}
         description={description}
-        onClick={() => onSelect(option)}
+        onClick={() => !disabled && onSelect(option)}
         rightChildren={
           selected ? (
             <div className="flex h-5 items-center">
