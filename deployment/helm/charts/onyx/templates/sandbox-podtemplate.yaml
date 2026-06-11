@@ -126,8 +126,9 @@ template:
           - { name: managed, mountPath: /workspace/managed }
           - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
         resources:
+          # Snapshot tar/stream runs through this sidecar, so give it headroom.
           requests: { cpu: "100m", memory: "256Mi" }
-          limits: { cpu: "500m", memory: "512Mi" }
+          limits: { cpu: "1", memory: "1Gi" }
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
