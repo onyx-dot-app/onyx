@@ -48,9 +48,11 @@ import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
-import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { showErrorNotification } from "@/lib/sidebar/utils";
+import {
+  shouldShowMoveModal,
+  showErrorNotification,
+} from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
@@ -424,16 +426,7 @@ const AppSidebar = memo(function AppSidebarInner() {
           return;
         }
 
-        const hideModal =
-          typeof window !== "undefined" &&
-          window.localStorage.getItem(
-            LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
-          ) === "true";
-
-        const isChatUsingDefaultAgent =
-          chatSession.persona_id === DEFAULT_AGENT_ID;
-
-        if (!isChatUsingDefaultAgent && !hideModal) {
+        if (shouldShowMoveModal(chatSession)) {
           setPendingMoveChatSession(chatSession);
           setPendingMoveProjectId(targetProject.id);
           setShowMoveCustomAgentModal(true);
