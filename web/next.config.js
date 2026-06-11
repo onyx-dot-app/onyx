@@ -2,19 +2,9 @@
 const { withSentryConfig } = require("@sentry/nextjs");
 const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
 
-const cspHeader = `
-    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-    font-src 'self' https://fonts.gstatic.com;
-    object-src 'none';
-    base-uri 'self';
-    form-action 'self';
-    ${
-      process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" &&
-      process.env.NODE_ENV !== "development"
-        ? "upgrade-insecure-requests;"
-        : ""
-    }
-`;
+// Content-Security-Policy is set in web/src/proxy.ts, not here: `headers()` is
+// baked into the build, which would freeze the runtime
+// WEB_FRAME_PROTECTION_ENABLED flag. The static headers below never vary.
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -47,10 +37,6 @@ const nextConfig = {
       {
         source: "/(.*)",
         headers: [
-          {
-            key: "Content-Security-Policy",
-            value: cspHeader.replace(/\n/g, ""),
-          },
           {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains; preload",
