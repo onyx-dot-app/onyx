@@ -1043,16 +1043,27 @@ function ChatPreferencesSettings() {
                 llmManager.currentLlm.modelName
               )}
               onChange={(opt) => {
-                llmManager.updateCurrentLlm({
-                  name: opt.name,
-                  provider: opt.provider,
-                  modelName: opt.modelName,
-                });
-                void updateUserDefaultModel(
-                  structureValue(opt.name, opt.provider, opt.modelName)
-                );
+                if (opt.modelConfigurationId === null) {
+                  // "Global Default" selected — clear personal preference
+                  llmManager.updateCurrentLlm({
+                    name: "",
+                    provider: "",
+                    modelName: "",
+                  });
+                  void updateUserDefaultModel(null);
+                } else {
+                  llmManager.updateCurrentLlm({
+                    name: opt.name,
+                    provider: opt.provider,
+                    modelName: opt.modelName,
+                  });
+                  void updateUserDefaultModel(
+                    structureValue(opt.name, opt.provider, opt.modelName)
+                  );
+                }
               }}
               temperatureManager={llmManager}
+              includeGlobalDefault
             />
           </InputHorizontal>
 
