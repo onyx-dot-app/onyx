@@ -11,6 +11,7 @@ from googleapiclient.http import MediaIoBaseDownload
 from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
+from onyx.configs.app_configs import GOOGLE_DRIVE_MAX_EXTRACTED_TEXT_CHARS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
@@ -681,6 +682,33 @@ def convert_drive_item_to_document(
     return first_error
 
 
+def _cap_extracted_text(
+    sections: list[TextSection | ImageSection | TabularSection],
+    file_name: str | None,
+) -> list[TextSection | ImageSection | TabularSection]:
+    """Bound the total text retained per file. Google-native files (Docs/Slides/
+    Sheets) report no `size` metadata, so they bypass the download size threshold
+    and can extract to arbitrarily large text."""
+    remaining = GOOGLE_DRIVE_MAX_EXTRACTED_TEXT_CHARS
+    for i, section in enumerate(sections):
+        if isinstance(section, ImageSection):
+            continue
+        if len(section.text) > remaining:
+            logger.warning(
+                "Extracted text for %s exceeds %s chars. Truncating.",
+                file_name,
+                GOOGLE_DRIVE_MAX_EXTRACTED_TEXT_CHARS,
+            )
+            capped = sections[:i]
+            if remaining > 0:
+                capped.append(
+                    section.model_copy(update={"text": section.text[:remaining]})
+                )
+            return capped
+        remaining -= len(section.text)
+    return sections
+
+
 def _convert_drive_item_to_document(
     creds: Any,
     allow_images: bool,
@@ -779,6 +807,8 @@ def _convert_drive_item_to_document(
         if not sections:
             logger.warning("No content extracted from %s. Skipping.", file.get("name"))
             return None
+
+        sections = _cap_extracted_text(sections, file.get("name"))
 
         doc_id = onyx_document_id_from_drive_file(file)
         external_access = (
