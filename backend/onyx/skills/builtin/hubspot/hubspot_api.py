@@ -190,6 +190,8 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         results: list[Any] = []
         after: str | None = None
         total: Any = None
+        if a.limit <= 0:
+            return {"ok": False, "error": "limit must be a positive integer"}
         while len(results) < a.limit:
             body: dict[str, Any] = {
                 "query": a.query,
