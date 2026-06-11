@@ -505,7 +505,8 @@ export default function AppChrome({ children }: AppChromeProps) {
   const { resolvedTheme } = useTheme();
   const { isSafari } = useBrowserInfo();
   const isLightMode = resolvedTheme === "light";
-  const showBackground = hasBackground && !appFocus.isProject();
+  const showBackground =
+    hasBackground && (appFocus.isChat() || appFocus.isNewSession());
 
   const horizontalBlurMask = `linear-gradient(
     to right,
