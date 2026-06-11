@@ -37,7 +37,11 @@ import {
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
-import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
+import {
+  AuthType,
+  DEFAULT_AGENT_ID,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+} from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
@@ -681,10 +685,10 @@ export function useLlmManager(
         llmProviders,
         defaultText
       );
-    } else if (liveAgent) {
-      // Agent's configured default takes precedence. When the agent has no
-      // explicit default, fall straight to the global system default — the
-      // user's personal preference is irrelevant in an agent-scoped chat.
+    } else if (liveAgent && liveAgent.id !== DEFAULT_AGENT_ID) {
+      // Custom agent — its configured default takes precedence. When the agent
+      // has no explicit default, fall to the global system default. The user's
+      // personal preference is irrelevant in an agent-scoped chat.
       const agentOverride = getProviderOverrideForAgent(
         liveAgent,
         llmProviders
