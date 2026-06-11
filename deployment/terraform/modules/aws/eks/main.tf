@@ -4,6 +4,14 @@ locals {
     bucket_objects = "arn:aws:s3:::${name}/*"
   }]
 
+  workload_irsa_service_account_subjects = [
+    for service_account_name in distinct(concat(
+      [var.irsa_service_account_name],
+      var.irsa_additional_service_account_names,
+    )) :
+    "system:serviceaccount:${var.irsa_service_account_namespace}:${service_account_name}"
+  ]
+
   # Optional dedicated node group for sandbox pods (nodeSelector/toleration below).
   # IMDSv2 hop-limit 1 blocks sandboxed containers from the node metadata service.
   craft_sandbox_node_groups = var.enable_craft_sandbox_node_group ? {
@@ -193,7 +201,7 @@ module "irsa-workload-access" {
   role_name                     = "AmazonEKSTFWorkloadAccessRole-${module.eks.cluster_name}"
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = [aws_iam_policy.s3_access_policy[0].arn]
-  oidc_fully_qualified_subjects = ["system:serviceaccount:${var.irsa_service_account_namespace}:${var.irsa_service_account_name}"]
+  oidc_fully_qualified_subjects = local.workload_irsa_service_account_subjects
 
   depends_on = [module.eks]
 }

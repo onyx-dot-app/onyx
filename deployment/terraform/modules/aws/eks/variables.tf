@@ -180,6 +180,12 @@ variable "irsa_service_account_name" {
   default     = "onyx-workload-access"
 }
 
+variable "irsa_additional_service_account_names" {
+  type        = list(string)
+  description = "Additional service accounts in irsa_service_account_namespace that may assume the workload IRSA role. Use this for chart-created workloads, such as <release>-sandbox-proxy, that also need RDS IAM auth."
+  default     = []
+}
+
 variable "enable_rds_iam_for_service_account" {
   type        = bool
   description = "Whether to create a dedicated RDS IRSA role and service account (grants rds-db:connect)"

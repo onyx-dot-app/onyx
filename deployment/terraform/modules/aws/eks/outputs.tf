@@ -16,6 +16,11 @@ output "workload_irsa_role_arn" {
   value       = length(module.irsa-workload-access) > 0 ? module.irsa-workload-access[0].iam_role_arn : null
 }
 
+output "workload_irsa_service_account_subjects" {
+  description = "Kubernetes service account subjects trusted by the workload IRSA role"
+  value       = length(module.irsa-workload-access) > 0 ? local.workload_irsa_service_account_subjects : []
+}
+
 output "node_security_group_id" {
   description = "Node security group ID from the EKS module"
   value       = module.eks.node_security_group_id
