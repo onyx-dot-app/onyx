@@ -1132,11 +1132,6 @@ export default function useChatController({
               const typedPacket = packet as Packet;
               const packetObj = typedPacket.obj;
 
-              // Keepalives are connection plumbing, not run state.
-              if (packetObj.type === "chat_heartbeat") {
-                continue;
-              }
-
               if (isMultiModel) {
                 // Multi-model: route packet by placement.model_index.
                 // OverallStop (type "stop") has model_index=null — it's a

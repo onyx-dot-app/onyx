@@ -5,6 +5,7 @@ the Postgres (lite) backend."""
 from uuid import uuid4
 
 from onyx.cache.interface import CacheBackend
+from onyx.chat.stream_buffer import _chunk_key
 from onyx.chat.stream_buffer import read_stream_chunks
 from onyx.chat.stream_buffer import StreamBufferWriter
 
@@ -38,7 +39,7 @@ def test_missing_chunk_is_gap(cache: CacheBackend) -> None:
     writer.flush()
 
     # Simulate eviction of the first chunk.
-    cache.delete(f"chatstream_{session_id}_8:0")
+    cache.delete(_chunk_key(session_id, 8, 0))
 
     read = read_stream_chunks(cache, session_id, 8, cursor=0)
     assert read is not None

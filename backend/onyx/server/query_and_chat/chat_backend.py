@@ -35,6 +35,7 @@ from onyx.chat.process_message import handle_multi_model_stream
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import set_fence
+from onyx.chat.stream_buffer import has_stream_buffer
 from onyx.chat.stream_buffer import read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
@@ -97,11 +98,10 @@ from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.models import SetPreferredResponseRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.session_loading import (
     translate_assistant_message_to_packets,
 )
-from onyx.server.query_and_chat.streaming_models import ChatHeartbeat
+from onyx.server.query_and_chat.streaming_models import heartbeat_packet
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
@@ -1033,7 +1033,7 @@ def resume_chat_stream(
 
     cache = get_cache_backend()
     run_id = get_processing_run_id(session_id, cache)
-    if run_id is None or read_stream_chunks(cache, session_id, run_id, 0) is None:
+    if run_id is None or not has_stream_buffer(cache, session_id, run_id):
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, "No resumable run for this chat session"
         )
@@ -1058,11 +1058,7 @@ def resume_chat_stream(
                 return
             now = time.monotonic()
             if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:
-                yield get_json_line(
-                    Packet(
-                        placement=Placement(turn_index=0), obj=ChatHeartbeat()
-                    ).model_dump()
-                )
+                yield get_json_line(heartbeat_packet().model_dump())
                 last_emit = now
             time.sleep(CHAT_RESUME_POLL_INTERVAL_S)
 

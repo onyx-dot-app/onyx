@@ -116,8 +116,8 @@ from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
-from onyx.server.query_and_chat.streaming_models import ChatHeartbeat
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import heartbeat_packet
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
@@ -1004,6 +1004,7 @@ def build_chat_turn(
         simple_chat_history=simple_chat_history,
         extracted_context_files=extracted_context_files,
         reserved_messages=reserved_messages,
+        processing_run_id=processing_run_id,
         reserved_token_count=reserved_token_count,
         search_params=search_params,
         all_injected_file_metadata=all_injected_file_metadata,
@@ -1029,10 +1030,6 @@ _MODEL_DONE = object()
 
 # Sentinel placed on the reader tee when the stream writer has fully finished.
 _STREAM_DONE = object()
-
-BuildChatTurnMetadata = (
-    CreateChatSessionID | MessageResponseIDInfo | MultiModelMessageResponseIDInfo
-)
 
 
 # Which exit path persisted a model's outcome — for log attribution.
@@ -1078,8 +1075,11 @@ def _run_models(
             present, each outbound packet/error is serialized once and appended
             for replay while also being teed to the live reader.
 
+    Worker threads and the writer thread start before this function returns; the
+    returned reader generator only tails the stream and can be dropped freely.
+
     Returns:
-        Generator yielding ``Packet`` objects as they arrive from worker threads —
+        Reader generator yielding ``Packet`` objects as they arrive from worker threads —
         answer tokens, tool output, citations — followed by a terminal ``Packet``
         containing ``OverallStop`` once all models complete (or one containing
         ``OverallStop(stop_reason="user_cancelled")`` if the connection drops).
@@ -1112,6 +1112,9 @@ def _run_models(
     # Writer-thread → reader-generator hand-off. The writer is the run's
     # lifeline and always runs to completion; the reader can die freely.
     tee: queue.Queue[Packet | StreamingError | object] = queue.Queue()
+    # Set when the reader detaches; stops the tee from accumulating items
+    # nobody will consume.
+    reader_gone = threading.Event()
 
     def _persist_model_outcome(
         model_idx: int,
@@ -1315,9 +1318,9 @@ def _run_models(
                 stream_buffer.append_line(get_json_line(item.model_dump()))
             except Exception:
                 logger.exception("stream buffer append failed")
-        # Unbounded tee: the put never blocks, so a detached reader can't stall the
-        # writer. The queue is GC'd once this generator returns.
-        tee.put(item)
+        # Non-blocking put: a slow reader can't stall the writer.
+        if not reader_gone.is_set():
+            tee.put(item)
 
     def _drain_to_completion() -> None:
         """Writer: consume worker output to the very end regardless of client state."""
@@ -1413,33 +1416,36 @@ def _run_models(
     )
     writer_thread.start()
 
-    # ── Reader: tail the tee while the client is attached ───────────────────
-    try:
-        last_packet_yield: float = time.monotonic()
-        while True:
-            try:
-                item = tee.get(timeout=_CANCEL_POLL_INTERVAL_S)
-            except queue.Empty:
-                now = time.monotonic()
-                if now - last_packet_yield >= CHAT_HEARTBEAT_INTERVAL_S:
-                    yield Packet(
-                        placement=Placement(turn_index=0),
-                        obj=ChatHeartbeat(),
-                    )
-                    last_packet_yield = now
-                continue
-            if item is _STREAM_DONE:
-                return
-            yield cast(Packet | StreamingError, item)
-            last_packet_yield = time.monotonic()
-    finally:
-        # GeneratorExit (client disconnect) or normal end: the reader stops here while
-        # the writer thread keeps draining to completion in the background.
-        if writer_thread.is_alive():
-            logger.info(
-                "chat stream reader detached; writer continues for session %s",
-                setup.chat_session.id,
-            )
+    def _read_stream() -> AnswerStream:
+        # ── Reader: tail the tee while the client is attached ────────────────
+        stream_done = False
+        try:
+            last_packet_yield: float = time.monotonic()
+            while True:
+                try:
+                    item = tee.get(timeout=_CANCEL_POLL_INTERVAL_S)
+                except queue.Empty:
+                    now = time.monotonic()
+                    if now - last_packet_yield >= CHAT_HEARTBEAT_INTERVAL_S:
+                        yield heartbeat_packet()
+                        last_packet_yield = now
+                    continue
+                if item is _STREAM_DONE:
+                    stream_done = True
+                    return
+                yield cast(Packet | StreamingError, item)
+                last_packet_yield = time.monotonic()
+        finally:
+            reader_gone.set()
+            if not stream_done:
+                # GeneratorExit (client disconnect): the reader stops here while
+                # the writer thread keeps draining to completion in the background.
+                logger.info(
+                    "chat stream reader detached; writer continues for session %s",
+                    setup.chat_session.id,
+                )
+
+    return _read_stream()
 
 
 def _stream_chat_turn(
@@ -1493,7 +1499,6 @@ def _stream_chat_turn(
 
     mock_response_token: Token[str | None] | None = None
     setup: ChatTurnSetup | None = None
-    # build_chat_turn only yields these setup-phase metadata packets.
     pre_run_packets: list[AnswerStreamPart] = []
     run_started = False
 
@@ -1560,27 +1565,23 @@ def _stream_chat_turn(
         assert setup is not None, (
             "build_chat_turn must complete before _run_models is called"
         )
-        # Mirror the run_id build_chat_turn already stamped into the processing
-        # fence so the buffer key matches what resume readers look up.
-        run_id = (
-            setup.reserved_messages[0].id
-            if len(setup.reserved_messages) == 1
-            else setup.user_message.id
-        )
         stream_buffer = StreamBufferWriter(
             cache=setup.cache,
             chat_session_id=setup.chat_session.id,
-            run_id=run_id,
+            run_id=setup.processing_run_id,
         )
         for pre_run_packet in pre_run_packets:
             stream_buffer.append_line(get_json_line(pre_run_packet.model_dump()))
-        run_started = True
-        yield from _run_models(
+        # _run_models starts the writer thread before returning; from that point
+        # the writer owns the fence reset.
+        run_stream = _run_models(
             setup=setup,
             user=user,
             external_state_container=external_state_container,
             stream_buffer=stream_buffer,
         )
+        run_started = True
+        yield from run_stream
 
     except OnyxError as e:
         if e.error_code is not OnyxErrorCode.QUERY_REJECTED:

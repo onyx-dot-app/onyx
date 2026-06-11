@@ -200,7 +200,19 @@ export async function* sendMessage({
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
-  yield* handleSSEStream<PacketType>(response, signal);
+  yield* withoutHeartbeats(handleSSEStream<PacketType>(response, signal));
+}
+
+// Drops keepalive heartbeats so stream consumers only ever see run state.
+async function* withoutHeartbeats(
+  stream: AsyncGenerator<PacketType, void, unknown>
+): AsyncGenerator<PacketType, void, unknown> {
+  for await (const packet of stream) {
+    if ("obj" in packet && packet.obj.type === "chat_heartbeat") {
+      continue;
+    }
+    yield packet;
+  }
 }
 
 // Replays an in-flight run's buffered stream from `cursor`, then tails it live.
@@ -221,7 +233,7 @@ export async function* resumeStream(
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
-  yield* handleSSEStream<PacketType>(response, signal);
+  yield* withoutHeartbeats(handleSSEStream<PacketType>(response, signal));
 }
 
 export async function setPreferredResponse(

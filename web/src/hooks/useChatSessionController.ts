@@ -299,9 +299,6 @@ export default function useChatSessionController({
               continue;
             }
             const packet = rawPacket as Packet;
-            if (packet.obj.type === "chat_heartbeat") {
-              continue;
-            }
             accumulated.push(packet);
             const now = Date.now();
             if (now - lastFlush >= 100) {
