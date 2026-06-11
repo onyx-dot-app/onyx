@@ -99,7 +99,11 @@ jobs:
       - volume=100gb
       - run-id=${{ github.run_id }}-craft-compose-integration
       - extras=ecr-cache
-    timeout-minutes: 15
+    # 30m covers the cold-cache case: the GHA buildx scopes are branch-keyed,
+    # so the first run on a new branch rebuilds sandbox (~3m) + backend (~4m)
+    # from scratch. Warm-cache runs land closer to 8m total. The inner
+    # `Run integration tests` step has its own 10m cap.
+    timeout-minutes: 20
 
     env:
       PYTHONPATH: ./backend
