@@ -777,8 +777,10 @@ export default function IndexSettingsPage() {
     wasReindexingRef.current = isReindexing;
   }, [isReindexing]);
 
+  // Shares the current-settings SWR key, which useCurrentSearchSettings
+  // below already polls while reindexing — one timer drives both hooks.
   const { data: currentEmbeddingModel, isLoading: isLoadingCurrentModel } =
-    useCurrentEmbeddingModel({ pollIntervalMs: isReindexing ? 5000 : 0 });
+    useCurrentEmbeddingModel();
 
   /**
    * Camel-cased view of the active embedding model for modal preload.
