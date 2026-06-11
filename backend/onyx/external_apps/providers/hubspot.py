@@ -125,6 +125,7 @@ _ENDPOINTS: list[EndpointSpec] = [
 # the rest grant read/write on the CRM objects this provider catalogs.
 _SCOPES = [
     "oauth",
+    "crm.objects.owners.read",
     "crm.objects.contacts.read",
     "crm.objects.contacts.write",
     "crm.objects.companies.read",
@@ -174,8 +175,9 @@ class HubspotProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
                 "In HubSpot: create a developer account, then Apps → Create app. "
                 "On the app's Auth tab, add this Onyx instance's callback URL "
                 "(/craft/v1/apps/oauth/callback) to the Redirect URLs and select "
-                "the CRM contacts, companies, and deals read/write scopes. Save, "
-                "then paste the Client ID and Client Secret below."
+                "the CRM contacts, companies, and deals read/write scopes plus "
+                "the owners read scope. Save, then paste the Client ID and "
+                "Client Secret below."
             ),
         ),
         endpoint_catalog=_ENDPOINTS,
@@ -197,7 +199,11 @@ class HubspotProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
         # `status` (e.g. `BAD_REFRESH_TOKEN`, `BAD_AUTH_CODE`) rather than the
         # OAuth `error` field the generic helper looks for. Surface that code so
         # terminal-vs-transient classification can match it.
-        if response.status_code >= 400 and isinstance(body, dict) and body.get("status"):
+        if (
+            response.status_code >= 400
+            and isinstance(body, dict)
+            and body.get("status")
+        ):
             return str(body["status"])
         return token_response_error(response, body)
 

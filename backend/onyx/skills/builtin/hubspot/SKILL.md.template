@@ -41,31 +41,33 @@ python hubspot_api.py search companies "acme" [--limit N]
 ### Owners
 
 ```
-python hubspot_api.py owners
+python hubspot_api.py owners [--limit N]
 ```
 
 ### Create an object (write)
 
 ```
-python hubspot_api.py create contacts '{"email":"jane@acme.co","firstname":"Jane"}'
+python hubspot_api.py create contacts --set email=jane@acme.co --set firstname=Jane
 ```
 
 ### Update an object (write)
 
 ```
-python hubspot_api.py update deals 123456 '{"dealstage":"closedwon"}'
+python hubspot_api.py update deals 123456 --set dealstage=closedwon
 ```
 
 ## Output
 
 JSON on stdout. List commands return `{"ok": true, "<object>": [...], "count":
 N, "truncated": bool}` (`truncated` means more results existed past `--limit`).
-Failures print the HubSpot error to stderr and exit non-zero — surface the
-error rather than retrying blindly.
+HTTP failures return `{"ok": false, "status": <code>, "error": "<message>"}`
+and exit non-zero — surface the error rather than retrying blindly.
 
 ## Notes
 
 - Properties default to a useful subset per object; pass `--properties` (a
   comma-separated list) to fetch others.
+- `--set key=value` is repeatable; keys are HubSpot internal property names
+  (e.g. `email`, `firstname`, `dealname`, `amount`).
 - `call` lets you hit any CRM endpoint: `call <METHOD> <path> [json_body]`.
   Pass user input as the JSON body, not by string-formatting into the path.

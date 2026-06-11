@@ -6,7 +6,7 @@ the egress proxy, which injects the connected user's bearer token on the
 wire — this script sends no credentials itself. User input is passed as
 JSON request bodies / query params (never string-formatted into a URL path
 beyond the object id), so there is no injection risk. Output is JSON on
-stdout.
+stdout; HTTP failures are surfaced as ``{"ok": false, "status": ..., "error": ...}``.
 """
 
 import argparse
@@ -21,6 +21,7 @@ _BASE = "https://api.hubapi.com"
 _DEFAULT_LIMIT = 100
 _PAGE_SIZE = 100
 _HTTP_TIMEOUT_SECONDS = 180
+_METHODS = ("GET", "POST", "PATCH", "PUT", "DELETE")
 
 # CRM object types this helper supports (path segment under /crm/v3/objects).
 _OBJECTS = ("contacts", "companies", "deals")
@@ -28,8 +29,8 @@ _OBJECTS = ("contacts", "companies", "deals")
 # Sensible default properties to fetch per object so output is useful without
 # the caller having to enumerate every property name.
 _DEFAULT_PROPERTIES: dict[str, list[str]] = {
-    "contacts": ["firstname", "lastname", "email", "phone", "company"],
-    "companies": ["name", "domain", "industry", "city", "country"],
+    "contacts": ["firstname", "lastname", "email", "phone", "company", "jobtitle"],
+    "companies": ["name", "domain", "industry", "city", "state", "country"],
     "deals": ["dealname", "amount", "dealstage", "pipeline", "closedate"],
 }
 
@@ -62,9 +63,7 @@ def _request(method: str, path: str, body: dict[str, Any] | None = None) -> Any:
 
 def _object_arg(value: str) -> str:
     if value not in _OBJECTS:
-        raise argparse.ArgumentTypeError(
-            f"object must be one of {', '.join(_OBJECTS)}"
-        )
+        raise argparse.ArgumentTypeError(f"object must be one of {', '.join(_OBJECTS)}")
     return value
 
 
@@ -72,6 +71,17 @@ def _props(a: argparse.Namespace, obj: str) -> list[str]:
     if getattr(a, "properties", None):
         return [p.strip() for p in a.properties.split(",") if p.strip()]
     return _DEFAULT_PROPERTIES.get(obj, [])
+
+
+def _properties_from_pairs(pairs: list[str]) -> dict[str, str]:
+    """Parse repeated `--set key=value` flags into a HubSpot properties dict."""
+    props: dict[str, str] = {}
+    for pair in pairs:
+        if "=" not in pair:
+            raise ValueError(f"expected key=value, got {pair!r}")
+        key, value = pair.split("=", 1)
+        props[key.strip()] = value
+    return props
 
 
 def _emit(result: dict[str, Any], raw: bool) -> int:
@@ -102,23 +112,36 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("create", help="create an object (write)")
     sp.add_argument("object", type=_object_arg)
-    sp.add_argument("properties_json", help='JSON object, e.g. {"email":"a@b.co"}')
+    sp.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="key=value",
+        help="a property to set (repeatable), e.g. --set email=a@b.co",
+    )
 
     sp = sub.add_parser("update", help="update an object (write)")
     sp.add_argument("object", type=_object_arg)
     sp.add_argument("id")
-    sp.add_argument("properties_json", help="JSON object of properties to set")
+    sp.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="key=value",
+        help="a property to set (repeatable)",
+    )
 
-    sub.add_parser("owners", help="list CRM owners")
+    sp = sub.add_parser("owners", help="list CRM owners")
+    sp.add_argument("--limit", type=int, default=_DEFAULT_LIMIT)
 
     sp = sub.add_parser("call", help="raw request")
-    sp.add_argument("method", help="GET|POST|PATCH|DELETE")
+    sp.add_argument("method", choices=_METHODS)
     sp.add_argument("path", help="path starting with /, e.g. /crm/v3/objects/...")
     sp.add_argument("body", nargs="?", help="optional JSON request body")
     return p
 
 
-def _paginate(obj: str, properties: list[str], limit: int) -> dict[str, Any]:
+def _paginate(path: str, key: str, properties: list[str], limit: int) -> dict[str, Any]:
     """Walk a HubSpot CRM list (`results` + `paging.next.after`) up to `limit`."""
     results: list[Any] = []
     after: str | None = None
@@ -129,24 +152,26 @@ def _paginate(obj: str, properties: list[str], limit: int) -> dict[str, Any]:
         if after:
             params["after"] = after
         query = urllib.parse.urlencode(params)
-        page = _request("GET", f"/crm/v3/objects/{obj}?{query}")
+        page = _request("GET", f"{path}?{query}")
         results.extend(page.get("results") or [])
-        after = (((page.get("paging") or {}).get("next") or {}).get("after"))
+        after = ((page.get("paging") or {}).get("next") or {}).get("after")
         if len(results) >= limit:
             return {
                 "ok": True,
-                obj: results[:limit],
+                key: results[:limit],
                 "count": limit,
                 "truncated": bool(after),
             }
         if not after:
             break
-    return {"ok": True, obj: results, "count": len(results), "truncated": False}
+    return {"ok": True, key: results, "count": len(results), "truncated": False}
 
 
 def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
     if a.cmd == "list":
-        return _paginate(a.object, _props(a, a.object), a.limit)
+        return _paginate(
+            f"/crm/v3/objects/{a.object}", a.object, _props(a, a.object), a.limit
+        )
 
     if a.cmd == "get":
         params = {}
@@ -164,19 +189,18 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         if props:
             body["properties"] = props
         result = _request("POST", f"/crm/v3/objects/{a.object}/search", body)
+        results = result.get("results") or []
         return {
             "ok": True,
-            a.object: result.get("results") or [],
+            a.object: results[: a.limit],
+            "count": min(len(results), a.limit),
             "total": result.get("total"),
         }
 
     if a.cmd in ("create", "update"):
-        try:
-            props = json.loads(a.properties_json)
-        except json.JSONDecodeError as e:
-            return {"ok": False, "error": f"invalid properties JSON: {e}"}
-        if not isinstance(props, dict):
-            return {"ok": False, "error": "properties must be a JSON object"}
+        props = _properties_from_pairs(a.set)
+        if not props:
+            return {"ok": False, "error": "no_properties_given"}
         if a.cmd == "create":
             result = _request(
                 "POST", f"/crm/v3/objects/{a.object}", {"properties": props}
@@ -191,8 +215,7 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         return {"ok": True, a.object: result}
 
     if a.cmd == "owners":
-        result = _request("GET", "/crm/v3/owners")
-        return {"ok": True, "owners": result.get("results") or []}
+        return _paginate("/crm/v3/owners", "owners", [], a.limit)
 
     # `call` raw escape hatch
     body = None
@@ -201,7 +224,7 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         if not isinstance(parsed, dict):
             return {"ok": False, "error": "body must be a JSON object"}
         body = parsed
-    result = _request(a.method.upper(), a.path, body)
+    result = _request(a.method, a.path, body)
     return {"ok": True, "data": result}
 
 
@@ -209,12 +232,19 @@ def main(argv: list[str]) -> int:
     a = _build_parser().parse_args(argv[1:])
     try:
         result = _dispatch(a)
-    except json.JSONDecodeError as e:
-        print(f"invalid JSON: {e}", file=sys.stderr)
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"invalid input: {e}", file=sys.stderr)
         return 2
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
-        print(f"HTTP {e.code} calling HubSpot: {detail}", file=sys.stderr)
+        try:
+            parsed = json.loads(detail)
+            message = (
+                parsed.get("message", detail) if isinstance(parsed, dict) else detail
+            )
+        except ValueError:
+            message = detail
+        print(json.dumps({"ok": False, "status": e.code, "error": message}))
         return 1
     except urllib.error.URLError as e:
         print(f"network error calling HubSpot: {e.reason}", file=sys.stderr)
