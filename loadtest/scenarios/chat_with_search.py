@@ -19,6 +19,7 @@ from onyx_client.chat_user import OnyxChatUser
 
 class ChatWithSearchUser(OnyxChatUser):
     abstract = False
+    weight = 20
 
     scenario_prefix: str = "search"
     mock_model: str | None = os.environ.get("ONYX_SEARCH_MODEL", "mock-tools1")

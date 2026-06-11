@@ -44,6 +44,11 @@ def _env_float(name: str, default: float) -> float:
     return float(raw) if raw else default
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    return int(raw) if raw else default
+
+
 class OnyxChatUser(HttpUser):
     abstract = True
 
@@ -53,6 +58,20 @@ class OnyxChatUser(HttpUser):
     # is not the deployment default.
     mock_model: str | None = None
     deep_research: bool = False
+
+    # >1 keeps a single chat session alive for this many turns, chaining each
+    # turn's parent_message_id off the previous assistant reply so the history
+    # grows turn over turn (reproduces the full-history recompute path). 1 (the
+    # default) sends a fresh auto-created session every turn — unchanged from
+    # the single-turn scenarios.
+    max_session_turns: int = _env_int("ONYX_SESSION_TURNS", 1)
+
+    # When set to a milestone name (e.g. "first_answer_token"), the client
+    # stops reading and drops the connection the instant that milestone
+    # arrives — a user closing the tab mid-stream. Exercises server-side
+    # disconnect handling (tx/connection cleanup while the turn is in flight).
+    # The turn is recorded as <prefix>:disconnected, not success/failure.
+    disconnect_after_milestone: str | None = None
 
     wait_time = constant(_env_float("ONYX_WAIT_SECONDS", 15.0))
     # Read timeout is between chunks, not total; chat_heartbeat keepalives in
@@ -76,6 +95,35 @@ class OnyxChatUser(HttpUser):
         self.messages: list[str] = DEFAULT_MESSAGES
         self.turn_index: int = 0
 
+        # Multi-turn session state (only used when max_session_turns > 1).
+        self._session_id: str | None = None
+        self._parent_message_id: int | None = None
+        self._session_turn: int = 0
+
+    def _create_session(self) -> str | None:
+        """Open a fresh chat session for a multi-turn conversation.
+
+        Returns the new session id, or None if creation failed (a failure
+        sample is recorded in that case).
+        """
+        start = time.perf_counter()
+        with self.client.post(
+            "/api/chat/create-chat-session",
+            json={"persona_id": 0, "description": f"loadtest-{uuid.uuid4().hex[:8]}"},
+            name=f"{self.scenario_prefix}:create-session",
+            catch_response=True,
+        ) as response:
+            if response.status_code != 200:
+                response.failure(f"HTTP {response.status_code}")
+                self._fire(
+                    "create_session",
+                    start,
+                    exception=Exception(f"HTTP {response.status_code}"),
+                )
+                return None
+            response.success()
+            return response.json().get("chat_session_id")
+
     def _fire(
         self,
         name: str,
@@ -92,26 +140,49 @@ class OnyxChatUser(HttpUser):
             context={},
         )
 
+    def _next_payload(self, message: str) -> dict[str, Any] | None:
+        """Build the send-chat-message payload, managing session reuse.
+
+        Returns None if a multi-turn session needed to be (re)created but
+        creation failed — the caller should skip the turn.
+        """
+        payload: dict[str, Any] = {"message": message, "stream": True}
+
+        if self.max_session_turns > 1:
+            if self._session_id is None or self._session_turn >= self.max_session_turns:
+                self._session_id = self._create_session()
+                self._parent_message_id = None
+                self._session_turn = 0
+                if self._session_id is None:
+                    return None
+            payload["chat_session_id"] = self._session_id
+            if self._parent_message_id is not None:
+                payload["parent_message_id"] = self._parent_message_id
+        else:
+            # Omitting chat_session_id auto-creates a session with the
+            # default persona (SendMessageRequest validator).
+            payload["chat_session_info"] = {
+                "description": f"loadtest-{uuid.uuid4().hex[:8]}",
+            }
+
+        if self.llm_override:
+            payload["llm_override"] = self.llm_override
+        if self.deep_research:
+            payload["deep_research"] = True
+        return payload
+
     @task
     def chat_turn(self) -> None:
         message = self.messages[self.turn_index % len(self.messages)]
         self.turn_index += 1
 
-        payload: dict[str, Any] = {
-            "message": message,
-            "stream": True,
-            # Omitting chat_session_id auto-creates a session with the
-            # default persona (SendMessageRequest validator).
-            "chat_session_info": {
-                "description": f"loadtest-{uuid.uuid4().hex[:8]}",
-            },
-        }
-        if self.llm_override:
-            payload["llm_override"] = self.llm_override
-        if self.deep_research:
-            payload["deep_research"] = True
+        payload = self._next_payload(message)
+        if payload is None:
+            return
 
         analyzer = ChatStreamAnalyzer()
+        disconnect_target = self.disconnect_after_milestone
+        disconnected = False
         start = time.perf_counter()
         try:
             # name= groups the auto-recorded HTTP metric; with stream=True its
@@ -139,10 +210,34 @@ class OnyxChatUser(HttpUser):
                 for line in response.iter_lines(decode_unicode=True):
                     for milestone in analyzer.feed(line):
                         self._fire(milestone, start)
+                        if disconnect_target and milestone == disconnect_target:
+                            disconnected = True
+                            break
+                    if disconnected:
+                        break
+                # On disconnect we deliberately leave the stream unconsumed;
+                # exiting the `with` closes the socket, so the server sees a
+                # client disconnect. The HTTP sample itself is fine — the early
+                # close is the intended behavior, not an error.
                 response.success()
         except Exception as exc:
             self._fire("total_turn", start, exception=exc)
             return
+
+        if disconnected:
+            self._fire(
+                "disconnected", start, response_length=analyzer.summary.answer_chars
+            )
+            # A mid-stream disconnect abandons this conversation; the next turn
+            # starts a fresh session.
+            self._session_id = None
+            return
+
+        if self.max_session_turns > 1:
+            self._session_turn += 1
+            rid = analyzer.summary.reserved_assistant_message_id
+            if rid is not None:
+                self._parent_message_id = rid
 
         summary = analyzer.summary
         if analyzer.completed_ok():
@@ -156,6 +251,10 @@ class OnyxChatUser(HttpUser):
 
 
 class BasicChatUser(OnyxChatUser):
-    """Single-turn basic chat, new session each turn."""
+    """Single-turn basic chat, new session each turn.
+
+    The bulk of the default weighted mix (see README "Scenario mix").
+    """
 
     abstract = False
+    weight = 70

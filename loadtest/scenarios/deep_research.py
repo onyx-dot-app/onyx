@@ -21,6 +21,7 @@ from onyx_client.chat_user import OnyxChatUser
 
 class DeepResearchUser(OnyxChatUser):
     abstract = False
+    weight = 2
 
     scenario_prefix: str = "dr"
     deep_research: bool = True

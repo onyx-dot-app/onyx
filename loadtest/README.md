@@ -43,7 +43,7 @@ Behavior knobs ride in the model name (litellm passes it through verbatim):
 | `ttft<ms>` | `mock-ttft500` | time to first token |
 | `itl<ms>` | `mock-itl20` | inter-token delay |
 | `len<n>` | `mock-len400` | answer length in tokens |
-| `tools<0/1>` | `mock-tools1` | call the search tool on the first AUTO cycle |
+| `tools<n>` | `mock-tools1` | call up to `n` retrieval tools (in parallel for `n>1`) on the first AUTO cycle |
 | `agents<n>` | `mock-agents2` | parallel research agents per DR orchestrator cycle |
 
 The mock understands Onyx's LLM-loop contract: `tool_choice` none/auto/
@@ -71,20 +71,58 @@ their resources open longer, which is exactly what stresses the api-server):
 ONYX_API_KEY=<key> uv run locust --headless -u 5 -r 1 -t 5m -H https://<your-onyx-url>
 ```
 
-Scenario selection (all run by default; pick classes explicitly):
+### Scenario mix
+
+With no user classes named, the **default weighted steady-state mix** runs,
+approximating production traffic shape:
+
+| Scenario | Metrics | Weight | What it exercises |
+|---|---|---|---|
+| **BasicChatUser** | `chat:*` | 70 | single-turn chat, plain answer |
+| **ChatWithSearchUser** | `search:*` | 20 | one `internal_search` tool call → query expansion, embedding model server, Vespa/OpenSearch retrieval (needs indexed docs) |
+| **MultiToolUser** | `multitool:*` | 8 | up to 3 retrieval tools in parallel in one turn (`mock-tools3`) |
+| **DeepResearchUser** | `dr:*` | 2 | full DR turn — plan, parallel agents, reports; ~8+ LLM calls on one held stream |
 
 ```bash
+# default weighted mix:
+... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url>
+# or pin to specific classes:
 ... uv run locust --headless -u 10 -r 2 -t 10m -H https://<your-onyx-url> BasicChatUser ChatWithSearchUser
-... uv run locust --headless -u 5 -r 1 -t 20m -H https://<your-onyx-url> DeepResearchUser
 ```
 
-- **BasicChatUser** (`chat:*` metrics) — single-turn chat, plain answer.
-- **ChatWithSearchUser** (`search:*`) — mock emits an `internal_search` tool
-  call, so query expansion, the embedding model server, and Vespa/OpenSearch
-  genuinely execute. Requires indexed documents in the target deployment.
-- **DeepResearchUser** (`dr:*`) — full deep-research turn (plan, parallel
-  research agents, intermediate + final reports). Heaviest scenario; one
-  turn = ~8+ LLM calls + real search executions on one held stream.
+### Targeted reproducers
+
+Run on their own (not part of the default mix) to stress a specific failure
+mode. Each maps to a real production incident class:
+
+- **LongConversationUser** (`longconv:*`) — keeps one chat session alive for
+  `ONYX_SESSION_TURNS` turns (default 20), chaining `parent_message_id` so the
+  history grows every turn. Drives full-history load + token counting +
+  summarization/compression each turn (history-driven slowdowns).
+- **DisconnectUser** (`disconnect:*`) — drops the connection mid-stream the
+  moment `ONYX_DISCONNECT_AFTER` (default `first_answer_token`) arrives, then
+  abandons the session. Stresses server-side disconnect cleanup of held
+  transactions/connections/buffers (slow leaks). The turn is recorded as
+  `disconnect:disconnected`, separate from success/failure.
+
+```bash
+... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> LongConversationUser
+... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> DisconnectUser
+```
+
+### Collapse-point ramp (`ONYX_SHAPE=stepramp`)
+
+Walk the user count up through plateaus to find the knee where the system
+stops keeping up, instead of guessing a fixed count. Pair with the
+slow-provider profile (`ONYX_LLM_MODEL=mock-ttft8000-itl40-len600`) to hold
+streams open and surface connection/memory exhaustion sooner. The shape
+overrides `-u/-r` and is only active when `ONYX_SHAPE=stepramp` is set.
+
+```bash
+ONYX_SHAPE=stepramp ONYX_RAMP_STAGES=25,50,100,200 ONYX_RAMP_DWELL=300 \
+ONYX_LLM_MODEL=mock-ttft8000-itl40-len600 \
+ONYX_API_KEY=<key> uv run locust --headless -t 25m -H https://<your-onyx-url>
+```
 
 The API key is created by an admin via `POST /api/admin/api-key`
 (`{"name": "loadtest", "role": "basic"}`) or Admin Panel → API Keys.
@@ -97,7 +135,13 @@ The API key is created by an admin via `POST /api/admin/api-key`
 | `ONYX_LLM_PROVIDER` | unset | Provider name for `llm_override` (needed when the mock isn't the deployment default) |
 | `ONYX_LLM_MODEL` | unset | Model for BasicChatUser (unset = persona default) |
 | `ONYX_SEARCH_MODEL` | `mock-tools1` | Model for ChatWithSearchUser |
+| `ONYX_MULTITOOL_MODEL` | `mock-tools3` | Model for MultiToolUser |
 | `ONYX_DR_MODEL` | `mock-agents2` | Model for DeepResearchUser |
+| `ONYX_LONGCONV_MODEL` | unset | Model for LongConversationUser (unset = persona default) |
+| `ONYX_SESSION_TURNS` | 1 | Turns to keep one session alive (LongConversationUser defaults to 20) |
+| `ONYX_DISCONNECT_AFTER` | `first_answer_token` | Milestone after which DisconnectUser drops the stream |
+| `ONYX_SHAPE` | unset | `stepramp` activates the staged ramp shape |
+| `ONYX_RAMP_STAGES` / `ONYX_RAMP_DWELL` / `ONYX_RAMP_SPAWN` | `25,50,100,200` / 300 / 5 | Ramp user plateaus, dwell seconds, spawn rate |
 | `ONYX_WAIT_SECONDS` | 15 | Think time between turns per user |
 | `ONYX_DR_WAIT_SECONDS` | 30 | Think time for DR users |
 | `ONYX_STREAM_READ_TIMEOUT` | 180 | Max seconds between stream chunks |
@@ -115,6 +159,9 @@ the milestone packet arrives; Locust aggregates percentiles per name:
 - `*:first_dr_plan` / `*:first_research_agent` — deep-research phase starts
 - `*:total_turn` — full turn wall time; success/failure recorded here
 - `*:send (headers)` — raw HTTP request (headers-only timing)
+- `*:create-session` — multi-turn session creation (LongConversationUser)
+- `disconnect:disconnected` — turns ended by a deliberate mid-stream
+  disconnect (DisconnectUser); kept separate from success/failure
 
 A turn fails on: non-200, an error packet, a stream stalling past the read
 timeout, or a stream ending without answer content / without the `stop`
@@ -150,6 +197,7 @@ polluted by WAN jitter and the LLM stays free:
 
 - ✅ Phase 0: harness + milestones + mock LLM core
 - ✅ Phase 1: tool-call & deep-research scripting, scenarios, Dockerfile
-- Phase 2: in-cluster Locust master/workers + mock provider (`k8s/`)
-- Phase 3: weighted scenario mixes, multi-turn sessions, open-workload arrivals
+- ✅ Phase 2: in-cluster Locust master/workers + mock provider (`k8s/`)
+- ✅ Phase 3: weighted scenario mix, multi-tool turns, multi-turn long-history
+  sessions, mid-stream disconnects, staged collapse-point ramp
 - Phase 4: Prometheus export + Grafana correlation dashboard
