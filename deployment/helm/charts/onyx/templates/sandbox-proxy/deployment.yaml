@@ -1,4 +1,6 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- $proxyPort := include "onyx.sandboxProxyPort" . }}
+{{- $healthzPort := "8081" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -65,10 +67,10 @@ spec:
           command: ["python", "-m", "onyx.sandbox_proxy.server"]
           ports:
             - name: proxy
-              containerPort: {{ .Values.sandboxProxy.containerPorts.proxy }}
+              containerPort: {{ $proxyPort }}
               protocol: TCP
             - name: healthz
-              containerPort: {{ .Values.sandboxProxy.containerPorts.healthz }}
+              containerPort: {{ $healthzPort }}
               protocol: TCP
           env:
             - name: SANDBOX_PROXY_NAMESPACE
@@ -76,9 +78,9 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: SANDBOX_PROXY_LISTEN_PORT
-              value: {{ .Values.sandboxProxy.containerPorts.proxy | quote }}
+              value: {{ $proxyPort | quote }}
             - name: SANDBOX_PROXY_HEALTHZ_PORT
-              value: {{ .Values.sandboxProxy.containerPorts.healthz | quote }}
+              value: {{ $healthzPort | quote }}
             {{- include "onyx.envSecrets" . | nindent 12}}
           envFrom:
             - configMapRef:

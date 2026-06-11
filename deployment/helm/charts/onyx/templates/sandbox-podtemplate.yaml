@@ -17,9 +17,9 @@ opencode-auth + push-key env, proxy hostAliases IP).
 {{- $nextjsEnd := (index $cm "SANDBOX_NEXTJS_PORT_END") | default "3100" | int }}
 {{- $opencodePort := (index $cm "OPENCODE_SERVE_PORT") | default "4096" | int }}
 {{/* Keep in sync with PUSH_DAEMON_PORT in kubernetes_sandbox_manager.py. */}}
-{{- $pushDaemonPort := (index $cm "PUSH_DAEMON_PORT") | default "8731" | int }}
-{{- $proxyPort := (index $cm "SANDBOX_PROXY_PORT") | default "8080" }}
-{{- $proxyHost := (index $cm "SANDBOX_PROXY_HOST") | default (printf "%s-sandbox-proxy.%s.svc.cluster.local" (include "onyx.fullname" .) .Release.Namespace) }}
+{{- $pushDaemonPort := 8731 }}
+{{- $proxyPort := include "onyx.sandboxProxyPort" . }}
+{{- $proxyHost := include "onyx.sandboxProxyHost" . }}
 {{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
 {{- $serverUrl := (index $cm "SANDBOX_API_SERVER_URL") }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
