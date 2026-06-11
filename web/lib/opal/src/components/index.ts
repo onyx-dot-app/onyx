@@ -126,7 +126,7 @@ export {
 export {
   default as InputTypeIn,
   type InputTypeInProps,
-} from "@opal/components/inputs/input-typein/components";
+} from "@opal/components/inputs/input-type-in/components";
 
 /* Spacer */
 export { Spacer, type SpacerProps } from "@opal/components/spacer/components";

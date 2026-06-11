@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { SidebarWrapper as OpalSidebarWrapper } from "@opal/layouts";
+import { SidebarLayouts } from "@opal/layouts";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import Logo from "@/refresh-components/Logo";
 
@@ -17,33 +17,35 @@ export function renderAppLogo(folded: boolean | undefined): React.ReactNode {
   );
 }
 
+export function useShowLogoWhenFolded(): boolean {
+  const settings = useSettingsContext();
+  const showLogoWhenFolded =
+    settings.enterpriseSettings?.logo_display_style !== "name_only";
+  return showLogoWhenFolded;
+}
+
 export interface SidebarWrapperProps {
-  folded?: boolean;
-  onFoldClick?: () => void;
+  foldable?: boolean;
   children?: React.ReactNode;
 }
 
 /**
- * App-specific sidebar wrapper. Thin shell around the Opal `SidebarWrapper`
+ * App-specific sidebar wrapper. Thin shell around `SidebarLayouts.Root`
  * that injects the enterprise-aware logo and show/hide rules.
  */
 export default function SidebarWrapper({
-  folded,
-  onFoldClick,
+  foldable = false,
   children,
 }: SidebarWrapperProps) {
-  const settings = useSettingsContext();
-  const showLogoWhenFolded =
-    settings.enterpriseSettings?.logo_display_style !== "name_only";
+  const showLogoWhenFolded = useShowLogoWhenFolded();
 
   return (
-    <OpalSidebarWrapper
-      folded={folded}
-      onFoldClick={onFoldClick}
-      logo={renderAppLogo}
-      showLogoWhenFolded={showLogoWhenFolded}
-    >
+    <SidebarLayouts.Root foldable={foldable}>
+      <SidebarLayouts.Header
+        logo={renderAppLogo}
+        showLogoWhenFolded={showLogoWhenFolded}
+      />
       {children}
-    </OpalSidebarWrapper>
+    </SidebarLayouts.Root>
   );
 }

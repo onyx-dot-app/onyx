@@ -3,8 +3,12 @@
 import "@opal/layouts/root/styles.css";
 import {
   createContext,
+  useCallback,
   useContext,
+  useEffect,
   useLayoutEffect,
+  useRef,
+  useState,
   type Dispatch,
   type ReactNode,
   type SetStateAction,
@@ -13,18 +17,89 @@ import useScreenSize from "@opal/hooks/useScreenSize";
 import type { WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
-// Folded context — readable by sidebar body content via useSidebarFolded()
+// Sidebar state — raw fold state + setter, owned here as the single source
+// of truth. SidebarRoot (in sidebar/components.tsx) derives contentFolded
+// and provides RootLayoutFoldedContext from this.
 // ---------------------------------------------------------------------------
 
-export const RootLayoutFoldedContext = createContext(false);
+export interface SidebarStateContextType {
+  folded: boolean;
+  setFolded: Dispatch<SetStateAction<boolean>>;
+}
 
-/**
- * Returns the effective sidebar fold state for content rendering.
- * On mobile this is always `false` — the sidebar content is always fully
- * expanded; the overlay transform handles visibility instead.
- */
-export function useSidebarFolded(): boolean {
-  return useContext(RootLayoutFoldedContext);
+export const SidebarStateContext = createContext<
+  SidebarStateContextType | undefined
+>(undefined);
+
+export interface SidebarStateProviderProps {
+  /** Initial fold state, typically read from a persisted cookie by the app. */
+  defaultFolded?: boolean;
+  /** Called whenever the fold state changes, e.g. to persist to a cookie. */
+  onFoldedChange?: (folded: boolean) => void;
+  children: ReactNode;
+}
+
+export function SidebarStateProvider({
+  defaultFolded = false,
+  onFoldedChange,
+  children,
+}: SidebarStateProviderProps) {
+  const [folded, setFoldedInternal] = useState(defaultFolded);
+
+  const onFoldedChangeRef = useRef(onFoldedChange);
+  onFoldedChangeRef.current = onFoldedChange;
+
+  const setFolded: Dispatch<SetStateAction<boolean>> = useCallback((value) => {
+    setFoldedInternal((prev) =>
+      typeof value === "function" ? value(prev) : value
+    );
+  }, []);
+
+  const isMounted = useRef(false);
+  useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+    onFoldedChangeRef.current?.(folded);
+  }, [folded]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+      const isMac = navigator.userAgent.toLowerCase().includes("mac");
+      const isModifierPressed = isMac ? event.metaKey : event.ctrlKey;
+      if (!isModifierPressed || event.key !== "e") return;
+      event.preventDefault();
+      setFolded((prev) => !prev);
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [setFolded]);
+
+  return (
+    <SidebarStateContext.Provider value={{ folded, setFolded }}>
+      {children}
+    </SidebarStateContext.Provider>
+  );
+}
+
+export function useSidebarState(): SidebarStateContextType {
+  const context = useContext(SidebarStateContext);
+  if (context === undefined) {
+    throw new Error(
+      "useSidebarState must be used within a SidebarStateProvider"
+    );
+  }
+  return context;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +140,7 @@ function RootLayoutSidebar({
 
   if (isMobile) {
     return (
-      <RootLayoutFoldedContext.Provider value={false}>
+      <>
         <div
           className="opal-root-layout__sidebar-overlay"
           data-variant="mobile"
@@ -73,49 +148,37 @@ function RootLayoutSidebar({
         >
           {children}
         </div>
-
-        {/* Closes the sidebar when anything outside it is tapped */}
         <div
           className="opal-root-layout__backdrop"
           data-variant="mobile"
           data-folded={foldedAttr}
           onClick={onFoldToggle}
         />
-      </RootLayoutFoldedContext.Provider>
+      </>
     );
   }
 
   if (isMediumScreen) {
     return (
-      <RootLayoutFoldedContext.Provider value={folded}>
-        {/* Spacer reserves the folded-sidebar width in the flex layout */}
+      <>
         <div className="opal-root-layout__sidebar-spacer" />
-
-        {/* Fixed so it overlays content when expanded */}
         <div
           className="opal-root-layout__sidebar-overlay"
           data-variant="medium"
         >
           {children}
         </div>
-
-        {/* Blur-only backdrop when expanded */}
         <div
           className="opal-root-layout__backdrop"
           data-variant="medium"
           data-folded={foldedAttr}
           onClick={onFoldToggle}
         />
-      </RootLayoutFoldedContext.Provider>
+      </>
     );
   }
 
-  // Desktop — normal flex-row flow
-  return (
-    <RootLayoutFoldedContext.Provider value={folded}>
-      {children}
-    </RootLayoutFoldedContext.Provider>
-  );
+  return <>{children}</>;
 }
 
 // ---------------------------------------------------------------------------

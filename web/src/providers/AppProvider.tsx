@@ -29,7 +29,7 @@ import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
 import { ModalProvider } from "@/components/context/ModalContext";
-import { SidebarLayouts } from "@opal/layouts";
+import { SidebarStateProvider } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import ToastProvider from "@/providers/ToastProvider";
@@ -56,12 +56,12 @@ function SidebarPersistenceProvider({
   }
 
   return (
-    <SidebarLayouts.StateProvider
+    <SidebarStateProvider
       defaultFolded={defaultFolded}
       onFoldedChange={handleFoldedChange}
     >
       {children}
-    </SidebarLayouts.StateProvider>
+    </SidebarStateProvider>
   );
 }
 

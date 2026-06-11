@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import useSWRInfinite from "swr/infinite";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -6,7 +8,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ChatSearchResponse } from "@/app/app/interfaces";
 import { UNNAMED_CHAT } from "@/lib/constants";
 
-export interface FilterableChat {
+interface FilterableChat {
   id: string;
   label: string;
   time: string;
@@ -58,7 +60,7 @@ function filterLocalSessions(
 
 // --- Hook ---
 
-export function useChatSearchOptimistic(
+export default function useChatSearchOptimistic(
   options: UseChatSearchOptimisticOptions
 ): UseChatSearchOptimisticResult {
   const { searchQuery, enabled = true } = options;
