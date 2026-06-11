@@ -11,7 +11,7 @@ import {
   useRef,
 } from "react";
 import { usePathname } from "next/navigation";
-import { Button, Text } from "@opal/components";
+import { Button, Spacer, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
 import type { RichStr } from "@opal/types";
@@ -265,24 +265,40 @@ interface SidebarSectionProps {
   action?: React.ReactNode;
   /** When true, dims the section header to indicate it is unavailable. */
   disabled?: boolean;
+
+  children?: React.ReactNode;
 }
 
-function SidebarSection({ title, action, disabled }: SidebarSectionProps) {
+function SidebarSection({
+  title,
+  action,
+  disabled,
+  children,
+}: SidebarSectionProps) {
   return (
-    <Hoverable.Root group="sidebar-section">
-      <Disabled disabled={disabled}>
-        <div className="opal-sidebar-section__header">
-          <div className="opal-sidebar-section__title">
-            <Text font="secondary-body" color="text-02">
-              {title}
-            </Text>
-          </div>
-          {action && (
-            <Hoverable.Item group="sidebar-section">{action}</Hoverable.Item>
-          )}
-        </div>
-      </Disabled>
-    </Hoverable.Root>
+    <div className="flex flex-col">
+      {title ? (
+        <Hoverable.Root group="sidebar-section">
+          <Disabled disabled={disabled}>
+            <div className="opal-sidebar-section__header">
+              <div className="opal-sidebar-section__title">
+                <Text font="secondary-body" color="text-02">
+                  {title}
+                </Text>
+              </div>
+              {action && (
+                <Hoverable.Item group="sidebar-section">
+                  {action}
+                </Hoverable.Item>
+              )}
+            </div>
+          </Disabled>
+        </Hoverable.Root>
+      ) : (
+        <Spacer rem={1} />
+      )}
+      {children}
+    </div>
   );
 }
 

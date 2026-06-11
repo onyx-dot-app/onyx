@@ -161,5 +161,5 @@
 }
 
 .opal-sidebar-section__title {
-  @apply p-0.5;
+  @apply flex p-0.5;
 }

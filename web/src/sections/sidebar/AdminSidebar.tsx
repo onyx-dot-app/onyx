@@ -268,46 +268,40 @@ export default function AdminSidebar() {
       <SidebarLayouts.Body scrollKey="admin-sidebar">
         {enabledGroups.map((group, groupIndex) => (
           <React.Fragment key={groupIndex}>
-            {group.section ? (
-              <SidebarLayouts.Section title={group.section} />
-            ) : (
-              <Spacer rem={1} />
-            )}
-            {group.items.map(({ link, icon, name }) => (
-              <SidebarTab
-                key={link}
-                icon={icon}
-                href={link}
-                selected={pathname.startsWith(link)}
-              >
-                {name}
-              </SidebarTab>
-            ))}
+            <SidebarLayouts.Section title={group.section ?? undefined}>
+              {group.items.map(({ link, icon, name }) => (
+                <SidebarTab
+                  key={link}
+                  icon={icon}
+                  href={link}
+                  selected={pathname.startsWith(link)}
+                >
+                  {name}
+                </SidebarTab>
+              ))}
+            </SidebarLayouts.Section>
           </React.Fragment>
         ))}
 
         {disabledGroups.length > 0 && <Divider paddingPerpendicular="sm" />}
         {disabledGroups.map((group, groupIndex) => (
           <React.Fragment key={`disabled-${groupIndex}`}>
-            {group.section ? (
-              <SidebarLayouts.Section title={group.section} disabled />
-            ) : (
-              <Spacer rem={1} />
-            )}
-            {group.items.map(({ link, icon, name, requiredTier }) => (
-              <SidebarTab
-                key={link}
-                disabled
-                icon={icon}
-                tooltip={markdown(
-                  requiredTier === Tier.ENTERPRISE
-                    ? "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
-                    : "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
-                )}
-              >
-                {name}
-              </SidebarTab>
-            ))}
+            <SidebarLayouts.Section title={group.section ?? undefined} disabled>
+              {group.items.map(({ link, icon, name, requiredTier }) => (
+                <SidebarTab
+                  key={link}
+                  disabled
+                  icon={icon}
+                  tooltip={markdown(
+                    requiredTier === Tier.ENTERPRISE
+                      ? "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
+                      : "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                  )}
+                >
+                  {name}
+                </SidebarTab>
+              ))}
+            </SidebarLayouts.Section>
           </React.Fragment>
         ))}
       </SidebarLayouts.Body>

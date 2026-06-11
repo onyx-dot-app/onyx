@@ -165,35 +165,36 @@ function RecentsSection({
         isOver && "bg-background-tint-03"
       )}
     >
-      <SidebarLayouts.Section title="Recents" />
-      {chatSessions.length === 0 ? (
-        <Text as="p" text01 className="px-3">
-          Try sending a message! Your chat history will appear here.
-        </Text>
-      ) : (
-        <>
-          {chatSessions.map((chatSession) => (
-            <ChatButton
-              key={chatSession.id}
-              chatSession={chatSession}
-              draggable
-            />
-          ))}
-          {hasMore &&
-            skeletonWidths.map((width, i) => (
-              <div
-                key={i}
-                ref={i === 0 ? sentinelRef : undefined}
-                className={cn(
-                  "transition-opacity duration-300",
-                  isLoadingMore ? "opacity-100" : "opacity-40"
-                )}
-              >
-                <SidebarTabSkeleton textWidth={width} />
-              </div>
+      <SidebarLayouts.Section title="Recents">
+        {chatSessions.length === 0 ? (
+          <Text as="p" text01 className="px-3">
+            Try sending a message! Your chat history will appear here.
+          </Text>
+        ) : (
+          <>
+            {chatSessions.map((chatSession) => (
+              <ChatButton
+                key={chatSession.id}
+                chatSession={chatSession}
+                draggable
+              />
             ))}
-        </>
-      )}
+            {hasMore &&
+              skeletonWidths.map((width, i) => (
+                <div
+                  key={i}
+                  ref={i === 0 ? sentinelRef : undefined}
+                  className={cn(
+                    "transition-opacity duration-300",
+                    isLoadingMore ? "opacity-100" : "opacity-40"
+                  )}
+                >
+                  <SidebarTabSkeleton textWidth={width} />
+                </div>
+              ))}
+          </>
+        )}
+      </SidebarLayouts.Section>
     </div>
   );
 }
@@ -695,16 +696,17 @@ const AppSidebar = memo(function AppSidebarInner() {
                 collisionDetection={closestCenter}
                 onDragEnd={handleAgentDragEnd}
               >
-                <SidebarLayouts.Section title="Agents" />
-                <SortableContext
-                  items={visibleAgentIds}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {visibleAgents.map((visibleAgent) => (
-                    <AgentButton key={visibleAgent.id} agent={visibleAgent} />
-                  ))}
-                </SortableContext>
-                {moreAgentsButton}
+                <SidebarLayouts.Section title="Agents">
+                  <SortableContext
+                    items={visibleAgentIds}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {visibleAgents.map((visibleAgent) => (
+                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
+                    ))}
+                  </SortableContext>
+                  {moreAgentsButton}
+                </SidebarLayouts.Section>
               </DndContext>
 
               {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
@@ -729,11 +731,12 @@ const AppSidebar = memo(function AppSidebarInner() {
                       onClick={() => createProjectModal.toggle(true)}
                     />
                   }
-                />
-                {projects.map((project) => (
-                  <ProjectFolderButton key={project.id} project={project} />
-                ))}
-                {projects.length === 0 && newProjectButton}
+                >
+                  {projects.map((project) => (
+                    <ProjectFolderButton key={project.id} project={project} />
+                  ))}
+                  {projects.length === 0 && newProjectButton}
+                </SidebarLayouts.Section>
 
                 {/* Recents */}
                 <RecentsSection
