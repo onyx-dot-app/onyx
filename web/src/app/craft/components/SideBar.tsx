@@ -15,7 +15,7 @@ import { SidebarTab, Text } from "@opal/components";
 import {
   SidebarLayouts,
   SidebarStateProvider,
-  useSidebarFolded,
+  useSidebarState,
 } from "@opal/layouts";
 import RefreshText from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
@@ -328,7 +328,7 @@ function BuildSessionButton({
 // ============================================================================
 
 const MemoizedBuildSidebarInner = memo(() => {
-  const folded = useSidebarFolded();
+  const { folded } = useSidebarState();
   const router = useRouter();
   const pathname = usePathname();
   const session = useSession();

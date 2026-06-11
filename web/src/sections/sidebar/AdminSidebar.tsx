@@ -3,11 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import {
-  SidebarLayouts,
-  useSidebarFolded,
-  useSidebarState,
-} from "@opal/layouts";
+import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";

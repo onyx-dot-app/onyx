@@ -15,10 +15,7 @@ import { Button, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
 import type { RichStr } from "@opal/types";
-import {
-  useSidebarFolded,
-  useSidebarState,
-} from "@opal/layouts/root/components";
+import { useSidebarState } from "@opal/layouts/root/components";
 import useScreenSize from "@opal/hooks/useScreenSize";
 
 // ---------------------------------------------------------------------------
@@ -195,7 +192,7 @@ interface SidebarBodyProps {
 }
 
 function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
-  const folded = useSidebarFolded();
+  const { folded } = useSidebarState();
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 

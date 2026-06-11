@@ -56,7 +56,6 @@ export type { SettingsHeaderProps } from "@opal/layouts/settings/components";
 /* RootLayout */
 export * as RootLayout from "@opal/layouts/root/components";
 export {
-  useSidebarFolded,
   useSidebarState,
   SidebarStateProvider,
   RootLayoutRightPanelSlotContext,

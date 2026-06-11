@@ -43,7 +43,7 @@ import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
 import type { Project } from "@/app/app/projects/projectsService";
-import { SidebarLayouts, useSidebarFolded } from "@opal/layouts";
+import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import {
   renderAppLogo,
   useShowLogoWhenFolded,
@@ -201,7 +201,7 @@ function RecentsSection({
 }
 
 const AppSidebar = memo(function AppSidebarInner() {
-  const folded = useSidebarFolded();
+  const { folded } = useSidebarState();
   const router = useRouter();
   const combinedSettings = useSettingsContext();
   const posthog = usePostHog();

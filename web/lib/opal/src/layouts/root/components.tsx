@@ -93,16 +93,6 @@ export function useSidebarState(): SidebarStateContextType {
   return context;
 }
 
-/**
- * Returns the effective sidebar fold state for content rendering.
- * Always `false` on mobile — the overlay handles visibility there.
- */
-export function useSidebarFolded(): boolean {
-  const { folded } = useSidebarState();
-  const { isMobile } = useScreenSize();
-  return !isMobile && folded;
-}
-
 // ---------------------------------------------------------------------------
 // Root — flex container
 // ---------------------------------------------------------------------------
