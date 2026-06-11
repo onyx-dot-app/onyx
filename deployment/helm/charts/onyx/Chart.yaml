@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.22
+version: 0.5.23
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,6 +16,9 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: changed
+      description: Add sandbox-proxy ServiceAccount annotation support for
+        IAM-backed managed services.
     - kind: changed
       description: Store Craft sandbox snapshots in the Onyx filestore instead
         of requiring sandbox pods to write directly to S3.

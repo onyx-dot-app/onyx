@@ -15,6 +15,16 @@ output "oidc_provider" {
   value = module.eks.oidc_provider
 }
 
+output "workload_irsa_role_arn" {
+  description = "ARN of the IAM role for workloads (S3 + optional RDS)"
+  value       = module.eks.workload_irsa_role_arn
+}
+
+output "workload_irsa_service_account_subjects" {
+  description = "Kubernetes service account subjects trusted by the workload IRSA role"
+  value       = module.eks.workload_irsa_service_account_subjects
+}
+
 output "postgres_endpoint" {
   description = "RDS endpoint hostname"
   value       = module.postgres.endpoint

@@ -1537,6 +1537,11 @@ sandboxProxy:
   caSecretName: "sandbox-proxy-ca"
   caConfigMapName: "sandbox-proxy-ca-bundle"
   podAnnotations: {}
+  serviceAccount:
+    # Set IRSA annotations here when the sandbox proxy uses IAM-backed services,
+    # such as RDS IAM auth.
+    annotations: {}
+    automount: true
   # Matches the `onyx` user (uid 1001) baked into the backend image.
   runAsUser: 1001
   fsGroup: 1001
