@@ -134,21 +134,7 @@ function buildItems(
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS);
   }
 
-  // 6. Organization (admin only)
-  if (!isCurator) {
-    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
-    if (hasSubscription) {
-      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
-    }
-    addGated(
-      SECTIONS.ORGANIZATION,
-      ADMIN_ROUTES.TOKEN_RATE_LIMITS,
-      Tier.ENTERPRISE
-    );
-    addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
-  }
-
-  // 7. Usage (admin only)
+  // 6. Usage (admin only)
   if (!isCurator) {
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
     if (
@@ -157,6 +143,16 @@ function buildItems(
     ) {
       addGated(SECTIONS.USAGE, ADMIN_ROUTES.QUERY_HISTORY, Tier.BUSINESS);
     }
+    addGated(SECTIONS.USAGE, ADMIN_ROUTES.TOKEN_RATE_LIMITS, Tier.ENTERPRISE);
+  }
+
+  // 7. Organization (admin only)
+  if (!isCurator) {
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
+    if (hasSubscription) {
+      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
+    }
+    addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
   }
 
   // 8. Upgrade Plan (admin only, no subscription)
