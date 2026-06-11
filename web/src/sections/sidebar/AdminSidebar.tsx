@@ -1,21 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import {
-  SidebarLayouts,
-  useSidebarFolded,
-  useSidebarState,
-} from "@opal/layouts";
+import { SidebarLayouts } from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
 import { CombinedSettings, Tier } from "@/interfaces/settings";
 import { tierAtLeast } from "@/lib/tiers";
 import { Divider, InputTypeIn, Spacer, SidebarTab } from "@opal/components";
-import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
+import { SvgArrowUpCircle, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
   useLicense,
@@ -185,17 +181,7 @@ function groupBySection(items: SidebarItemEntry[]) {
 }
 
 function AdminSidebarInner() {
-  const { setFolded } = useSidebarState();
-  const folded = useSidebarFolded();
   const searchRef = useRef<HTMLInputElement>(null);
-  const [focusSearch, setFocusSearch] = useState(false);
-
-  useEffect(() => {
-    if (focusSearch && !folded && searchRef.current) {
-      searchRef.current.focus();
-      setFocusSearch(false);
-    }
-  }, [focusSearch, folded]);
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
@@ -240,31 +226,6 @@ function AdminSidebarInner() {
 
   return (
     <>
-      <SidebarLayouts.Header>
-        {folded ? (
-          <SidebarTab
-            icon={SvgSearch}
-            folded
-            onClick={() => {
-              setFolded(false);
-              setFocusSearch(true);
-            }}
-          >
-            Search
-          </SidebarTab>
-        ) : (
-          <InputTypeIn
-            ref={searchRef}
-            variant="internal"
-            searchIcon
-            placeholder="Search..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            clearButton
-          />
-        )}
-      </SidebarLayouts.Header>
-
       <SidebarLayouts.Body scrollKey="admin-sidebar">
         {enabledGroups.map((group, groupIndex) => {
           const tabs = group.items.map(({ link, icon, name }) => (
@@ -279,7 +240,22 @@ function AdminSidebarInner() {
           ));
 
           if (!group.section) {
-            return <div key={groupIndex}>{tabs}</div>;
+            return (
+              <div key={groupIndex}>
+                {groupIndex === 0 && (
+                  <InputTypeIn
+                    ref={searchRef}
+                    variant="internal"
+                    searchIcon
+                    placeholder="Search..."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    clearButton
+                  />
+                )}
+                {tabs}
+              </div>
+            );
           }
 
           return (
@@ -316,21 +292,14 @@ function AdminSidebarInner() {
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        {!folded && (
-          <>
-            <Divider paddingPerpendicular="fit" />
-            <Spacer rem={0.5} />
-          </>
-        )}
-        <SidebarTab
-          icon={SvgX}
-          href="/app"
-          variant="sidebar-light"
-          folded={folded}
-        >
+        <>
+          <Divider paddingPerpendicular="fit" />
+          <Spacer rem={0.5} />
+        </>
+        <SidebarTab icon={SvgX} href="/app" variant="sidebar-light">
           Exit Admin Panel
         </SidebarTab>
-        <AccountPopover folded={folded} />
+        <AccountPopover folded={false} />
       </SidebarLayouts.Footer>
     </>
   );
