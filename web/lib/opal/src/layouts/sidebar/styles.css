@@ -93,6 +93,9 @@
 .opal-sidebar-header__content {
   @apply px-2;
 }
+.opal-sidebar-header__content[data-folded="true"] {
+  @apply hidden;
+}
 
 /* Logo: visible by default, hidden on hover while folded */
 .opal-sidebar-root__logo-default {

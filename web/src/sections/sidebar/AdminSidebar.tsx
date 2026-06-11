@@ -25,7 +25,10 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
+import {
+  renderAppLogo,
+  useShowLogoWhenFolded,
+} from "@/sections/sidebar/SidebarWrapper";
 import { markdown } from "@opal/utils";
 
 const SECTIONS = {
@@ -183,9 +186,9 @@ function groupBySection(items: SidebarItemEntry[]) {
   return groups;
 }
 
-function AdminSidebarInner() {
-  const { setFolded } = useSidebarState();
-  const folded = useSidebarFolded();
+export default function AdminSidebar() {
+  const { folded, setFolded } = useSidebarState();
+  const showLogoWhenFolded = useShowLogoWhenFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
 
@@ -238,8 +241,11 @@ function AdminSidebarInner() {
   const disabledGroups = groupBySection(disabled);
 
   return (
-    <>
-      <SidebarLayouts.Header>
+    <SidebarLayouts.Root foldable>
+      <SidebarLayouts.Header
+        logo={renderAppLogo}
+        showLogoWhenFolded={showLogoWhenFolded}
+      >
         {folded ? (
           <SidebarTab
             icon={SvgSearch}
@@ -321,14 +327,6 @@ function AdminSidebarInner() {
         </SidebarTab>
         <AccountPopover folded={folded} />
       </SidebarLayouts.Footer>
-    </>
-  );
-}
-
-export default function AdminSidebar() {
-  return (
-    <SidebarWrapper foldable>
-      <AdminSidebarInner />
-    </SidebarWrapper>
+    </SidebarLayouts.Root>
   );
 }

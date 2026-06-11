@@ -57,13 +57,15 @@ export type { SettingsHeaderProps } from "@opal/layouts/settings/components";
 export * as RootLayout from "@opal/layouts/root/components";
 export {
   useSidebarFolded,
+  useSidebarState,
+  SidebarStateProvider,
   RootLayoutRightPanelSlotContext,
 } from "@opal/layouts/root/components";
-export type { RightPanelSlotSetter } from "@opal/layouts/root/components";
+export type {
+  SidebarStateProviderProps,
+  RightPanelSlotSetter,
+} from "@opal/layouts/root/components";
 
 /* SidebarLayouts */
 export * as SidebarLayouts from "@opal/layouts/sidebar/components";
-export {
-  useSidebarState,
-  type SidebarRootProps,
-} from "@opal/layouts/sidebar/components";
+export { type SidebarRootProps } from "@opal/layouts/sidebar/components";

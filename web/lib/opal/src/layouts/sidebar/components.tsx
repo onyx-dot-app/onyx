@@ -5,13 +5,10 @@ import {
   createContext,
   useCallback,
   useContext,
-  useState,
   useEffect,
-  useRef,
   useLayoutEffect,
   useMemo,
-  type Dispatch,
-  type SetStateAction,
+  useRef,
 } from "react";
 import { usePathname } from "next/navigation";
 import { Button, Text } from "@opal/components";
@@ -19,104 +16,16 @@ import { Disabled, Hoverable } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
 import type { RichStr } from "@opal/types";
 import {
-  RootLayoutFoldedContext,
   useSidebarFolded,
+  useSidebarState,
 } from "@opal/layouts/root/components";
 import useScreenSize from "@opal/hooks/useScreenSize";
-export { useSidebarFolded } from "@opal/layouts/root/components";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const SCROLL_POSITION_PREFIX = "opal-sidebar-scroll-";
-
-// ---------------------------------------------------------------------------
-// State provider — sidebar fold state with Cmd/Ctrl+E keyboard shortcut
-// ---------------------------------------------------------------------------
-
-interface SidebarStateContextType {
-  folded: boolean;
-  setFolded: Dispatch<SetStateAction<boolean>>;
-}
-
-const SidebarStateContext = createContext<SidebarStateContextType | undefined>(
-  undefined
-);
-
-interface SidebarStateProviderProps {
-  /** Initial fold state, typically read from a persisted cookie by the app. */
-  defaultFolded?: boolean;
-  /** Called whenever the fold state changes, e.g. to persist to a cookie. */
-  onFoldedChange?: (folded: boolean) => void;
-  children: React.ReactNode;
-}
-
-function SidebarStateProvider({
-  defaultFolded = false,
-  onFoldedChange,
-  children,
-}: SidebarStateProviderProps) {
-  const [folded, setFoldedInternal] = useState(defaultFolded);
-
-  // Keep a ref so the effect below always sees the latest callback without
-  // needing it as a dependency (avoids unnecessary effect re-runs).
-  const onFoldedChangeRef = useRef(onFoldedChange);
-  onFoldedChangeRef.current = onFoldedChange;
-
-  const setFolded: Dispatch<SetStateAction<boolean>> = (value) => {
-    setFoldedInternal((prev) =>
-      typeof value === "function" ? value(prev) : value
-    );
-  };
-
-  // Notify after state commits rather than inside the updater, keeping the
-  // updater pure and safe under React's StrictMode double-invocation.
-  const isMounted = useRef(false);
-  useEffect(() => {
-    if (!isMounted.current) {
-      isMounted.current = true;
-      return;
-    }
-    onFoldedChangeRef.current?.(folded);
-  }, [folded]);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const isMac = navigator.userAgent.toLowerCase().includes("mac");
-      const isModifierPressed = isMac ? event.metaKey : event.ctrlKey;
-      if (!isModifierPressed || event.key !== "e") return;
-
-      event.preventDefault();
-      setFolded((prev) => !prev);
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
-
-  return (
-    <SidebarStateContext.Provider value={{ folded, setFolded }}>
-      {children}
-    </SidebarStateContext.Provider>
-  );
-}
-
-/**
- * Returns the global sidebar fold state and setter.
- * Must be used within a `SidebarStateProvider`.
- */
-export function useSidebarState(): SidebarStateContextType {
-  const context = useContext(SidebarStateContext);
-  if (context === undefined) {
-    throw new Error(
-      "useSidebarState must be used within a SidebarStateProvider"
-    );
-  }
-  return context;
-}
 
 // ---------------------------------------------------------------------------
 // Root
@@ -141,28 +50,25 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
 
   const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
 
-  const contentFolded = !isMobile && foldable ? folded : false;
   const foldedAttr = String(folded);
   const inner = <div className="opal-sidebar-root__inner">{children}</div>;
 
   if (isMobile) {
     return (
       <SidebarFoldableContext.Provider value={foldable}>
-        <RootLayoutFoldedContext.Provider value={false}>
-          <div
-            className="opal-sidebar-root__overlay"
-            data-variant="mobile"
-            data-folded={foldedAttr}
-          >
-            {inner}
-          </div>
-          <div
-            className="opal-sidebar-root__backdrop"
-            data-variant="mobile"
-            data-folded={foldedAttr}
-            onClick={closeSidebar}
-          />
-        </RootLayoutFoldedContext.Provider>
+        <div
+          className="opal-sidebar-root__overlay"
+          data-variant="mobile"
+          data-folded={foldedAttr}
+        >
+          {inner}
+        </div>
+        <div
+          className="opal-sidebar-root__backdrop"
+          data-variant="mobile"
+          data-folded={foldedAttr}
+          onClick={closeSidebar}
+        />
       </SidebarFoldableContext.Provider>
     );
   }
@@ -170,36 +76,32 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
   if (isMediumScreen) {
     return (
       <SidebarFoldableContext.Provider value={foldable}>
-        <RootLayoutFoldedContext.Provider value={folded}>
-          <div className="opal-sidebar-root__spacer" />
-          <div
-            className="opal-sidebar-root__overlay"
-            data-variant="medium"
-            data-folded={foldedAttr}
-          >
-            {inner}
-          </div>
-          <div
-            className="opal-sidebar-root__backdrop"
-            data-variant="medium"
-            data-folded={foldedAttr}
-            onClick={closeSidebar}
-          />
-        </RootLayoutFoldedContext.Provider>
+        <div className="opal-sidebar-root__spacer" />
+        <div
+          className="opal-sidebar-root__overlay"
+          data-variant="medium"
+          data-folded={foldedAttr}
+        >
+          {inner}
+        </div>
+        <div
+          className="opal-sidebar-root__backdrop"
+          data-variant="medium"
+          data-folded={foldedAttr}
+          onClick={closeSidebar}
+        />
       </SidebarFoldableContext.Provider>
     );
   }
 
   return (
     <SidebarFoldableContext.Provider value={foldable}>
-      <RootLayoutFoldedContext.Provider value={contentFolded}>
-        <div
-          className="opal-sidebar-root__column"
-          data-folded={foldable ? foldedAttr : undefined}
-        >
-          {inner}
-        </div>
-      </RootLayoutFoldedContext.Provider>
+      <div
+        className="opal-sidebar-root__column"
+        data-folded={foldable ? foldedAttr : undefined}
+      >
+        {inner}
+      </div>
     </SidebarFoldableContext.Provider>
   );
 }
@@ -247,13 +149,15 @@ function SidebarHeader({
     [folded, toggleFolded]
   );
 
-  if (!logo && !children) return null;
+  const contentFolded = useSidebarFolded();
 
-  const logoEl = logo ? logo(foldable ? folded : undefined) : null;
+  if (logo == null && !children) return null;
+
+  const logoEl = logo != null ? logo(foldable ? folded : undefined) : null;
 
   return (
     <div className="opal-sidebar-header">
-      {logo && (
+      {logo != null && (
         <div className="opal-sidebar-header__topbar">
           {!foldable ? (
             logoEl
@@ -273,7 +177,12 @@ function SidebarHeader({
         </div>
       )}
       {children && (
-        <div className="opal-sidebar-header__content">{children}</div>
+        <div
+          className="opal-sidebar-header__content"
+          data-folded={String(contentFolded)}
+        >
+          {children}
+        </div>
       )}
     </div>
   );
@@ -387,7 +296,6 @@ function SidebarSection({ title, action, disabled }: SidebarSectionProps) {
 // ---------------------------------------------------------------------------
 
 export {
-  SidebarStateProvider as StateProvider,
   SidebarRoot as Root,
   SidebarHeader as Header,
   SidebarBody as Body,

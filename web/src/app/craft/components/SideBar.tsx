@@ -12,7 +12,11 @@ import {
 import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { SidebarTab, Text } from "@opal/components";
-import { SidebarLayouts, useSidebarFolded } from "@opal/layouts";
+import {
+  SidebarLayouts,
+  SidebarStateProvider,
+  useSidebarFolded,
+} from "@opal/layouts";
 import RefreshText from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
@@ -509,11 +513,11 @@ export default function BuildSidebar() {
   const { leftSidebarFolded, setLeftSidebarFolded } = useBuildContext();
 
   return (
-    <SidebarLayouts.StateProvider
+    <SidebarStateProvider
       defaultFolded={leftSidebarFolded}
       onFoldedChange={setLeftSidebarFolded}
     >
       <MemoizedBuildSidebarInner />
-    </SidebarLayouts.StateProvider>
+    </SidebarStateProvider>
   );
 }

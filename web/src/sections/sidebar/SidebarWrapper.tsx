@@ -17,6 +17,13 @@ export function renderAppLogo(folded: boolean | undefined): React.ReactNode {
   );
 }
 
+export function useShowLogoWhenFolded(): boolean {
+  const settings = useSettingsContext();
+  const showLogoWhenFolded =
+    settings.enterpriseSettings?.logo_display_style !== "name_only";
+  return showLogoWhenFolded;
+}
+
 export interface SidebarWrapperProps {
   foldable?: boolean;
   children?: React.ReactNode;
@@ -30,9 +37,7 @@ export default function SidebarWrapper({
   foldable = false,
   children,
 }: SidebarWrapperProps) {
-  const settings = useSettingsContext();
-  const showLogoWhenFolded =
-    settings.enterpriseSettings?.logo_display_style !== "name_only";
+  const showLogoWhenFolded = useShowLogoWhenFolded();
 
   return (
     <SidebarLayouts.Root foldable={foldable}>
