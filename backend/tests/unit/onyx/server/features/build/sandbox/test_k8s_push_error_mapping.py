@@ -24,6 +24,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import NoEncryption
 from cryptography.hazmat.primitives.serialization import PrivateFormat
@@ -37,8 +38,15 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_PUSH_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_SNAPSHOT_CREATE_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     sidecar_snapshot_restore_path,
 )
+from onyx.server.features.build.sandbox.kubernetes import sidecar_client
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     _build_targz,
 )
@@ -180,12 +188,30 @@ def _mock_httpx_stream_client(response: MagicMock) -> MagicMock:
     return MagicMock(return_value=ctx)
 
 
+def _stream_context(response: MagicMock) -> MagicMock:
+    stream_ctx = MagicMock()
+    stream_ctx.__enter__ = MagicMock(return_value=response)
+    stream_ctx.__exit__ = MagicMock(return_value=False)
+    return stream_ctx
+
+
 def _sandbox_id() -> UUID:
     return uuid4()
 
 
 def _files() -> FileSet:
     return {"my-skill/SKILL.md": b"# hello\n"}
+
+
+def _assert_signature(
+    headers: dict[str, str], signing_path: str, sha256_hex: str
+) -> None:
+    _priv, pub_b64 = sidecar_client.get_push_key_pair()
+    pub = Ed25519PublicKey.from_public_bytes(base64.b64decode(pub_b64))
+    pub.verify(
+        base64.b64decode(headers["X-Push-Signature"]),
+        f"{headers['X-Push-Timestamp']}|{signing_path}|{sha256_hex}".encode(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +304,93 @@ def test_2xx_returns_success() -> None:
             mount_path="/workspace/managed/skills",
             files=_files(),
         )
+
+
+def test_push_archive_sends_signed_mount_path_request() -> None:
+    sandbox_id = _sandbox_id()
+    mount_path = "/workspace/managed/skills"
+    archive = b"skill archive"
+    sha256_hex = hashlib.sha256(archive).hexdigest()
+    client_instance = MagicMock()
+    client_instance.post.return_value = _resp(200, "ok")
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=client_instance)
+    ctx.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch(_HTTPX_CLIENT_PATH, MagicMock(return_value=ctx)),
+        patch.object(sidecar_client.time, "time", return_value=1234567890),
+    ):
+        SidecarClient(hosts=lambda _sandbox_id: ["sidecar.local"]).push_archive(
+            sandbox_id=sandbox_id,
+            mount_path=mount_path,
+            archive=archive,
+            sha256_hex=sha256_hex,
+            operation_label="Push files",
+            timeout_seconds=30.0,
+        )
+
+    client_instance.post.assert_called_once()
+    url = client_instance.post.call_args.args[0]
+    kwargs = client_instance.post.call_args.kwargs
+    assert url == f"http://sidecar.local:8731{SIDECAR_PUSH_PATH}"
+    assert kwargs["params"] == {"mount_path": mount_path}
+    assert kwargs["content"] == archive
+    headers = cast(dict[str, str], kwargs["headers"])
+    assert headers["Content-Type"] == "application/gzip"
+    assert headers["X-Bundle-Sha256"] == sha256_hex
+    assert headers["X-Push-Timestamp"] == "1234567890"
+    _assert_signature(headers, mount_path, sha256_hex)
+
+
+def test_stream_new_snapshot_falls_back_and_streams_signed_response() -> None:
+    sandbox_id = _sandbox_id()
+    body = b'{"session_id":"00000000-0000-0000-0000-000000000001"}'
+    sha256_hex = hashlib.sha256(body).hexdigest()
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    response = MagicMock()
+    response.status_code = 200
+    response.iter_bytes.return_value = iter([b"tar", b"bytes"])
+
+    def stream_handler(_method: str, url: str, **kwargs: object) -> MagicMock:
+        calls.append((url, kwargs))
+        if "sidecar-fqdn" in url:
+            raise httpx.ConnectError("service not routable yet")
+        return _stream_context(response)
+
+    client_instance = MagicMock()
+    client_instance.stream.side_effect = stream_handler
+    ctx = MagicMock()
+    ctx.__enter__ = MagicMock(return_value=client_instance)
+    ctx.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch(_HTTPX_CLIENT_PATH, MagicMock(return_value=ctx)),
+        patch.object(sidecar_client.time, "time", return_value=1234567890),
+    ):
+        with SidecarClient(
+            hosts=lambda _sandbox_id: ["sidecar-fqdn", "10.0.0.1"]
+        ).request_and_stream_new_snapshot(
+            sandbox_id=sandbox_id,
+            endpoint_path=SIDECAR_SNAPSHOT_CREATE_PATH,
+            body=body,
+            content_type="application/json",
+            operation_label="Snapshot create",
+            timeout_seconds=30.0,
+        ) as stream:
+            assert stream is not None
+            assert stream.read() == b"tarbytes"
+
+    assert [url for url, _kwargs in calls] == [
+        f"http://sidecar-fqdn:8731{SIDECAR_SNAPSHOT_CREATE_PATH}",
+        f"http://10.0.0.1:8731{SIDECAR_SNAPSHOT_CREATE_PATH}",
+    ]
+    headers = cast(dict[str, str], calls[-1][1]["headers"])
+    assert headers["Content-Type"] == "application/json"
+    assert headers["X-Push-Timestamp"] == "1234567890"
+    assert calls[-1][1]["content"] == body
+    _assert_signature(headers, SIDECAR_SNAPSHOT_CREATE_PATH, sha256_hex)
 
 
 # ---------------------------------------------------------------------------

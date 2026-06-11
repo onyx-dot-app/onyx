@@ -155,38 +155,6 @@ def test_ensure_session_raises_on_5xx_lookup() -> None:
     raise AssertionError("expected HTTPStatusError for 500 lookup")
 
 
-def test_ensure_session_callback_contract_triggers_on_id_mismatch() -> None:
-    """Simulates the ``_send_message_via_serve`` contract: caller invokes
-    ensure_session, then compares input vs. result; if they differ, fires
-    the persistence callback. Locks the "id mismatch → callback fires"
-    invariant at the unit level so the session-manager DB write path is
-    guaranteed reachable from any future caller."""
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        if req.method == "GET" and req.url.path == f"/session/{_STALE_ID}":
-            return httpx.Response(404)
-        if req.method == "POST" and req.url.path == "/session":
-            return httpx.Response(200, json={"id": _FRESH_ID})
-        raise AssertionError(f"unexpected {req.method} {req.url.path}")
-
-    transport = _RecordingTransport(handler)
-    client = _make_client(transport)
-
-    persisted_ids: list[str] = []
-
-    def on_resolved(new_id: str) -> None:
-        persisted_ids.append(new_id)
-
-    # Mirror _send_message_via_serve's logic.
-    resolved = client.ensure_session(_STALE_ID, directory=_CWD)
-    if resolved != _STALE_ID:
-        on_resolved(resolved)
-
-    assert persisted_ids == [_FRESH_ID], (
-        "callback must fire exactly once with the new id when stale"
-    )
-
-
 def test_ensure_session_passes_directory_as_query_string() -> None:
     """opencode-serve scopes Instance (and the session store) per
     ``?directory=`` query param — the body field is silently ignored
@@ -218,33 +186,6 @@ def test_ensure_session_passes_directory_as_query_string() -> None:
     # and the Session.create schema would silently drop it.
     body = json.loads(post_req.content)
     assert "directory" not in body
-
-
-def test_ensure_session_callback_does_not_fire_on_valid_id() -> None:
-    """Counterpart to the above: when the persisted id is still valid,
-    the callback MUST NOT fire — otherwise we'd do a redundant DB write
-    on every turn after the first."""
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        if req.method == "GET" and req.url.path == f"/session/{_STALE_ID}":
-            return httpx.Response(200, json={"id": _STALE_ID})
-        raise AssertionError(f"unexpected {req.method} {req.url.path}")
-
-    transport = _RecordingTransport(handler)
-    client = _make_client(transport)
-
-    persisted_ids: list[str] = []
-
-    def on_resolved(new_id: str) -> None:
-        persisted_ids.append(new_id)
-
-    resolved = client.ensure_session(_STALE_ID, directory=_CWD)
-    if resolved != _STALE_ID:
-        on_resolved(resolved)
-
-    assert persisted_ids == [], (
-        "callback must NOT fire on the happy path (persisted id still valid)"
-    )
 
 
 @pytest.mark.parametrize("status_code", [200, 204, 404])

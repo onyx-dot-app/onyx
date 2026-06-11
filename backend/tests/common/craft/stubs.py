@@ -166,6 +166,7 @@ class StubSandboxManager(SandboxManager):
         # Observable state: scoped counters and last-payload snapshots.
         self.provision_count: int = 0
         self.terminate_count: int = 0
+        self.terminated_sandbox_ids: list[UUID] = []
         self.setup_session_workspace_count: int = 0
         self.cleanup_session_workspace_count: int = 0
         self.create_snapshot_count: int = 0
@@ -174,6 +175,7 @@ class StubSandboxManager(SandboxManager):
         self.session_workspace_exists_count: int = 0
         self.list_session_workspaces_count: int = 0
         self.list_session_workspaces_returns: list[UUID] | None = None
+        self.list_session_workspaces_payloads: list[dict[str, Any]] = []
         self.last_list_session_workspaces_payload: dict[str, Any] | None = None
         self.health_check_count: int = 0
         self.ensure_opencode_session_count: int = 0
@@ -198,6 +200,7 @@ class StubSandboxManager(SandboxManager):
         self.last_cleanup_session_workspace_payload: dict[str, Any] | None = None
         self.last_create_snapshot_payload: dict[str, Any] | None = None
         self.last_create_opencode_history_snapshot_payload: dict[str, Any] | None = None
+        self.create_opencode_history_snapshot_payloads: list[dict[str, Any]] = []
         self.last_restore_snapshot_payload: dict[str, Any] | None = None
         self.last_session_workspace_exists_payload: dict[str, Any] | None = None
         self.last_health_check_payload: dict[str, Any] | None = None
@@ -267,6 +270,7 @@ class StubSandboxManager(SandboxManager):
     def terminate(self, sandbox_id: UUID) -> None:
         self.terminate_count += 1
         self.last_terminate_sandbox_id = sandbox_id
+        self.terminated_sandbox_ids.append(sandbox_id)
         if not self.terminate_silent:
             raise _not_configured("terminate")
 
@@ -334,6 +338,9 @@ class StubSandboxManager(SandboxManager):
             "tenant_id": tenant_id,
             "timeout_seconds": timeout_seconds,
         }
+        self.create_opencode_history_snapshot_payloads.append(
+            self.last_create_opencode_history_snapshot_payload
+        )
         if self.create_opencode_history_snapshot_returns is _UNSET:
             raise _not_configured("create_opencode_history_snapshot")
         return cast(bool, self.create_opencode_history_snapshot_returns)
@@ -378,6 +385,9 @@ class StubSandboxManager(SandboxManager):
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         self.list_session_workspaces_count += 1
         self.last_list_session_workspaces_payload = {"sandbox_id": sandbox_id}
+        self.list_session_workspaces_payloads.append(
+            self.last_list_session_workspaces_payload
+        )
         if self.list_session_workspaces_returns is None:
             raise _not_configured("list_session_workspaces")
         return list(self.list_session_workspaces_returns)

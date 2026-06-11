@@ -1530,9 +1530,17 @@ class SessionManager:
         if sandbox.status == SandboxStatus.TERMINATED:
             logger.info("Sandbox %s already terminated", sandbox.id)
             if history_snapshot_manager is not None:
-                history_snapshot_manager.delete_opencode_history_snapshot(
-                    tenant_id, str(sandbox.id)
-                )
+                try:
+                    history_snapshot_manager.delete_opencode_history_snapshot(
+                        tenant_id, str(sandbox.id)
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to delete opencode history for already-terminated "
+                        "sandbox %s; ignoring: %s",
+                        sandbox.id,
+                        e,
+                    )
             return True
 
         if history_snapshot_manager is not None:

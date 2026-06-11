@@ -17,12 +17,11 @@ import io
 import shutil
 import tarfile
 from pathlib import Path
-from typing import Any
 from uuid import UUID
+from uuid import uuid4
 
 import pytest
 from kubernetes import client
-from kubernetes.client.rest import ApiException
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
@@ -396,48 +395,45 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
     assert "AGENTS.md" in listing
 
 
-def test_snapshot_failure_does_not_block_pod_termination(
+def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
     live_pod: tuple[UUID, UUID, str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sandbox_id, session_id, pod_name = live_pod
+    sandbox_id, _session_id, pod_name = live_pod
+    marker_path = "/workspace/opencode-data/cache/history-roundtrip.txt"
 
-    _populate_session_workspace(k8s_client, pod_name, session_id)
-
-    # Break ``create_snapshot`` directly. The orchestration contract (see
-    # ``cleanup_idle_sandboxes_task``) is: snapshot failure is caught and
-    # termination still proceeds.
-    def _boom(*_args: Any, **_kwargs: Any) -> None:
-        raise RuntimeError("simulated storage outage")
-
-    monkeypatch.setattr(
-        KubernetesSandboxManager,
-        "create_snapshot",
-        _boom,
+    pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "mkdir -p /workspace/opencode-data/cache && "
+        f"printf '%s' 'restored-opencode-history' > {marker_path}",
     )
 
-    # Mimic the orchestration block from cleanup_idle_sandboxes_task in a
-    # narrow form: try snapshot, swallow on failure, then terminate.
-    snapshot_failed = False
-    try:
-        k8s_manager.create_snapshot(sandbox_id, session_id, TEST_TENANT_ID)
-    except Exception:
-        snapshot_failed = True
+    assert k8s_manager.create_opencode_history_snapshot(
+        sandbox_id,
+        TEST_TENANT_ID,
+    )
 
-    assert snapshot_failed, "monkeypatched create_snapshot should have raised"
-
-    # Termination should still succeed.
     k8s_manager.terminate(sandbox_id)
     wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
 
-    # Pod is gone.
-    try:
-        pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
-        assert pod.metadata.deletion_timestamp is not None
-    except ApiException as e:
-        assert e.status == 404
+    k8s_manager.provision(
+        sandbox_id=sandbox_id,
+        user_id=uuid4(),
+        tenant_id=TEST_TENANT_ID,
+        llm_config=default_llm_config(),
+        onyx_pat="test-onyx-pat",
+    )
+
+    restored = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"cat {marker_path}",
+    )
+    assert restored == "restored-opencode-history"
 
 
 def test_restore_uses_data_filter_to_block_traversal(

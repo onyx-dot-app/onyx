@@ -293,6 +293,11 @@ fails after history deletion succeeds, the API reports reset failure and rolls
 back DB state, but the durable history object is already gone. This preserves
 the "start fresh" invariant on the next successful provision.
 
+If the sandbox row is already `TERMINATED`, reset has no live pod or DB status
+transition left to protect. In that case the durable history delete is
+best-effort: failures are logged and the reset still returns success. A later
+reset can retry the delete once FileStore recovers.
+
 This is intentionally different from idle sleep. Sleep preserves history; reset
 removes it.
 

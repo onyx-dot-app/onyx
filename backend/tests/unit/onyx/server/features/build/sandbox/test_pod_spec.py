@@ -134,13 +134,6 @@ def _render_chart(
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
-def _render_chart_documents(extra_args: list[str] | None = None) -> list[dict]:
-    result = _render_chart(extra_args)
-    if result.returncode != 0:
-        pytest.skip(f"helm template failed (chart deps?): {result.stderr.strip()}")
-    return [doc for doc in yaml.safe_load_all(result.stdout) if doc is not None]
-
-
 def _render_pod_template() -> client.V1PodTemplate:
     """Render the sandbox-pod PodTemplate from the chart and deserialize it
     into the same model the K8s API would return."""
