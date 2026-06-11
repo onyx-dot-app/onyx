@@ -305,11 +305,20 @@ export default function MessageToolbar({
                       llmManager.currentLlm.provider,
                       currentModelName ?? llmManager.currentLlm.modelName
                     )}
-                    renderTrigger={() => (
-                      <OpenButton icon={SvgRefreshCw} foldable>
-                        {currentModelName ?? llmManager.currentLlm.modelName}
-                      </OpenButton>
-                    )}
+                    renderTrigger={() => {
+                      const rawName =
+                        currentModelName ?? llmManager!.currentLlm.modelName;
+                      const mc = llmManager!.llmProviders
+                        ?.flatMap((p) => p.model_configurations)
+                        .find((m) => m.name === rawName);
+                      const displayName =
+                        mc?.custom_display_name ?? mc?.display_name ?? rawName;
+                      return (
+                        <OpenButton icon={SvgRefreshCw} foldable>
+                          {displayName}
+                        </OpenButton>
+                      );
+                    }}
                     onChange={(opt) => {
                       const regenerator = onRegenerate({
                         messageId,

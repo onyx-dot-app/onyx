@@ -11,7 +11,7 @@ import {
 import { SvgCheck, SvgChevronRight } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import { Interactive } from "@opal/core";
+import { Disabled, Interactive } from "@opal/core";
 import {
   LLMOption,
   buildLlmOptions,
@@ -119,24 +119,28 @@ export default function ModelSelectorContent({
       capabilities.length > 0 ? capabilities.join(", ") : undefined;
 
     return (
-      <LineItemButton
+      <Disabled
         key={`${option.provider}:${option.modelName}`}
-        selectVariant="select-heavy"
-        state={selected ? "selected" : "empty"}
-        icon={(props) => <div {...(props as any)} />}
-        title={option.displayName}
-        description={description}
-        onClick={() => !disabled && onSelect(option)}
-        rightChildren={
-          selected ? (
-            <div className="flex h-5 items-center">
-              <SvgCheck className="text-action-link-05" size={16} />
-            </div>
-          ) : null
-        }
-        sizePreset="main-ui"
-        rounding="sm"
-      />
+        disabled={disabled}
+      >
+        <LineItemButton
+          selectVariant="select-heavy"
+          state={selected ? "selected" : "empty"}
+          icon={(props) => <div {...(props as any)} />}
+          title={option.displayName}
+          description={description}
+          onClick={() => onSelect(option)}
+          rightChildren={
+            selected ? (
+              <div className="flex h-5 items-center">
+                <SvgCheck className="text-action-link-05" size={16} />
+              </div>
+            ) : null
+          }
+          sizePreset="main-ui"
+          rounding="sm"
+        />
+      </Disabled>
     );
   };
 

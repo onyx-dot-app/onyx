@@ -54,7 +54,8 @@ export function buildLlmOptions(
     llmProvider.model_configurations
       .filter((mc) => mc.is_visible || mc.name === currentModelName)
       .forEach((mc) => {
-        const key = `${llmProvider.provider}:${mc.name}`;
+        const key =
+          mc.id != null ? `id:${mc.id}` : `${llmProvider.provider}:${mc.name}`;
         if (seenKeys.has(key)) return;
         seenKeys.add(key);
 

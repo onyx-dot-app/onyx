@@ -1564,8 +1564,9 @@ export default function AgentEditorPage({
                                 >
                                   <ModelSelector
                                     value={
-                                      (values as any)
-                                        .default_model_configuration_id ?? null
+                                      (values.default_model_configuration_id as
+                                        | number
+                                        | null) ?? null
                                     }
                                     onChange={(opt) =>
                                       setFieldValue(
