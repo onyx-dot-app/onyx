@@ -43,12 +43,7 @@ import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
 import type { Project } from "@/app/app/projects/projectsService";
-import {
-  SidebarLayouts,
-  useSidebarFolded,
-  useSidebarState,
-  RootLayout,
-} from "@opal/layouts";
+import { SidebarLayouts, useSidebarFolded } from "@opal/layouts";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -753,25 +748,10 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
   );
 });
 
-function AppSidebarShell() {
-  const contentFolded = useSidebarFolded();
-  const { setFolded } = useSidebarState();
-  const toggle = useCallback(() => setFolded((prev) => !prev), [setFolded]);
-
+export default function AppSidebar() {
   return (
-    <SidebarWrapper folded={contentFolded} onFoldClick={toggle}>
+    <SidebarWrapper foldable>
       <MemoizedAppSidebarInner />
     </SidebarWrapper>
-  );
-}
-
-export default function AppSidebar() {
-  const { folded, setFolded } = useSidebarState();
-  const toggle = useCallback(() => setFolded((prev) => !prev), [setFolded]);
-
-  return (
-    <RootLayout.Sidebar folded={folded} onFoldToggle={toggle}>
-      <AppSidebarShell />
-    </RootLayout.Sidebar>
   );
 }

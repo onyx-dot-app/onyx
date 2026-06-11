@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import SidebarSection from "@/sections/sidebar/SidebarSection";
 import {
   SidebarLayouts,
   useSidebarFolded,
@@ -26,7 +25,7 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import { markdown } from "@opal/utils";
 
 const SECTIONS = {
@@ -266,37 +265,27 @@ function AdminSidebarInner() {
       </SidebarLayouts.Header>
 
       <SidebarLayouts.Body scrollKey="admin-sidebar">
-        {enabledGroups.map((group, groupIndex) => {
-          const tabs = group.items.map(({ link, icon, name }) => (
-            <SidebarTab
-              key={link}
-              icon={icon}
-              href={link}
-              selected={pathname.startsWith(link)}
-            >
-              {name}
-            </SidebarTab>
-          ));
-
-          if (!group.section) {
-            return <div key={groupIndex}>{tabs}</div>;
-          }
-
-          return (
-            <SidebarSection key={groupIndex} title={group.section}>
-              {tabs}
-            </SidebarSection>
-          );
-        })}
+        {enabledGroups.map((group, groupIndex) => (
+          <React.Fragment key={groupIndex}>
+            {group.section && <SidebarLayouts.Section title={group.section} />}
+            {group.items.map(({ link, icon, name }) => (
+              <SidebarTab
+                key={link}
+                icon={icon}
+                href={link}
+                selected={pathname.startsWith(link)}
+              >
+                {name}
+              </SidebarTab>
+            ))}
+          </React.Fragment>
+        ))}
 
         {disabledGroups.length > 0 && <Divider paddingPerpendicular="fit" />}
 
         {disabledGroups.map((group, groupIndex) => (
-          <SidebarSection
-            key={`disabled-${groupIndex}`}
-            title={group.section}
-            disabled
-          >
+          <React.Fragment key={`disabled-${groupIndex}`}>
+            <SidebarLayouts.Section title={group.section} disabled />
             {group.items.map(({ link, icon, name, requiredTier }) => (
               <SidebarTab
                 key={link}
@@ -311,7 +300,7 @@ function AdminSidebarInner() {
                 {name}
               </SidebarTab>
             ))}
-          </SidebarSection>
+          </React.Fragment>
         ))}
       </SidebarLayouts.Body>
 
@@ -337,16 +326,9 @@ function AdminSidebarInner() {
 }
 
 export default function AdminSidebar() {
-  const settings = useSettingsContext();
-  const showLogoWhenFolded =
-    settings.enterpriseSettings?.logo_display_style !== "name_only";
-
   return (
-    <SidebarLayouts.Root
-      logo={renderAppLogo}
-      showLogoWhenFolded={showLogoWhenFolded}
-    >
+    <SidebarWrapper foldable>
       <AdminSidebarInner />
-    </SidebarLayouts.Root>
+    </SidebarWrapper>
   );
 }

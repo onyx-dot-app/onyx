@@ -3,6 +3,7 @@
 import "@opal/layouts/sidebar/styles.css";
 import {
   createContext,
+  useCallback,
   useContext,
   useState,
   useEffect,
@@ -13,9 +14,10 @@ import {
   type SetStateAction,
 } from "react";
 import { usePathname } from "next/navigation";
-import { cn } from "@opal/utils";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
+import { Disabled, Hoverable } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
+import type { RichStr } from "@opal/types";
 import {
   RootLayoutFoldedContext,
   useSidebarFolded,
@@ -117,33 +119,118 @@ export function useSidebarState(): SidebarStateContextType {
 }
 
 // ---------------------------------------------------------------------------
-// SidebarWrapper — structural chrome shared by Root and direct callers
+// Root
 // ---------------------------------------------------------------------------
 
-export interface SidebarWrapperProps {
-  folded?: boolean;
-  onFoldClick?: () => void;
+const SidebarFoldableContext = createContext(false);
+
+interface SidebarRootProps {
   /**
-   * Render function for the logo/brand area. Receives the current fold state
-   * so the logo can adapt its appearance (e.g. icon-only vs full wordmark).
+   * Whether the sidebar supports folding on desktop.
+   * When `false` (the default), the sidebar is always expanded on desktop and
+   * the fold button is hidden. Mobile overlay behavior is always enabled
+   * regardless of this prop.
    */
+  foldable?: boolean;
+  children: React.ReactNode;
+}
+
+function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
+  const { isMobile, isMediumScreen } = useScreenSize();
+  const { folded, setFolded } = useSidebarState();
+
+  const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
+
+  const contentFolded = !isMobile && foldable ? folded : false;
+  const foldedAttr = String(folded);
+  const inner = <div className="opal-sidebar-root__inner">{children}</div>;
+
+  if (isMobile) {
+    return (
+      <SidebarFoldableContext.Provider value={foldable}>
+        <RootLayoutFoldedContext.Provider value={false}>
+          <div
+            className="opal-sidebar-root__overlay"
+            data-variant="mobile"
+            data-folded={foldedAttr}
+          >
+            {inner}
+          </div>
+          <div
+            className="opal-sidebar-root__backdrop"
+            data-variant="mobile"
+            data-folded={foldedAttr}
+            onClick={closeSidebar}
+          />
+        </RootLayoutFoldedContext.Provider>
+      </SidebarFoldableContext.Provider>
+    );
+  }
+
+  if (isMediumScreen) {
+    return (
+      <SidebarFoldableContext.Provider value={foldable}>
+        <RootLayoutFoldedContext.Provider value={folded}>
+          <div className="opal-sidebar-root__spacer" />
+          <div
+            className="opal-sidebar-root__overlay"
+            data-variant="medium"
+            data-folded={foldedAttr}
+          >
+            {inner}
+          </div>
+          <div
+            className="opal-sidebar-root__backdrop"
+            data-variant="medium"
+            data-folded={foldedAttr}
+            onClick={closeSidebar}
+          />
+        </RootLayoutFoldedContext.Provider>
+      </SidebarFoldableContext.Provider>
+    );
+  }
+
+  return (
+    <SidebarFoldableContext.Provider value={foldable}>
+      <RootLayoutFoldedContext.Provider value={contentFolded}>
+        <div
+          className="opal-sidebar-root__column"
+          data-folded={foldable ? foldedAttr : undefined}
+        >
+          {inner}
+        </div>
+      </RootLayoutFoldedContext.Provider>
+    </SidebarFoldableContext.Provider>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Header — topbar (logo + fold button) with optional pinned content below
+// ---------------------------------------------------------------------------
+
+interface SidebarHeaderProps {
   logo?: (folded: boolean | undefined) => React.ReactNode;
   /**
    * When `true` (default), the logo is shown in the folded state with a
-   * hover-to-reveal close button. When `false`, only the close button is
-   * shown when folded.
+   * hover-to-reveal fold button. When `false`, only the fold button is shown
+   * when folded.
    */
   showLogoWhenFolded?: boolean;
   children?: React.ReactNode;
 }
 
-export function SidebarWrapper({
-  folded,
-  onFoldClick,
+function SidebarHeader({
   logo,
   showLogoWhenFolded = true,
   children,
-}: SidebarWrapperProps) {
+}: SidebarHeaderProps) {
+  const foldable = useContext(SidebarFoldableContext);
+  const { folded, setFolded } = useSidebarState();
+  const toggleFolded = useCallback(
+    () => setFolded((prev) => !prev),
+    [setFolded]
+  );
+
   const closeButton = useMemo(
     () => (
       <div className="px-1">
@@ -153,28 +240,27 @@ export function SidebarWrapper({
           tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
           tooltipSide={folded ? "right" : "bottom"}
           size="md"
-          onClick={onFoldClick}
+          onClick={toggleFolded}
         />
       </div>
     ),
-    [folded, onFoldClick]
+    [folded, toggleFolded]
   );
 
-  const logoEl = logo ? logo(folded) : null;
-  const foldedAttr = folded === undefined ? undefined : String(folded);
+  if (!logo && !children) return null;
+
+  const logoEl = logo ? logo(foldable ? folded : undefined) : null;
 
   return (
-    <div className="opal-sidebar-wrapper">
-      <div className="opal-sidebar-wrapper__inner" data-folded={foldedAttr}>
-        <div className="opal-sidebar-wrapper__topbar">
-          {folded === undefined ? (
+    <div className="opal-sidebar-header">
+      {logo && (
+        <div className="opal-sidebar-header__topbar">
+          {!foldable ? (
             logoEl
           ) : folded && showLogoWhenFolded && logoEl ? (
             <>
-              <div className="opal-sidebar-wrapper__logo-default">{logoEl}</div>
-              <div className="opal-sidebar-wrapper__logo-hover">
-                {closeButton}
-              </div>
+              <div className="opal-sidebar-root__logo-default">{logoEl}</div>
+              <div className="opal-sidebar-root__logo-hover">{closeButton}</div>
             </>
           ) : folded ? (
             closeButton
@@ -185,129 +271,12 @@ export function SidebarWrapper({
             </>
           )}
         </div>
-        {children}
-      </div>
+      )}
+      {children && (
+        <div className="opal-sidebar-header__content">{children}</div>
+      )}
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Root
-// ---------------------------------------------------------------------------
-
-interface SidebarRootProps {
-  /**
-   * Whether the sidebar supports folding on desktop.
-   * When `false` (the default), the sidebar is always expanded on desktop and
-   * the fold button is hidden. Mobile overlay behavior is always enabled
-   * regardless of this prop.
-   */
-  foldable?: boolean;
-  logo?: (folded: boolean | undefined) => React.ReactNode;
-  showLogoWhenFolded?: boolean;
-  children: React.ReactNode;
-}
-
-function SidebarRoot({
-  foldable = false,
-  logo,
-  showLogoWhenFolded = true,
-  children,
-}: SidebarRootProps) {
-  const { isMobile, isMediumScreen } = useScreenSize();
-  const { folded, setFolded } = useSidebarState();
-
-  function closeSidebar() {
-    setFolded(true);
-  }
-  function toggleSidebar() {
-    setFolded((prev) => !prev);
-  }
-
-  const contentFolded = !isMobile && foldable ? folded : false;
-  const foldedAttr = String(folded);
-
-  const inner = <div className="opal-sidebar-root__inner">{children}</div>;
-
-  if (isMobile) {
-    return (
-      <RootLayoutFoldedContext.Provider value={false}>
-        <div
-          className="opal-sidebar-root__overlay"
-          data-variant="mobile"
-          data-folded={foldedAttr}
-        >
-          <SidebarWrapper
-            folded={false}
-            onFoldClick={closeSidebar}
-            logo={logo}
-            showLogoWhenFolded={showLogoWhenFolded}
-          >
-            {inner}
-          </SidebarWrapper>
-        </div>
-
-        <div
-          className="opal-sidebar-root__backdrop"
-          data-variant="mobile"
-          data-folded={foldedAttr}
-          onClick={closeSidebar}
-        />
-      </RootLayoutFoldedContext.Provider>
-    );
-  }
-
-  if (isMediumScreen) {
-    return (
-      <RootLayoutFoldedContext.Provider value={folded}>
-        <div className="opal-sidebar-root__spacer" />
-
-        <div className="opal-sidebar-root__overlay" data-variant="medium">
-          <SidebarWrapper
-            folded={folded}
-            onFoldClick={toggleSidebar}
-            logo={logo}
-            showLogoWhenFolded={showLogoWhenFolded}
-          >
-            {inner}
-          </SidebarWrapper>
-        </div>
-
-        <div
-          className="opal-sidebar-root__backdrop"
-          data-variant="medium"
-          data-folded={foldedAttr}
-          onClick={closeSidebar}
-        />
-      </RootLayoutFoldedContext.Provider>
-    );
-  }
-
-  return (
-    <RootLayoutFoldedContext.Provider value={contentFolded}>
-      <SidebarWrapper
-        folded={foldable ? folded : undefined}
-        onFoldClick={foldable ? toggleSidebar : undefined}
-        logo={logo}
-        showLogoWhenFolded={showLogoWhenFolded}
-      >
-        {inner}
-      </SidebarWrapper>
-    </RootLayoutFoldedContext.Provider>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Header — pinned content above the scroll area
-// ---------------------------------------------------------------------------
-
-interface SidebarHeaderProps {
-  children?: React.ReactNode;
-}
-
-function SidebarHeader({ children }: SidebarHeaderProps) {
-  if (!children) return null;
-  return <div className="opal-sidebar-header">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,6 +352,37 @@ function SidebarFooter({ children }: SidebarFooterProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Section — titled group within the scrollable body
+// ---------------------------------------------------------------------------
+
+interface SidebarSectionProps {
+  title?: string | RichStr;
+  /** Optional action shown on hover, e.g. a "+" button. */
+  action?: React.ReactNode;
+  /** When true, dims the section header to indicate it is unavailable. */
+  disabled?: boolean;
+}
+
+function SidebarSection({ title, action, disabled }: SidebarSectionProps) {
+  return (
+    <Hoverable.Root group="sidebar-section">
+      <Disabled disabled={disabled}>
+        <div className="opal-sidebar-section__header">
+          <div className="opal-sidebar-section__title">
+            <Text font="secondary-body" color="text-02">
+              {title}
+            </Text>
+          </div>
+          {action && (
+            <Hoverable.Item group="sidebar-section">{action}</Hoverable.Item>
+          )}
+        </div>
+      </Disabled>
+    </Hoverable.Root>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -392,4 +392,6 @@ export {
   SidebarHeader as Header,
   SidebarBody as Body,
   SidebarFooter as Footer,
+  SidebarSection as Section,
 };
+export type { SidebarRootProps };

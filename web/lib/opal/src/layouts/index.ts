@@ -65,6 +65,5 @@ export type { RightPanelSlotSetter } from "@opal/layouts/root/components";
 export * as SidebarLayouts from "@opal/layouts/sidebar/components";
 export {
   useSidebarState,
-  SidebarWrapper,
-  type SidebarWrapperProps,
+  type SidebarRootProps,
 } from "@opal/layouts/sidebar/components";

@@ -1,3 +1,5 @@
+"use client";
+
 import { ChatSession } from "@/app/app/interfaces";
 import { LOCAL_STORAGE_KEYS, DEFAULT_PERSONA_ID } from "./constants";
 import { moveChatSession } from "@/app/app/projects/projectsService";
