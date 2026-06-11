@@ -15,9 +15,6 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_multi_provider_opencode_config,
 )
-from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_opencode_config,
-)
 
 
 def _cfg(
@@ -159,25 +156,6 @@ def test_api_base_propagates() -> None:
     )
 
 
-def test_single_provider_wrapper_back_compat() -> None:
-    """
-    ``build_opencode_config`` wraps the multi-provider helper for the docker
-    path. Verify the wrapped output matches what a direct multi-provider call
-    with one entry would produce.
-    """
-    direct = build_opencode_config(
-        provider="anthropic",
-        model_name="claude-opus-4-7",
-        api_key="sk-test",
-    )
-    wrapped = build_multi_provider_opencode_config(
-        providers=[_cfg("anthropic", "claude-opus-4-7")],
-        default_provider="anthropic",
-        default_model="claude-opus-4-7",
-    )
-    assert direct == wrapped
-
-
 def test_permission_block_includes_external_directory_deny_by_default() -> None:
     """
     K8s + Docker run in container, so external_directory must default to deny.
@@ -252,28 +230,3 @@ def test_plugins_are_emitted_when_provided() -> None:
         plugins=["/workspace/opencode-plugins/session-proxy-tag.ts"],
     )
     assert config["plugin"] == ["/workspace/opencode-plugins/session-proxy-tag.ts"]
-
-
-def test_single_provider_wrapper_forwards_plugins() -> None:
-    """
-    The docker backend uses the single-provider builder and needs the same
-    session-tagging plugin the K8s multi-provider path registers. Without
-    forwarding, the proxy can't route approval cards to the originating session
-    for docker sandboxes.
-    """
-    config = build_opencode_config(
-        provider="anthropic",
-        model_name="claude-opus-4-7",
-        api_key="sk-test",
-        plugins=["/workspace/opencode-plugins/session-proxy-tag.ts"],
-    )
-    assert config["plugin"] == ["/workspace/opencode-plugins/session-proxy-tag.ts"]
-
-
-def test_single_provider_wrapper_omits_plugins_by_default() -> None:
-    config = build_opencode_config(
-        provider="anthropic",
-        model_name="claude-opus-4-7",
-        api_key="sk-test",
-    )
-    assert "plugin" not in config

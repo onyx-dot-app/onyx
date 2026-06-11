@@ -22,7 +22,6 @@ from onyx.db.models import BuildSession
 from onyx.server.features.build.db.action_approval import get_action_approval
 from onyx.server.features.build.db.action_approval import get_action_approval_for_user
 from onyx.server.features.build.db.action_approval import insert_action_approval
-from onyx.server.features.build.db.action_approval import list_session_action_approvals
 from onyx.server.features.build.db.action_approval import (
     list_session_pending_action_approvals,
 )
@@ -225,77 +224,3 @@ def test_list_session_pending_action_approvals_filters_by_created_after(
     returned_ids = {r.approval_id for r in rows}
     assert new_row.approval_id in returned_ids
     assert old_row.approval_id not in returned_ids
-
-
-def test_list_session_action_approvals_filters_by_decision(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    build_session_with_user: Callable[..., BuildSession],
-) -> None:
-    user = make_user(db_session)
-    bs = build_session_with_user(user=user)
-
-    approved = _seed_pending(db_session, bs.id, payload={"cmd": "a"})
-    rejected = _seed_pending(db_session, bs.id, payload={"cmd": "b"})
-    pending = _seed_pending(db_session, bs.id, payload={"cmd": "c"})
-
-    try_record_decision(
-        db_session,
-        approval_id=approved.approval_id,
-        decision=ApprovalDecision.APPROVED,
-    )
-    try_record_decision(
-        db_session,
-        approval_id=rejected.approval_id,
-        decision=ApprovalDecision.REJECTED,
-    )
-    db_session.commit()
-
-    rows = list_session_action_approvals(
-        db_session, bs.id, decision=ApprovalDecision.REJECTED
-    )
-    returned_ids = {r.approval_id for r in rows}
-    assert returned_ids == {rejected.approval_id}
-    assert approved.approval_id not in returned_ids
-    assert pending.approval_id not in returned_ids
-
-
-def test_list_session_action_approvals_since_until_inclusive(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    build_session_with_user: Callable[..., BuildSession],
-) -> None:
-    """``since``/``until`` form a fully-inclusive interval (>= since, <= until)."""
-    user = make_user(db_session)
-    bs = build_session_with_user(user=user)
-
-    base = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
-    early_ts = base - dt.timedelta(hours=2)
-    middle_ts = base - dt.timedelta(hours=1)
-    late_ts = base
-
-    early = _seed_pending(db_session, bs.id, payload={"cmd": "early"})
-    middle = _seed_pending(db_session, bs.id, payload={"cmd": "middle"})
-    late = _seed_pending(db_session, bs.id, payload={"cmd": "late"})
-    for row, ts in ((early, early_ts), (middle, middle_ts), (late, late_ts)):
-        _set_created_at(db_session, ActionApproval, row.approval_id, ts)
-
-    # Window covering only the middle row's exact timestamp.
-    rows = list_session_action_approvals(
-        db_session, bs.id, since=middle_ts, until=middle_ts
-    )
-    assert {r.approval_id for r in rows} == {middle.approval_id}
-
-    # since=middle_ts (inclusive), no upper bound → middle + late.
-    rows_since = list_session_action_approvals(db_session, bs.id, since=middle_ts)
-    assert {r.approval_id for r in rows_since} == {
-        middle.approval_id,
-        late.approval_id,
-    }
-
-    # until=middle_ts (inclusive), no lower bound → early + middle.
-    rows_until = list_session_action_approvals(db_session, bs.id, until=middle_ts)
-    assert {r.approval_id for r in rows_until} == {
-        early.approval_id,
-        middle.approval_id,
-    }

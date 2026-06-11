@@ -11,7 +11,6 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
 from fastapi import Form
-from fastapi import Query
 from fastapi import UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -37,7 +36,6 @@ from onyx.server.features.build.db.user_library import fetch_user_file_for_user
 from onyx.server.features.build.db.user_library import get_or_create_craft_connector
 from onyx.server.features.build.db.user_library import get_user_storage_bytes
 from onyx.server.features.build.db.user_library import list_user_files
-from onyx.server.features.build.db.user_library import set_sync_disabled
 from onyx.server.features.build.db.user_library import store_user_file
 from onyx.server.features.build.sandbox.user_library import (
     sync_user_library_to_active_sandboxes,
@@ -71,11 +69,6 @@ class UploadResponse(BaseModel):
     entries: list[LibraryEntryResponse]
     total_uploaded: int
     total_size_bytes: int
-
-
-class ToggleSyncResponse(BaseModel):
-    success: bool
-    sync_enabled: bool
 
 
 class DeleteFileResponse(BaseModel):
@@ -484,26 +477,6 @@ def create_directory(
         sync_enabled=True,
         created_at=datetime.now(timezone.utc),
     )
-
-
-@router.patch("/files/{document_id}/toggle")
-def toggle_file_sync(
-    document_id: str,
-    enabled: bool = Query(...),
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> ToggleSyncResponse:
-    """Enable/disable syncing a file to sandboxes.
-
-    If the item is a directory, all children are also toggled.
-    """
-    doc = fetch_user_file_for_user(db_session, document_id, user.id)
-    set_sync_disabled(db_session, user.id, doc, sync_disabled=not enabled)
-    db_session.commit()
-
-    sync_user_library_to_active_sandboxes(user.id, db_session)
-
-    return ToggleSyncResponse(success=True, sync_enabled=enabled)
 
 
 @router.delete("/files/{document_id}")

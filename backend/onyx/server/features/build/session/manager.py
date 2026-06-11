@@ -53,7 +53,6 @@ from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
@@ -496,32 +495,6 @@ class SessionManager:
             headless=headless,
         )
 
-    def delete_empty_session(self, user_id: UUID) -> bool:
-        """Delete user's pre-provisioned (empty) session if one exists.
-
-        A session is considered "empty" if it has no messages.
-        This is called when user changes LLM selection
-        so the session can be re-created with the new LLM configuration.
-
-        Args:
-            user_id: The user ID
-
-        Returns:
-            True if a session was deleted, False if none found
-        """
-        empty_session = get_empty_session_for_user(user_id, self._db_session)
-
-        if not empty_session:
-            logger.info("No empty session found for user %s", user_id)
-            return False
-
-        deleted = self.delete_session(empty_session.id, user_id)
-        if deleted:
-            logger.info(
-                "Deleted empty session %s for user %s", empty_session.id, user_id
-            )
-        return deleted
-
     def get_session(
         self,
         session_id: UUID,
@@ -673,7 +646,6 @@ class SessionManager:
                     self._sandbox_manager.cleanup_session_workspace(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
-                        nextjs_port=session.nextjs_port,
                     )
                     logger.info(
                         "Cleaned up session workspace %s in sandbox %s",
@@ -1205,15 +1177,6 @@ class SessionManager:
             # Quick health check: can the API server reach the NextJS dev server?
             ready = self._check_nextjs_ready(sandbox.id, session.nextjs_port)
 
-            # If not ready, ask the sandbox manager to ensure Next.js is running.
-            # For the local backend this triggers a background restart so that the
-            # frontend poll loop eventually sees ready=True without the user having
-            # to manually recreate the session.
-            if not ready:
-                self._sandbox_manager.ensure_nextjs_running(
-                    sandbox.id, session_id, session.nextjs_port
-                )
-
         return {
             "has_webapp": session.nextjs_port is not None,
             "webapp_url": webapp_url,
@@ -1501,74 +1464,3 @@ class SessionManager:
             update_sandbox_heartbeat(self._db_session, sandbox.id)
 
         return deleted
-
-    # =========================================================================
-    # Sandbox Management Operations
-    # =========================================================================
-
-    def terminate_user_sandbox(self, user_id: UUID) -> bool:
-        """Terminate the user's sandbox and clean up all session workspaces.
-
-        Used for explicit "start fresh" functionality.
-
-        Args:
-            user_id: The user ID
-
-        Returns:
-            True if sandbox was terminated, False if user had no sandbox
-        """
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox is None:
-            return False
-
-        tenant_id = get_current_tenant_id()
-        history_snapshot_manager = (
-            SnapshotManager(get_default_file_store())
-            if self._sandbox_manager.supports_opencode_history_persistence
-            else None
-        )
-        if sandbox.status == SandboxStatus.TERMINATED:
-            logger.info("Sandbox %s already terminated", sandbox.id)
-            if history_snapshot_manager is not None:
-                try:
-                    history_snapshot_manager.delete_opencode_history_snapshot(
-                        tenant_id, str(sandbox.id)
-                    )
-                except Exception as e:
-                    logger.warning(
-                        "Failed to delete opencode history for already-terminated "
-                        "sandbox %s; ignoring: %s",
-                        sandbox.id,
-                        e,
-                    )
-            return True
-
-        if history_snapshot_manager is not None:
-            try:
-                history_snapshot_manager.delete_opencode_history_snapshot(
-                    tenant_id, str(sandbox.id)
-                )
-            except Exception as e:
-                logger.error(
-                    "Failed to delete opencode history for sandbox %s: %s",
-                    sandbox.id,
-                    e,
-                )
-                raise RuntimeError(
-                    f"Failed to delete opencode history snapshot: {e}"
-                ) from e
-
-        try:
-            # Terminate the sandbox (this cleans up all resources)
-            self._sandbox_manager.terminate(sandbox.id)
-            logger.info("Terminated sandbox %s for user %s", sandbox.id, user_id)
-
-            update_sandbox_status__no_commit(
-                self._db_session, sandbox.id, SandboxStatus.TERMINATED
-            )
-            self._db_session.flush()
-        except Exception as e:
-            logger.error("Failed to terminate sandbox %s: %s", sandbox.id, e)
-            raise RuntimeError(f"Failed to terminate sandbox: {e}") from e
-
-        return True

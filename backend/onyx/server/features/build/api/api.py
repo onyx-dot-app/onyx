@@ -36,8 +36,6 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.enums import SharingScope
 from onyx.db.models import User
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.api.debug_api import router as debug_router
 from onyx.server.features.build.api.external_apps_api import (
     router as external_apps_router,
@@ -58,7 +56,6 @@ from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.scheduled_tasks.api import (
     router as scheduled_tasks_router,
 )
-from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.utils import is_onyx_craft_enabled
 from onyx.utils.logger import setup_logger
 
@@ -477,38 +474,3 @@ async def websocket_webapp_hmr(
         raise WebSocketException(code=1008)
 
     await _proxy_webapp_hmr_websocket(session_id, websocket)
-
-
-# =============================================================================
-# Sandbox Management Endpoints
-# =============================================================================
-
-
-@router.post("/sandbox/reset", response_model=None)
-def reset_sandbox(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> Response:
-    """Reset the user's sandbox by terminating it and cleaning up all sessions.
-
-    This endpoint terminates the user's shared sandbox container/pod and
-    cleans up all session workspaces. Useful for "start fresh" functionality.
-
-    After calling this endpoint, the next session creation will provision a
-    new sandbox.
-    """
-    session_manager = SessionManager(db_session)
-
-    try:
-        success = session_manager.terminate_user_sandbox(user.id)
-        if not success:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "No sandbox found for user")
-        db_session.commit()
-    except OnyxError:
-        raise
-    except Exception as e:
-        db_session.rollback()
-        logger.error("Failed to reset sandbox for user %s: %s", user.id, e)
-        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to reset sandbox: {e}")
-
-    return Response(status_code=204)

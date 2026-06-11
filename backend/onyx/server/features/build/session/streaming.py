@@ -31,7 +31,6 @@ from onyx.configs.constants import MessageType
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.sandbox_proxy import approval_cache
-from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.api.packets import ApprovalRequestedPacket
 from onyx.server.features.build.api.packets import BuildPacket
 from onyx.server.features.build.api.packets import ErrorPacket
@@ -671,7 +670,6 @@ def stream_subagent_turn(
     or model selection (the child session already exists with its own
     default model).
     """
-    packet_logger = get_packet_logger()
     events_emitted = 0
     state: BuildStreamingState | None = None
     prompt_slot_cm: contextlib.AbstractContextManager[bool] | None = None
@@ -793,7 +791,6 @@ def stream_subagent_turn(
         return
     except Exception as e:
         error_packet = ErrorPacket(message=str(e))
-        packet_logger.log("error", error_packet.model_dump())
         logger.exception("Error in subagent message streaming")
         yield _format_packet_event(error_packet)
     finally:

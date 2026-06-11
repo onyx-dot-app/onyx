@@ -107,13 +107,6 @@ def _download_snapshot(storage_path: str, dest: Path) -> None:
         file_io.close()
 
 
-def _delete_snapshot(storage_path: str) -> None:
-    try:
-        get_default_file_store().delete_file(storage_path, error_on_missing=False)
-    except Exception:
-        pass
-
-
 def _put_snapshot_bytes(storage_path: str, body: bytes) -> None:
     """Upload arbitrary bytes to FileStore (used to forge corrupt
     or traversal-laden tarballs that real callers can't produce)."""
@@ -263,7 +256,6 @@ def test_restore_from_snapshot_recreates_workspace(
         sandbox_id=sandbox_id,
         session_id=session_id,
         snapshot_storage_path=result.storage_path,
-        tenant_id=TEST_TENANT_ID,
         nextjs_port=None,
         llm_config=default_llm_config(),
         skills_section="No skills available.",
@@ -321,7 +313,6 @@ def test_restore_re_pushes_skills(
         sandbox_id=sandbox_id,
         session_id=session_id,
         snapshot_storage_path=result.storage_path,
-        tenant_id=TEST_TENANT_ID,
         nextjs_port=None,
         llm_config=default_llm_config(),
         skills_section="No skills available.",
@@ -487,7 +478,6 @@ def test_restore_uses_data_filter_to_block_traversal(
             sandbox_id=sandbox_id,
             session_id=session_id,
             snapshot_storage_path=storage_path,
-            tenant_id=TEST_TENANT_ID,
             nextjs_port=None,
             llm_config=default_llm_config(),
             skills_section="No skills available.",
@@ -556,7 +546,6 @@ def test_snapshot_corruption_detected_on_restore(
             sandbox_id=sandbox_id,
             session_id=session_id,
             snapshot_storage_path=storage_path,
-            tenant_id=TEST_TENANT_ID,
             nextjs_port=None,
             llm_config=default_llm_config(),
             skills_section="No skills available.",
