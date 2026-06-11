@@ -30,8 +30,10 @@ from watchfiles import run_process
 # not imported by the worker, so editing them shouldn't trigger a restart.
 # Mirrors BUILTIN_SKILLS_PATH (onyx/skills/built_in.py); kept inline to avoid
 # importing onyx.db into the reloader supervisor just for a path.
-_SKILLS_BUNDLE_DIR = str(
-    Path(__file__).resolve().parents[1] / "onyx" / "skills" / "builtin"
+_BACKEND_DIR = Path(__file__).resolve().parents[1]
+_SKILLS_BUNDLE_DIR = str(_BACKEND_DIR / "onyx" / "skills" / "builtin")
+_SANDBOX_IMAGE_DIR = str(
+    _BACKEND_DIR / "onyx" / "server" / "features" / "build" / "sandbox" / "image"
 )
 
 
@@ -49,5 +51,7 @@ if __name__ == "__main__":
         *watch_paths,
         target=_run,
         args=(celery_argv,),
-        watch_filter=DefaultFilter(ignore_paths=[_SKILLS_BUNDLE_DIR]),
+        watch_filter=DefaultFilter(
+            ignore_paths=[_SKILLS_BUNDLE_DIR, _SANDBOX_IMAGE_DIR]
+        ),
     )
