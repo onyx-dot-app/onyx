@@ -11,7 +11,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { SvgPin, SvgX } from "@opal/icons";
+import { SvgX } from "@opal/icons";
 
 interface SortableItemProps {
   id: number;

@@ -1,0 +1,8 @@
+{{- if eq (include "onyx.craftKubernetesSandboxEnabled" .) "true" }}
+{{- if not (semverCompare ">=1.33.0-0" .Capabilities.KubeVersion.Version) }}
+{{- fail (printf "Onyx Craft with configMap.SANDBOX_BACKEND=kubernetes requires Kubernetes >= 1.33 because sandbox pods use native restartable init sidecar containers; target cluster reports %s. Use a newer Kubernetes cluster or set configMap.SANDBOX_BACKEND=docker for Docker sandbox deployments." .Capabilities.KubeVersion.Version) }}
+{{- end }}
+# Craft Kubernetes sandbox version check passed for {{ .Capabilities.KubeVersion.Version }}.
+{{- else }}
+# Craft Kubernetes sandbox version check skipped.
+{{- end }}

@@ -1,8 +1,9 @@
-"""Pod spec invariants for the two-container sandbox.
+"""Pod spec invariants for the Kubernetes sandbox pod.
 
-The pod has two containers — `sandbox` (agent) and `sidecar` (control plane) —
-sharing a single image with different entrypoints. The asymmetries between
-them carry the security model:
+The pod has one app container — `sandbox` (agent) — plus a native Kubernetes
+sidecar implemented as a restartable init container named `sidecar`. They
+share a single image with different entrypoints. The asymmetries between them
+carry the security model:
 
   - `sandbox` must not see the push public key or run the push daemon.
   - `sandbox` must not be able to mutate `/workspace/managed/`.
@@ -141,6 +142,14 @@ def _container(pod: client.V1Pod, name: str) -> client.V1Container:
     return next(c for c in pod.spec.containers if c.name == name)
 
 
+def _init_container(pod: client.V1Pod, name: str) -> client.V1Container:
+    return next(c for c in pod.spec.init_containers or [] if c.name == name)
+
+
+def _sidecar(pod: client.V1Pod) -> client.V1Container:
+    return _init_container(pod, "sidecar")
+
+
 def _mount(container: client.V1Container, name: str) -> client.V1VolumeMount:
     return next(m for m in container.volume_mounts if m.name == name)
 
@@ -150,17 +159,22 @@ def _mount(container: client.V1Container, name: str) -> client.V1VolumeMount:
 # ---------------------------------------------------------------------------
 
 
-def test_pod_has_sandbox_and_sidecar_with_distinct_entrypoints(
+def test_pod_has_sandbox_app_container_and_native_init_sidecar(
     pod: client.V1Pod,
 ) -> None:
     """Same image, different commands — the asymmetry that turns one image
     into two roles."""
-    by_name = {c.name: c for c in pod.spec.containers}
-    assert set(by_name) == {"sandbox", "sidecar"}
-    assert by_name["sandbox"].image == by_name["sidecar"].image
-    assert by_name["sandbox"].command != by_name["sidecar"].command
-    assert by_name["sandbox"].command == ["/workspace/entrypoint.sh"]
-    assert by_name["sidecar"].command == ["/workspace/sidecar-entrypoint.sh"]
+    app_by_name = {c.name: c for c in pod.spec.containers}
+    init_by_name = {c.name: c for c in pod.spec.init_containers or []}
+
+    assert set(app_by_name) == {"sandbox"}
+    assert list(init_by_name) == ["sandbox-init", "sidecar"]
+    assert app_by_name["sandbox"].image == init_by_name["sidecar"].image
+    assert app_by_name["sandbox"].command != init_by_name["sidecar"].command
+    assert app_by_name["sandbox"].command == ["/workspace/entrypoint.sh"]
+    assert init_by_name["sidecar"].command == ["/workspace/sidecar-entrypoint.sh"]
+    assert init_by_name["sidecar"].restart_policy == "Always"
+    assert pod.spec.restart_policy == "Never"
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +184,7 @@ def test_pod_has_sandbox_and_sidecar_with_distinct_entrypoints(
 
 def test_push_daemon_port_is_declared_on_sidecar_only(pod: client.V1Pod) -> None:
     sandbox_ports = {p.container_port for p in _container(pod, "sandbox").ports}
-    sidecar_ports = {p.container_port for p in _container(pod, "sidecar").ports}
+    sidecar_ports = {p.container_port for p in _sidecar(pod).ports}
     assert PUSH_DAEMON_PORT in sidecar_ports
     assert PUSH_DAEMON_PORT not in sandbox_ports
 
@@ -183,13 +197,13 @@ def test_push_public_key_is_in_sidecar_env_only(pod: client.V1Pod) -> None:
     but unnecessary surface.
     """
     sandbox_env = {e.name for e in _container(pod, "sandbox").env}
-    sidecar_env = {e.name for e in _container(pod, "sidecar").env}
+    sidecar_env = {e.name for e in _sidecar(pod).env}
     assert "ONYX_SANDBOX_PUSH_PUBLIC_KEY" in sidecar_env
     assert "ONYX_SANDBOX_PUSH_PUBLIC_KEY" not in sandbox_env
 
 
 def test_sidecar_health_probes_target_the_daemon_port(pod: client.V1Pod) -> None:
-    sidecar = _container(pod, "sidecar")
+    sidecar = _sidecar(pod)
     for probe in (sidecar.liveness_probe, sidecar.readiness_probe):
         assert probe is not None
         assert probe.http_get.path == "/health"
@@ -207,7 +221,7 @@ def test_managed_volume_is_writable_only_from_sidecar(pod: client.V1Pod) -> None
     after extraction — so it mounts the same volume read-only.
     """
     sandbox_mount = _mount(_container(pod, "sandbox"), "managed")
-    sidecar_mount = _mount(_container(pod, "sidecar"), "managed")
+    sidecar_mount = _mount(_sidecar(pod), "managed")
     assert sandbox_mount.read_only is True
     # K8s treats None and False equivalently for volume mounts.
     assert not sidecar_mount.read_only
@@ -225,8 +239,8 @@ def test_workspace_volume_is_shared_for_session_io(pod: client.V1Pod) -> None:
         "sandbox-ca-source",
         "sandbox-ca-bundle",
     }
-    for name in ("sandbox", "sidecar"):
-        mount = _mount(_container(pod, name), "workspace")
+    for container in (_container(pod, "sandbox"), _sidecar(pod)):
+        mount = _mount(container, "workspace")
         assert mount.mount_path == "/workspace/sessions"
         assert not mount.read_only
 
@@ -284,8 +298,12 @@ _PROXY_ENV_NAMES = {
 def test_proxy_env_is_set_on_sandbox_and_sidecar(pod: client.V1Pod) -> None:
     """Both containers' outbound traffic must be routed through the proxy —
     sandbox for the agent and sidecar for control-plane callbacks."""
-    for name in ("sandbox", "sidecar"):
-        env = {e.name for e in _container(pod, name).env}
+    containers = {
+        "sandbox": _container(pod, "sandbox"),
+        "sidecar": _sidecar(pod),
+    }
+    for name, container in containers.items():
+        env = {e.name for e in container.env}
         assert _PROXY_ENV_NAMES.issubset(env), (
             f"{name} container missing proxy env: {_PROXY_ENV_NAMES - env}"
         )
@@ -303,18 +321,36 @@ def test_snapshot_storage_credentials_are_not_in_pod_env(pod: client.V1Pod) -> N
         "S3_AWS_ACCESS_KEY_ID",
         "S3_AWS_SECRET_ACCESS_KEY",
     }
-    for name in ("sandbox", "sidecar"):
-        env = {e.name for e in _container(pod, name).env}
+    containers = {
+        "sandbox": _container(pod, "sandbox"),
+        "sidecar": _sidecar(pod),
+    }
+    for name, container in containers.items():
+        env = {e.name for e in container.env}
         assert env.isdisjoint(forbidden), (
             f"{name} leaked storage env: {env & forbidden}"
         )
 
 
-def test_proxy_init_container_present(pod: client.V1Pod) -> None:
+def test_init_containers_preserve_proxy_then_sidecar_order(pod: client.V1Pod) -> None:
     """The iptables-lockdown initContainer must run before any user code —
     it's what blocks direct egress that the HTTPS_PROXY env doesn't catch."""
     init_names = [c.name for c in (pod.spec.init_containers or [])]
-    assert init_names == ["sandbox-init"]
+    assert init_names == ["sandbox-init", "sidecar"]
+    assert _init_container(pod, "sandbox-init").restart_policy is None
+    assert _sidecar(pod).restart_policy == "Always"
+
+
+def test_sidecar_restart_policy_serializes_for_kubernetes_api(
+    pod: client.V1Pod,
+) -> None:
+    serialized = client.ApiClient().sanitize_for_serialization(pod)
+    init_containers = serialized["spec"]["initContainers"]
+    sidecar = next(c for c in init_containers if c["name"] == "sidecar")
+    sandbox_init = next(c for c in init_containers if c["name"] == "sandbox-init")
+
+    assert sidecar["restartPolicy"] == "Always"
+    assert "restartPolicy" not in sandbox_init
 
 
 def test_host_aliases_pin_proxy(pod: client.V1Pod) -> None:
@@ -329,8 +365,8 @@ def test_ca_bundle_mounted_read_only_on_both_containers(pod: client.V1Pod) -> No
     """The proxy terminates TLS with its own CA, so every container that
     makes HTTPS calls must mount the CA bundle. Read-only — the bundle is
     populated by the initContainer and must not be writable by the agent."""
-    for name in ("sandbox", "sidecar"):
-        mount = _mount(_container(pod, name), "sandbox-ca-bundle")
+    for container in (_container(pod, "sandbox"), _sidecar(pod)):
+        mount = _mount(container, "sandbox-ca-bundle")
         assert mount.read_only is True
         assert mount.mount_path == "/etc/ssl/sandbox"
 

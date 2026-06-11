@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/inputs/input-typein/styles.css";
+import "@opal/components/inputs/input-type-in/styles.css";
 import { useCallback } from "react";
 import { cn } from "@opal/utils";
 import { SvgSearch, SvgX } from "@opal/icons";

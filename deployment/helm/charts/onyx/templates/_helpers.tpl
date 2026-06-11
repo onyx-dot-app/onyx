@@ -220,6 +220,14 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- end }}
 
 {{/*
+"true" when Craft is enabled and configured to provision Kubernetes sandbox pods.
+*/}}
+{{- define "onyx.craftKubernetesSandboxEnabled" -}}
+{{- $sandboxBackend := toString ((index .Values.configMap "SANDBOX_BACKEND") | default "kubernetes") -}}
+{{- if and (eq (include "onyx.craftEnabled" .) "true") (eq $sandboxBackend "kubernetes") -}}true{{- end -}}
+{{- end }}
+
+{{/*
 "true" when custom CA certificates are configured, empty otherwise.
 */}}
 {{- define "onyx.customCACerts.enabled" -}}

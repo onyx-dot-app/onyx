@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
+import { useVideoBackgroundToggleClick } from "@/app/craft/components/video-background/useVideoBackgroundToggleClick";
 import { Text } from "@opal/components";
 import Logo from "@/refresh-components/Logo";
 import CraftInputBar, {
@@ -37,6 +38,7 @@ export default function BuildWelcome({
   const [selectedModel, setSelectedModel] = useState<BuildLlmSelection | null>(
     null
   );
+  const handleWordmarkClick = useVideoBackgroundToggleClick();
 
   const handlePromptClick = (promptText: string) => {
     inputBarRef.current?.setMessage(promptText);
@@ -45,14 +47,13 @@ export default function BuildWelcome({
   return (
     <div className="h-full flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-(--app-page-main-content-width) flex flex-col">
-        {/* Branding on the left, model picker on the right — mirrors AppPage. */}
         <div className="flex flex-row items-center justify-between gap-4 pb-6">
-          {/* Typed Onyx wordmark + "Craft" (heading-h2, 24/36 — matches the
-              main app's chat welcome). The wordmark's letters sit in the
-              upper-middle of its box (baseline ~79% down), so we baseline-align
-              and nudge the wordmark down (~0.21 × size) to share Craft's
-              baseline. */}
-          <div className="flex flex-row items-baseline gap-2">
+          {/* The wordmark's baseline sits ~79% down its box, so nudge it
+              down (~0.21 × size) to share Craft's baseline. */}
+          <div
+            className="flex flex-row items-baseline gap-2 select-none"
+            onClick={handleWordmarkClick}
+          >
             <Logo onyxBranded size={28} className="translate-y-[6px]" />
             <Text font="heading-h2" color="text-05">
               Craft
