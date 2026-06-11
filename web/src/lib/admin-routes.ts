@@ -236,8 +236,8 @@ export const ADMIN_ROUTES = {
   SECURITY_HARDENING: {
     path: "/admin/security",
     icon: SvgShield,
-    title: "Security and Hardening",
-    sidebarLabel: "Security and Hardening",
+    title: "Security & Hardening",
+    sidebarLabel: "Security & Hardening",
   },
   // Prefix-only entries used for layout matching — not rendered as sidebar
   // items or page headers.

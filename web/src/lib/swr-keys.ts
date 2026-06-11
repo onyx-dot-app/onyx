@@ -19,6 +19,7 @@ export const SWR_KEYS = {
   enterpriseSettings: "/api/enterprise-settings",
   customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
   authType: "/api/auth/type",
+  adminSecuritySettings: "/api/admin/security",
 
   // ── Agents / Personas ─────────────────────────────────────────────────────
   personas: "/api/persona",
