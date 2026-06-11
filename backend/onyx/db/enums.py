@@ -383,9 +383,10 @@ class ExternalAppType(str, PyEnum):
 
     Each built-in value names a provider with its own configured
     authorize URL, token URL, scope, and response parser in
-    `external_apps.providers`. `CUSTOM` is for admin-defined apps
-    that don't go through any built-in OAuth flow (static-token
-    integrations, internal services, etc.).
+    `external_apps.providers`. `CUSTOM` is for admin-defined apps:
+    static-token integrations (auth_template + stored credentials)
+    or, when the row carries an `oauth_config`, a generic admin-defined
+    OAuth 2.0 authorization-code flow.
     """
 
     GOOGLE_CALENDAR = "GOOGLE_CALENDAR"

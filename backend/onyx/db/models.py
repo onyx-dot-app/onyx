@@ -6014,6 +6014,14 @@ class ExternalApp(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    # CUSTOM apps only: admin-defined OAuth 2.0 flow parameters (a serialized
+    # `CustomOAuthConfig`, validated on write). NULL means the app uses static
+    # credentials. Holds no secrets — client_id/client_secret live in
+    # `organization_credentials`. Always NULL for built-in app types, whose
+    # flow comes from their provider spec.
+    oauth_config: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     organization_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
         EncryptedJson(),
         nullable=False,

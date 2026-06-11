@@ -5,6 +5,7 @@
  */
 
 import {
+  CustomOAuthConfig,
   EndpointPolicy,
   ExternalAppAdminResponse,
   ExternalAppType,
@@ -59,6 +60,9 @@ interface CreateCustomExternalAppInput {
   enabled: boolean;
   /** Required — the skill bundle whose filename becomes the app slug. */
   bundle: File;
+  /** Set to make users authenticate via an admin-defined OAuth 2.0 flow
+   * instead of typing credentials in manually. */
+  oauth_config?: CustomOAuthConfig;
 }
 
 /**
@@ -83,6 +87,9 @@ export async function createCustomExternalApp(
     "organization_credentials",
     JSON.stringify(input.organization_credentials)
   );
+  if (input.oauth_config) {
+    form.append("oauth_config", JSON.stringify(input.oauth_config));
+  }
   form.append("bundle", input.bundle);
 
   // No explicit Content-Type — the browser sets the multipart boundary.
@@ -128,6 +135,9 @@ interface UpdateExternalAppBody {
   organization_credentials?: Record<string, string>;
   // Full replace when present; omit to leave stored policies untouched.
   action_policies?: Record<string, EndpointPolicy>;
+  // CUSTOM apps only. Unlike the other fields, an *explicit* null clears the
+  // config (back to manual credentials); omit to leave it untouched.
+  oauth_config?: CustomOAuthConfig | null;
 }
 
 /**

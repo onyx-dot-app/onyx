@@ -79,6 +79,44 @@ def validate_auth_template(
             )
 
 
+def validate_oauth_auth_template(
+    auth_template: dict[str, Any],
+    organization_credentials: dict[str, Any],
+) -> None:
+    """Validate that an OAuth app's auth template is satisfiable by the flow.
+
+    OAuth apps never prompt the user for manual values, so every placeholder
+    the org hasn't pre-filled must be ``access_token`` (what the token exchange
+    stores) — anything else would leave the app permanently unauthenticatable.
+    The template must also actually reference ``{access_token}`` (and the org
+    must not pre-fill it): otherwise no per-user key is required and every user
+    would read as "connected" without ever going through OAuth.
+    """
+    placeholders = _placeholders_in_template(auth_template)
+    if "access_token" not in placeholders:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "An OAuth app's auth_template must reference {access_token}.",
+        )
+    if "access_token" in organization_credentials:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "access_token is supplied per user by the OAuth flow and cannot "
+            "be an organization credential.",
+        )
+    unfillable = sorted(
+        set(required_user_credential_keys(auth_template, organization_credentials))
+        - {"access_token"}
+    )
+    if unfillable:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"auth_template references credentials the OAuth flow cannot "
+            f"supply: {', '.join(unfillable)}. Use {{access_token}} or "
+            "pre-fill them as organization credentials.",
+        )
+
+
 def resolve_masked_credentials(
     incoming: dict[str, str],
     existing: SensitiveValue[dict[str, Any]] | None,
@@ -230,6 +268,7 @@ def create_external_app(
     author_user_id: UUID | None = None,
     slug: str | None = None,
     action_policies: dict[str, EndpointPolicy] | None = None,
+    oauth_config: dict[str, Any] | None = None,
 ) -> ExternalApp:
     """Create the backing Skill row and the ExternalApp that references it (flush
     only — the caller commits after pushing, so a push failure rolls back). The
@@ -284,6 +323,7 @@ def create_external_app(
         upstream_url_patterns=upstream_url_patterns,
         auth_template=auth_template,
         organization_credentials=organization_credentials,
+        oauth_config=oauth_config,
     )
     db_session.add(app)
     if action_policies is not None:
@@ -305,6 +345,7 @@ def update_external_app(
     new_bundle_file_id: str | None = None,
     new_bundle_sha256: str | None = None,
     action_policies: dict[str, EndpointPolicy] | UnsetType = UNSET,
+    oauth_config: dict[str, Any] | None | UnsetType = UNSET,
 ) -> tuple[ExternalApp, str | None]:
     """Partial-update the external app and its linked skill (flush only — the
     caller commits after pushing, so a push failure rolls back). Returns
@@ -353,6 +394,9 @@ def update_external_app(
         app.upstream_url_patterns = upstream_url_patterns
     if is_set(auth_template):
         app.auth_template = auth_template
+    if is_set(oauth_config):
+        # Explicit None clears the config (back to static credentials).
+        app.oauth_config = oauth_config
     if is_set(organization_credentials):
         # Admin responses mask org credentials; restore any masked value the form
         # echoed back so an unchanged secret isn't overwritten with its mask.

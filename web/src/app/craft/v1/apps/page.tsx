@@ -187,9 +187,10 @@ function ProviderConnectCard({
   }, [highlight]);
 
   async function connect() {
-    // Custom apps have no OAuth provider — collect the user's credentials
-    // directly via a popup instead of redirecting to an authorize URL.
-    if (userApp.app_type === "CUSTOM") {
+    // Manual-credential apps have no OAuth flow — collect the user's
+    // credentials directly via a popup instead of redirecting to an
+    // authorize URL.
+    if (userApp.auth_flow === "manual") {
       setCredModalOpen(true);
       return;
     }
