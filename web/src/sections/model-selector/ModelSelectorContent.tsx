@@ -1,11 +1,17 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { PopoverMenu } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import { Button, LineItemButton, Text } from "@opal/components";
+import {
+  Button,
+  LineItemButton,
+  Text,
+  InputTypeIn,
+  PopoverMenu,
+} from "@opal/components";
 import { SvgCheck, SvgChevronRight } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
+import { ContentAction, Section } from "@opal/layouts";
+import { cn } from "@opal/utils";
+import { Interactive } from "@opal/core";
 import {
   LLMOption,
   buildLlmOptions,
@@ -17,9 +23,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
-import { cn } from "@opal/utils";
-import { Interactive } from "@opal/core";
-import { ContentAction } from "@opal/layouts";
 
 export interface ModelSelectorContentProps {
   llmProviders: LLMProviderDescriptor[] | undefined;
