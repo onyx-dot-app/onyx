@@ -4,6 +4,19 @@ locals {
     bucket_objects = "arn:aws:s3:::${name}/*"
   }]
 
+  workload_irsa_enabled = (
+    length(var.s3_bucket_names) > 0 ||
+    (var.enable_rds_iam_for_service_account && var.rds_db_connect_arn != null)
+  )
+
+  workload_irsa_service_account_subjects = [
+    for service_account_name in distinct(concat(
+      [var.irsa_service_account_name],
+      var.irsa_additional_service_account_names,
+    )) :
+    "system:serviceaccount:${var.irsa_service_account_namespace}:${service_account_name}"
+  ]
+
   # Optional dedicated node group for sandbox pods (nodeSelector/toleration below).
   # IMDSv2 hop-limit 1 blocks sandboxed containers from the node metadata service.
   craft_sandbox_node_groups = var.enable_craft_sandbox_node_group ? {
@@ -185,22 +198,22 @@ resource "aws_iam_policy" "s3_access_policy" {
 
 # Create IAM role for workload access using IRSA (S3 + RDS)
 module "irsa-workload-access" {
-  count   = length(var.s3_bucket_names) == 0 ? 0 : 1
+  count   = local.workload_irsa_enabled ? 1 : 0
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version = "4.7.0"
 
   create_role                   = true
   role_name                     = "AmazonEKSTFWorkloadAccessRole-${module.eks.cluster_name}"
   provider_url                  = module.eks.oidc_provider
-  role_policy_arns              = [aws_iam_policy.s3_access_policy[0].arn]
-  oidc_fully_qualified_subjects = ["system:serviceaccount:${var.irsa_service_account_namespace}:${var.irsa_service_account_name}"]
+  role_policy_arns              = aws_iam_policy.s3_access_policy[*].arn
+  oidc_fully_qualified_subjects = local.workload_irsa_service_account_subjects
 
   depends_on = [module.eks]
 }
 
-# Create Kubernetes service account for S3 access (optional)
+# Create Kubernetes service account for workload IRSA access (optional)
 resource "kubernetes_service_account" "s3_access" {
-  count = length(var.s3_bucket_names) == 0 ? 0 : 1
+  count = local.workload_irsa_enabled ? 1 : 0
   metadata {
     name      = var.irsa_service_account_name
     namespace = var.irsa_service_account_namespace

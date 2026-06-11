@@ -17,6 +17,9 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: changed
+      description: Add sandbox-proxy ServiceAccount annotation support for
+        IAM-backed managed services.
+    - kind: changed
       description: Store Craft sandbox snapshots in the Onyx filestore instead
         of requiring sandbox pods to write directly to S3.
 dependencies:

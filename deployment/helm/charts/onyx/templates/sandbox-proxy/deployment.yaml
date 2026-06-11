@@ -22,6 +22,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/service-account: {{ toJson (.Values.sandboxProxy.serviceAccount | default dict) | sha256sum }}
         {{- with .Values.sandboxProxy.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
