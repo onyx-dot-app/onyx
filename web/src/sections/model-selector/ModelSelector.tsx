@@ -52,7 +52,7 @@ export default function ModelSelector({
   disabled = false,
 }: ModelSelectorProps) {
   const currentAgent = useCurrentAgent();
-  const { llmProviders } = useLLMProviders(currentAgent?.id);
+  const { llmProviders, defaultText } = useLLMProviders(currentAgent?.id);
   const [open, setOpen] = useState(false);
   const { user } = useUser();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -73,7 +73,23 @@ export default function ModelSelector({
     return null;
   }, [value, llmProviders]);
 
-  const currentDisplayName = currentOption?.displayName ?? "Select Model";
+  // When no model is explicitly selected, fall back to showing the global default.
+  const defaultModelOption = useMemo(() => {
+    if (!defaultText || !llmProviders) return null;
+    const provider = llmProviders.find((p) => p.id === defaultText.provider_id);
+    const mc = provider?.model_configurations.find(
+      (m) => m.name === defaultText.model_name
+    );
+    if (!mc || !provider) return null;
+    return {
+      provider: provider.provider,
+      modelName: mc.name,
+      displayName: mc.custom_display_name ?? mc.display_name ?? mc.name,
+    };
+  }, [defaultText, llmProviders]);
+
+  const effectiveOption = currentOption ?? defaultModelOption;
+  const currentDisplayName = effectiveOption?.displayName ?? "Select Model";
 
   const isSelected = useCallback(
     (option: LLMOption) =>
@@ -140,8 +156,8 @@ export default function ModelSelector({
       </>
     ) : undefined;
 
-  const triggerIcon = currentOption
-    ? getModelIcon(currentOption.provider, currentOption.modelName)
+  const triggerIcon = effectiveOption
+    ? getModelIcon(effectiveOption.provider, effectiveOption.modelName)
     : getModelIcon("", "");
 
   return (
