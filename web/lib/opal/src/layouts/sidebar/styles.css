@@ -157,7 +157,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-sidebar-section__header {
-  @apply pl-2 pb-1 pt-4;
+  @apply pl-2 pb-1 pt-4 flex flex-row justify-between items-center;
 }
 
 .opal-sidebar-section__title {
