@@ -17,7 +17,6 @@ import {
 import { useUser } from "@/providers/UserProvider";
 import { useCurrentAgent } from "@/lib/agents/hooks";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
-import { resolveModelDisplayName } from "@/lib/languageModels/utils";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 
 interface TemperatureManager {
@@ -77,7 +76,7 @@ export default function ModelSelector({
         return {
           provider: provider.provider,
           modelName: mc.name,
-          displayName: resolveModelDisplayName(mc),
+          displayName: mc.effectiveDisplayName,
         };
       }
     }

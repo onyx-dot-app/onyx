@@ -31,6 +31,7 @@ const llmProviders: LLMProviderDescriptor[] = [
         max_input_tokens: null,
         supports_image_input: true,
         supports_reasoning: true,
+        effectiveDisplayName: "Claude Opus 4.8",
       },
       {
         name: "claude-sonnet-4-6",
@@ -39,6 +40,7 @@ const llmProviders: LLMProviderDescriptor[] = [
         max_input_tokens: null,
         supports_image_input: true,
         supports_reasoning: true,
+        effectiveDisplayName: "Claude Sonnet 4.6",
       },
     ],
   },
