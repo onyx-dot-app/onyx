@@ -20,7 +20,6 @@ import {
 import RefreshText from "@/refresh-components/texts/Text";
 import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
 import SidebarBody from "@/sections/sidebar/SidebarBody";
-import SidebarSection from "@/sections/sidebar/SidebarSection";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { Popover, PopoverMenu } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -465,7 +464,8 @@ const MemoizedBuildSidebarInner = memo(() => {
         scrollKey="build-sidebar"
       >
         {!folded && (
-          <SidebarSection title={sessionsTitle}>
+          <>
+            <SidebarLayouts.Section title={sessionsTitle} />
             {sessionHistory.length === 0 ? (
               <div className="pl-2 pr-1.5 py-1">
                 <Text color="text-01">
@@ -496,7 +496,7 @@ const MemoizedBuildSidebarInner = memo(() => {
                 />
               ))
             )}
-          </SidebarSection>
+          </>
         )}
       </SidebarBody>
     </SidebarWrapper>

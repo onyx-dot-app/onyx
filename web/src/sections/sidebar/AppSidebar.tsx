@@ -29,7 +29,6 @@ import {
   restrictToFirstScrollableAncestor,
   restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
-import SidebarSection from "@/sections/sidebar/SidebarSection";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import {
@@ -166,36 +165,35 @@ function RecentsSection({
         isOver && "bg-background-tint-03"
       )}
     >
-      <SidebarSection title="Recents">
-        {chatSessions.length === 0 ? (
-          <Text as="p" text01 className="px-3">
-            Try sending a message! Your chat history will appear here.
-          </Text>
-        ) : (
-          <>
-            {chatSessions.map((chatSession) => (
-              <ChatButton
-                key={chatSession.id}
-                chatSession={chatSession}
-                draggable
-              />
+      <SidebarLayouts.Section title="Recents" />
+      {chatSessions.length === 0 ? (
+        <Text as="p" text01 className="px-3">
+          Try sending a message! Your chat history will appear here.
+        </Text>
+      ) : (
+        <>
+          {chatSessions.map((chatSession) => (
+            <ChatButton
+              key={chatSession.id}
+              chatSession={chatSession}
+              draggable
+            />
+          ))}
+          {hasMore &&
+            skeletonWidths.map((width, i) => (
+              <div
+                key={i}
+                ref={i === 0 ? sentinelRef : undefined}
+                className={cn(
+                  "transition-opacity duration-300",
+                  isLoadingMore ? "opacity-100" : "opacity-40"
+                )}
+              >
+                <SidebarTabSkeleton textWidth={width} />
+              </div>
             ))}
-            {hasMore &&
-              skeletonWidths.map((width, i) => (
-                <div
-                  key={i}
-                  ref={i === 0 ? sentinelRef : undefined}
-                  className={cn(
-                    "transition-opacity duration-300",
-                    isLoadingMore ? "opacity-100" : "opacity-40"
-                  )}
-                >
-                  <SidebarTabSkeleton textWidth={width} />
-                </div>
-              ))}
-          </>
-        )}
-      </SidebarSection>
+        </>
+      )}
     </div>
   );
 }
@@ -697,17 +695,16 @@ const AppSidebar = memo(function AppSidebarInner() {
                 collisionDetection={closestCenter}
                 onDragEnd={handleAgentDragEnd}
               >
-                <SidebarSection title="Agents">
-                  <SortableContext
-                    items={visibleAgentIds}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {visibleAgents.map((visibleAgent) => (
-                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
-                    ))}
-                  </SortableContext>
-                  {moreAgentsButton}
-                </SidebarSection>
+                <SidebarLayouts.Section title="Agents" />
+                <SortableContext
+                  items={visibleAgentIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {visibleAgents.map((visibleAgent) => (
+                    <AgentButton key={visibleAgent.id} agent={visibleAgent} />
+                  ))}
+                </SortableContext>
+                {moreAgentsButton}
               </DndContext>
 
               {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
@@ -721,7 +718,7 @@ const AppSidebar = memo(function AppSidebarInner() {
                 onDragEnd={handleChatProjectDragEnd}
               >
                 {/* Projects */}
-                <SidebarSection
+                <SidebarLayouts.Section
                   title="Projects"
                   action={
                     <OpalButton
@@ -732,12 +729,11 @@ const AppSidebar = memo(function AppSidebarInner() {
                       onClick={() => createProjectModal.toggle(true)}
                     />
                   }
-                >
-                  {projects.map((project) => (
-                    <ProjectFolderButton key={project.id} project={project} />
-                  ))}
-                  {projects.length === 0 && newProjectButton}
-                </SidebarSection>
+                />
+                {projects.map((project) => (
+                  <ProjectFolderButton key={project.id} project={project} />
+                ))}
+                {projects.length === 0 && newProjectButton}
 
                 {/* Recents */}
                 <RecentsSection
