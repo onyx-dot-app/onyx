@@ -4,7 +4,7 @@ import { useCallback, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
-import { SidebarLayouts } from "@opal/layouts";
+import { SidebarLayouts, useSidebarFolded } from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
@@ -181,6 +181,7 @@ function groupBySection(items: SidebarItemEntry[]) {
 }
 
 function AdminSidebarInner() {
+  const folded = useSidebarFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
@@ -292,14 +293,21 @@ function AdminSidebarInner() {
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        <>
-          <Divider paddingPerpendicular="fit" />
-          <Spacer rem={0.5} />
-        </>
-        <SidebarTab icon={SvgX} href="/app" variant="sidebar-light">
+        {!folded && (
+          <>
+            <Divider paddingPerpendicular="fit" />
+            <Spacer rem={0.5} />
+          </>
+        )}
+        <SidebarTab
+          icon={SvgX}
+          href="/app"
+          variant="sidebar-light"
+          folded={folded}
+        >
           Exit Admin Panel
         </SidebarTab>
-        <AccountPopover folded={false} />
+        <AccountPopover folded={folded} />
       </SidebarLayouts.Footer>
     </>
   );
