@@ -1,9 +1,16 @@
 "use client";
 
 import "@opal/layouts/root/styles.css";
-import { createContext, useContext, type ReactNode } from "react";
-import { cn } from "@opal/utils";
+import {
+  createContext,
+  useContext,
+  useLayoutEffect,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import useScreenSize from "@opal/hooks/useScreenSize";
+import type { WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Folded context — readable by sidebar body content via useSidebarFolded()
@@ -115,11 +122,11 @@ function RootLayoutSidebar({
 // App — fills remaining flex space; use as direct child of Root
 // ---------------------------------------------------------------------------
 
-type RootLayoutAppProps = React.HTMLAttributes<HTMLDivElement>;
+type RootLayoutAppProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>>;
 
-function RootLayoutApp({ children, className, ...props }: RootLayoutAppProps) {
+function RootLayoutApp({ children, ...props }: RootLayoutAppProps) {
   return (
-    <div className={cn("opal-root-layout__app", className)} {...props}>
+    <div className="opal-root-layout__app" {...props}>
       {children}
     </div>
   );
@@ -129,15 +136,16 @@ function RootLayoutApp({ children, className, ...props }: RootLayoutAppProps) {
 // MainContent — scrollable content slot inside App
 // ---------------------------------------------------------------------------
 
-type RootLayoutMainContentProps = React.HTMLAttributes<HTMLDivElement>;
+type RootLayoutMainContentProps = WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+>;
 
 function RootLayoutMainContent({
   children,
-  className,
   ...props
 }: RootLayoutMainContentProps) {
   return (
-    <div className={cn("opal-root-layout__main", className)} {...props}>
+    <div className="opal-root-layout__main" {...props}>
       {children}
     </div>
   );
@@ -149,19 +157,36 @@ function RootLayoutMainContent({
 
 interface RootLayoutPanelProps {
   children: ReactNode;
-  className?: string;
 }
 
-function RootLayoutLeftPanel({ children, className }: RootLayoutPanelProps) {
-  return (
-    <div className={cn("opal-root-layout__panel", className)}>{children}</div>
-  );
+function RootLayoutPanel({ children }: RootLayoutPanelProps) {
+  return <div className="opal-root-layout__panel">{children}</div>;
 }
 
-function RootLayoutRightPanel({ children, className }: RootLayoutPanelProps) {
-  return (
-    <div className={cn("opal-root-layout__panel", className)}>{children}</div>
-  );
+function RootLayoutLeftPanel(props: RootLayoutPanelProps) {
+  return <RootLayoutPanel {...props} />;
+}
+
+// When provided, RightPanel hoists itself into this slot (set by the host
+// layout, e.g. AppChrome) instead of rendering in place. This lets it sit as
+// a flex sibling to the Header/Content/Footer column and push the whole column
+// in, regardless of where in the tree RightPanel is actually rendered.
+export type RightPanelSlotSetter = Dispatch<SetStateAction<ReactNode>>;
+export const RootLayoutRightPanelSlotContext =
+  createContext<RightPanelSlotSetter | null>(null);
+
+function RootLayoutRightPanel({ children }: RootLayoutPanelProps) {
+  const setSlot = useContext(RootLayoutRightPanelSlotContext);
+
+  useLayoutEffect(() => {
+    if (!setSlot) return;
+    const content = <RootLayoutPanel>{children}</RootLayoutPanel>;
+    setSlot(content);
+    return () => setSlot((prev) => (prev === content ? null : prev));
+  }, [setSlot, children]);
+
+  if (setSlot) return null;
+  return <RootLayoutPanel>{children}</RootLayoutPanel>;
 }
 
 // ---------------------------------------------------------------------------

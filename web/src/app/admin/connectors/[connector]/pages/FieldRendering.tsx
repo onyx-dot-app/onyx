@@ -218,7 +218,6 @@ export const RenderField: FC<RenderFieldProps> = ({
             label={label}
             sublabel={description}
             disabled={disabled}
-            size="lg"
             onChange={(checked) => setFieldValue(field.name, checked)}
           />
         </GeneralLayouts.Section>
