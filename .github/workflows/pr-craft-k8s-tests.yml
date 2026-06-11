@@ -335,54 +335,6 @@ jobs:
             ps -q cache)
           docker exec "$REDIS_ID" redis-cli CONFIG SET requirepass password
 
-      - name: Expose MinIO inside the kind cluster
-        run: |
-          set -eo pipefail
-          MINIO_ID=$(cd deployment/docker_compose && \
-            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q minio)
-          # Attach the minio container to kind's docker network so kind pods
-          # can route to it; alias is cosmetic but useful for debugging.
-          docker network connect kind "$MINIO_ID" --alias minio
-          MINIO_IP=$(docker inspect "$MINIO_ID" \
-            --format '{{ (index .NetworkSettings.Networks "kind").IPAddress }}')
-          echo "minio on kind network at $MINIO_IP"
-
-          # Pre-create the snapshot bucket so the daemon's `aws s3 cp` doesn't
-          # 404 on first run.
-          docker exec "$MINIO_ID" \
-            mc alias set local http://localhost:9000 minioadmin minioadmin
-          docker exec "$MINIO_ID" \
-            mc mb -p "local/${SANDBOX_S3_BUCKET}"
-
-          # Expose minio via a cluster Service in onyx-sandboxes so the
-          # sidecar resolves `minio.onyx-sandboxes.svc.cluster.local:9000`.
-          # Manual Endpoints (no selector) — points straight at the
-          # container's IP on kind's docker network.
-          cat <<EOF | kubectl apply -f -
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: minio
-            namespace: onyx-sandboxes
-          spec:
-            ports:
-              - port: 9000
-                targetPort: 9000
-                protocol: TCP
-          ---
-          apiVersion: v1
-          kind: Endpoints
-          metadata:
-            name: minio
-            namespace: onyx-sandboxes
-          subsets:
-            - addresses:
-                - ip: ${MINIO_IP}
-              ports:
-                - port: 9000
-                  protocol: TCP
-          EOF
-
       - name: Expose Postgres inside the kind cluster
         run: |
           set -eo pipefail
