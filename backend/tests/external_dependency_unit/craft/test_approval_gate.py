@@ -112,10 +112,11 @@ def _seed_slack_external_app() -> Generator[None, None, None]:
                     app_type=ExternalAppType.SLACK,
                     upstream_url_patterns=["https://slack\\.com/api/.*"],
                     auth_template={"Authorization": "Bearer {access_token}"},
-                    # Fake token: Never reaches Slack on the REJECTED path, and
-                    # the APPROVED path expects Slack to reply ``invalid_auth``.
-                    # An unfillable template skips the ASK gate (forwards bare,
-                    # no DB row), which is what the tests assert against.
+                    # Fake token. An unfillable template short-circuits the ASK
+                    # gate (forwards bare, no DB row), which breaks every
+                    # gate-flow test below. ``test_ask_with_uninvokable_app_
+                    # forwards_bare`` strips this back out to exercise that
+                    # short-circuit path.
                     organization_credentials={"access_token": "fake-test-token"},
                     enabled=True,
                     is_public=True,
