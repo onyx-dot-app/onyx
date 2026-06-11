@@ -152,6 +152,12 @@ class ExternalAppProvider(ABC):
         ``action_type``. Empty by default; override to register decoders."""
         return {}
 
+    def derive_credentials(self, credentials: dict[str, Any]) -> dict[str, Any]:
+        """Add computed values auth templates can reference (e.g. a base64'd
+        Basic pair). Must copy, not mutate, and derived keys must not collide
+        with stored credential fields. Default: unchanged."""
+        return credentials
+
 
 class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
     """Interface for a built-in provider whose OAuth client credentials Onyx
