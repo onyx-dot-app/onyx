@@ -22,7 +22,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Switch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { Button, LineItemButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
@@ -36,7 +36,6 @@ import {
 import {
   SvgArrowExchange,
   SvgChevronDown,
-  SvgEdit,
   SvgOnyxOctagon,
   SvgOrganization,
   SvgPlusCircle,
@@ -439,10 +438,15 @@ interface ModelRowProps {
 /**
  * A single selectable model row.
  *
- * The toggle (a `LineItemButton`) and the rename control are kept as siblings
- * rather than nesting an editable `<button>` inside the toggle `<button>` — the
- * latter is invalid HTML and triggers a hydration error. Keeping them separate
- * also means renaming no longer accidentally toggles the model's visibility.
+ * The row is a clickable `<div role="button">` rather than a real `<button>`,
+ * because the `editable` title renders its own nested edit `<button>` — and a
+ * `<button>` inside a `<button>` is invalid HTML that triggers a React
+ * hydration error. Rendering the row as a div keeps the inline rename pencil a
+ * real, keyboard-accessible button while preserving the original look and feel.
+ *
+ * This mirrors `LineItemButton`'s internals (Stateful → Container →
+ * ContentAction) but with a typeless `Interactive.Container`, which renders a
+ * `<div>` instead of a `<button>`.
  */
 function ModelRow({
   model,
@@ -453,76 +457,46 @@ function ModelRow({
   const displayName =
     model.custom_display_name || model.display_name || model.name;
   // In auto mode every model is shown, so the row is always "selected" and the
-  // toggle is disabled (no onClick).
+  // visibility toggle is disabled.
   const isSelected = isAutoMode || model.is_visible;
-
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(displayName);
-
-  function startEditing() {
-    setDraft(displayName);
-    setEditing(true);
-  }
-
-  function commit() {
-    const trimmed = draft.trim();
-    if (trimmed !== displayName) onRename(trimmed || undefined);
-    setEditing(false);
-  }
-
-  if (editing) {
-    return (
-      <div
-        data-model-name={model.name}
-        className="flex items-center gap-2 px-2 py-2"
-      >
-        <Checkbox checked={isSelected} />
-        <div className="min-w-0 flex-1">
-          <InputTypeIn
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onFocus={(e) => e.currentTarget.select()}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commit();
-              }
-              if (e.key === "Escape") {
-                setDraft(displayName);
-                setEditing(false);
-              }
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
+  const toggleVisibility = isAutoMode
+    ? undefined
+    : () => onToggleVisibility(!model.is_visible);
 
   return (
-    <div data-model-name={model.name} className="flex items-center gap-1">
-      <div className="min-w-0 flex-1">
-        <LineItemButton
-          variant="section"
-          sizePreset="main-ui"
-          selectVariant="select-heavy"
-          state={isSelected ? "selected" : "empty"}
-          icon={() => <Checkbox checked={isSelected} />}
-          title={displayName}
-          onClick={
-            isAutoMode ? undefined : () => onToggleVisibility(!model.is_visible)
-          }
-        />
-      </div>
-      <Button
-        icon={SvgEdit}
-        prominence="internal"
-        size="xs"
-        tooltip="Rename"
-        tooltipSide="right"
-        onClick={startEditing}
-      />
+    <div data-model-name={model.name}>
+      <Interactive.Stateful
+        variant="select-heavy"
+        state={isSelected ? "selected" : "empty"}
+        onClick={toggleVisibility}
+        role={toggleVisibility ? "button" : undefined}
+        tabIndex={toggleVisibility ? 0 : undefined}
+        onKeyDown={
+          toggleVisibility
+            ? (e: React.KeyboardEvent) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleVisibility();
+                }
+              }
+            : undefined
+        }
+      >
+        <Interactive.Container width="full" size="fit" rounding="md">
+          <div className="w-full p-2">
+            <ContentAction
+              color="interactive"
+              variant="section"
+              sizePreset="main-ui"
+              icon={() => <Checkbox checked={isSelected} />}
+              title={displayName}
+              editable
+              onTitleChange={(newTitle) => onRename(newTitle || undefined)}
+              padding="fit"
+            />
+          </div>
+        </Interactive.Container>
+      </Interactive.Stateful>
     </div>
   );
 }
