@@ -22,6 +22,11 @@ Builds on the CONTRIBUTING.md prereqs (Python 3.13, uv, Node.js 22, the venv,
 `.vscode/.env`). Docker Desktop must be running with at least 8 CPU / 16 GB
 allocated.
 
+Craft sandbox pods use Kubernetes native restartable init sidecar containers,
+so the cluster must run Kubernetes `>= 1.33`. The local `k8s-up.sh` script pins
+kind to `kindest/node:v1.33.1` by default; set `KIND_NODE_IMAGE` before running
+the script if you need a different compatible kind node image.
+
 ```bash
 brew install kind helm kubectl
 
@@ -111,7 +116,9 @@ can also invoke them individually for tighter rebuild loops.
 [`deployment/helm/dev/k8s-up.sh`](/deployment/helm/dev/k8s-up.sh). The
 script is idempotent and refuses to run unless your kubectl context is
 `kind-onyx-dev`. It also installs the telepresence traffic-manager once
-per cluster.
+per cluster. New clusters use the `kindest/node:v1.33.1` node image so Craft's
+native init sidecar pod shape is supported. Existing clusters are not recreated;
+set `KIND_NODE_IMAGE` to override the default for a newly created cluster.
 
 Watch pods (vespa and CNPG-postgres take a minute or two on first boot):
 

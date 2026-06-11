@@ -173,6 +173,7 @@ jobs:
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # ratchet:helm/kind-action@v1.14.0
         with:
           cluster_name: onyx-craft-ci
+          node_image: kindest/node:v1.33.1
           config: ${{ runner.temp }}/kind-config.yaml
 
       # Connect the registry to kind's docker network and tell containerd
@@ -224,6 +225,7 @@ jobs:
           helm template onyx deployment/helm/charts/onyx \
             -n "${HELM_RELEASE_NAMESPACE}" \
             -f deployment/helm/charts/onyx/values-ci.yaml \
+            --kube-version 1.33.0 \
             --set "celery_shared.image.repository=localhost:5001/onyx-backend" \
             --set "celery_shared.image.tag=ci" \
             --show-only templates/sandbox-namespace.yaml \
