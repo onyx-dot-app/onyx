@@ -1286,8 +1286,6 @@ def session_manager_with_stub(
 def assert_lock_serializes_two_threads(
     redis_client: Redis | TenantRedisClient,  # type: ignore[type-arg]
     lock_key: str,
-    *,
-    acquire_fn: Callable[[], Any] | None = None,  # noqa: ARG001
 ) -> None:
     """Verify two concurrent acquirers contend on ``lock_key`` — one waits.
 
@@ -1295,12 +1293,6 @@ def assert_lock_serializes_two_threads(
     thread acquires + holds, the second observes that a non-blocking
     acquire fails (the serialization point). Cleans the key before and
     after.
-
-    ``acquire_fn`` is accepted for API parity with future variants that
-    may wrap a production acquire helper; the current implementation
-    always uses ``redis_client.lock(lock_key)`` so the test pins the same
-    contract that ``create_session_with_lock`` / ``provision_with_lock``
-    rely on.
     """
     redis_client.delete(lock_key)
 
@@ -1374,7 +1366,7 @@ def pod_exec(
     client: "k8s_client_module.CoreV1Api",
     pod_name: str,
     namespace: str,
-    command: str | list[str],
+    command: str,
     container: str = "sandbox",
 ) -> str:
     """Run a one-shot command in a pod container; return combined output.
@@ -1383,12 +1375,11 @@ def pod_exec(
     operations that need to write to ``/workspace/managed/`` (read-only in
     the sandbox container) or inspect the sidecar's environment.
 
-    ``command`` may be a shell-string (auto-wrapped in ``/bin/sh -c``) or an
-    explicit argv list passed straight through to ``connect_get_namespaced_pod_exec``.
+    ``command`` is a shell-string run via ``/bin/sh -c``.
     """
     from kubernetes.stream import stream as k8s_stream
 
-    argv = ["/bin/sh", "-c", command] if isinstance(command, str) else list(command)
+    argv = ["/bin/sh", "-c", command]
     resp = k8s_stream(
         client.connect_get_namespaced_pod_exec,
         name=pod_name,
@@ -1572,9 +1563,8 @@ def wait_for_proxy_redeploy(
 # ``pytestmark = pytest.mark.skipif(SANDBOX_BACKEND != KUBERNETES, ...)`` —
 # the fixtures themselves do not gate.
 #
-# We don't use the test_kubernetes_sandbox.py ``_is_kubernetes_available``
-# call here — the cluster check happens implicitly when ``k8s_client`` or
-# the manager makes its first API call.
+# The cluster check happens implicitly when ``k8s_client`` or the manager makes
+# its first API call.
 # ---------------------------------------------------------------------------
 
 

@@ -120,16 +120,6 @@ def _opencode_pid(container: str) -> int:
     return pids[0]
 
 
-def _proxy_session_url(session_id: UUID) -> str:
-    """
-    Mimics the session-tag opencode plugin: encode the session id as HTTP-Basic
-    userinfo on the proxy URL so the gate resolves the session.
-
-    Format mirrors ``session-proxy-tag.ts``: ``<session_id>:x@host``.
-    """
-    return f"http://{session_id}:x@sandbox-proxy:8080"
-
-
 def _start_slack_post_via_proxy(
     container: str, session_id: UUID
 ) -> subprocess.Popen[str]:

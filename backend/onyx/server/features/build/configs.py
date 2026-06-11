@@ -54,10 +54,6 @@ SANDBOX_CONTAINER_IMAGE = os.environ.get(
     "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.52"
 )
 
-# Set to "Always" in environments that pin a mutable tag (e.g. :dev) so nodes
-# re-pull on every pod start; immutable version pins can use the node cache.
-SANDBOX_IMAGE_PULL_POLICY = os.environ.get("SANDBOX_IMAGE_PULL_POLICY", "IfNotPresent")
-
 SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get("SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox")
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"

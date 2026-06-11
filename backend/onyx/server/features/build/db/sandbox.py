@@ -94,26 +94,6 @@ def get_sandbox_by_user_id(db_session: Session, user_id: UUID) -> Sandbox | None
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def get_sandbox_by_session_id(db_session: Session, session_id: UUID) -> Sandbox | None:
-    """Get sandbox by session ID (compatibility function).
-
-    This function provides backwards compatibility during the transition to
-    user-owned sandboxes. It looks up the session's user_id, then finds the
-    user's sandbox.
-
-    NOTE: This will be removed in a future phase when all callers are updated
-    to use get_sandbox_by_user_id() directly.
-    """
-    from onyx.db.models import BuildSession
-
-    stmt = select(BuildSession.user_id).where(BuildSession.id == session_id)
-    result = db_session.execute(stmt).scalar_one_or_none()
-    if result is None:
-        return None
-
-    return get_sandbox_by_user_id(db_session, result)
-
-
 def get_sandbox_by_id(db_session: Session, sandbox_id: UUID) -> Sandbox | None:
     """Get sandbox by its ID."""
     stmt = select(Sandbox).where(Sandbox.id == sandbox_id)
@@ -185,15 +165,12 @@ def get_idle_sandboxes(
     return list(db_session.execute(stmt).scalars().all())
 
 
-def get_running_sandbox_count_by_tenant(
+def get_running_sandbox_count(
     db_session: Session,
-    tenant_id: str,  # noqa: ARG001
 ) -> int:
-    """Get count of running sandboxes for a tenant (for limit enforcement).
+    """Get count of all running sandboxes (for limit enforcement).
 
-    Note: tenant_id parameter is kept for API compatibility but is not used
-    since Sandbox model no longer has tenant_id. This function returns
-    the count of all running sandboxes.
+    Per-tenant by virtue of schema-scoped sessions on multi-tenant.
     """
     stmt = select(func.count(Sandbox.id)).where(Sandbox.status == SandboxStatus.RUNNING)
     result = db_session.execute(stmt).scalar()

@@ -46,19 +46,6 @@ class SnapshotResult(BaseModel):
     size_bytes: int
 
 
-class SnapshotInfo(BaseModel):
-    """Full information about a sandbox snapshot (including DB info).
-
-    Used when returning snapshot information to API callers.
-    """
-
-    id: str
-    sandbox_id: str
-    storage_path: str
-    created_at: datetime
-    size_bytes: int
-
-
 class FilesystemEntry(BaseModel):
     """Represents a file or directory entry in the sandbox filesystem.
 

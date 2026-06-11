@@ -673,7 +673,6 @@ class SessionManager:
                     self._sandbox_manager.cleanup_session_workspace(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
-                        nextjs_port=session.nextjs_port,
                     )
                     logger.info(
                         "Cleaned up session workspace %s in sandbox %s",
@@ -1204,15 +1203,6 @@ class SessionManager:
 
             # Quick health check: can the API server reach the NextJS dev server?
             ready = self._check_nextjs_ready(sandbox.id, session.nextjs_port)
-
-            # If not ready, ask the sandbox manager to ensure Next.js is running.
-            # For the local backend this triggers a background restart so that the
-            # frontend poll loop eventually sees ready=True without the user having
-            # to manually recreate the session.
-            if not ready:
-                self._sandbox_manager.ensure_nextjs_running(
-                    sandbox.id, session_id, session.nextjs_port
-                )
 
         return {
             "has_webapp": session.nextjs_port is not None,

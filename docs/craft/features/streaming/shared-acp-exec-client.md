@@ -124,7 +124,6 @@ class ACPExecClientBase(ABC):
 4. Reset `self._state = ACPClientState()`.
 
 `_enqueue_message(msg)` (helper for subclass readers):
-- Log via `packet_logger.log_jsonrpc_raw_message("IN", msg, context=self.transport_name)`.
 - Put on `self._response_queue`.
 
 `__enter__` / `__exit__` shared.
