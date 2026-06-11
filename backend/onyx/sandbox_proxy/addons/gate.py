@@ -37,6 +37,8 @@ from onyx.sandbox_proxy.credential_injection import InjectionContext
 from onyx.sandbox_proxy.credential_injection import InjectionOutcome
 from onyx.sandbox_proxy.errors import http_403
 from onyx.sandbox_proxy.errors import SandboxProxyError
+from onyx.sandbox_proxy.git_smart_http import GIT_SMART_HTTP_MAX_BODY_BYTES
+from onyx.sandbox_proxy.git_smart_http import parse_git_request
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.identity import SessionContext
 from onyx.sandbox_proxy.logging_utils import approval_decided_args
@@ -398,8 +400,16 @@ class GateAddon:
 
         # raw_content is None for streamed bodies; treat None as oversize so a
         # future stream opt-in can't silently bypass the cap.
+        #
+        # Git smart-HTTP gets its own (higher) cap: push packfiles routinely
+        # exceed the parser cap, are never action-matched (see below), and the
+        # GitRemoteResolver enforces the craft/* ref namespace on them.
         raw = flow.request.raw_content
-        if raw is None or len(raw) > PARSER_MAX_BODY_BYTES:
+        is_git_request = parse_git_request(flow.request) is not None
+        body_limit = (
+            GIT_SMART_HTTP_MAX_BODY_BYTES if is_git_request else PARSER_MAX_BODY_BYTES
+        )
+        if raw is None or len(raw) > body_limit:
             logger.info(
                 "egress_block "
                 + EGRESS_TARGET_FIELDS
@@ -407,9 +417,40 @@ class GateAddon:
                 *egress_target_args(flow, sandbox),
                 SandboxProxyError.BODY_TOO_LARGE.value,
                 "-" if raw is None else len(raw),
-                PARSER_MAX_BODY_BYTES,
+                body_limit,
             )
             flow.response = http_403(SandboxProxyError.BODY_TOO_LARGE)
+            return None
+
+        if is_git_request:
+            # Git protocol bodies are packfiles, not API payloads — skip the
+            # matcher (no catalog covers github.com git endpoints) so it never
+            # parses megabytes of pack data. Off-catalog dispatch below routes
+            # to the GitRemoteResolver.
+            injection = await asyncio.to_thread(
+                self._dispatch_injection_or_block,
+                flow,
+                sandbox=sandbox,
+                matched_actions=None,
+            )
+            if injection is InjectionOutcome.BLOCKED:
+                logger.warning(
+                    "egress_block "
+                    + EGRESS_TARGET_FIELDS
+                    + " reason=%s credential_outcome=%s",
+                    *egress_target_args(flow, sandbox),
+                    SandboxProxyError.CREDENTIAL_ERROR.value,
+                    credential_outcome_label(injection),
+                )
+            else:
+                logger.info(
+                    "egress_allow "
+                    + EGRESS_TARGET_FIELDS
+                    + " policy=%s credential_outcome=%s",
+                    *egress_target_args(flow, sandbox),
+                    "git_smart_http",
+                    credential_outcome_label(injection),
+                )
             return None
 
         try:
