@@ -34,6 +34,7 @@ import TTSButton from "./TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
+import { resolveModelDisplayName } from "@/lib/languageModels/utils";
 
 // Wrapper component for SourceTag in toolbar to handle memoization
 const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
@@ -311,8 +312,9 @@ export default function MessageToolbar({
                       const mc = llmManager!.llmProviders
                         ?.flatMap((p) => p.model_configurations)
                         .find((m) => m.name === rawName);
-                      const displayName =
-                        mc?.custom_display_name ?? mc?.display_name ?? rawName;
+                      const displayName = mc
+                        ? resolveModelDisplayName(mc)
+                        : rawName;
                       return (
                         <OpenButton icon={SvgRefreshCw} foldable>
                           {displayName}

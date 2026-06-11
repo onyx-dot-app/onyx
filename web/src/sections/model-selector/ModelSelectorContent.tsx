@@ -20,6 +20,7 @@ import {
 } from "@/lib/languageModels/options";
 import { useCurrentAgent } from "@/lib/agents/hooks";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { resolveModelDisplayName } from "@/lib/languageModels/utils";
 import {
   Collapsible,
   CollapsibleContent,
@@ -59,7 +60,7 @@ export default function ModelSelectorContent({
     const mc = provider?.model_configurations.find(
       (m) => m.name === defaultText.model_name
     );
-    return mc?.custom_display_name ?? mc?.display_name ?? mc?.name ?? null;
+    return mc ? resolveModelDisplayName(mc) : null;
   }, [defaultText, llmProviders]);
   const [searchQuery, setSearchQuery] = useState("");
   const internalScrollRef = useRef<HTMLDivElement>(null);

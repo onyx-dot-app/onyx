@@ -3,6 +3,7 @@ import type { IconProps } from "@opal/types";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { getModelIcon } from "@/lib/languageModels";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
+import { resolveModelDisplayName } from "@/lib/languageModels/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,7 +83,7 @@ export function buildLlmOptions(
             llmProvider.provider_display_name || llmProvider.provider,
           modelName: mc.name,
           modelConfigurationId: mc.id ?? null,
-          displayName: mc.custom_display_name || mc.display_name || mc.name,
+          displayName: resolveModelDisplayName(mc),
           vendor: mc.vendor || null,
           maxInputTokens: mc.max_input_tokens,
           region: mc.region || null,

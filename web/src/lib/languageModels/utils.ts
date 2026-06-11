@@ -137,6 +137,19 @@ export const modelSupportsImageInput = (
   return modelConfiguration?.supports_image_input || false;
 };
 
+/**
+ * Single source of truth for resolving a model configuration's human-readable
+ * display name. Priority: admin-set custom name → provider display name → raw
+ * model identifier.
+ */
+export function resolveModelDisplayName(mc: {
+  custom_display_name?: string | null;
+  display_name?: string | null;
+  name: string;
+}): string {
+  return mc.custom_display_name || mc.display_name || mc.name;
+}
+
 export function getDisplayName(
   agent: MinimalAgent,
   llmProviders: LLMProviderDescriptor[]
@@ -146,7 +159,7 @@ export function getDisplayName(
     const mc = p.model_configurations.find(
       (m) => m.id === agent.default_model_configuration_id
     );
-    if (mc) return mc.display_name;
+    if (mc) return resolveModelDisplayName(mc);
   }
   return undefined;
 }
