@@ -23,7 +23,10 @@ import {
 } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import { parseLlmDescriptor } from "@/lib/languageModels/utils";
+import {
+  getProviderOverrideForPersona,
+  parseLlmDescriptor,
+} from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/providers/SettingsProvider";
@@ -678,6 +681,22 @@ export function useLlmManager(
         llmProviders,
         defaultText
       );
+    } else if (liveAgent) {
+      // Agent's configured default model takes precedence over the user's
+      // personal preference. Falls through when no default is set on the agent.
+      const agentOverride = getProviderOverrideForPersona(
+        liveAgent,
+        llmProviders
+      );
+      resolved =
+        agentOverride ??
+        (user?.preferences?.default_model
+          ? getValidLlmDescriptorForProviders(
+              user.preferences.default_model,
+              llmProviders,
+              defaultText
+            )
+          : (getDefaultLlmDescriptor(llmProviders, defaultText) ?? manualLlm));
     } else if (user?.preferences?.default_model) {
       resolved = getValidLlmDescriptorForProviders(
         user.preferences.default_model,
@@ -705,6 +724,7 @@ export function useLlmManager(
     currentChatSession,
     userHasManuallyOverriddenLLM,
     manualLlm,
+    liveAgent?.default_model_configuration_id,
     user?.preferences?.default_model,
   ]);
 
