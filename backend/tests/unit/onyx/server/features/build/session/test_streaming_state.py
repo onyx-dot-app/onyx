@@ -7,13 +7,86 @@ from __future__ import annotations
 
 from typing import Any
 from typing import cast
+from uuid import UUID
 from uuid import uuid4
 
 import pytest
 
+from onyx.db.models import BuildSession
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.session import streaming
 from onyx.server.features.build.session.streaming import BuildStreamingState
+
+
+class _FakeStreamingSandboxManager:
+    supports_opencode_history_persistence = True
+
+    def __init__(self) -> None:
+        self.last_payload: dict[str, Any] | None = None
+        self.resolved_opencode_session_id: str | None = None
+
+    def send_message(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        user_message_content: str,
+        *,
+        opencode_session_id: str | None = None,
+        agent_provider: str | None = None,
+        agent_model: str | None = None,
+        on_opencode_session_resolved: Any = None,  # noqa: ARG002
+        should_interrupt: Any = None,  # noqa: ARG002
+    ) -> Any:
+        self.last_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+            "user_message_content": user_message_content,
+            "opencode_session_id": opencode_session_id,
+            "agent_provider": agent_provider,
+            "agent_model": agent_model,
+        }
+        if on_opencode_session_resolved is not None:
+            if self.resolved_opencode_session_id is not None:
+                on_opencode_session_resolved(self.resolved_opencode_session_id)
+        yield object()
+
+
+class _FakePreflightSandboxManager:
+    supports_opencode_history_persistence = True
+    resolved_id = "ses_minted"
+
+    def ensure_opencode_session(self, *_args: Any, **_kwargs: Any) -> str:
+        return self.resolved_id
+
+
+class _PreflightDb:
+    commit_count = 0
+
+    def commit(self) -> None:
+        self.commit_count += 1
+
+
+class _FakeQuery:
+    def __init__(self, build_session: BuildSession | None) -> None:
+        self._build_session = build_session
+
+    def filter(self, *_args: Any, **_kwargs: Any) -> "_FakeQuery":
+        return self
+
+    def first(self) -> BuildSession | None:
+        return self._build_session
+
+
+class _FakePersistDb:
+    def __init__(self, build_session: BuildSession | None) -> None:
+        self.build_session = build_session
+        self.commit_count = 0
+
+    def query(self, _model: Any) -> _FakeQuery:
+        return _FakeQuery(self.build_session)
+
+    def commit(self) -> None:
+        self.commit_count += 1
 
 
 class TestBuildStreamingState:
@@ -197,3 +270,113 @@ def test_persist_sandbox_event_splits_chunks_by_routing_meta(
             "sessionUpdate": "agent_message",
         },
     ]
+
+
+def test_yield_sandbox_events_passes_existing_opencode_id() -> None:
+    sandbox_manager = _FakeStreamingSandboxManager()
+    sandbox_id = uuid4()
+    session_id = uuid4()
+
+    events = list(
+        streaming.yield_sandbox_events(
+            cast(Any, object()),
+            cast(Any, sandbox_manager),
+            sandbox_id,
+            session_id,
+            "continue",
+            opencode_session_id="ses_existing",
+            agent_provider=None,
+            agent_model=None,
+        )
+    )
+
+    assert len(events) == 1
+    assert sandbox_manager.last_payload is not None
+    assert sandbox_manager.last_payload["opencode_session_id"] == "ses_existing"
+
+
+def test_yield_sandbox_events_persists_resolved_opencode_id() -> None:
+    sandbox_manager = _FakeStreamingSandboxManager()
+    sandbox_manager.resolved_opencode_session_id = "ses_fresh"
+    session_id = uuid4()
+    build_session = BuildSession(
+        id=session_id,
+        user_id=uuid4(),
+        opencode_session_id="ses_stale",
+    )
+    db_session = _FakePersistDb(build_session)
+
+    events = list(
+        streaming.yield_sandbox_events(
+            cast(Any, db_session),
+            cast(Any, sandbox_manager),
+            uuid4(),
+            session_id,
+            "continue",
+            opencode_session_id="ses_stale",
+            agent_provider=None,
+            agent_model=None,
+        )
+    )
+
+    assert len(events) == 1
+    assert build_session.opencode_session_id == "ses_fresh"
+    assert db_session.commit_count == 1
+
+
+def test_yield_sandbox_events_passes_initial_opencode_id() -> None:
+    sandbox_manager = _FakeStreamingSandboxManager()
+
+    events = list(
+        streaming.yield_sandbox_events(
+            cast(Any, object()),
+            cast(Any, sandbox_manager),
+            uuid4(),
+            uuid4(),
+            "first prompt",
+            opencode_session_id="ses_first_turn",
+            agent_provider=None,
+            agent_model=None,
+        )
+    )
+
+    assert len(events) == 1
+    assert sandbox_manager.last_payload is not None
+    assert sandbox_manager.last_payload["opencode_session_id"] == "ses_first_turn"
+
+
+def test_preflight_mints_opencode_id_when_missing() -> None:
+    build_session = BuildSession(id=uuid4(), user_id=uuid4())
+    db_session = _PreflightDb()
+
+    resolved_id = streaming._ensure_opencode_session_id(
+        cast(Any, db_session),
+        cast(Any, _FakePreflightSandboxManager()),
+        uuid4(),
+        build_session,
+    )
+
+    assert resolved_id == "ses_minted"
+    assert build_session.opencode_session_id == "ses_minted"
+    assert db_session.commit_count == 1
+
+
+def test_yield_sandbox_events_allows_non_empty_session_without_opencode_id() -> None:
+    sandbox_manager = _FakeStreamingSandboxManager()
+
+    events = list(
+        streaming.yield_sandbox_events(
+            cast(Any, object()),
+            cast(Any, sandbox_manager),
+            uuid4(),
+            uuid4(),
+            "continue",
+            opencode_session_id=None,
+            agent_provider=None,
+            agent_model=None,
+        )
+    )
+
+    assert len(events) == 1
+    assert sandbox_manager.last_payload is not None
+    assert sandbox_manager.last_payload["opencode_session_id"] is None

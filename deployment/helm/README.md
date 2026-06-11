@@ -56,7 +56,7 @@ not a bypass for this requirement.
 Craft sandbox pods use native restartable init sidecar containers:
 `sandbox-init` runs and completes first, `sidecar` starts next as an
 `initContainers` entry with `restartPolicy: Always`, and the main `sandbox` app
-container starts after the sidecar is ready.
+container starts after the sidecar's startup restore gate is ready.
 
 The chart fails during render/install on older clusters so the incompatibility
 is caught before sandbox provisioning. This guard does not apply to non-Craft

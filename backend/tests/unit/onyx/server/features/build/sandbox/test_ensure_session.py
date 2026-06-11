@@ -26,6 +26,7 @@ import json
 from typing import Any
 
 import httpx
+import pytest
 
 from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
 from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
@@ -244,3 +245,45 @@ def test_ensure_session_callback_does_not_fire_on_valid_id() -> None:
     assert persisted_ids == [], (
         "callback must NOT fire on the happy path (persisted id still valid)"
     )
+
+
+@pytest.mark.parametrize("status_code", [200, 204, 404])
+def test_delete_session_treats_success_and_missing_as_deleted(
+    status_code: int,
+) -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "DELETE" and req.url.path == f"/session/{_STALE_ID}":
+            return httpx.Response(status_code)
+        raise AssertionError(f"unexpected {req.method} {req.url.path}")
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    assert client.delete_session(_STALE_ID, directory=_CWD) is True
+
+    assert len(transport.requests) == 1
+    req = transport.requests[0]
+    assert req.method == "DELETE"
+    assert req.url.params.get("directory") == _CWD
+
+
+def test_delete_session_returns_false_on_http_failure() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "DELETE" and req.url.path == f"/session/{_STALE_ID}":
+            return httpx.Response(500, text="nope")
+        raise AssertionError(f"unexpected {req.method} {req.url.path}")
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    assert client.delete_session(_STALE_ID, directory=_CWD) is False
+
+
+def test_delete_session_returns_false_on_transport_error() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("offline", request=req)
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    assert client.delete_session(_STALE_ID, directory=_CWD) is False

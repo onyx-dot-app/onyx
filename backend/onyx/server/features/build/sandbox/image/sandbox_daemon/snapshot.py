@@ -27,7 +27,7 @@ class SnapshotError(RuntimeError):
     """Raised when tar or bun fails so the manager can see the cause."""
 
 
-_SNAPSHOT_ROOTS = frozenset({"outputs", "attachments", ".opencode-data"})
+_SNAPSHOT_ROOTS = frozenset({"outputs", "attachments"})
 _SNAPSHOT_GENERATED_DIR_NAMES = frozenset({"node_modules", ".next"})
 MAX_SNAPSHOT_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_SNAPSHOT_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
@@ -75,12 +75,11 @@ def _snapshot_dirs(session_path: Path) -> list[str]:
         return []
 
     dirs = ["outputs"]
-    for subdir in ("attachments", ".opencode-data"):
-        candidate = session_path / subdir
-        if candidate.is_symlink():
-            raise SnapshotError(f"{subdir} is a symlink; refusing to snapshot")
-        if candidate.is_dir() and any(candidate.iterdir()):
-            dirs.append(subdir)
+    candidate = session_path / "attachments"
+    if candidate.is_symlink():
+        raise SnapshotError("attachments is a symlink; refusing to snapshot")
+    if candidate.is_dir() and any(candidate.iterdir()):
+        dirs.append("attachments")
     return dirs
 
 
@@ -246,10 +245,6 @@ def _validate_snapshot_member(member: tarfile.TarInfo) -> str:
     except UnicodeEncodeError as e:
         raise SnapshotError(f"non-UTF-8 snapshot path: {member.name!r}") from e
 
-    if member.issym() or member.islnk():
-        raise SnapshotError(f"snapshot links are not allowed: {member.name}")
-    if not (member.isfile() or member.isdir()):
-        raise SnapshotError(f"snapshot special file is not allowed: {member.name}")
     if os.path.isabs(member.name):
         raise SnapshotError(f"absolute snapshot path is not allowed: {member.name}")
 
@@ -258,6 +253,10 @@ def _validate_snapshot_member(member: tarfile.TarInfo) -> str:
         raise SnapshotError(f"snapshot path escapes session: {member.name}")
 
     root = normalized.split(os.sep, 1)[0]
+    if member.issym() or member.islnk():
+        raise SnapshotError(f"snapshot links are not allowed: {member.name}")
+    if not (member.isfile() or member.isdir()):
+        raise SnapshotError(f"snapshot special file is not allowed: {member.name}")
     if root not in _SNAPSHOT_ROOTS:
         raise SnapshotError(f"snapshot path has unexpected root: {member.name}")
     if normalized == root and not member.isdir():
@@ -343,7 +342,7 @@ def has_snapshot_content(session_id: UUID) -> bool:
 
 
 def iter_snapshot_archive(session_id: UUID) -> Iterator[bytes]:
-    """Create a snapshot of a session's outputs/attachments/.opencode-data.
+    """Create a snapshot of a session's outputs/attachments.
 
     Yields a tar.gz byte stream. Durable persistence is handled by the
     api-server, not the sidecar.

@@ -56,6 +56,9 @@ from onyx.server.features.build.db.sandbox import update_sandbox_status__no_comm
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    snapshot_opencode_history_before_recovery,
+)
 from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
@@ -311,6 +314,9 @@ def delete_session(
         if not success:
             raise HTTPException(status_code=404, detail="Session not found")
         db_session.commit()
+    except OnyxError:
+        db_session.rollback()
+        raise
     except HTTPException:
         # Re-raise HTTP exceptions (like 404) without rollback
         raise
@@ -381,6 +387,9 @@ def restore_session(
                 logger.warning(
                     "Sandbox %s marked as RUNNING but pod is unhealthy/missing. Entering recovery mode.",
                     sandbox.id,
+                )
+                snapshot_opencode_history_before_recovery(
+                    sandbox_manager, sandbox.id, tenant_id
                 )
                 sandbox_manager.terminate(sandbox.id)
                 update_sandbox_status__no_commit(

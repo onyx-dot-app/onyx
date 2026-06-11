@@ -49,6 +49,7 @@ Usage
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
@@ -131,10 +132,13 @@ class StubSandboxManager(SandboxManager):
         self.health_check_returns: bool | None = None
         self.session_workspace_exists_returns: bool | None = None
         self.create_snapshot_returns: SnapshotResult | None | object = _UNSET
+        self.create_opencode_history_snapshot_returns: bool | object = _UNSET
         self.list_directory_returns: list[FilesystemEntry] | None = None
         self.read_file_returns: bytes | None = None
         self.upload_file_returns: str | None = None
         self.delete_file_returns: bool | None = None
+        self.delete_opencode_session_returns: bool | Exception = True
+        self.prompt_slot_returns: bool = True
         self.get_upload_stats_returns: tuple[int, int] | None = None
         self.get_webapp_url_returns: str | None = None
         self.generate_pptx_preview_returns: tuple[list[str], bool] | None = None
@@ -165,6 +169,7 @@ class StubSandboxManager(SandboxManager):
         self.setup_session_workspace_count: int = 0
         self.cleanup_session_workspace_count: int = 0
         self.create_snapshot_count: int = 0
+        self.create_opencode_history_snapshot_count: int = 0
         self.restore_snapshot_count: int = 0
         self.session_workspace_exists_count: int = 0
         self.list_session_workspaces_count: int = 0
@@ -179,6 +184,8 @@ class StubSandboxManager(SandboxManager):
         self.read_file_count: int = 0
         self.upload_file_count: int = 0
         self.delete_file_count: int = 0
+        self.delete_opencode_session_count: int = 0
+        self.prompt_slot_count: int = 0
         self.write_sandbox_file_count: int = 0
         self.get_upload_stats_count: int = 0
         self.write_files_to_sandbox_count: int = 0
@@ -190,6 +197,7 @@ class StubSandboxManager(SandboxManager):
         self.last_setup_session_workspace_payload: dict[str, Any] | None = None
         self.last_cleanup_session_workspace_payload: dict[str, Any] | None = None
         self.last_create_snapshot_payload: dict[str, Any] | None = None
+        self.last_create_opencode_history_snapshot_payload: dict[str, Any] | None = None
         self.last_restore_snapshot_payload: dict[str, Any] | None = None
         self.last_session_workspace_exists_payload: dict[str, Any] | None = None
         self.last_health_check_payload: dict[str, Any] | None = None
@@ -199,6 +207,8 @@ class StubSandboxManager(SandboxManager):
         self.last_read_file_payload: dict[str, Any] | None = None
         self.last_upload_file_payload: dict[str, Any] | None = None
         self.last_delete_file_payload: dict[str, Any] | None = None
+        self.last_delete_opencode_session_payload: dict[str, Any] | None = None
+        self.last_prompt_slot_payload: dict[str, Any] | None = None
         self.last_write_sandbox_file_payload: dict[str, Any] | None = None
         self.last_get_upload_stats_payload: dict[str, Any] | None = None
         self.last_write_files_to_sandbox_payload: dict[str, Any] | None = None
@@ -312,6 +322,22 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("create_snapshot")
         return cast("SnapshotResult | None", self.create_snapshot_returns)
 
+    def create_opencode_history_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,
+    ) -> bool:
+        self.create_opencode_history_snapshot_count += 1
+        self.last_create_opencode_history_snapshot_payload = {
+            "sandbox_id": sandbox_id,
+            "tenant_id": tenant_id,
+            "timeout_seconds": timeout_seconds,
+        }
+        if self.create_opencode_history_snapshot_returns is _UNSET:
+            raise _not_configured("create_opencode_history_snapshot")
+        return cast(bool, self.create_opencode_history_snapshot_returns)
+
     def restore_snapshot(
         self,
         sandbox_id: UUID,
@@ -365,6 +391,19 @@ class StubSandboxManager(SandboxManager):
         if self.health_check_returns is None:
             raise _not_configured("health_check")
         return self.health_check_returns
+
+    @contextlib.contextmanager
+    def prompt_slot(
+        self,
+        sandbox_id: UUID,
+        build_session_id: UUID,
+    ) -> Generator[bool, None, None]:
+        self.prompt_slot_count += 1
+        self.last_prompt_slot_payload = {
+            "sandbox_id": sandbox_id,
+            "build_session_id": build_session_id,
+        }
+        yield self.prompt_slot_returns
 
     def ensure_opencode_session(
         self,
@@ -486,6 +525,22 @@ class StubSandboxManager(SandboxManager):
         if self.delete_file_returns is None:
             raise _not_configured("delete_file")
         return self.delete_file_returns
+
+    def delete_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> bool:
+        self.delete_opencode_session_count += 1
+        self.last_delete_opencode_session_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+            "opencode_session_id": opencode_session_id,
+        }
+        if isinstance(self.delete_opencode_session_returns, Exception):
+            raise self.delete_opencode_session_returns
+        return self.delete_opencode_session_returns
 
     def write_sandbox_file(
         self,

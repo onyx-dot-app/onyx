@@ -12,6 +12,7 @@ from onyx.server.features.build.session.manager import SessionManager
 class _FakeSandboxManager:
     def __init__(self, result: str | None) -> None:
         self.result = result
+        self.supports_opencode_history_persistence = False
         self.calls: list[tuple[UUID, UUID, str | None]] = []
 
     def ensure_opencode_session(
@@ -72,6 +73,34 @@ def test_prewarm_opencode_session_persists_resolved_id(
     assert session.opencode_session_id == resolved_id
     assert db_session.flush_count == flush_count
     assert sandbox_manager.calls == [(sandbox_id, session.id, initial_id)]
+
+
+def test_prewarm_reuses_existing_id_for_non_empty_session() -> None:
+    sandbox_id = uuid4()
+    session = _build_session("persisted-opencode")
+    sandbox_manager = _FakeSandboxManager("persisted-opencode")
+    sandbox_manager.supports_opencode_history_persistence = True
+    db_session = _FakeDbSession()
+
+    _manager(sandbox_manager, db_session)._prewarm_opencode_session(sandbox_id, session)
+
+    assert session.opencode_session_id == "persisted-opencode"
+    assert db_session.flush_count == 0
+    assert sandbox_manager.calls == [(sandbox_id, session.id, "persisted-opencode")]
+
+
+def test_prewarm_mints_id_for_non_empty_session_without_opencode_id() -> None:
+    sandbox_id = uuid4()
+    session = _build_session(None)
+    sandbox_manager = _FakeSandboxManager("replacement-opencode")
+    sandbox_manager.supports_opencode_history_persistence = True
+    db_session = _FakeDbSession()
+
+    _manager(sandbox_manager, db_session)._prewarm_opencode_session(sandbox_id, session)
+
+    assert session.opencode_session_id == "replacement-opencode"
+    assert db_session.flush_count == 1
+    assert sandbox_manager.calls == [(sandbox_id, session.id, None)]
 
 
 def test_prewarm_opencode_session_raises_when_runtime_returns_no_id() -> None:

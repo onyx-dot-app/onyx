@@ -72,7 +72,6 @@ def _populate_session_workspace(
         "outputs/web/page.tsx": "// hello from outputs\n",
         "outputs/data/manifest.json": '{"v": 1}\n',
         "attachments/notes.txt": "user uploaded notes\n",
-        ".opencode-data/session.json": '{"id": "deadbeef"}\n',
     }
 
     script_lines = ["set -e", f"cd {session_path}"]
@@ -150,7 +149,7 @@ def _list_archive_members(tar_path: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def test_snapshot_includes_outputs_and_attachments_and_opencode_data(
+def test_snapshot_includes_outputs_and_attachments_only(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
@@ -175,14 +174,13 @@ def test_snapshot_includes_outputs_and_attachments_and_opencode_data(
     assert any(m == "attachments" or m.startswith("attachments/") for m in members), (
         f"Expected attachments/ tree. Members: {members}"
     )
-    assert any(
+    assert not any(
         m == ".opencode-data" or m.startswith(".opencode-data/") for m in members
-    ), f"Expected .opencode-data/ tree. Members: {members}"
+    ), f".opencode-data/ must not appear in session snapshot. Members: {members}"
 
     # The specific seed files should round-trip.
     assert any(m.endswith("outputs/web/page.tsx") for m in members)
     assert any(m.endswith("attachments/notes.txt") for m in members)
-    assert any(m.endswith(".opencode-data/session.json") for m in members)
 
 
 def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
@@ -243,7 +241,7 @@ def test_restore_from_snapshot_recreates_workspace(
         pod_name,
         SANDBOX_NAMESPACE,
         f"cd /workspace/sessions/{session_id} && "
-        f"find outputs attachments .opencode-data -type f | sort | "
+        f"find outputs attachments -type f | sort | "
         f"xargs sha256sum",
     )
 
@@ -279,7 +277,7 @@ def test_restore_from_snapshot_recreates_workspace(
         pod_name,
         SANDBOX_NAMESPACE,
         f"cd /workspace/sessions/{session_id} && "
-        f"find outputs attachments .opencode-data -type f | sort | "
+        f"find outputs attachments -type f | sort | "
         f"xargs sha256sum",
     )
     assert pre_hashes.strip() == post_hashes.strip(), (

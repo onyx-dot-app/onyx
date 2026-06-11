@@ -558,6 +558,23 @@ class _ServeMixin:
         finally:
             client.close()
 
+    def delete_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> bool:
+        session_path = self._session_directory(session_id)
+        client = self._build_serve_client(
+            sandbox_id,
+            session_path,
+            with_event_bus=False,
+        )
+        try:
+            return client.delete_session(opencode_session_id, directory=session_path)
+        finally:
+            client.close()
+
     def _abort_and_log_turn_failure(
         self,
         *,

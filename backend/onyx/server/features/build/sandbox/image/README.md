@@ -120,6 +120,7 @@ When a session is created, the following structure is set up in the pod:
 ```
 /workspace/
 ├── managed/skills/         # Pushed at session-setup time (built-ins + customs)
+├── opencode-data/          # Sandbox-global opencode data in Kubernetes
 ├── templates/              # Baked into image
 └── sessions/
     └── $session_id/

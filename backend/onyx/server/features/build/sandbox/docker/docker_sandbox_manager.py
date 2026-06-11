@@ -16,7 +16,7 @@ Snapshots
 Docker V1 streams tar bytes through api_server-owned ``FileStore`` rather than
 handing storage credentials to the agent container. ``create_snapshot`` runs
 ``tar`` inside the sandbox via docker exec, pipes the bytes through
-``SnapshotManager.create_snapshot_from_stream``; ``restore_snapshot`` runs the
+``SnapshotManager.persist_snapshot_from_stream``; ``restore_snapshot`` runs the
 reverse path via ``stream_stdin_to_container``.
 
 Security model
@@ -1129,8 +1129,7 @@ echo "Session cleanup complete"
             (
                 f"cd {session_path} && tar -czf - "
                 f"$([ -d outputs ] && echo outputs) "
-                f"$([ -d attachments ] && echo attachments) "
-                f"$([ -d .opencode-data ] && echo .opencode-data)"
+                f"$([ -d attachments ] && echo attachments)"
             ),
         ]
 
@@ -1141,7 +1140,7 @@ echo "Session cleanup complete"
             # ``SnapshotManager``/``FileStore`` actually use, but does not
             # subclass ``typing.IO[bytes]`` formally.
             _, storage_path, size_bytes = (
-                self._snapshot_manager.create_snapshot_from_stream(
+                self._snapshot_manager.persist_snapshot_from_stream(
                     stream=adapter,  # ty: ignore[invalid-argument-type]
                     sandbox_id=str(sandbox_id),
                     tenant_id=tenant_id,
@@ -1713,7 +1712,7 @@ echo WRITE_OK"""
 class _GeneratorReader:
     """Adapts a ``Generator[bytes, ...]`` into a ``read(n)``-based reader.
 
-    ``SnapshotManager.create_snapshot_from_stream`` (and ``shutil.copyfileobj``
+    ``SnapshotManager.persist_snapshot_from_stream`` (and ``shutil.copyfileobj``
     under it) only need ``read(n)``. We buffer leftover bytes so the producer's
     chunk size doesn't constrain the consumer's.
     """

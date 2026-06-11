@@ -35,11 +35,11 @@ from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    PUSH_DAEMON_PORT,
 )
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    PUSH_DAEMON_PORT,
+    KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.utils.logger import setup_logger

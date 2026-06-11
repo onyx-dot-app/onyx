@@ -52,7 +52,7 @@ class OpencodeServeClient:
         self,
         opencode_session_id: str | None,
         *,
-        cwd: str,
+        directory: str,
         title: str | None = None,
     ) -> str:
         """Return a known-good opencode session id.
@@ -63,8 +63,9 @@ class OpencodeServeClient:
 
         Idempotent. Safe to call from any API replica."""
 
-    def delete_session(self, opencode_session_id: str) -> None:
-        """DELETE /session/{id}. Best-effort; logs but does not raise on 404."""
+    def delete_session(self, opencode_session_id: str, *, directory: str) -> bool:
+        """Best-effort DELETE /session/{id}. Returns false on failure; Onyx
+        session deletion must not depend on this cleanup succeeding."""
 
     # --- the load-bearing method ------------------------------------------
 

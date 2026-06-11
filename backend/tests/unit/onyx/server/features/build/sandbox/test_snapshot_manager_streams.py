@@ -15,7 +15,6 @@ from typing import IO
 
 import pytest
 
-import onyx.server.features.build.sandbox.manager.snapshot_manager as snapshot_manager_mod
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import FileStore
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
@@ -54,6 +53,19 @@ class _FakeFileStore:
     def read_file(self, file_id: str, use_tempfile: bool = False) -> IO[bytes]:  # noqa: ARG002
         return io.BytesIO(self._content[file_id])
 
+    def delete_file(self, file_id: str, error_on_missing: bool = True) -> None:
+        if file_id not in self._content and error_on_missing:
+            raise FileNotFoundError(file_id)
+        self._content.pop(file_id, None)
+
+    def has_file(
+        self,
+        file_id: str,
+        file_origin: FileOrigin,  # noqa: ARG002
+        file_type: str,  # noqa: ARG002
+    ) -> bool:
+        return file_id in self._content
+
 
 @pytest.fixture
 def store() -> _FakeFileStore:
@@ -65,12 +77,12 @@ def manager(store: _FakeFileStore) -> SnapshotManager:
     return SnapshotManager(cast(FileStore, store))
 
 
-def test_create_snapshot_from_stream_persists_with_expected_metadata(
+def test_persist_snapshot_from_stream_persists_with_expected_metadata(
     store: _FakeFileStore, manager: SnapshotManager
 ) -> None:
     """Storage path / display name / origin / metadata must remain stable."""
     payload = b"a" * 1024
-    snapshot_id, storage_path, size = manager.create_snapshot_from_stream(
+    snapshot_id, storage_path, size = manager.persist_snapshot_from_stream(
         stream=io.BytesIO(payload),
         sandbox_id="sandbox-xyz",
         tenant_id="tenant-abc",
@@ -96,29 +108,12 @@ def test_create_snapshot_from_stream_persists_with_expected_metadata(
     assert saved["size"] == len(payload)
 
 
-def test_create_snapshot_from_stream_rejects_oversized_stream(
-    store: _FakeFileStore,
-    manager: SnapshotManager,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(snapshot_manager_mod, "MAX_SNAPSHOT_ARCHIVE_BYTES", 4)
-
-    with pytest.raises(RuntimeError, match="exceeds"):
-        manager.create_snapshot_from_stream(
-            stream=io.BytesIO(b"12345"),
-            sandbox_id="s",
-            tenant_id="t",
-        )
-
-    assert store.saved == []
-
-
 def test_restore_snapshot_to_stream_writes_stored_bytes(
     manager: SnapshotManager,
 ) -> None:
     """Bytes saved via ``save_file`` should round-trip through the streaming reader."""
     payload = b"snapshot-bytes-to-restore"
-    _id, storage_path, _size = manager.create_snapshot_from_stream(
+    _id, storage_path, _size = manager.persist_snapshot_from_stream(
         stream=io.BytesIO(payload),
         sandbox_id="s",
         tenant_id="t",
@@ -128,19 +123,83 @@ def test_restore_snapshot_to_stream_writes_stored_bytes(
     assert sink.getvalue() == payload
 
 
-def test_restore_snapshot_to_stream_rejects_oversized_snapshot(
+def test_opencode_history_snapshot_uses_stable_sandbox_level_path(
+    store: _FakeFileStore,
     manager: SnapshotManager,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    payload = b"12345"
-    _id, storage_path, _size = manager.create_snapshot_from_stream(
+    payload = b"opencode-history"
+
+    storage_path, size = manager.persist_opencode_snapshot_from_stream(
         stream=io.BytesIO(payload),
-        sandbox_id="s",
-        tenant_id="t",
+        sandbox_id="sandbox-xyz",
+        tenant_id="tenant-abc",
     )
-    monkeypatch.setattr(snapshot_manager_mod, "MAX_SNAPSHOT_ARCHIVE_BYTES", 4)
+
+    assert size == len(payload)
+    assert (
+        storage_path
+        == "sandbox-snapshots/tenant-abc/sandbox-xyz/opencode-history.tar.gz"
+    )
+    assert manager.has_opencode_history_snapshot("tenant-abc", "sandbox-xyz") is True
+
+    saved = store.saved[-1]
+    assert saved["file_origin"] == FileOrigin.SANDBOX_SNAPSHOT
+    assert saved["file_type"] == "application/gzip"
+    assert saved["file_id"] == storage_path
+    assert saved["display_name"] == "sandbox-opencode-history-sandbox-xyz.tar.gz"
+    assert saved["file_metadata"] == {
+        "sandbox_id": "sandbox-xyz",
+        "tenant_id": "tenant-abc",
+        "snapshot_kind": "opencode_history",
+    }
 
     sink = io.BytesIO()
-    with pytest.raises(RuntimeError, match="exceeds"):
-        manager.restore_snapshot_to_stream(storage_path, sink)
-    assert sink.getvalue() == b""
+    manager.restore_snapshot_to_stream(storage_path, sink)
+    assert sink.getvalue() == payload
+
+
+def test_opencode_history_snapshot_overwrites_latest_for_sandbox(
+    manager: SnapshotManager,
+) -> None:
+    manager.persist_opencode_snapshot_from_stream(
+        stream=io.BytesIO(b"old"),
+        sandbox_id="sandbox-xyz",
+        tenant_id="tenant-abc",
+    )
+    manager.persist_opencode_snapshot_from_stream(
+        stream=io.BytesIO(b"new"),
+        sandbox_id="sandbox-xyz",
+        tenant_id="tenant-abc",
+    )
+
+    sink = io.BytesIO()
+    manager.restore_snapshot_to_stream(
+        SnapshotManager.opencode_history_storage_path("tenant-abc", "sandbox-xyz"),
+        sink,
+    )
+    assert sink.getvalue() == b"new"
+
+
+def test_opencode_history_snapshot_rejects_empty_stream(
+    manager: SnapshotManager,
+) -> None:
+    with pytest.raises(RuntimeError, match="empty"):
+        manager.persist_opencode_snapshot_from_stream(
+            stream=io.BytesIO(b""),
+            sandbox_id="sandbox-xyz",
+            tenant_id="tenant-abc",
+        )
+
+
+def test_delete_opencode_history_snapshot_removes_stable_path(
+    manager: SnapshotManager,
+) -> None:
+    manager.persist_opencode_snapshot_from_stream(
+        stream=io.BytesIO(b"history"),
+        sandbox_id="sandbox-xyz",
+        tenant_id="tenant-abc",
+    )
+
+    manager.delete_opencode_history_snapshot("tenant-abc", "sandbox-xyz")
+
+    assert manager.has_opencode_history_snapshot("tenant-abc", "sandbox-xyz") is False

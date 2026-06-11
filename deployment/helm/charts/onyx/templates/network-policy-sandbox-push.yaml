@@ -43,7 +43,7 @@ spec:
         {{- end }}
       ports:
         - protocol: TCP
-          port: 8731
+          port: {{ include "onyx.sandboxPushDaemonPort" . }}
         # opencode serve — driven by OpencodeServeClient.
         - protocol: TCP
           port: 4096

@@ -65,11 +65,19 @@ K8s pulls `LLMProviderConfig` for every configured provider from the DB at provi
 
 Pick the second for this PR — it minimizes the surface area of the change. The first is a follow-up if/when Docker users actually need cross-provider per-prompt switching.
 
-### Snapshots already capture `.opencode-data`
+### Docker snapshots do not preserve opencode history today
 
-`SnapshotManager` (`backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`) tars from the sandbox container. The shared `/workspace` volume that holds `XDG_DATA_HOME=/workspace/.opencode-data` (set indirectly by `entrypoint.sh:35-38` — `WORKSPACE_DATA_HOME` then `export XDG_DATA_HOME="${XDG_DATA_HOME:-$WORKSPACE_DATA_HOME}"`) is already snapshotted by both backends. No snapshot-format change.
+Normal workspace snapshots capture per-session `outputs/` and `attachments/`
+only. They do not include opencode's sandbox-global data directory. The
+Kubernetes backend persists that history through separate sidecar
+`/opencode-history/*` endpoints, but Docker does not currently have an
+equivalent opencode-history persistence path.
 
-The K8s plan flagged "snapshot mid-turn could capture a half-written SQLite WAL" — same mitigation here. The Docker sidecar daemon doesn't exist, so the abort-before-tar logic lives in `DockerSandboxManager.create_snapshot` directly: call `OpencodeServeClient.abort` for any active session on the sandbox before invoking `tar`. Out of scope for this PR if `create_snapshot` is already not called mid-turn; verify and document.
+If Docker moves to `opencode serve`, preserve session history with a separate
+sandbox-level archive instead of putting opencode data into normal per-session
+workspace snapshots. The SQLite backup detail matters there: a live
+`opencode serve` process can have WAL state, so the archive should be created
+from a coherent SQLite backup rather than a raw mid-write file copy.
 
 ### Networking from api_server to sandbox container
 

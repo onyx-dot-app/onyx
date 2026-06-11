@@ -1027,6 +1027,11 @@ class OpencodeServeClient:
     ) -> str:
         """Return a valid opencode session id. Idempotent across replicas.
 
+        A missing caller-supplied id is treated optimistically: the restored
+        history snapshot may not contain that opencode session yet, so we mint a
+        replacement id and let the caller persist it. Non-404 lookup failures
+        still raise instead of masking runtime outages.
+
         ``directory`` anchors the opencode Instance for this session.
         Opencode-serve scopes its session store per-directory via the
         ``?directory=`` query parameter on every route (the
@@ -1061,7 +1066,7 @@ class OpencodeServeClient:
             if r.status_code == 404:
                 logger.warning(
                     "[SESSION-LIFECYCLE] ensure_session: GET /session/%s -> 404 "
-                    "(persisted id stale; will create new)",
+                    "(persisted id missing from opencode store; will create new)",
                     opencode_session_id,
                 )
             else:
@@ -1099,24 +1104,35 @@ class OpencodeServeClient:
         )
         return new_id
 
-    def delete_session(self, opencode_session_id: str, *, directory: str) -> None:
+    def delete_session(self, opencode_session_id: str, *, directory: str) -> bool:
+        """Best-effort delete of an opencode session from the live serve process.
+
+        Product deletion is owned by Onyx's BuildSession row. This cleanup is
+        opportunistic: failure should not block deleting the Onyx session.
+        """
         try:
-            r = self._http.delete(
+            r = self._request(
+                "DELETE",
                 f"/session/{opencode_session_id}",
                 params={"directory": directory},
+                idempotent=True,
             )
-            if r.status_code not in (200, 204, 404):
-                logger.warning(
-                    "opencode-serve: delete_session(%s) → HTTP %s",
-                    opencode_session_id,
-                    r.status_code,
-                )
         except httpx.HTTPError as e:
             logger.warning(
                 "opencode-serve: delete_session(%s) failed: %s",
                 opencode_session_id,
                 e,
             )
+            return False
+
+        if r.status_code in (200, 204, 404):
+            return True
+        logger.warning(
+            "opencode-serve: delete_session(%s) -> HTTP %s",
+            opencode_session_id,
+            r.status_code,
+        )
+        return False
 
     def list_messages(
         self, opencode_session_id: str, *, directory: str

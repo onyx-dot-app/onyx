@@ -109,6 +109,8 @@ class SandboxManager(_ServeMixin, ABC):
     Use get_sandbox_manager() to get the appropriate implementation.
     """
 
+    supports_opencode_history_persistence: bool = False
+
     @abstractmethod
     def provision(
         self,
@@ -268,6 +270,25 @@ class SandboxManager(_ServeMixin, ABC):
             RuntimeError: If snapshot restoration fails
         """
         ...
+
+    def create_opencode_history_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,
+    ) -> bool:
+        """Snapshot sandbox-global opencode history if this backend supports it.
+
+        Returns False when opencode has not created any data yet. By default,
+        an empty live store leaves any existing durable archive untouched so idle
+        and recovery snapshots do not discard the last known history.
+        Callers must gate on ``supports_opencode_history_persistence`` before
+        invoking this optional capability.
+        """
+        _ = sandbox_id, tenant_id, timeout_seconds
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support opencode history snapshots"
+        )
 
     @abstractmethod
     def session_workspace_exists(
