@@ -1,9 +1,10 @@
 """opencode.json builders.
 
 opencode-serve loads config once at startup and does not hot-reload
-(sst/opencode#22213). The K8s + serve path pre-loads every configured
-provider so per-prompt model overrides can cross providers without a
-pod restart; the docker path keeps single-provider per-session config.
+(sst/opencode#22213), so both the K8s and docker paths pre-load every
+supported provider — real key (or proxy placeholder) when configured, dummy
+key otherwise — letting per-prompt model overrides cross providers without a
+restart.
 """
 
 from typing import Any

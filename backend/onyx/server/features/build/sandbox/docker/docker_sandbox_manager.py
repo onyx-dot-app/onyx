@@ -133,7 +133,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_opencode_config,
+    build_multi_provider_opencode_config,
 )
 from onyx.utils.logger import setup_logger
 
@@ -224,6 +224,30 @@ def _sandbox_container_name(sandbox_id: str | UUID) -> str:
 def _sandbox_volume_name(sandbox_id: str | UUID) -> str:
     """Per-sandbox named volume holding ``/workspace/sessions``."""
     return f"{SANDBOX_DOCKER_VOLUME_PREFIX}{str(sandbox_id)[:8]}"
+
+
+def _container_llm_configs(
+    all_llm_configs: list[LLMProviderConfig] | None,
+    llm_config: LLMProviderConfig,
+    *,
+    proxy_enabled: bool,
+) -> list[LLMProviderConfig]:
+    """Provider configs to bake into the container's opencode.json.
+
+    The Docker analog of K8s ``_placeholder_llm_configs``: when the egress proxy
+    is enabled, real keys are swapped for the placeholder (the proxy injects the
+    live key on the wire); ``api_key=None`` providers (e.g. Ollama) are left
+    untouched so the placeholder never reaches the LLM.
+    """
+    configs = all_llm_configs or [llm_config]
+    if not proxy_enabled:
+        return configs
+    return [
+        c.model_copy(update={"api_key": SANDBOX_PROXY_INJECTED_PLACEHOLDER})
+        if c.api_key
+        else c
+        for c in configs
+    ]
 
 
 def _sanitize_relative_path(path: str) -> str:
@@ -714,18 +738,6 @@ class DockerSandboxManager(SandboxManager):
                 "SANDBOX_API_SERVER_URL must be set for Docker sandbox provisioning."
             )
 
-        if all_llm_configs is not None and len(all_llm_configs) > 1:
-            # Docker is single-provider today: per-prompt agent_provider
-            # overrides will fail at opencode-serve with "provider not
-            # registered". Warn now so operators see it before the first turn.
-            logger.warning(
-                "DockerSandboxManager.provision received %d LLM configs but only the primary "
-                "provider %r is bootstrapped; per-prompt provider overrides will fail until Docker "
-                "grows multi-provider support.",
-                len(all_llm_configs),
-                llm_config.provider,
-            )
-
         logger.info(
             "Provisioning Docker sandbox %s for user %s, tenant %s.",
             sandbox_id,
@@ -757,19 +769,14 @@ class DockerSandboxManager(SandboxManager):
             container_onyx_pat = (
                 SANDBOX_PROXY_INJECTED_PLACEHOLDER if SANDBOX_PROXY_HOST else onyx_pat
             )
-            # api_key=None (e.g. Ollama) -> skip; The resolver has nothing to
-            # swap and the placeholder would reach the LLM verbatim.
-            container_llm_api_key = (
-                SANDBOX_PROXY_INJECTED_PLACEHOLDER
-                if SANDBOX_PROXY_HOST and llm_config.api_key
-                else llm_config.api_key
+            provider_configs = _container_llm_configs(
+                all_llm_configs, llm_config, proxy_enabled=bool(SANDBOX_PROXY_HOST)
             )
             opencode_config_json = json.dumps(
-                build_opencode_config(
-                    provider=llm_config.provider,
-                    model_name=llm_config.model_name,
-                    api_key=container_llm_api_key,
-                    api_base=llm_config.api_base,
+                build_multi_provider_opencode_config(
+                    providers=provider_configs,
+                    default_provider=llm_config.provider,
+                    default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
                     plugins=session_tag_plugins,
                 )

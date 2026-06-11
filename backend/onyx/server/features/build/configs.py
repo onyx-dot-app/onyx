@@ -67,6 +67,11 @@ ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 # shared recommended-models config (served via /build/recommended-models).
 BUILD_MODE_ALLOWED_PROVIDER_TYPES = ["anthropic", "openai", "openrouter"]
 
+# apiKey sentinel for a supported provider the org hasn't configured. We register
+# every supported provider so a cross-provider override never hits "model not
+# found"; an unconfigured one fails closed instead (proxy 403 / upstream 401).
+BUILD_MODE_NOT_CONFIGURED_API_KEY = "onyx-provider-not-configured"
+
 # Dev/debug-only: exposes an SSE endpoint that tails the sandbox pod's
 # opencode-serve container logs. Never enable in prod — the logs include LLM I/O
 # and tool invocations that may contain sensitive data. When false, the endpoint
