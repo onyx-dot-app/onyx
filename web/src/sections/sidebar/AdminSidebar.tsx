@@ -286,7 +286,7 @@ export default function AdminSidebar() {
           </React.Fragment>
         ))}
 
-        {disabledGroups.length > 0 && <Divider paddingPerpendicular="fit" />}
+        {disabledGroups.length > 0 && <Divider paddingPerpendicular="sm" />}
         {disabledGroups.map((group, groupIndex) => (
           <React.Fragment key={`disabled-${groupIndex}`}>
             {group.section ? (
@@ -313,12 +313,7 @@ export default function AdminSidebar() {
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        {!folded && (
-          <>
-            <Divider paddingPerpendicular="fit" />
-            <Spacer rem={0.5} />
-          </>
-        )}
+        {!folded && <Divider paddingPerpendicular="sm" />}
         <SidebarTab
           icon={SvgX}
           href="/app"
