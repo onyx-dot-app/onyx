@@ -641,7 +641,7 @@ class KubernetesSandboxManager(SandboxManager):
         missing the expected container) as an opaque ``StopIteration``; this
         names the container and the fix, matching the 404 PodTemplate error.
         """
-        for container in spec.containers or []:
+        for container in list(spec.containers or []) + list(spec.init_containers or []):
             if container.name == name:
                 return container
         raise RuntimeError(
@@ -846,33 +846,40 @@ class KubernetesSandboxManager(SandboxManager):
         Returns:
             Error message if an init container failed, None otherwise
         """
-        if not pod.status.init_container_statuses:
+        init_statuses = pod.status.init_container_statuses or []
+        if not init_statuses:
             return None
 
-        for init_status in pod.status.init_container_statuses:
-            if init_status.state:
-                # Check for terminated state with non-zero exit code
-                if init_status.state.terminated:
-                    if init_status.state.terminated.exit_code != 0:
-                        container_name = init_status.name
-                        logs = self._get_init_container_logs(
-                            pod.metadata.name, container_name
-                        )
-                        return (
-                            f"Init container '{container_name}' failed with exit code "
-                            f"{init_status.state.terminated.exit_code}. "
-                            f"Logs:\n{logs}"
-                        )
-                # Check for waiting state with error reason
-                elif init_status.state.waiting:
-                    if init_status.state.waiting.reason in [
-                        "Error",
-                        "CrashLoopBackOff",
-                    ]:
-                        container_name = init_status.name
-                        reason = init_status.state.waiting.reason
-                        message = init_status.state.waiting.message or ""
-                        return f"Init container '{container_name}' is in '{reason}' state. Message: {message}"
+        restartable_init_container_names = {
+            init_container.name
+            for init_container in pod.spec.init_containers or []
+            if init_container.name and init_container.restart_policy == "Always"
+        }
+
+        for init_status in init_statuses:
+            state = init_status.state
+            if state is None:
+                continue
+
+            waiting = state.waiting
+            if waiting and waiting.reason in ["Error", "CrashLoopBackOff"]:
+                message = waiting.message or ""
+                return (
+                    f"Init container '{init_status.name}' is in "
+                    f"'{waiting.reason}' state. Message: {message}"
+                )
+
+            terminated = state.terminated
+            if terminated is None or terminated.exit_code == 0:
+                continue
+            if init_status.name in restartable_init_container_names:
+                continue
+
+            logs = self._get_init_container_logs(pod.metadata.name, init_status.name)
+            return (
+                f"Init container '{init_status.name}' failed with exit code "
+                f"{terminated.exit_code}. Logs:\n{logs}"
+            )
 
         return None
 

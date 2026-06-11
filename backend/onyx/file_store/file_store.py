@@ -300,7 +300,7 @@ class S3BackedFileStore(FileStore):
             elif error_code == "403":
                 # Bucket exists but we don't have permission to access it
                 logger.warning(
-                    f"S3 bucket '{bucket_name}' exists but access is forbidden"
+                    "S3 bucket '%s' exists but access is forbidden", bucket_name
                 )
                 raise RuntimeError(
                     f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."

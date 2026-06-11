@@ -1,10 +1,12 @@
 # Sidecar Reimplementation for Craft Sandboxes
 
-The sandbox pod uses two containers from the same image:
+The sandbox pod uses one app container plus one native restartable init
+sidecar from the same image:
 
 - `sandbox`: untrusted agent/code execution.
 - `sidecar`: signed control-plane filesystem API for bundle pushes and
-  snapshot tar/untar operations.
+  snapshot tar/untar operations. It is rendered in `initContainers` with
+  `restartPolicy: Always`.
 
 The sidecar is not a durable-storage client. It does not receive S3 bucket
 names, AWS credentials, or workload identity. Snapshot bytes are streamed
@@ -18,20 +20,26 @@ Pod: sandbox-{id}
 ServiceAccount: sandbox
 shareProcessNamespace: false
 
-containers:
-  sandbox
-    - opencode agent
-    - Next.js dev server
-    - read-only /workspace/managed
-    - read/write /workspace/sessions
-    - no snapshot storage credentials
+initContainers:
+  sandbox-init
+    - firewall/proxy bootstrap
+    - must complete before user code
 
   sidecar
+    - restartPolicy: Always
     - daemon on :8731
     - POST /push for bundle materialization
     - POST /snapshot/create for gzip snapshot stream
     - POST /snapshot/restore/{session_id} for gzip restore stream
     - read/write /workspace/managed
+    - read/write /workspace/sessions
+    - no snapshot storage credentials
+
+containers:
+  sandbox
+    - opencode agent
+    - Next.js dev server
+    - read-only /workspace/managed
     - read/write /workspace/sessions
     - no snapshot storage credentials
 ```
@@ -66,6 +74,8 @@ Restore:
 - Helm renders `ServiceAccount/sandbox` without storage annotations.
 - Helm renders sandbox manager RBAC for the Onyx workload ServiceAccount and
   any `craft.extraBoundServiceAccounts`.
+- Kubernetes `>= 1.33` is required for native restartable init sidecar
+  containers.
 - Terraform does not create Craft-specific snapshot buckets or roles.
 - The main FileStore configuration is the only durable storage configuration
   needed for snapshots.
@@ -74,6 +84,7 @@ Restore:
 
 - Sidecar unit tests for signed create/restore, checksum validation, and replay
   resistance.
-- Pod spec tests proving storage env vars are absent from both containers.
+- Pod spec tests proving storage env vars are absent from the sandbox app
+  container and sidecar init container.
 - K8s external dependency tests proving snapshot create/restore round trips via
   FileStore.

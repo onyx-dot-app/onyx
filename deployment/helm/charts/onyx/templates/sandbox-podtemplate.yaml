@@ -84,6 +84,38 @@ template:
           capabilities:
             drop: ["ALL"]
             add: ["NET_ADMIN"]
+      - name: sidecar
+        image: {{ $image }}
+        imagePullPolicy: {{ $pullPolicy }}
+        command: ["/workspace/sidecar-entrypoint.sh"]
+        restartPolicy: Always
+        ports:
+          - { name: push-daemon, containerPort: {{ $pushDaemonPort }} }
+        env:
+          {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
+        volumeMounts:
+          - { name: workspace, mountPath: /workspace/sessions }
+          - { name: managed, mountPath: /workspace/managed }
+          - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
+        resources:
+          # Snapshot tar/stream runs through this sidecar, so give it headroom.
+          requests: { cpu: "100m", memory: "256Mi" }
+          limits: { cpu: "1", memory: "1Gi" }
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          privileged: false
+          capabilities:
+            drop: ["ALL"]
+        livenessProbe:
+          httpGet: { path: /health, port: {{ $pushDaemonPort }} }
+          initialDelaySeconds: 5
+          periodSeconds: 30
+        readinessProbe:
+          httpGet: { path: /health, port: {{ $pushDaemonPort }} }
+          initialDelaySeconds: 1
+          periodSeconds: 2
+          failureThreshold: 10
     containers:
       - name: sandbox
         image: {{ $image }}
@@ -113,37 +145,6 @@ template:
           privileged: false
           capabilities:
             drop: ["ALL"]
-      - name: sidecar
-        image: {{ $image }}
-        imagePullPolicy: {{ $pullPolicy }}
-        command: ["/workspace/sidecar-entrypoint.sh"]
-        ports:
-          - { name: push-daemon, containerPort: {{ $pushDaemonPort }} }
-        env:
-          {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
-        volumeMounts:
-          - { name: workspace, mountPath: /workspace/sessions }
-          - { name: managed, mountPath: /workspace/managed }
-          - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
-        resources:
-          # Snapshot tar/stream runs through this sidecar, so give it headroom.
-          requests: { cpu: "100m", memory: "256Mi" }
-          limits: { cpu: "1", memory: "1Gi" }
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false
-          privileged: false
-          capabilities:
-            drop: ["ALL"]
-        livenessProbe:
-          httpGet: { path: /health, port: {{ $pushDaemonPort }} }
-          initialDelaySeconds: 5
-          periodSeconds: 30
-        readinessProbe:
-          httpGet: { path: /health, port: {{ $pushDaemonPort }} }
-          initialDelaySeconds: 1
-          periodSeconds: 2
-          failureThreshold: 10
     volumes:
       - name: workspace
         emptyDir: { sizeLimit: 50Gi }

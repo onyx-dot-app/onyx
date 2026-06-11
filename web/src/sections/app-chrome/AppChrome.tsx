@@ -22,11 +22,11 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useChatSessions from "@/hooks/useChatSessions";
 import {
-  handleMoveOperation,
   shouldShowMoveModal,
   showErrorNotification,
-} from "@/sections/sidebar/sidebarUtils";
-import { LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
+} from "@/lib/sidebar/utils";
+import { handleMoveOperation } from "@/lib/sidebar/svc";
+import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { deleteChatSession } from "@/app/app/services/lib";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
@@ -285,16 +285,7 @@ function HeaderInner({
         </ConfirmationModalLayout>
       )}
 
-      <div
-        className={cn(
-          "w-full flex flex-row flex-wrap justify-center items-center px-4",
-          // # Note (@raunakab):
-          //
-          // We add an additional top margin to align this header with the `LogoSection` inside of the App-Sidebar.
-          // For more information, check out `SidebarWrapper.tsx`.
-          "mt-2"
-        )}
-      >
+      <div className="w-full flex flex-row flex-wrap justify-center items-center px-4">
         {/*
           Left:
           - (mobile) sidebar toggle
@@ -505,7 +496,8 @@ export default function AppChrome({ children }: AppChromeProps) {
   const { resolvedTheme } = useTheme();
   const { isSafari } = useBrowserInfo();
   const isLightMode = resolvedTheme === "light";
-  const showBackground = hasBackground && !appFocus.isProject();
+  const showBackground =
+    hasBackground && (appFocus.isChat() || appFocus.isNewSession());
 
   const horizontalBlurMask = `linear-gradient(
     to right,
