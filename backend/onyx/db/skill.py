@@ -18,6 +18,8 @@ These helpers never commit — callers control the transaction boundary so a
 multi-step admin flow (e.g. create row + replace grants) can roll back atomically.
 """
 
+import hashlib
+import struct
 from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import UUID
@@ -29,6 +31,7 @@ from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
@@ -246,7 +249,7 @@ def list_skills_for_sandbox_injection(
     return list(db_session.scalars(stmt))
 
 
-def fetch_skill_for_admin(skill_id: UUID, db_session: Session) -> Skill | None:
+def fetch_skill_by_id(skill_id: UUID, db_session: Session) -> Skill | None:
     stmt = select(Skill).where(Skill.id == skill_id).options(selectinload(Skill.author))
     return db_session.scalars(stmt).one_or_none()
 
@@ -370,7 +373,7 @@ def replace_skill_bundle(
 
     Rejects built-in rows — they have no bundle.
     """
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
@@ -405,7 +408,7 @@ def patch_skill(
     patch: SkillPatch,
     db_session: Session,
 ) -> Skill:
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
@@ -424,7 +427,7 @@ def patch_skill(
 def replace_skill_grants(
     skill_id: UUID, group_ids: Sequence[int], db_session: Session
 ) -> None:
-    if fetch_skill_for_admin(skill_id, db_session) is None:
+    if fetch_skill_by_id(skill_id, db_session) is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"Skill {skill_id} not found.",
@@ -451,7 +454,7 @@ def replace_skill_grants(
 
 def delete_skill(skill_id: UUID, db_session: Session) -> str | None:
     """Hard-delete a skill and return its `bundle_file_id` for caller cleanup."""
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         return None
     bundle_file_id = skill.bundle_file_id
@@ -507,19 +510,25 @@ def count_personal_skills_for_user(user_id: UUID, db_session: Session) -> int:
     return db_session.scalar(stmt) or 0
 
 
-# Arbitrary namespace so this per-user lock can't collide with other advisory locks.
-_PERSONAL_SKILL_LOCK_NAMESPACE = 0x534B494C
+# Namespaced + user-hashed so unrelated users don't block each other and the
+# lock id can't collide with other advisory locks in the codebase.
+_PERSONAL_SKILL_LOCK_NAMESPACE = "onyx_personal_skill_lock"
+
+
+def _personal_skill_lock_id(user_id: UUID) -> int:
+    digest = hashlib.sha256(
+        f"{_PERSONAL_SKILL_LOCK_NAMESPACE}:{user_id}".encode()
+    ).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    return struct.unpack("q", digest[:8])[0]
 
 
 def lock_personal_skills_for_user(user_id: UUID, db_session: Session) -> None:
     """Serialize a user's concurrent personal-skill creates so the
     count-then-insert cap check is race-free; released at transaction end."""
     db_session.execute(
-        select(
-            func.pg_advisory_xact_lock(
-                _PERSONAL_SKILL_LOCK_NAMESPACE, func.hashtext(str(user_id))
-            )
-        )
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": _personal_skill_lock_id(user_id)},
     )
 
 

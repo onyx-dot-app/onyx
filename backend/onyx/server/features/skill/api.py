@@ -1,5 +1,4 @@
 import json
-import os
 from typing import Annotated
 from typing import Final
 from uuid import UUID
@@ -15,6 +14,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import Permission
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_curator_or_admin_user
+from onyx.configs.app_configs import MAX_PERSONAL_SKILLS_PER_USER
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Skill
 from onyx.db.models import User
@@ -22,7 +22,7 @@ from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.skill import count_personal_skills_for_user
 from onyx.db.skill import create_skill__no_commit
 from onyx.db.skill import delete_skill
-from onyx.db.skill import fetch_skill_for_admin
+from onyx.db.skill import fetch_skill_by_id
 from onyx.db.skill import fetch_skill_for_user
 from onyx.db.skill import fetch_skill_for_user_by_slug
 from onyx.db.skill import get_group_ids_for_skill
@@ -56,9 +56,6 @@ logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/skills")
 user_router = APIRouter(prefix="/skills")
-
-# Env-overridable so CI can lower it without creating 50 real bundles to test the cap.
-MAX_PERSONAL_SKILLS_PER_USER = int(os.environ.get("MAX_PERSONAL_SKILLS_PER_USER") or 50)
 
 # Built-in slugs plus external-app provider slugs (rows created on demand by
 # slug — a user-claimed slug would block the org from connecting that app).
@@ -218,7 +215,7 @@ def patch_custom_skill(
     rows are rejected — their identity and lifecycle are codified."""
     domain_patch = patch_req.to_domain()
 
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
@@ -250,7 +247,7 @@ def replace_custom_skill_bundle(
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
@@ -288,7 +285,7 @@ def replace_custom_skill_grants(
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
@@ -298,7 +295,7 @@ def replace_custom_skill_grants(
     replace_skill_grants(skill_id, body.group_ids, db_session=db_session)
     db_session.commit()
 
-    updated = fetch_skill_for_admin(skill_id, db_session)
+    updated = fetch_skill_by_id(skill_id, db_session)
     if updated is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     after_affected = affected_user_ids_for_skill(updated, db_session)
@@ -313,7 +310,7 @@ def delete_custom_skill(
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_custom(skill)
@@ -424,9 +421,9 @@ def replace_personal_skill_bundle(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
-    # fetch_skill_for_admin bypasses the enabled filter on purpose: an
+    # fetch_skill_by_id bypasses the enabled filter on purpose: an
     # admin-disabled personal skill must stay mutable by its owner.
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_owned_personal(skill, user, db_session)
@@ -464,7 +461,7 @@ def patch_personal_skill(
 ) -> CustomSkillResponse:
     """Owner toggle for ``enabled``. The skill stays listed for the owner
     while disabled (greyed out) but drops out of their sandbox fileset."""
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_owned_personal(skill, user, db_session)
@@ -488,7 +485,7 @@ def delete_personal_skill(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
     _ensure_owned_personal(skill, user, db_session)
