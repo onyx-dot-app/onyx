@@ -53,21 +53,32 @@ def _install_cache_for_test(
 
 
 def _derive_ssrf_level_from_env() -> SSRFProtectionLevel:
-    """Map the legacy per-path SSRF env vars to a single protection level so
-    existing deployments keep their behavior without touching the new admin
-    control. The collapse is intentionally lossy — combos that don't line up
-    with one of the three levels resolve to the closest match (an operator who
-    needs the old fine-grained behavior should pick a level explicitly):
+    """Seed the new admin "SSRF Protection" setting's default from the legacy
+    per-path SSRF env vars so existing deployments keep their access without
+    touching the new control. The mapping is intentionally lossy and only
+    distinguishes the two extremes — VALIDATE_LLM is reachable solely through
+    the admin setting, never derived from env:
 
-    - DISABLED      when open_url validation is off AND MCP private network is allowed
-    - VALIDATE_ALL  when the web connector validates URLs (mirrors its truthiness)
-    - VALIDATE_LLM  otherwise (the all-defaults case)
+    - DISABLED      if any LLM-initiated path was opted out of validation —
+                    open_url SSRF off, or MCP allowed onto the private network
+                    or loopback. DISABLED is the only level that lets those
+                    paths reach internal/loopback targets, so honoring any of
+                    these opt-ins preserves the access an operator already had.
+    - VALIDATE_ALL  otherwise — secure by default (every outbound path, incl.
+                    the web connector, refuses private/internal IPs).
+
+    ``WEB_CONNECTOR_VALIDATE_URLS`` no longer affects the default: the web
+    connector validates whenever the level is VALIDATE_ALL (the default). An
+    operator who needs the connector to reach private IPs picks VALIDATE_LLM /
+    DISABLED in the admin setting.
     """
-    if not _cfg.OPEN_URL_VALIDATE_SSRF and _cfg.MCP_SERVER_ALLOW_PRIVATE_NETWORK:
+    if (
+        not _cfg.OPEN_URL_VALIDATE_SSRF
+        or _cfg.MCP_SERVER_ALLOW_PRIVATE_NETWORK
+        or _cfg.MCP_SERVER_ALLOW_LOOPBACK
+    ):
         return SSRFProtectionLevel.DISABLED
-    if _cfg.WEB_CONNECTOR_VALIDATE_URLS:
-        return SSRFProtectionLevel.VALIDATE_ALL
-    return SSRFProtectionLevel.VALIDATE_LLM
+    return SSRFProtectionLevel.VALIDATE_ALL
 
 
 def _build_env_defaults() -> SecuritySettings:

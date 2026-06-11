@@ -58,8 +58,10 @@ def _set_level(monkeypatch: pytest.MonkeyPatch, level: SSRFProtectionLevel) -> N
 
 @pytest.fixture(autouse=True)
 def _default_level(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Default every test to the shipped default level unless it overrides."""
-    _set_level(monkeypatch, SSRFProtectionLevel.VALIDATE_LLM)
+    """Default every test to the shipped default level unless it overrides.
+    MCP validation is identical at VALIDATE_ALL and VALIDATE_LLM (only DISABLED
+    relaxes it), so this just keeps the fixture aligned with the real default."""
+    _set_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
 
 
 @pytest.mark.parametrize("url", ALWAYS_BLOCKED + LOOPBACK + PRIVATE_HOSTS)

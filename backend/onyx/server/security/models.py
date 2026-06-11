@@ -16,11 +16,11 @@ class SSRFProtectionLevel(str, Enum):
     MCP_SERVER_ALLOW_PRIVATE_NETWORK, MCP_SERVER_ALLOW_LOOPBACK,
     WEB_CONNECTOR_VALIDATE_URLS)."""
 
-    # Most restrictive: every outbound path (incl. web connectors) blocks
-    # private/internal IPs.
+    # Default. Most restrictive: every outbound path (incl. web connectors)
+    # blocks private/internal IPs.
     VALIDATE_ALL = "validate_all"
-    # Default: LLM-initiated fetches (open_url, MCP, OAuth) are validated;
-    # admin-configured connectors may still reach private IPs.
+    # LLM-initiated fetches (open_url, MCP, OAuth) are validated; admin-configured
+    # connectors may still reach private IPs.
     VALIDATE_LLM = "validate_llm"
     # Allow all outbound requests (trusted networks / local LLM backends).
     DISABLED = "disabled"
