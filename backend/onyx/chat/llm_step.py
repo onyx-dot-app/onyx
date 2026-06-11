@@ -12,6 +12,7 @@ from typing import cast
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.citation_utils import strip_rendered_citation_links
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
@@ -705,9 +706,14 @@ def _build_structured_assistant_message(msg: ChatMessageSimple) -> AssistantMess
             for tc in msg.tool_calls
         ]
 
+    # Assistant messages are persisted in rendered "[[n]](url)" citation form. Replay
+    # the bare "[n]" markers the system prompt asks for so the model doesn't imitate
+    # the link format and trigger nested "[ [[n]](url) ](url)" citations on later turns.
+    content = strip_rendered_citation_links(msg.message) if msg.message else None
+
     return AssistantMessage(
         role="assistant",
-        content=msg.message or None,
+        content=content,
         tool_calls=tool_calls_list,
     )
 
