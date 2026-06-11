@@ -15,6 +15,7 @@ from pydantic import AnyUrl
 
 from onyx.server.features.mcp.api import _build_oauth_admin_config_data
 from onyx.server.features.mcp.api import _build_oauth_admin_config_data_for_update
+from onyx.server.features.mcp.api import _preserve_oauth_metadata
 from onyx.server.features.mcp.api import _resolve_oauth_credentials
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.utils.encryption import mask_string
@@ -410,3 +411,40 @@ class TestBuildOAuthAdminConfigDataForUpdate:
         )
         # scope is reset to REQUESTED_SCOPE (currently None)
         assert client_info_dict.get("scope") is None
+
+
+class TestPreserveOAuthMetadata:
+    def test_existing_metadata_is_carried_forward_on_rewrite(self) -> None:
+        config_data = _build_oauth_admin_config_data(
+            client_id="client-id",
+            client_secret="client-secret",
+        )
+        existing_config_data = {
+            "headers": {"Authorization": "Bearer old-token"},
+            MCPOAuthKeys.METADATA.value: {
+                "oauth_metadata": {
+                    "token_endpoint": "https://github.com/login/oauth/access_token"
+                }
+            },
+        }
+
+        preserved = _preserve_oauth_metadata(config_data, existing_config_data)
+
+        assert preserved[MCPOAuthKeys.METADATA.value] == {
+            "oauth_metadata": {
+                "token_endpoint": "https://github.com/login/oauth/access_token"
+            }
+        }
+
+    def test_missing_metadata_leaves_rewritten_config_unchanged(self) -> None:
+        config_data = _build_oauth_admin_config_data(
+            client_id="client-id",
+            client_secret="client-secret",
+        )
+
+        preserved = _preserve_oauth_metadata(
+            config_data,
+            {"headers": {"Authorization": "Bearer old-token"}},
+        )
+
+        assert MCPOAuthKeys.METADATA.value not in preserved

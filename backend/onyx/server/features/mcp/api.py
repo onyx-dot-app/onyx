@@ -336,6 +336,27 @@ def _build_oauth_admin_config_data_for_update(
     return config_data
 
 
+def _preserve_oauth_metadata(
+    config_data: MCPConnectionData,
+    existing_config_data: MCPConnectionData | None,
+) -> MCPConnectionData:
+    """Carry forward persisted MCP OAuth discovery metadata when rewriting a
+    connection config.
+
+    `update_connection_config()` replaces the whole JSON blob, so callers that
+    rebuild OAuth config from scratch must explicitly preserve metadata fields
+    that are still valid across reconnects (PRM/OAuth metadata is tied to the
+    protected resource + auth server, not the current token set).
+    """
+    if not existing_config_data:
+        return config_data
+
+    metadata = existing_config_data.get(MCPOAuthKeys.METADATA.value)
+    if metadata:
+        config_data[MCPOAuthKeys.METADATA.value] = metadata
+    return config_data
+
+
 router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
 STATE_TTL_SECONDS = 60 * 5  # 5 minutes
@@ -839,6 +860,10 @@ async def _connect_oauth(
             admin_config.id
         )  # might not have to do this
     elif is_admin:  # only update admin config if we're an admin
+        existing_admin_config_data = extract_connection_data(
+            mcp_server.admin_connection_config, apply_mask=False
+        )
+        config_data = _preserve_oauth_metadata(config_data, existing_admin_config_data)
         update_connection_config(mcp_server.admin_connection_config_id, db, config_data)
 
     connection_config = get_user_connection_config(mcp_server.id, user.email, db)
@@ -851,6 +876,10 @@ async def _connect_oauth(
             db_session=db,
         )
     else:
+        existing_user_config_data = extract_connection_data(
+            connection_config, apply_mask=False
+        )
+        config_data = _preserve_oauth_metadata(config_data, existing_user_config_data)
         update_connection_config(connection_config.id, db, config_data)
 
     db.commit()
