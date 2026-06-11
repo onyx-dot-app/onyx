@@ -394,6 +394,7 @@ class ExternalAppType(str, PyEnum):
     SLACK = "SLACK"
     LINEAR = "LINEAR"
     GITHUB = "GITHUB"
+    HUBSPOT = "HUBSPOT"
     CUSTOM = "CUSTOM"
 
     @property
