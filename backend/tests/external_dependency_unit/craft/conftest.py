@@ -859,10 +859,10 @@ def _cleanup_pool_workspace(
 ) -> None:
     """Wipe mutable trees on the pool pod before the next test runs.
 
-    ``managed/`` is read-only in the sandbox container but writable from the
-    sidecar (see ``kubernetes_sandbox_manager._build_pod_spec``), so we exec
-    via the sidecar for the skills + user_library subtrees. ``sessions/`` is
-    on a shared emptyDir, writable from either container.
+    ``managed/`` is read-only in the sandbox app container but writable from
+    the native init sidecar, so we exec via the sidecar for the skills +
+    user_library subtrees. ``sessions/`` is on a shared emptyDir, writable from
+    either container.
     """
     # managed/{skills,user_library} live under the RO mount — clean via sidecar.
     # ``find -mindepth 1 -delete`` removes only the directory's contents

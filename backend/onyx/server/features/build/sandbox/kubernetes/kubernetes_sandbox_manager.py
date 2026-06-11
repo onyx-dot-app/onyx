@@ -641,7 +641,7 @@ class KubernetesSandboxManager(SandboxManager):
         missing the expected container) as an opaque ``StopIteration``; this
         names the container and the fix, matching the 404 PodTemplate error.
         """
-        for container in spec.containers or []:
+        for container in list(spec.containers or []) + list(spec.init_containers or []):
             if container.name == name:
                 return container
         raise RuntimeError(
@@ -849,11 +849,20 @@ class KubernetesSandboxManager(SandboxManager):
         if not pod.status.init_container_statuses:
             return None
 
+        restartable_init_container_names = {
+            init_container.name
+            for init_container in pod.spec.init_containers or []
+            if init_container.name and init_container.restart_policy == "Always"
+        }
+
         for init_status in pod.status.init_container_statuses:
             if init_status.state:
                 # Check for terminated state with non-zero exit code
                 if init_status.state.terminated:
-                    if init_status.state.terminated.exit_code != 0:
+                    if (
+                        init_status.state.terminated.exit_code != 0
+                        and init_status.name not in restartable_init_container_names
+                    ):
                         container_name = init_status.name
                         logs = self._get_init_container_logs(
                             pod.metadata.name, container_name

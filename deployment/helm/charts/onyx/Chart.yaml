@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.23
+version: 0.5.24
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,11 +17,8 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: changed
-      description: Add sandbox-proxy ServiceAccount annotation support for
-        IAM-backed managed services.
-    - kind: changed
-      description: Store Craft sandbox snapshots in the Onyx filestore instead
-        of requiring sandbox pods to write directly to S3.
+      description: Run the Craft Kubernetes sandbox sidecar as a restartable
+        init container and require Kubernetes 1.33 or newer for that backend.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
