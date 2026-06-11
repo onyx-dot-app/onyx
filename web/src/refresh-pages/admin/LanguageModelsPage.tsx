@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
 import { useAdminLLMProviders } from "@/hooks/useLanguageModels";
@@ -25,7 +25,8 @@ import {
   deleteLlmProvider,
   setDefaultLlmModel,
 } from "@/lib/languageModels/svc";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
+import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
@@ -305,6 +306,32 @@ export default function LanguageModelsPage() {
   const hasProviders = existingLlmProviders.length > 0;
   const isFirstProvider = !hasProviders;
 
+  // Map admin providers to the descriptor shape ModelSelector expects
+  const llmProvidersForSelector = useMemo<LLMProviderDescriptor[]>(
+    () =>
+      (existingLlmProviders ?? []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        provider: p.provider,
+        provider_display_name: getProvider(p.provider, p).productName,
+        model_configurations: p.model_configurations,
+      })),
+    [existingLlmProviders]
+  );
+
+  // Resolve the current default to a model_configuration_id for ModelSelector
+  const defaultModelConfigId = useMemo(() => {
+    if (!defaultText || !existingLlmProviders) return null;
+    const provider = existingLlmProviders.find(
+      (p) => p.id === defaultText.provider_id
+    );
+    return (
+      provider?.model_configurations.find(
+        (m) => m.name === defaultText.model_name
+      )?.id ?? null
+    );
+  }, [defaultText, existingLlmProviders]);
+
   // Pre-sort providers so the default appears first
   const sortedProviders = [...existingLlmProviders].sort((a, b) => {
     const aIsDefault = defaultText?.provider_id === a.id;
@@ -355,33 +382,22 @@ export default function LanguageModelsPage() {
               center
               withLabel
             >
-              <InputSelect
-                value={currentDefaultValue}
-                onValueChange={handleDefaultModelChange}
-              >
-                <InputSelect.Trigger placeholder="Select a default model" />
-                <InputSelect.Content>
-                  {providersWithVisibleModels.map(
-                    ({ provider, visibleModels }) => (
-                      <InputSelect.Group key={provider.id}>
-                        <InputSelect.Label>
-                          {providerDisplayName(provider)}
-                        </InputSelect.Label>
-                        {visibleModels.map((model) => (
-                          <InputSelect.Item
-                            key={`${provider.id}:${model.name}`}
-                            value={`${provider.id}:${model.name}`}
-                          >
-                            {model.custom_display_name ||
-                              model.display_name ||
-                              model.name}
-                          </InputSelect.Item>
-                        ))}
-                      </InputSelect.Group>
-                    )
-                  )}
-                </InputSelect.Content>
-              </InputSelect>
+              <ModelSelector
+                llmProviders={llmProvidersForSelector}
+                value={defaultModelConfigId}
+                onChange={(opt) => {
+                  const provider = existingLlmProviders?.find(
+                    (p) =>
+                      p.provider === opt.provider &&
+                      (p.name === opt.name || (!p.name && !opt.name))
+                  );
+                  if (provider) {
+                    void handleDefaultModelChange(
+                      `${provider.id}:${opt.modelName}`
+                    );
+                  }
+                }}
+              />
             </InputHorizontal>
           </Card>
         ) : (
