@@ -271,7 +271,7 @@ export default function AdminSidebar() {
             {group.section ? (
               <SidebarLayouts.Section title={group.section} />
             ) : (
-              <Spacer rem={1} />
+              groupIndex > 0 && <Spacer rem={1} />
             )}
             {group.items.map(({ link, icon, name }) => (
               <SidebarTab
@@ -292,7 +292,7 @@ export default function AdminSidebar() {
             {group.section ? (
               <SidebarLayouts.Section title={group.section} disabled />
             ) : (
-              <Spacer rem={1} />
+              groupIndex > 0 && <Spacer rem={1} />
             )}
             {group.items.map(({ link, icon, name, requiredTier }) => (
               <SidebarTab

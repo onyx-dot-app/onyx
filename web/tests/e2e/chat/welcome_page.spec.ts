@@ -52,7 +52,7 @@ for (const theme of THEMES) {
     // ── Sidebar element screenshot ────────────────────────────────────
 
     test("sidebar element snapshot", async ({ page }) => {
-      const sidebar = page.locator(".opal-sidebar-wrapper__inner");
+      const sidebar = page.locator(".opal-sidebar-root__column");
       await sidebar.waitFor({ state: "visible", timeout: 10000 });
 
       await expectElementScreenshot(sidebar, {

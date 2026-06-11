@@ -66,6 +66,15 @@ export function SidebarStateProvider({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
       const isMac = navigator.userAgent.toLowerCase().includes("mac");
       const isModifierPressed = isMac ? event.metaKey : event.ctrlKey;
       if (!isModifierPressed || event.key !== "e") return;
