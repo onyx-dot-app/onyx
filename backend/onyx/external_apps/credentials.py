@@ -9,6 +9,9 @@ from onyx.db.external_app import get_external_app_user_credential
 from onyx.db.models import ExternalApp
 from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.external_apps.providers.registry import get_provider_for_app
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def build_auth_headers(
@@ -51,8 +54,9 @@ def resolve_injection_headers(
     the user's stored credentials (the user's win on key conflicts), extends
     them with the provider's ``derive_credentials``, then renders the
     ``auth_template`` via :func:`build_auth_headers`. ``action_types`` is the
-    request's matched catalog actions (strictest-first); the first with an
-    ``EndpointSpec.auth_template`` overrides the app's stored template.
+    request's matched catalog actions; a matched ``EndpointSpec.auth_template``
+    overrides the app's stored template (co-matched overrides must agree —
+    conflicts are logged and the first wins).
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None or not app.skill.enabled:
@@ -78,11 +82,17 @@ def resolve_injection_headers(
             for endpoint in get_endpoint_catalog(app.app_type)
             if endpoint.auth_template is not None
         }
-        # First override in the list wins — assumes co-matched actions never
-        # carry conflicting templates (true while overrides are host-disjoint).
-        override = next((overrides[a] for a in action_types if a in overrides), None)
-        if override is not None:
-            auth_template = override
+        matched = [overrides[a] for a in action_types if a in overrides]
+        if matched:
+            auth_template = matched[0]
+            # Selection must not hinge on action ordering: co-matched overrides
+            # are expected to agree, so a conflict is a catalog bug — log it.
+            if any(override != auth_template for override in matched[1:]):
+                logger.warning(
+                    "conflicting_auth_template_overrides app_type=%s action_types=%s",
+                    app.app_type.value,
+                    ",".join(action_types),
+                )
 
     return build_auth_headers(auth_template, credentials)
 
@@ -96,8 +106,7 @@ def app_is_available(db_session: Session, app: ExternalApp, user_id: UUID) -> bo
     injects nothing) is available; an app whose template can't be filled is not.
     A disabled skill (the proxy's kill switch) is never available. Injection
     re-resolves later with an OAuth refresh, so this verdict-time render is the
-    cheap presence check, not the final one. Probes the stored template only —
-    assumes per-action ``auth_template`` overrides are fillable iff it is.
+    cheap presence check, not the final one.
     """
     if not app.skill.enabled:
         return False
