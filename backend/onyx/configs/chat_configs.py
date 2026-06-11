@@ -30,6 +30,17 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Max silent gap before the chat stream emits a keepalive packet; must stay below
+# the smallest proxy idle timeout in front (ALBs default to 60s).
+CHAT_HEARTBEAT_INTERVAL_S = int(os.environ.get("CHAT_HEARTBEAT_INTERVAL_S") or "15")
+# Extra attempts when a streaming completion errors before its first chunk.
+# Never retried after partial output.
+LLM_FIRST_CHUNK_MAX_RETRIES = max(
+    0, int(os.environ.get("LLM_FIRST_CHUNK_MAX_RETRIES") or "2")
+)
+# Socket-read timeout for deep-research report calls — bounds inter-chunk gaps
+# (including a zero-chunk stall), not total generation time.
+DR_REPORT_LLM_TIMEOUT_S = int(os.environ.get("DR_REPORT_LLM_TIMEOUT_S") or "60")
 # Weighting factor between vector and keyword Search; 1 for completely vector
 # search, 0 for keyword. Enforces a valid range of [0, 1]. A supplied value from
 # the env outside of this range will be clipped to the respective end of the
