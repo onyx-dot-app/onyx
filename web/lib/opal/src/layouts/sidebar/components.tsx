@@ -252,7 +252,6 @@ interface SidebarFooterProps {
 }
 
 function SidebarFooter({ children }: SidebarFooterProps) {
-  if (!children) return null;
   return <div className="opal-sidebar-footer">{children}</div>;
 }
 
