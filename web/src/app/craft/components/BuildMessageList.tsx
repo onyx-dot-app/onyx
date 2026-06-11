@@ -2,16 +2,19 @@
 
 import { useEffect, useMemo } from "react";
 import { cn } from "@opal/utils";
+import { CopyButton } from "@opal/components";
+import { Hoverable } from "@opal/core";
 import { SvgAlertCircle } from "@opal/icons";
 import { AnimatePresence, motion } from "motion/react";
 import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
-import UserMessage from "@/app/craft/components/UserMessage";
+import HumanMessage from "@/app/app/message/HumanMessage";
 import { BuildMessage } from "@/app/craft/types/streamingTypes";
 import {
   StreamItem,
@@ -248,29 +251,47 @@ export default function BuildMessageList({
         : null;
 
     return (
-      <div key={message.id} className="flex items-start gap-3 py-4">
-        <div className="shrink-0 h-9 flex items-center">
-          <Logo onyxBranded folded size={24} />
-        </div>
-        <div className="flex-1 flex flex-col gap-2 min-w-0">
-          {visibleSavedRender ? (
-            <>
-              {visibleSavedRender.pinnedTodo && (
-                <div>
-                  <TodoListCard
-                    todoList={visibleSavedRender.pinnedTodo}
-                    defaultOpen={visibleSavedRender.pinnedTodo.isOpen}
+      <Hoverable.Root key={message.id} group="craftAgentMessage" width="full">
+        <div className="flex items-start gap-3 py-4">
+          <div className="shrink-0 h-9 flex items-center">
+            <Logo onyxBranded folded size={24} />
+          </div>
+          <div className="flex-1 flex flex-col gap-2 min-w-0">
+            {visibleSavedRender ? (
+              <>
+                {visibleSavedRender.pinnedTodo && (
+                  <div>
+                    <TodoListCard
+                      todoList={visibleSavedRender.pinnedTodo}
+                      defaultOpen={visibleSavedRender.pinnedTodo.isOpen}
+                    />
+                  </div>
+                )}
+                {visibleSavedRender.nodes}
+              </>
+            ) : (
+              <TextChunk content={message.content} />
+            )}
+            {message.content.trim() && (
+              <Hoverable.Item
+                group="craftAgentMessage"
+                variant="appear-on-hover"
+              >
+                <div className="flex flex-row -ml-1">
+                  <CopyButton
+                    getCopyText={() =>
+                      convertMarkdownTablesToTsv(message.content)
+                    }
+                    prominence="tertiary"
+                    data-testid="CraftAgentMessage/copy-button"
                   />
                 </div>
-              )}
-              {visibleSavedRender.nodes}
-            </>
-          ) : (
-            <TextChunk content={message.content} />
-          )}
-          {trailing}
+              </Hoverable.Item>
+            )}
+            {trailing}
+          </div>
         </div>
-      </div>
+      </Hoverable.Root>
     );
   };
 
@@ -297,7 +318,15 @@ export default function BuildMessageList({
       <div className="w-full max-w-[720px] rounded-16 p-4">
         {messages.map((message, idx) => {
           if (message.type === "user") {
-            return <UserMessage key={message.id} content={message.content} />;
+            return (
+              <div key={message.id} className="py-4">
+                <HumanMessage
+                  content={message.content}
+                  nodeId={idx}
+                  clampContent
+                />
+              </div>
+            );
           }
           if (message.type === "assistant") {
             // Anchor the trailing slot (e.g. approval cards) under the

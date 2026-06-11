@@ -9,9 +9,48 @@ import { cn } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import { CopyButton } from "@opal/components";
 import { Button } from "@opal/components";
-import { SvgEdit } from "@opal/icons";
+import { SvgChevronDown, SvgEdit } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import FileDisplay from "./FileDisplay";
+
+const COLLAPSED_MAX_PX = 240; // ~10 lines
+
+function ClampedContent({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el) setOverflows(el.scrollHeight > COLLAPSED_MAX_PX + 8);
+  }, [children]);
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <div
+        ref={ref}
+        className="relative w-full overflow-hidden"
+        style={expanded ? undefined : { maxHeight: COLLAPSED_MAX_PX }}
+      >
+        {children}
+        {!expanded && overflows && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-b from-transparent to-background-tint-02" />
+        )}
+      </div>
+      {overflows && (
+        <Button
+          variant="default"
+          prominence="tertiary"
+          size="2xs"
+          icon={SvgChevronDown}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "Show less" : "Show more"}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 interface MessageEditingProps {
   content: string;
@@ -102,6 +141,9 @@ interface HumanMessageProps {
   // Streaming and generation
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
+
+  /** Collapse very long messages behind a "Show more" toggle. */
+  clampContent?: boolean;
 }
 
 // Memoization comparison - compare by value for primitives, by reference for objects/arrays
@@ -116,7 +158,8 @@ function arePropsEqual(
     prev.files === next.files &&
     prev.disableSwitchingForStreaming === next.disableSwitchingForStreaming &&
     prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
-    prev.onEdit === next.onEdit
+    prev.onEdit === next.onEdit &&
+    prev.clampContent === next.clampContent
     // Skip: stopGenerating, onMessageSelection (inline function props)
   );
 }
@@ -131,6 +174,7 @@ const HumanMessage = React.memo(function HumanMessage({
   onMessageSelection,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
+  clampContent = false,
 }: HumanMessageProps) {
   // TODO (@raunakab):
   //
@@ -179,16 +223,18 @@ const HumanMessage = React.memo(function HumanMessage({
           prominence="tertiary"
           data-testid="HumanMessage/copy-button"
         />
-        <Button
-          icon={SvgEdit}
-          prominence="tertiary"
-          tooltip="Edit"
-          onClick={() => setIsEditing(true)}
-          data-testid="HumanMessage/edit-button"
-        />
+        {onEdit && (
+          <Button
+            icon={SvgEdit}
+            prominence="tertiary"
+            tooltip="Edit"
+            onClick={() => setIsEditing(true)}
+            data-testid="HumanMessage/edit-button"
+          />
+        )}
       </div>
     ),
-    [content]
+    [content, onEdit]
   );
 
   const copyEditButton = (
@@ -221,7 +267,7 @@ const HumanMessage = React.memo(function HumanMessage({
           />
         ) : (
           <div className="flex justify-end">
-            {onEdit && !isMobile && copyEditButton}
+            {!isMobile && copyEditButton}
             <div className="md:max-w-150">
               <div
                 className={
@@ -239,19 +285,31 @@ const HumanMessage = React.memo(function HumanMessage({
                   }
                 }}
               >
-                <Text
-                  as="p"
-                  className="inline-block align-middle"
-                  mainContentBody
-                >
-                  {content}
-                </Text>
+                {clampContent ? (
+                  <ClampedContent>
+                    <Text
+                      as="p"
+                      className="inline-block align-middle"
+                      mainContentBody
+                    >
+                      {content}
+                    </Text>
+                  </ClampedContent>
+                ) : (
+                  <Text
+                    as="p"
+                    className="inline-block align-middle"
+                    mainContentBody
+                  >
+                    {content}
+                  </Text>
+                )}
               </div>
             </div>
           </div>
         )}
         <div className="flex justify-end pt-1">
-          {!isEditing && onEdit && isMobile && copyEditButton}
+          {!isEditing && isMobile && copyEditButton}
           {currentMessageInd !== undefined &&
             onMessageSelection &&
             otherMessagesCanSwitchTo &&
