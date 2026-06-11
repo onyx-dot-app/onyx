@@ -233,6 +233,9 @@ all = "error"
 
 [tool.uv.workspace]
 members = ["tools/ods"]
+# loadtest/ is a standalone uv project (its locust/gevent pins must not enter
+# the shared lockfile); exclude it from workspace discovery.
+exclude = ["loadtest"]
 
 [tool.basedpyright]
 include = ["backend"]
