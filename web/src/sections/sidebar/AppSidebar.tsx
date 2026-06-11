@@ -49,13 +49,10 @@ import {
 } from "@/sections/sidebar/SidebarWrapper";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
-import {
-  DRAG_TYPES,
-  DEFAULT_PERSONA_ID,
-  LOCAL_STORAGE_KEYS,
-} from "@/sections/sidebar/constants";
+import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
+import { showErrorNotification } from "@/lib/sidebar/utils";
+import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
@@ -434,8 +431,7 @@ const AppSidebar = memo(function AppSidebarInner() {
             LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
           ) === "true";
 
-        const isChatUsingDefaultAgent =
-          chatSession.persona_id === DEFAULT_PERSONA_ID;
+        const isChatUsingDefaultAgent = chatSession.persona_id === 0;
 
         if (!isChatUsingDefaultAgent && !hideModal) {
           setPendingMoveChatSession(chatSession);

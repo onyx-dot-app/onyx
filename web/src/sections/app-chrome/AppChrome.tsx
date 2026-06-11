@@ -22,11 +22,11 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useChatSessions from "@/hooks/useChatSessions";
 import {
-  handleMoveOperation,
   shouldShowMoveModal,
   showErrorNotification,
-} from "@/sections/sidebar/sidebarUtils";
-import { LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
+} from "@/lib/sidebar/utils";
+import { handleMoveOperation } from "@/lib/sidebar/svc";
+import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { deleteChatSession } from "@/app/app/services/lib";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
