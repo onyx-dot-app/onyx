@@ -77,6 +77,7 @@ export const SWR_KEYS = {
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
   chatSessions: "/api/chat/get-user-chat-sessions",
+  chatSearch: "/api/chat/search",
 
   // ── Projects & Files ──────────────────────────────────────────────────────
   userProjects: "/api/user/projects",

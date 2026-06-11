@@ -43,19 +43,17 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/app/app/projects/projectsService";
 import type { Project } from "@/app/app/projects/projectsService";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import {
-  renderAppLogo,
-  useShowLogoWhenFolded,
-} from "@/sections/sidebar/SidebarWrapper";
+import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
-import {
-  DRAG_TYPES,
-  DEFAULT_PERSONA_ID,
-  LOCAL_STORAGE_KEYS,
-} from "@/sections/sidebar/constants";
+import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { showErrorNotification, handleMoveOperation } from "./sidebarUtils";
+import {
+  shouldShowMoveModal,
+  showErrorNotification,
+} from "@/lib/sidebar/utils";
+import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
@@ -428,16 +426,7 @@ const AppSidebar = memo(function AppSidebarInner() {
           return;
         }
 
-        const hideModal =
-          typeof window !== "undefined" &&
-          window.localStorage.getItem(
-            LOCAL_STORAGE_KEYS.HIDE_MOVE_CUSTOM_AGENT_MODAL
-          ) === "true";
-
-        const isChatUsingDefaultAgent =
-          chatSession.persona_id === DEFAULT_PERSONA_ID;
-
-        if (!isChatUsingDefaultAgent && !hideModal) {
+        if (shouldShowMoveModal(chatSession)) {
           setPendingMoveChatSession(chatSession);
           setPendingMoveProjectId(targetProject.id);
           setShowMoveCustomAgentModal(true);

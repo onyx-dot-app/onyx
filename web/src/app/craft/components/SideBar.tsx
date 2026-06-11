@@ -18,8 +18,8 @@ import {
   useSidebarState,
 } from "@opal/layouts";
 import RefreshText from "@/refresh-components/texts/Text";
-import SidebarWrapper from "@/sections/sidebar/SidebarWrapper";
-import SidebarBody from "@/sections/sidebar/SidebarBody";
+import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { Popover, PopoverMenu } from "@opal/components";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -449,20 +449,22 @@ const MemoizedBuildSidebarInner = memo(() => {
     [folded, backToChatButton]
   );
 
+  const showLogoWhenFolded = useShowLogoWhenFolded();
+
   return (
-    <SidebarWrapper foldable>
-      <SidebarBody
-        pinnedContent={
-          <div className="flex flex-col gap-0.5">
-            {newBuildButton}
-            {scheduledTasksPanel}
-            {skillsPanel}
-            {appsTab}
-          </div>
-        }
-        footer={footer}
-        scrollKey="build-sidebar"
+    <SidebarLayouts.Root foldable>
+      <SidebarLayouts.Header
+        logo={renderAppLogo}
+        showLogoWhenFolded={showLogoWhenFolded}
       >
+        <div className="flex flex-col gap-0.5">
+          {newBuildButton}
+          {scheduledTasksPanel}
+          {skillsPanel}
+          {appsTab}
+        </div>
+      </SidebarLayouts.Header>
+      <SidebarLayouts.Body scrollKey="build-sidebar">
         {!folded && (
           <>
             <SidebarLayouts.Section title={sessionsTitle} />
@@ -498,8 +500,9 @@ const MemoizedBuildSidebarInner = memo(() => {
             )}
           </>
         )}
-      </SidebarBody>
-    </SidebarWrapper>
+      </SidebarLayouts.Body>
+      <SidebarLayouts.Footer>{footer}</SidebarLayouts.Footer>
+    </SidebarLayouts.Root>
   );
 });
 

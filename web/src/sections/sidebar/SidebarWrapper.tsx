@@ -2,7 +2,7 @@
 
 import React from "react";
 import { SidebarLayouts } from "@opal/layouts";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import Logo from "@/refresh-components/Logo";
 
 /**
@@ -15,13 +15,6 @@ export function renderAppLogo(folded: boolean | undefined): React.ReactNode {
       <Logo folded={folded} size={28} />
     </div>
   );
-}
-
-export function useShowLogoWhenFolded(): boolean {
-  const settings = useSettingsContext();
-  const showLogoWhenFolded =
-    settings.enterpriseSettings?.logo_display_style !== "name_only";
-  return showLogoWhenFolded;
 }
 
 export interface SidebarWrapperProps {
