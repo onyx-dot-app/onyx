@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
@@ -764,8 +764,21 @@ export default function IndexSettingsPage() {
   const imageProcessingEnabled =
     settings.settings.image_extraction_and_analysis_enabled ?? false;
 
+  const { data: secondarySearchSettings } = useSecondarySearchSettings();
+  const isReindexing = !!secondarySearchSettings;
+
+  // When a migration finishes, the fast poll on the current settings stops in
+  // the same render — revalidate once so the new model shows as current.
+  const wasReindexingRef = useRef(false);
+  useEffect(() => {
+    if (wasReindexingRef.current && !isReindexing) {
+      mutate(SWR_KEYS.currentSearchSettings);
+    }
+    wasReindexingRef.current = isReindexing;
+  }, [isReindexing]);
+
   const { data: currentEmbeddingModel, isLoading: isLoadingCurrentModel } =
-    useCurrentEmbeddingModel();
+    useCurrentEmbeddingModel({ pollIntervalMs: isReindexing ? 5000 : 0 });
 
   /**
    * Camel-cased view of the active embedding model for modal preload.
@@ -798,15 +811,13 @@ export default function IndexSettingsPage() {
     : false;
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
-    useCurrentSearchSettings();
+    useCurrentSearchSettings({ pollIntervalMs: isReindexing ? 5000 : 0 });
   const { data: configuredProvidersList } = useConfiguredEmbeddingProviders();
   const configuredProviders = useMemo(
     () =>
       new Map((configuredProvidersList ?? []).map((p) => [p.provider_type, p])),
     [configuredProvidersList]
   );
-  const { data: secondarySearchSettings } = useSecondarySearchSettings();
-  const isReindexing = !!secondarySearchSettings;
   const cancelReindexModal = useCreateModal();
   const customModelModal = useCreateModal();
 
