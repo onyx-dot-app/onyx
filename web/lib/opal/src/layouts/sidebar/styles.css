@@ -156,8 +156,6 @@
    SidebarSection
    --------------------------------------------------------------------------- */
 
-/* NOTE: mr-1.5 intentionally avoids padding so the sticky background doesn't
-   overlap scrollbars on Safari. */
 .opal-sidebar-section__header {
   @apply pl-2 pb-1 pt-4;
 }

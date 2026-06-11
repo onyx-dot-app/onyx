@@ -32,7 +32,7 @@ import {
 import { markdown } from "@opal/utils";
 
 const SECTIONS = {
-  UNLABELED: "",
+  UNLABELED: null,
   AGENTS_AND_ACTIONS: "Agents & Actions",
   DOCUMENTS_AND_KNOWLEDGE: "Documents & Knowledge",
   INTEGRATIONS: "Integrations",
@@ -42,7 +42,7 @@ const SECTIONS = {
 } as const;
 
 interface SidebarItemEntry {
-  section: string;
+  section: string | null;
   name: string;
   icon: IconFunctionComponent;
   link: string;
@@ -62,12 +62,15 @@ function buildItems(
 ): SidebarItemEntry[] {
   const items: SidebarItemEntry[] = [];
 
-  const add = (section: string, route: Parameters<typeof sidebarItem>[0]) => {
+  const add = (
+    section: string | null,
+    route: Parameters<typeof sidebarItem>[0]
+  ) => {
     items.push({ ...sidebarItem(route), section });
   };
 
   const addGated = (
-    section: string,
+    section: string | null,
     route: Parameters<typeof sidebarItem>[0],
     requiredTier: Tier
   ) => {
@@ -170,7 +173,7 @@ function buildItems(
 
 /** Preserve section ordering while grouping consecutive items by section. */
 function groupBySection(items: SidebarItemEntry[]) {
-  const groups: { section: string; items: SidebarItemEntry[] }[] = [];
+  const groups: { section: string | null; items: SidebarItemEntry[] }[] = [];
   for (const item of items) {
     const last = groups[groups.length - 1];
     if (last && last.section === item.section) {
@@ -269,7 +272,11 @@ export default function AdminSidebar() {
       <SidebarLayouts.Body scrollKey="admin-sidebar">
         {enabledGroups.map((group, groupIndex) => (
           <React.Fragment key={groupIndex}>
-            {group.section && <SidebarLayouts.Section title={group.section} />}
+            {group.section ? (
+              <SidebarLayouts.Section title={group.section} />
+            ) : (
+              <Spacer rem={1} />
+            )}
             {group.items.map(({ link, icon, name }) => (
               <SidebarTab
                 key={link}
@@ -286,7 +293,11 @@ export default function AdminSidebar() {
         {disabledGroups.length > 0 && <Divider paddingPerpendicular="fit" />}
         {disabledGroups.map((group, groupIndex) => (
           <React.Fragment key={`disabled-${groupIndex}`}>
-            <SidebarLayouts.Section title={group.section} disabled />
+            {group.section ? (
+              <SidebarLayouts.Section title={group.section} disabled />
+            ) : (
+              <Spacer rem={1} />
+            )}
             {group.items.map(({ link, icon, name, requiredTier }) => (
               <SidebarTab
                 key={link}
