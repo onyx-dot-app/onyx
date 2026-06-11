@@ -1,9 +1,4 @@
-"""Tests for the NDJSON stream parser's milestone + message-id extraction.
-
-These assert the parser reads the same packet shapes Onyx streams (see
-backend/onyx/server/query_and_chat/streaming_models.py and the integration
-chat manager) so milestone timing and multi-turn chaining stay correct.
-"""
+"""Tests for the NDJSON parser's milestone + message-id extraction."""
 
 from __future__ import annotations
 

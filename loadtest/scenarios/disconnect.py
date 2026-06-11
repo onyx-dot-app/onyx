@@ -1,24 +1,7 @@
-"""Chat turns where the client disconnects mid-stream.
-
-Each turn starts a normal streaming chat, then drops the connection the moment
-the configured milestone arrives (default: the first answer token) — a user
-closing the tab while the answer is still streaming. The server is left
-holding a turn that no one is reading, which exercises disconnect detection
-and the cleanup of whatever that turn was holding (DB transactions/connections,
-per-stream buffers). Resource that isn't released on client disconnect is a
-classic slow leak under load.
-
-Turns are recorded as `<prefix>:disconnected` (plus whatever milestones were
-reached first), kept separate from success/failure so the disconnect rate is
-explicit rather than masquerading as errors.
-
-Tuning (env):
-    ONYX_DISCONNECT_AFTER   milestone to disconnect after — one of
-                            first_packet, first_search_doc, first_answer_token
-                            (default), first_dr_plan, first_research_agent.
-
-Selected explicitly (not part of the default steady-state mix), e.g.:
-    locust -f locustfile.py DisconnectUser
+"""Client drops the stream mid-turn (default: after the first answer token)
+to exercise server-side disconnect cleanup (held transactions/connections/
+buffers). Recorded as `<prefix>:disconnected`, not a failure. Run on its own
+(not in the default mix). See README.
 """
 
 from __future__ import annotations

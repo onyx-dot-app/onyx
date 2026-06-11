@@ -59,18 +59,12 @@ class OnyxChatUser(HttpUser):
     mock_model: str | None = None
     deep_research: bool = False
 
-    # >1 keeps a single chat session alive for this many turns, chaining each
-    # turn's parent_message_id off the previous assistant reply so the history
-    # grows turn over turn (reproduces the full-history recompute path). 1 (the
-    # default) sends a fresh auto-created session every turn — unchanged from
-    # the single-turn scenarios.
+    # >1 keeps one session alive for N turns, chaining parent_message_id so
+    # history grows; 1 (default) = a fresh session per turn.
     max_session_turns: int = _env_int("ONYX_SESSION_TURNS", 1)
 
-    # When set to a milestone name (e.g. "first_answer_token"), the client
-    # stops reading and drops the connection the instant that milestone
-    # arrives — a user closing the tab mid-stream. Exercises server-side
-    # disconnect handling (tx/connection cleanup while the turn is in flight).
-    # The turn is recorded as <prefix>:disconnected, not success/failure.
+    # If set to a milestone name, drop the stream the instant it arrives
+    # (client disconnect). Recorded as <prefix>:disconnected, not a failure.
     disconnect_after_milestone: str | None = None
 
     wait_time = constant(_env_float("ONYX_WAIT_SECONDS", 15.0))
@@ -101,11 +95,7 @@ class OnyxChatUser(HttpUser):
         self._session_turn: int = 0
 
     def _create_session(self) -> str | None:
-        """Open a fresh chat session for a multi-turn conversation.
-
-        Returns the new session id, or None if creation failed (a failure
-        sample is recorded in that case).
-        """
+        """Open a session for a multi-turn conversation; None on failure."""
         start = time.perf_counter()
         with self.client.post(
             "/api/chat/create-chat-session",
@@ -141,11 +131,8 @@ class OnyxChatUser(HttpUser):
         )
 
     def _next_payload(self, message: str) -> dict[str, Any] | None:
-        """Build the send-chat-message payload, managing session reuse.
-
-        Returns None if a multi-turn session needed to be (re)created but
-        creation failed — the caller should skip the turn.
-        """
+        """Build the send payload, managing session reuse. None = skip turn
+        (a multi-turn session was needed but couldn't be created)."""
         payload: dict[str, Any] = {"message": message, "stream": True}
 
         if self.max_session_turns > 1:
@@ -215,10 +202,8 @@ class OnyxChatUser(HttpUser):
                             break
                     if disconnected:
                         break
-                # On disconnect we deliberately leave the stream unconsumed;
-                # exiting the `with` closes the socket, so the server sees a
-                # client disconnect. The HTTP sample itself is fine — the early
-                # close is the intended behavior, not an error.
+                # On disconnect, exiting the `with` unconsumed closes the
+                # socket so the server sees the client drop; the sample is ok.
                 response.success()
         except Exception as exc:
             self._fire("total_turn", start, exception=exc)

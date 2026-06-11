@@ -1,14 +1,6 @@
-"""Chat turn that drives multiple retrieval tools in parallel.
-
-The `-tools3` knob makes the mock LLM answer the first AUTO-tool-choice cycle
-with parallel calls to every retrieval tool the persona offers (internal
-search, web search, open url), so Onyx executes them concurrently inside one
-chat turn — fan-out over the embedding model server, Vespa/OpenSearch, and the
-web fetch path, then a single follow-up answer call.
-
-A small but real slice of production traffic; weighted accordingly in the
-default mix. Degrades gracefully to a single search when the persona exposes
-only one retrieval tool.
+"""Chat turn that calls several retrieval tools in parallel (the `-tools3`
+knob), exercising concurrent tool execution within one turn. Degrades to a
+single search if the persona offers fewer tools. Part of the default mix.
 """
 
 from __future__ import annotations

@@ -107,10 +107,8 @@ class Knobs:
         self.ttft_s: float = DEFAULT_TTFT_MS / 1000.0
         self.itl_s: float = DEFAULT_ITL_MS / 1000.0
         self.n_tokens: int = DEFAULT_LEN_TOKENS
-        # Number of retrieval tools to call in parallel on an AUTO cycle:
-        # 0 = none (plain chat), 1 = single search (mock-tools1), 2+ = parallel
-        # multi-tool (mock-tools2 / mock-tools3). Capped by how many retrieval
-        # tools the persona actually offers, so it degrades gracefully.
+        # Retrieval tools to call in parallel on an AUTO cycle (0=none,
+        # 1=mock-tools1, 2+=multi-tool); capped by tools the persona offers.
         self.n_auto_tools: int = 0
         self.n_agents: int = 1
         for name, value in _KNOB_RE.findall(model):
@@ -276,9 +274,7 @@ def _pick_tool(request: ChatCompletionRequest, knobs: Knobs) -> list[ToolCall]:
     if _GENERATE_PLAN in by_name:
         return [make(by_name[_GENERATE_PLAN])]
     if knobs.n_auto_tools > 0 and not has_tool_result:
-        # Emit up to n_auto_tools of the offered retrieval tools in parallel
-        # (mock-tools2/3 → multi-tool turn). Falls back to the first offered
-        # tool when the persona exposes no retrieval tools.
+        # Up to n_auto_tools retrieval tools in parallel; else the first tool.
         retrieval = [by_name[n] for n in _RETRIEVAL_TOOLS if n in by_name]
         chosen = retrieval[: knobs.n_auto_tools]
         if not chosen and tools:
