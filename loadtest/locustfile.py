@@ -3,7 +3,7 @@
 Usage (from this directory, after `uv sync`):
 
     ONYX_API_KEY=... uv run locust --headless -u 5 -r 1 -t 5m \
-        -H https://st-dev.onyx.app
+        -H https://<your-onyx-url>
 
 Select scenarios with Locust's class picker, e.g.:
 

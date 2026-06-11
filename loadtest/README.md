@@ -68,14 +68,14 @@ their resources open longer, which is exactly what stresses the api-server):
 ## Running
 
 ```bash
-ONYX_API_KEY=<key> uv run locust --headless -u 5 -r 1 -t 5m -H https://st-dev.onyx.app
+ONYX_API_KEY=<key> uv run locust --headless -u 5 -r 1 -t 5m -H https://<your-onyx-url>
 ```
 
 Scenario selection (all run by default; pick classes explicitly):
 
 ```bash
-... uv run locust --headless -u 10 -r 2 -t 10m -H https://st-dev.onyx.app BasicChatUser ChatWithSearchUser
-... uv run locust --headless -u 5 -r 1 -t 20m -H https://st-dev.onyx.app DeepResearchUser
+... uv run locust --headless -u 10 -r 2 -t 10m -H https://<your-onyx-url> BasicChatUser ChatWithSearchUser
+... uv run locust --headless -u 5 -r 1 -t 20m -H https://<your-onyx-url> DeepResearchUser
 ```
 
 - **BasicChatUser** (`chat:*` metrics) — single-turn chat, plain answer.
@@ -125,12 +125,31 @@ packet (truncation).
 ```bash
 cd loadtest && docker build -f mock_llm/Dockerfile -t onyx-mock-llm .
 docker run -p 8001:8000 onyx-mock-llm
+
+# Locust harness image (locustfile + scenarios baked in, for k8s/)
+docker build -t onyx-loadtest .
 ```
+
+## In-cluster (`k8s/`)
+
+Run the whole rig inside the target cluster so latency measurements aren't
+polluted by WAN jitter and the LLM stays free:
+
+1. `kubectl apply -n <onyx-namespace> -f k8s/mock-llm.yaml`, then register
+   `http://onyx-mock-llm:8000` as an `openai_compatible` provider (see Mock
+   LLM server above; keep it `is_public=false` and persona-scoped so real
+   users never see it).
+2. `kubectl create secret generic onyx-loadtest --from-literal=ONYX_API_KEY=...`
+3. `kubectl apply -n <onyx-namespace> -f k8s/locust.yaml`, then
+   `kubectl port-forward svc/onyx-loadtest-master 8089:8089` and drive runs
+   from the web UI. Scale `onyx-loadtest-worker` replicas for bigger runs,
+   and pin workers to a dedicated nodegroup if available (see comments in
+   the manifest).
 
 ## Roadmap
 
 - ✅ Phase 0: harness + milestones + mock LLM core
 - ✅ Phase 1: tool-call & deep-research scripting, scenarios, Dockerfile
-- Phase 2: in-cluster Locust master/workers + mock provider on st-dev (`k8s/`)
+- Phase 2: in-cluster Locust master/workers + mock provider (`k8s/`)
 - Phase 3: weighted scenario mixes, multi-turn sessions, open-workload arrivals
 - Phase 4: Prometheus export + Grafana correlation dashboard
