@@ -203,6 +203,27 @@ export async function* sendMessage({
   yield* handleSSEStream<PacketType>(response, signal);
 }
 
+// Replays an in-flight run's buffered stream from `cursor`, then tails it live.
+// 404 means there is nothing to resume — callers fall back to the persisted
+// session state.
+export async function* resumeStream(
+  chatSessionId: string,
+  cursor: number,
+  signal?: AbortSignal
+): AsyncGenerator<PacketType, void, unknown> {
+  const response = await fetch(
+    `/api/chat/chat-session/${chatSessionId}/resume-stream?cursor=${cursor}`,
+    { signal }
+  );
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
+  }
+
+  yield* handleSSEStream<PacketType>(response, signal);
+}
+
 export async function setPreferredResponse(
   userMessageId: number,
   preferredResponseId: number
