@@ -168,6 +168,7 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import global_version
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+from shared_configs.configs import CORS_ALLOW_CREDENTIALS
 from shared_configs.configs import CORS_ALLOWED_ORIGIN
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -691,10 +692,17 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     application.add_exception_handler(ValueError, value_error_handler)
 
+    if not CORS_ALLOW_CREDENTIALS:
+        logger.warning(
+            "CORS_ALLOWED_ORIGIN is unset or contains '*'; cross-origin "
+            "requests will be served without credentials. Set "
+            "CORS_ALLOWED_ORIGIN to your frontend origin(s) to allow "
+            "credentialed cross-origin requests."
+        )
     application.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ALLOWED_ORIGIN,  # Configurable via environment variable
-        allow_credentials=True,
+        allow_credentials=CORS_ALLOW_CREDENTIALS,
         allow_methods=["*"],
         allow_headers=["*"],
     )

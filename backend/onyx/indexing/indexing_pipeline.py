@@ -375,7 +375,7 @@ def get_docs_to_update(
         if not timestamp_advanced:
             db_doc = id_to_db_doc_map.get(doc.id)
             if db_doc and db_doc.content_hash == content_hash:
-                logger.debug(f"Skipping document {doc.id!r} — content hash unchanged")
+                logger.debug("Skipping document %r — content hash unchanged", doc.id)
                 continue
 
         doc_id_to_content_hash[doc.id] = content_hash
