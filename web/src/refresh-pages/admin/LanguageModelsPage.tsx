@@ -299,13 +299,6 @@ export default function LanguageModelsPage() {
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
 
-  if (!existingLlmProviders) {
-    return <ThreeDotsLoader />;
-  }
-
-  const hasProviders = existingLlmProviders.length > 0;
-  const isFirstProvider = !hasProviders;
-
   // Map admin providers to the descriptor shape ModelSelector expects
   const llmProvidersForSelector = useMemo<LLMProviderDescriptor[]>(
     () =>
@@ -331,6 +324,13 @@ export default function LanguageModelsPage() {
       )?.id ?? null
     );
   }, [defaultText, existingLlmProviders]);
+
+  if (!existingLlmProviders) {
+    return <ThreeDotsLoader />;
+  }
+
+  const hasProviders = existingLlmProviders.length > 0;
+  const isFirstProvider = !hasProviders;
 
   // Pre-sort providers so the default appears first
   const sortedProviders = [...existingLlmProviders].sort((a, b) => {
