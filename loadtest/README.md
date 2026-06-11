@@ -74,8 +74,8 @@ ONYX_API_KEY=<key> uv run locust --headless -u 5 -r 1 -t 5m -H https://st-dev.on
 Scenario selection (all run by default; pick classes explicitly):
 
 ```bash
-... uv run locust --headless -u 10 -r 2 -t 10m BasicChatUser ChatWithSearchUser
-... uv run locust --headless -u 5 -r 1 -t 20m DeepResearchUser
+... uv run locust --headless -u 10 -r 2 -t 10m -H https://st-dev.onyx.app BasicChatUser ChatWithSearchUser
+... uv run locust --headless -u 5 -r 1 -t 20m -H https://st-dev.onyx.app DeepResearchUser
 ```
 
 - **BasicChatUser** (`chat:*` metrics) — single-turn chat, plain answer.

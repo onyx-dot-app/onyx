@@ -278,6 +278,23 @@ def test_dr_research_agent_searches_then_reports() -> None:
     assert second["message"]["tool_calls"][0]["function"]["name"] == "generate_report"
 
 
+def test_forced_unknown_tool_returns_400() -> None:
+    # Mirror OpenAI: forcing a function that isn't offered is a 400, not a
+    # silent fallback — fallback would mask real contract violations.
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "mock-ttft0-itl0",
+            "stream": False,
+            "messages": [{"role": "user", "content": "q"}],
+            "tools": [INTERNAL_SEARCH_TOOL],
+            "tool_choice": {"type": "function", "function": {"name": "nonexistent"}},
+        },
+    )
+    assert response.status_code == 400
+    assert "nonexistent" in response.text
+
+
 def test_forced_specific_tool_is_honored() -> None:
     choice = complete(
         tools=[INTERNAL_SEARCH_TOOL, GENERATE_REPORT_TOOL],

@@ -57,6 +57,7 @@ import uuid
 from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi import Response
 from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
@@ -211,8 +212,18 @@ def _pick_tool(request: ChatCompletionRequest, knobs: Knobs) -> list[ToolCall]:
     # Forced specific function: {"type": "function", "function": {"name": ...}}
     if isinstance(request.tool_choice, dict):
         forced = request.tool_choice.get("function", {}).get("name")
-        if forced and forced in by_name:
-            return [make(by_name[forced])]
+        if not forced or forced not in by_name:
+            # Mirror OpenAI: 400 on a forced function that isn't offered.
+            # Failing loudly matters here — silent fallback would mask the
+            # exact contract violations this mock exists to surface.
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid 'tool_choice': function {forced!r} is not in "
+                    f"'tools': {sorted(by_name)}"
+                ),
+            )
+        return [make(by_name[forced])]
 
     choice = request.tool_choice if isinstance(request.tool_choice, str) else None
     if choice is None:
