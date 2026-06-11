@@ -159,9 +159,9 @@
 /* NOTE: mr-1.5 intentionally avoids padding so the sticky background doesn't
    overlap scrollbars on Safari. */
 .opal-sidebar-section__header {
-  @apply pl-2 mr-1.5 py-1 sticky top-0 bg-background-tint-02 z-10 flex flex-row items-center justify-between min-h-8;
+  @apply pl-2 pb-1 pt-4;
 }
 
 .opal-sidebar-section__title {
-  @apply p-0.5 w-full flex flex-col justify-center;
+  @apply p-0.5;
 }

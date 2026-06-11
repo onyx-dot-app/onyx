@@ -288,7 +288,6 @@ export default function AdminSidebar() {
         ))}
 
         {disabledGroups.length > 0 && <Divider paddingPerpendicular="fit" />}
-
         {disabledGroups.map((group, groupIndex) => (
           <React.Fragment key={`disabled-${groupIndex}`}>
             <SidebarLayouts.Section title={group.section} disabled />
