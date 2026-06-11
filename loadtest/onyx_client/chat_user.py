@@ -27,6 +27,8 @@ from locust import constant
 from locust import HttpUser
 from locust import task
 
+from onyx_client.env import env_float
+from onyx_client.env import env_int
 from onyx_client.stream_parser import ChatStreamAnalyzer
 
 DEFAULT_MESSAGES = [
@@ -37,16 +39,6 @@ DEFAULT_MESSAGES = [
     "What integrations and connectors are supported?",
     "Summarize how background indexing works.",
 ]
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = os.environ.get(name)
-    return float(raw) if raw else default
-
-
-def _env_int(name: str, default: int) -> int:
-    raw = os.environ.get(name)
-    return int(raw) if raw else default
 
 
 class OnyxChatUser(HttpUser):
@@ -61,16 +53,16 @@ class OnyxChatUser(HttpUser):
 
     # >1 keeps one session alive for N turns, chaining parent_message_id so
     # history grows; 1 (default) = a fresh session per turn.
-    max_session_turns: int = _env_int("ONYX_SESSION_TURNS", 1)
+    max_session_turns: int = env_int("ONYX_SESSION_TURNS", 1)
 
     # If set to a milestone name, drop the stream the instant it arrives
     # (client disconnect). Recorded as <prefix>:disconnected, not a failure.
     disconnect_after_milestone: str | None = None
 
-    wait_time = constant(_env_float("ONYX_WAIT_SECONDS", 15.0))
+    wait_time = constant(env_float("ONYX_WAIT_SECONDS", 15.0))
     # Read timeout is between chunks, not total; chat_heartbeat keepalives in
     # the stream mean a healthy turn never goes silent this long.
-    stream_read_timeout: float = _env_float("ONYX_STREAM_READ_TIMEOUT", 180.0)
+    stream_read_timeout: float = env_float("ONYX_STREAM_READ_TIMEOUT", 180.0)
 
     def on_start(self) -> None:
         api_key = os.environ.get("ONYX_API_KEY")
@@ -96,7 +88,6 @@ class OnyxChatUser(HttpUser):
 
     def _create_session(self) -> str | None:
         """Open a session for a multi-turn conversation; None on failure."""
-        start = time.perf_counter()
         with self.client.post(
             "/api/chat/create-chat-session",
             json={"persona_id": 0, "description": f"loadtest-{uuid.uuid4().hex[:8]}"},
@@ -105,11 +96,6 @@ class OnyxChatUser(HttpUser):
         ) as response:
             if response.status_code != 200:
                 response.failure(f"HTTP {response.status_code}")
-                self._fire(
-                    "create_session",
-                    start,
-                    exception=Exception(f"HTTP {response.status_code}"),
-                )
                 return None
             response.success()
             return response.json().get("chat_session_id")
