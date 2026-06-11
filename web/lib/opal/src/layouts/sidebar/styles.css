@@ -20,7 +20,7 @@
 
 /* Visible sidebar chrome */
 .opal-sidebar-wrapper__inner {
-  @apply h-screen flex flex-col bg-background-tint-02 py-2 gap-4;
+  @apply h-screen flex flex-col bg-background-tint-02 pb-2 gap-4;
   width: var(--sidebar-width-expanded);
   transition: width 200ms ease-in-out;
 }
