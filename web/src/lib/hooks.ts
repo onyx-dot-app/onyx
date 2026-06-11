@@ -682,21 +682,17 @@ export function useLlmManager(
         defaultText
       );
     } else if (liveAgent) {
-      // Agent's configured default model takes precedence over the user's
-      // personal preference. Falls through when no default is set on the agent.
+      // Agent's configured default takes precedence. When the agent has no
+      // explicit default, fall straight to the global system default — the
+      // user's personal preference is irrelevant in an agent-scoped chat.
       const agentOverride = getProviderOverrideForAgent(
         liveAgent,
         llmProviders
       );
       resolved =
         agentOverride ??
-        (user?.preferences?.default_model
-          ? getValidLlmDescriptorForProviders(
-              user.preferences.default_model,
-              llmProviders,
-              defaultText
-            )
-          : (getDefaultLlmDescriptor(llmProviders, defaultText) ?? manualLlm));
+        getDefaultLlmDescriptor(llmProviders, defaultText) ??
+        manualLlm;
     } else if (user?.preferences?.default_model) {
       resolved = getValidLlmDescriptorForProviders(
         user.preferences.default_model,

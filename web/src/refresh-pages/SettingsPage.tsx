@@ -1037,19 +1037,17 @@ function ChatPreferencesSettings() {
             withLabel
           >
             <ModelSelector
-              value={findModelConfigId(
-                llmManager.llmProviders,
-                llmManager.currentLlm.provider,
-                llmManager.currentLlm.modelName
-              )}
+              value={
+                user?.preferences?.default_model
+                  ? findModelConfigId(
+                      llmManager.llmProviders,
+                      llmManager.currentLlm.provider,
+                      llmManager.currentLlm.modelName
+                    )
+                  : null
+              }
               onChange={(opt) => {
                 if (opt.modelConfigurationId === null) {
-                  // "Global Default" selected — clear personal preference
-                  llmManager.updateCurrentLlm({
-                    name: "",
-                    provider: "",
-                    modelName: "",
-                  });
                   void updateUserDefaultModel(null);
                 } else {
                   llmManager.updateCurrentLlm({
