@@ -24,7 +24,7 @@ spec:
         - name: mock-llm
           # Pin the tag: master/workers and mid-run restarts must never pick
           # up a different build (bump deliberately when publishing).
-          image: onyxdotapp/onyx-mock-llm:v0.1.0
+          image: <your-registry>/onyx-mock-llm:v0.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

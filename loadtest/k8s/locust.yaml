@@ -38,7 +38,7 @@ spec:
         - name: locust-master
           # Pinned tag: in distributed mode every pod must run the same build
           # or results are silently corrupted.
-          image: onyxdotapp/onyx-loadtest:v0.1.0
+          image: <your-registry>/onyx-loadtest:v0.1.0
           imagePullPolicy: IfNotPresent
           args: ["--master"]
           ports:
@@ -102,7 +102,7 @@ spec:
       # tolerations: [{ key: loadtest, operator: Exists, effect: NoSchedule }]
       containers:
         - name: locust-worker
-          image: onyxdotapp/onyx-loadtest:v0.1.0
+          image: <your-registry>/onyx-loadtest:v0.1.0
           imagePullPolicy: IfNotPresent
           args: ["--worker", "--master-host", "onyx-loadtest-master"]
           env:
