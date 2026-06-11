@@ -1574,6 +1574,7 @@ export default function AgentEditorPage({
                                         opt.modelConfigurationId ?? null
                                       )
                                     }
+                                    includeGlobalDefault
                                   />
                                 </InputHorizontal>
                                 <InputHorizontal

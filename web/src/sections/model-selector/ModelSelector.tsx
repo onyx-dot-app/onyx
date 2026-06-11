@@ -10,7 +10,10 @@ import React, {
 import { Popover, OpenButton, Text } from "@opal/components";
 import { Slider } from "@/components/ui/slider";
 import { getModelIcon } from "@/lib/languageModels";
-import { LLMOption } from "@/lib/languageModels/options";
+import {
+  GLOBAL_DEFAULT_LLM_OPTION,
+  LLMOption,
+} from "@/lib/languageModels/options";
 import { useUser } from "@/providers/UserProvider";
 import { useCurrentAgent } from "@/lib/agents/hooks";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
@@ -41,6 +44,12 @@ export interface ModelSelectorProps {
   temperatureManager?: TemperatureManager;
 
   disabled?: boolean;
+  /**
+   * When true, a "Global Default Model" entry is prepended to the list.
+   * Selecting it calls onChange with GLOBAL_DEFAULT_LLM_OPTION
+   * (modelConfigurationId === null), which callers should treat as "clear."
+   */
+  includeGlobalDefault?: boolean;
 }
 
 export default function ModelSelector({
@@ -50,6 +59,7 @@ export default function ModelSelector({
   renderTrigger,
   temperatureManager,
   disabled = false,
+  includeGlobalDefault = false,
 }: ModelSelectorProps) {
   const currentAgent = useCurrentAgent();
   const { llmProviders, defaultText } = useLLMProviders(currentAgent?.id);
@@ -92,11 +102,13 @@ export default function ModelSelector({
   const currentDisplayName = effectiveOption?.displayName ?? "Select Model";
 
   const isSelected = useCallback(
-    (option: LLMOption) =>
-      option.modelConfigurationId != null
+    (option: LLMOption) => {
+      if (option === GLOBAL_DEFAULT_LLM_OPTION) return value === null;
+      return option.modelConfigurationId != null
         ? option.modelConfigurationId === value
         : option.provider === currentOption?.provider &&
-          option.modelName === currentOption?.modelName,
+            option.modelName === currentOption?.modelName;
+    },
     [value, currentOption]
   );
 
@@ -180,6 +192,7 @@ export default function ModelSelector({
           requiresImageInput={requiresImageInput}
           onSelect={handleSelect}
           isSelected={isSelected}
+          includeGlobalDefault={includeGlobalDefault}
           scrollContainerRef={scrollContainerRef}
           footer={temperatureFooter}
         />
