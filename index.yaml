@@ -4,6 +4,9 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: changed
+          description: Add sandbox-proxy ServiceAccount annotation support for
+            IAM-backed managed services.
+        - kind: changed
           description: Store Craft sandbox snapshots in the Onyx filestore instead
             of requiring sandbox pods to write directly to S3.
       category: Productivity
@@ -15,7 +18,7 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: latest
-    created: "2026-06-11T01:12:29.982042088Z"
+    created: "2026-06-11T01:23:50.866419536Z"
     dependencies:
     - alias: postgresql
       condition: postgresql.enabled
@@ -48,7 +51,7 @@ entries:
       repository: https://onyx-dot-app.github.io/python-sandbox/
       version: 0.4.3
     description: A Helm chart for Kubernetes
-    digest: 210c3b42eb40d1263926df62792a35bbb2f9391220d7ad0957de3e585ca303ea
+    digest: 23ed1e7804ab02cb0b6c7d042dcb94e270d436dca4e7011790bc02fcf471562f
     home: https://www.onyx.app/
     name: onyx
     sources:
@@ -4728,4 +4731,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-06-11T01:12:29.95385853Z"
+generated: "2026-06-11T01:23:50.84783767Z"
