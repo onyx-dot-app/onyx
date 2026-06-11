@@ -6,6 +6,7 @@ import {
   Button,
   InputTypeIn,
   MessageCard,
+  Tabs,
   Text,
   Tooltip,
 } from "@opal/components";
@@ -319,177 +320,184 @@ export default function CreateCustomAppModal({
                 fill in, or an OAuth 2.0 authorization-code flow against the
                 provider.
               </Text>
-              <InputSelect
+              <Tabs
                 value={authMethod}
                 onValueChange={(value) => setAuthMethod(value as AuthMethod)}
               >
-                <InputSelect.Trigger />
-                <InputSelect.Content>
-                  <InputSelect.Item value="static">
-                    Static headers
-                  </InputSelect.Item>
-                  <InputSelect.Item value="oauth">OAuth 2.0</InputSelect.Item>
-                </InputSelect.Content>
-              </InputSelect>
+                <Tabs.List>
+                  <Tabs.Trigger value="static">Static headers</Tabs.Trigger>
+                  <Tabs.Trigger value="oauth">OAuth 2.0</Tabs.Trigger>
+                </Tabs.List>
+                <div className="pt-3">
+                  <Tabs.Content value="static">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">
+                          Header credential pattern
+                        </Text>
+                        <Text font="secondary-body" color="text-03">
+                          {`Optional — headers injected into outbound requests. Use {placeholder} for values the user (or org below) supplies, e.g. "Bearer {api_key}". Leave empty to allowlist the upstream patterns without injecting credentials.`}
+                        </Text>
+                        <InputKeyValue
+                          keyTitle="Header"
+                          valueTitle="Value"
+                          keyPlaceholder="Authorization"
+                          valuePlaceholder="Bearer {api_key}"
+                          items={headers}
+                          onChange={setHeaders}
+                          mode="line"
+                          addButtonLabel="Add header"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">
+                          Organization credentials
+                        </Text>
+                        <Text font="secondary-body" color="text-03">
+                          Optional — values your org pre-fills for every user.
+                          Leave empty for apps where each user supplies their
+                          own credentials.
+                        </Text>
+                        <InputKeyValue
+                          keyTitle="Credential key"
+                          valueTitle="Value"
+                          keyPlaceholder="api_key"
+                          valuePlaceholder="sk-…"
+                          items={orgCredentials}
+                          onChange={setOrgCredentials}
+                          mode="line"
+                          addButtonLabel="Add credential"
+                        />
+                      </div>
+                    </div>
+                  </Tabs.Content>
+
+                  <Tabs.Content value="oauth">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Redirect URI</Text>
+                        <Text font="secondary-body" color="text-03">
+                          Register this callback URL in the provider&apos;s
+                          OAuth app settings.
+                        </Text>
+                        <div className="flex items-center gap-2">
+                          <Text font="main-ui-body" color="text-03">
+                            {redirectUri}
+                          </Text>
+                          <Button
+                            prominence="secondary"
+                            onClick={copyRedirectUri}
+                          >
+                            {copiedRedirectUri ? "Copied" : "Copy"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Authorization URL</Text>
+                        <InputTypeIn
+                          value={authorizeUrl}
+                          onChange={(e) => setAuthorizeUrl(e.target.value)}
+                          placeholder="https://provider.example.com/oauth/authorize"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Token URL</Text>
+                        <InputTypeIn
+                          value={tokenUrl}
+                          onChange={(e) => setTokenUrl(e.target.value)}
+                          placeholder="https://provider.example.com/oauth/token"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Scopes</Text>
+                        <Text font="secondary-body" color="text-03">
+                          Exactly as the provider expects them (often
+                          space-separated). Leave empty to use the
+                          provider&apos;s defaults.
+                        </Text>
+                        <InputTypeIn
+                          value={scope}
+                          onChange={(e) => setScope(e.target.value)}
+                          placeholder="read write"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Client ID</Text>
+                        <InputTypeIn
+                          value={clientId}
+                          onChange={(e) => setClientId(e.target.value)}
+                          placeholder="From the provider's OAuth app settings"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Client secret</Text>
+                        <InputTypeIn
+                          value={clientSecret}
+                          onChange={(e) => setClientSecret(e.target.value)}
+                          placeholder="Treat this like a password"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Token endpoint auth</Text>
+                        <Text font="secondary-body" color="text-03">
+                          Most providers take the client credentials in the
+                          request body; some require an HTTP Basic header
+                          instead.
+                        </Text>
+                        <InputSelect
+                          value={tokenAuthMethod}
+                          onValueChange={(value) =>
+                            setTokenAuthMethod(value as TokenEndpointAuthMethod)
+                          }
+                        >
+                          <InputSelect.Trigger />
+                          <InputSelect.Content>
+                            <InputSelect.Item value="client_secret_post">
+                              Request body (client_secret_post)
+                            </InputSelect.Item>
+                            <InputSelect.Item value="client_secret_basic">
+                              Basic auth header (client_secret_basic)
+                            </InputSelect.Item>
+                          </InputSelect.Content>
+                        </InputSelect>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">
+                          Extra authorization parameters
+                        </Text>
+                        <Text font="secondary-body" color="text-03">
+                          {`Optional — added to the authorize URL (response_type=code is always sent). E.g. access_type=offline for providers that gate refresh tokens behind it.`}
+                        </Text>
+                        <InputKeyValue
+                          keyTitle="Parameter"
+                          valueTitle="Value"
+                          keyPlaceholder="access_type"
+                          valuePlaceholder="offline"
+                          items={extraAuthorizeParams}
+                          onChange={setExtraAuthorizeParams}
+                          mode="line"
+                          addButtonLabel="Add parameter"
+                        />
+                      </div>
+
+                      <Text font="secondary-body" color="text-03">
+                        {
+                          "Matching outbound requests are authenticated with “Authorization: Bearer <the user's access token>”."
+                        }
+                      </Text>
+                    </div>
+                  </Tabs.Content>
+                </div>
+              </Tabs>
             </div>
-
-            {authMethod === "oauth" && (
-              <>
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Redirect URI</Text>
-                  <Text font="secondary-body" color="text-03">
-                    Register this callback URL in the provider&apos;s OAuth app
-                    settings.
-                  </Text>
-                  <div className="flex items-center gap-2">
-                    <Text font="main-ui-body" color="text-03">
-                      {redirectUri}
-                    </Text>
-                    <Button prominence="secondary" onClick={copyRedirectUri}>
-                      {copiedRedirectUri ? "Copied" : "Copy"}
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Authorization URL</Text>
-                  <InputTypeIn
-                    value={authorizeUrl}
-                    onChange={(e) => setAuthorizeUrl(e.target.value)}
-                    placeholder="https://provider.example.com/oauth/authorize"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Token URL</Text>
-                  <InputTypeIn
-                    value={tokenUrl}
-                    onChange={(e) => setTokenUrl(e.target.value)}
-                    placeholder="https://provider.example.com/oauth/token"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Scopes</Text>
-                  <Text font="secondary-body" color="text-03">
-                    Exactly as the provider expects them (often
-                    space-separated). Leave empty to use the provider&apos;s
-                    defaults.
-                  </Text>
-                  <InputTypeIn
-                    value={scope}
-                    onChange={(e) => setScope(e.target.value)}
-                    placeholder="read write"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Client ID</Text>
-                  <InputTypeIn
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    placeholder="From the provider's OAuth app settings"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Client secret</Text>
-                  <InputTypeIn
-                    value={clientSecret}
-                    onChange={(e) => setClientSecret(e.target.value)}
-                    placeholder="Treat this like a password"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Token endpoint auth</Text>
-                  <Text font="secondary-body" color="text-03">
-                    Most providers take the client credentials in the request
-                    body; some require an HTTP Basic header instead.
-                  </Text>
-                  <InputSelect
-                    value={tokenAuthMethod}
-                    onValueChange={(value) =>
-                      setTokenAuthMethod(value as TokenEndpointAuthMethod)
-                    }
-                  >
-                    <InputSelect.Trigger />
-                    <InputSelect.Content>
-                      <InputSelect.Item value="client_secret_post">
-                        Request body (client_secret_post)
-                      </InputSelect.Item>
-                      <InputSelect.Item value="client_secret_basic">
-                        Basic auth header (client_secret_basic)
-                      </InputSelect.Item>
-                    </InputSelect.Content>
-                  </InputSelect>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">
-                    Extra authorization parameters
-                  </Text>
-                  <Text font="secondary-body" color="text-03">
-                    {`Optional — added to the authorize URL (response_type=code is always sent). E.g. access_type=offline for providers that gate refresh tokens behind it.`}
-                  </Text>
-                  <InputKeyValue
-                    keyTitle="Parameter"
-                    valueTitle="Value"
-                    keyPlaceholder="access_type"
-                    valuePlaceholder="offline"
-                    items={extraAuthorizeParams}
-                    onChange={setExtraAuthorizeParams}
-                    mode="line"
-                    addButtonLabel="Add parameter"
-                  />
-                </div>
-
-                <Text font="secondary-body" color="text-03">
-                  {
-                    "Matching outbound requests are authenticated with “Authorization: Bearer <the user's access token>”."
-                  }
-                </Text>
-              </>
-            )}
-
-            {authMethod === "static" && (
-              <div className="flex flex-col gap-1">
-                <Text font="main-ui-action">Header credential pattern</Text>
-                <Text font="secondary-body" color="text-03">
-                  {`Optional — headers injected into outbound requests. Use {placeholder} for values the user (or org below) supplies, e.g. "Bearer {api_key}". Leave empty to allowlist the upstream patterns without injecting credentials.`}
-                </Text>
-                <InputKeyValue
-                  keyTitle="Header"
-                  valueTitle="Value"
-                  keyPlaceholder="Authorization"
-                  valuePlaceholder="Bearer {api_key}"
-                  items={headers}
-                  onChange={setHeaders}
-                  mode="line"
-                  addButtonLabel="Add header"
-                />
-              </div>
-            )}
-
-            {authMethod === "static" && (
-              <div className="flex flex-col gap-1">
-                <Text font="main-ui-action">Organization credentials</Text>
-                <Text font="secondary-body" color="text-03">
-                  Optional — values your org pre-fills for every user. Leave
-                  empty for apps where each user supplies their own credentials.
-                </Text>
-                <InputKeyValue
-                  keyTitle="Credential key"
-                  valueTitle="Value"
-                  keyPlaceholder="api_key"
-                  valuePlaceholder="sk-…"
-                  items={orgCredentials}
-                  onChange={setOrgCredentials}
-                  mode="line"
-                  addButtonLabel="Add credential"
-                />
-              </div>
-            )}
 
             <div className="flex flex-col gap-1">
               <Text font="main-ui-action">
