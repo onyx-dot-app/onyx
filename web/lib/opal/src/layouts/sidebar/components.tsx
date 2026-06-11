@@ -149,8 +149,6 @@ function SidebarHeader({
     [folded, toggleFolded]
   );
 
-  const contentFolded = useSidebarFolded();
-
   if (logo == null && !children) return null;
 
   const logoEl = logo != null ? logo(foldable ? folded : undefined) : null;
@@ -177,12 +175,7 @@ function SidebarHeader({
         </div>
       )}
       {children && (
-        <div
-          className="opal-sidebar-header__content"
-          data-folded={String(contentFolded)}
-        >
-          {children}
-        </div>
+        <div className="opal-sidebar-header__content">{children}</div>
       )}
     </div>
   );
