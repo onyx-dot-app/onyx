@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import SidebarSection from "@/sections/sidebar/SidebarSection";
@@ -182,7 +182,6 @@ function groupBySection(items: SidebarItemEntry[]) {
 
 function AdminSidebarInner() {
   const folded = useSidebarFolded();
-  const searchRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
@@ -224,10 +223,23 @@ function AdminSidebarInner() {
   const disabled = filtered.filter((item) => item.disabled);
   const enabledGroups = groupBySection(enabled);
   const disabledGroups = groupBySection(disabled);
+  const firstGroupIsUnlabeled = enabledGroups[0]?.section === "";
+
+  const searchInput = (
+    <InputTypeIn
+      variant="internal"
+      searchIcon
+      placeholder="Search..."
+      value={query}
+      onChange={(e) => setQuery(e.target.value)}
+      clearButton
+    />
+  );
 
   return (
     <>
       <SidebarLayouts.Body scrollKey="admin-sidebar">
+        {!firstGroupIsUnlabeled && searchInput}
         {enabledGroups.map((group, groupIndex) => {
           const tabs = group.items.map(({ link, icon, name }) => (
             <SidebarTab
@@ -243,17 +255,7 @@ function AdminSidebarInner() {
           if (!group.section) {
             return (
               <div key={groupIndex}>
-                {groupIndex === 0 && (
-                  <InputTypeIn
-                    ref={searchRef}
-                    variant="internal"
-                    searchIcon
-                    placeholder="Search..."
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    clearButton
-                  />
-                )}
+                {groupIndex === 0 && searchInput}
                 {tabs}
               </div>
             );
