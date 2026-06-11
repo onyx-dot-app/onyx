@@ -71,6 +71,11 @@ env:
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
 
+  # Must match the helm values-ci.yaml redis_password the proxy reads from its
+  # onyx-redis secret. Compose Redis is set to require this password right after
+  # startup (see Start Postgres step).
+  REDIS_PASSWORD: "password"
+
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
@@ -310,6 +315,17 @@ jobs:
             relational_db \
             cache
 
+          # The proxy chart bakes in REDIS_PASSWORD=password (helm
+          # values-ci.yaml). Compose Redis ships without requirepass, so a
+          # CONFIG SET aligns the daemon with what the proxy expects -- without
+          # it, the proxy's grant-cache check trips NOAUTH and the approval row
+          # gets terminalized.
+          REDIS_ID=$(docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.dev.yml \
+            ps -q cache)
+          docker exec "$REDIS_ID" redis-cli CONFIG SET requirepass password
+
       - name: Expose Postgres inside the kind cluster
         run: |
           set -eo pipefail
@@ -352,6 +368,43 @@ jobs:
                 - ip: ${PG_IP}
               ports:
                 - port: 5432
+                  protocol: TCP
+          EOF
+
+      # Same selector-less Service trick as Postgres above. The configmap
+      # renders REDIS_HOST as the helm release name (`onyx`); The proxy uses it
+      # for the approval-grant cache check.
+      - name: Expose Redis inside the kind cluster
+        run: |
+          set -eo pipefail
+          REDIS_ID=$(cd deployment/docker_compose && \
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml ps -q cache)
+          docker network connect kind "$REDIS_ID" --alias cache
+          REDIS_IP=$(docker inspect "$REDIS_ID" \
+            --format '{{ (index .NetworkSettings.Networks "kind").IPAddress }}')
+          echo "redis on kind network at $REDIS_IP"
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: onyx
+            namespace: onyx
+          spec:
+            ports:
+              - port: 6379
+                targetPort: 6379
+                protocol: TCP
+          ---
+          apiVersion: v1
+          kind: Endpoints
+          metadata:
+            name: onyx
+            namespace: onyx
+          subsets:
+            - addresses:
+                - ip: ${REDIS_IP}
+              ports:
+                - port: 6379
                   protocol: TCP
           EOF
 
