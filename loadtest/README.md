@@ -49,6 +49,20 @@ required/forced, the deep-research phase sequence (clarification →
 plan → orchestrator → research agents → reports), and `max_tokens` caps.
 Contract tests: `uv run pytest tests/ -q`.
 
+### Provider profiles
+
+Knob combinations imitate real provider latency profiles — register each as
+a model configuration and select per scenario to test how Onyx behaves when
+the provider is fast, slow, or degraded (slow providers hold streams and
+their resources open longer, which is exactly what stresses the api-server):
+
+| Profile | Model name |
+|---|---|
+| Fast chat model (gpt-class) | `mock-ttft300-itl15-len150` |
+| Slow reasoning model (long silent TTFT) | `mock-ttft8000-itl40-len600` |
+| Degraded/overloaded provider | `mock-ttft20000-itl200-len300` |
+| Long-answer generation | `mock-ttft500-itl20-len2000` |
+
 ## Running
 
 ```bash

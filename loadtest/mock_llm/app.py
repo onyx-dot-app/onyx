@@ -19,6 +19,10 @@ Timing knobs are encoded in the model name (litellm passes it through):
     mock-agents2                    — spawn 2 parallel research agents per
                                       deep-research orchestrator cycle
 
+Knob combinations can imitate provider latency profiles (see README:
+"Provider profiles") — e.g. a slow reasoning model is just
+`mock-ttft8000-itl40-len600`.
+
 Branching follows the contract of Onyx's LLM loops (chat llm_loop.py and
 deep_research/dr_loop.py):
 
@@ -50,13 +54,27 @@ import os
 import re
 import time
 import uuid
-from typing import Any
+from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
-from fastapi import Request
 from fastapi import Response
 from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
+
+from mock_llm.models import AssistantMessage
+from mock_llm.models import ChatCompletionChunk
+from mock_llm.models import ChatCompletionRequest
+from mock_llm.models import ChatCompletionResponse
+from mock_llm.models import ChatMessage
+from mock_llm.models import Choice
+from mock_llm.models import ChunkChoice
+from mock_llm.models import ChunkDelta
+from mock_llm.models import StreamToolCall
+from mock_llm.models import StreamToolCallFunction
+from mock_llm.models import ToolCall
+from mock_llm.models import ToolCallFunction
+from mock_llm.models import ToolDefinition
+from mock_llm.models import Usage
 
 app = FastAPI()
 
@@ -80,11 +98,11 @@ _GENERATE_PLAN = "generate_plan"
 
 class Knobs:
     def __init__(self, model: str) -> None:
-        self.ttft_s = DEFAULT_TTFT_MS / 1000.0
-        self.itl_s = DEFAULT_ITL_MS / 1000.0
-        self.n_tokens = DEFAULT_LEN_TOKENS
-        self.tools_on_auto = False
-        self.n_agents = 1
+        self.ttft_s: float = DEFAULT_TTFT_MS / 1000.0
+        self.itl_s: float = DEFAULT_ITL_MS / 1000.0
+        self.n_tokens: int = DEFAULT_LEN_TOKENS
+        self.tools_on_auto: bool = False
+        self.n_agents: int = 1
         for name, value in _KNOB_RE.findall(model):
             if name == "ttft":
                 self.ttft_s = int(value) / 1000.0
@@ -98,45 +116,38 @@ class Knobs:
                 self.n_agents = max(1, int(value))
 
 
-def _tool_names(tools: list[dict[str, Any]] | None) -> list[str]:
-    if not tools:
-        return []
-    return [t.get("function", {}).get("name", "") for t in tools]
-
-
-def _assistant_called(messages: list[dict[str, Any]], names: tuple[str, ...]) -> bool:
+def _assistant_called(messages: list[ChatMessage], names: tuple[str, ...]) -> bool:
     """True if any assistant message in the history already called one of
     `names` — the stateless signal for which phase of a loop we're in."""
-    for m in messages:
-        if m.get("role") != "assistant":
+    for message in messages:
+        if message.role != "assistant":
             continue
-        for tc in m.get("tool_calls") or []:
-            if tc.get("function", {}).get("name") in names:
+        for tool_call in message.tool_calls or []:
+            if tool_call.function.name in names:
                 return True
     return False
 
 
-def _last_user_snippet(messages: list[dict[str, Any]]) -> str:
-    for m in reversed(messages):
-        if m.get("role") != "user":
+def _last_user_snippet(messages: list[ChatMessage]) -> str:
+    for message in reversed(messages):
+        if message.role != "user":
             continue
-        content = m.get("content")
-        if isinstance(content, str):
-            return content[:200]
-        if isinstance(content, list):  # multimodal content parts
-            for part in content:
+        if isinstance(message.content, str):
+            return message.content[:200]
+        if isinstance(message.content, list):  # multimodal content parts
+            for part in message.content:
                 if isinstance(part, dict) and part.get("type") == "text":
                     return str(part.get("text", ""))[:200]
     return "load test query"
 
 
-def _synthesize_arguments(tool: dict[str, Any], snippet: str) -> str:
+def _synthesize_arguments(tool: ToolDefinition, snippet: str) -> str:
     """Fill a tool's required params from its JSON schema: strings get the
     user-message snippet, string-arrays get a one-element list."""
-    params = tool.get("function", {}).get("parameters", {}) or {}
+    params = tool.function.parameters or {}
     properties = params.get("properties", {}) or {}
     required = params.get("required", list(properties.keys())) or []
-    args: dict[str, Any] = {}
+    args: dict[str, object] = {}
     for prop in required:
         schema = properties.get(prop, {})
         prop_type = schema.get("type")
@@ -153,45 +164,35 @@ def _synthesize_arguments(tool: dict[str, Any], snippet: str) -> str:
     return json.dumps(args)
 
 
-def _pick_tool(
-    tools: list[dict[str, Any]],
-    tool_choice: Any,
-    messages: list[dict[str, Any]],
-    knobs: Knobs,
-) -> tuple[list[dict[str, Any]], bool]:
-    """Decide which tool call(s) to emit, if any.
-
-    Returns (tool_calls, emit) where each tool_call is the full OpenAI
-    non-streaming shape; emit=False means stream plain text instead.
-    """
-    names = _tool_names(tools)
-    by_name = {n: t for n, t in zip(names, tools)}
+def _pick_tool(request: ChatCompletionRequest, knobs: Knobs) -> list[ToolCall]:
+    """Decide which tool call(s) to emit; empty list means stream text."""
+    tools = request.tools or []
+    by_name = {t.function.name: t for t in tools}
+    messages = request.messages
     snippet = _last_user_snippet(messages)
-    has_tool_result = any(m.get("role") == "tool" for m in messages)
+    has_tool_result = any(m.role == "tool" for m in messages)
 
-    def make(tool: dict[str, Any], task: str | None = None) -> dict[str, Any]:
-        arguments = _synthesize_arguments(tool, task or snippet)
-        return {
-            "id": f"call_mock_{uuid.uuid4().hex[:10]}",
-            "type": "function",
-            "function": {
-                "name": tool.get("function", {}).get("name", ""),
-                "arguments": arguments,
-            },
-        }
+    def make(tool: ToolDefinition, task: str | None = None) -> ToolCall:
+        return ToolCall(
+            id=f"call_mock_{uuid.uuid4().hex[:10]}",
+            function=ToolCallFunction(
+                name=tool.function.name,
+                arguments=_synthesize_arguments(tool, task or snippet),
+            ),
+        )
 
     # Forced specific function: {"type": "function", "function": {"name": ...}}
-    if isinstance(tool_choice, dict):
-        forced = tool_choice.get("function", {}).get("name")
+    if isinstance(request.tool_choice, dict):
+        forced = request.tool_choice.get("function", {}).get("name")
         if forced and forced in by_name:
-            return [make(by_name[forced])], True
+            return [make(by_name[forced])]
 
-    choice = tool_choice if isinstance(tool_choice, str) else None
+    choice = request.tool_choice if isinstance(request.tool_choice, str) else None
     if choice is None:
         choice = "auto" if tools else "none"
 
     if choice == "none" or not tools:
-        return [], False
+        return []
 
     if choice == "required":
         # DR orchestrator: spawn agents once, then ask for the report.
@@ -203,40 +204,61 @@ def _pick_tool(
                         task=f"research aspect {i + 1}: {snippet}",
                     )
                     for i in range(knobs.n_agents)
-                ], True
+                ]
             if _GENERATE_REPORT in by_name:
-                return [make(by_name[_GENERATE_REPORT])], True
+                return [make(by_name[_GENERATE_REPORT])]
         # DR research-agent loop: search once, then ask for the report.
         searchish = next((n for n in _SEARCHISH_TOOLS if n in by_name), None)
         if searchish and not _assistant_called(messages, _SEARCHISH_TOOLS):
-            return [make(by_name[searchish])], True
+            return [make(by_name[searchish])]
         if _GENERATE_REPORT in by_name:
-            return [make(by_name[_GENERATE_REPORT])], True
-        return [make(tools[0])], True
+            return [make(by_name[_GENERATE_REPORT])]
+        return [make(tools[0])]
 
     # choice == "auto"
     # DR clarification: always proceed to the plan, never ask to clarify.
     if _GENERATE_PLAN in by_name:
-        return [make(by_name[_GENERATE_PLAN])], True
+        return [make(by_name[_GENERATE_PLAN])]
     if knobs.tools_on_auto and not has_tool_result:
         searchish = next((n for n in _SEARCHISH_TOOLS if n in by_name), None)
         target = by_name.get(searchish) if searchish else tools[0]
         if target is not None:
-            return [make(target)], True
-    return [], False
+            return [make(target)]
+    return []
 
 
-def _chunk(
-    model: str, completion_id: str, delta: dict[str, Any], finish: str | None
-) -> str:
-    payload = {
-        "id": completion_id,
-        "object": "chat.completion.chunk",
-        "created": int(time.time()),
-        "model": model,
-        "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
-    }
-    return f"data: {json.dumps(payload)}\n\n"
+def _sse(chunk: ChatCompletionChunk) -> str:
+    # Match OpenAI's wire format: unset fields are omitted inside delta (and
+    # its tool_calls entries), but finish_reason is always present (null).
+    data = chunk.model_dump()
+    for choice in data["choices"]:
+        delta = {k: v for k, v in choice["delta"].items() if v is not None}
+        if "tool_calls" in delta:
+            delta["tool_calls"] = [
+                {
+                    k: (
+                        {fk: fv for fk, fv in v.items() if fv is not None}
+                        if k == "function"
+                        else v
+                    )
+                    for k, v in tc.items()
+                    if v is not None
+                }
+                for tc in delta["tool_calls"]
+            ]
+        choice["delta"] = delta
+    return f"data: {json.dumps(data)}\n\n"
+
+
+def _make_chunk(
+    model: str, completion_id: str, delta: ChunkDelta, finish: str | None
+) -> ChatCompletionChunk:
+    return ChatCompletionChunk(
+        id=completion_id,
+        created=int(time.time()),
+        model=model,
+        choices=[ChunkChoice(delta=delta, finish_reason=finish)],
+    )
 
 
 @app.get("/v1/models")
@@ -250,104 +272,111 @@ def list_models() -> JSONResponse:
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: Request) -> Response:
-    body = await request.json()
-    model: str = body.get("model", "mock-model")
-    stream: bool = body.get("stream", False)
-    messages: list[dict[str, Any]] = body.get("messages", [])
-    tools: list[dict[str, Any]] | None = body.get("tools")
-    tool_choice: Any = body.get("tool_choice")
-    max_tokens: int | None = body.get("max_tokens") or body.get("max_completion_tokens")
-    knobs = Knobs(model)
+async def chat_completions(request: ChatCompletionRequest) -> Response:
+    knobs = Knobs(request.model)
     completion_id = f"chatcmpl-mock-{uuid.uuid4().hex[:12]}"
 
-    tool_calls, emit_tools = _pick_tool(tools or [], tool_choice, messages, knobs)
+    tool_calls = _pick_tool(request, knobs)
+    emit_tools = bool(tool_calls)
 
     n_tokens = knobs.n_tokens
-    if max_tokens is not None:
-        n_tokens = min(n_tokens, max(1, int(max_tokens)))
+    if request.effective_max_tokens is not None:
+        n_tokens = min(n_tokens, max(1, request.effective_max_tokens))
     answer = " ".join(_FILLER_WORDS[i % len(_FILLER_WORDS)] for i in range(n_tokens))
 
-    if not stream:
+    if not request.stream:
         await asyncio.sleep(
             knobs.ttft_s + (0 if emit_tools else knobs.itl_s * n_tokens)
         )
         if emit_tools:
-            message: dict[str, Any] = {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": tool_calls,
-            }
+            message = AssistantMessage(content=None, tool_calls=tool_calls)
             finish = "tool_calls"
         else:
-            message = {"role": "assistant", "content": answer}
+            message = AssistantMessage(content=answer)
             finish = "stop"
-        return JSONResponse(
-            {
-                "id": completion_id,
-                "object": "chat.completion",
-                "created": int(time.time()),
-                "model": model,
-                "choices": [{"index": 0, "message": message, "finish_reason": finish}],
-                "usage": {
-                    "prompt_tokens": 100,
-                    "completion_tokens": n_tokens if not emit_tools else 20,
-                    "total_tokens": 100 + (n_tokens if not emit_tools else 20),
-                },
-            }
+        completion_tokens = 20 if emit_tools else n_tokens
+        response = ChatCompletionResponse(
+            id=completion_id,
+            created=int(time.time()),
+            model=request.model,
+            choices=[Choice(message=message, finish_reason=finish)],
+            usage=Usage(
+                prompt_tokens=100,
+                completion_tokens=completion_tokens,
+                total_tokens=100 + completion_tokens,
+            ),
         )
+        return JSONResponse(response.model_dump())
 
-    async def generate() -> Any:
+    async def generate() -> AsyncGenerator[str, None]:
         await asyncio.sleep(knobs.ttft_s)
         if emit_tools:
             # Header chunk: ids + names with empty arguments, then one
             # argument-delta chunk per call (OpenAI parallel format).
-            yield _chunk(
-                model,
-                completion_id,
-                {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "index": i,
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": {
-                                "name": tc["function"]["name"],
-                                "arguments": "",
-                            },
-                        }
-                        for i, tc in enumerate(tool_calls)
-                    ],
-                },
-                None,
-            )
-            for i, tc in enumerate(tool_calls):
-                yield _chunk(
-                    model,
+            yield _sse(
+                _make_chunk(
+                    request.model,
                     completion_id,
-                    {
-                        "tool_calls": [
-                            {
-                                "index": i,
-                                "function": {"arguments": tc["function"]["arguments"]},
-                            }
-                        ]
-                    },
+                    ChunkDelta(
+                        role="assistant",
+                        tool_calls=[
+                            StreamToolCall(
+                                index=i,
+                                id=tc.id,
+                                type="function",
+                                function=StreamToolCallFunction(
+                                    name=tc.function.name, arguments=""
+                                ),
+                            )
+                            for i, tc in enumerate(tool_calls)
+                        ],
+                    ),
                     None,
                 )
-            yield _chunk(model, completion_id, {}, "tool_calls")
+            )
+            for i, tc in enumerate(tool_calls):
+                yield _sse(
+                    _make_chunk(
+                        request.model,
+                        completion_id,
+                        ChunkDelta(
+                            tool_calls=[
+                                StreamToolCall(
+                                    index=i,
+                                    function=StreamToolCallFunction(
+                                        arguments=tc.function.arguments
+                                    ),
+                                )
+                            ]
+                        ),
+                        None,
+                    )
+                )
+            yield _sse(
+                _make_chunk(request.model, completion_id, ChunkDelta(), "tool_calls")
+            )
         else:
-            yield _chunk(
-                model, completion_id, {"role": "assistant", "content": ""}, None
+            yield _sse(
+                _make_chunk(
+                    request.model,
+                    completion_id,
+                    ChunkDelta(role="assistant", content=""),
+                    None,
+                )
             )
             for i in range(n_tokens):
                 word = _FILLER_WORDS[i % len(_FILLER_WORDS)]
-                yield _chunk(model, completion_id, {"content": word + " "}, None)
+                yield _sse(
+                    _make_chunk(
+                        request.model,
+                        completion_id,
+                        ChunkDelta(content=word + " "),
+                        None,
+                    )
+                )
                 if knobs.itl_s > 0:
                     await asyncio.sleep(knobs.itl_s)
-            yield _chunk(model, completion_id, {}, "stop")
+            yield _sse(_make_chunk(request.model, completion_id, ChunkDelta(), "stop"))
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
