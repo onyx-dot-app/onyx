@@ -43,6 +43,9 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import create_external_app
 from onyx.db.external_app import get_built_in_external_app
 from tests.integration.common_utils import http_client
+from tests.integration.common_utils.constants import ADMIN_USER_NAME
+from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
+from tests.integration.common_utils.managers.user import UserManager
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -59,6 +62,30 @@ def _test_client() -> Generator[httpx.Client, None, None]:
     finally:
         real_client.close()
         http_client.set_test_client(None)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _install_playwright() -> None:
+    """No-op override: No docker_e2e test uses playwright."""
+    return None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _start_celery_workers() -> Generator[None, None, None]:
+    """No-op override: The ``background`` container already runs the workers."""
+    yield None
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _module_reset_and_seed() -> None:
+    """
+    Override: Skip the parent's ``reset_all()``. The dockerized api_server holds
+    pooled postgres connections; an out-of-process ``alembic downgrade base``
+    deadlocks against those. Admin + LLM provider seed is retained because gate
+    tests need a configured provider.
+    """
+    admin = UserManager.create(name=ADMIN_USER_NAME)
+    LLMProviderManager.create(user_performing_action=admin, api_key="test-api-key")
 
 
 @pytest.fixture(scope="module")
@@ -84,7 +111,9 @@ def slack_external_app() -> None:
                 app_type=ExternalAppType.SLACK,
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
-                organization_credentials={},
+                # Fake token. An unfillable template short-circuits the ASK gate
+                # (forwards bare, no DB row), which breaks every gate-flow test.
+                organization_credentials={"access_token": "fake-test-token"},
                 enabled=True,
                 is_public=True,
                 action_policies={"slack.messages.write": EndpointPolicy.ASK},

@@ -13,6 +13,8 @@ import { vars } from "nativewind";
 import { varsLight, varsDark } from "@onyx-ai/shared/native";
 
 import { persister, persistMaxAge, queryClient } from "@/query/client";
+import { bindAppStateFocus } from "@/query/focus";
+import { bindOnlineManager } from "@/query/online";
 
 // Show the native Onyx splash until the first frame is ready, then reveal the app.
 SplashScreen.preventAutoHideAsync();
@@ -30,11 +32,21 @@ export default function RootLayout() {
   const themeVars = colorScheme === "dark" ? darkTheme : lightTheme;
 
   useEffect(() => {
+    // Wire React Native connectivity + foreground state into TanStack Query so
+    // queries pause offline and refetch on reconnect / app resume.
+    const unbindOnline = bindOnlineManager();
+    const unbindFocus = bindAppStateFocus();
+
     // No async init yet, so hide on the first render.
     // TODO(Subash-Mohan): once useFonts lands, gate this behind a readiness flag
     // (return null until ready) so text never flashes in the system font before
     // custom fonts load.
     void SplashScreen.hideAsync();
+
+    return () => {
+      unbindOnline();
+      unbindFocus();
+    };
   }, []);
 
   return (

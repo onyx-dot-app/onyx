@@ -38,7 +38,10 @@ from uuid import uuid4
 import pytest
 from httpx import Response
 
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecision
+from onyx.db.enums import ExternalAppType
+from onyx.db.external_app import get_built_in_external_app
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.configs import SandboxBackend
@@ -551,3 +554,59 @@ def test_reject_decision_returns_403_user_rejected(
         )
     finally:
         curl_proc.kill()
+
+
+def test_ask_with_uninvokable_app_forwards_bare(
+    slack_external_app: None,  # noqa: ARG001 -- side-effect fixture
+    gated_session: tuple[DATestUser, UUID, str],
+) -> None:
+    """ASKs on an app whose auth template can't be filled forwards bare.
+
+    Documents the credential gate's short-circuit: With no credentials to inject
+    after approval, the gate skips the ASK prompt and forwards the request
+    as-is. Mirrors K8s ``test_ask_with_uninvokable_app_forwards_bare``.
+    """
+    user, session_id, container = gated_session
+
+    # Strip Slack's org credential so app_is_available -> False.
+    with get_session_with_tenant(tenant_id="public") as db:
+        app = get_built_in_external_app(db, ExternalAppType.SLACK)
+        assert app is not None, "slack_external_app fixture must seed the row"
+        app.organization_credentials = {}  # ty: ignore[invalid-assignment]
+        db.commit()
+
+    try:
+        curl_proc = _start_slack_post_via_proxy(container, session_id)
+        try:
+            stdout, _stderr = curl_proc.communicate(timeout=60)
+            # Slack returns HTTP 200 with `invalid_auth` in the body for the
+            # fake bearer -- the 200 + body is the proof the request actually
+            # reached slack.com bare (no injection from the gate).
+            assert stdout.strip() == "200", (
+                "Uninvokable ASK should forward bare to Slack and Slack should "
+                f"200 with invalid_auth in the body, got {stdout!r}"
+            )
+            body = _docker_exec(container, ["cat", "/tmp/slack_out"]).stdout
+            payload = json.loads(body)
+            assert payload.get("error") == "invalid_auth", (
+                f"Bare-forwarded request should reach slack.com and get "
+                f"invalid_auth, got {payload!r}"
+            )
+
+            live_url = f"{API_SERVER_URL}/build/approvals/sessions/{session_id}/live"
+            resp = client.get(live_url, headers=user.headers, cookies=user.cookies)
+            resp.raise_for_status()
+            assert resp.json().get("items") == [], (
+                "Uninvokable ASK must not mint an approval row."
+            )
+        finally:
+            curl_proc.kill()
+    finally:
+        # Restore the seeded fake token so sibling tests still gate.
+        with get_session_with_tenant(tenant_id="public") as db:
+            app = get_built_in_external_app(db, ExternalAppType.SLACK)
+            assert app is not None
+            app.organization_credentials = {  # ty: ignore[invalid-assignment]
+                "access_token": "fake-test-token"
+            }
+            db.commit()

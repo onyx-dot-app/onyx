@@ -8,15 +8,26 @@ them carry the security model:
   - `sandbox` must not be able to mutate `/workspace/managed/`.
   - PID namespace sharing must be disabled (else /proc leaks the sidecar env).
   - The sidecar must expose the push/snapshot port with health probes.
+  - Neither container should receive durable-storage credentials for snapshots.
 
-Pure logic — bypasses `_initialize` so no cluster is needed.
+The static pod shape now lives in the Helm-rendered ``sandbox-pod`` PodTemplate
+(templates/sandbox-podtemplate.yaml); `_create_sandbox_pod` reads it and overlays
+the per-pod fields. This suite renders that chart template, feeds it through the
+overlay (via a mocked ``read_namespaced_pod_template``), and asserts the
+invariants on the result — so it verifies the Helm template + Python overlay
+end to end. Skips if the ``helm`` binary or chart deps are unavailable.
 """
 
 from __future__ import annotations
 
 import base64
+import json
+import shutil
+import subprocess
+from pathlib import Path
 
 import pytest
+import yaml
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization import NoEncryption
@@ -31,6 +42,10 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     PUSH_DAEMON_PORT,
 )
+
+# backend/tests/unit/onyx/server/features/build/sandbox/ -> repo root
+_REPO_ROOT = Path(__file__).resolve().parents[8]
+_CHART_DIR = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
 
 
 def _gen_key_b64() -> str:
@@ -58,16 +73,62 @@ def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _render_pod_template() -> client.V1PodTemplate:
+    """Render the sandbox-pod PodTemplate from the chart and deserialize it
+    into the same model the K8s API would return."""
+    helm = shutil.which("helm")
+    if helm is None:
+        pytest.skip("helm binary not available")
+    result = subprocess.run(
+        [
+            helm,
+            "template",
+            "onyx",
+            str(_CHART_DIR),
+            "-n",
+            "onyx",
+            "-f",
+            str(_CHART_DIR / "values-ci.yaml"),
+            "--show-only",
+            "templates/sandbox-podtemplate.yaml",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        pytest.skip(f"helm template failed (chart deps?): {result.stderr.strip()}")
+    rendered = yaml.safe_load(result.stdout)
+
+    class _Resp:
+        def __init__(self, obj: dict) -> None:
+            self.data = json.dumps(obj)
+
+    return client.ApiClient().deserialize(_Resp(rendered), "V1PodTemplate")
+
+
 def _build_pod() -> client.V1Pod:
+    pod_template = _render_pod_template()
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
-    mgr._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
-    mgr._service_account = "sandbox-file-sync"  # type: ignore[attr-defined]
-    mgr._s3_bucket = "test-bucket"  # type: ignore[attr-defined]
+    mgr._core_api = _FakeCoreApi(pod_template)  # type: ignore[attr-defined]
     return mgr._create_sandbox_pod(  # type: ignore[attr-defined]
         sandbox_id="abc12345-abcd-abcd-abcd-abcdef123456",
         tenant_id="t-1",
     )
+
+
+class _FakeCoreApi:
+    """Returns the rendered PodTemplate from read_namespaced_pod_template."""
+
+    def __init__(self, pod_template: client.V1PodTemplate) -> None:
+        self._pod_template = pod_template
+
+    def read_namespaced_pod_template(
+        self,
+        name: str,  # noqa: ARG002
+        namespace: str,  # noqa: ARG002
+    ) -> client.V1PodTemplate:
+        return self._pod_template
 
 
 @pytest.fixture
@@ -100,16 +161,6 @@ def test_pod_has_sandbox_and_sidecar_with_distinct_entrypoints(
     assert by_name["sandbox"].command != by_name["sidecar"].command
     assert by_name["sandbox"].command == ["/workspace/entrypoint.sh"]
     assert by_name["sidecar"].command == ["/workspace/sidecar-entrypoint.sh"]
-
-
-def test_irsa_skip_containers_annotation_targets_sandbox_container(
-    pod: client.V1Pod,
-) -> None:
-    annotations = pod.metadata.annotations or {}
-    assert (
-        annotations["eks.amazonaws.com/skip-containers"]
-        == _container(pod, "sandbox").name
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -186,9 +237,14 @@ def test_workspace_volume_is_shared_for_session_io(pod: client.V1Pod) -> None:
 
 
 def test_share_process_namespace_is_disabled(pod: client.V1Pod) -> None:
-    """PID-sharing would expose the sidecar's IRSA env via /proc to the
-    agent. Pin explicitly False (not just None / unset)."""
+    """PID-sharing would expose sidecar process state via /proc to the agent.
+    Pin explicitly False (not just None / unset)."""
     assert pod.spec.share_process_namespace is False
+
+
+def test_service_account_token_automount_is_disabled(pod: client.V1Pod) -> None:
+    """The sandbox pod never needs the Kubernetes API token mounted."""
+    assert pod.spec.automount_service_account_token is False
 
 
 # ---------------------------------------------------------------------------
@@ -227,12 +283,30 @@ _PROXY_ENV_NAMES = {
 
 def test_proxy_env_is_set_on_sandbox_and_sidecar(pod: client.V1Pod) -> None:
     """Both containers' outbound traffic must be routed through the proxy —
-    sandbox for the agent, sidecar for `aws s3` (the pod-wide iptables
-    lockdown blocks direct egress for either)."""
+    sandbox for the agent and sidecar for control-plane callbacks."""
     for name in ("sandbox", "sidecar"):
         env = {e.name for e in _container(pod, name).env}
         assert _PROXY_ENV_NAMES.issubset(env), (
             f"{name} container missing proxy env: {_PROXY_ENV_NAMES - env}"
+        )
+
+
+def test_snapshot_storage_credentials_are_not_in_pod_env(pod: client.V1Pod) -> None:
+    """Snapshots stream to api-server-owned FileStore persistence, so sandbox
+    pods do not need bucket names, endpoints, or AWS credentials."""
+    forbidden = {
+        "SANDBOX_S3_BUCKET",
+        "S3_ENDPOINT_URL",
+        "AWS_ENDPOINT_URL",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "S3_AWS_ACCESS_KEY_ID",
+        "S3_AWS_SECRET_ACCESS_KEY",
+    }
+    for name in ("sandbox", "sidecar"):
+        env = {e.name for e in _container(pod, name).env}
+        assert env.isdisjoint(forbidden), (
+            f"{name} leaked storage env: {env & forbidden}"
         )
 
 
@@ -259,6 +333,14 @@ def test_ca_bundle_mounted_read_only_on_both_containers(pod: client.V1Pod) -> No
         mount = _mount(_container(pod, name), "sandbox-ca-bundle")
         assert mount.read_only is True
         assert mount.mount_path == "/etc/ssl/sandbox"
+
+
+def test_missing_container_raises_clear_error_on_version_skew() -> None:
+    """A chart/api-server version skew (template missing an expected container)
+    must surface as an actionable RuntimeError, not an opaque StopIteration."""
+    spec = client.V1PodSpec(containers=[client.V1Container(name="sandbox")])
+    with pytest.raises(RuntimeError, match="sidecar"):
+        KubernetesSandboxManager._require_container(spec, "sidecar")
 
 
 def test_service_exposes_push_daemon_port() -> None:

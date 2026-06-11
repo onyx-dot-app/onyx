@@ -61,6 +61,7 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import action_entry
+from tests.external_dependency_unit.craft.conftest import pod_exec
 from tests.external_dependency_unit.craft.conftest import pod_exec_async
 from tests.external_dependency_unit.craft.conftest import wait_for_pod_exec_output
 from tests.external_dependency_unit.craft.conftest import wait_for_proxy_redeploy
@@ -111,7 +112,12 @@ def _seed_slack_external_app() -> Generator[None, None, None]:
                     app_type=ExternalAppType.SLACK,
                     upstream_url_patterns=["https://slack\\.com/api/.*"],
                     auth_template={"Authorization": "Bearer {access_token}"},
-                    organization_credentials={},
+                    # Fake token. An unfillable template short-circuits the ASK
+                    # gate (forwards bare, no DB row), which breaks every
+                    # gate-flow test below. ``test_ask_with_uninvokable_app_
+                    # forwards_bare`` strips this back out to exercise that
+                    # short-circuit path.
+                    organization_credentials={"access_token": "fake-test-token"},
                     enabled=True,
                     is_public=True,
                     action_policies={"slack.messages.write": EndpointPolicy.ASK},
@@ -547,6 +553,55 @@ def test_gated_egress_without_session_tag_fails_closed(
     )
 
 
+def test_ask_with_uninvokable_app_forwards_bare(
+    k8s_manager: object,  # noqa: ARG001 -- required to construct live_pod
+    k8s_client: client.CoreV1Api,
+    gated_session: tuple[User, UUID, str],
+    db_session: Session,
+) -> None:
+    """ASKs on an app whose auth template can't be filled forwards bare.
+
+    The credential gate's documented short-circuit: With no credentials to
+    inject after approval, the gate skips the ASK prompt and forwards the
+    request as-is rather than parking it.
+    """
+    user, session_id, pod_name = gated_session
+
+    # Strip the org credential the module seed put on Slack so app_is_available
+    # falls to False. _isolate_skill_tables restores the row after this test.
+    slack = get_built_in_external_app(db_session, ExternalAppType.SLACK)
+    assert slack is not None, "Module seed must have created the Slack row."
+    slack.organization_credentials = {}  # ty: ignore[invalid-assignment]
+    db_session.commit()
+
+    output_path = f"/tmp/curl_bare_{uuid4().hex[:8]}"
+    _post_slack_via_curl(
+        k8s_client,
+        pod_name,
+        output_path,
+        text="hello",
+        session_id=session_id,
+    )
+
+    # Slack returns HTTP 200 with `invalid_auth` in the body for the curl's fake
+    # bearer -- the 200 + body is the proof the request actually reached
+    # slack.com bare (no injection from the gate).
+    status_code, body = wait_for_pod_exec_output(
+        k8s_client, pod_name, output_path, timeout_s=30
+    )
+    assert status_code == 200, (
+        f"Uninvokable ASK should forward bare to Slack and Slack should 200 "
+        f"with invalid_auth in the body, got {status_code}: {body!r}"
+    )
+    assert "invalid_auth" in body.strip(), (
+        f"Bare-forwarded request should reach slack.com and get invalid_auth, "
+        f"got body {body!r}"
+    )
+    assert _approval_count_for_user(db_session, user.id) == 0, (
+        "Uninvokable ASK must not mint an approval row."
+    )
+
+
 def test_sse_merger_emits_approval_requested_packet(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
@@ -597,7 +652,20 @@ def test_body_too_large_returns_403(
     user, _, pod_name = gated_session
 
     output_path = f"/tmp/curl_oversize_{uuid4().hex[:8]}"
-    big_payload = "x" * (1_572_864)  # 1.5 MiB, above the 1 MiB cap
+    body_path = f"/tmp/body_oversize_{uuid4().hex[:8]}.json"
+    # Generate the 1.5 MiB body in-pod -- inlining it through pod_exec_async
+    # would push the full payload into the apiserver's exec URL query params and
+    # trip a 431 Request Header Fields Too Large at the websocket handshake.
+    pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        (
+            f'printf \'{{"channel":"#general","text":"\' > {body_path} && '
+            f'head -c 1572864 /dev/zero | tr "\\0" x >> {body_path} && '
+            f"printf '\"}}' >> {body_path}"
+        ),
+    )
     pod_exec_async(
         k8s_client,
         pod_name,
@@ -608,7 +676,7 @@ def test_body_too_large_returns_403(
             "Authorization": "Bearer xoxb-fake-test-token",
             "Content-Type": "application/json",
         },
-        body=json.dumps({"channel": "#general", "text": big_payload}),
+        body_file=body_path,
         max_time_s=60,
     )
 

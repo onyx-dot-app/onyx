@@ -1,12 +1,8 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
 {{- $craft := .Values.craft | default dict }}
 {{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
-{{- $saName := (index .Values.configMap "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox-file-sync" }}
+{{- $saName := (index .Values.configMap "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox" }}
 {{- $proxyNs := (index .Values.configMap "SANDBOX_PROXY_NAMESPACE") | default .Release.Namespace }}
-{{- $roleArn := (index $craft "sandboxFileSyncRoleArn") | default "" }}
-{{- if not $roleArn }}
-{{- fail "craft.sandboxFileSyncRoleArn is required when configMap.ENABLE_CRAFT=true (IRSA role ARN for the sandbox-file-sync ServiceAccount — output of the craft_sandbox terraform module)." }}
-{{- end }}
 {{- $boundSAs := prepend ((index $craft "extraBoundServiceAccounts") | default (list)) (include "onyx.serviceAccountName" .) }}
 {{- $rbacNameBase := printf "%s-%s" (include "onyx.fullname" .) .Release.Namespace }}
 {{- $rbacNamePrefix := $rbacNameBase }}
@@ -22,10 +18,8 @@ metadata:
   namespace: {{ $sandboxNs }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
-    app.kubernetes.io/component: sandbox-file-sync
-  annotations:
-    eks.amazonaws.com/role-arn: {{ $roleArn | quote }}
-automountServiceAccountToken: true
+    app.kubernetes.io/component: sandbox
+automountServiceAccountToken: false
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -40,6 +34,10 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch", "create", "delete"]
+  # _create_sandbox_pod reads the sandbox-pod PodTemplate to build the pod.
+  - apiGroups: [""]
+    resources: ["podtemplates"]
+    verbs: ["get"]
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["get", "create", "delete"]

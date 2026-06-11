@@ -1514,16 +1514,25 @@ configMap:
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
-  SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox-file-sync"
+  SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
 
-# -- Craft sandbox identity/RBAC (rendered when configMap.ENABLE_CRAFT=true).
+# -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).
 craft:
-  # Required when ENABLE_CRAFT=true. The craft_sandbox terraform module's role_arn output.
-  sandboxFileSyncRoleArn: ""
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
   extraBoundServiceAccounts: []
+
+# -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
+# Image/resources/ports come from the configMap.SANDBOX_* keys.
+sandboxPod:
+  nodeSelector:
+    onyx.app/workload: sandbox
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: sandbox
+      effect: NoSchedule
 
 # -- Sandbox egress proxy.
 sandboxProxy:
@@ -1539,6 +1548,11 @@ sandboxProxy:
   caSecretName: "sandbox-proxy-ca"
   caConfigMapName: "sandbox-proxy-ca-bundle"
   podAnnotations: {}
+  serviceAccount:
+    # Set IRSA annotations here when the sandbox proxy uses IAM-backed services,
+    # such as RDS IAM auth.
+    annotations: {}
+    automount: true
   # Matches the `onyx` user (uid 1001) baked into the backend image.
   runAsUser: 1001
   fsGroup: 1001

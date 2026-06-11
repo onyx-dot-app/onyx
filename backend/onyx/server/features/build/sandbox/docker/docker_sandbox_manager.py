@@ -935,17 +935,8 @@ class DockerSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
-        snapshot_path: str | None = None,
         user_name: str | None = None,
     ) -> None:
-        if snapshot_path:
-            logger.warning(
-                "setup_session_workspace called with snapshot_path=%s; use restore_snapshot "
-                "for snapshot restores. Session %s will be set up with the fresh template instead.",
-                snapshot_path,
-                session_id,
-            )
-
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._render_agents_md(

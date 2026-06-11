@@ -202,6 +202,23 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}
 
+{{/* Sandbox egress-proxy env. Mirrors _proxy_main_container_env_vars(). */}}
+{{- define "onyx.sandboxProxyEnv" -}}
+{{- $proxyUrl := printf "http://sandbox-proxy:%v" .proxyPort }}
+- { name: HTTPS_PROXY, value: "{{ $proxyUrl }}" }
+- { name: HTTP_PROXY, value: "{{ $proxyUrl }}" }
+- { name: https_proxy, value: "{{ $proxyUrl }}" }
+- { name: http_proxy, value: "{{ $proxyUrl }}" }
+- { name: NO_PROXY, value: "127.0.0.1,localhost" }
+- { name: no_proxy, value: "127.0.0.1,localhost" }
+- { name: NODE_EXTRA_CA_CERTS, value: "{{ .caBundleFile }}" }
+- { name: REQUESTS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
+- { name: SSL_CERT_FILE, value: "{{ .caBundleFile }}" }
+- { name: AWS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
+- { name: CURL_CA_BUNDLE, value: "{{ .caBundleFile }}" }
+- { name: GIT_SSL_CAINFO, value: "{{ .caBundleFile }}" }
+{{- end }}
+
 {{/*
 "true" when custom CA certificates are configured, empty otherwise.
 */}}

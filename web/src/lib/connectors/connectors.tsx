@@ -1661,6 +1661,32 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [],
     advanced_values: [],
   },
+  braintrust: {
+    description: "Configure Braintrust connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Braintrust project name to index:",
+        label: "Project Name",
+        name: "project_name",
+        optional: true,
+        description:
+          "Only index prompts, datasets, and experiments from this project. Leave empty to index the whole organization.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        query: "Enter the experiment row lookback window in days:",
+        label: "Experiment Row Lookback (days)",
+        name: "experiment_row_lookback_days",
+        optional: true,
+        default: 30,
+        description:
+          "Only index per-row results for experiments created within this many days. Experiment summaries are always indexed. Set to 0 to index rows for all experiments.",
+      },
+    ],
+  },
   egnyte: {
     description: "Configure Egnyte connector",
     values: [

@@ -39,6 +39,7 @@ import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const usePublicCredentials = () => {
@@ -843,20 +844,20 @@ export function useLlmManager(
 }
 
 export function useAuthType(): AuthType | null {
-  const { data, error } = useSWR<{ auth_type: AuthType }>(
-    SWR_KEYS.authType,
-    errorHandlingFetcher
-  );
+  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
+  // camelCase-mapped shape — a raw fetcher here would poison the cache for
+  // every other consumer of the key.
+  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
 
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
     return AuthType.CLOUD;
   }
 
-  if (error || !data) {
+  if (error || isLoading) {
     return null;
   }
 
-  return data.auth_type;
+  return authTypeMetadata.authType;
 }
 
 /*

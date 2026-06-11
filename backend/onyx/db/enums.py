@@ -361,7 +361,7 @@ class ScheduledTaskSkipReason(str, PyEnum):
 class SandboxStatus(str, PyEnum):
     PROVISIONING = "provisioning"
     RUNNING = "running"
-    SLEEPING = "sleeping"  # Pod terminated, snapshots saved to S3
+    SLEEPING = "sleeping"  # Pod terminated, snapshots saved to FileStore
     TERMINATED = "terminated"
     FAILED = "failed"
 

@@ -6,6 +6,7 @@
       "name": "mobile",
       "dependencies": {
         "@onyx-ai/shared": "file:../web/lib/shared",
+        "@react-native-community/netinfo": "12.0.1",
         "@shopify/flash-list": "2.0.2",
         "@tanstack/query-sync-storage-persister": "^5.101.0",
         "@tanstack/react-query": "^5.101.0",
@@ -17,6 +18,7 @@
         "expo-font": "~56.0.5",
         "expo-linking": "~56.0.13",
         "expo-router": "~56.2.9",
+        "expo-secure-store": "~56.0.4",
         "expo-splash-screen": "~56.0.10",
         "expo-status-bar": "~56.0.4",
         "expo-system-ui": "~56.0.5",
@@ -330,21 +332,21 @@
 
     "@jsonjoy.com/codegen": ["@jsonjoy.com/codegen@1.0.0", "", { "peerDependencies": { "tslib": "2" } }, "sha512-E8Oy+08cmCf0EK/NMxpaJZmOxPqM+6iSe2S4nlSBrPZOORoDJILxtbSUEDKQyTamm/BVAhIGllOBNU79/dwf0g=="],
 
-    "@jsonjoy.com/fs-core": ["@jsonjoy.com/fs-core@4.57.6", "", { "dependencies": { "@jsonjoy.com/fs-node-builtins": "4.57.6", "@jsonjoy.com/fs-node-utils": "4.57.6", "thingies": "^2.5.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-uI++Wx6VkBJqVmkb4ZeExwAVpZiA2Do5NrEtXoDk0Pdvce3ytFXJoviT1sLOj16+qDIMnD5nWPfOhVpnDmRJKg=="],
+    "@jsonjoy.com/fs-core": ["@jsonjoy.com/fs-core@4.57.7", "", { "dependencies": { "@jsonjoy.com/fs-node-builtins": "4.57.7", "@jsonjoy.com/fs-node-utils": "4.57.7", "thingies": "^2.5.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-GDKuYHjP7vAI1kjBo73V+STKr9XIMZknW/xirpRW/EcShX0IKSev/ALafeRfC8Q331nodrXUFu04PugPB0MAhw=="],
 
-    "@jsonjoy.com/fs-fsa": ["@jsonjoy.com/fs-fsa@4.57.6", "", { "dependencies": { "@jsonjoy.com/fs-core": "4.57.6", "@jsonjoy.com/fs-node-builtins": "4.57.6", "@jsonjoy.com/fs-node-utils": "4.57.6", "thingies": "^2.5.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-pKkw/yC5CzSZKhIIUIsH1przOa+K5jGmZIg1sWaSF24JojyrUFbjcQv7QrcGAudriei6HQ6R0BFj+V8NbQinJw=="],
+    "@jsonjoy.com/fs-fsa": ["@jsonjoy.com/fs-fsa@4.57.7", "", { "dependencies": { "@jsonjoy.com/fs-core": "4.57.7", "@jsonjoy.com/fs-node-builtins": "4.57.7", "@jsonjoy.com/fs-node-utils": "4.57.7", "thingies": "^2.5.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-1rWsah2nZtRbNeP+c61QcfGfVrJXBmBD0Hm7Akvv4C9MKEasXnbiOS//iH3T3HwUSSBATGrfSp0Xi8nlNhATeQ=="],
 
-    "@jsonjoy.com/fs-node": ["@jsonjoy.com/fs-node@4.57.6", "", { "dependencies": { "@jsonjoy.com/fs-core": "4.57.6", "@jsonjoy.com/fs-node-builtins": "4.57.6", "@jsonjoy.com/fs-node-utils": "4.57.6", "@jsonjoy.com/fs-print": "4.57.6", "@jsonjoy.com/fs-snapshot": "4.57.6", "glob-to-regex.js": "^1.0.0", "thingies": "^2.5.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-Kbn1jdkvDN4F2+BhoB6mMu7NCbhP0bgA5NcI1aJj/Q5UcU+I1JLLW+dEQean33iV4tXv35AzBVKPICnDltBpxw=="],
+    "@jsonjoy.com/fs-node": ["@jsonjoy.com/fs-node@4.57.7", "", { "dependencies": { "@jsonjoy.com/fs-core": "4.57.7", "@jsonjoy.com/fs-node-builtins": "4.57.7", "@jsonjoy.com/fs-node-utils": "4.57.7", "@jsonjoy.com/fs-print": "4.57.7", "@jsonjoy.com/fs-snapshot": "4.57.7", "glob-to-regex.js": "^1.0.0", "thingies": "^2.5.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-xhnyeyEVTiIOibFvda/5n89nChMLCPKHHM2WQ+GGDf6+U/IrQBW3Qx6x+Uq1bkDbxBkybLOdIGoBtVBrE8Nngg=="],
 
-    "@jsonjoy.com/fs-node-builtins": ["@jsonjoy.com/fs-node-builtins@4.57.6", "", { "peerDependencies": { "tslib": "2" } }, "sha512-V4DgEFT3Cg5S9fCMOZSCVdTxdJWWLBO0WnAazV7hnCM96u5zXHyW/ubDAfcSVwqjkMJ50W1Y44IXtxRoIwaCVg=="],
+    "@jsonjoy.com/fs-node-builtins": ["@jsonjoy.com/fs-node-builtins@4.57.7", "", { "peerDependencies": { "tslib": "2" } }, "sha512-LWqfY1m+uAosjwM1RrKhMkUnP9jcq1RUczHsNO779ovm1E9v8I/pmj04eBAcoBjhC7ltcPbNFGyRJ5JqSJ7Jdg=="],
 
-    "@jsonjoy.com/fs-node-to-fsa": ["@jsonjoy.com/fs-node-to-fsa@4.57.6", "", { "dependencies": { "@jsonjoy.com/fs-fsa": "4.57.6", "@jsonjoy.com/fs-node-builtins": "4.57.6", "@jsonjoy.com/fs-node-utils": "4.57.6" }, "peerDependencies": { "tslib": "2" } }, "sha512-+JptNw3iifihxH2rEXrninDzX4FFVW8JD/wPR8GbJPAeL9CQUSblrlumOPB5gZuS7tYRX+PJPLtT7XzKoRhv/Q=="],
+    "@jsonjoy.com/fs-node-to-fsa": ["@jsonjoy.com/fs-node-to-fsa@4.57.7", "", { "dependencies": { "@jsonjoy.com/fs-fsa": "4.57.7", "@jsonjoy.com/fs-node-builtins": "4.57.7", "@jsonjoy.com/fs-node-utils": "4.57.7" }, "peerDependencies": { "tslib": "2" } }, "sha512-9T0zC9LKcAWXDoTLRdLMoJ0seOvJ5bgDKq1tSBoQAFQpPDstQUeV1Oe7PLypdu7F2D3ddRstmwgeNUEN/VaZ4Q=="],
 
-    "@jsonjoy.com/fs-node-utils": ["@jsonjoy.com/fs-node-utils@4.57.6", "", { "dependencies": { "@jsonjoy.com/fs-node-builtins": "4.57.6" }, "peerDependencies": { "tslib": "2" } }, "sha512-foyUrfS7WmYEUzqYXSNxmJBcSj04TABrkpFabwO9SCDCpVCfJ+qG+2sk5FjfiflG2n0SDFZDCJ6vYlJAEpxJFg=="],
+    "@jsonjoy.com/fs-node-utils": ["@jsonjoy.com/fs-node-utils@4.57.7", "", { "dependencies": { "@jsonjoy.com/fs-node-builtins": "4.57.7" }, "peerDependencies": { "tslib": "2" } }, "sha512-jjWSDOsfcog2cZnUCwX5AHmlIq6b6wx5Pz/2LAcNjJ62Rajwg89Fy7ubN+lDHew0/1reLDa9Z5urybYadhh37g=="],
 
-    "@jsonjoy.com/fs-print": ["@jsonjoy.com/fs-print@4.57.6", "", { "dependencies": { "@jsonjoy.com/fs-node-utils": "4.57.6", "tree-dump": "^1.1.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-96eAn4Dudtt67LTeuU47yUD+pg9/G/oKpI10zei9ljk3X3WK4lYKc+n3cpaPCAbKPzoyfxl0mXm8f8Y7BOSFXw=="],
+    "@jsonjoy.com/fs-print": ["@jsonjoy.com/fs-print@4.57.7", "", { "dependencies": { "@jsonjoy.com/fs-node-utils": "4.57.7", "tree-dump": "^1.1.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-mFM4P4Gjq0QQHkLnXzPYPEMFrAoe6a5Myedgb6+CmL+nGd3MKvTxYPuD7N1dLIH9RBy1fLdzxd80qvuK8xrx3Q=="],
 
-    "@jsonjoy.com/fs-snapshot": ["@jsonjoy.com/fs-snapshot@4.57.6", "", { "dependencies": { "@jsonjoy.com/buffers": "^17.65.0", "@jsonjoy.com/fs-node-utils": "4.57.6", "@jsonjoy.com/json-pack": "^17.65.0", "@jsonjoy.com/util": "^17.65.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-V57CMzbOgTzUWGOWQ8GzHQdpJP6JnrYVNCtTBNxVYEnlVRvo4uEJqHhtAT8vhDFrIuJOXLrTL1Fki4h5oI7xxg=="],
+    "@jsonjoy.com/fs-snapshot": ["@jsonjoy.com/fs-snapshot@4.57.7", "", { "dependencies": { "@jsonjoy.com/buffers": "^17.65.0", "@jsonjoy.com/fs-node-utils": "4.57.7", "@jsonjoy.com/json-pack": "^17.65.0", "@jsonjoy.com/util": "^17.65.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-1GS3+plfm2giB3PqokiqyydyqYTPLcCQIKSkp0TdMNRh3KVk7rqRM6U785FLlVRG7XLmkc0KWr215OY+22K3QA=="],
 
     "@jsonjoy.com/json-pack": ["@jsonjoy.com/json-pack@1.21.0", "", { "dependencies": { "@jsonjoy.com/base64": "^1.1.2", "@jsonjoy.com/buffers": "^1.2.0", "@jsonjoy.com/codegen": "^1.0.0", "@jsonjoy.com/json-pointer": "^1.0.2", "@jsonjoy.com/util": "^1.9.0", "hyperdyperid": "^1.2.0", "thingies": "^2.5.0", "tree-dump": "^1.1.0" }, "peerDependencies": { "tslib": "2" } }, "sha512-+AKG+R2cfZMShzrF2uQw34v3zbeDYUqnQ+jg7ORic3BGtfw9p/+N6RJbq/kkV8JmYZaINknaEQ2m0/f693ZPpg=="],
 
@@ -419,6 +421,8 @@
     "@radix-ui/react-use-escape-keydown": ["@radix-ui/react-use-escape-keydown@1.1.2", "", { "dependencies": { "@radix-ui/react-use-callback-ref": "1.1.2" }, "peerDependencies": { "@types/react": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-2uVLvLjgO7NZCWw01/FdqRwmA42J0BcjPMUCA+koFEOAb+zjqIP7SiFz/7zWPrKnVmSqr76Omq2ALyCuX4dhLw=="],
 
     "@radix-ui/react-use-layout-effect": ["@radix-ui/react-use-layout-effect@1.1.2", "", { "peerDependencies": { "@types/react": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-jrBWOxZITuGcnjRCM2t2U5ZPkCLxD+Ym6DjfssS5haTj2iiak/DOb64JeN6OdLfLgptb6/e2kKR+ZuTrGoZTPA=="],
+
+    "@react-native-community/netinfo": ["@react-native-community/netinfo@12.0.1", "", { "peerDependencies": { "react": "*", "react-native": ">=0.59" } }, "sha512-P/3caXIvfYSJG8AWJVefukg+ZGRPs+M4Lp3pNJtgcTYoJxCjWrKQGNnCkj/Cz//zWa/avGed0i/wzm0T8vV2IQ=="],
 
     "@react-native-masked-view/masked-view": ["@react-native-masked-view/masked-view@0.3.2", "", { "peerDependencies": { "react": ">=16", "react-native": ">=0.57" } }, "sha512-XwuQoW7/GEgWRMovOQtX3A4PrXhyaZm0lVUiY8qJDvdngjLms9Cpdck6SmGAUNqQwcj2EadHC1HwL0bEyoa/SQ=="],
 
@@ -904,6 +908,8 @@
 
     "expo-router": ["expo-router@56.2.9", "", { "dependencies": { "@expo/log-box": "^56.0.12", "@expo/metro-runtime": "^56.0.14", "@expo/schema-utils": "^56.0.0", "@expo/ui": "^56.0.16", "@radix-ui/react-slot": "^1.2.0", "@radix-ui/react-tabs": "^1.1.12", "@react-native-masked-view/masked-view": "^0.3.2", "@testing-library/jest-dom": "^6.9.1", "@testing-library/user-event": "^14.6.1", "client-only": "^0.0.1", "color": "^4.2.3", "debug": "^4.3.4", "escape-string-regexp": "^4.0.0", "expo-glass-effect": "^56.0.4", "expo-server": "^56.0.5", "expo-symbols": "^56.0.6", "fast-deep-equal": "^3.1.3", "invariant": "^2.2.4", "nanoid": "^3.3.8", "query-string": "^7.1.3", "react-fast-compare": "^3.2.2", "react-is": "^19.1.0", "react-native-drawer-layout": "^4.2.2", "react-native-screens": "^4.25.2", "server-only": "^0.0.1", "sf-symbols-typescript": "^2.1.0", "shallowequal": "^1.1.0", "vaul": "^1.1.2" }, "peerDependencies": { "@testing-library/react-native": ">= 13.2.0", "expo": "*", "expo-constants": "^56.0.17", "expo-linking": "^56.0.13", "react": "*", "react-dom": "*", "react-native": "*", "react-native-gesture-handler": "*", "react-native-reanimated": "*", "react-native-safe-area-context": ">= 5.4.0", "react-native-web": "*", "react-server-dom-webpack": "~19.0.4 || ~19.1.5 || ~19.2.4" }, "optionalPeers": ["@testing-library/react-native", "react-dom", "react-native-gesture-handler", "react-native-reanimated", "react-native-web", "react-server-dom-webpack"] }, "sha512-MuGL7Ht8hFTo1ddntyXGw5Lh+5rBw8S/0wHCwtI88nv4aCSyLEuFE19i4E/G0BXVCTKeDRu/hOww3jEqUlAN2w=="],
 
+    "expo-secure-store": ["expo-secure-store@56.0.4", "", { "peerDependencies": { "expo": "*" } }, "sha512-hjEi/gmpdFFJ9lYbdp3k3p/WchV7Gi0Qt8jt/m/0WJadqQrskafHAlDxbZkII1cN3Yd7zp9Lvkeq3UfGhSwirQ=="],
+
     "expo-server": ["expo-server@56.0.5", "", {}, "sha512-SmM2p2g3Jrktpiazcst+OxhjSzOHXKAY4BPURHYHXvApzzoybMmrNF4IEZ8DKZ145BhSe4ydAmlEFCRTsdtgUQ=="],
 
     "expo-splash-screen": ["expo-splash-screen@56.0.10", "", { "dependencies": { "@expo/config-plugins": "~56.0.8", "@expo/image-utils": "^0.10.1", "xml2js": "0.6.0" }, "peerDependencies": { "expo": "*" } }, "sha512-vDIlo8hzt9HlCZQ0kSY66v83D1WEXOJbVMeyPDfXDu9tbDdPMNUyDpi4WGJXikAjxnAKfbt5Mv5NnEbxINy+VA=="],
@@ -1236,7 +1242,7 @@
 
     "math-intrinsics": ["math-intrinsics@1.1.0", "", {}, "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g=="],
 
-    "memfs": ["memfs@4.57.6", "", { "dependencies": { "@jsonjoy.com/fs-core": "4.57.6", "@jsonjoy.com/fs-fsa": "4.57.6", "@jsonjoy.com/fs-node": "4.57.6", "@jsonjoy.com/fs-node-builtins": "4.57.6", "@jsonjoy.com/fs-node-to-fsa": "4.57.6", "@jsonjoy.com/fs-node-utils": "4.57.6", "@jsonjoy.com/fs-print": "4.57.6", "@jsonjoy.com/fs-snapshot": "4.57.6", "@jsonjoy.com/json-pack": "^1.11.0", "@jsonjoy.com/util": "^1.9.0", "glob-to-regex.js": "^1.0.1", "thingies": "^2.5.0", "tree-dump": "^1.0.3", "tslib": "^2.0.0" } }, "sha512-WQK+DGjKCnPdpSyJUXphz+COF2uEhhsxQ3VIWBSbzpbbXuch3h4FePMqXrXGdLjsTgo4JFzBFsP6AWd9pVazGw=="],
+    "memfs": ["memfs@4.57.7", "", { "dependencies": { "@jsonjoy.com/fs-core": "4.57.7", "@jsonjoy.com/fs-fsa": "4.57.7", "@jsonjoy.com/fs-node": "4.57.7", "@jsonjoy.com/fs-node-builtins": "4.57.7", "@jsonjoy.com/fs-node-to-fsa": "4.57.7", "@jsonjoy.com/fs-node-utils": "4.57.7", "@jsonjoy.com/fs-print": "4.57.7", "@jsonjoy.com/fs-snapshot": "4.57.7", "@jsonjoy.com/json-pack": "^1.11.0", "@jsonjoy.com/util": "^1.9.0", "glob-to-regex.js": "^1.0.1", "thingies": "^2.5.0", "tree-dump": "^1.0.3", "tslib": "^2.0.0" } }, "sha512-YZPphUQZSRGk6ddPlsNuMbztrLwsbUATFNZcqKscSbSJZ4g0+Y3vSZLJ/rfnGZaB1FFhC7SrywZXev6i8lnHgg=="],
 
     "memoize-one": ["memoize-one@5.2.1", "", {}, "sha512-zYiwtZUcYyXKo/np96AGZAckk+FWWsUdJ3cHGGmld7+AhvcWmQyGCYUh1hc4Q/pkOhb65dQR/pqCyK0cOaHz4Q=="],
 

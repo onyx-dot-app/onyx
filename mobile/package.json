@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@onyx-ai/shared": "file:../web/lib/shared",
+    "@react-native-community/netinfo": "12.0.1",
     "@shopify/flash-list": "2.0.2",
     "@tanstack/query-sync-storage-persister": "^5.101.0",
     "@tanstack/react-query": "^5.101.0",
@@ -15,6 +16,7 @@
     "expo-font": "~56.0.5",
     "expo-linking": "~56.0.13",
     "expo-router": "~56.2.9",
+    "expo-secure-store": "~56.0.4",
     "expo-splash-screen": "~56.0.10",
     "expo-status-bar": "~56.0.4",
     "expo-system-ui": "~56.0.5",

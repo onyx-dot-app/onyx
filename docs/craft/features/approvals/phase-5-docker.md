@@ -54,7 +54,6 @@ in it:
 - `backend/onyx/sandbox_proxy/ca.py` (the Protocol + bootstrap)
 - `backend/onyx/sandbox_proxy/approval_cache.py`
 - `backend/onyx/sandbox_proxy/action_matcher.py`
-- `backend/onyx/sandbox_proxy/snapshot_egress.py`
 - `backend/onyx/server/features/build/db/action_approval.py`
 - `backend/onyx/server/features/build/approvals/api.py`
 - `backend/onyx/server/features/build/session/manager.py::_merge_acp_with_announces`
