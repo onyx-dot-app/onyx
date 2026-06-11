@@ -83,7 +83,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-sidebar-header {
-  @apply flex flex-col gap-4;
+  @apply flex flex-col gap-4 pb-2;
 }
 
 .opal-sidebar-header__topbar {
@@ -133,7 +133,7 @@
 }
 
 .opal-sidebar-body__content {
-  @apply flex-1 flex flex-col px-2;
+  @apply flex-1 flex flex-col px-2 gap-2;
 }
 .opal-sidebar-body__content[data-folded="true"] {
   @apply hidden;
@@ -157,7 +157,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-sidebar-section__header {
-  @apply pl-2 pb-1 pt-4 flex flex-row justify-between items-center;
+  @apply pl-2 pb-1 pt-2 flex flex-row justify-between items-center;
 }
 
 .opal-sidebar-section__title {
