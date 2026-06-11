@@ -41,10 +41,19 @@ export const skipRetryOnAuthError: NonNullable<
     return;
   const delay = Math.min(2000 * 2 ** retryCount, 30000);
   setTimeout(() => {
-    // Hidden tabs drop the retry chain instead of retrying forever in the
-    // background; revalidateOnFocus refetches when the user returns.
-    if (typeof document !== "undefined" && document.hidden) return;
-    revalidate({ retryCount });
+    if (typeof document === "undefined" || !document.hidden) {
+      revalidate({ retryCount });
+      return;
+    }
+    // Hidden at retry time: defer until the tab is visible again, so hidden
+    // tabs stay quiet without permanently dropping the retry chain (which
+    // would strand consumers that disable revalidateOnFocus).
+    const retryOnVisible = () => {
+      if (document.hidden) return;
+      document.removeEventListener("visibilitychange", retryOnVisible);
+      revalidate({ retryCount });
+    };
+    document.addEventListener("visibilitychange", retryOnVisible);
   }, delay);
 };
 
