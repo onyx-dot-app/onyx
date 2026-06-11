@@ -846,7 +846,8 @@ class KubernetesSandboxManager(SandboxManager):
         Returns:
             Error message if an init container failed, None otherwise
         """
-        if not pod.status.init_container_statuses:
+        init_statuses = pod.status.init_container_statuses or []
+        if not init_statuses:
             return None
 
         restartable_init_container_names = {
@@ -855,33 +856,30 @@ class KubernetesSandboxManager(SandboxManager):
             if init_container.name and init_container.restart_policy == "Always"
         }
 
-        for init_status in pod.status.init_container_statuses:
-            if init_status.state:
-                # Check for terminated state with non-zero exit code
-                if init_status.state.terminated:
-                    if (
-                        init_status.state.terminated.exit_code != 0
-                        and init_status.name not in restartable_init_container_names
-                    ):
-                        container_name = init_status.name
-                        logs = self._get_init_container_logs(
-                            pod.metadata.name, container_name
-                        )
-                        return (
-                            f"Init container '{container_name}' failed with exit code "
-                            f"{init_status.state.terminated.exit_code}. "
-                            f"Logs:\n{logs}"
-                        )
-                # Check for waiting state with error reason
-                elif init_status.state.waiting:
-                    if init_status.state.waiting.reason in [
-                        "Error",
-                        "CrashLoopBackOff",
-                    ]:
-                        container_name = init_status.name
-                        reason = init_status.state.waiting.reason
-                        message = init_status.state.waiting.message or ""
-                        return f"Init container '{container_name}' is in '{reason}' state. Message: {message}"
+        for init_status in init_statuses:
+            state = init_status.state
+            if state is None:
+                continue
+
+            waiting = state.waiting
+            if waiting and waiting.reason in ["Error", "CrashLoopBackOff"]:
+                message = waiting.message or ""
+                return (
+                    f"Init container '{init_status.name}' is in "
+                    f"'{waiting.reason}' state. Message: {message}"
+                )
+
+            terminated = state.terminated
+            if terminated is None or terminated.exit_code == 0:
+                continue
+            if init_status.name in restartable_init_container_names:
+                continue
+
+            logs = self._get_init_container_logs(pod.metadata.name, init_status.name)
+            return (
+                f"Init container '{init_status.name}' failed with exit code "
+                f"{terminated.exit_code}. Logs:\n{logs}"
+            )
 
         return None
 
