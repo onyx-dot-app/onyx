@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo, useRef } from "react";
-import { LlmManager } from "@/lib/hooks";
 import { getModelIcon } from "@/lib/languageModels";
 import { Button, SelectButton, Popover, Divider } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
@@ -19,7 +18,6 @@ export interface SelectedModel {
 }
 
 export interface MultiModelSelectorProps {
-  llmManager: LlmManager;
   selectedModels: SelectedModel[];
   onAdd: (model: SelectedModel) => void;
   onRemove: (index: number) => void;
@@ -31,7 +29,6 @@ function modelKey(provider: string, modelName: string): string {
 }
 
 export default function MultiModelSelector({
-  llmManager,
   selectedModels,
   onAdd,
   onRemove,
@@ -212,8 +209,6 @@ export default function MultiModelSelector({
       {!(atMax && replacingIndex === null) && (
         <Popover.Content side="top" align="end" width="xl">
           <ModelSelectorContent
-            llmProviders={llmManager.llmProviders}
-            isLoading={llmManager.isLoadingProviders}
             onSelect={handleSelect}
             isSelected={isSelected}
             isDisabled={isDisabled}

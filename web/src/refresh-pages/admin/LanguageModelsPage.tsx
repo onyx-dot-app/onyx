@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
-import { useAdminLLMProviders } from "@/hooks/useLanguageModels";
+import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import {
@@ -26,7 +26,6 @@ import {
   setDefaultLlmModel,
 } from "@/lib/languageModels/svc";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
-import type { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
@@ -299,19 +298,6 @@ export default function LanguageModelsPage() {
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
 
-  // Map admin providers to the descriptor shape ModelSelector expects
-  const llmProvidersForSelector = useMemo<LLMProviderDescriptor[]>(
-    () =>
-      (existingLlmProviders ?? []).map((p) => ({
-        id: p.id,
-        name: p.name,
-        provider: p.provider,
-        provider_display_name: getProvider(p.provider, p).productName,
-        model_configurations: p.model_configurations,
-      })),
-    [existingLlmProviders]
-  );
-
   // Resolve the current default to a model_configuration_id for ModelSelector
   const defaultModelConfigId = useMemo(() => {
     if (!defaultText || !existingLlmProviders) return null;
@@ -383,7 +369,6 @@ export default function LanguageModelsPage() {
               withLabel
             >
               <ModelSelector
-                llmProviders={llmProvidersForSelector}
                 value={defaultModelConfigId}
                 onChange={(opt) => {
                   const provider = existingLlmProviders?.find(

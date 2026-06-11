@@ -83,7 +83,7 @@ import {
   useCurrentSearchSettings,
   useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
-import { useLlmDefaults } from "@/hooks/useLanguageModels";
+import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import useFilter from "@/hooks/useFilter";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import type { RichStr } from "@opal/types";
@@ -1450,12 +1450,10 @@ export default function IndexSettingsPage() {
                               withLabel
                             >
                               <ModelSelector
-                                llmProviders={llmProviders}
                                 value={
                                   values.contextual_rag_model_configuration_id
                                 }
                                 disabled={!values.enable_contextual_rag}
-                                isLoading={isLoadingLlmProviders}
                                 onChange={(opt) =>
                                   void setFieldValue(
                                     "contextual_rag_model_configuration_id",
@@ -1525,10 +1523,8 @@ export default function IndexSettingsPage() {
                               withLabel
                             >
                               <ModelSelector
-                                llmProviders={llmProviders}
                                 value={captioningModelConfigId}
                                 disabled={!imageProcessingEnabled}
-                                isLoading={isLoadingLlmProviders}
                                 requiresImageInput
                                 onChange={(opt) =>
                                   void handleCaptioningModelChange({

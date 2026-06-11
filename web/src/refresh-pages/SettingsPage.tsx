@@ -1037,7 +1037,6 @@ function ChatPreferencesSettings() {
             withLabel
           >
             <ModelSelector
-              llmProviders={llmManager.llmProviders}
               value={findModelConfigId(
                 llmManager.llmProviders,
                 llmManager.currentLlm.provider,
@@ -1054,7 +1053,6 @@ function ChatPreferencesSettings() {
                 );
               }}
               temperatureManager={llmManager}
-              isLoading={llmManager.isLoadingProviders}
             />
           </InputHorizontal>
 

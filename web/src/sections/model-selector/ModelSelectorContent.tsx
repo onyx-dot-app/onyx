@@ -17,7 +17,8 @@ import {
   buildLlmOptions,
   groupLlmOptions,
 } from "@/lib/languageModels/options";
-import { LLMProviderDescriptor } from "@/lib/languageModels/types";
+import { useCurrentAgent } from "@/lib/agents/hooks";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import {
   Collapsible,
   CollapsibleContent,
@@ -25,28 +26,26 @@ import {
 } from "@/refresh-components/Collapsible";
 
 export interface ModelSelectorContentProps {
-  llmProviders: LLMProviderDescriptor[] | undefined;
   currentModelName?: string;
   requiresImageInput?: boolean;
   onSelect: (option: LLMOption) => void;
   isSelected: (option: LLMOption) => boolean;
   isDisabled?: (option: LLMOption) => boolean;
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
-  isLoading?: boolean;
   footer?: React.ReactNode;
 }
 
 export default function ModelSelectorContent({
-  llmProviders,
   currentModelName,
   requiresImageInput,
   onSelect,
   isSelected,
   isDisabled,
   scrollContainerRef: externalScrollRef,
-  isLoading,
   footer,
 }: ModelSelectorContentProps) {
+  const currentAgent = useCurrentAgent();
+  const { llmProviders, isLoading } = useLLMProviders(currentAgent?.id);
   const [searchQuery, setSearchQuery] = useState("");
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;

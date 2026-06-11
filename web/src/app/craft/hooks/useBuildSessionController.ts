@@ -7,7 +7,7 @@ import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { hasSupportedCraftProvider } from "@/app/craft/onboarding/constants";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { checkPreProvisionedSession } from "@/app/craft/services/apiServices";
 
 interface UseBuildSessionControllerProps {

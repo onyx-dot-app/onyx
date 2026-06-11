@@ -300,7 +300,6 @@ export default function MessageToolbar({
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector
-                    llmProviders={llmManager.llmProviders}
                     value={findModelConfigId(
                       llmManager.llmProviders,
                       llmManager.currentLlm.provider,
@@ -323,7 +322,6 @@ export default function MessageToolbar({
                       });
                     }}
                     temperatureManager={llmManager}
-                    isLoading={llmManager.isLoadingProviders}
                   />
                 </div>
               )}

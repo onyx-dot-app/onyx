@@ -500,9 +500,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   className="max-w-(--app-page-main-content-width)"
                 >
                   <WelcomeMessage isDefaultAgent />
-                  {liveAgent && !llmManager.isLoadingProviders && (
+                  {liveAgent && (
                     <MultiModelSelector
-                      llmManager={llmManager}
                       selectedModels={multiModel.selectedModels}
                       onAdd={multiModel.addModel}
                       onRemove={multiModel.removeModel}
@@ -522,10 +521,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 !isSidePanel && "max-w-(--app-page-main-content-width)"
               )}
             >
-              {hasMessages && liveAgent && !llmManager.isLoadingProviders && (
+              {hasMessages && liveAgent && (
                 <div className="pb-1">
                   <MultiModelSelector
-                    llmManager={llmManager}
                     selectedModels={multiModel.selectedModels}
                     onAdd={multiModel.addModel}
                     onRemove={multiModel.removeModel}

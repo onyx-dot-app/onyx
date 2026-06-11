@@ -908,10 +908,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         !(
                           state.phase === "idle" && state.appMode === "search"
                         ) &&
-                        liveAgent &&
-                        !llmManager.isLoadingProviders && (
+                        liveAgent && (
                           <MultiModelSelector
-                            llmManager={llmManager}
                             selectedModels={multiModel.selectedModels}
                             onAdd={multiModel.addModel}
                             onRemove={multiModel.removeModel}
@@ -983,19 +981,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
-                      {appFocus.isChat() &&
-                        liveAgent &&
-                        !llmManager.isLoadingProviders && (
-                          <div className="pb-1">
-                            <MultiModelSelector
-                              llmManager={llmManager}
-                              selectedModels={multiModel.selectedModels}
-                              onAdd={multiModel.addModel}
-                              onRemove={multiModel.removeModel}
-                              onReplace={multiModel.replaceModel}
-                            />
-                          </div>
-                        )}
+                      {appFocus.isChat() && liveAgent && (
+                        <div className="pb-1">
+                          <MultiModelSelector
+                            selectedModels={multiModel.selectedModels}
+                            onAdd={multiModel.addModel}
+                            onRemove={multiModel.removeModel}
+                            onReplace={multiModel.replaceModel}
+                          />
+                        </div>
+                      )}
                       <AppInputBar
                         ref={chatInputBarRef}
                         deepResearchEnabled={

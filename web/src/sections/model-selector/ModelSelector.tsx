@@ -11,8 +11,9 @@ import { Popover, OpenButton, Text } from "@opal/components";
 import { Slider } from "@/components/ui/slider";
 import { getModelIcon } from "@/lib/languageModels";
 import { LLMOption } from "@/lib/languageModels/options";
-import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { useUser } from "@/providers/UserProvider";
+import { useCurrentAgent } from "@/lib/agents/hooks";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 
 interface TemperatureManager {
@@ -22,7 +23,6 @@ interface TemperatureManager {
 }
 
 export interface ModelSelectorProps {
-  llmProviders: LLMProviderDescriptor[] | undefined;
   /** The currently selected model, identified by model_configuration_id. */
   value: number | null;
   onChange: (option: LLMOption) => void;
@@ -41,19 +41,18 @@ export interface ModelSelectorProps {
   temperatureManager?: TemperatureManager;
 
   disabled?: boolean;
-  isLoading?: boolean;
 }
 
 export default function ModelSelector({
-  llmProviders,
   value,
   onChange,
   requiresImageInput,
   renderTrigger,
   temperatureManager,
   disabled = false,
-  isLoading,
 }: ModelSelectorProps) {
+  const currentAgent = useCurrentAgent();
+  const { llmProviders } = useLLMProviders(currentAgent?.id);
   const [open, setOpen] = useState(false);
   const { user } = useUser();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -161,10 +160,8 @@ export default function ModelSelector({
 
       <Popover.Content side="top" align="end" width="xl">
         <ModelSelectorContent
-          llmProviders={llmProviders}
           currentModelName={currentOption?.modelName}
           requiresImageInput={requiresImageInput}
-          isLoading={isLoading}
           onSelect={handleSelect}
           isSelected={isSelected}
           scrollContainerRef={scrollContainerRef}

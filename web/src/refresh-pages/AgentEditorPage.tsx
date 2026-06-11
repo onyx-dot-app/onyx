@@ -22,7 +22,6 @@ import {
 } from "@opal/layouts";
 import { useFormikContext } from "formik";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
 import {
   STARTER_MESSAGES_EXAMPLES,
   MAX_CHARACTERS_STARTER_MESSAGE,
@@ -505,7 +504,6 @@ export default function AgentEditorPage({
   const { mcpData, isLoading: isMcpLoading } = useMcpServersForAgentEditor();
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
     useOpenApiTools();
-  const { llmProviders } = useLLMProviders(existingAgent?.id);
 
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
@@ -1565,7 +1563,6 @@ export default function AgentEditorPage({
                                   description="This model will be used by Onyx by default in your chats."
                                 >
                                   <ModelSelector
-                                    llmProviders={llmProviders}
                                     value={
                                       (values as any)
                                         .default_model_configuration_id ?? null
@@ -1576,7 +1573,6 @@ export default function AgentEditorPage({
                                         opt.modelConfigurationId ?? null
                                       )
                                     }
-                                    isLoading={!llmProviders}
                                   />
                                 </InputHorizontal>
                                 <InputHorizontal
