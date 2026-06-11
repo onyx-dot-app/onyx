@@ -40,7 +40,12 @@ export const skipRetryOnAuthError: NonNullable<
   )
     return;
   const delay = Math.min(2000 * 2 ** retryCount, 30000);
-  setTimeout(() => revalidate({ retryCount }), delay);
+  setTimeout(() => {
+    // Hidden tabs drop the retry chain instead of retrying forever in the
+    // background; revalidateOnFocus refetches when the user returns.
+    if (typeof document !== "undefined" && document.hidden) return;
+    revalidate({ retryCount });
+  }, delay);
 };
 
 export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {
