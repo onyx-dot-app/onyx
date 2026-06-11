@@ -81,34 +81,34 @@ function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
  * unwraps `.providers` for convenience while still exposing the defaults.
  *
  * **Endpoints:**
- * - No `personaId` → `GET /api/llm/provider`
+ * - No `agentId` → `GET /api/llm/provider`
  *   Returns all public providers plus restricted providers the user can
  *   access via group membership.
- * - With `personaId` → `GET /api/llm/persona/{personaId}/providers`
- *   Returns providers scoped to a specific persona, respecting RBAC
+ * - With `agentId` → `GET /api/llm/persona/{agentId}/providers`
+ *   Returns providers scoped to a specific agent, respecting RBAC
  *   restrictions. Use this when displaying model options for a particular
  *   assistant.
  *
- * @param personaId - Optional persona ID for RBAC-scoped providers.
+ * @param agentId - Optional agent ID for RBAC-scoped providers.
  *
  * @returns
  * - `llmProviders` — The array of provider descriptors, or `undefined`
  *    while loading.
- * - `defaultText` — The global (or persona-overridden) default text model.
- * - `defaultVision` — The global (or persona-overridden) default vision model.
+ * - `defaultText` — The global (or agent-overridden) default text model.
+ * - `defaultVision` — The global (or agent-overridden) default vision model.
  * - `isLoading` — `true` until the first successful response or error.
  * - `error` — The SWR error object, if any.
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
  */
-export function useLLMProviders(personaId?: number) {
+export function useLLMProviders(agentId?: number) {
   const url =
-    personaId !== undefined
-      ? SWR_KEYS.llmProvidersForPersona(personaId)
+    agentId !== undefined
+      ? SWR_KEYS.llmProvidersForPersona(agentId)
       : SWR_KEYS.llmProviders;
 
   // `revalidateIfStale` is intentionally left at its default (true), unlike
   // `useAdminLLMProviders` below. Admin edits call `refreshLlmProviderCaches`,
-  // but persona-scoped keys are orphaned when that runs, so `mutate` on them
+  // but agent-scoped keys are orphaned when that runs, so `mutate` on them
   // is a no-op. Mount-time revalidation picks up the edits on next nav.
   // `dedupingInterval: 60000` keeps this off the hot path.
   const {
@@ -146,7 +146,7 @@ export function useLLMProviders(personaId?: number) {
  *
  * Hits `GET /api/admin/llm/provider` which returns `LLMProviderView` —
  * the full provider object including `id`, `api_key` (masked),
- * group/persona assignments, and all other admin-visible fields.
+ * group/agent assignments, and all other admin-visible fields.
  *
  * Use this hook on admin pages (e.g. the LLM Configuration page) where
  * you need provider IDs for mutations (setting defaults, editing, deleting)

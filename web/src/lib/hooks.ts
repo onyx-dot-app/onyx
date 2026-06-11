@@ -24,7 +24,7 @@ import {
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import {
-  getProviderOverrideForPersona,
+  getProviderOverrideForAgent,
   parseLlmDescriptor,
 } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
@@ -684,7 +684,7 @@ export function useLlmManager(
     } else if (liveAgent) {
       // Agent's configured default model takes precedence over the user's
       // personal preference. Falls through when no default is set on the agent.
-      const agentOverride = getProviderOverrideForPersona(
+      const agentOverride = getProviderOverrideForAgent(
         liveAgent,
         llmProviders
       );
