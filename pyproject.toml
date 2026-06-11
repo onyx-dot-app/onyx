@@ -267,7 +267,8 @@ ignore = [
     # cleaned up:
     "S113", # request-without-timeout (~463 existing violations).
 ]
-select = ["ARG", "E", "F", "I", "S", "W"]
+# G004: f-strings in logging break Sentry's message-pattern grouping.
+select = ["ARG", "E", "F", "G004", "I", "S", "W"]
 
 [tool.ruff.lint.isort]
 force-single-line = true

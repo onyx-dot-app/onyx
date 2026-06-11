@@ -13,3 +13,6 @@ dependencies = [
 # Intentionally NOT a member of the root uv workspace: locust pins
 # gevent/geventhttpclient/flask, which must not constrain the backend's
 # shared lockfile. Run `uv sync` from inside this directory.
+#
+# No [tool.ruff] section on purpose: ruff then falls back to the root
+# pyproject, keeping this project under the repo-wide lint rules.
