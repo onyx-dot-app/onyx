@@ -14,6 +14,7 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.jira_service_management.connector",
         class_name="JiraServiceManagementConnector",
     ),
+    ),
     DocumentSource.WEB: ConnectorMapping(
         module_path="onyx.connectors.web.connector",
         class_name="WebConnector",
