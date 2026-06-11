@@ -184,17 +184,33 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         return {"ok": True, a.object: result}
 
     if a.cmd == "search":
-        body: dict[str, Any] = {"query": a.query, "limit": min(_PAGE_SIZE, a.limit)}
+        # Search pages like the list endpoints, but the cursor goes in the POST
+        # body rather than the query string.
         props = _props(a, a.object)
-        if props:
-            body["properties"] = props
-        result = _request("POST", f"/crm/v3/objects/{a.object}/search", body)
-        results = result.get("results") or []
+        results: list[Any] = []
+        after: str | None = None
+        total: Any = None
+        while len(results) < a.limit:
+            body: dict[str, Any] = {
+                "query": a.query,
+                "limit": min(_PAGE_SIZE, a.limit - len(results)),
+            }
+            if props:
+                body["properties"] = props
+            if after:
+                body["after"] = after
+            page = _request("POST", f"/crm/v3/objects/{a.object}/search", body)
+            results.extend(page.get("results") or [])
+            total = page.get("total")
+            after = ((page.get("paging") or {}).get("next") or {}).get("after")
+            if not after:
+                break
         return {
             "ok": True,
             a.object: results[: a.limit],
             "count": min(len(results), a.limit),
-            "total": result.get("total"),
+            "total": total,
+            "truncated": bool(after),
         }
 
     if a.cmd in ("create", "update"):
