@@ -12,6 +12,8 @@ from celery import Task
 
 from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.memory_diagnostics import start_memory_observer
+from onyx.background.celery.memory_diagnostics import stop_memory_observer
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
 from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
@@ -121,11 +123,14 @@ def docfetching_task(
 
     # Start heartbeat for this indexing attempt
     heartbeat_thread, stop_event = start_heartbeat(index_attempt_id)
+    # One-shot allocation-site report if memory nears the watchdog limit
+    memory_observer = start_memory_observer(index_attempt_id)
     try:
         _docfetching_task(
             app, index_attempt_id, cc_pair_id, search_settings_id, is_ee, tenant_id
         )
     finally:
+        stop_memory_observer(memory_observer)
         stop_heartbeat(heartbeat_thread, stop_event)  # Stop heartbeat before exiting
 
 
