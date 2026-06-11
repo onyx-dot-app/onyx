@@ -25,7 +25,6 @@ Custom Onyx packets (defined here):
 
 from datetime import datetime
 from datetime import timezone
-from typing import Any
 from typing import Literal
 from uuid import UUID
 
@@ -56,8 +55,6 @@ class ErrorPacket(BasePacket):
 
     type: Literal["error"] = "error"
     message: str
-    code: int | None = None
-    details: dict[str, Any] | None = None
 
 
 class ApprovalRequestedPacket(BasePacket):

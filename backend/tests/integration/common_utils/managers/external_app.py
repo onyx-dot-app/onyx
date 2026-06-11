@@ -216,30 +216,6 @@ class ExternalAppManager:
         return ExternalAppAdminResponse.model_validate(response.json())
 
     @staticmethod
-    def replace_bundle(
-        user_performing_action: DATestUser,
-        app_id: int,
-    ) -> ExternalAppAdminResponse:
-        """PUT a fresh bundle onto a custom app, keyed by id."""
-        files: dict[str, tuple[str, bytes, str]] = {
-            "bundle": (
-                f"custom-{uuid4().hex[:8]}.zip",
-                _minimal_bundle_zip(),
-                "application/zip",
-            )
-        }
-        headers = user_performing_action.headers.copy()
-        headers.pop("Content-Type", None)
-        response = client.put(
-            f"{_BUILD_PREFIX}/admin/apps/{app_id}/bundle",
-            files=files,
-            headers=headers,
-            cookies=user_performing_action.cookies,
-        )
-        response.raise_for_status()
-        return ExternalAppAdminResponse.model_validate(response.json())
-
-    @staticmethod
     def list_admin(
         user_performing_action: DATestUser,
     ) -> list[ExternalAppAdminResponse]:

@@ -65,11 +65,6 @@ TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 # ---------------------------------------------------------------------------
 
 
-def _is_kubernetes_available(k8s: client.CoreV1Api) -> None:
-    """Sanity-check that the cluster client is usable for this namespace."""
-    k8s.list_namespaced_pod(SANDBOX_NAMESPACE, limit=1)
-
-
 def _wait_until_healthy(
     manager: KubernetesSandboxManager,
     sandbox_id: UUID,

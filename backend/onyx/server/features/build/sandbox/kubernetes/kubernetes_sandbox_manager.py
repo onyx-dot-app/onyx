@@ -1500,7 +1500,6 @@ echo "Session workspace setup complete"
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
         """Clean up a session workspace (on session delete). Executes
         kubectl exec to remove the session directory.
@@ -1508,8 +1507,6 @@ echo "Session workspace setup complete"
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to clean up
-            nextjs_port: Optional port where Next.js server is running (unused in K8s,
-                        we use PID file instead)
         """
         self._close_session_buses(sandbox_id, session_id)
 
@@ -1811,7 +1808,6 @@ echo "Session cleanup complete"
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,  # noqa: ARG002
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
@@ -1829,7 +1825,6 @@ echo "Session cleanup complete"
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: FileStore file id for the snapshot archive
-            tenant_id: Tenant identifier kept for the SandboxManager interface.
             nextjs_port: Port number for the NextJS dev server, or None to
                 skip starting it.
             llm_config: LLM provider configuration for opencode.json
