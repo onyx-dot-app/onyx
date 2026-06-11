@@ -8,6 +8,7 @@ import { useProjects } from "@/lib/hooks/useProjects";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ChatSearchResponse } from "@/app/app/interfaces";
 import { UNNAMED_CHAT } from "@/lib/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 // ---------------------------------------------------------------------------
 // useShowLogoWhenFolded
@@ -147,7 +148,7 @@ export default function useChatSearchOptimistic(
       params.set("page_size", PAGE_SIZE.toString());
       if (debouncedQuery.trim()) params.set("query", debouncedQuery);
 
-      return `/api/chat/search?${params.toString()}`;
+      return `${SWR_KEYS.chatSearch}?${params.toString()}`;
     },
     [enabled, debouncedQuery]
   );
