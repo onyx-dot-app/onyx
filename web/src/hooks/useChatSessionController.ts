@@ -292,12 +292,26 @@ export default function useChatSessionController({
         node.message = "";
         const accumulated: Packet[] = [];
         let lastFlush = 0;
+        let trailingFlush: ReturnType<typeof setTimeout> | null = null;
+        // updateSessionAndMessageTree re-points currentSessionId at this
+        // session; once the user navigates elsewhere, any further store write
+        // from this tail would hijack their new session's sends.
+        const stillCurrent = () =>
+          useChatSessionStore.getState().currentSessionId === sessionId;
         const flush = () => {
+          if (!stillCurrent()) {
+            return;
+          }
           node.packets = [...accumulated];
+          // AgentMessage's memo compares packetCount, not the packets array.
+          node.packetCount = accumulated.length;
           updateSessionAndMessageTree(sessionId, new Map(messageMap));
         };
         try {
           for await (const rawPacket of resumeStream(sessionId, 0)) {
+            if (!stillCurrent()) {
+              return;
+            }
             if (!Object.hasOwn(rawPacket, "obj")) {
               continue;
             }
@@ -307,29 +321,42 @@ export default function useChatSessionController({
             if (now - lastFlush >= 100) {
               lastFlush = now;
               flush();
+            } else if (trailingFlush === null) {
+              // A burst's last packets would otherwise wait for the NEXT
+              // packet to render — during quiet phases that's minutes.
+              trailingFlush = setTimeout(() => {
+                trailingFlush = null;
+                lastFlush = Date.now();
+                flush();
+              }, 120);
             }
           }
         } catch (error) {
           console.error("Failed to resume in-flight run", { runId, error });
         } finally {
-          flush();
+          if (trailingFlush !== null) {
+            clearTimeout(trailingFlush);
+          }
           resumingRuns.delete(runId);
-          // Settle final state (message text, citations, documents) from the
-          // persisted session.
-          try {
-            const settledResponse = await fetch(
-              `/api/chat/get-chat-session/${sessionId}`
-            );
-            if (settledResponse.ok) {
-              const settled =
-                (await settledResponse.json()) as BackendChatSession;
-              updateSessionAndMessageTree(
-                sessionId,
-                processRawChatHistory(settled.messages, settled.packets)
+          if (stillCurrent()) {
+            flush();
+            // Settle final state (message text, citations, documents) from
+            // the persisted session.
+            try {
+              const settledResponse = await fetch(
+                `/api/chat/get-chat-session/${sessionId}`
               );
+              if (settledResponse.ok && stillCurrent()) {
+                const settled =
+                  (await settledResponse.json()) as BackendChatSession;
+                updateSessionAndMessageTree(
+                  sessionId,
+                  processRawChatHistory(settled.messages, settled.packets)
+                );
+              }
+            } catch (error) {
+              console.error("Post-resume session refresh failed", { error });
             }
-          } catch (error) {
-            console.error("Post-resume session refresh failed", { error });
           }
         }
       }
