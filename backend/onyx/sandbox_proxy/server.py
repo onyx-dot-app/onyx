@@ -27,6 +27,7 @@ from onyx.sandbox_proxy.identity import IdentityResolver
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.sandbox_proxy.request_evaluator import ExternalAppRequestEvaluator
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
+from onyx.sandbox_proxy.resolvers.git_remote import GitRemoteResolver
 from onyx.sandbox_proxy.resolvers.llm_provider_key import LLMProviderKeyResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
@@ -178,7 +179,12 @@ def build_resolvers() -> list[CredentialResolver]:
     canonical hosts). Order is a safety net against accidental overlap, not a
     designed-in priority.
     """
-    return [OnyxPatResolver(), LLMProviderKeyResolver(), ExternalAppResolver()]
+    return [
+        OnyxPatResolver(),
+        LLMProviderKeyResolver(),
+        GitRemoteResolver(),
+        ExternalAppResolver(),
+    ]
 
 
 def _install_signal_handlers(
