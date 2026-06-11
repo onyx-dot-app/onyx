@@ -8,6 +8,7 @@ from unittest.mock import Mock
 from unittest.mock import patch
 
 import pytest
+from botocore.exceptions import ClientError
 from sqlalchemy import create_engine
 from sqlalchemy import DateTime
 from sqlalchemy import Enum
@@ -140,6 +141,55 @@ class TestExternalStorageFileStore:
             file_store = S3BackedFileStore(bucket_name="my-test-bucket")
             bucket_name: str = file_store._get_bucket_name()
             assert bucket_name == "my-test-bucket"
+
+    def test_s3_initialize_bad_request_mentions_region_configuration(self) -> None:
+        """Test HeadBucket errors include region and endpoint configuration hints"""
+        mock_client = Mock()
+        mock_client.head_bucket.side_effect = ClientError(
+            {"Error": {"Code": "400", "Message": "Bad Request"}},
+            "HeadBucket",
+        )
+
+        file_store = S3BackedFileStore(
+            bucket_name="test-bucket",
+            aws_region_name="us-east-2",
+            s3_endpoint_url="https://example.r2.cloudflarestorage.com",
+        )
+        file_store._s3_client = mock_client
+
+        with pytest.raises(RuntimeError) as exc_info:
+            file_store.initialize()
+
+        message = str(exc_info.value)
+        assert "S3_ENDPOINT_URL" in message
+        assert "AWS_REGION_NAME" in message
+        assert "Cloudflare R2" in message
+        mock_client.head_bucket.assert_called_once_with(Bucket="test-bucket")
+
+    def test_s3_initialize_forbidden_mentions_region_configuration(self) -> None:
+        """Test forbidden HeadBucket errors include region and endpoint hints"""
+        mock_client = Mock()
+        mock_client.head_bucket.side_effect = ClientError(
+            {"Error": {"Code": "403", "Message": "Forbidden"}},
+            "HeadBucket",
+        )
+
+        file_store = S3BackedFileStore(
+            bucket_name="test-bucket",
+            aws_region_name="us-east-2",
+            s3_endpoint_url="https://example.r2.cloudflarestorage.com",
+        )
+        file_store._s3_client = mock_client
+
+        with pytest.raises(RuntimeError) as exc_info:
+            file_store.initialize()
+
+        message = str(exc_info.value)
+        assert "Access denied" in message
+        assert "S3_ENDPOINT_URL" in message
+        assert "AWS_REGION_NAME" in message
+        assert "Cloudflare R2" in message
+        mock_client.head_bucket.assert_called_once_with(Bucket="test-bucket")
 
     def test_s3_key_generation_default_prefix(self) -> None:
         """Test S3 key generation with default prefix"""

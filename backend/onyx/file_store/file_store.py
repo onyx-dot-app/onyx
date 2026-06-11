@@ -268,6 +268,12 @@ class S3BackedFileStore(FileStore):
         """Initialize the S3 file store by ensuring the bucket exists"""
         s3_client = self._get_s3_client()
         bucket_name = self._get_bucket_name()
+        config_hint = (
+            "Verify S3_ENDPOINT_URL and AWS_REGION_NAME for the bucket. "
+            "For S3-compatible providers such as Cloudflare R2, a region "
+            "mismatch can surface as a generic HeadBucket failure; "
+            "Cloudflare R2 commonly uses AWS_REGION_NAME=auto."
+        )
 
         # Check if bucket exists
         try:
@@ -300,15 +306,25 @@ class S3BackedFileStore(FileStore):
             elif error_code == "403":
                 # Bucket exists but we don't have permission to access it
                 logger.warning(
-                    f"S3 bucket '{bucket_name}' exists but access is forbidden"
+                    "S3 bucket '%s' exists but access is forbidden. %s",
+                    bucket_name,
+                    config_hint,
                 )
                 raise RuntimeError(
-                    f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
+                    f"Access denied to S3 bucket '{bucket_name}'. "
+                    f"Check credentials and permissions. {config_hint}"
                 )
             else:
                 # Some other error occurred
-                logger.error("Failed to check S3 bucket '%s': %s", bucket_name, e)
-                raise RuntimeError(f"Failed to check S3 bucket '{bucket_name}': {e}")
+                logger.error(
+                    "Failed to check S3 bucket '%s': %s. %s",
+                    bucket_name,
+                    e,
+                    config_hint,
+                )
+                raise RuntimeError(
+                    f"Failed to check S3 bucket '{bucket_name}': {e}. {config_hint}"
+                )
 
     def has_file(
         self,

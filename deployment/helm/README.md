@@ -73,6 +73,33 @@ auth:
       REDIS_PASSWORD: redis_password
 ```
 
+## Using an external S3-compatible file store
+
+To use AWS S3 or another S3-compatible service instead of the bundled MinIO
+service, disable MinIO and set the S3 endpoint, bucket, and signing region in
+`configMap`. Cloudflare R2 commonly requires `AWS_REGION_NAME: "auto"`; other
+providers require their bucket region.
+
+```yaml
+minio:
+  enabled: false
+
+configMap:
+  FILE_STORE_BACKEND: "s3"
+  S3_ENDPOINT_URL: "https://<account-id>.r2.cloudflarestorage.com"
+  S3_FILE_STORE_BUCKET_NAME: "<bucket-name>"
+  AWS_REGION_NAME: "auto"
+
+auth:
+  objectStorage:
+    values:
+      s3_aws_access_key_id: "<access-key-id>"
+      s3_aws_secret_access_key: "<secret-access-key>"
+```
+
+If `HeadBucket` returns a generic HTTP 400 or 403 on startup, verify that both
+`S3_ENDPOINT_URL` and `AWS_REGION_NAME` match the bucket provider and region.
+
 ## Sourcing secrets from an external secret manager (ESO)
 
 The chart can render an `ExternalSecret` CR that has [External Secrets
