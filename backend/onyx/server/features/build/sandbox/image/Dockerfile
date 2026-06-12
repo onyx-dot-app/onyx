@@ -14,12 +14,16 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 # only expandable in a FROM.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
 
+# Node.js source. The final image is Python-based, but the sandbox still needs
+# Node/npm/npx for MCP commands and skill-runtime packages.
+FROM ${BASE_IMAGE_REGISTRY}/library/node:20-trixie-slim@sha256:abfbe12cc943141a0c9e8c0a57d710df1dadd95d35e8662cc02958b284d1f35b AS node_source
+
 # GitHub CLI (gh): downloaded + checksum-verified in its own stage (arch-matched
 # via buildx's TARGETARCH) so only the binary lands in the final image.
-FROM ${BASE_IMAGE_REGISTRY}/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS gh_source
+FROM node_source AS gh_source
 ARG GH_CLI_VERSION=2.93.0
 ARG TARGETARCH
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 RUN set -eux; \
     arch="${TARGETARCH:-amd64}"; \
@@ -32,7 +36,7 @@ RUN set -eux; \
     tar -xzf "${tarball}"; \
     install -m 0755 "gh_${GH_CLI_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh
 
-FROM ${BASE_IMAGE_REGISTRY}/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:f82c96458eedc847b233e582eb31336f4954b39cae020b6dcf5b3ed0e5cbcd74
 
 # Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
 # poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed by
@@ -43,24 +47,25 @@ ARG OPENCODE_VERSION=1.15.7
 
 # firewall-init.sh needs: iptables (egress lockdown), ca-certificates (trust
 # store), gosu (legacy, not currently invoked). setpriv ships with util-linux in
-# the node:20-slim base.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-venv \
+# the python:3.13-slim base.
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     curl \
     git \
     procps \
     unzip \
-    gcc \
-    libc6-dev \
     iptables \
     gosu \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=node_source /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_source /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
+    ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
+
 RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libreoffice-core \
     libreoffice-common \
     libreoffice-impress \
@@ -97,12 +102,12 @@ RUN chown -R sandbox:sandbox /workspace/templates
 COPY initial-requirements.txt /tmp/initial-requirements.txt
 RUN python3 -m venv /workspace/.venv && \
     /workspace/.venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /workspace/.venv/bin/pip install --no-cache-dir -r /tmp/initial-requirements.txt && \
+    /workspace/.venv/bin/pip install --no-cache-dir --only-binary=:all: -r /tmp/initial-requirements.txt && \
     rm -rf /tmp/initial-requirements.txt /root/.cache/pip && \
     chown -R sandbox:sandbox /workspace/.venv
 
 ENV PATH="/workspace/.venv/bin:${PATH}"
-ENV PYTHONPATH="/workspace:${PYTHONPATH}"
+ENV PYTHONPATH="/workspace"
 
 RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     npm install -g pptxgenjs && \
