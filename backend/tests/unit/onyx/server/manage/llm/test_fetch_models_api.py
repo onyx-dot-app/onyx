@@ -5,6 +5,7 @@ from dynamic providers (Ollama, OpenRouter, Litellm), including the
 sync-to-DB behavior when provider_name is specified.
 """
 
+import os
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ import pytest
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import BifrostFinalModelResponse
 from onyx.server.manage.llm.models import BifrostModelsRequest
 from onyx.server.manage.llm.models import LitellmFinalModelResponse
@@ -1429,3 +1431,107 @@ class TestGetBifrostAvailableModels:
                 get_bifrost_available_models(request, MagicMock(), mock_session)
 
             mock_warning.assert_called_once()
+
+
+class TestGetBedrockAvailableModels:
+    """Tests for the Bedrock model fetch endpoint."""
+
+    @pytest.fixture
+    def mock_bedrock_client(self) -> MagicMock:
+        """Bedrock client that records AWS_BEARER_TOKEN_BEDROCK at call time.
+
+        boto3 resolves AWS_BEARER_TOKEN_BEDROCK lazily at API call time, so
+        the env var must still be set when list_foundation_models runs — not
+        just while boto3.Session is being constructed.
+        """
+        client = MagicMock()
+        client.bearer_token_at_call_time = None
+
+        def list_foundation_models() -> dict:
+            client.bearer_token_at_call_time = os.environ.get(
+                "AWS_BEARER_TOKEN_BEDROCK"
+            )
+            return {
+                "modelSummaries": [
+                    {
+                        "modelId": "anthropic.claude-opus-4-7",
+                        "modelName": "Claude Opus 4.7",
+                        "inputModalities": ["TEXT", "IMAGE"],
+                        "responseStreamingSupported": True,
+                    }
+                ]
+            }
+
+        def list_inference_profiles(**_: object) -> dict:
+            return {"inferenceProfileSummaries": []}
+
+        client.list_foundation_models.side_effect = list_foundation_models
+        client.list_inference_profiles.side_effect = list_inference_profiles
+        return client
+
+    def test_bearer_token_available_during_aws_calls(
+        self, mock_bedrock_client: MagicMock
+    ) -> None:
+        """Regression test: bearer token must stay in env across list_foundation_models.
+
+        Prior bug popped AWS_BEARER_TOKEN_BEDROCK right after Session() was
+        built, before boto3 actually read it — falling back to SigV4 creds
+        (IRSA on managed clusters) and producing AccessDenied.
+        """
+        from onyx.server.manage.llm.api import get_bedrock_available_models
+
+        mock_session = MagicMock()
+        mock_session.client.return_value = mock_bedrock_client
+
+        # Guarantee a clean slate for the env var we're asserting about.
+        prior = os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.boto3.Session",
+                return_value=mock_session,
+            ):
+                request = BedrockModelsRequest(
+                    aws_region_name="us-west-2",
+                    aws_bearer_token_bedrock="test-bearer-token",
+                )
+                get_bedrock_available_models(request, MagicMock(), MagicMock())
+
+            assert mock_bedrock_client.bearer_token_at_call_time == "test-bearer-token"
+            # Env var is cleaned up after the call when nothing was pre-set.
+            assert "AWS_BEARER_TOKEN_BEDROCK" not in os.environ
+        finally:
+            if prior is not None:
+                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = prior
+
+    def test_prior_bearer_token_restored_after_call(
+        self, mock_bedrock_client: MagicMock
+    ) -> None:
+        """If AWS_BEARER_TOKEN_BEDROCK was already set in the environment,
+        it must be restored after the request — not popped."""
+        from onyx.server.manage.llm.api import get_bedrock_available_models
+
+        mock_session = MagicMock()
+        mock_session.client.return_value = mock_bedrock_client
+
+        prior = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = "ambient-token"
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.boto3.Session",
+                return_value=mock_session,
+            ):
+                request = BedrockModelsRequest(
+                    aws_region_name="us-west-2",
+                    aws_bearer_token_bedrock="request-token",
+                )
+                get_bedrock_available_models(request, MagicMock(), MagicMock())
+
+            # Request token was what boto3 saw inside the call.
+            assert mock_bedrock_client.bearer_token_at_call_time == "request-token"
+            # Ambient env var is back afterwards.
+            assert os.environ.get("AWS_BEARER_TOKEN_BEDROCK") == "ambient-token"
+        finally:
+            if prior is None:
+                os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
+            else:
+                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = prior
