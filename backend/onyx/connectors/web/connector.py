@@ -144,6 +144,10 @@ def protected_url_check(url: str) -> None:
 
 
 def check_internet_connection(url: str) -> None:
+    # SSRF guard on the fetch primitive itself, so no call site can reach an
+    # internal target. No-op unless SSRF protection is at its strictest level.
+    protected_url_check(url)
+
     try:
         # Use a more realistic browser-like request
         session = requests.Session()
@@ -240,6 +244,11 @@ def get_internal_links(
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
+    # SSRF guard. This fetch runs in __init__, before validation, so the check
+    # must live here. Placed before the try so it surfaces as the SSRF error
+    # rather than a wrapped sitemap-parse failure.
+    protected_url_check(sitemap_url)
+
     # Note: brotli compression is handled automatically by the requests library
     # as long as the brotli package is installed in the venv.
     try:
@@ -725,16 +734,11 @@ class WebConnector(LoadConnector, SlimConnector):
                 "No URL configured. Please provide at least one valid URL."
             )
 
-        if (
-            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
-            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
-        ):
-            return None
-
         # We'll just test the first URL for connectivity and correctness
         test_url = self.to_visit_list[0]
 
-        # Check that the URL is allowed and well-formed
+        # SSRF check runs for every connector type so an internal target is
+        # rejected at creation rather than at index time.
         try:
             protected_url_check(test_url)
         except ValueError as e:
@@ -744,6 +748,14 @@ class WebConnector(LoadConnector, SlimConnector):
         except ConnectionError as e:
             # Typically DNS or other network issues
             raise ConnectorValidationError(str(e))
+
+        # Recursive/sitemap defer page fetches to index time; skip the connectivity
+        # probe for them (the SSRF check above still ran).
+        if (
+            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
+            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
+        ):
+            return None
 
         # Make a quick request to see if we get a valid response
         try:
