@@ -70,6 +70,13 @@ class OnyxChatUser(HttpUser):
             raise RuntimeError("ONYX_API_KEY env var is required")
         self.client.headers["Authorization"] = f"Bearer {api_key}"
 
+        # When LOCUST_HOST points at an internal Service (to bypass an external
+        # ALB/WAF rate limit for high-rps runs), set ONYX_HOST_HEADER to the
+        # real domain so the in-cluster nginx routes by Host as usual.
+        host_header = os.environ.get("ONYX_HOST_HEADER")
+        if host_header:
+            self.client.headers["Host"] = host_header
+
         provider = os.environ.get("ONYX_LLM_PROVIDER")
         model = self.mock_model or os.environ.get("ONYX_LLM_MODEL")
         self.llm_override: dict[str, Any] | None = None
