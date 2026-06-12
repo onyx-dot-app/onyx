@@ -152,6 +152,18 @@ class MetadataUpdateRequest(BaseModel):
     persona_ids: set[int] | None = None
 
 
+class SecondaryIndexDocumentMissingError(Exception):
+    """A metadata update applied to the primary index but the doc isn't in the
+    secondary (FUTURE) index yet (e.g. mid reindex port). Carries the doc ids so
+    the caller can defer the secondary sync instead of failing."""
+
+    def __init__(self, document_ids: list[str]) -> None:
+        self.document_ids = document_ids
+        super().__init__(
+            f"{len(document_ids)} document(s) missing from the secondary index."
+        )
+
+
 class IndexRetrievalFilters(BaseModel):
     """
     Filters for retrieving chunks from the index.
