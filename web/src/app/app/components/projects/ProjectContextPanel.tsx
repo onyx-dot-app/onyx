@@ -125,7 +125,7 @@ export default function ProjectContextPanel({
         />
       </projectFilesModal.Provider>
 
-      <div className="w-(--app-page-main-content-width) mx-auto px-2 flex flex-col gap-6">
+      <div className="w-(--app-page-main-content-width) mx-auto flex flex-col gap-6">
         <Content
           icon={SvgFolderOpen}
           title={projectName}
