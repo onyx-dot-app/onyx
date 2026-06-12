@@ -471,6 +471,9 @@ def docfetching_proxy_task(
     # Track the last time memory info was emitted
     last_memory_emit_time = 0.0
 
+    # Set when the memory limit trips; reused for the post-loop re-mark
+    memory_limit_failure_reason: str | None = None
+
     try:
         with get_session_with_current_tenant() as db_session:
             index_attempt = get_index_attempt(
@@ -558,6 +561,13 @@ def docfetching_proxy_task(
                         result.status = (
                             IndexingWatchdogTerminalStatus.TERMINATED_BY_MEMORY_LIMIT
                         )
+                        memory_limit_failure_reason = (
+                            "Indexing worker exceeded the memory limit while "
+                            f"fetching documents: rss_mb={rss_mb} "
+                            f"limit_mb={INDEXING_WORKER_MEMORY_LIMIT_MB}. "
+                            "This usually means the connector encountered "
+                            "very large documents."
+                        )
 
                         # mark failed before terminating so the subprocess's own
                         # termination handling can't write a competing status
@@ -566,11 +576,7 @@ def docfetching_proxy_task(
                                 mark_attempt_failed(
                                     index_attempt_id,
                                     db_session,
-                                    "Indexing worker exceeded the memory limit while "
-                                    f"fetching documents: rss_mb={rss_mb} "
-                                    f"limit_mb={INDEXING_WORKER_MEMORY_LIMIT_MB}. "
-                                    "This usually means the connector encountered "
-                                    "very large documents.",
+                                    memory_limit_failure_reason,
                                 )
                         except Exception:
                             task_logger.exception(
@@ -745,9 +751,27 @@ def docfetching_proxy_task(
         # writes are needed here.
         pass
     elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_MEMORY_LIMIT:
-        # attempt already marked failed and subprocess terminated in the
-        # watchdog loop above; nothing further to do here.
-        pass
+        # subprocess already terminated in the watchdog loop. Re-mark in case the
+        # in-loop mark_attempt_failed hit a transient DB error — otherwise the
+        # attempt lingers in_progress until the heartbeat watchdog fails it with
+        # the opaque "No heartbeat received" message this status exists to replace.
+        try:
+            with get_session_with_current_tenant() as db_session:
+                attempt = get_index_attempt(db_session, index_attempt_id)
+                if attempt and not attempt.status.is_terminal():
+                    mark_attempt_failed(
+                        index_attempt_id,
+                        db_session,
+                        memory_limit_failure_reason
+                        or "Indexing worker exceeded the memory limit",
+                    )
+        except Exception:
+            task_logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - transient exception marking index attempt "
+                    "as failed after memory limit"
+                )
+            )
     else:
         pass
 

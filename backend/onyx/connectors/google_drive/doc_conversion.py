@@ -809,6 +809,11 @@ def _convert_drive_item_to_document(
             return None
 
         sections = _cap_extracted_text(sections, file.get("name"))
+        if not sections:
+            logger.warning(
+                "No content within text cap for %s. Skipping.", file.get("name")
+            )
+            return None
 
         doc_id = onyx_document_id_from_drive_file(file)
         external_access = (

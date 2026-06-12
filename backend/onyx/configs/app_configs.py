@@ -1040,6 +1040,7 @@ INDEXING_WORKER_MEMORY_LIMIT_MB = int(
 INDEXING_WORKER_TRACEMALLOC = (
     os.environ.get("INDEXING_WORKER_TRACEMALLOC", "").lower() == "true"
 )
+
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
