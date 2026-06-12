@@ -552,3 +552,30 @@ Permission.IMPLIED = frozenset(
         Permission.READ_ADMIN,
     }
 )
+
+
+class PersonaSharePermission(str, PyEnum):
+    """Level granted by a persona share row (user or group), or to the whole
+    org via `Persona.public_permission`."""
+
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class PersonaAccessLevel(str, PyEnum):
+    """Computed access the requesting user holds on a persona.
+
+    OWNER outranks share rows; admins are reported as EDITOR unless owner."""
+
+    OWNER = "OWNER"
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class PersonaSharingStatus(str, PyEnum):
+    """Derived share state: group-owned or row-shared counts as SHARED even
+    with an empty share list; PUBLIC wins over both."""
+
+    PRIVATE = "PRIVATE"
+    SHARED = "SHARED"
+    PUBLIC = "PUBLIC"
