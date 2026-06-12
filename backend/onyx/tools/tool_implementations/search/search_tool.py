@@ -87,6 +87,7 @@ from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
 from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
+from onyx.secondary_llm_flows.source_filter import strings_to_document_sources
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
@@ -124,6 +125,7 @@ from shared_configs.configs import MODEL_SERVER_PORT
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+SOURCE_FILTER_FIELD = "source_type"
 
 
 def deduplicate_queries(
@@ -428,6 +430,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         acl_filters: list[str] | None,
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
+        effective_filters: BaseFilters | None = None,
     ) -> list[InferenceChunk]:
         """Run search pipeline for a single query using pre-fetched data.
 
@@ -451,7 +454,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 hybrid_alpha=hybrid_alpha,
                 # For projects, the search scope is the project and has no other limits
                 user_selected_filters=(
-                    self.user_selected_filters
+                    (effective_filters if effective_filters is not None else self.user_selected_filters)
                     if self.project_id_filter is None
                     else None
                 ),
@@ -522,6 +525,16 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                             "items": {"type": "string"},
                             "description": "List of search queries to execute, typically a single query.",
                         },
+                        SOURCE_FILTER_FIELD: {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Optional: restrict results to specific source types. "
+                                "Use when the user is clearly asking about a specific system "
+                                "(e.g. ['jira'] for Jira tickets/issues, ['confluence'] for "
+                                "Confluence pages/docs). Leave empty to search all sources."
+                            ),
+                        },
                     },
                     "required": [QUERIES_FIELD],
                 },
@@ -550,6 +563,61 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         query_expansion_elapsed = 0.0
         document_selection_elapsed = 0.0
         document_expansion_elapsed = 0.0
+
+        # Validate `queries` early so we can fail fast before any DB work.
+        if QUERIES_FIELD not in llm_kwargs:
+            raise ToolCallException(
+                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
+                llm_facing_message=(
+                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
+                    f"containing an array of search queries. Please provide the queries "
+                    f'like: {{"queries": ["your search query here"]}}'
+                ),
+            )
+        llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
+
+        # Compute a call-local effective filter — never mutate self.user_selected_filters
+        # so that source_type chosen by the LLM doesn't leak into subsequent run() calls.
+        # Resolved here (before the DB session block) so the same effective source filter
+        # can be passed to both the federated retriever prefetch and the vector-DB search.
+        effective_filters = self.user_selected_filters
+        llm_source_types_raw = llm_kwargs.get(SOURCE_FILTER_FIELD)
+        if llm_source_types_raw:
+            # Coerce shape: LLMs sometimes send a bare string ("jira") instead
+            # of an array (["jira"]). Without this, list-comprehension would
+            # iterate over individual characters and silently drop the filter.
+            if isinstance(llm_source_types_raw, str):
+                llm_source_types_raw = [llm_source_types_raw]
+            elif not isinstance(llm_source_types_raw, list):
+                raise ToolCallException(
+                    message=(
+                        f"Invalid '{SOURCE_FILTER_FIELD}' parameter type: "
+                        f"expected list of strings, got {type(llm_source_types_raw).__name__}"
+                    ),
+                    llm_facing_message=(
+                        f"The '{SOURCE_FILTER_FIELD}' parameter must be an array of "
+                        f"source-type strings (e.g. [\"jira\"]). You sent a "
+                        f"{type(llm_source_types_raw).__name__}."
+                    ),
+                )
+            llm_source_types = strings_to_document_sources(
+                [s for s in llm_source_types_raw if isinstance(s, str)]
+            )
+            if llm_source_types:
+                existing = self.user_selected_filters or BaseFilters()
+                # Intersect with any user-set source filter so the LLM can only
+                # narrow the user's selection, never expand it.
+                if existing.source_type:
+                    llm_source_types = [
+                        s for s in llm_source_types if s in existing.source_type
+                    ]
+                if llm_source_types:
+                    effective_filters = BaseFilters(
+                        source_type=llm_source_types,
+                        document_set=existing.document_set,
+                        time_cutoff=existing.time_cutoff,
+                        tags=existing.tags,
+                    )
 
         # Pre-fetch all DB data in a single short-lived session so that
         # parallel search workers need zero DB connections.
@@ -599,14 +667,16 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
             # Federated retrieval functions (non-Slack; Slack is separate)
+            # Use effective_filters (which already merges user + LLM source_type)
+            # so the federated leg honours the LLM's source_type just like the
+            # vector-DB leg.
             if self.project_id_filter is not None:
                 # Project mode ignores user filters → no federated sources
                 prefetch_source_types = None
             else:
                 prefetch_source_types = (
-                    list(self.user_selected_filters.source_type)
-                    if self.user_selected_filters
-                    and self.user_selected_filters.source_type
+                    list(effective_filters.source_type)
+                    if effective_filters and effective_filters.source_type
                     else None
                 )
             federated_retrieval_infos = (
@@ -632,17 +702,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     {},
                 )
         # Session is closed here — all parallel work uses plain Python objects only
-
-        if QUERIES_FIELD not in llm_kwargs:
-            raise ToolCallException(
-                message=f"Missing required '{QUERIES_FIELD}' parameter in internal_search tool call",
-                llm_facing_message=(
-                    f"The internal_search tool requires a '{QUERIES_FIELD}' parameter "
-                    f"containing an array of search queries. Please provide the queries "
-                    f'like: {{"queries": ["your search query here"]}}'
-                ),
-            )
-        llm_queries = cast(list[str], llm_kwargs[QUERIES_FIELD])
 
         # Run semantic and keyword query expansion in parallel (unless skipped)
         # Use message history, memories, and user info from override_kwargs
@@ -769,6 +828,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
+                        effective_filters,
                     ),
                 )
             )
@@ -786,6 +846,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
+                        effective_filters,
                     ),
                 )
             )
