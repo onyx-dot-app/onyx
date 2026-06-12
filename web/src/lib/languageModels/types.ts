@@ -11,7 +11,7 @@ export interface ModelConfiguration {
   is_recommended_default?: boolean;
   display_name?: string;
   /** Admin-set override that takes precedence over display_name everywhere in the UI. */
-  custom_display_name?: string;
+  custom_display_name?: string | null;
   provider_display_name?: string;
   vendor?: string;
   version?: string;
