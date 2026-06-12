@@ -352,8 +352,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
 
     const firstProviderName = uniqueName("PW Baseline Provider");
     const secondProviderName = uniqueName("PW Target Provider");
-    const firstModelName = "gpt-4o";
-    const secondModelName = "gpt-4o-mini";
+    // Use unique model names so the search uniquely identifies the test-created
+    // model and doesn't collide with any pre-existing system provider.
+    const ts = Date.now();
+    const firstModelName = `pw-baseline-${ts}`;
+    const secondModelName = `pw-target-${ts}`;
 
     const firstProviderId = await createPublicProvider(
       page,
