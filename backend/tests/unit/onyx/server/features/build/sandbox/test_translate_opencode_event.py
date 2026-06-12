@@ -1644,3 +1644,95 @@ def test_parent_non_task_tool_event_not_tagged() -> None:
         assert meta is not None
         assert "subagentSessionId" not in meta
         assert meta["toolName"] == "bash"
+
+
+# ───────────────────────── exit-code / error-state mapping ────────
+
+
+def test_bash_completed_with_nonzero_exit_maps_to_failed() -> None:
+    s = _state()
+    _drain(translate_opencode_event(_tool_event("c1", "bash", "pending"), s))
+    out = _drain(
+        translate_opencode_event(
+            _tool_event(
+                "c1",
+                "bash",
+                "completed",
+                input={"command": "sudo do-thing"},
+                output="permission denied",
+                metadata={"exit": 1},
+            ),
+            s,
+        )
+    )
+    assert len(out) == 1
+    assert isinstance(out[0], ToolCallProgress)
+    assert out[0].status == "failed"
+    assert out[0].raw_output is not None
+    assert out[0].raw_output.get("output") == "permission denied"  # type: ignore[union-attr]
+    assert out[0].raw_output.get("metadata") == {"exit": 1}  # type: ignore[union-attr]
+
+
+def test_bash_first_sighting_completed_with_nonzero_exit_dual_emits_failed() -> None:
+    """First sighting that already carries completed-with-nonzero-exit state
+    emits ToolCallStart plus a ToolCallProgress with the overridden status."""
+    s = _state()
+    out = _drain(
+        translate_opencode_event(
+            _tool_event(
+                "c1",
+                "bash",
+                "completed",
+                input={"command": "false"},
+                output="",
+                metadata={"exit": 1},
+            ),
+            s,
+        )
+    )
+    assert len(out) == 2
+    assert isinstance(out[0], ToolCallStart)
+    assert isinstance(out[1], ToolCallProgress)
+    assert out[1].status == "failed"
+
+
+def test_bash_completed_with_zero_exit_stays_completed() -> None:
+    s = _state()
+    _drain(translate_opencode_event(_tool_event("c1", "bash", "pending"), s))
+    out = _drain(
+        translate_opencode_event(
+            _tool_event(
+                "c1",
+                "bash",
+                "completed",
+                input={"command": "ls"},
+                output="file1\nfile2\n",
+                metadata={"exit": 0},
+            ),
+            s,
+        )
+    )
+    assert len(out) == 1
+    assert isinstance(out[0], ToolCallProgress)
+    assert out[0].status == "completed"
+
+
+def test_tool_error_state_maps_to_failed_with_error_output() -> None:
+    s = _state()
+    _drain(translate_opencode_event(_tool_event("c1", "bash", "pending"), s))
+    out = _drain(
+        translate_opencode_event(
+            _tool_event(
+                "c1",
+                "bash",
+                "error",
+                error="sudo: a password is required",
+            ),
+            s,
+        )
+    )
+    assert len(out) == 1
+    assert isinstance(out[0], ToolCallProgress)
+    assert out[0].status == "failed"
+    assert out[0].raw_output is not None
+    assert out[0].raw_output.get("output") == "sudo: a password is required"  # type: ignore[union-attr]
