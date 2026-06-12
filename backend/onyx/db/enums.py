@@ -573,8 +573,9 @@ class PersonaAccessLevel(str, PyEnum):
 
 
 class PersonaSharingStatus(str, PyEnum):
-    """Derived share state: group-owned or row-shared counts as SHARED even
-    with an empty share list; PUBLIC wins over both."""
+    """Derived share state computed from a persona's columns by the sharing
+    helpers (no DB column of its own): group-owned or row-shared counts as
+    SHARED even with an empty share list; PUBLIC wins over both."""
 
     PRIVATE = "PRIVATE"
     SHARED = "SHARED"

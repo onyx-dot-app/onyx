@@ -3730,15 +3730,18 @@ class Persona(Base):
         "User",
         secondary=Persona__User.__table__,
         viewonly=True,
+        overlaps="user_shares",
     )
     # Share rows with permission levels (association objects)
     user_shares: Mapped[list[Persona__User]] = relationship(
         "Persona__User",
         viewonly=True,
+        overlaps="users",
     )
     group_shares: Mapped[list["Persona__UserGroup"]] = relationship(
         "Persona__UserGroup",
         viewonly=True,
+        overlaps="groups",
     )
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -3753,6 +3756,7 @@ class Persona(Base):
         "UserGroup",
         secondary="persona__user_group",
         viewonly=True,
+        overlaps="group_shares",
     )
     allowed_by_llm_providers: Mapped[list["LLMProvider"]] = relationship(
         "LLMProvider",
