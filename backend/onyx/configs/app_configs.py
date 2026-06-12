@@ -852,12 +852,13 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
-# Google-native files (Docs/Slides/Sheets) report no `size` metadata, so they
-# bypass GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD. Cap the total text extracted per
-# file to bound connector memory; content past the cap is dropped with a warning.
-# 0 disables the cap.
-GOOGLE_DRIVE_MAX_EXTRACTED_TEXT_CHARS = int(
-    os.environ.get("GOOGLE_DRIVE_MAX_EXTRACTED_TEXT_CHARS") or 10_000_000
+# Cap the total text retained per file across a connector's extracted sections,
+# bounding worker memory when a source can't be size-checked before fetch —
+# e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
+# bypass GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD. Content past the cap is dropped
+# with a warning. 0 disables the cap.
+CONNECTOR_MAX_EXTRACTED_TEXT_CHARS = int(
+    os.environ.get("CONNECTOR_MAX_EXTRACTED_TEXT_CHARS") or 10_000_000
 )
 
 # Default size threshold for Drupal Wiki attachments (10MB)

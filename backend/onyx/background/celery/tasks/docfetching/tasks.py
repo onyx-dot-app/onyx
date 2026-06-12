@@ -12,9 +12,9 @@ from celery import Task
 
 from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.memory_diagnostics import start_memory_observer
-from onyx.background.celery.memory_diagnostics import stop_memory_observer
 from onyx.background.celery.memory_monitoring import emit_process_memory
+from onyx.background.celery.memory_monitoring import start_memory_observer
+from onyx.background.celery.memory_monitoring import stop_memory_observer
 from onyx.background.celery.tasks.docprocessing.heartbeat import start_heartbeat
 from onyx.background.celery.tasks.docprocessing.heartbeat import stop_heartbeat
 from onyx.background.celery.tasks.docprocessing.tasks import ConnectorIndexingLogBuilder
