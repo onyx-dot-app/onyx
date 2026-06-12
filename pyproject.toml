@@ -52,6 +52,9 @@ backend = [
     "google-api-python-client==2.86.0",
     "google-auth-oauthlib==1.0.0",
     "google-cloud-storage>=3.0.0,<4.0.0",
+    # Linear-time (RE2) regex engine for matching over untrusted / LLM-generated
+    # text without catastrophic backtracking (ReDoS). See onyx/utils/regex_engine.py.
+    "google-re2==1.1.20251105",
     "graphql-core==3.2.8",
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
