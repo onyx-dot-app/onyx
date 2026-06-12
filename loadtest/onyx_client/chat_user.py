@@ -97,8 +97,14 @@ class OnyxChatUser(HttpUser):
             if response.status_code != 200:
                 response.failure(f"HTTP {response.status_code}")
                 return None
+            session_id = response.json().get("chat_session_id")
+            if not session_id:
+                # A 200 with no id would otherwise be counted a success while
+                # silently dropping the turn — fail it explicitly instead.
+                response.failure("create-chat-session: missing chat_session_id")
+                return None
             response.success()
-            return response.json().get("chat_session_id")
+            return session_id
 
     def _fire(
         self,
@@ -178,6 +184,9 @@ class OnyxChatUser(HttpUser):
                             f"HTTP {response.status_code}: {response.text[:200]}"
                         ),
                     )
+                    # Abandon a multi-turn session that just errored so the
+                    # next turn starts fresh rather than reusing a bad session.
+                    self._session_id = None
                     return
 
                 for line in response.iter_lines(decode_unicode=True):
@@ -193,6 +202,7 @@ class OnyxChatUser(HttpUser):
                 response.success()
         except Exception as exc:
             self._fire("total_turn", start, exception=exc)
+            self._session_id = None  # don't reuse a session after a failure
             return
 
         if disconnected:

@@ -167,6 +167,27 @@ A turn fails on: non-200, an error packet, a stream stalling past the read
 timeout, or a stream ending without answer content / without the `stop`
 packet (truncation).
 
+### Prometheus + Grafana correlation
+
+The master exposes milestone metrics for Prometheus on a dedicated port
+(default `9646`, `LOCUST_PROMETHEUS_PORT` to override) at `/metrics`:
+
+- `locust_users`
+- `locust_requests_total{name,method}` / `locust_failures_total{name,method}`
+- `locust_response_time_p50_milliseconds` / `..._p95_milliseconds{name,method}`
+- `locust_current_rps{name,method}`
+
+Scrape it: annotation-based Prometheus uses the master pod's
+`prometheus.io/scrape` annotations; **Prometheus Operator
+(kube-prometheus-stack) ignores annotations and needs a ServiceMonitor**
+targeting the `metrics` service port (commented example in `k8s/locust.yaml`).
+Then import
+`dashboards/chat-loadtest-correlation.json` to overlay milestone latency and
+failure rate against server-side CPU/memory on one timeline — set the
+dashboard's `$namespace` / `$workload` variables to the deployment under
+load. That overlay is how you read the collapse point: the user count where
+p95 / failure rate bend up, and which resource saturates first.
+
 ## Docker
 
 ```bash
@@ -200,4 +221,5 @@ polluted by WAN jitter and the LLM stays free:
 - ✅ Phase 2: in-cluster Locust master/workers + mock provider (`k8s/`)
 - ✅ Phase 3: weighted scenario mix, multi-tool turns, multi-turn long-history
   sessions, mid-stream disconnects, staged collapse-point ramp
-- Phase 4: Prometheus export + Grafana correlation dashboard
+- ✅ Phase 4: Prometheus exporter (`/metrics`) + Grafana correlation dashboard
+  (`dashboards/`)

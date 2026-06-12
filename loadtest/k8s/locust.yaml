@@ -33,6 +33,12 @@ spec:
       labels:
         app: onyx-loadtest
         role: master
+      # Scrape Locust milestone metrics (Phase 4 correlation). Drop these if
+      # your Prometheus uses ServiceMonitor/PodMonitor CRDs instead.
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9646"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: locust-master
@@ -44,6 +50,7 @@ spec:
           ports:
             - containerPort: 8089 # web UI
             - containerPort: 5557 # worker communication
+            - containerPort: 9646 # Prometheus /metrics
           # No ONYX_API_KEY here: the master only coordinates — user
           # greenlets (and API calls) run on the workers.
           env:
@@ -75,6 +82,9 @@ spec:
     - name: comm
       port: 5557
       targetPort: 5557
+    - name: metrics
+      port: 9646
+      targetPort: 9646
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -121,3 +131,29 @@ spec:
             limits:
               cpu: "2"
               memory: 1Gi
+# Metrics discovery:
+#   - Annotation-based Prometheus scrapes the master pod via the
+#     prometheus.io/* annotations above (no extra object needed).
+#   - Prometheus Operator (kube-prometheus-stack) ignores those annotations —
+#     it needs a ServiceMonitor. Uncomment below and set the `release` label to
+#     whatever your Prometheus's serviceMonitorSelector matches. Requires the
+#     monitoring.coreos.com CRDs, so it's left commented to keep this manifest
+#     applyable on clusters without the operator.
+#
+# ---
+# apiVersion: monitoring.coreos.com/v1
+# kind: ServiceMonitor
+# metadata:
+#   name: onyx-loadtest
+#   labels:
+#     release: <your-prometheus-release>
+# spec:
+#   namespaceSelector:
+#     matchNames: [<onyx-namespace>]
+#   selector:
+#     matchLabels:
+#       app: onyx-loadtest
+#   endpoints:
+#     - port: metrics
+#       path: /metrics
+#       interval: 15s
