@@ -320,11 +320,7 @@ export default function BuildMessageList({
           if (message.type === "user") {
             return (
               <div key={message.id} className="py-4">
-                <HumanMessage
-                  content={message.content}
-                  nodeId={idx}
-                  clampContent
-                />
+                <HumanMessage content={message.content} nodeId={idx} />
               </div>
             );
           }

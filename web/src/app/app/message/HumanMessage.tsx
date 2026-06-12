@@ -9,56 +9,9 @@ import { cn } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import { CopyButton } from "@opal/components";
 import { Button } from "@opal/components";
-import { SvgChevronDown, SvgEdit } from "@opal/icons";
+import { SvgEdit } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import FileDisplay from "./FileDisplay";
-
-const COLLAPSED_MAX_PX = 240; // ~10 lines
-
-function ClampedContent({ children }: { children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [overflows, setOverflows] = useState(false);
-
-  // ResizeObserver instead of a render-tied effect: re-measures on layout /
-  // viewport changes without re-firing on every parent render.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const recompute = () =>
-      setOverflows(el.scrollHeight > COLLAPSED_MAX_PX + 8);
-    recompute();
-    const observer = new ResizeObserver(recompute);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <div className="flex flex-col items-start gap-1">
-      <div
-        ref={ref}
-        className="relative w-full overflow-hidden"
-        style={expanded ? undefined : { maxHeight: COLLAPSED_MAX_PX }}
-      >
-        {children}
-        {!expanded && overflows && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-b from-transparent to-background-tint-02" />
-        )}
-      </div>
-      {overflows && (
-        <Button
-          variant="default"
-          prominence="tertiary"
-          size="2xs"
-          icon={SvgChevronDown}
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? "Show less" : "Show more"}
-        </Button>
-      )}
-    </div>
-  );
-}
 
 interface MessageEditingProps {
   content: string;
@@ -149,9 +102,6 @@ interface HumanMessageProps {
   // Streaming and generation
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
-
-  /** Collapse very long messages behind a "Show more" toggle. */
-  clampContent?: boolean;
 }
 
 // Memoization comparison - compare by value for primitives, by reference for objects/arrays
@@ -166,8 +116,7 @@ function arePropsEqual(
     prev.files === next.files &&
     prev.disableSwitchingForStreaming === next.disableSwitchingForStreaming &&
     prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
-    prev.onEdit === next.onEdit &&
-    prev.clampContent === next.clampContent
+    prev.onEdit === next.onEdit
     // Skip: stopGenerating, onMessageSelection (inline function props)
   );
 }
@@ -182,7 +131,6 @@ const HumanMessage = React.memo(function HumanMessage({
   onMessageSelection,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
-  clampContent = false,
 }: HumanMessageProps) {
   // TODO (@raunakab):
   //
@@ -293,25 +241,13 @@ const HumanMessage = React.memo(function HumanMessage({
                   }
                 }}
               >
-                {clampContent ? (
-                  <ClampedContent>
-                    <Text
-                      as="p"
-                      className="inline-block align-middle"
-                      mainContentBody
-                    >
-                      {content}
-                    </Text>
-                  </ClampedContent>
-                ) : (
-                  <Text
-                    as="p"
-                    className="inline-block align-middle"
-                    mainContentBody
-                  >
-                    {content}
-                  </Text>
-                )}
+                <Text
+                  as="p"
+                  className="inline-block align-middle"
+                  mainContentBody
+                >
+                  {content}
+                </Text>
               </div>
             </div>
           </div>
