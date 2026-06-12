@@ -10,6 +10,7 @@ import { PreviewContext } from "@/sections/modals/PreviewModal/interfaces";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CopyButton } from "@opal/components";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
+import { sanitizeDocxHtml } from "@/sections/modals/PreviewModal/variants/sanitizeDocxHtml";
 
 const DOCX_MIMES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -68,6 +69,17 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
             renderFootnotes: true,
             renderEndnotes: true,
           });
+
+          // Sanitize docx-preview's output (it has HTML/href sinks). Runs before
+          // the innerText read below so copied text matches what's displayed.
+          bodyRef.current.innerHTML = sanitizeDocxHtml(bodyRef.current.innerHTML);
+
+          // styleRef should only hold library-generated <style> elements.
+          for (const child of Array.from(styleRef.current.children)) {
+            if (child.tagName !== "STYLE") {
+              child.remove();
+            }
+          }
         }
 
         // Extract plain text from the rendered DOM
