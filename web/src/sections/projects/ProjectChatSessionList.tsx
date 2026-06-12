@@ -7,11 +7,11 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { ChatSession } from "@/app/app/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useAgents } from "@/lib/agents/hooks";
-import { formatRelativeTime } from "@/sections/projects/project_utils";
 import { Card, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { SvgBubbleText, SvgSimpleLoader } from "@opal/icons";
+import { timeAgo } from "@opal/time";
 
 export default function ProjectChatSessionList() {
   const {
@@ -141,7 +141,7 @@ export default function ProjectChatSessionList() {
                         nowrap
                         maxLines={1}
                       >
-                        {`Last message ${formatRelativeTime(chat.time_updated)}`}
+                        {`Last message ${timeAgo(chat.time_updated)}`}
                       </Text>
                     </div>
                   </div>
