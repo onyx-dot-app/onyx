@@ -1,19 +1,32 @@
 """Locust entrypoint for Onyx chat load tests.
 
-Usage (from this directory, after `uv sync`):
-
-    ONYX_API_KEY=... uv run locust --headless -u 5 -r 1 -t 5m \
-        -H https://<your-onyx-url>
-
-Select scenarios with Locust's class picker, e.g.:
-
-    ... uv run locust --headless -u 10 -r 2 -t 10m BasicChatUser ChatWithSearchUser
-
-See README.md for configuration env vars and scenario details.
+With no user classes named, the default weighted mix runs (BasicChat 70 /
+ChatWithSearch 20 / MultiTool 8 / DeepResearch 2); name a class to run a
+targeted reproducer (LongConversationUser, DisconnectUser). ONYX_SHAPE=stepramp
+drives a staged ramp. See README.md for usage and env vars.
 """
+
+import os
 
 from onyx_client.chat_user import BasicChatUser
 from scenarios import ChatWithSearchUser
 from scenarios import DeepResearchUser
+from scenarios import DisconnectUser
+from scenarios import LongConversationUser
+from scenarios import MultiToolUser
 
-__all__ = ["BasicChatUser", "ChatWithSearchUser", "DeepResearchUser"]
+__all__ = [
+    "BasicChatUser",
+    "ChatWithSearchUser",
+    "MultiToolUser",
+    "DeepResearchUser",
+    "LongConversationUser",
+    "DisconnectUser",
+]
+
+# Expose the ramp only on request: Locust auto-activates any shape it finds,
+# which would override -u/-r on every run.
+if os.environ.get("ONYX_SHAPE") == "stepramp":
+    from shapes import StepRampShape  # noqa: F401  (Locust discovers it via globals)
+
+    __all__.append("StepRampShape")

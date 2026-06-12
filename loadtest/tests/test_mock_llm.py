@@ -64,6 +64,30 @@ GENERATE_PLAN_TOOL = {
     },
 }
 
+WEB_SEARCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "web_search",
+        "parameters": {
+            "type": "object",
+            "properties": {"queries": {"type": "array", "items": {"type": "string"}}},
+            "required": ["queries"],
+        },
+    },
+}
+
+OPEN_URL_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "open_url",
+        "parameters": {
+            "type": "object",
+            "properties": {"urls": {"type": "array", "items": {"type": "string"}}},
+            "required": ["urls"],
+        },
+    },
+}
+
 THINK_TOOL = {
     "type": "function",
     "function": {
@@ -196,6 +220,43 @@ def test_chat_auto_with_tools_knob_emits_internal_search_with_queries_array() ->
     )
     parsed = json.loads(arguments)
     assert isinstance(parsed["queries"], list) and parsed["queries"]
+
+
+def test_multi_tool_knob_emits_parallel_retrieval_calls() -> None:
+    # mock-tools3 + three retrieval tools offered → all three called in
+    # parallel in one assistant message (multi-tool chat turn).
+    choice = complete(
+        model="mock-tools3-ttft0-itl0",
+        tools=[INTERNAL_SEARCH_TOOL, WEB_SEARCH_TOOL, OPEN_URL_TOOL],
+        tool_choice="auto",
+    )
+    assert choice["finish_reason"] == "tool_calls"
+    names = [c["function"]["name"] for c in choice["message"]["tool_calls"]]
+    assert names == ["internal_search", "web_search", "open_url"]
+
+
+def test_multi_tool_knob_caps_at_offered_retrieval_tools() -> None:
+    # mock-tools3 but only one retrieval tool offered → degrades to a single
+    # call rather than inventing tools.
+    choice = complete(
+        model="mock-tools3-ttft0-itl0",
+        tools=[INTERNAL_SEARCH_TOOL],
+        tool_choice="auto",
+    )
+    calls = choice["message"]["tool_calls"]
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "internal_search"
+
+
+def test_tools_knob_count_is_honored() -> None:
+    # mock-tools2 picks exactly two of three offered retrieval tools.
+    choice = complete(
+        model="mock-tools2-ttft0-itl0",
+        tools=[INTERNAL_SEARCH_TOOL, WEB_SEARCH_TOOL, OPEN_URL_TOOL],
+        tool_choice="auto",
+    )
+    names = [c["function"]["name"] for c in choice["message"]["tool_calls"]]
+    assert names == ["internal_search", "web_search"]
 
 
 def test_chat_auto_after_tool_result_streams_final_answer() -> None:

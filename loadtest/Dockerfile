@@ -6,6 +6,7 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 FROM ${BASE_IMAGE_REGISTRY}/locustio/locust:2.44.1
 
 COPY locustfile.py /loadtest/locustfile.py
+COPY shapes.py /loadtest/shapes.py
 COPY onyx_client /loadtest/onyx_client
 COPY scenarios /loadtest/scenarios
 
