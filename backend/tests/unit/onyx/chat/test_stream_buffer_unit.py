@@ -206,3 +206,11 @@ def test_flush_failure_marks_truncated_and_persists_meta() -> None:
     assert read is not None
     assert read.gap
     assert read.blocks == []
+
+
+def test_corrupt_meta_reads_as_missing_buffer() -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    cache.set(f"chatstream_{session_id}_{_RUN_ID}:meta", b"not json{", ex=600)
+
+    assert read_stream_chunks(cache, session_id, _RUN_ID, cursor=0) is None

@@ -14,6 +14,7 @@ import zlib
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import ValidationError
 
 from onyx.cache.interface import CacheBackend
 from onyx.configs.chat_configs import CHAT_STREAM_BUFFER_DONE_TTL_S
@@ -172,9 +173,17 @@ def read_stream_chunks(
     meta_raw = cache.get(_meta_key(chat_session_id, run_id))
     if meta_raw is None:
         return None
-    meta = StreamBufferMeta.model_validate_json(
-        meta_raw.decode("utf-8") if isinstance(meta_raw, bytes) else str(meta_raw)
-    )
+    try:
+        meta = StreamBufferMeta.model_validate_json(
+            meta_raw.decode("utf-8") if isinstance(meta_raw, bytes) else str(meta_raw)
+        )
+    except (ValidationError, UnicodeDecodeError):
+        logger.warning(
+            "stream buffer meta corrupt for session %s run %d; treating as missing",
+            chat_session_id,
+            run_id,
+        )
+        return None
 
     blocks: list[str] = []
     chunk_n = cursor
