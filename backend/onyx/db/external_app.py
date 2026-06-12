@@ -29,6 +29,24 @@ logger = setup_logger()
 _PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
+def decrypt_credentials_or_empty(
+    credentials: SensitiveValue[dict[str, Any]],
+    *,
+    apply_mask: bool,
+    context: str,
+) -> dict[str, Any]:
+    """Stored credential blobs become undecryptable when ENCRYPTION_KEY_SECRET
+    changes. Degrade to "nothing stored" — the app shows as unauthenticated and
+    re-entering credentials overwrites the bad row — instead of failing every
+    caller. ValueError covers UnicodeDecodeError and json.JSONDecodeError.
+    """
+    try:
+        return credentials.get_value(apply_mask=apply_mask)
+    except ValueError:
+        logger.warning("Could not decrypt %s; treating as empty.", context)
+        return {}
+
+
 def _placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
     placeholders: set[str] = set()
     for value in auth_template.values():
@@ -85,7 +103,13 @@ def resolve_masked_credentials(
 ) -> dict[str, str]:
     """Restore real secret values when the caller submits masked placeholders."""
     existing_values = (
-        existing.get_value(apply_mask=False) if existing is not None else {}
+        decrypt_credentials_or_empty(
+            existing,
+            apply_mask=False,
+            context="stored credentials while restoring masked values",
+        )
+        if existing is not None
+        else {}
     )
     resolved: dict[str, str] = {}
     for key, value in incoming.items():
@@ -110,13 +134,22 @@ def is_user_authenticated_for_app(
     ``auth_template`` requires that the org hasn't pre-filled. Apps with no
     user-required keys need no credential row."""
     required = required_user_credential_keys(
-        app.auth_template, app.organization_credentials.get_value(apply_mask=False)
+        app.auth_template,
+        decrypt_credentials_or_empty(
+            app.organization_credentials,
+            apply_mask=False,
+            context=f"organization credentials for external app {app.id}",
+        ),
     )
     if not required:
         return True
     if user_cred is None:
         return False
-    stored = user_cred.user_credentials.get_value(apply_mask=False)
+    stored = decrypt_credentials_or_empty(
+        user_cred.user_credentials,
+        apply_mask=False,
+        context=f"user credentials for external app {app.id}",
+    )
     return all(k in stored for k in required)
 
 

@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.db.external_app import decrypt_credentials_or_empty
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_app_user_credential
 from onyx.db.models import ExternalApp
@@ -52,13 +53,23 @@ def resolve_injection_headers(
         return {}
 
     credentials: dict[str, Any] = dict(
-        app.organization_credentials.get_value(apply_mask=False)
+        decrypt_credentials_or_empty(
+            app.organization_credentials,
+            apply_mask=False,
+            context=f"organization credentials for external app {app.id}",
+        )
     )
     user_cred = get_external_app_user_credential(
         db_session, external_app_id=external_app_id, user_id=user_id
     )
     if user_cred is not None:
-        credentials.update(user_cred.user_credentials.get_value(apply_mask=False))
+        credentials.update(
+            decrypt_credentials_or_empty(
+                user_cred.user_credentials,
+                apply_mask=False,
+                context=f"user credentials for external app {app.id}",
+            )
+        )
 
     return build_auth_headers(app.auth_template, credentials)
 

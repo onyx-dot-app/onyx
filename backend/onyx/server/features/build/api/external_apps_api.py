@@ -11,6 +11,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import Permission
 from onyx.db.external_app import create_external_app
+from onyx.db.external_app import decrypt_credentials_or_empty
 from onyx.db.external_app import delete_external_app
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_apps
@@ -79,7 +80,13 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
         upstream_url_patterns=[] if managed else list(app.upstream_url_patterns),
         auth_template={} if managed else app.auth_template,
         organization_credentials=(
-            {} if managed else app.organization_credentials.get_value(apply_mask=True)
+            {}
+            if managed
+            else decrypt_credentials_or_empty(
+                app.organization_credentials,
+                apply_mask=True,
+                context=f"organization credentials for external app {app.id}",
+            )
         ),
         enabled=app.skill.enabled,
         actions=action_policy_views(app.app_type, stored),
@@ -95,10 +102,19 @@ def _to_user_response(
     those keys (stale keys filtered out).
     """
     required_keys = required_user_credential_keys(
-        app.auth_template, app.organization_credentials.get_value(apply_mask=False)
+        app.auth_template,
+        decrypt_credentials_or_empty(
+            app.organization_credentials,
+            apply_mask=False,
+            context=f"organization credentials for external app {app.id}",
+        ),
     )
     stored = (
-        user_cred.user_credentials.get_value(apply_mask=False)
+        decrypt_credentials_or_empty(
+            user_cred.user_credentials,
+            apply_mask=False,
+            context=f"user credentials for external app {app.id}",
+        )
         if user_cred is not None
         else {}
     )
