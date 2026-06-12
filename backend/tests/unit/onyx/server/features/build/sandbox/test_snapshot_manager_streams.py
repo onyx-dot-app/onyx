@@ -17,7 +17,7 @@ import pytest
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import FileStore
-from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
+from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 
 
 class _FakeFileStore:

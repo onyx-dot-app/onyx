@@ -31,9 +31,7 @@ from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-from onyx.server.features.build.sandbox.manager.snapshot_manager import (
-    SNAPSHOT_FILE_TYPE,
-)
+from onyx.server.features.build.sandbox.snapshot_manager import SNAPSHOT_FILE_TYPE
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
 from tests.external_dependency_unit.craft.conftest import pod_exec
