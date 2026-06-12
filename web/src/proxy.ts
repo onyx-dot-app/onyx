@@ -29,6 +29,12 @@ const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
 const frameProtectionEnabled =
   process.env.WEB_FRAME_PROTECTION_ENABLED?.toLowerCase() !== "false";
 
+// Strict CSP (default-src/script-src/connect-src/etc. directives). Off by
+// default while the allowlist is validated against real deployments; enable
+// with WEB_STRICT_CSP_ENABLED=true (runtime, no rebuild needed).
+const strictCspEnabled =
+  process.env.WEB_STRICT_CSP_ENABLED?.toLowerCase() === "true";
+
 // NEXT_PUBLIC_* and NODE_ENV are inlined at build, so this stays build-time —
 // only the frame-ancestors flag above is runtime.
 const upgradeInsecureRequests =
@@ -45,6 +51,23 @@ const CSP_HEADER = [
     ? "frame-ancestors 'self' chrome-extension: moz-extension:;"
     : "",
   upgradeInsecureRequests ? "upgrade-insecure-requests;" : "",
+  // 'unsafe-inline' is required: the App Router emits inline scripts for
+  // hydration (nonce-based CSP is a deferred follow-up). PostHog is proxied
+  // same-origin via /ph_ingest (next.config.js rewrites), so 'self' covers it;
+  // Sentry events POST to the DSN's ingest host.
+  strictCspEnabled ? "default-src 'self';" : "",
+  strictCspEnabled ? "script-src 'self' 'unsafe-inline';" : "",
+  // connect-src blob: for the DOCX preview modal, which fetches the document
+  // back out of a blob: URL to render it.
+  strictCspEnabled ? "connect-src 'self' blob: https://*.sentry.io;" : "",
+  // img-src stays broad: chat markdown and connector content render remote
+  // images.
+  strictCspEnabled ? "img-src 'self' data: blob: https:;" : "",
+  strictCspEnabled ? "media-src 'self' blob: data:;" : "",
+  // worker-src blob: covers pdf.js-style workers and the PostHog session
+  // recorder; frame-src blob: covers in-app PDF preview.
+  strictCspEnabled ? "worker-src 'self' blob:;" : "",
+  strictCspEnabled ? "frame-src 'self' blob:;" : "",
 ]
   .filter(Boolean)
   .join(" ");
