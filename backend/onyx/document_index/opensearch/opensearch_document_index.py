@@ -28,8 +28,10 @@ from onyx.document_index.interfaces_new import DocumentInsertionRecord
 from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.document_index.interfaces_new import IndexingMetadata
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchClient
+from onyx.document_index.opensearch.client import OpenSearchDocumentMissingError
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.client import SearchHit
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
@@ -542,6 +544,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
     def update(
         self,
         update_requests: list[MetadataUpdateRequest],
+        swallow_document_missing: bool = False,
     ) -> None:
         """Updates some set of chunks.
 
@@ -570,6 +573,10 @@ class OpenSearchDocumentIndex(DocumentIndex):
             len(update_requests),
             self._index_name,
         )
+        # When swallowing, keep going past a missing-doc request so later
+        # requests still update; attribute only the docs that were truly missing.
+        missing_chunk_ids: list[str] = []
+        missing_document_ids: set[str] = set()
         for update_request in update_requests:
             properties_to_update: dict[str, Any] = dict()
             # TODO(andrei): Nit but consider if we can use DocumentChunk here so
@@ -612,6 +619,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 continue
 
             doc_chunk_ids_to_update: list[str] = []
+            chunk_id_to_doc_id: dict[str, str] = {}
             for doc_id in update_request.document_ids:
                 doc_chunk_count = update_request.doc_id_to_chunk_cnt.get(doc_id, -1)
                 if doc_chunk_count < 0:
@@ -643,10 +651,27 @@ class OpenSearchDocumentIndex(DocumentIndex):
                         chunk_index=chunk_index,
                     )
                     doc_chunk_ids_to_update.append(document_chunk_id)
+                    chunk_id_to_doc_id[document_chunk_id] = doc_id
 
-            self._client.bulk_update_documents(
-                document_chunk_ids=doc_chunk_ids_to_update,
-                properties_to_update=properties_to_update,
+            try:
+                self._client.bulk_update_documents(
+                    document_chunk_ids=doc_chunk_ids_to_update,
+                    properties_to_update=properties_to_update,
+                    swallow_document_missing=swallow_document_missing,
+                )
+            except OpenSearchDocumentMissingError as e:
+                # Only raised when swallowing; record the missing docs and keep
+                # processing the remaining requests.
+                missing_chunk_ids.extend(e.missing_chunk_ids)
+                missing_document_ids.update(
+                    chunk_id_to_doc_id[cid]
+                    for cid in e.missing_chunk_ids
+                    if cid in chunk_id_to_doc_id
+                )
+
+        if missing_chunk_ids:
+            raise OpenSearchDocumentMissingError(
+                missing_chunk_ids, sorted(missing_document_ids)
             )
 
     def id_based_retrieval(
@@ -880,22 +905,32 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return inference_chunks
 
-    def index_raw_chunks(self, chunks: list[DocumentChunk]) -> None:
+    def index_raw_chunks(
+        self, chunks: list[DocumentChunk], use_create_only: bool = False
+    ) -> None:
         """Indexes raw document chunks into OpenSearch.
 
-        Used in the Vespa migration task. Can be deleted after migrations are
-        complete.
+        Used by the Vespa migration task and the reindex port. The reindex port
+        passes use_create_only=True so its stale backlog snapshot can never
+        overwrite a chunk a live/forward writer already owns in FUTURE (an
+        existing chunk is a benign 409). The port is pure gap-fill backfill of
+        PRESENT, which is always >= the port in recency, so it never needs to
+        overwrite an existing chunk.
         """
         logger.debug(
             "[OpenSearchDocumentIndex] Indexing %s raw chunks for index %s.",
             len(chunks),
             self._index_name,
         )
-        # Do not raise if the document already exists, just update. This is
-        # because the document may already have been indexed during the
-        # OpenSearch transition period.
+        # Migration path (use_create_only=False): update_if_exists overwrites,
+        # since the doc may already have been indexed during the OpenSearch
+        # transition period. Port path (use_create_only=True): create-only, so
+        # it never overwrites.
         self._client.bulk_index_documents(
-            documents=chunks, tenant_state=self._tenant_state, update_if_exists=True
+            documents=chunks,
+            tenant_state=self._tenant_state,
+            update_if_exists=True,
+            use_create_only=use_create_only,
         )
 
 
@@ -974,7 +1009,12 @@ class OpenSearchIndexPair(DocumentIndex):
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
         self._primary.update(update_requests)
         if self._secondary is not None:
-            self._secondary.update(update_requests)
+            # FUTURE may not have the doc yet (port); re-raise as a typed signal
+            # carrying only the docs that were actually missing.
+            try:
+                self._secondary.update(update_requests, swallow_document_missing=True)
+            except OpenSearchDocumentMissingError as e:
+                raise SecondaryIndexDocumentMissingError(e.missing_document_ids)
 
     def id_based_retrieval(
         self,
