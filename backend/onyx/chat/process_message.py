@@ -1043,6 +1043,9 @@ class _PersistContext(Enum):
 # How often the drain loop polls for user-initiated cancellation (stop button).
 _CANCEL_POLL_INTERVAL_S: Final[float] = 0.05
 
+# How often the writer re-arms the processing fence (FENCE_TTL is 30 min).
+_FENCE_REFRESH_INTERVAL_S: Final[float] = 60.0
+
 
 def _run_models(
     setup: ChatTurnSetup,
@@ -1325,8 +1328,20 @@ def _run_models(
     def _drain_to_completion() -> None:
         """Writer: consume worker output to the very end regardless of client state."""
         models_remaining = n_models
+        last_fence_refresh = time.monotonic()
         try:
             while models_remaining > 0:
+                # Runs can outlive FENCE_TTL; a lapsed fence reads as a dead
+                # writer to resume readers and unblocks concurrent sends.
+                now = time.monotonic()
+                if now - last_fence_refresh >= _FENCE_REFRESH_INTERVAL_S:
+                    last_fence_refresh = now
+                    set_processing_status(
+                        chat_session_id=setup.chat_session.id,
+                        cache=setup.cache,
+                        value=True,
+                        run_id=setup.processing_run_id,
+                    )
                 try:
                     model_idx, item = merged_queue.get(timeout=_CANCEL_POLL_INTERVAL_S)
                 except queue.Empty:

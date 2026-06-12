@@ -217,7 +217,8 @@ async function* withoutHeartbeats(
 
 // Replays an in-flight run's buffered stream from `cursor`, then tails it live.
 // 404 means there is nothing to resume — callers fall back to the persisted
-// session state.
+// session state. Heartbeats pass through: the consumer uses them as liveness
+// ticks to re-check session focus during quiet phases.
 export async function* resumeStream(
   chatSessionId: string,
   cursor: number,
@@ -233,7 +234,7 @@ export async function* resumeStream(
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
-  yield* withoutHeartbeats(handleSSEStream<PacketType>(response, signal));
+  yield* handleSSEStream<PacketType>(response, signal);
 }
 
 export async function setPreferredResponse(

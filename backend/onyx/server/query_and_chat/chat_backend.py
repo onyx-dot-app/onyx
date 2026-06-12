@@ -1009,6 +1009,11 @@ async def search_chats(
     )
 
 
+# ~32 KiB decompressed per chunk → ~1 MiB peak per read; a full-buffer replay
+# would otherwise materialize up to the whole decompressed buffer at once.
+_RESUME_MAX_CHUNKS_PER_READ = 32
+
+
 @router.get("/chat-session/{session_id}/resume-stream")
 def resume_chat_stream(
     session_id: UUID,
@@ -1016,20 +1021,22 @@ def resume_chat_stream(
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
-    db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     """Replay an in-flight run's buffered stream from ``cursor`` and tail it
     live until the run completes. Serves any pod: the buffer lives in the
     shared cache. 404 when the session has no resumable run — the client
     falls back to refetching the session."""
-    try:
-        get_chat_session_by_id(
-            chat_session_id=session_id,
-            user_id=user.id,
-            db_session=db_session,
-        )
-    except ValueError:
-        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND)
+    # Short-lived session: a Depends(get_session) would stay checked out (idle
+    # in transaction) for the lifetime of the SSE response.
+    with get_session_with_current_tenant() as db_session:
+        try:
+            get_chat_session_by_id(
+                chat_session_id=session_id,
+                user_id=user.id,
+                db_session=db_session,
+            )
+        except ValueError:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND)
 
     cache = get_cache_backend()
     run_id = get_processing_run_id(session_id, cache)
@@ -1042,7 +1049,13 @@ def resume_chat_stream(
         chunk_cursor = cursor
         last_emit = time.monotonic()
         while True:
-            read = read_stream_chunks(cache, session_id, run_id, chunk_cursor)
+            read = read_stream_chunks(
+                cache,
+                session_id,
+                run_id,
+                chunk_cursor,
+                max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
+            )
             # Buffer expired/evicted or sequence broken: end the stream — the
             # client refetches the session and renders the persisted message.
             if read is None or read.gap:
@@ -1051,16 +1064,27 @@ def resume_chat_stream(
                 yield "".join(read.blocks)
                 chunk_cursor = read.next_cursor
                 last_emit = time.monotonic()
+                # Drain the backlog before sleeping; done is only trusted once
+                # a read comes back empty (a capped read can precede the tail).
+                continue
             if read.done:
                 return
             # A dead writer never marks done; its fence lapsing is the signal.
-            # One final read drains anything written between the poll above
+            # A final drain catches anything written between the read above
             # and this check (including the done marker's last chunks).
             if not is_chat_session_processing(session_id, cache):
-                read = read_stream_chunks(cache, session_id, run_id, chunk_cursor)
-                if read is not None and not read.gap and read.blocks:
+                while True:
+                    read = read_stream_chunks(
+                        cache,
+                        session_id,
+                        run_id,
+                        chunk_cursor,
+                        max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
+                    )
+                    if read is None or read.gap or not read.blocks:
+                        return
                     yield "".join(read.blocks)
-                return
+                    chunk_cursor = read.next_cursor
             now = time.monotonic()
             if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:
                 yield get_json_line(heartbeat_packet().model_dump())

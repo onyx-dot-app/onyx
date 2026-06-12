@@ -155,9 +155,12 @@ def read_stream_chunks(
     chat_session_id: UUID,
     run_id: int,
     cursor: int,
+    max_chunks: int | None = None,
 ) -> StreamChunkRead | None:
     """Read buffered stream blocks from ``cursor``. Returns None when no buffer
-    exists for the run (never started, or fully expired)."""
+    exists for the run (never started, or fully expired). ``max_chunks`` bounds
+    memory per call — a capped read may return ``done=True`` with chunks still
+    pending, so callers must re-read until ``blocks`` comes back empty."""
     meta_raw = cache.get(_meta_key(chat_session_id, run_id))
     if meta_raw is None:
         return None
@@ -169,6 +172,8 @@ def read_stream_chunks(
     chunk_n = cursor
     gap = meta.truncated
     while chunk_n < meta.chunk_count:
+        if max_chunks is not None and len(blocks) >= max_chunks:
+            break
         raw = cache.get(_chunk_key(chat_session_id, run_id, chunk_n))
         if raw is None or not isinstance(raw, bytes):
             gap = True

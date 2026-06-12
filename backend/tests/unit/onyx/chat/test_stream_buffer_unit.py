@@ -113,6 +113,39 @@ def test_mark_done_switches_ttls_and_sets_done() -> None:
     assert meta.chunk_count == 1
 
 
+def test_max_chunks_bounds_each_read() -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    writer = _make_writer(cache, session_id)
+    for i in range(3):
+        writer.append_line(f'{{"n": {i}}}\n')
+        writer.flush()
+    writer.mark_done()
+
+    first = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0, max_chunks=2)
+    assert first is not None
+    assert "".join(first.blocks) == '{"n": 0}\n{"n": 1}\n'
+    assert first.next_cursor == 2
+    assert not first.gap
+    # done is reported even on a capped read; the empty follow-up read is the
+    # caller's caught-up signal.
+    assert first.done
+
+    rest = read_stream_chunks(
+        cache, session_id, _RUN_ID, cursor=first.next_cursor, max_chunks=2
+    )
+    assert rest is not None
+    assert "".join(rest.blocks) == '{"n": 2}\n'
+    assert rest.next_cursor == 3
+
+    empty = read_stream_chunks(
+        cache, session_id, _RUN_ID, cursor=rest.next_cursor, max_chunks=2
+    )
+    assert empty is not None
+    assert empty.blocks == []
+    assert empty.done
+
+
 def test_missing_chunk_is_a_gap() -> None:
     cache = FakeCache()
     session_id = uuid4()

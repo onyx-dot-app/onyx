@@ -307,8 +307,15 @@ export default function useChatSessionController({
           node.packetCount = accumulated.length;
           updateSessionAndMessageTree(sessionId, new Map(messageMap));
         };
+        // handleSSEStream only releases the connection via this signal —
+        // bailing out of the loop alone leaves the SSE response open.
+        const abortController = new AbortController();
         try {
-          for await (const rawPacket of resumeStream(sessionId, 0)) {
+          for await (const rawPacket of resumeStream(
+            sessionId,
+            0,
+            abortController.signal
+          )) {
             if (!stillCurrent()) {
               return;
             }
@@ -316,6 +323,11 @@ export default function useChatSessionController({
               continue;
             }
             const packet = rawPacket as Packet;
+            // Heartbeats are liveness ticks for the stillCurrent check above,
+            // not run state — never render them.
+            if (packet.obj.type === "chat_heartbeat") {
+              continue;
+            }
             accumulated.push(packet);
             const now = Date.now();
             if (now - lastFlush >= 100) {
@@ -334,6 +346,7 @@ export default function useChatSessionController({
         } catch (error) {
           console.error("Failed to resume in-flight run", { runId, error });
         } finally {
+          abortController.abort();
           if (trailingFlush !== null) {
             clearTimeout(trailingFlush);
           }
