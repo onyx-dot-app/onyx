@@ -170,3 +170,36 @@ def test_share_update_allowed_for_editor_and_preserves_flags(
     assert persona.is_featured
     assert not persona.is_listed
     assert any(share.user_id == new_viewer.id for share in persona.user_shares)
+
+
+def test_editor_cannot_flip_public_visibility(db_session: Session) -> None:
+    """EDITOR-level sharees may edit shares but not make a private agent
+    public; only the owner/admin can flip org-wide visibility."""
+    owner = create_test_user(db_session, "owner")
+    editor = create_test_user(db_session, "editor")
+    persona = create_test_persona(db_session, owner)
+    share_persona_with_user(db_session, persona, editor, PersonaSharePermission.EDITOR)
+    assert not persona.is_public
+
+    # Editor's attempt to go public is ignored.
+    update_persona_shared(
+        persona_id=persona.id,
+        user=editor,
+        db_session=db_session,
+        user_ids=None,
+        is_public=True,
+        public_permission=PersonaSharePermission.EDITOR,
+    )
+    db_session.refresh(persona)
+    assert not persona.is_public
+
+    # Owner can still flip it.
+    update_persona_shared(
+        persona_id=persona.id,
+        user=owner,
+        db_session=db_session,
+        user_ids=None,
+        is_public=True,
+    )
+    db_session.refresh(persona)
+    assert persona.is_public
