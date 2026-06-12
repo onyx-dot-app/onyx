@@ -62,6 +62,11 @@ function ProjectChatItem({
   const [showMoveOptions, setShowMoveOptions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const lastUpdateTime = useMemo(
+    () => timeAgo(chat.time_updated),
+    [chat.time_updated]
+  );
+
   const { refreshChatSessions, removeSession } = useChatSessions();
   const { fetchProjects, projects } = useProjectsContext();
 
@@ -181,46 +186,6 @@ function ProjectChatItem({
 
   return (
     <>
-      <Hoverable.Root group={chat.id} width="full">
-        <LineItemButton
-          href={`/app?chatId=${chat.id}`}
-          group={chat.id}
-          icon={icon}
-          title={chat.name || UNNAMED_CHAT}
-          description={`Last message ${timeAgo(chat.time_updated) ?? ""}`}
-          sizePreset="main-ui"
-          interaction={popoverOpen ? "active" : undefined}
-          rightChildren={
-            <Hoverable.Item group={chat.id} variant="appear-on-hover">
-              <div className="-my-1">
-                <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                  <Popover.Trigger
-                    asChild
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setPopoverOpen(!popoverOpen);
-                    }}
-                  >
-                    <div className="p-1 rounded-sm cursor-pointer select-none">
-                      <SvgMoreHorizontal size={20} />
-                    </div>
-                  </Popover.Trigger>
-                  <Popover.Content
-                    align="end"
-                    side="right"
-                    avoidCollisions
-                    sideOffset={8}
-                  >
-                    <PopoverMenu>{popoverItems}</PopoverMenu>
-                  </Popover.Content>
-                </Popover>
-              </div>
-            </Hoverable.Item>
-          }
-        />
-      </Hoverable.Root>
-
       {isDeleteModalOpen && (
         <ConfirmationModalLayout
           title="Delete Chat"
@@ -257,6 +222,48 @@ function ProjectChatItem({
           }}
         />
       )}
+
+      <Hoverable.Root group={chat.id} width="full">
+        <LineItemButton
+          href={`/app?chatId=${chat.id}`}
+          group={chat.id}
+          icon={icon}
+          title={chat.name || UNNAMED_CHAT}
+          description={
+            lastUpdateTime ? `Last message ${lastUpdateTime}` : undefined
+          }
+          sizePreset="main-ui"
+          interaction={popoverOpen ? "active" : undefined}
+          rightChildren={
+            <Hoverable.Item group={chat.id} variant="appear-on-hover">
+              <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+                <Popover.Trigger
+                  asChild
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPopoverOpen(!popoverOpen);
+                  }}
+                >
+                  <Button
+                    icon={SvgMoreHorizontal}
+                    size="sm"
+                    prominence="tertiary"
+                  />
+                </Popover.Trigger>
+                <Popover.Content
+                  align="end"
+                  side="right"
+                  avoidCollisions
+                  sideOffset={8}
+                >
+                  <PopoverMenu>{popoverItems}</PopoverMenu>
+                </Popover.Content>
+              </Popover>
+            </Hoverable.Item>
+          }
+        />
+      </Hoverable.Root>
     </>
   );
 }
