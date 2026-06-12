@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import BaseFilters
@@ -62,6 +63,7 @@ from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.context.search.utils import populate_file_ids_on_sections
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
+from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
@@ -87,6 +89,7 @@ from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
 from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
+from onyx.secondary_llm_flows.source_filter import extract_source_filter
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
@@ -551,6 +554,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         document_selection_elapsed = 0.0
         document_expansion_elapsed = 0.0
 
+        connected_sources: list[DocumentSource] = []
+
         # Pre-fetch all DB data in a single short-lived session so that
         # parallel search workers need zero DB connections.
         with get_session_with_current_tenant() as db_session:
@@ -619,6 +624,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 or []
             )
 
+            # Project mode ignores user filters, so source scoping doesn't apply.
+            if self.project_id_filter is None:
+                connected_sources = fetch_unique_document_sources(db_session)
+
             # Slack tokens and entity config — only prefetch when Slack
             # search is enabled or we're in a Slack bot context.
             if self.enable_slack_search or self.slack_context:
@@ -656,11 +665,22 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         user_info = override_kwargs.user_info
 
+        detected_source_filter: list[DocumentSource] | None = None
+
+        # Infer scope only when the user/persona hasn't already set one.
+        run_source_filter = bool(connected_sources) and not (
+            self.user_selected_filters and self.user_selected_filters.source_type
+        )
+
         # Skip query expansion if this is a repeat search call
         if override_kwargs.skip_query_expansion:
             logger.debug("Search tool - Skipping query expansion (repeat search call)")
             semantic_query = None
             keyword_queries: list[str] = []
+            if run_source_filter:
+                detected_source_filter = extract_source_filter(
+                    message_history, self.llm, connected_sources
+                )
         else:
             # Start timing for query expansion/rephrase
             query_expansion_start_time = time.time()
@@ -675,6 +695,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     (message_history, self.llm, user_info, memories),
                 ),
             ]
+            if run_source_filter:
+                functions_with_args.append(
+                    (
+                        extract_source_filter,
+                        (message_history, self.llm, connected_sources),
+                    )
+                )
 
             expansion_results = run_functions_tuples_in_parallel(functions_with_args)
 
@@ -688,6 +715,36 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             keyword_queries = (
                 expansion_results[1] if expansion_results[1] is not None else []
             )  # list[str]
+            if run_source_filter:
+                detected_source_filter = expansion_results[2]  # list | None
+
+        if run_source_filter:
+            logger.info(
+                "Internal search - source filter result: %s",
+                (
+                    [source.value for source in detected_source_filter]
+                    if detected_source_filter
+                    else "none (searching all sources)"
+                ),
+            )
+        else:
+            logger.debug("Internal search - source filter inference skipped")
+
+        # Apply the inferred scope to every retrieval backend.
+        if detected_source_filter:
+            self.user_selected_filters = (
+                self.user_selected_filters or BaseFilters()
+            ).model_copy(update={"source_type": detected_source_filter})
+
+            federated_retrieval_infos = [
+                info
+                for info in federated_retrieval_infos
+                if info.source.to_non_federated_source() in detected_source_filter
+            ]
+
+            # Disable the Slack federated search when Slack is out of scope.
+            if DocumentSource.SLACK not in detected_source_filter:
+                slack_access_token = None
 
         # Prepare queries with their weights and hybrid_alpha settings
         # Group 1: Keyword queries (use hybrid_alpha=0.2)
