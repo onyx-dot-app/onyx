@@ -34,9 +34,6 @@ from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.api.models import DirectoryListing
-from onyx.server.features.build.api.models import FileSystemEntry
-from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
@@ -54,8 +51,11 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.sandbox.models import FileSet
+from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
@@ -1372,7 +1372,7 @@ class SessionManager:
             return DirectoryListing(path=path, entries=[])
 
         # Filter hidden files and directories
-        entries: list[FileSystemEntry] = [
+        entries: list[FilesystemEntry] = [
             entry
             for entry in raw_entries
             if entry.name not in HIDDEN_PATTERNS and not entry.name.startswith(".")

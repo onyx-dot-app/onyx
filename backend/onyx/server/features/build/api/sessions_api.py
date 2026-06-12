@@ -33,7 +33,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
 from onyx.server.features.build.api.models import DetailedSessionResponse
-from onyx.server.features.build.api.models import DirectoryListing
 from onyx.server.features.build.api.models import PptxPreviewResponse
 from onyx.server.features.build.api.models import PreProvisionedCheckResponse
 from onyx.server.features.build.api.models import SessionCreateRequest
@@ -54,6 +53,7 @@ from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.sandbox_lifecycle import (

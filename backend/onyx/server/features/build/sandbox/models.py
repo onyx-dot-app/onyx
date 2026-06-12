@@ -73,6 +73,11 @@ class FilesystemEntry(BaseModel):
     mime_type: str | None = None  # MIME type (None for directories)
 
 
+class DirectoryListing(BaseModel):
+    path: str  # Current directory path
+    entries: list[FilesystemEntry]  # Contents
+
+
 class PushFailure(BaseModel):
     sandbox_id: UUID
     reason: str

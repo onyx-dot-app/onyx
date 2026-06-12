@@ -25,11 +25,11 @@ import httpx
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.server.features.build.api.packet_logger import get_packet_logger
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
+from onyx.server.features.build.packet_logger import get_packet_logger
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import PromptResponse

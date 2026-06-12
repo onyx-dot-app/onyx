@@ -13,7 +13,7 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import SessionOrigin
 from onyx.db.enums import SharingScope
-from onyx.server.features.build.sandbox.models import FilesystemEntry as FileSystemEntry
+from onyx.external_apps.models import ActionPolicyView
 
 if TYPE_CHECKING:
     from onyx.db.models import BuildSession
@@ -287,11 +287,6 @@ class SessionStatus(BaseModel):
     webapp_url: str | None = None
 
 
-class DirectoryListing(BaseModel):
-    path: str  # Current directory path
-    entries: list[FileSystemEntry]  # Contents
-
-
 class WebappInfo(BaseModel):
     has_webapp: bool  # Whether a webapp exists in outputs/web
     webapp_url: str | None  # URL to access the webapp (e.g., http://localhost:3015)
@@ -307,17 +302,6 @@ class UploadResponse(BaseModel):
     filename: str  # Sanitized filename
     path: str  # Relative path in sandbox (e.g., "attachments/doc.pdf")
     size_bytes: int  # File size in bytes
-
-
-# ===== Rate Limit Models =====
-class RateLimitResponse(BaseModel):
-    """Rate limit information."""
-
-    is_limited: bool
-    limit_type: str  # "weekly" or "total"
-    messages_used: int
-    limit: int
-    reset_timestamp: str | None = None
 
 
 # ===== Pre-Provisioned Session Check Models =====
@@ -388,16 +372,6 @@ class UpdateExternalAppRequest(BaseModel):
     action_policies: dict[str, EndpointPolicy] | None = None
 
 
-class ActionPolicyView(BaseModel):
-    """One action of a built-in app, with its effective policy — the admin's
-    stored override if set, otherwise the action's ``default_policy``."""
-
-    action_id: str
-    normalised_name: str
-    description: str
-    state: EndpointPolicy
-
-
 class ExternalAppAdminResponse(BaseModel):
     """Admin-facing view of an external app (includes org credentials)."""
 
@@ -460,42 +434,3 @@ class OAuthCallbackRequest(BaseModel):
 class OAuthCallbackResponse(BaseModel):
     success: bool
     external_app_id: int
-
-
-class OrgCredentialFieldDescriptor(BaseModel):
-    """One credential field the admin must fill in to configure a
-    built-in provider."""
-
-    key: str
-    label: str
-    description: str
-    secret: bool
-
-
-class EndpointDescriptor(BaseModel):
-    """One action in a built-in provider's catalog, flattened for the admin UI.
-    The admin picks a policy per action; recognition rules stay backend-side."""
-
-    action_id: str
-    normalised_name: str
-    description: str
-    # The policy a new app's instance of this action defaults to; the create
-    # form seeds each action's selector with it (the admin can still override).
-    default_policy: EndpointPolicy
-
-
-class BuiltInExternalAppDescriptor(BaseModel):
-    """Backend-defined preset for a built-in OAuth provider. The admin
-    UI fetches these and uses them to render the Configure modal +
-    POST body, so adding a new provider is a backend-only change."""
-
-    app_type: ExternalAppType
-    name: str
-    description: str
-    upstream_url_patterns: list[str]
-    auth_template: dict[str, str]
-    required_org_credential_fields: list[OrgCredentialFieldDescriptor]
-    setup_instructions: str
-    # The catalog of actions an admin can govern (empty for providers without
-    # a catalog).
-    actions: list[EndpointDescriptor]
