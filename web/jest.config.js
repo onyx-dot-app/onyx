@@ -45,6 +45,10 @@ const sharedConfig = {
   transformIgnorePatterns: [
     "/node_modules/(?!(" +
       [
+        // Bun stores packages under node_modules/.bun/<pkg>/node_modules/<pkg>.
+        // Let Jest traverse that store path so the package-level ESM allowlist
+        // below can still apply to the nested real package path.
+        "\\.bun",
         // Auth & Security
         "jose",
         // UI Libraries
@@ -52,7 +56,6 @@ const sharedConfig = {
         "@headlessui",
         "@phosphor-icons",
         // i18n
-        "\\.bun/(next-intl|use-intl|intl-messageformat|@formatjs|@schummar).*",
         "next-intl",
         "use-intl",
         "intl-messageformat",
