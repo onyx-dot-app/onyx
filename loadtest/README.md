@@ -160,6 +160,7 @@ The API key is created by an admin via `POST /api/admin/api-key`
 | `ONYX_MSG_CHARS` | 0 | Per-message size in chars (CompressionUser defaults to 8000; 0 = short questions) |
 | `ONYX_DISCONNECT_AFTER` | `first_answer_token` | Milestone after which DisconnectUser drops the stream |
 | `ONYX_FILE_KB` | 512 | Uploaded file size (KB) for FileAttachmentUser |
+| `ONYX_HOST_HEADER` | unset | `Host` header to send (set when `LOCUST_HOST` targets an internal Service to bypass an external ALB/WAF for high-rps runs) |
 | `ONYX_SHAPE` | unset | `stepramp` activates the staged ramp shape |
 | `ONYX_RAMP_STAGES` / `ONYX_RAMP_DWELL` / `ONYX_RAMP_SPAWN` | `25,50,100,200` / 300 / 5 | Ramp user plateaus, dwell seconds, spawn rate |
 | `ONYX_WAIT_SECONDS` | 15 | Think time between turns per user |
