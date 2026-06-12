@@ -18,7 +18,6 @@ from urllib3.exceptions import MaxRetryError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
-from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -35,6 +34,8 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.server.security.models import web_connector_ssrf_enforced
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
 # Re-exported for backwards compatibility with existing tests/callers that
@@ -114,7 +115,9 @@ def protected_url_check(url: str) -> None:
     - To be extra safe, all IPs associated with the URL must be global
     - This is to prevent misuse and not explicit attacks
     """
-    if not WEB_CONNECTOR_VALIDATE_URLS:
+    # The web connector is only guarded at the most restrictive SSRF level; at
+    # VALIDATE_LLM / DISABLED admin-configured connectors may reach private IPs.
+    if not web_connector_ssrf_enforced(get_security_settings().ssrf_protection_level):
         return
 
     parse = urlparse(url)
