@@ -688,7 +688,10 @@ def _cap_extracted_text(
 ) -> list[TextSection | ImageSection | TabularSection]:
     """Bound the total text retained per file. Google-native files (Docs/Slides/
     Sheets) report no `size` metadata, so they bypass the download size threshold
-    and can extract to arbitrarily large text."""
+    and can extract to arbitrarily large text. A non-positive cap disables."""
+    if GOOGLE_DRIVE_MAX_EXTRACTED_TEXT_CHARS <= 0:
+        return sections
+
     remaining = GOOGLE_DRIVE_MAX_EXTRACTED_TEXT_CHARS
     for i, section in enumerate(sections):
         if isinstance(section, ImageSection):

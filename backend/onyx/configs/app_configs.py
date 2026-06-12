@@ -855,6 +855,7 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
 # Google-native files (Docs/Slides/Sheets) report no `size` metadata, so they
 # bypass GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD. Cap the total text extracted per
 # file to bound connector memory; content past the cap is dropped with a warning.
+# 0 disables the cap.
 GOOGLE_DRIVE_MAX_EXTRACTED_TEXT_CHARS = int(
     os.environ.get("GOOGLE_DRIVE_MAX_EXTRACTED_TEXT_CHARS") or 10_000_000
 )

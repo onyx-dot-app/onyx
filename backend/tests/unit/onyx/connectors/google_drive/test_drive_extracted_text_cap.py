@@ -54,6 +54,17 @@ def test_exact_boundary_drops_section_without_partial() -> None:
     assert isinstance(capped[0], TextSection) and capped[0].text == "a" * 100
 
 
+def test_non_positive_cap_disables_capping() -> None:
+    sections: list[TextSection | ImageSection | TabularSection] = [
+        TextSection(text="a" * 100, link="l1"),
+    ]
+    with patch(
+        "onyx.connectors.google_drive.doc_conversion.GOOGLE_DRIVE_MAX_EXTRACTED_TEXT_CHARS",
+        0,
+    ):
+        assert _cap_extracted_text(sections, "f") is sections
+
+
 def test_image_sections_do_not_count_toward_cap() -> None:
     sections: list[TextSection | ImageSection | TabularSection] = [
         TextSection(text="a" * 100, link="l1"),
