@@ -30,9 +30,13 @@ export function checkUserCanEditAgent(
 ): boolean {
   if (!user || agent.builtin_persona) return false;
   if (checkUserIsNoAuthUser(user.id)) return true;
-  return (
-    agent.user_permission === "OWNER" || agent.user_permission === "EDITOR"
-  );
+  if (agent.user_permission != null) {
+    return (
+      agent.user_permission === "OWNER" || agent.user_permission === "EDITOR"
+    );
+  }
+  // Fallback for payloads predating user_permission: only ownership is knowable
+  return agent.owner?.id === user.id;
 }
 
 // TODO(ENG-3766): rename to agent
