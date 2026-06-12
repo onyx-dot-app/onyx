@@ -20,11 +20,6 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.api.models import InteractiveTurnResponse
-from onyx.server.features.build.api.models import MessageInterruptResponse
-from onyx.server.features.build.api.models import MessageListResponse
-from onyx.server.features.build.api.models import MessageRequest
-from onyx.server.features.build.api.models import MessageResponse
 from onyx.server.features.build.db.build_session import count_user_messages
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_build_session
@@ -33,6 +28,7 @@ from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.interactive_turns.executor import (
     start_interactive_turn_runner,
 )
+from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
 from onyx.server.features.build.interactive_turns.state import acquire_active_turn_lock
 from onyx.server.features.build.interactive_turns.state import create_interactive_turn
 from onyx.server.features.build.interactive_turns.state import finish_turn
@@ -42,6 +38,10 @@ from onyx.server.features.build.interactive_turns.state import InteractiveTurnLo
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
 from onyx.server.features.build.session.errors import RateLimitError
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.models import MessageInterruptResponse
+from onyx.server.features.build.session.models import MessageListResponse
+from onyx.server.features.build.session.models import MessageRequest
+from onyx.server.features.build.session.models import MessageResponse
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
