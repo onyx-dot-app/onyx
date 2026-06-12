@@ -1,7 +1,7 @@
 """agent sharing permissions and ownership
 
 Revision ID: 8f2c4a1d9e3b
-Revises: 1cb59a95b250
+Revises: 01c63968ff8f
 Create Date: 2026-06-11
 
 Adds per-share permission levels (EDITOR/VIEWER) to persona shares, group
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "8f2c4a1d9e3b"
-down_revision = "1cb59a95b250"
+down_revision = "01c63968ff8f"
 branch_labels = None
 depends_on = None
 
