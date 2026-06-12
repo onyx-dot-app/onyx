@@ -11,48 +11,55 @@ import {
 } from "@/lib/indexing/interfaces";
 
 /**
- * Fetches the currently-active search settings, including the embedding model
- * configuration and advanced retrieval options.
- *
- * Polls every 5 seconds so the UI stays in sync with backend-side changes
- * (e.g. embedding migration completion).
+ * Fetches the active search settings.
+ * Polls only when a caller provides `pollIntervalMs`.
  */
-export function useCurrentSearchSettings() {
+export function useCurrentSearchSettings({
+  pollIntervalMs = 0,
+}: { pollIntervalMs?: number } = {}) {
   return useSWR<SavedSearchSettings | null>(
     SWR_KEYS.currentSearchSettings,
     errorHandlingFetcher,
-    { refreshInterval: 5000 }
+    { refreshInterval: pollIntervalMs }
   );
 }
 
 /**
- * Fetches the FUTURE embedding model, populated only while a
- * switchover is in progress. Returns null when no re-index is running.
- *
- * Polls every 5 seconds so the in-progress banner appears/disappears
- * promptly when the backend transitions states.
+ * SWR refresh cadence for the secondary settings: 5s while a migration is in
+ * flight, 60s otherwise to catch migrations started elsewhere.
+ */
+export function secondaryRefreshInterval(
+  latestData: EmbeddingModelResponse | null | undefined
+): number {
+  return latestData ? 5000 : 60000;
+}
+
+/**
+ * Returns the secondary (in-progress) embedding model, or null when no
+ * re-index is running. Self-throttles via {@link secondaryRefreshInterval}.
  */
 export function useSecondarySearchSettings() {
   return useSWR<EmbeddingModelResponse | null>(
     SWR_KEYS.secondarySearchSettings,
     errorHandlingFetcher,
-    { refreshInterval: 5000 }
+    { refreshInterval: secondaryRefreshInterval }
   );
 }
 
 /**
- * Fetches the currently-active embedding model. Narrower-typed view of
- * {@link useCurrentSearchSettings} focused on model metadata (name,
- * provider, etc.).
+ * Fetches the active embedding model from the current search settings key.
+ * Polls only when a caller provides `pollIntervalMs`.
  *
  * Returns the backend-persisted shape, which does NOT carry a `description`.
  * Descriptions are frontend-only — look them up via `getCurrentModelCopy`.
  */
-export function useCurrentEmbeddingModel() {
+export function useCurrentEmbeddingModel({
+  pollIntervalMs = 0,
+}: { pollIntervalMs?: number } = {}) {
   return useSWR<EmbeddingModelResponse | null>(
     SWR_KEYS.currentSearchSettings,
     errorHandlingFetcher,
-    { refreshInterval: 5000 }
+    { refreshInterval: pollIntervalMs }
   );
 }
 
