@@ -182,10 +182,12 @@ export default function AppHealthBanner() {
         clearInterval(refreshIntervalRef.current);
       }
 
-      refreshIntervalRef.current = setInterval(
-        attemptTokenRefresh,
-        refreshInterval * 1000
-      );
+      refreshIntervalRef.current = setInterval(() => {
+        // Hidden tabs skip the refresh; UserProvider's useTokenRefresh
+        // catches the session up on return to visibility.
+        if (document.hidden) return;
+        attemptTokenRefresh();
+      }, refreshInterval * 1000);
 
       // If we're going to expire before the next refresh, kick off a refresh now
       if (secondsUntilExpiration < refreshInterval) {
