@@ -60,7 +60,7 @@ services:
       inference_model_server:
         condition: service_started
       minio:
-        condition: service_started
+        condition: service_healthy
         required: false
     restart: unless-stopped
     # DEV: To expose ports, either:
@@ -141,6 +141,9 @@ services:
         condition: service_started
       indexing_model_server:
         condition: service_started
+      minio:
+        condition: service_healthy
+        required: false
     restart: unless-stopped
     environment:
       - FILE_STORE_BACKEND=${FILE_STORE_BACKEND:-s3}
