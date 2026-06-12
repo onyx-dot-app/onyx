@@ -13,6 +13,7 @@ from onyx_client.chat_user import BasicChatUser
 from scenarios import ChatWithSearchUser
 from scenarios import DeepResearchUser
 from scenarios import DisconnectUser
+from scenarios import FileAttachmentUser
 from scenarios import LongConversationUser
 from scenarios import MultiToolUser
 
@@ -23,6 +24,7 @@ __all__ = [
     "DeepResearchUser",
     "LongConversationUser",
     "DisconnectUser",
+    "FileAttachmentUser",
 ]
 
 # Expose the ramp only on request: Locust auto-activates any shape it finds,
