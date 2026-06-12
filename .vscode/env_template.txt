@@ -7,7 +7,8 @@
 
 
 AUTH_TYPE=basic
-# Recommended for basic auth - used for signing password reset and verification tokens
+# Signs password reset, email verification, OAuth login state, and captcha cookies.
+# Required in production; an empty value is tolerated here only because DEV_MODE=true is set below.
 # Generate a secure value with: openssl rand -hex 32
 USER_AUTH_SECRET=""
 DEV_MODE=true
