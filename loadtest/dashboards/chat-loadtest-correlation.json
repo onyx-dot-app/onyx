@@ -116,7 +116,7 @@
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
-      "fieldConfig": { "defaults": { "unit": "decmbytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "fieldConfig": { "defaults": { "unit": "mbytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
       "targets": [
         {
           "refId": "A",

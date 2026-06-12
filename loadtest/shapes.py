@@ -13,15 +13,24 @@ import os
 
 from locust import LoadTestShape
 
+_DEFAULT_STAGES = "25,50,100,200"
+
 
 def _stage_users() -> list[int]:
-    raw = os.environ.get("ONYX_RAMP_STAGES", "25,50,100,200")
-    return [int(part) for part in raw.split(",") if part.strip()]
+    raw = os.environ.get("ONYX_RAMP_STAGES", _DEFAULT_STAGES)
+    users = [int(part) for part in raw.split(",") if part.strip()]
+    # Empty/garbage (e.g. ONYX_RAMP_STAGES="") would make tick() stop instantly
+    # with no users ever spawned — fall back to the default instead.
+    if not users:
+        users = [int(p) for p in _DEFAULT_STAGES.split(",")]
+    return users
 
 
 class StepRampShape(LoadTestShape):
-    dwell_s: int = int(os.environ.get("ONYX_RAMP_DWELL", "300"))
-    spawn_rate: float = float(os.environ.get("ONYX_RAMP_SPAWN", "5"))
+    # Clamp to sane minimums: a non-positive dwell makes end times non-increasing
+    # (test stops immediately) and a non-positive spawn rate stalls spawning.
+    dwell_s: int = max(1, int(os.environ.get("ONYX_RAMP_DWELL", "300")))
+    spawn_rate: float = max(0.1, float(os.environ.get("ONYX_RAMP_SPAWN", "5")))
 
     def __init__(self) -> None:
         super().__init__()
