@@ -119,6 +119,8 @@ function detectSkillScript(command: string): string | null {
   const match = command.match(/\.opencode\/skills\/([\w-]+)\//);
   if (match?.[1]) return match[1];
   // The github skill invokes the gh CLI directly rather than a bundled script.
+  // Any gh call in the sandbox authenticates through the github app's proxy
+  // injection, so attributing all of them to the skill is intentional.
   if (/^gh\s/.test(command)) return "github";
   return null;
 }

@@ -77,18 +77,23 @@ describe("parsePacket", () => {
   });
 
   it("detects gh CLI commands as the github skill", () => {
+    const packet = {
+      tool_call_id: "bash-call-3",
+      kind: "execute",
+      status: "completed",
+      raw_input: {
+        command: "gh api user",
+        description: "Get the connected GitHub user",
+      },
+      _meta: { toolName: "bash" },
+    };
+    expect(parsePacket({ type: "tool_call_start", ...packet })).toMatchObject({
+      type: "tool_call_start",
+      skillName: "github",
+      description: "Get the connected GitHub user",
+    });
     expect(
-      parsePacket({
-        type: "tool_call_progress",
-        tool_call_id: "bash-call-3",
-        kind: "execute",
-        status: "completed",
-        raw_input: {
-          command: "gh api user",
-          description: "Get the connected GitHub user",
-        },
-        _meta: { toolName: "bash" },
-      })
+      parsePacket({ type: "tool_call_progress", ...packet })
     ).toMatchObject({
       type: "tool_call_progress",
       skillName: "github",
