@@ -59,6 +59,7 @@ def _group_shares_from_model(persona: Persona) -> list[PersonaGroupShare]:
             permission=share.permission,
         )
         for share in persona.group_shares
+        if share.user_group is not None
     ]
 
 
