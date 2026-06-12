@@ -108,6 +108,15 @@ class OnyxChatUser(HttpUser):
         self._parent_message_id: int | None = None
         self._session_turn: int = 0
 
+        # File attachments to include on every turn (populated by scenarios
+        # that exercise the file path; empty for plain chat).
+        self.file_descriptors: list[dict[str, Any]] = []
+        self.setup_files()
+
+    def setup_files(self) -> None:
+        """Hook for scenarios to upload files and populate file_descriptors.
+        No-op by default."""
+
     def _create_session(self) -> str | None:
         """Open a session for a multi-turn conversation; None on failure."""
         with self.client.post(
@@ -170,6 +179,8 @@ class OnyxChatUser(HttpUser):
             payload["llm_override"] = self.llm_override
         if self.deep_research:
             payload["deep_research"] = True
+        if self.file_descriptors:
+            payload["file_descriptors"] = self.file_descriptors
         return payload
 
     @task
