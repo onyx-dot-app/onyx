@@ -220,6 +220,7 @@ export default function EmailPasswordForm({
                           field.onChange(e);
                         }}
                         placeholder="●●●●●●●●●●●●●●"
+                        shrinkPlaceholder
                         data-testid="password"
                         autoComplete={
                           isSignup ? "new-password" : "current-password"
