@@ -22,7 +22,7 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
     "react-day-picker": "^9.13.0",
-    "react-dom": "19.2.4",
+    "react-dom": "19.2.7",
     "react-resizable-panels": "^4.4.1",
     "recharts": "^2.15.4",
     "shadcn": "^4.11.0",
