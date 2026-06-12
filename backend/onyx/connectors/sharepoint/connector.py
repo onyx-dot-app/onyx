@@ -144,6 +144,18 @@ DEFAULT_AUTHORITY_HOST = "https://login.microsoftonline.com"
 DEFAULT_GRAPH_API_HOST = "https://graph.microsoft.com"
 DEFAULT_SHAREPOINT_DOMAIN_SUFFIX = "sharepoint.com"
 
+# All Microsoft cloud SharePoint host suffixes. Used to recognize valid
+# SharePoint URLs that don't include a /sites/ or /teams/ segment (e.g. tenant
+# root URLs). Covers commercial, GCC High, DoD, China (21Vianet), and the
+# legacy Germany cloud.
+SHAREPOINT_HOST_SUFFIXES: tuple[str, ...] = (
+    ".sharepoint.com",
+    ".sharepoint.us",
+    ".sharepoint-mil.us",
+    ".sharepoint.cn",
+    ".sharepoint.de",
+)
+
 GRAPH_API_BASE = f"{DEFAULT_GRAPH_API_HOST}/v1.0"
 GRAPH_API_MAX_RETRIES = 5
 GRAPH_API_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -1212,13 +1224,20 @@ class SharepointConnector(
                 "Please check either 'Include Site Documents' or 'Include Site Pages' (or both)."
             )
 
-        # Ensure sites are sharepoint urls
+        # Ensure sites are sharepoint urls. Tenant root URLs
+        # (e.g. https://tenant.sharepoint.com or https://tenant.sharepoint.com/<drive>)
+        # are also accepted: Graph resolves them via /sites/{hostname} and the
+        # parser below treats the trailing path as drive_name/folder_path. The
+        # host-suffix check covers all Microsoft sovereign clouds, not just the
+        # commercial .sharepoint.com domain.
         for site_url in self.sites:
             if not site_url.startswith("https://") or not (
-                "/sites/" in site_url or "/teams/" in site_url
+                "/sites/" in site_url
+                or "/teams/" in site_url
+                or any(suffix in site_url for suffix in SHAREPOINT_HOST_SUFFIXES)
             ):
                 raise ConnectorValidationError(
-                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site or https://your-tenant.sharepoint.com/teams/your-team)"
+                    "Site URLs must be full Sharepoint URLs (e.g. https://your-tenant.sharepoint.com/sites/your-site, https://your-tenant.sharepoint.com/teams/your-team, or the tenant root https://your-tenant.sharepoint.com)"
                 )
             try:
                 validate_outbound_http_url(site_url, https_only=True)
@@ -1453,7 +1472,32 @@ class SharepointConnector(
                     site_type_index = lower_parts.index(site_token)
                     break
 
-            if site_type_index is None or len(parts) <= site_type_index + 1:
+            if site_type_index is None:
+                # Tenant root site: no /sites/<name> or /teams/<name> segment.
+                # Graph resolves base_url via sites.get_by_url(<hostname>) to
+                # the root site; the remaining path is treated as
+                # drive_name (+ optional folder_path).
+                site_url = base_url
+                if parts:
+                    drive_name = unquote(parts[0])
+                    folder_path = (
+                        "/".join(unquote(part) for part in parts[1:])
+                        if len(parts) > 1
+                        else None
+                    )
+                else:
+                    drive_name = None
+                    folder_path = None
+                site_data_list.append(
+                    SiteDescriptor(
+                        url=site_url,
+                        drive_name=drive_name,
+                        folder_path=folder_path,
+                    )
+                )
+                continue
+
+            if len(parts) <= site_type_index + 1:
                 logger.warning(
                     "Site URL '%s' is not a valid Sharepoint URL (must contain /sites/<name> or /teams/<name>)",
                     url,
