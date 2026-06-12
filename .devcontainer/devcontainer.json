@@ -17,7 +17,8 @@
     "source=onyx-devcontainer-local,target=/home/dev/.local,type=volume",
     "source=onyx-devcontainer-venv,target=/workspace/.venv,type=volume",
     "source=onyx-devcontainer-web-node-modules,target=/workspace/web/node_modules,type=volume",
-    "source=onyx-devcontainer-web-next,target=/workspace/web/.next,type=volume"
+    "source=onyx-devcontainer-web-next,target=/workspace/web/.next,type=volume",
+    "source=${localEnv:HOME}/.onyx-env,target=/home/dev/.onyx-env,type=bind,readonly"
   ],
   "containerEnv": {
     "COLORTERM": "truecolor",
@@ -34,7 +35,7 @@
   },
   "remoteUser": "${localEnv:DEVCONTAINER_REMOTE_USER:dev}",
   "updateRemoteUserUID": false,
-  "initializeCommand": "docker network create onyx_default 2>/dev/null || true",
+  "initializeCommand": "docker network create onyx_default 2>/dev/null || true; touch \"${HOME}/.onyx-env\"",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
   "postStartCommand": "sudo bash /workspace/.devcontainer/init-dev-user.sh && if [ \"${ONYX_DEVCONTAINER_FIREWALL:-}\" = \"1\" ]; then sudo bash /workspace/.devcontainer/init-firewall.sh; else echo 'Devcontainer firewall disabled. Set ONYX_DEVCONTAINER_FIREWALL=1 on the host before starting the container to enable it.'; fi",
