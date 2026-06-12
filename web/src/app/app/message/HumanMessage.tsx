@@ -20,10 +20,18 @@ function ClampedContent({ children }: { children: React.ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
 
+  // ResizeObserver instead of a render-tied effect: re-measures on layout /
+  // viewport changes without re-firing on every parent render.
   useEffect(() => {
     const el = ref.current;
-    if (el) setOverflows(el.scrollHeight > COLLAPSED_MAX_PX + 8);
-  }, [children]);
+    if (!el) return;
+    const recompute = () =>
+      setOverflows(el.scrollHeight > COLLAPSED_MAX_PX + 8);
+    recompute();
+    const observer = new ResizeObserver(recompute);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="flex flex-col items-start gap-1">
