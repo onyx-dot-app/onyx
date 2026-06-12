@@ -535,6 +535,16 @@ class OnyxRedisConstants:
     ACTIVE_FENCES = "active_fences"
 
 
+class OnyxRedisChannels:
+    """Redis pub/sub channel names — global to the instance, NOT tenant-prefixed.
+    Every subscribed process across all tenants receives every message, so carry
+    any tenant scope in the payload rather than the channel name.
+    """
+
+    # Payload is a tenant id; subscribers drop that tenant's cached SecuritySettings.
+    SECURITY_SETTINGS_INVALIDATE = "channel:security_settings_invalidate"
+
+
 class OnyxCeleryPriority(int, Enum):
     HIGHEST = 0
     HIGH = auto()

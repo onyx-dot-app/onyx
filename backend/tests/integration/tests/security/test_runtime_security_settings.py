@@ -3,6 +3,11 @@
 The integration api_server runs as a single uvicorn worker, so the PUT
 handler's local-cache invalidation takes effect on the very next request
 without any TTL wait.
+
+Being single-worker, it does NOT exercise cross-process propagation (the pub/sub
+path in ``onyx.server.security.store``). A true multi-worker test belongs in a
+multi-process harness if/when one exists; the publish→subscribe wiring itself is
+covered in the external_dependency_unit ``test_security_settings_pubsub`` module.
 """
 
 from collections.abc import Generator

@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 from redis.lock import Lock as RedisLock
 
 from onyx.cache.interface import CacheBackend
@@ -80,3 +82,29 @@ class RedisCacheBackend(CacheBackend):
 
     def blpop(self, keys: list[str], timeout: int = 0) -> tuple[bytes, bytes] | None:
         return self._r.blpop(keys, timeout=timeout)
+
+    # -- pub/sub -----------------------------------------------------------
+    #
+    # Use the *raw* (non-prefixed) client: pub/sub channels are global, so the
+    # name must be identical across tenants and processes.
+
+    def publish(self, channel: str, message: str | bytes) -> None:
+        self._r.raw_client.publish(channel, message)
+
+    def subscribe(self, channel: str) -> Iterator[bytes]:
+        pubsub = self._r.raw_client.pubsub()
+        try:
+            pubsub.subscribe(channel)
+            for message in pubsub.listen():
+                # listen() also emits a 'subscribe' confirmation; skip non-messages.
+                if message.get("type") != "message":
+                    continue
+                data = message.get("data")
+                if isinstance(data, bytes):
+                    yield data
+        finally:
+            # close() can itself raise if the connection already died.
+            try:
+                pubsub.close()
+            except Exception:
+                pass

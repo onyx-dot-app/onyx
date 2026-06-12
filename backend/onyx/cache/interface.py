@@ -1,4 +1,5 @@
 import abc
+from collections.abc import Iterator
 from enum import Enum
 
 from redis.exceptions import RedisError
@@ -115,3 +116,19 @@ class CacheBackend(abc.ABC):
         Returns ``(key, value)`` or ``None`` on timeout.
         """
         raise NotImplementedError
+
+    # -- pub/sub -----------------------------------------------------------
+    #
+    # Non-abstract so non-pub/sub backends (and test fakes) need not implement
+    # them; the default raises so dependent callers gate on a supporting backend
+    # rather than silently no-op'ing. Channels are global (not tenant-prefixed) —
+    # carry tenant scope in the payload.
+
+    def publish(self, channel: str, message: str | bytes) -> None:
+        """Publish *message* on *channel* to all subscribers."""
+        raise NotImplementedError(f"{type(self).__name__} does not support pub/sub.")
+
+    def subscribe(self, channel: str) -> Iterator[bytes]:
+        """Yield each message payload on *channel* as ``bytes``. Blocks between
+        messages (run on a dedicated thread) and raises on connection loss."""
+        raise NotImplementedError(f"{type(self).__name__} does not support pub/sub.")
