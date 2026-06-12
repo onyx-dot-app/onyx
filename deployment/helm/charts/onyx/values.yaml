@@ -1362,6 +1362,10 @@ configMap:
   MIN_THREADS_ML_MODELS: ""
   # Indexing Configs
   NUM_INDEXING_WORKERS: ""
+  # Fail an indexing attempt when its worker exceeds this RSS (MB) instead of
+  # letting the pod get OOM-killed; "" = disabled
+  INDEXING_WORKER_MEMORY_LIMIT_MB: ""
+  INDEXING_WORKER_TRACEMALLOC: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
   DASK_JOB_CLIENT_ENABLED: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""
