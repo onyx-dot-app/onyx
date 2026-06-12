@@ -264,8 +264,6 @@ export default function ChatSearchCommandMenu({
                             ↵
                           </Text>
                         ) : (
-                          // data-testid lets visual-regression screenshots mask
-                          // the relative timestamp (non-deterministic content).
                           <Text
                             secondaryBody
                             text03
@@ -327,8 +325,6 @@ export default function ChatSearchCommandMenu({
                           ↵
                         </Text>
                       ) : (
-                        // data-testid lets visual-regression screenshots mask
-                        // the relative timestamp (non-deterministic content).
                         <Text
                           secondaryBody
                           text03
