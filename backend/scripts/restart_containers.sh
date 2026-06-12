@@ -94,6 +94,8 @@ else
 fi
 
 # Start the MinIO container with optional volume
+# TODO(security): publish on 127.0.0.1:9004 / 127.0.0.1:9005 so MinIO binds
+# loopback instead of 0.0.0.0 and isn't reachable from the LAN on a dev machine.
 echo "Starting MinIO container..."
 if [[ -n "$MINIO_VOLUME" ]]; then
     docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin -v "$MINIO_VOLUME":/data minio/minio server /data --console-address ":9001"

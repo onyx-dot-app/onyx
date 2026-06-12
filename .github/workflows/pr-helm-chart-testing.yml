@@ -130,7 +130,14 @@ jobs:
           echo "=== Validating chart dependencies ==="
           cd deployment/helm/charts/onyx
           helm dependency update
-          helm lint . --set auth.userauth.values.user_auth_secret=placeholder
+          # objectstorage ships no defaults (fail closed in values.yaml), so lint
+          # must supply placeholder credentials the same way userauth does.
+          helm lint . \
+            --set auth.userauth.values.user_auth_secret=placeholder \
+            --set auth.objectstorage.values.s3_aws_access_key_id=placeholder \
+            --set auth.objectstorage.values.s3_aws_secret_access_key=placeholder \
+            --set auth.objectstorage.values.rootUser=placeholder \
+            --set auth.objectstorage.values.rootPassword=placeholder
 
       - name: Run chart-testing (install) with enhanced monitoring
         timeout-minutes: 25

@@ -1270,18 +1270,19 @@ auth:
       S3_AWS_ACCESS_KEY_ID: s3_aws_access_key_id
       S3_AWS_SECRET_ACCESS_KEY: s3_aws_secret_access_key
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
-    # SECURITY: the minioadmin values below are insecure defaults for local/dev
-    # clusters only. For production, override these or (preferred) set
-    # `existingSecret` / the `externalSecret` block above to source credentials
-    # from a real secret store — anyone who can reach MinIO with the default
-    # minioadmin:minioadmin can list, download, or modify stored files. Keep the
-    # s3_aws_* pair identical to rootUser/rootPassword (the app authenticates to
-    # MinIO using its root credentials).
+    # SECURITY: no defaults are shipped — leaving these empty makes helm
+    # install/upgrade fail closed (see templates/auth-secrets.yaml) so a real
+    # cluster can never run on the well-known minioadmin:minioadmin. Provide
+    # values here, or (preferred) set `existingSecret` / the `externalSecret`
+    # block above to source credentials from a real secret store. Generate with:
+    # `openssl rand -hex 16` (key) and `openssl rand -hex 32` (secret). Keep the
+    # s3_aws_* pair identical to rootUser/rootPassword — the app authenticates to
+    # MinIO using its root credentials.
     values:
-      s3_aws_access_key_id: "minioadmin"
-      s3_aws_secret_access_key: "minioadmin"
-      rootUser: "minioadmin"
-      rootPassword: "minioadmin"
+      s3_aws_access_key_id: ""
+      s3_aws_secret_access_key: ""
+      rootUser: ""
+      rootPassword: ""
   oauth:
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: false
