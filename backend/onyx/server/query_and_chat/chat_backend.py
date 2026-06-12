@@ -1012,7 +1012,7 @@ async def search_chats(
 @router.get("/chat-session/{session_id}/resume-stream")
 def resume_chat_stream(
     session_id: UUID,
-    cursor: int = 0,
+    cursor: int = Query(0, ge=0),
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),

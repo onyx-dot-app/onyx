@@ -1393,6 +1393,14 @@ def _run_models(
                 _persist_model_outcome(i, _PersistContext.NORMAL)
         except Exception:
             logger.exception("chat stream writer crashed")
+            # Generic message: the raw exception may embed provider API keys.
+            _publish(
+                StreamingError(
+                    error="The response stream ended unexpectedly. Please try again.",
+                    error_code="STREAM_WRITER_ERROR",
+                    is_retryable=True,
+                )
+            )
         finally:
             # Mark done before _run_post_steps clears the fence so resume
             # readers never see a fence-less, not-done buffer and drop the tail.
