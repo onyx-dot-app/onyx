@@ -87,6 +87,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "gemini": "Gemini",
     "stability": "Stability",
     "writer": "Writer",
+    "baidu": "Baidu",
     # Custom provider display names (used in the custom provider picker)
     "aiml": "AI/ML",
     "assemblyai": "AssemblyAI",
@@ -144,6 +145,7 @@ VENDOR_BRAND_NAMES: dict[str, str] = {
     "qwen": "Qwen",
     "alibaba": "Qwen",
     "writer": "Palmyra",
+    "baidu": "ERNIE",
 }
 
 # Aggregator providers that host models from multiple vendors
@@ -328,6 +330,8 @@ MODEL_PREFIX_TO_VENDOR: dict[str, str] = {
     "nemotron": "nvidia",
     # xAI
     "grok": "xai",
+    # Baidu
+    "ernie": "baidu",
 }
 
 
