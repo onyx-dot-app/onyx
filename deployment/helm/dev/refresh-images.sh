@@ -12,18 +12,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 CLUSTER_NAME="${CLUSTER_NAME:-onyx-dev}"
-BACKEND_IMAGE="onyxdotapp/onyx-backend:dev"
+BACKEND_IMAGE="${BACKEND_IMAGE:-onyxdotapp/onyx-backend:dev}"
 SANDBOX_IMAGE="${SANDBOX_IMAGE:-onyxdotapp/sandbox:dev}"
 SANDBOX_IMAGE_DIR="$REPO_ROOT/backend/onyx/server/features/build/sandbox/image"
 
+# docker's .Created is always UTC; strip Z + fractional seconds, then parse
+# with GNU date (-d) or BSD date (-j -f).
+utc_to_epoch() {
+  local ts="${1%Z}"
+  ts="${ts%%.*}"
+  date -u -d "$ts" +%s 2>/dev/null || date -u -j -f '%Y-%m-%dT%H:%M:%S' "$ts" +%s
+}
+
 check_staleness() {
   local stale=0
-  local backend_created last_commit
+  local backend_created last_commit commit_epoch
   backend_created=$(docker image inspect "$BACKEND_IMAGE" --format '{{.Created}}' 2>/dev/null || echo "missing")
   last_commit=$(git -C "$REPO_ROOT" log -1 --format=%cI -- backend/)
+  commit_epoch=$(git -C "$REPO_ROOT" log -1 --format=%ct -- backend/)
   echo "backend image built:        $backend_created"
   echo "last backend/ commit:       $last_commit"
-  if [[ "$backend_created" == "missing" || "$backend_created" < "$last_commit" ]]; then
+  if [[ "$backend_created" == "missing" || "$(utc_to_epoch "$backend_created")" -lt "$commit_epoch" ]]; then
     echo "WARNING: $BACKEND_IMAGE is older than the latest backend/ commit — the"
     echo "         sandbox-proxy is running stale code. Run: $0"
     stale=1
