@@ -74,6 +74,7 @@ class UserFileIndexingAdapter:
         self,
         documents: list[Document],
         ignore_time_skip: bool,  # noqa: ARG002
+        index_to_secondary: bool,  # noqa: ARG002
     ) -> DocumentBatchPrepareContext:
         return DocumentBatchPrepareContext(
             updatable_docs=documents,

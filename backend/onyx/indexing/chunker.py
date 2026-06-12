@@ -30,6 +30,11 @@ CHUNK_OVERLAP = 0
 # overwhelm the actual contents of the chunk
 MAX_METADATA_PERCENTAGE = 0.25
 CHUNK_MIN_CONTENT = 256
+# Tokens reserved per chunk for the contextual-RAG doc summary + chunk context.
+# Single source of truth — the reindex port reuses it to mirror indexing budgets.
+DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS = MAX_CONTEXT_TOKENS * (
+    int(USE_CHUNK_SUMMARY) + int(USE_DOCUMENT_SUMMARY)
+)
 
 logger = setup_logger()
 
@@ -144,8 +149,8 @@ class Chunker:
             assert USE_CHUNK_SUMMARY or USE_DOCUMENT_SUMMARY, (
                 "Contextual RAG requires at least one of chunk summary and document summary enabled"
             )
-        self.default_contextual_rag_reserved_tokens = MAX_CONTEXT_TOKENS * (
-            int(USE_CHUNK_SUMMARY) + int(USE_DOCUMENT_SUMMARY)
+        self.default_contextual_rag_reserved_tokens = (
+            DEFAULT_CONTEXTUAL_RAG_RESERVED_TOKENS
         )
         self.tokenizer = tokenizer
         self.callback = callback
