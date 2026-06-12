@@ -1,17 +1,17 @@
 "use client";
 
 import React, { useMemo } from "react";
-import Link from "next/link";
-import { ChatSessionMorePopup } from "@/components/sidebar/ChatSessionMorePopup";
+import { ProjectChatMorePopup } from "@/sections/projects/ProjectChatMorePopup";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { ChatSession } from "@/app/app/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useAgents } from "@/lib/agents/hooks";
-import { Card, Text } from "@opal/components";
-import { cn } from "@opal/utils";
+import { Card, LineItemButton, Text } from "@opal/components";
+import { Hoverable, Interactive } from "@opal/core";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { SvgBubbleText, SvgSimpleLoader } from "@opal/icons";
 import { timeAgo } from "@opal/time";
+import { Content } from "@opal/layouts";
 
 export default function ProjectChatSessionList() {
   const {
@@ -24,7 +24,6 @@ export default function ProjectChatSessionList() {
   const [isRenamingChat, setIsRenamingChat] = React.useState<string | null>(
     null
   );
-  const [hoveredChatId, setHoveredChatId] = React.useState<string | null>(null);
 
   const projectChats: ChatSession[] = useMemo(() => {
     const sessions = currentProjectDetails?.project?.chat_sessions || [];
@@ -58,97 +57,51 @@ export default function ProjectChatSessionList() {
             </div>
           </Card>
         ) : (
-          <div className="flex flex-col gap-2">
-            {projectChats.map((chat) => (
-              <Link
-                key={chat.id}
-                href={{ pathname: "/app", query: { chatId: chat.id } }}
-                className="relative flex w-full"
-                onMouseEnter={() => setHoveredChatId(chat.id)}
-                onMouseLeave={() => setHoveredChatId(null)}
-              >
-                <div
-                  className={cn(
-                    "w-full rounded-08 py-2 transition-colors p-1.5",
-                    hoveredChatId === chat.id && "bg-background-tint-02"
-                  )}
-                >
-                  <div className="flex gap-3 min-w-0 w-full">
-                    <div className="flex h-full w-fit pt-1 pl-1">
-                      {(() => {
-                        const personaIdToFeatured =
-                          currentProjectDetails?.persona_id_to_is_featured ||
-                          {};
-                        const isFeatured = personaIdToFeatured[chat.persona_id];
-                        if (isFeatured === false) {
-                          const agent = agents.find(
-                            (a) => a.id === chat.persona_id
-                          );
-                          if (agent) {
-                            return (
-                              <div className="h-full pt-1">
-                                <AgentAvatar agent={agent} size={18} />
-                              </div>
-                            );
+          projectChats.map((chat) => {
+            const personaIdToFeatured =
+              currentProjectDetails?.persona_id_to_is_featured || {};
+            const isFeatured = personaIdToFeatured[chat.persona_id];
+            const agent =
+              isFeatured === false
+                ? agents.find((a) => a.id === chat.persona_id)
+                : undefined;
+            const icon = agent
+              ? () => <AgentAvatar agent={agent} size={18} />
+              : SvgBubbleText;
+
+            return (
+              <div key={chat.id} className="px-1">
+                <Hoverable.Root group={chat.id} width="full">
+                  <LineItemButton
+                    href={`/app?chatId=${chat.id}`}
+                    group={chat.id}
+                    icon={icon}
+                    title={chat.name || UNNAMED_CHAT}
+                    description={`Last message ${timeAgo(chat.time_updated) ?? ""}`}
+                    sizePreset="main-ui"
+                    rightChildren={
+                      <Hoverable.Item group={chat.id} variant="appear-on-hover">
+                        <ProjectChatMorePopup
+                          chatSession={chat}
+                          projectId={currentProjectId}
+                          isRenamingChat={isRenamingChat === chat.id}
+                          setIsRenamingChat={(value) =>
+                            setIsRenamingChat(value ? chat.id : null)
                           }
-                        }
-                        return (
-                          <SvgBubbleText className="h-4 w-4 stroke-text-02" />
-                        );
-                      })()}
-                    </div>
-                    <div className="flex flex-col w-full">
-                      <div className="flex items-center gap-1 w-full justify-between">
-                        <div className="flex items-center gap-1">
-                          <Text
-                            as="p"
-                            font="main-ui-body"
-                            color="text-03"
-                            nowrap
-                            maxLines={1}
-                            title={chat.name}
-                          >
-                            {chat.name || UNNAMED_CHAT}
-                          </Text>
-                        </div>
-                        <div className="flex items-center">
-                          <ChatSessionMorePopup
-                            chatSession={chat}
-                            projectId={currentProjectId}
-                            isRenamingChat={isRenamingChat === chat.id}
-                            setIsRenamingChat={(value) =>
-                              setIsRenamingChat(value ? chat.id : null)
-                            }
-                            search={false}
-                            afterDelete={() => {
-                              refreshCurrentProjectDetails();
-                            }}
-                            afterMove={() => {
-                              refreshCurrentProjectDetails();
-                            }}
-                            afterRemoveFromProject={() => {
-                              refreshCurrentProjectDetails();
-                            }}
-                            iconSize={20}
-                            isVisible={hoveredChatId === chat.id}
-                          />
-                        </div>
-                      </div>
-                      <Text
-                        as="p"
-                        font="secondary-body"
-                        color="text-03"
-                        nowrap
-                        maxLines={1}
-                      >
-                        {`Last message ${timeAgo(chat.time_updated)}`}
-                      </Text>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+                          search={false}
+                          afterDelete={refreshCurrentProjectDetails}
+                          afterMove={refreshCurrentProjectDetails}
+                          afterRemoveFromProject={refreshCurrentProjectDetails}
+                          iconSize={20}
+                          isVisible
+                        />
+                      </Hoverable.Item>
+                    }
+                  />
+                </Hoverable.Root>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

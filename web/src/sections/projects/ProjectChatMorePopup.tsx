@@ -12,7 +12,6 @@ import { FiMoreHorizontal } from "react-icons/fi";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCallback, useState, useMemo } from "react";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
-// PopoverMenu already imported above
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -20,11 +19,11 @@ import { Button } from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgFolder, SvgFolderIn, SvgShare, SvgTrash } from "@opal/icons";
-// Constants
+
 const DEFAULT_PERSONA_ID = 0;
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
 
-interface ChatSessionMorePopupProps {
+interface ProjectChatMorePopupProps {
   chatSession: ChatSession;
   projectId?: number;
   isRenamingChat: boolean;
@@ -38,7 +37,7 @@ interface ChatSessionMorePopupProps {
   isVisible?: boolean;
 }
 
-export function ChatSessionMorePopup({
+export function ProjectChatMorePopup({
   chatSession,
   projectId,
   isRenamingChat: _isRenamingChat,
@@ -50,7 +49,7 @@ export function ChatSessionMorePopup({
   search,
   iconSize = 16,
   isVisible = false,
-}: ChatSessionMorePopupProps) {
+}: ProjectChatMorePopupProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const { refreshChatSessions, removeSession } = useChatSessions();
