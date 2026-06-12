@@ -123,6 +123,11 @@ HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL = (
 # fixes it)
 WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 
+# Native-mobile Google OAuth callback origin. Must point at the backend origin,
+# or a path proxied to the backend, e.g. https://example.com/api. Leave unset to
+# disable mobile Google OAuth.
+MOBILE_OAUTH_REDIRECT_BASE = os.environ.get("MOBILE_OAUTH_REDIRECT_BASE")
+
 
 #####
 # Auth Configs
