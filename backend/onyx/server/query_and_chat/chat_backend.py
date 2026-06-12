@@ -71,6 +71,7 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
+from onyx.llm.override_models import LLMOverride
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
@@ -427,11 +428,38 @@ def rename_chat_session(
             )
         return RenameChatSessionResponse(new_name=name)
 
-    llm = get_default_llm(
-        additional_headers=extract_headers(
-            request.headers, LITELLM_PASS_THROUGH_HEADERS
-        )
+    additional_headers = extract_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS)
+
+    # Mirror how the chat flow resolves the LLM so the auto-name runs on the
+    # same model the user is actually chatting with. Priority: explicit session
+    # llm_override, then the UI-selected alternate model, then persona defaults
+    # (handled inside get_llm_for_persona). Using the default LLM here would
+    # swap the user's model out of VRAM on self-hosted GPU setups (#8330).
+    chat_session = get_chat_session_by_id(
+        chat_session_id=chat_session_id,
+        user_id=user_id,
+        db_session=db_session,
+        eager_load_persona=True,
     )
+    session_override = chat_session.llm_override
+    if session_override is None and chat_session.current_alternate_model:
+        session_override = LLMOverride(
+            model_version=chat_session.current_alternate_model
+        )
+
+    try:
+        llm = get_llm_for_persona(
+            persona=chat_session.persona,
+            user=user,
+            llm_override=session_override,
+            additional_headers=additional_headers,
+        )
+    except Exception as e:
+        logger.warning(
+            "Failed to resolve session LLM for chat rename (%s); falling back to default",
+            e,
+        )
+        llm = get_default_llm(additional_headers=additional_headers)
 
     # Read-phase short session: usage check + history fetch. Closed before the
     # LLM call so the underlying pool connection is fully released for the
