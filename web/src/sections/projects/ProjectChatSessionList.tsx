@@ -7,7 +7,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { ChatSession } from "@/app/app/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useAgents } from "@/lib/agents/hooks";
-import { formatRelativeTime } from "@/app/app/components/projects/project_utils";
+import { formatRelativeTime } from "@/sections/projects/project_utils";
 import { Card, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
