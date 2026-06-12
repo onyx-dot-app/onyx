@@ -219,3 +219,27 @@ def collapse_citations(
     combined_mapping.update(additional_mappings)
 
     return updated_text, combined_mapping
+
+
+# Matches a rendered hyperlink citation, e.g. "[[1]](https://example.com)", and
+# captures the citation number. This is exactly the form emitted by
+# DynamicCitationProcessor in HYPERLINK mode (f"[[{num}]]({link})"). The link body
+# uses [^)]* (a negated character class) so the pattern stays linear-time / ReDoS-safe.
+_RENDERED_CITATION_LINK_PATTERN = re.compile(r"\[\[(\d+)\]\]\([^)]*\)")
+
+
+def strip_rendered_citation_links(text: str) -> str:
+    """Convert rendered hyperlink citations "[[n]](url)" back to bare "[n]" markers.
+
+    Assistant messages are persisted in their post-processed HYPERLINK form
+    ("[[n]](url)"). When such a message is replayed into the LLM as conversation
+    history, the model tends to imitate that link format on the next turn — even
+    though the system prompt asks for bare "[1]" markers and explicitly says not to
+    add links. The citation processor then re-wraps the bare marker it finds inside
+    the model's "[ [1]](url)" output, producing nested "[ [[n]](url) ](url)".
+
+    Normalizing assistant history back to the bare markers the prompt asks for keeps
+    the model emitting the format the citation processor expects, which prevents the
+    nesting from ever starting.
+    """
+    return _RENDERED_CITATION_LINK_PATTERN.sub(r"[\1]", text)
