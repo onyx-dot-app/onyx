@@ -264,13 +264,15 @@ export default function ChatSearchCommandMenu({
                             ↵
                           </Text>
                         ) : (
-                          // Wrapped so visual-regression screenshots can mask
+                          // data-testid lets visual-regression screenshots mask
                           // the relative timestamp (non-deterministic content).
-                          <span data-testid="command-menu-timestamp">
-                            <Text secondaryBody text03>
-                              {timeAgo(chat.time)}
-                            </Text>
-                          </span>
+                          <Text
+                            secondaryBody
+                            text03
+                            data-testid="command-menu-timestamp"
+                          >
+                            {timeAgo(chat.time)}
+                          </Text>
                         )
                       }
                       onSelect={() => handleChatSelect(chat.id)}
@@ -325,13 +327,15 @@ export default function ChatSearchCommandMenu({
                           ↵
                         </Text>
                       ) : (
-                        // Wrapped so visual-regression screenshots can mask
+                        // data-testid lets visual-regression screenshots mask
                         // the relative timestamp (non-deterministic content).
-                        <span data-testid="command-menu-timestamp">
-                          <Text secondaryBody text03>
-                            {timeAgo(project.time)}
-                          </Text>
-                        </span>
+                        <Text
+                          secondaryBody
+                          text03
+                          data-testid="command-menu-timestamp"
+                        >
+                          {timeAgo(project.time)}
+                        </Text>
                       )
                     }
                     onSelect={() => handleProjectSelect(project.id)}
