@@ -33,9 +33,7 @@ def _enforce_ssrf(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         web_connector,
         "get_security_settings",
-        lambda: SimpleNamespace(
-            ssrf_protection_level=SSRFProtectionLevel.VALIDATE_ALL
-        ),
+        lambda: SimpleNamespace(ssrf_protection_level=SSRFProtectionLevel.VALIDATE_ALL),
     )
 
 
