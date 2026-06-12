@@ -1772,3 +1772,43 @@ def test_bifrost_claude_includes_allowed_openai_params() -> None:
         assert kwargs["base_url"] == "https://bifrost.example.com/v1"
         assert kwargs["custom_llm_provider"] == "openai"
         assert kwargs["allowed_openai_params"] == ["tool_choice"]
+
+
+def test_user_metadata_passthrough_allowed_for_openai_compatible_provider(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    messages: LanguageModelInput = [UserMessage(content="Hello!")]
+    user_identity = LLMUserIdentity(
+        user_id="user@example.com",
+        session_id="session-123",
+    )
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hello!"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model="gpt-3.5-turbo",
+        ),
+    ]
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", True),
+    ):
+        mock_completion.return_value = mock_stream_chunks
+
+        default_multi_llm.invoke(messages, tools=None, user_identity=user_identity)
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["user"] == "user@example.com"
+        assert kwargs["metadata"] == {"session_id": "session-123"}
+        assert kwargs["allowed_openai_params"] == [
+            "tool_choice",
+            "user",
+            "metadata",
+        ]
