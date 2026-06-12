@@ -1,7 +1,8 @@
 """External-app credential resolver.
 
 Claims a request iff the matcher has attributed it to a connected `ExternalApp`
-(`ctx.matched_actions is not None`) and renders the app's `auth_template` from the org +
+(`ctx.matched_actions is not None`) and renders the matched action's auth
+template (catalog override, else the app's stored `auth_template`) from the org +
 per-user credentials via `resolve_injection_headers`. Per-header fail-open
 behaviour for missing placeholders lives in `build_auth_headers`.
 """
@@ -54,7 +55,10 @@ class ExternalAppResolver(CredentialResolver):
 
         with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
             headers = resolve_injection_headers(
-                db, matched_actions.external_app_id, ctx.sandbox.user_id
+                db,
+                matched_actions.external_app_id,
+                ctx.sandbox.user_id,
+                action_types=[a.action_type for a in matched_actions.actions],
             )
 
         # Per-app debug line so `external_app_id` survives in logs even when

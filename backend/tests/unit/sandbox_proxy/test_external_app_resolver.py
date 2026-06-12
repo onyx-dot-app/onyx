@@ -63,13 +63,19 @@ def test_resolve_forwards_external_app_id_user_id_and_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The resolver opens a tenant-scoped session and forwards
-    `(external_app_id, user_id)` to the renderer."""
+    `(external_app_id, user_id, action_types)` to the renderer."""
     captured: dict[str, Any] = {}
 
-    def _fake(db: Any, external_app_id: int, user_id: Any) -> dict[str, str]:
+    def _fake(
+        db: Any,
+        external_app_id: int,
+        user_id: Any,
+        action_types: list[str] | None = None,
+    ) -> dict[str, str]:
         captured["db"] = db
         captured["external_app_id"] = external_app_id
         captured["user_id"] = user_id
+        captured["action_types"] = action_types
         return {"Authorization": "Bearer real"}
 
     monkeypatch.setattr(external_app, "resolve_injection_headers", _fake)
@@ -86,6 +92,7 @@ def test_resolve_forwards_external_app_id_user_id_and_tenant(
     assert headers == {"Authorization": "Bearer real"}
     assert captured["external_app_id"] == 99
     assert captured["user_id"] == ctx.sandbox.user_id
+    assert captured["action_types"] == [a.action_type for a in matched_actions.actions]
     assert ops == ["session:tenant-7"]
 
 
