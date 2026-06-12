@@ -40,7 +40,7 @@ the `vars()` maps. (Web-app-only concerns — modal/sidebar/page widths, image h
 in Opal's `sizes.css`, and overlay stacking values in `z-index.css` — remain in Opal;
 they are not cross-platform design tokens.)
 
-Edit the **source** in `tokens/opal/*.json` — never the generated output in `dist/`.
+Edit the **source** in `tokens/*.json` — never the generated output in `dist/`.
 Token sources use the legacy `{ name, value, type }` shape; each token's key is the
 **exact** CSS variable name (no prefix). Semantic colors reference primitives
 (`"{alpha-grey-100-90}"`), which the build emits as `var(--alpha-grey-100-90)` so
@@ -48,10 +48,10 @@ dark mode flips at runtime exactly as before. The build (Style Dictionary)
 regenerates every platform output:
 
 ```bash
-bun run build:tokens   # tokens/opal/*.json -> tokens.css + typography.css + nativewind-theme.cjs + native.js (+ .d.ts)
+bun run build:tokens   # tokens/*.json -> tokens.css + typography.css + nativewind-theme.cjs + native.js (+ .d.ts)
 ```
 
-Typography presets live in `tokens/opal/typography-presets.json` (each preset bundles
+Typography presets live in `tokens/typography-presets.json` (each preset bundles
 font-family, size, weight, line-height, letter-spacing). The build emits them as web
 `@utility font-*` blocks (`typography.css`) **and** as resolved RN style objects
 (`textPresets` in `native.js`) — one source, both platforms.
