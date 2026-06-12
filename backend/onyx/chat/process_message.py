@@ -1336,12 +1336,17 @@ def _run_models(
                 now = time.monotonic()
                 if now - last_fence_refresh >= _FENCE_REFRESH_INTERVAL_S:
                     last_fence_refresh = now
-                    set_processing_status(
-                        chat_session_id=setup.chat_session.id,
-                        cache=setup.cache,
-                        value=True,
-                        run_id=setup.processing_run_id,
-                    )
+                    try:
+                        set_processing_status(
+                            chat_session_id=setup.chat_session.id,
+                            cache=setup.cache,
+                            value=True,
+                            run_id=setup.processing_run_id,
+                        )
+                    except Exception:
+                        # Worst case the fence lapses early; never kill the
+                        # run over a refresh.
+                        logger.exception("processing fence refresh failed")
                 try:
                     model_idx, item = merged_queue.get(timeout=_CANCEL_POLL_INTERVAL_S)
                 except queue.Empty:
@@ -1408,6 +1413,9 @@ def _run_models(
                 _persist_model_outcome(i, _PersistContext.NORMAL)
         except Exception:
             logger.exception("chat stream writer crashed")
+            # With the writer dead, merged_queue has no consumer — flip the
+            # emitters to discard so workers can't grow it unbounded.
+            drain_done.set()
             # Generic message: the raw exception may embed provider API keys.
             _publish(
                 StreamingError(
