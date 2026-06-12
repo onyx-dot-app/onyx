@@ -83,6 +83,8 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
 _ANTHROPIC_ADAPTIVE_THINKING_MODELS = (
     "claude-opus-4-7",
     "claude-opus-4-8",
+    "claude-fable-5",
+    "claude-mythos-5",
 )
 
 # Anthropic models that reject any non-default sampling parameter (temperature,
@@ -100,6 +102,10 @@ _ANTHROPIC_NO_SAMPLING_PARAMS_MODELS = (
     "claude-opus-4.8",
     "claude-4-8-opus",
     "claude-4.8-opus",
+    "claude-fable-5",
+    "claude-5-fable",
+    "claude-mythos-5",
+    "claude-5-mythos",
 )
 
 
