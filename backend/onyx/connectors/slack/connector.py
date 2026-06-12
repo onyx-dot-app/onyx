@@ -408,21 +408,21 @@ def _bot_inclusive_msg_filter(
 
 def filter_channels(
     all_channels: list[ChannelType],
-    channels_to_connect: list[str] | None,
-    regex_enabled: bool,
+    channels_to_include: list[str] | None,
+    include_regex_enabled: bool,
     channels_to_exclude: list[str] | None = None,
     exclude_regex_enabled: bool = False,
 ) -> list[ChannelType]:
     filtered_channels = all_channels
 
-    if channels_to_connect:
-        if not regex_enabled:
-            _validate_channels_exist(all_channels, channels_to_connect)
+    if channels_to_include:
+        if not include_regex_enabled:
+            _validate_channels_exist(all_channels, channels_to_include)
         filtered_channels = [
             channel
             for channel in filtered_channels
             if _channel_name_matches(
-                channel["name"], channels_to_connect, regex_enabled
+                channel["name"], channels_to_include, include_regex_enabled
             )
         ]
 
@@ -448,12 +448,12 @@ def _channel_name_matches(
 
 
 def _validate_channels_exist(
-    all_channels: list[ChannelType], channels_to_connect: list[str]
+    all_channels: list[ChannelType], channels_to_include: list[str]
 ) -> None:
     # fail loudly on an unknown channel so the user knows one of the
     # channels they've specified is typo'd or private
     all_channel_names = {channel["name"] for channel in all_channels}
-    for channel in channels_to_connect:
+    for channel in channels_to_include:
         if channel not in all_channel_names:
             raise ValueError(
                 f"Channel '{channel}' not found in workspace. "
@@ -628,10 +628,10 @@ def _message_to_doc(
 
 def _get_all_doc_ids(
     client: WebClient,
-    channels: list[str] | None = None,
-    channel_name_regex_enabled: bool = False,
-    exclude_channels: list[str] | None = None,
-    exclude_channel_name_regex_enabled: bool = False,
+    channels_to_include: list[str] | None = None,
+    include_regex_enabled: bool = False,
+    channels_to_exclude: list[str] | None = None,
+    exclude_regex_enabled: bool = False,
     msg_filter_func: Callable[
         [MessageType], SlackMessageFilterReason | None
     ] = default_msg_filter,
@@ -655,10 +655,10 @@ def _get_all_doc_ids(
         all_channels = get_channels(client)
     filtered_channels = filter_channels(
         all_channels,
-        channels,
-        channel_name_regex_enabled,
-        exclude_channels,
-        exclude_channel_name_regex_enabled,
+        channels_to_include,
+        include_regex_enabled,
+        channels_to_exclude,
+        exclude_regex_enabled,
     )
     user_cache: dict[str, BasicExpertInfo | None] = {}
 
@@ -1083,10 +1083,10 @@ class SlackConnector(
 
         return _get_all_doc_ids(
             client=self.client,
-            channels=self.channels,
-            channel_name_regex_enabled=self.channel_regex_enabled,
-            exclude_channels=self.exclude_channels,
-            exclude_channel_name_regex_enabled=self.exclude_channel_regex_enabled,
+            channels_to_include=self.channels,
+            include_regex_enabled=self.channel_regex_enabled,
+            channels_to_exclude=self.exclude_channels,
+            exclude_regex_enabled=self.exclude_channel_regex_enabled,
             msg_filter_func=self.msg_filter_func,
             callback=callback,
             workspace_url=self._workspace_url,
