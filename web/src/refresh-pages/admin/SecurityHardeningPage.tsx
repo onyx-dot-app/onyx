@@ -84,7 +84,7 @@ export default function SecurityHardeningPage() {
   const { data: settings, isLoading: settingsLoading } =
     useSWR<SecuritySettings>(
       SWR_KEYS.adminSecuritySettings,
-      errorHandlingFetcher,
+      errorHandlingFetcher
     );
 
   // Local state mirrors the loaded settings; we save on every change.
@@ -107,7 +107,7 @@ export default function SecurityHardeningPage() {
     setDraft((prev) => {
       if (!prev) return prev;
       const concrete = Object.fromEntries(
-        Object.entries(updates).filter(([, value]) => value != null),
+        Object.entries(updates).filter(([, value]) => value != null)
       ) as Partial<SecuritySettings>;
       return { ...prev, ...concrete };
     });
@@ -139,7 +139,7 @@ export default function SecurityHardeningPage() {
       // that may have succeeded while this request was in flight.
       try {
         const fresh = await mutate<SecuritySettings>(
-          SWR_KEYS.adminSecuritySettings,
+          SWR_KEYS.adminSecuritySettings
         );
         if (fresh) setDraft(fresh);
       } catch {
@@ -333,7 +333,7 @@ export default function SecurityHardeningPage() {
                 <ToggleRow
                   title="Require Special Characters"
                   description={markdown(
-                    "Accepted characters: `!@#$%^&*()_+-=[]{}|;:,.<>?`",
+                    "Accepted characters: `!@#$%^&*()_+-=[]{}|;:,.<>?`"
                   )}
                   checked={draft.password_require_special_char}
                   onCheckedChange={(checked) =>
