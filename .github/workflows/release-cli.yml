@@ -23,7 +23,16 @@ jobs:
           enable-cache: false
           version: "0.9.9"
       - run: |
-          for goos in linux windows darwin; do
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 uv build --wheel
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 ONYX_CLI_REUSE_BINARY=1 \
+            ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_x86_64 \
+            uv build --wheel
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 uv build --wheel
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 ONYX_CLI_REUSE_BINARY=1 \
+            ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_aarch64 \
+            uv build --wheel
+
+          for goos in windows darwin; do
             for goarch in amd64 arm64; do
               GOOS="$goos" GOARCH="$goarch" uv build --wheel
             done
@@ -247,6 +256,11 @@ jobs:
 
           for wheel in cli/dist/*.whl; do
             wheel_name="$(basename "$wheel" .whl)"
+            if [[ "$wheel_name" == *-musllinux_* ]]; then
+              echo "Skipping duplicate static Linux binary scan for $wheel_name"
+              continue
+            fi
+
             extract_dir="wheel-binaries/${wheel_name}"
             sarif_file="govulncheck-results/raw/${wheel_name}.sarif"
 
