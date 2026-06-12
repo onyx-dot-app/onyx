@@ -22,6 +22,28 @@ def _make_writer(cache: FakeCache, session_id: UUID) -> StreamBufferWriter:
     return StreamBufferWriter(cache=cache, chat_session_id=session_id, run_id=_RUN_ID)
 
 
+class _FailingChunkCache(FakeCache):
+    """Simulates a cache that fails when storing chunk payloads but not meta."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._failed = False
+
+    def set(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> None:
+        if key.endswith(":meta"):
+            super().set(key, value, ex)
+            return
+        if not self._failed and key.endswith(":0"):
+            self._failed = True
+            raise RuntimeError("simulated chunk write failure")
+        super().set(key, value, ex)
+
+
 def test_append_flush_and_cursor_read_roundtrip() -> None:
     cache = FakeCache()
     session_id = uuid4()
@@ -163,3 +185,24 @@ def test_missing_chunk_is_a_gap() -> None:
     assert read.gap
     assert read.blocks == []
     assert read.next_cursor == 0
+
+
+def test_flush_failure_marks_truncated_and_persists_meta() -> None:
+    cache = _FailingChunkCache()
+    session_id = uuid4()
+    writer = _make_writer(cache, session_id)
+
+    writer.append_line('{"a": 1}\n')
+    writer.flush()
+
+    meta_key = f"chatstream_{session_id}_{_RUN_ID}:meta"
+    meta_raw = cache.store.get(meta_key)
+    assert meta_raw is not None
+    meta = StreamBufferMeta.model_validate_json(meta_raw.decode())
+    assert meta.truncated
+    assert meta.chunk_count == 0
+
+    read = read_stream_chunks(cache, session_id, _RUN_ID, cursor=0)
+    assert read is not None
+    assert read.gap
+    assert read.blocks == []

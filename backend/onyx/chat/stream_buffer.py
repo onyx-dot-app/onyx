@@ -117,6 +117,14 @@ class StreamBufferWriter:
                 self._run_id,
             )
             self._meta.truncated = True
+            try:
+                self._write_meta(CHAT_STREAM_BUFFER_TTL_S)
+            except Exception:
+                logger.exception(
+                    "stream buffer meta update failed after flush error for session %s run %d",
+                    self._chat_session_id,
+                    self._run_id,
+                )
 
     def mark_done(self) -> None:
         self.flush()
