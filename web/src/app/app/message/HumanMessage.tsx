@@ -179,16 +179,18 @@ const HumanMessage = React.memo(function HumanMessage({
           prominence="tertiary"
           data-testid="HumanMessage/copy-button"
         />
-        <Button
-          icon={SvgEdit}
-          prominence="tertiary"
-          tooltip="Edit"
-          onClick={() => setIsEditing(true)}
-          data-testid="HumanMessage/edit-button"
-        />
+        {onEdit && (
+          <Button
+            icon={SvgEdit}
+            prominence="tertiary"
+            tooltip="Edit"
+            onClick={() => setIsEditing(true)}
+            data-testid="HumanMessage/edit-button"
+          />
+        )}
       </div>
     ),
-    [content]
+    [content, onEdit]
   );
 
   const copyEditButton = (
@@ -221,7 +223,7 @@ const HumanMessage = React.memo(function HumanMessage({
           />
         ) : (
           <div className="flex justify-end">
-            {onEdit && !isMobile && copyEditButton}
+            {!isMobile && copyEditButton}
             <div className="md:max-w-150">
               <div
                 className={
@@ -251,7 +253,7 @@ const HumanMessage = React.memo(function HumanMessage({
           </div>
         )}
         <div className="flex justify-end pt-1">
-          {!isEditing && onEdit && isMobile && copyEditButton}
+          {!isEditing && isMobile && copyEditButton}
           {currentMessageInd !== undefined &&
             onMessageSelection &&
             otherMessagesCanSwitchTo &&
