@@ -446,6 +446,22 @@ def update_persona_shared(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
 
+    # Org-wide visibility is an owner/admin decision. EDITOR-level sharees may
+    # edit user/group shares but must not flip is_public / public_permission
+    # (the same guard update_persona_public_status enforces).
+    is_owner_or_admin = (
+        user.role == UserRole.ADMIN
+        or persona.user_id == user.id
+        or (
+            persona.owner_group_id is not None
+            and persona.owner_group_id
+            in get_user_group_ids_for_user(db_session, user.id)
+        )
+    )
+    if not is_owner_or_admin:
+        is_public = None
+        public_permission = None
+
     owner_user_id = persona.user_id
     owner_group_id = persona.owner_group_id
     if user_ids is not None and owner_user_id is not None:
