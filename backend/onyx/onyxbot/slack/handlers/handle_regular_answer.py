@@ -260,8 +260,6 @@ def handle_regular_answer(
         return answer
 
     try:
-        # By leaving time_cutoff and favor_recent as None, and setting enable_auto_detect_filters
-        # it allows the slack flow to extract out filters from the user query
         filters = BaseFilters(
             source_type=None,
             document_set=document_set_names,
