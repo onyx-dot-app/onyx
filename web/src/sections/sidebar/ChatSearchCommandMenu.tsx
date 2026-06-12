@@ -264,9 +264,13 @@ export default function ChatSearchCommandMenu({
                             ↵
                           </Text>
                         ) : (
-                          <Text secondaryBody text03>
-                            {timeAgo(chat.time)}
-                          </Text>
+                          // Wrapped so visual-regression screenshots can mask
+                          // the relative timestamp (non-deterministic content).
+                          <span data-testid="command-menu-timestamp">
+                            <Text secondaryBody text03>
+                              {timeAgo(chat.time)}
+                            </Text>
+                          </span>
                         )
                       }
                       onSelect={() => handleChatSelect(chat.id)}
@@ -321,9 +325,13 @@ export default function ChatSearchCommandMenu({
                           ↵
                         </Text>
                       ) : (
-                        <Text secondaryBody text03>
-                          {timeAgo(project.time)}
-                        </Text>
+                        // Wrapped so visual-regression screenshots can mask
+                        // the relative timestamp (non-deterministic content).
+                        <span data-testid="command-menu-timestamp">
+                          <Text secondaryBody text03>
+                            {timeAgo(project.time)}
+                          </Text>
+                        </span>
                       )
                     }
                     onSelect={() => handleProjectSelect(project.id)}
