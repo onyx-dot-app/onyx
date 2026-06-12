@@ -36,11 +36,13 @@ from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.external_apps.providers.registry import resolve_action_overrides
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
-from onyx.server.features.build.api.models import ExternalAppAdminResponse
-from onyx.server.features.build.api.models import ExternalAppUserResponse
-from onyx.server.features.build.api.models import UpdateExternalAppRequest
-from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
+from onyx.server.features.build.external_apps.models import (
+    CreateBuiltInExternalAppRequest,
+)
+from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
+from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
+from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
+from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes

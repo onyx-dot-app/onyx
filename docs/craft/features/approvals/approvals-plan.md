@@ -237,7 +237,7 @@ same path.
   threads writing onto a shared `queue.Queue`: one drives the ACP
   iterator, one `BLPOP`s `approval:announce:{session_id}` and
   emits `ApprovalRequestedPacket` instances (defined in
-  `backend/onyx/server/features/build/api/packets.py`) into the
+  `backend/onyx/server/features/build/packets.py`) into the
   same stream. The packet carries only `{approval_id, session_id}`
   — Postgres remains the source of truth for card contents. On the
   FE, `useBuildStreaming` invalidates the

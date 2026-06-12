@@ -39,7 +39,7 @@ export function getAppTypeLogo(
 }
 
 // Keep in sync with backend Pydantic models in
-// `server/features/build/api/models.py`.
+// `server/features/build/external_apps/models.py`.
 
 export interface OrgCredentialFieldDescriptor {
   key: string;

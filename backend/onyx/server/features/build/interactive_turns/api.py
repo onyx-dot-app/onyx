@@ -24,11 +24,11 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.api.models import InteractiveTurnResponse
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.interactive_turns.executor import (
     start_interactive_turn_runner,
 )
+from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
 from onyx.server.features.build.interactive_turns.state import get_active_turn
 from onyx.server.features.build.interactive_turns.state import get_turn
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
