@@ -83,9 +83,8 @@ export type TokenEndpointAuthMethod =
   | "client_secret_post"
   | "client_secret_basic";
 
-// Mirrors `onyx.external_apps.custom_oauth.CustomOAuthConfig`. Holds no
-// secrets — the OAuth client credentials live in `organization_credentials`
-// under `client_id`/`client_secret`.
+// Mirrors `onyx.external_apps.custom_oauth.CustomOAuthConfig`. No secrets —
+// client creds live in `organization_credentials`.
 export interface CustomOAuthConfig {
   authorize_url: string;
   token_url: string;
@@ -95,9 +94,8 @@ export interface CustomOAuthConfig {
   token_endpoint_auth_method: TokenEndpointAuthMethod;
 }
 
-// How a user connects to an app: redirect through an OAuth flow, or type
-// credential values in manually. Server-derived — `app_type` alone can't
-// tell, since CUSTOM covers both.
+// How a user connects. Server-derived — `app_type` alone can't tell, since
+// CUSTOM covers both flows.
 export type ExternalAppAuthFlow = "oauth" | "manual";
 
 export interface ExternalAppAdminResponse {

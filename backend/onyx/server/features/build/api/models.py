@@ -388,9 +388,8 @@ class UpdateExternalAppRequest(BaseModel):
     organization_credentials: dict[str, str] | None = None
     # Full-replace stored overrides when present (empty clears); None leaves them.
     action_policies: dict[str, EndpointPolicy] | None = None
-    # CUSTOM apps only. Unlike the fields above, an *explicit* null clears the
-    # config (back to static credentials) — the route distinguishes omitted vs
-    # null via `model_fields_set`.
+    # CUSTOM apps only. Unlike the fields above, explicit null clears the
+    # config; the route distinguishes omitted vs null via `model_fields_set`.
     oauth_config: CustomOAuthConfig | None = None
 
 
@@ -455,15 +454,21 @@ class ExternalAppUserResponse(BaseModel):
     credential_keys: list[str]
     credential_values: dict[str, Any]
     authenticated: bool
-    # How the user connects: "oauth" → redirect through the OAuth flow
-    # (built-in provider or admin-defined custom config); "manual" → type
-    # credential values in. Server-derived — `app_type` alone can't tell,
-    # since CUSTOM covers both.
+    # How the user connects. Server-derived — `app_type` alone can't tell,
+    # since CUSTOM covers both flows.
     auth_flow: Literal["oauth", "manual"]
 
 
 class OAuthStartResponse(BaseModel):
     authorize_url: str
+
+
+class OAuthRedirectUriResponse(BaseModel):
+    """The WEB_DOMAIN-derived redirect URI the OAuth flow sends. Served so the
+    admin UI never guesses it from the browser origin, which can differ
+    (proxies, tunnels) and would mismatch at the provider."""
+
+    redirect_uri: str
 
 
 class OAuthCallbackRequest(BaseModel):

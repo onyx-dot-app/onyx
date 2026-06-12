@@ -83,15 +83,10 @@ def validate_oauth_auth_template(
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
 ) -> None:
-    """Validate that an OAuth app's auth template is satisfiable by the flow.
-
-    OAuth apps never prompt the user for manual values, so every placeholder
-    the org hasn't pre-filled must be ``access_token`` (what the token exchange
-    stores) — anything else would leave the app permanently unauthenticatable.
-    The template must also actually reference ``{access_token}`` (and the org
-    must not pre-fill it): otherwise no per-user key is required and every user
-    would read as "connected" without ever going through OAuth.
-    """
+    """OAuth apps never prompt for manual values, so every placeholder the org
+    hasn't pre-filled must be ``access_token`` (what the exchange stores), and
+    the template must reference it without the org pre-filling it — otherwise
+    users read as "connected" without ever going through OAuth."""
     placeholders = _placeholders_in_template(auth_template)
     if "access_token" not in placeholders:
         raise OnyxError(

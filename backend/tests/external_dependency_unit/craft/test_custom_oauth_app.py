@@ -28,6 +28,7 @@ from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Skill
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.custom_oauth import CustomOAuthConfig
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import OAuthCallbackRequest
 from onyx.server.features.build.api.models import UpdateExternalAppRequest
@@ -250,11 +251,21 @@ def test_patch_rejects_oauth_config_on_built_in(
             api.update_external_app_admin(
                 external_app_id=created.id,
                 request=UpdateExternalAppRequest(
-                    oauth_config=None,  # even clearing is meaningless here
+                    oauth_config=CustomOAuthConfig.model_validate(_OAUTH_CONFIG),
                 ),
                 _=test_user,
                 db_session=db_session,
             )
+        # An explicit null is a no-op, not an error: full-body clients (e.g.
+        # the integration ExternalAppManager) send `oauth_config: null`.
+        edited = api.update_external_app_admin(
+            external_app_id=created.id,
+            request=UpdateExternalAppRequest(name="Slack 2", oauth_config=None),
+            _=test_user,
+            db_session=db_session,
+        )
+        assert edited.name == "Slack 2"
+        assert edited.oauth_config is None
     finally:
         app = db_session.scalar(select(ExternalApp).where(ExternalApp.id == created.id))
         assert app is not None
@@ -282,6 +293,9 @@ def test_oauth_start_and_callback_round_trip(
     assert params["client_id"] == ["cid"]
     assert params["scope"] == ["read write"]
     assert params["response_type"] == ["code"]
+    # The served (displayed) redirect URI must be exactly what the flow sends.
+    displayed = oauth_api.get_oauth_redirect_uri(_=test_user)
+    assert params["redirect_uri"] == [displayed.redirect_uri]
     state = params["state"][0]
 
     captured: dict[str, Any] = {}

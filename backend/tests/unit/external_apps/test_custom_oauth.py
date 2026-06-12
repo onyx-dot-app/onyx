@@ -145,16 +145,16 @@ def test_authorize_url_custom_scope_param_and_extra_params() -> None:
     assert params["response_type"] == ["code"]
 
 
-def test_authorize_url_extra_params_can_override_response_type() -> None:
-    handler = CustomOAuthHandler(
-        _config(extra_authorize_params={"response_type": "code id_token"})
-    )
-    params = _authorize_params(
-        handler.build_authorize_url(
-            client_id="cid", redirect_uri="https://onyx.example.com/cb", state="st"
-        )
-    )
-    assert params["response_type"] == ["code id_token"]
+@pytest.mark.parametrize(
+    "param", ["response_type", "client_id", "redirect_uri", "state"]
+)
+def test_config_rejects_reserved_authorize_params(param: str) -> None:
+    """The flow owns the protocol params: a `response_type` override would
+    request a grant the callback can't exchange, and a `state` override would
+    disable the callback's CSRF/replay protection. Rejected loudly at write
+    time rather than silently re-overridden."""
+    with pytest.raises(ValidationError):
+        _config(extra_authorize_params={param: "x"})
 
 
 # ---------------------------------------------------------------------------
@@ -289,12 +289,19 @@ def test_resolve_custom_app_without_config_is_none() -> None:
     )
 
 
-def test_resolve_corrupt_stored_config_fails_loudly() -> None:
+@pytest.mark.parametrize(
+    "corrupt_config",
+    [
+        {"authorize_url": "nope"},  # invalid field values
+        {},  # falsy but not None — corruption, not a static app
+    ],
+)
+def test_resolve_corrupt_stored_config_fails_loudly(
+    corrupt_config: dict[str, str],
+) -> None:
     # Writes are validated, so a corrupt stored config is a bug — surfaced,
-    # not masked as "non-OAuth app".
-    app = ExternalApp(
-        app_type=ExternalAppType.CUSTOM, oauth_config={"authorize_url": "nope"}
-    )
+    # not masked as "non-OAuth app". Only None means static.
+    app = ExternalApp(app_type=ExternalAppType.CUSTOM, oauth_config=corrupt_config)
     with pytest.raises(ValidationError):
         resolve_oauth_handler(app)
 

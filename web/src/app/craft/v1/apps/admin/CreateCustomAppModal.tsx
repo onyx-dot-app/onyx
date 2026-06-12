@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import useSWR from "swr";
 import Modal from "@/refresh-components/Modal";
 import {
   Button,
@@ -16,6 +17,7 @@ import InputKeyValue, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
+import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import {
   CustomOAuthConfig,
   ExternalAppAdminResponse,
@@ -26,14 +28,22 @@ import {
   replaceCustomAppBundle,
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 type AuthMethod = "static" | "oauth";
 
-const OAUTH_CALLBACK_PATH = "/craft/v1/apps/oauth/callback";
+// Authorize-URL params the OAuth flow itself owns — rejected server-side
+// (overriding e.g. response_type or state would break every connect).
+const RESERVED_AUTHORIZE_PARAMS = new Set([
+  "response_type",
+  "client_id",
+  "redirect_uri",
+  "state",
+]);
 
-// The auth template every OAuth custom app uses (RFC 6750 bearer usage — what
-// all built-in providers use too). The form doesn't ask; the backend keeps the
-// template configurable for future exotic cases.
+// The auth template every OAuth custom app uses (RFC 6750). The form doesn't
+// ask; the API keeps the template flexible for exotic cases.
 const BEARER_TEMPLATE: Record<string, string> = {
   Authorization: "Bearer {access_token}",
 };
@@ -141,11 +151,16 @@ export default function CreateCustomAppModal({
     setError(null);
   }, [open, existingApp]);
 
-  const redirectUri =
-    (typeof window !== "undefined" ? window.location.origin : "") +
-    OAUTH_CALLBACK_PATH;
+  // Server-derived (WEB_DOMAIN): the URI the flow actually sends — the
+  // browser origin can differ (proxy, tunnel) and would mislead.
+  const { data: redirectUriData } = useSWR<{ redirect_uri: string }>(
+    SWR_KEYS.buildExternalAppsOAuthRedirectUri,
+    errorHandlingFetcher
+  );
+  const redirectUri = redirectUriData?.redirect_uri ?? null;
 
   async function copyRedirectUri() {
+    if (redirectUri === null) return;
     await navigator.clipboard.writeText(redirectUri);
     setCopiedRedirectUri(true);
   }
@@ -154,8 +169,9 @@ export default function CreateCustomAppModal({
     setFile(event.target.files?.[0] ?? null);
   }
 
-  // Headers and org credentials are optional; name + at least one upstream
-  // pattern are required. A bundle is required only on create (optional on edit).
+  // Name + an upstream pattern are required; OAuth mode also needs the
+  // endpoint URLs and client credentials (else every Connect fails at the
+  // start route). Bundle required only on create.
   const disabledCreateReason = (() => {
     if (isSaving) return "Save is already in progress.";
     if (name.trim().length === 0) {
@@ -170,6 +186,18 @@ export default function CreateCustomAppModal({
       }
       if (!tokenUrl.trim().startsWith("https://")) {
         return "Enter the provider's token URL (must be https://).";
+      }
+      if (clientId.trim().length === 0) {
+        return "Enter the client ID from the provider's OAuth app settings.";
+      }
+      if (clientSecret.trim().length === 0) {
+        return "Enter the client secret from the provider's OAuth app settings.";
+      }
+      const reserved = Object.keys(toRecord(extraAuthorizeParams)).find((key) =>
+        RESERVED_AUTHORIZE_PARAMS.has(key)
+      );
+      if (reserved) {
+        return `"${reserved}" is sent by the OAuth flow itself — remove it from the extra authorization parameters.`;
       }
     }
     if (!isEdit && file === null) {
@@ -383,10 +411,11 @@ export default function CreateCustomAppModal({
                         </Text>
                         <div className="flex items-center gap-2">
                           <Text font="main-ui-body" color="text-03">
-                            {redirectUri}
+                            {redirectUri ?? "Loading…"}
                           </Text>
                           <Button
                             prominence="secondary"
+                            disabled={redirectUri === null}
                             onClick={copyRedirectUri}
                           >
                             {copiedRedirectUri ? "Copied" : "Copy"}
@@ -437,7 +466,7 @@ export default function CreateCustomAppModal({
 
                       <div className="flex flex-col gap-1">
                         <Text font="main-ui-action">Client secret</Text>
-                        <InputTypeIn
+                        <PasswordInputTypeIn
                           value={clientSecret}
                           onChange={(e) => setClientSecret(e.target.value)}
                           placeholder="Treat this like a password"

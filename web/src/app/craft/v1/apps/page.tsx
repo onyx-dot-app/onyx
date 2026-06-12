@@ -187,9 +187,8 @@ function ProviderConnectCard({
   }, [highlight]);
 
   async function connect() {
-    // Manual-credential apps have no OAuth flow — collect the user's
-    // credentials directly via a popup instead of redirecting to an
-    // authorize URL.
+    // Manual-credential apps have no OAuth flow — collect credentials via a
+    // popup instead of redirecting.
     if (userApp.auth_flow === "manual") {
       setCredModalOpen(true);
       return;

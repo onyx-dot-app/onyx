@@ -91,9 +91,11 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
         enabled=app.skill.enabled,
         actions=action_policy_views(app.app_type, stored),
         is_onyx_managed=managed,
+        # `is not None`, not truthiness: a corrupt falsy value (`{}`) must
+        # raise here, not render as "no OAuth config".
         oauth_config=(
             CustomOAuthConfig.model_validate(app.oauth_config)
-            if app.oauth_config
+            if app.oauth_config is not None
             else None
         ),
     )
@@ -211,21 +213,23 @@ def update_external_app_admin(
         for pattern in request.upstream_url_patterns:
             UrlGlob.parse(pattern)
 
-    # oauth_config: omitted → untouched; explicit null → clear (back to manual
-    # credentials). CUSTOM only — a built-in's flow comes from its provider spec.
+    # oauth_config: omitted → untouched; explicit null → clear. Non-null is
+    # CUSTOM-only; null on a built-in is a no-op (already NULL, and full-body
+    # clients send it routinely).
     oauth_config_update: dict[str, Any] | None | UnsetType = UNSET
     if "oauth_config" in request.model_fields_set:
-        if app.app_type != ExternalAppType.CUSTOM:
+        if request.oauth_config is not None and app.app_type != ExternalAppType.CUSTOM:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "oauth_config applies only to custom apps; a built-in app's "
                 "OAuth flow comes from its provider.",
             )
-        oauth_config_update = (
-            request.oauth_config.model_dump(mode="json")
-            if request.oauth_config is not None
-            else None
-        )
+        if app.app_type == ExternalAppType.CUSTOM:
+            oauth_config_update = (
+                request.oauth_config.model_dump(mode="json")
+                if request.oauth_config is not None
+                else None
+            )
 
     # Cross-validate the auth template against the auth method the app will
     # have *after* this update (only keys matter, so masked org creds are fine).
@@ -233,7 +237,7 @@ def update_external_app_admin(
         will_have_oauth = (
             request.oauth_config is not None
             if "oauth_config" in request.model_fields_set
-            else bool(app.oauth_config)
+            else app.oauth_config is not None
         )
         if will_have_oauth:
             validate_oauth_auth_template(

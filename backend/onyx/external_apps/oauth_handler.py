@@ -1,14 +1,9 @@
 """The OAuth 2.0 mechanics seam shared by built-in providers and admin-defined
-custom apps.
-
-:class:`OAuthFlowHandler` owns everything the External-App OAuth routes and the
-lazy token refresh need — authorize-URL construction, the authorization-code
-exchange, and token refresh — behind one token-request helper, so transport
-handling and the client-auth method are decided in exactly one place for both
-grants. Built-in providers implement it via ``OAuthExternalAppProvider`` (flow
-parameters from their ``spec``); CUSTOM apps use the config-driven
-``CustomOAuthHandler``. Resolution from an ``ExternalApp`` row lives in
-``providers.registry.resolve_oauth_handler``.
+custom apps: authorize-URL construction, the authorization-code exchange, and
+token refresh, with both grants going through one token-request helper.
+Built-in providers implement it via ``OAuthExternalAppProvider``; CUSTOM apps
+use the config-driven ``CustomOAuthHandler``. Resolution from an
+``ExternalApp`` row lives in ``providers.registry.resolve_oauth_handler``.
 """
 
 import base64

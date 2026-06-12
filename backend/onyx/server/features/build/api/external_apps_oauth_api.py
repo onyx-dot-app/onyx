@@ -25,6 +25,7 @@ from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import OAuthCallbackRequest
 from onyx.server.features.build.api.models import OAuthCallbackResponse
+from onyx.server.features.build.api.models import OAuthRedirectUriResponse
 from onyx.server.features.build.api.models import OAuthStartResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -76,6 +77,15 @@ class _OAuthStateRecord(BaseModel):
 
     user_id: str
     external_app_id: int
+
+
+@router.get("/admin/apps/oauth/redirect-uri")
+def get_oauth_redirect_uri(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> OAuthRedirectUriResponse:
+    """The redirect URI the OAuth routes send, for the admin to register with
+    the provider. See ``OAuthRedirectUriResponse``."""
+    return OAuthRedirectUriResponse(redirect_uri=_frontend_callback_url())
 
 
 @router.get("/apps/{external_app_id}/oauth/start")

@@ -15,16 +15,21 @@ from onyx.external_apps.oauth_handler import OAuthFlowHandler
 from onyx.external_apps.oauth_handler import OAuthFlowSpec
 from onyx.external_apps.oauth_handler import TokenEndpointAuthMethod
 
+# Authorize-URL params the flow itself owns: the downstream path is hardwired
+# to the code grant (`response_type`) and the callback's CSRF/replay
+# protection rides on `state`, so admin extras may not collide.
+_RESERVED_AUTHORIZE_PARAMS = frozenset(
+    {"response_type", "client_id", "redirect_uri", "state"}
+)
+
 
 class CustomOAuthConfig(BaseModel):
     """Authorization-code-flow parameters for an admin-defined OAuth app.
 
-    Stored as ``external_app.oauth_config`` (JSONB); ``NULL`` rows are
-    static-credential custom apps. Validated on every write and parsed back
-    only in ``resolve_oauth_handler``, so a corrupt stored value fails loudly
-    in one place. Holds no secrets — the OAuth client credentials live in
-    ``organization_credentials`` under ``client_id``/``client_secret``, same
-    as built-in providers."""
+    Stored as ``external_app.oauth_config``; validated on every write and
+    parsed back only in ``resolve_oauth_handler``, so a corrupt stored value
+    fails loudly in one place. No secrets — client creds live in
+    ``organization_credentials``, same as built-ins."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -33,8 +38,8 @@ class CustomOAuthConfig(BaseModel):
     # Empty means "don't send a scope param" (provider-default scopes).
     scope: str = ""
     scope_param: str = "scope"
-    # Merged over {"response_type": "code"}; only needed for providers that
-    # want params beyond RFC 6749 §4.1.1 (e.g. access_type=offline).
+    # Params beyond RFC 6749 §4.1.1 (e.g. access_type=offline). May not name
+    # a protocol param the flow owns — see `_RESERVED_AUTHORIZE_PARAMS`.
     extra_authorize_params: dict[str, str] = {}
     token_endpoint_auth_method: TokenEndpointAuthMethod = (
         TokenEndpointAuthMethod.CLIENT_SECRET_POST
@@ -61,6 +66,16 @@ class CustomOAuthConfig(BaseModel):
             raise ValueError("must be a non-empty string")
         return value
 
+    @field_validator("extra_authorize_params")
+    @classmethod
+    def _no_reserved_params(cls, value: dict[str, str]) -> dict[str, str]:
+        reserved = sorted(_RESERVED_AUTHORIZE_PARAMS & value.keys())
+        if reserved:
+            raise ValueError(
+                f"may not override protocol parameters: {', '.join(reserved)}"
+            )
+        return value
+
 
 class CustomOAuthHandler(OAuthFlowHandler):
     """Config-driven handler for a CUSTOM app. Credential extraction is plain
@@ -75,6 +90,7 @@ class CustomOAuthHandler(OAuthFlowHandler):
             token_url=config.token_url,
             scope=config.scope,
             scope_param=config.scope_param,
+            # Collision-free: the validator rejects reserved params.
             extra_authorize_params={
                 "response_type": "code",
                 **config.extra_authorize_params,

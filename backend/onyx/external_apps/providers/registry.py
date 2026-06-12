@@ -66,14 +66,14 @@ def resolve_oauth_handler(app: ExternalApp) -> OAuthFlowHandler | None:
     provider for a built-in OAuth ``app_type``, a config-driven handler for a
     CUSTOM app carrying an ``oauth_config``, else ``None`` (static-credential
     app). Every OAuth touchpoint — the start/callback routes, lazy token
-    refresh, and the user-facing ``auth_flow`` field — derives from this, so
-    they can't drift.
+    refresh, the user-facing ``auth_flow`` — derives from this, so they can't
+    drift.
 
-    Raises ``pydantic.ValidationError`` on a corrupt stored config: writes are
-    validated, so that's a bug worth surfacing loudly, not masking as
-    "non-OAuth app"."""
+    Only ``None`` means static: any other stored value must validate as a
+    ``CustomOAuthConfig`` or raise (corruption is surfaced, not masked as
+    "non-OAuth app")."""
     if app.app_type == ExternalAppType.CUSTOM:
-        if not app.oauth_config:
+        if app.oauth_config is None:
             return None
         return CustomOAuthHandler(CustomOAuthConfig.model_validate(app.oauth_config))
     provider = PROVIDERS.get(app.app_type)
