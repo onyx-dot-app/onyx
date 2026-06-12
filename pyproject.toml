@@ -183,7 +183,7 @@ model_server = [
     "einops==0.8.1",
     "numpy==2.4.1",
     "sentence-transformers==5.4.1",
-    "torch==2.9.1",
+    "torch==2.12.0",
     # Do NOT upgrade to >=5 without addressing the `from_pretrained()` buffer
     # corruption bug: persistent=False buffers (notably RoPE `inv_freq`) are
     # loaded with garbage memory, producing all-NaN embeddings.
