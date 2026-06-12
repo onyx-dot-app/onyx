@@ -37,6 +37,7 @@ const sharedConfig = {
   },
 
   testPathIgnorePatterns: ["/node_modules/", "/tests/e2e/", "/.next/"],
+  modulePathIgnorePatterns: ["<rootDir>/.next/"],
 
   // Transform ES Modules in node_modules to CommonJS for Jest compatibility
   // Add packages here when you encounter: "SyntaxError: Unexpected token 'export'"
@@ -50,6 +51,13 @@ const sharedConfig = {
         "@radix-ui",
         "@headlessui",
         "@phosphor-icons",
+        // i18n
+        "\\.bun/(next-intl|use-intl|intl-messageformat|@formatjs|@schummar).*",
+        "next-intl",
+        "use-intl",
+        "intl-messageformat",
+        "@formatjs",
+        "@schummar",
         // Testing & Mocking
         "msw",
         "until-async",
