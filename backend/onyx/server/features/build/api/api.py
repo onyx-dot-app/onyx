@@ -54,7 +54,7 @@ from onyx.server.features.build.api.user_library import router as user_library_r
 from onyx.server.features.build.approvals.api import router as approvals_router
 from onyx.server.features.build.db.build_session import get_webapp_access_async
 from onyx.server.features.build.db.build_session import get_webapp_target_async
-from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.scheduled_tasks.api import (
     router as scheduled_tasks_router,
 )

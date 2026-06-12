@@ -1116,7 +1116,7 @@ class TestSandboxReset:
             lambda: failing_stub,
         )
         monkeypatch.setattr(
-            "onyx.server.features.build.sandbox.base._sandbox_manager_instance",
+            "onyx.server.features.build.sandbox.factory._sandbox_manager_instance",
             failing_stub,
         )
         sm_fail = SessionManager(db_session)
