@@ -12,7 +12,8 @@ describe("sanitizeDocxHtml", () => {
     // Mirrors renderSymbol: span.innerHTML = `&#x${char};` with a malicious char.
     // The (now harmless) <img> may remain, but the onerror handler must be gone
     // so nothing executes.
-    const dirty = '<span>&amp;#x41;<img src="x" onerror="window.__pwned=1"></span>';
+    const dirty =
+      '<span>&amp;#x41;<img src="x" onerror="window.__pwned=1"></span>';
     const clean = sanitizeDocxHtml(dirty);
 
     const img = parse(clean).querySelector("img");
@@ -41,7 +42,7 @@ describe("sanitizeDocxHtml", () => {
 
   it("removes <script> elements", () => {
     const clean = sanitizeDocxHtml(
-      '<div>text<script>window.__pwned=1</script></div>'
+      "<div>text<script>window.__pwned=1</script></div>"
     );
     expect(parse(clean).querySelector("script")).toBeNull();
   });
@@ -49,7 +50,7 @@ describe("sanitizeDocxHtml", () => {
   it("preserves https hyperlinks and basic document formatting", () => {
     const dirty =
       '<a href="https://onyx.app">Onyx</a>' +
-      '<table><tr><td><b>bold</b> <i>italic</i></td></tr></table>' +
+      "<table><tr><td><b>bold</b> <i>italic</i></td></tr></table>" +
       "<h1>Heading</h1>";
     const doc = parse(sanitizeDocxHtml(dirty));
 

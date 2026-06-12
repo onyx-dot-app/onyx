@@ -72,7 +72,9 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
 
           // Sanitize docx-preview's output (it has HTML/href sinks). Runs before
           // the innerText read below so copied text matches what's displayed.
-          bodyRef.current.innerHTML = sanitizeDocxHtml(bodyRef.current.innerHTML);
+          bodyRef.current.innerHTML = sanitizeDocxHtml(
+            bodyRef.current.innerHTML
+          );
 
           // styleRef should only hold library-generated <style> elements.
           for (const child of Array.from(styleRef.current.children)) {
