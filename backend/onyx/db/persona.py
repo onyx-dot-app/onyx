@@ -22,6 +22,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
+from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentSet
@@ -38,6 +39,8 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserFile
 from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
+from onyx.db.persona_sharing import get_persona_access_level
+from onyx.db.persona_sharing import get_user_group_ids_for_user
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -81,8 +84,9 @@ def _add_user_filters(
     Persona__UG = aliased(Persona__UserGroup)
     User__UG = aliased(User__UserGroup)
     """
-    Here we select cc_pairs by relation:
-    User -> User__UserGroup -> Persona__UserGroup -> Persona
+    Join chain: Persona -> Persona__UserGroup (group share rows) ->
+    User__UserGroup (membership in the share group), plus direct
+    Persona__User share rows.
     """
     stmt = (
         stmt.outerjoin(Persona__UG)
@@ -95,17 +99,6 @@ def _add_user_filters(
             Persona__User.persona_id == Persona.id,
         )
     )
-    """
-    Filter Personas by:
-    - if the user is in the user_group that owns the Persona
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out Personas that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all Personas in the groups the user is a curator
-    for (as well as public Personas)
-    - if we are not editing, we return all Personas directly connected to the user
-    """
 
     # Anonymous users only see public, listed Personas
     if user.is_anonymous:
@@ -122,33 +115,58 @@ def _add_user_filters(
         where_clause = (Persona.user_id == user.id) | (Persona.user_id.is_(None))
         return stmt.where(where_clause)
 
-    where_clause = User__UserGroup.user_id == user.id
-    if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UserGroup.is_curator == True  # noqa: E712
+    user_group_ids = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
+
+    # Owner: the owning user, or any member of the owning group
+    owner_clause = (Persona.user_id == user.id) | (
+        Persona.owner_group_id.in_(user_group_ids)
+    )
+
     if get_editable:
-        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        if user.role == UserRole.CURATOR:
-            user_groups = user_groups.where(User__UG.is_curator == True)  # noqa: E712
-        where_clause &= ~exists().where(Persona__UG.persona_id == Persona.id).where(
-            ~Persona__UG.user_group_id.in_(user_groups)
-        ).correlate(Persona)
+        where_clause = owner_clause
+        # EDITOR-level direct share
+        where_clause |= (Persona__User.user_id == user.id) & (
+            Persona__User.permission == PersonaSharePermission.EDITOR
+        )
+        # EDITOR-level group share (any member of the share group)
+        where_clause |= (User__UserGroup.user_id == user.id) & (
+            Persona__UG.permission == PersonaSharePermission.EDITOR
+        )
+        # Org-wide edit
+        where_clause |= (Persona.is_public == True) & (  # noqa: E712
+            Persona.public_permission == PersonaSharePermission.EDITOR
+        )
+        # Curators keep their group-attachment edit rights: member (curator,
+        # for the CURATOR role) of share groups, with no share group outside
+        # their (curated) groups.
+        if user.role in [UserRole.CURATOR, UserRole.GLOBAL_CURATOR]:
+            curator_clause = User__UserGroup.user_id == user.id
+            curated_group_ids = user_group_ids
+            if user.role == UserRole.CURATOR:
+                curator_clause &= User__UserGroup.is_curator == True  # noqa: E712
+                curated_group_ids = curated_group_ids.where(
+                    User__UG.is_curator == True  # noqa: E712
+                )
+            curator_clause &= ~exists().where(
+                Persona__UG.persona_id == Persona.id
+            ).where(~Persona__UG.user_group_id.in_(curated_group_ids)).correlate(
+                Persona
+            )
+            where_clause |= curator_clause
     else:
         listed = Persona.is_listed == True  # noqa: E712
 
-        # Group membership — only listed agents
-        where_clause &= listed
+        # Group share membership — only listed agents
+        where_clause = (User__UserGroup.user_id == user.id) & listed
 
         # Public agents — must be listed
-        public_condition = (Persona.is_public == True) & listed  # noqa: E712
+        where_clause |= (Persona.is_public == True) & listed  # noqa: E712
 
         # Directly shared — only listed agents
-        shared_condition = (Persona__User.user_id == user.id) & listed
+        where_clause |= (Persona__User.user_id == user.id) & listed
 
-        where_clause |= public_condition
-        where_clause |= shared_condition
-
-    # Owner always sees their own agents (regardless of is_listed)
-    where_clause |= Persona.user_id == user.id
+        # Owners always see their own agents (regardless of is_listed)
+        where_clause |= owner_clause
 
     return stmt.where(where_clause)
 
@@ -209,6 +227,72 @@ def _get_persona_by_name(
     return result
 
 
+def apply_persona_user_share_diff(
+    persona_id: int,
+    desired_shares: dict[UUID, PersonaSharePermission],
+    creator_user_id: UUID | None,
+    db_session: Session,
+) -> None:
+    """Reconcile persona__user rows to ``desired_shares``: delete missing,
+    update changed levels in place, insert + notify genuinely new users.
+    Level-only changes never re-notify."""
+    existing_rows = (
+        db_session.query(Persona__User)
+        .filter(Persona__User.persona_id == persona_id)
+        .all()
+    )
+    existing_by_user = {row.user_id: row for row in existing_rows if row.user_id}
+
+    for user_id, row in existing_by_user.items():
+        if user_id not in desired_shares:
+            db_session.delete(row)
+        elif row.permission != desired_shares[user_id]:
+            row.permission = desired_shares[user_id]
+
+    for user_id, permission in desired_shares.items():
+        if user_id in existing_by_user:
+            continue
+        db_session.add(
+            Persona__User(persona_id=persona_id, user_id=user_id, permission=permission)
+        )
+        if user_id != creator_user_id:
+            create_notification(
+                user_id=user_id,
+                notif_type=NotificationType.PERSONA_SHARED,
+                title="A new agent was shared with you!",
+                db_session=db_session,
+                additional_data=PersonaSharedNotificationData(
+                    persona_id=persona_id,
+                ).model_dump(),
+            )
+
+
+def resolve_desired_user_shares(
+    persona_id: int,
+    user_ids: list[UUID] | None,
+    user_shares: dict[UUID, PersonaSharePermission] | None,
+    db_session: Session,
+) -> dict[UUID, PersonaSharePermission] | None:
+    """Merge the legacy id-list and leveled-share inputs into one desired map.
+    Legacy ids keep an existing row's level (new rows default to VIEWER) so
+    pre-permission callers can't downgrade editors."""
+    if user_shares is not None:
+        return dict(user_shares)
+    if user_ids is None:
+        return None
+    existing = {
+        row.user_id: row.permission
+        for row in db_session.query(Persona__User)
+        .filter(Persona__User.persona_id == persona_id)
+        .all()
+        if row.user_id
+    }
+    return {
+        user_id: existing.get(user_id, PersonaSharePermission.VIEWER)
+        for user_id in set(user_ids)
+    }
+
+
 def update_persona_access(
     persona_id: int,
     creator_user_id: UUID | None,
@@ -216,48 +300,44 @@ def update_persona_access(
     is_public: bool | None = None,
     user_ids: list[UUID] | None = None,
     group_ids: list[int] | None = None,
+    user_shares: dict[UUID, PersonaSharePermission] | None = None,
+    group_shares: dict[int, PersonaSharePermission] | None = None,
+    public_permission: PersonaSharePermission | None = None,
 ) -> None:
     """Updates the access settings for a persona including public status and user shares.
 
     NOTE: Callers are responsible for committing."""
 
     needs_sync = False
-    if is_public is not None:
+    if is_public is not None or public_permission is not None:
         needs_sync = True
         persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
         if persona:
-            persona.is_public = is_public
+            if is_public is not None:
+                persona.is_public = is_public
+            if public_permission is not None:
+                persona.public_permission = public_permission
 
-    # NOTE: For user-ids and group-ids, `None` means "leave unchanged", `[]` means "clear all shares",
-    # and a non-empty list means "replace with these shares".
-    if user_ids is not None:
+    # NOTE: For share inputs, `None` means "leave unchanged", empty means
+    # "clear all shares", and non-empty means "replace with these shares".
+    desired_user_shares = resolve_desired_user_shares(
+        persona_id, user_ids, user_shares, db_session
+    )
+    if desired_user_shares is not None:
         needs_sync = True
-        db_session.query(Persona__User).filter(
-            Persona__User.persona_id == persona_id
-        ).delete(synchronize_session="fetch")
-
-        for user_uuid in user_ids:
-            db_session.add(Persona__User(persona_id=persona_id, user_id=user_uuid))
-            if user_uuid != creator_user_id:
-                create_notification(
-                    user_id=user_uuid,
-                    notif_type=NotificationType.PERSONA_SHARED,
-                    title="A new agent was shared with you!",
-                    db_session=db_session,
-                    additional_data=PersonaSharedNotificationData(
-                        persona_id=persona_id,
-                    ).model_dump(),
-                )
+        apply_persona_user_share_diff(
+            persona_id, desired_user_shares, creator_user_id, db_session
+        )
 
     # MIT doesn't support group-based sharing, so we allow clearing (no-op since
     # there shouldn't be any) but raise an error if trying to add actual groups.
-    if group_ids is not None:
+    if group_ids is not None or group_shares is not None:
         needs_sync = True
         db_session.query(Persona__UserGroup).filter(
             Persona__UserGroup.persona_id == persona_id
         ).delete(synchronize_session="fetch")
 
-        if group_ids:
+        if group_ids or group_shares:
             raise NotImplementedError("Onyx MIT does not support group-based sharing")
 
     # When sharing changes, user file ACLs need to be updated in the vector DB
@@ -350,16 +430,36 @@ def update_persona_shared(
     group_ids: list[int] | None = None,
     is_public: bool | None = None,
     label_ids: list[int] | None = None,
+    user_shares: dict[UUID, PersonaSharePermission] | None = None,
+    group_shares: dict[int, PersonaSharePermission] | None = None,
+    public_permission: PersonaSharePermission | None = None,
 ) -> None:
     """Simplified version of `create_update_persona` which only touches the
     accessibility rather than any of the logic (e.g. prompt, connected data sources,
-    etc.)."""
+    etc.). Allowed for the owner, EDITOR-level users, and admins — enforced by
+    the editable fetch.
+
+    The owner never appears in the share rows: incoming owner ids are dropped
+    silently so a dialog that went stale across an ownership transfer can
+    still save."""
     persona = fetch_persona_by_id_for_user(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
 
-    if user and user.role != UserRole.ADMIN and persona.user_id != user.id:
-        raise PermissionError("You don't have permission to modify this persona")
+    owner_user_id = persona.user_id
+    owner_group_id = persona.owner_group_id
+    if user_ids is not None and owner_user_id is not None:
+        user_ids = [uid for uid in user_ids if uid != owner_user_id]
+    if user_shares is not None and owner_user_id is not None:
+        user_shares = {
+            uid: perm for uid, perm in user_shares.items() if uid != owner_user_id
+        }
+    if group_ids is not None and owner_group_id is not None:
+        group_ids = [gid for gid in group_ids if gid != owner_group_id]
+    if group_shares is not None and owner_group_id is not None:
+        group_shares = {
+            gid: perm for gid, perm in group_shares.items() if gid != owner_group_id
+        }
 
     versioned_update_persona_access = fetch_versioned_implementation(
         "onyx.db.persona", "update_persona_access"
@@ -371,6 +471,9 @@ def update_persona_shared(
         is_public=is_public,
         user_ids=user_ids,
         group_ids=group_ids,
+        user_shares=user_shares,
+        group_shares=group_shares,
+        public_permission=public_permission,
     )
 
     if label_ids is not None:
@@ -394,10 +497,19 @@ def update_persona_public_status(
     persona = fetch_persona_by_id_for_user(
         db_session=db_session, persona_id=persona_id, user=user, get_editable=True
     )
-    if user.role != UserRole.ADMIN and persona.user_id != user.id:
+    is_owner_group_member = (
+        persona.owner_group_id is not None
+        and persona.owner_group_id in get_user_group_ids_for_user(db_session, user.id)
+    )
+    if (
+        user.role != UserRole.ADMIN
+        and persona.user_id != user.id
+        and not is_owner_group_member
+    ):
         raise ValueError("You don't have permission to modify this persona")
 
     persona.is_public = is_public
+    mark_persona_user_files_for_sync(persona_id, db_session)
     db_session.commit()
 
 
@@ -458,9 +570,19 @@ def get_minimal_persona_snapshots_for_user(
             Document.parent_hierarchy_node
         ),
         selectinload(Persona.user),
+        selectinload(Persona.owner_group),
+        selectinload(Persona.user_shares),
+        selectinload(Persona.group_shares),
     )
     results = db_session.scalars(stmt).all()
-    return [MinimalPersonaSnapshot.from_model(persona) for persona in results]
+    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    return [
+        MinimalPersonaSnapshot.from_model(
+            persona,
+            user_permission=get_persona_access_level(persona, user, user_group_ids),
+        )
+        for persona in results
+    ]
 
 
 def get_persona_snapshots_for_user(
@@ -497,6 +619,9 @@ def get_persona_snapshots_for_user(
         selectinload(Persona.user_files),
         selectinload(Persona.users),
         selectinload(Persona.groups),
+        selectinload(Persona.owner_group),
+        selectinload(Persona.user_shares).selectinload(Persona__User.user),
+        selectinload(Persona.group_shares).selectinload(Persona__UserGroup.user_group),
     )
 
     results = db_session.scalars(stmt).all()
@@ -600,10 +725,20 @@ def get_minimal_persona_snapshots_paginated(
             ),
         ),
         selectinload(Persona.user),
+        selectinload(Persona.owner_group),
+        selectinload(Persona.user_shares),
+        selectinload(Persona.group_shares),
     )
 
     results = db_session.scalars(stmt).all()
-    return [MinimalPersonaSnapshot.from_model(persona) for persona in results]
+    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    return [
+        MinimalPersonaSnapshot.from_model(
+            persona,
+            user_permission=get_persona_access_level(persona, user, user_group_ids),
+        )
+        for persona in results
+    ]
 
 
 def get_persona_snapshots_paginated(
@@ -671,6 +806,9 @@ def get_persona_snapshots_paginated(
         selectinload(Persona.user_files),
         selectinload(Persona.users),
         selectinload(Persona.groups),
+        selectinload(Persona.owner_group),
+        selectinload(Persona.user_shares).selectinload(Persona__User.user),
+        selectinload(Persona.group_shares).selectinload(Persona__UserGroup.user_group),
     )
 
     results = db_session.scalars(stmt).all()
@@ -914,7 +1052,7 @@ def upsert_persona(
     system_prompt: str | None,
     task_prompt: str | None,
     datetime_aware: bool | None,
-    is_public: bool,
+    is_public: bool | None,
     db_session: Session,
     default_model_configuration_id: int | None = None,
     document_set_ids: list[int] | None = None,
@@ -924,7 +1062,7 @@ def upsert_persona(
     uploaded_image_id: str | None = None,
     icon_name: str | None = None,
     display_priority: int | None = None,
-    is_listed: bool = True,
+    is_listed: bool | None = None,
     remove_image: bool | None = None,
     search_start_date: datetime | None = None,
     builtin_persona: bool = False,
@@ -1046,18 +1184,27 @@ def upsert_persona(
         existing_persona.default_model_configuration_id = default_model_configuration_id
         existing_persona.starter_messages = starter_messages
         existing_persona.deleted = False  # Un-delete if previously deleted
-        existing_persona.is_public = is_public
+        if is_public is not None:
+            existing_persona.is_public = is_public
         if remove_image or uploaded_image_id:
             existing_persona.uploaded_image_id = uploaded_image_id
         existing_persona.icon_name = icon_name
-        existing_persona.is_listed = is_listed
         existing_persona.search_start_date = search_start_date
         if label_ids is not None:
             existing_persona.labels.clear()
             existing_persona.labels = labels or []
-        existing_persona.is_featured = (
-            is_featured if is_featured is not None else existing_persona.is_featured
-        )
+        # Featured/listed changes are curator/admin-only (ENG-4179): shared
+        # editors saving the form must never flip them, so non-privileged
+        # updates silently preserve the stored values.
+        user_can_set_admin_flags = user is None or user.role in [
+            UserRole.ADMIN,
+            UserRole.CURATOR,
+            UserRole.GLOBAL_CURATOR,
+        ]
+        if is_listed is not None and user_can_set_admin_flags:
+            existing_persona.is_listed = is_listed
+        if is_featured is not None and user_can_set_admin_flags:
+            existing_persona.is_featured = is_featured
         # Update embedded prompt fields if provided
         if system_prompt is not None:
             existing_persona.system_prompt = system_prompt
@@ -1106,7 +1253,7 @@ def upsert_persona(
         new_persona = Persona(
             id=persona_id,
             user_id=user.id if user else None,
-            is_public=is_public,
+            is_public=(is_public if is_public is not None else True),
             name=name,
             description=description,
             builtin_persona=builtin_persona,
@@ -1121,7 +1268,7 @@ def upsert_persona(
             uploaded_image_id=uploaded_image_id,
             icon_name=icon_name,
             display_priority=display_priority,
-            is_listed=is_listed,
+            is_listed=(is_listed if is_listed is not None else True),
             search_start_date=search_start_date,
             is_featured=(is_featured if is_featured is not None else False),
             user_files=user_files or [],
@@ -1237,8 +1384,16 @@ def get_persona_by_id(
 
     # or check if user owns persona
     or_conditions = Persona.user_id == user.id
-    # allow access if persona user id is None
-    or_conditions |= Persona.user_id == None  # noqa: E711
+    # Builtin/system personas are ownerless and stay reachable for everyone
+    # (chat flows fetch them with this function's safe-default edit flag).
+    # Other ownerless personas are vacant — admin-managed, no blanket access.
+    or_conditions |= (Persona.user_id == None) & (  # noqa: E711
+        Persona.builtin_persona == True  # noqa: E712
+    )
+    # Members of the owning group hold owner rights
+    owner_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    if owner_group_ids:
+        or_conditions |= Persona.owner_group_id.in_(owner_group_ids)
     if not is_for_edit:
         # if the user is in a group related to the persona
         or_conditions |= User__UserGroup.user_id == user.id
