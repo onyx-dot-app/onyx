@@ -7,6 +7,7 @@ import {
   SvgMicrosoft,
   SvgNomic,
   SvgOpenai,
+  SvgOpenrouter,
   SvgVoyage,
 } from "@opal/logos";
 import {
@@ -155,6 +156,15 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
     displayName: "LiteLLM",
     icon: SvgLitellm,
     apiLink: "https://docs.litellm.ai/docs/proxy/quick_start",
+    embeddingModels: [],
+  },
+  {
+    providerName: EmbeddingProviderName.OPENROUTER,
+    displayName: "OpenRouter",
+    icon: SvgOpenrouter,
+    docsLink: "https://openrouter.ai/docs/embeddings",
+    apiLink: "https://openrouter.ai/settings/keys",
+    costslink: "https://openrouter.ai/models?category=embedding",
     embeddingModels: [],
   },
   {
