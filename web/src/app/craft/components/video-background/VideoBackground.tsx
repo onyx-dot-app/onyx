@@ -10,7 +10,7 @@ export default function VideoBackground() {
 
   return (
     <div
-      aria-hidden
+      aria-hidden="true"
       className="absolute inset-0 z-0 overflow-hidden pointer-events-none"
     >
       {/* scale-105 crops the transparent fringe the blur creates at the edges */}
