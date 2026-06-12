@@ -757,7 +757,8 @@ class WebConnector(LoadConnector, SlimConnector):
         ):
             return None
 
-        # Make a quick request to see if we get a valid response
+        # Make a quick request to see if we get a valid response. This re-runs the
+        # SSRF check internally (intentional, cheap defense-in-depth).
         try:
             check_internet_connection(test_url)
         except Exception as e:

@@ -61,7 +61,9 @@ def test_extract_urls_from_sitemap_blocks_internal_before_fetch() -> None:
         WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value,
     ],
 )
-def test_validate_rejects_internal_target_for_all_types(connector_type: str) -> None:
+def test_validate_rejects_internal_target_for_single_and_recursive(
+    connector_type: str,
+) -> None:
     """Validation must reject an internal base_url for both single and recursive."""
     connector = WebConnector(base_url=PRIVATE_URL, web_connector_type=connector_type)
     with pytest.raises(ConnectorValidationError, match="Protected URL check failed"):
