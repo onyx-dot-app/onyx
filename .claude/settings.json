@@ -7,7 +7,10 @@
       "Bash(git -C /d/dev/agent/glomi-ai commit -m ' *)",
       "Bash(git -C /d/dev/agent/glomi-ai log --oneline -3)",
       "Bash(git check-ignore *)",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(git fetch *)",
+      "Bash(git cherry-pick *)",
+      "Bash(git branch *)"
     ]
   },
   "enabledPlugins": {
