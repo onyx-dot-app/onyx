@@ -1417,7 +1417,9 @@ class SlackConnector(
         1. Verify any channel include/exclude regexes compile.
         2. Verify the bot token is valid for the workspace (via auth_test).
         3. Ensure the bot has enough scope to list channels.
-        4. Check that every channel specified in self.channels exists (only when regex is not enabled).
+
+        Channel existence (for non-regex includes) is validated during indexing
+        via filter_channels, not here.
         """
         if self.channel_regex_enabled:
             _validate_channel_regexes(self.channels, "channel")

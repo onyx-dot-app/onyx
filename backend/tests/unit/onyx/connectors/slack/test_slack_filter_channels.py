@@ -40,7 +40,7 @@ def test_exclude_regex_without_includes() -> None:
         CHANNELS,
         None,
         False,
-        channels_to_exclude=[".*-alerts$", ".*-notifications$"],
+        channels_to_exclude=[".*-alerts", ".*-notifications"],
         exclude_regex_enabled=True,
     )
     assert _names(result) == ["general", "support"]
