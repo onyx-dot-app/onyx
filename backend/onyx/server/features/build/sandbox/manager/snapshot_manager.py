@@ -241,19 +241,23 @@ class SnapshotManager:
                 pass
 
     def delete_snapshot(self, storage_path: str) -> None:
-        """Delete snapshot from file store.
+        """Delete a snapshot's blob from the file store.
+
+        Idempotent: a missing blob is treated as already-deleted (not an error),
+        so a caller retrying after a partial failure can still drop its DB row
+        without the blob and row leaking out of sync.
 
         Args:
             storage_path: The file store path of the snapshot to delete
 
         Raises:
-            RuntimeError: If deletion fails (other than file not found)
+            RuntimeError: If deletion fails for a reason other than the blob
+                already being gone.
         """
         try:
-            self._file_store.delete_file(storage_path)
+            self._file_store.delete_file(storage_path, error_on_missing=False)
             logger.info("Deleted snapshot: %s", storage_path)
         except Exception as e:
-            # Log but don't fail if snapshot doesn't exist
             logger.warning("Failed to delete snapshot %s: %s", storage_path, e)
             raise RuntimeError(f"Failed to delete snapshot: {e}") from e
 
