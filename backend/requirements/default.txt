@@ -1831,9 +1831,9 @@ opentelemetry-sdk==1.39.1 \
     #   langfuse
     #   openinference-instrumentation
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-semantic-conventions==0.60b1 \
-    --hash=sha256:87c228b5a0669b748c76d76df6c364c369c28f1c465e50f661e39737e84bc953 \
-    --hash=sha256:9fa8c8b0c110da289809292b0591220d3a7b53c1526a23021e977d68597893fb
+opentelemetry-semantic-conventions==0.62b1 \
+    --hash=sha256:c5cc6e04a7f8c7cdd30be2ed81499fa4e75bfbd52c9cb70d40af1f9cd3619802 \
+    --hash=sha256:cf506938103d331fbb78eded0d9788095f7fd59016f2bda813c3324e5a74a93c
     # via opentelemetry-sdk
 orjson==3.11.6 ; platform_python_implementation != 'PyPy' \
     --hash=sha256:0a54c72259f35299fd033042367df781c2f66d10252955ca1efb7db309b954cb \
