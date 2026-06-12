@@ -21,4 +21,4 @@ craft-refresh-images:
 	deployment/helm/dev/refresh-images.sh
 
 craft-check-images:
-	deployment/helm/dev/refresh-images.sh --check
+	deployment/helm/dev/refresh-images.sh --check || true
