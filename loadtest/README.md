@@ -104,6 +104,12 @@ mode. Each maps to a real production incident class:
   abandons the session. Stresses server-side disconnect cleanup of held
   transactions/connections/buffers (slow leaks). The turn is recorded as
   `disconnect:disconnected`, separate from success/failure.
+- **FileAttachmentUser** (`fileattach:*`) — uploads one file (`ONYX_FILE_KB`,
+  default 512) up front, then attaches it to every message. Exercises the
+  chat-setup path that loads attached files from object storage while the DB
+  connection is held — the connection-hold contributor that plain-text
+  scenarios never touch. Set `ONYX_SESSION_TURNS > 1` to accumulate files
+  across a growing history (a file-heavy long chat).
 
 ```bash
 ... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> LongConversationUser
@@ -140,6 +146,8 @@ The API key is created by an admin via `POST /api/admin/api-key`
 | `ONYX_LONGCONV_MODEL` | unset | Model for LongConversationUser (unset = persona default) |
 | `ONYX_SESSION_TURNS` | 1 | Turns to keep one session alive (LongConversationUser defaults to 20) |
 | `ONYX_DISCONNECT_AFTER` | `first_answer_token` | Milestone after which DisconnectUser drops the stream |
+| `ONYX_FILE_KB` | 512 | Uploaded file size (KB) for FileAttachmentUser |
+| `ONYX_HOST_HEADER` | unset | `Host` header to send (set when `LOCUST_HOST` targets an internal Service to bypass an external ALB/WAF for high-rps runs) |
 | `ONYX_SHAPE` | unset | `stepramp` activates the staged ramp shape |
 | `ONYX_RAMP_STAGES` / `ONYX_RAMP_DWELL` / `ONYX_RAMP_SPAWN` | `25,50,100,200` / 300 / 5 | Ramp user plateaus, dwell seconds, spawn rate |
 | `ONYX_WAIT_SECONDS` | 15 | Think time between turns per user |
