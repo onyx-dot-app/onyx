@@ -1,7 +1,5 @@
 """Celery tasks for sandbox operations (cleanup, etc.)."""
 
-from typing import TYPE_CHECKING
-
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
@@ -11,6 +9,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import Snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
@@ -19,12 +18,7 @@ from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.sandbox.base import get_sandbox_manager
-
-if TYPE_CHECKING:
-    from onyx.db.models import Snapshot
-    from onyx.server.features.build.sandbox.manager.snapshot_manager import (
-        SnapshotManager,
-    )
+from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 
 # 100 minutes - snapshotting can take time
 TIMEOUT_SECONDS = 6000
@@ -32,8 +26,8 @@ TIMEOUT_SECONDS = 6000
 
 def _prune_prior_session_snapshots(
     db_session: Session,
-    snapshot_manager: "SnapshotManager",
-    prior_snapshots: list["Snapshot"],
+    snapshot_manager: SnapshotManager,
+    prior_snapshots: list[Snapshot],
 ) -> None:
     """Delete a session's now-superseded snapshots (blob then row).
 
@@ -94,9 +88,6 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
         from onyx.server.features.build.db.sandbox import get_snapshots_for_session
         from onyx.server.features.build.db.sandbox import (
             update_sandbox_status__no_commit,
-        )
-        from onyx.server.features.build.sandbox.manager.snapshot_manager import (
-            SnapshotManager,
         )
 
         sandbox_manager = get_sandbox_manager()
