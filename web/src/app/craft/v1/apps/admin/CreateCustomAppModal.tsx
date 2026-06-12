@@ -185,6 +185,13 @@ export default function CreateCustomAppModal({
         />
         <Modal.Body>
           <div className="flex flex-col gap-4">
+            {existingApp?.credential_error && (
+              <MessageCard
+                variant="warning"
+                title="Stored credentials can't be read"
+                description="They may have been saved under a different encryption key. Re-enter the organization credentials below and save to fix this app."
+              />
+            )}
             <div className="flex flex-col gap-1">
               <Text font="main-ui-action">Name</Text>
               <InputTypeIn

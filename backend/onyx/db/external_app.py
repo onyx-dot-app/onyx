@@ -29,22 +29,38 @@ logger = setup_logger()
 _PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
+def try_decrypt_credentials(
+    credentials: SensitiveValue[dict[str, Any]],
+    *,
+    apply_mask: bool,
+    context: str,
+) -> dict[str, Any] | None:
+    """Stored credential blobs become undecryptable when ENCRYPTION_KEY_SECRET
+    changes. Returns None on decrypt failure so callers can distinguish a broken
+    blob from "nothing stored". ValueError covers UnicodeDecodeError and
+    json.JSONDecodeError.
+    """
+    try:
+        return credentials.get_value(apply_mask=apply_mask)
+    except ValueError:
+        logger.warning("Could not decrypt %s; treating as empty.", context)
+        return None
+
+
 def decrypt_credentials_or_empty(
     credentials: SensitiveValue[dict[str, Any]],
     *,
     apply_mask: bool,
     context: str,
 ) -> dict[str, Any]:
-    """Stored credential blobs become undecryptable when ENCRYPTION_KEY_SECRET
-    changes. Degrade to "nothing stored" — the app shows as unauthenticated and
-    re-entering credentials overwrites the bad row — instead of failing every
-    caller. ValueError covers UnicodeDecodeError and json.JSONDecodeError.
+    """Decrypt-failure-tolerant read: degrade to "nothing stored" — the app
+    shows as unauthenticated and re-entering credentials overwrites the bad
+    row — instead of failing the caller.
     """
-    try:
-        return credentials.get_value(apply_mask=apply_mask)
-    except ValueError:
-        logger.warning("Could not decrypt %s; treating as empty.", context)
-        return {}
+    decrypted = try_decrypt_credentials(
+        credentials, apply_mask=apply_mask, context=context
+    )
+    return decrypted if decrypted is not None else {}
 
 
 def _placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:

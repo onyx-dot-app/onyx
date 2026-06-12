@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/refresh-components/Modal";
-import { Button, Text } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
+import { Button, InputTypeIn, MessageCard, Text } from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
@@ -207,6 +206,13 @@ export default function ConfigureProviderModal({
         />
         <Modal.Body>
           <div className="flex flex-col gap-3">
+            {existingApp?.credential_error && !managed && (
+              <MessageCard
+                variant="warning"
+                title="Stored credentials can't be read"
+                description="They may have been saved under a different encryption key. Re-enter the credentials below and save to fix this app."
+              />
+            )}
             {managed ? (
               <Text font="secondary-body" color="text-03">
                 This app is provided by Onyx — credentials are managed for you.

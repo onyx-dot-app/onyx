@@ -1,5 +1,6 @@
-"""Unit tests for `validate_auth_template`, `decrypt_credentials_or_empty`,
-`is_user_authenticated_for_app`, and `resolve_masked_credentials`."""
+"""Unit tests for `try_decrypt_credentials`, `validate_auth_template`,
+`decrypt_credentials_or_empty`, `is_user_authenticated_for_app`, and
+`resolve_masked_credentials`."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from onyx.configs.constants import MASK_CREDENTIAL_CHAR
 from onyx.db.external_app import decrypt_credentials_or_empty
 from onyx.db.external_app import is_user_authenticated_for_app
 from onyx.db.external_app import resolve_masked_credentials
+from onyx.db.external_app import try_decrypt_credentials
 from onyx.db.external_app import validate_auth_template
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
@@ -62,6 +64,24 @@ def _make_user_cred(
 ) -> ExternalAppUserCredential:
     """Transient ExternalAppUserCredential with the given credentials."""
     return ExternalAppUserCredential(user_credentials=user_credentials)
+
+
+# ---------------------------------------------------------------------------
+# try_decrypt_credentials
+# ---------------------------------------------------------------------------
+
+
+def test_try_decrypt_credentials_returns_none_for_bad_bytes() -> None:
+    result = try_decrypt_credentials(_bad_sensitive(), apply_mask=False, context="test")
+    assert result is None
+
+
+def test_try_decrypt_credentials_returns_dict_for_valid() -> None:
+    data = {"token": "secret"}
+    result = try_decrypt_credentials(
+        _good_sensitive(data), apply_mask=False, context="test"
+    )
+    assert result == data
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +160,7 @@ def test_resolve_masked_credentials_undecryptable_existing_plain_value() -> None
 
 
 # ---------------------------------------------------------------------------
-# validate_auth_template (existing tests follow)
+# validate_auth_template
 # ---------------------------------------------------------------------------
 
 

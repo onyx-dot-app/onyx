@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
@@ -11,13 +13,13 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import Permission
 from onyx.db.external_app import create_external_app
-from onyx.db.external_app import decrypt_credentials_or_empty
 from onyx.db.external_app import delete_external_app
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import get_policies
 from onyx.db.external_app import get_user_credentials_by_app_id
 from onyx.db.external_app import required_user_credential_keys
+from onyx.db.external_app import try_decrypt_credentials
 from onyx.db.external_app import update_external_app
 from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.external_app import validate_auth_template
@@ -70,27 +72,31 @@ def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
 def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
     stored = {policy.action_id: policy.policy for policy in app.policies}
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
+    # Managed built-ins: hide Onyx-owned config/creds. Else mask secrets — the
+    # write path restores masked values echoed back unchanged.
+    if managed:
+        org_credentials: dict[str, Any] = {}
+        credential_error = False
+    else:
+        decrypted = try_decrypt_credentials(
+            app.organization_credentials,
+            apply_mask=True,
+            context=f"organization credentials for external app {app.id}",
+        )
+        org_credentials = decrypted if decrypted is not None else {}
+        credential_error = decrypted is None
     return ExternalAppAdminResponse(
         id=app.id,
         name=app.skill.name,
         description=app.skill.description,
         app_type=app.app_type,
-        # Managed built-ins: hide Onyx-owned config/creds. Else mask secrets — the
-        # write path restores masked values echoed back unchanged.
         upstream_url_patterns=[] if managed else list(app.upstream_url_patterns),
         auth_template={} if managed else app.auth_template,
-        organization_credentials=(
-            {}
-            if managed
-            else decrypt_credentials_or_empty(
-                app.organization_credentials,
-                apply_mask=True,
-                context=f"organization credentials for external app {app.id}",
-            )
-        ),
+        organization_credentials=org_credentials,
         enabled=app.skill.enabled,
         actions=action_policy_views(app.app_type, stored),
         is_onyx_managed=managed,
+        credential_error=credential_error,
     )
 
 
@@ -101,16 +107,16 @@ def _to_user_response(
     org hasn't pre-filled; ``credential_values`` = the user's stored values for
     those keys (stale keys filtered out).
     """
-    required_keys = required_user_credential_keys(
-        app.auth_template,
-        decrypt_credentials_or_empty(
-            app.organization_credentials,
-            apply_mask=False,
-            context=f"organization credentials for external app {app.id}",
-        ),
+    org_creds = try_decrypt_credentials(
+        app.organization_credentials,
+        apply_mask=False,
+        context=f"organization credentials for external app {app.id}",
     )
-    stored = (
-        decrypt_credentials_or_empty(
+    required_keys = required_user_credential_keys(
+        app.auth_template, org_creds if org_creds is not None else {}
+    )
+    user_creds = (
+        try_decrypt_credentials(
             user_cred.user_credentials,
             apply_mask=False,
             context=f"user credentials for external app {app.id}",
@@ -118,6 +124,8 @@ def _to_user_response(
         if user_cred is not None
         else {}
     )
+    credential_error = org_creds is None or user_creds is None
+    stored = user_creds if user_creds is not None else {}
     credential_values = {key: stored[key] for key in required_keys if key in stored}
     authenticated = all(key in credential_values for key in required_keys)
 
@@ -130,6 +138,7 @@ def _to_user_response(
         credential_keys=required_keys,
         credential_values=credential_values,
         authenticated=authenticated,
+        credential_error=credential_error,
     )
 
 
