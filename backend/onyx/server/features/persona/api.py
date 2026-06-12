@@ -9,6 +9,7 @@ from fastapi import Response
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from pydantic import model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -427,6 +428,16 @@ class PersonaShareRequest(BaseModel):
     is_public: bool | None = None
     public_permission: PersonaSharePermission | None = None
     label_ids: list[int] | None = None
+
+    @model_validator(mode="after")
+    def _reject_legacy_and_leveled(self) -> "PersonaShareRequest":
+        # A stale client sending both forms would silently lose the legacy list
+        # (the leveled map wins downstream); reject the ambiguity at the boundary.
+        if self.user_ids is not None and self.user_shares is not None:
+            raise ValueError("Provide either user_ids or user_shares, not both")
+        if self.group_ids is not None and self.group_shares is not None:
+            raise ValueError("Provide either group_ids or group_shares, not both")
+        return self
 
 
 # We notify each user when a user is shared with them
