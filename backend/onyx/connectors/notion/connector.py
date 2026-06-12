@@ -955,7 +955,6 @@ class NotionConnector(LoadConnector, PollConnector):
                         parent_hierarchy_raw_node_id=parent_raw_id,
                     )
                 )
-                self.indexed_pages.add(page.id)
 
             if self.recursive_index_enabled and all_child_page_ids:
                 # NOTE: checking if page_id is in self.indexed_pages to prevent extra
