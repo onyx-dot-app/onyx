@@ -12,11 +12,15 @@ import PasswordInputTypeIn from "./PasswordInputTypeIn";
 interface ControlledPasswordProps {
   initialValue?: string;
   isNonRevealable?: boolean;
+  placeholder?: string;
+  shrinkPlaceholder?: boolean;
 }
 
 function ControlledPassword({
   initialValue = "",
   isNonRevealable,
+  placeholder,
+  shrinkPlaceholder,
 }: ControlledPasswordProps) {
   const [value, setValue] = React.useState(initialValue);
   return (
@@ -25,6 +29,8 @@ function ControlledPassword({
       value={value}
       onChange={(e) => setValue(e.target.value)}
       isNonRevealable={isNonRevealable}
+      placeholder={placeholder}
+      shrinkPlaceholder={shrinkPlaceholder}
     />
   );
 }
@@ -76,14 +82,32 @@ describe("PasswordInputTypeIn", () => {
     render(<ControlledPassword initialValue="secret" />);
 
     // Applied whenever hidden (even before typing) so the size is constant
-    // across keystrokes; the placeholder override keeps it matched to the mask.
+    // across keystrokes.
     const wrapper = screen.getByTestId("pw").closest("div.contents");
     expect(wrapper?.className).toContain("[&_input]:!text-[0.6rem]");
-    expect(wrapper?.className).toContain(
-      "[&_input::placeholder]:!text-[0.6rem]"
-    );
 
     await user.click(screen.getByRole("button", { name: "Show password" }));
     expect(wrapper?.className).not.toContain("[&_input]:!text-[0.6rem]");
+  });
+
+  test("shrinks the placeholder when shrinkPlaceholder is set", () => {
+    render(<ControlledPassword placeholder="●●●●●●●●" shrinkPlaceholder />);
+
+    const wrapper = screen.getByTestId("pw").closest("div.contents");
+    expect(wrapper?.className).toContain(
+      "[&_input::placeholder]:!text-[0.6rem]"
+    );
+  });
+
+  test("leaves a custom text placeholder at full size by default", () => {
+    render(<ControlledPassword placeholder="Your long-term API key" />);
+
+    // The input value still shrinks while hidden, but the custom text
+    // placeholder must stay legible at its normal Opal size.
+    const wrapper = screen.getByTestId("pw").closest("div.contents");
+    expect(wrapper?.className).toContain("[&_input]:!text-[0.6rem]");
+    expect(wrapper?.className).not.toContain(
+      "[&_input::placeholder]:!text-[0.6rem]"
+    );
   });
 });
