@@ -11,10 +11,13 @@ export default function Home() {
       <View className="flex-1 items-center justify-center gap-2 px-6">
         <Text className="text-2xl font-semibold text-text-04">Onyx Mobile</Text>
         <Text className="text-center text-base text-text-03">
-          Design tokens via @onyx-ai/shared — colors, spacing & radius, light & dark.
+          Design tokens via @onyx-ai/shared — colors, spacing & radius, light &
+          dark.
         </Text>
         <View className="mt-2 rounded-12 bg-background-neutral-02 px-4 py-2">
-          <Text className="text-text-03">rounded-12 · background-neutral-02</Text>
+          <Text className="text-text-03">
+            rounded-12 · background-neutral-02
+          </Text>
         </View>
       </View>
     </SafeAreaView>
