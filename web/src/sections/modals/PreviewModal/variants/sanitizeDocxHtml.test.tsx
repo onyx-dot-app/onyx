@@ -77,4 +77,15 @@ describe("sanitizeDocxHtml", () => {
     );
     expect(doc.querySelector("img")?.getAttribute("src")).toBe(dataUrl);
   });
+
+  it("blocks data: URLs in anchor hrefs (only permitted in <img src>)", () => {
+    const doc = parse(
+      sanitizeDocxHtml(
+        '<a href="data:text/html,<script>alert(1)</script>">x</a>'
+      )
+    );
+
+    const href = doc.querySelector("a")?.getAttribute("href") ?? "";
+    expect(href).not.toMatch(/^data:/i);
+  });
 });
