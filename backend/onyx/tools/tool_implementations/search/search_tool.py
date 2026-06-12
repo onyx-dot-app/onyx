@@ -43,6 +43,7 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import BaseFilters
@@ -124,6 +125,7 @@ from shared_configs.configs import MODEL_SERVER_PORT
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+SOURCE_TYPES_FIELD = "source_types"
 
 
 def deduplicate_queries(
@@ -148,6 +150,51 @@ def deduplicate_queries(
             # Keep the first occurrence (preserves original casing)
             query_map[query_lower] = (query, weight)
     return list(query_map.values())
+
+
+def _parse_llm_source_types(raw_source_types: Any) -> list[DocumentSource] | None:
+    if raw_source_types is None:
+        return None
+
+    if not isinstance(raw_source_types, list):
+        logger.warning("Ignoring non-list source_types from search tool call")
+        return None
+
+    source_types: list[DocumentSource] = []
+    for source_type in raw_source_types:
+        if not isinstance(source_type, str):
+            logger.warning("Ignoring non-string source_type from search tool call")
+            continue
+
+        try:
+            source_types.append(DocumentSource(source_type.lower()))
+        except ValueError:
+            logger.warning("Ignoring unknown source_type '%s'", source_type)
+
+    return list(dict.fromkeys(source_types)) or None
+
+
+def _with_llm_source_type_filter(
+    base_filters: BaseFilters | None,
+    llm_source_types: list[DocumentSource] | None,
+) -> BaseFilters | None:
+    if not llm_source_types:
+        return base_filters
+
+    if base_filters is None:
+        return BaseFilters(source_type=llm_source_types)
+
+    if not base_filters.source_type:
+        return base_filters.model_copy(update={"source_type": llm_source_types})
+
+    allowed_source_types = [
+        source for source in llm_source_types if source in base_filters.source_type
+    ]
+    if not allowed_source_types:
+        logger.warning("Ignoring source_types that do not overlap existing filters")
+        return base_filters
+
+    return base_filters.model_copy(update={"source_type": allowed_source_types})
 
 
 def _estimate_section_tokens(
@@ -425,6 +472,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         query: str,
         hybrid_alpha: float | None,
         num_hits: int,
+        user_selected_filters: BaseFilters | None,
         acl_filters: list[str] | None,
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
@@ -451,9 +499,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 hybrid_alpha=hybrid_alpha,
                 # For projects, the search scope is the project and has no other limits
                 user_selected_filters=(
-                    self.user_selected_filters
-                    if self.project_id_filter is None
-                    else None
+                    user_selected_filters if self.project_id_filter is None else None
                 ),
                 bypass_acl=self.bypass_acl,
                 limit=num_hits,
@@ -522,6 +568,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                             "items": {"type": "string"},
                             "description": "List of search queries to execute, typically a single query.",
                         },
+                        SOURCE_TYPES_FIELD: {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Optional source filters such as 'jira', 'confluence', "
+                                "'github', or 'google_drive'. Use when the user clearly "
+                                "asks for information from a specific connected source."
+                            ),
+                        },
                     },
                     "required": [QUERIES_FIELD],
                 },
@@ -550,6 +605,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         query_expansion_elapsed = 0.0
         document_selection_elapsed = 0.0
         document_expansion_elapsed = 0.0
+        llm_source_types = _parse_llm_source_types(llm_kwargs.get(SOURCE_TYPES_FIELD))
+        effective_user_selected_filters = _with_llm_source_type_filter(
+            self.user_selected_filters,
+            llm_source_types,
+        )
 
         # Pre-fetch all DB data in a single short-lived session so that
         # parallel search workers need zero DB connections.
@@ -563,13 +623,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
             # Validate document-set access for user-supplied filters.
             if (
-                self.user_selected_filters
-                and self.user_selected_filters.document_set
+                effective_user_selected_filters
+                and effective_user_selected_filters.document_set
                 and not self.bypass_acl
                 and self.user
                 and not self.user.is_anonymous
             ):
-                requested = self.user_selected_filters.document_set
+                requested = effective_user_selected_filters.document_set
                 accessible = filter_document_set_names_by_user_access(
                     db_session=db_session,
                     document_set_names=requested,
@@ -604,9 +664,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 prefetch_source_types = None
             else:
                 prefetch_source_types = (
-                    list(self.user_selected_filters.source_type)
-                    if self.user_selected_filters
-                    and self.user_selected_filters.source_type
+                    list(effective_user_selected_filters.source_type)
+                    if effective_user_selected_filters
+                    and effective_user_selected_filters.source_type
                     else None
                 )
             federated_retrieval_infos = (
@@ -766,6 +826,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         query,
                         None,
                         override_kwargs.num_hits,
+                        effective_user_selected_filters,
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
@@ -783,6 +844,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         query,
                         KEYWORD_QUERY_HYBRID_ALPHA,
                         override_kwargs.num_hits,
+                        effective_user_selected_filters,
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
