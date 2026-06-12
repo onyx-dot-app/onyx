@@ -88,7 +88,8 @@ export default function BuildChatPanel({
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
-  const { setLeftSidebarFolded, leftSidebarFolded } = useBuildContext();
+  const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
+    useBuildContext();
   const { isMobile } = useScreenSize();
   const toggleOutputPanel = useToggleOutputPanel();
 
@@ -653,7 +654,9 @@ export default function BuildChatPanel({
                 />
               </div>
               {/* Soft fade border at bottom */}
-              <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
+              {!videoBackgroundEnabled && (
+                <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
+              )}
             </div>
 
             {/* Main content area — cross-fades when switching between the main
@@ -702,7 +705,9 @@ export default function BuildChatPanel({
             {(hasSession || existingSessionId) && (
               <div className="px-4 pb-8 pt-4 relative">
                 {/* Soft fade border at top */}
-                <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+                {!videoBackgroundEnabled && (
+                  <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+                )}
                 <div className="max-w-[720px] mx-auto">
                   {/* Scroll to bottom button - shown when user has scrolled away */}
                   {showScrollButton && (
