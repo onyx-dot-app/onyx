@@ -8,6 +8,7 @@ drives a staged ramp. See README.md for usage and env vars.
 
 import os
 
+import prometheus_exporter  # noqa: F401  (registers the /metrics exporter)
 from onyx_client.chat_user import BasicChatUser
 from scenarios import ChatWithSearchUser
 from scenarios import DeepResearchUser
