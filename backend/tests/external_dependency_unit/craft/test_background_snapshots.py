@@ -186,17 +186,46 @@ def test_fresh_snapshot_skipped_by_age_gate(
     stubbed_sweep: StubSandboxManager,
 ) -> None:
     """Sessions whose latest snapshot is newer than the interval are skipped
-    without any pod traffic."""
+    without any pod traffic — the DB prefilter even skips the workspace
+    listing exec."""
     user = make_user(db_session)
     make_sandbox(db_session, user)
     session_row = _make_session(db_session, user)
     _add_snapshot(db_session, session_row.id, age_seconds=10)
 
-    stubbed_sweep.list_session_workspaces_returns = [session_row.id]
+    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+
+    assert stubbed_sweep.list_session_workspaces_count == 0
+    assert stubbed_sweep.create_snapshot_count == 0
+
+
+def test_stale_session_defeats_prefilter(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_sweep: StubSandboxManager,
+) -> None:
+    """One stale session among fresh ones is enough to reach the pod."""
+    user = make_user(db_session)
+    make_sandbox(db_session, user)
+    fresh = _make_session(db_session, user)
+    stale = _make_session(db_session, user)
+    _add_snapshot(db_session, fresh.id, age_seconds=10)
+    interval = tasks_module.SANDBOX_PERIODIC_SNAPSHOT_INTERVAL_SECONDS
+    _add_snapshot(db_session, stale.id, age_seconds=interval * 2)
+
+    stubbed_sweep.list_session_workspaces_returns = [fresh.id, stale.id]
+    stubbed_sweep.create_snapshot_returns = SnapshotResult(
+        storage_path=f"s3://snapshots/{uuid4()}.tar.gz",
+        size_bytes=55,
+    )
 
     cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
 
-    assert stubbed_sweep.create_snapshot_count == 0
+    assert stubbed_sweep.list_session_workspaces_count == 1
+    # The per-session age gate still protects the fresh session.
+    assert stubbed_sweep.create_snapshot_count == 1
+    assert stubbed_sweep.last_create_snapshot_payload is not None
+    assert stubbed_sweep.last_create_snapshot_payload["session_id"] == stale.id
 
 
 def test_stale_snapshot_resnapshotted_and_priors_pruned(

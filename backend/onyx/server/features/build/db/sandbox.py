@@ -4,13 +4,16 @@ import datetime
 from uuid import UUID
 
 from sqlalchemy import func
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
+from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import PatType
 from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
+from onyx.db.models import BuildSession
 from onyx.db.models import PersonalAccessToken
 from onyx.db.models import Sandbox
 from onyx.db.models import Snapshot
@@ -141,6 +144,34 @@ def get_running_sandboxes(db_session: Session) -> list[Sandbox]:
     """Get all RUNNING sandboxes (the sweep task's working set)."""
     stmt = select(Sandbox).where(Sandbox.status == SandboxStatus.RUNNING)
     return list(db_session.execute(stmt).scalars().all())
+
+
+def user_has_stale_active_session(
+    db_session: Session,
+    user_id: UUID,
+    snapshot_cutoff: datetime.datetime,
+) -> bool:
+    """True when any of the user's ACTIVE sessions lacks a snapshot fresher
+    than ``snapshot_cutoff`` — lets the sweep skip the pod round-trip when
+    every session is already covered."""
+    latest_snapshot_at = (
+        select(func.max(Snapshot.created_at))
+        .where(Snapshot.session_id == BuildSession.id)
+        .scalar_subquery()
+    )
+    stmt = (
+        select(BuildSession.id)
+        .where(
+            BuildSession.user_id == user_id,
+            BuildSession.status == BuildSessionStatus.ACTIVE,
+            or_(
+                latest_snapshot_at.is_(None),
+                latest_snapshot_at < snapshot_cutoff,
+            ),
+        )
+        .limit(1)
+    )
+    return db_session.execute(stmt).first() is not None
 
 
 def get_running_sandbox_count_by_tenant(

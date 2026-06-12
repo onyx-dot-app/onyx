@@ -30,6 +30,7 @@ from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_sessio
 from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.db.sandbox import user_has_stale_active_session
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 
@@ -121,6 +122,15 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                 idle = _is_idle(sandbox, now)
 
                 try:
+                    # DB-only prefilter: listing workspaces is a pod exec, so
+                    # skip it when every ACTIVE session already has a fresh
+                    # snapshot (idle sandboxes always proceed — they're about
+                    # to be reaped).
+                    if not idle and not user_has_stale_active_session(
+                        db_session, sandbox.user_id, snapshot_cutoff
+                    ):
+                        continue
+
                     if idle and sandbox_manager.supports_opencode_history_persistence:
                         try:
                             sandbox_manager.create_opencode_history_snapshot(
@@ -188,6 +198,8 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                             )
                             db_session.rollback()
 
+                    # snapshot_failed only gates reap (below); background
+                    # snapshot failures are log-only.
                     if not idle:
                         # Chat history lives outside session workspaces;
                         # keep it equally fresh.
