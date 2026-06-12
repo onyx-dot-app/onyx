@@ -35,8 +35,9 @@ def _get_gpu_status_from_model_server(indexing: bool) -> bool:
         raise  # Re-raise exception to trigger a retry
 
 
-# backoff=1 preserves the constant 5s delay this had under the `retry` package
-@retry_builder(tries=5, delay=5, backoff=1)
+# backoff=1 + jitter=0 preserve the constant 5s delay this had under the
+# legacy `retry` package
+@retry_builder(tries=5, delay=5, backoff=1, jitter=0)
 def gpu_status_request(indexing: bool) -> bool:
     return _get_gpu_status_from_model_server(indexing)
 

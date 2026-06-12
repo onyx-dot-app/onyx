@@ -17,8 +17,9 @@ def _api_url_builder(env_name: str, api_path: str) -> str:
         return "http://localhost:8080" + api_path
 
 
-# backoff=1 preserves the constant 10s delay this had under the `retry` package
-@retry_builder(tries=10, delay=10, backoff=1)
+# backoff=1 + jitter=0 preserve the constant 10s delay this had under the
+# legacy `retry` package
+@retry_builder(tries=10, delay=10, backoff=1, jitter=0)
 def check_indexing_status(env_name: str) -> tuple[int, bool]:
     url = _api_url_builder(env_name, "/manage/admin/connector/indexing-status/")
     try:
