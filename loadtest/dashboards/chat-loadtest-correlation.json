@@ -134,7 +134,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "locust_current_rps",
+          "expr": "locust_current_rps{name=~\"$milestone\"}",
           "legendFormat": "{{name}}"
         }
       ]
