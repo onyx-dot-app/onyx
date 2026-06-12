@@ -31,7 +31,7 @@ import { MinimalUserSnapshot } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { SettingsContext } from "@/providers/SettingsProvider";
 import Modal from "@/refresh-components/Modal";
-import { Button, Divider, MessageCard, Text } from "@opal/components";
+import { Button, Divider, Text } from "@opal/components";
 import {
   SvgArrowExchange,
   SvgArrowLeft,
@@ -106,21 +106,15 @@ function buildInitialDraftState(
     return props.draftShares;
   }
 
+  // No saved agent and no create-mode draft. The legacy userIds/groupIds
+  // props can't be hydrated into real users/groups synchronously here (the
+  // user list loads async), so don't fabricate rows that would render UUIDs
+  // as display names — start from an empty draft.
   return {
-    groupShares: (props.groupIds ?? []).map((groupId) => ({
-      group_id: groupId,
-      group_name: `Group ${groupId}`,
-      permission: "VIEWER",
-    })),
+    groupShares: [],
     isPublic: props.isPublic ?? false,
     publicPermission: "VIEWER",
-    userShares: (props.userIds ?? []).map((userId) => ({
-      permission: "VIEWER",
-      user: {
-        email: userId,
-        id: userId,
-      },
-    })),
+    userShares: [],
   };
 }
 
@@ -475,9 +469,17 @@ export default function ShareAgentModal({
   }, [agentId]);
 
   const handleSelfRemove = useCallback(async () => {
-    if (!agentId || !currentUser) {
-      removeUserShare(currentUser?.id ?? "");
+    // Create mode (no saved agent): mutate the local draft only.
+    if (!agentId) {
+      if (currentUser) {
+        removeUserShare(currentUser.id);
+      }
       closeModal();
+      return;
+    }
+    // Saved agent but the current user hasn't loaded yet: don't no-op-and-close
+    // (that would leave the share intact while signalling success).
+    if (!currentUser) {
       return;
     }
 
