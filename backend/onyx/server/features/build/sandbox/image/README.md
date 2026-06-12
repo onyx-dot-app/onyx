@@ -104,7 +104,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## What's Baked Into the Image
 
-- **Base**: `python:3.13-slim` (Debian-based) with Node.js 20 copied from `node:20-trixie-slim`
+- **Base**: `python:3.13-slim` (Debian-based) with Node.js 24 copied from `node:24-trixie-slim`
 - **Templates**: `/workspace/templates/outputs/` — Next.js web app scaffold
 - **Python venv**: `/workspace/.venv/` with packages from `initial-requirements.txt`
 - **OpenCode CLI**: Installed in `/home/sandbox/.opencode/bin/`

@@ -16,7 +16,7 @@ Related files:
 
 ## SHA-pinned base + helper images
 
-`python:3.13-slim`, `node:20-trixie-slim`, and `oven/bun:1.3.14` are
+`python:3.13-slim`, `node:24-trixie-slim`, and `oven/bun:1.3.14` are
 SHA-pinned in the Dockerfile (`@sha256:...`). Same precedent as
 `backend/Dockerfile` and `web/Dockerfile`. Bump via:
 
