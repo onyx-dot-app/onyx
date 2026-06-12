@@ -9,14 +9,22 @@ export default function VideoBackground() {
   if (!videoBackgroundEnabled) return null;
 
   return (
-    <video
-      autoPlay
-      loop
-      muted
-      playsInline
-      className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none opacity-30 blur-sm"
+    <div
+      aria-hidden
+      className="absolute inset-0 z-0 overflow-hidden pointer-events-none"
     >
-      <source src={VIDEO_BACKGROUND_SRC} type="video/mp4" />
-    </video>
+      {/* scale-105 crops the transparent fringe the blur creates at the edges */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="w-full h-full object-cover scale-105 blur-xs"
+      >
+        <source src={VIDEO_BACKGROUND_SRC} type="video/mp4" />
+      </video>
+      {/* tint overlay keeps foreground readable without washing the video out */}
+      <div className="absolute inset-0 bg-background-tint-00/60" />
+    </div>
   );
 }
