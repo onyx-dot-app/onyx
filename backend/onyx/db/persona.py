@@ -1326,7 +1326,7 @@ def upsert_persona(
     # Editors may only ATTACH knowledge they can access themselves; anything
     # already attached survives an update, but once removed it can't be
     # re-added by someone without access (ENG-4180).
-    knowledge_guard_applies = user is not None and user.role != UserRole.ADMIN
+    knowledge_guard_applies: bool = user is not None and user.role != UserRole.ADMIN
     if document_set_ids is not None and knowledge_guard_applies and user is not None:
         existing_set_ids = (
             {ds.id for ds in existing_persona.document_sets}
@@ -1350,13 +1350,19 @@ def upsert_persona(
         if not user_files and user_file_ids:
             raise ValueError("user_files not found")
 
-    if user_file_ids is not None and knowledge_guard_applies and user is not None:
-        existing_file_ids = (
-            {uf.id for uf in existing_persona.user_files} if existing_persona else set()
-        )
-        for user_file in user_files or []:
-            if user_file.id not in existing_file_ids and user_file.user_id != user.id:
-                raise ValueError("Cannot attach files you don't own")
+        # Editors may only attach files they own (admins bypass)
+        if knowledge_guard_applies and user is not None:
+            existing_file_ids = (
+                {uf.id for uf in existing_persona.user_files}
+                if existing_persona
+                else set()
+            )
+            for user_file in user_files:
+                if (
+                    user_file.id not in existing_file_ids
+                    and user_file.user_id != user.id
+                ):
+                    raise ValueError("Cannot attach files you don't own")
 
     labels = None
     if label_ids is not None:
