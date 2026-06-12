@@ -132,14 +132,16 @@ test("Default Model selector shows available models", async ({ page }) => {
   await defaultModelSection.scrollIntoViewIfNeeded();
 
   // Open the model selector
+  const dialog = page.locator('[role="dialog"]').first();
   await getDefaultModelSelector(page).click();
-  await page.waitForSelector('[role="option"]', { state: "visible" });
+  await dialog.waitFor({ state: "visible", timeout: 10000 });
 
   // Get all options
-  const options = await page.locator('[role="option"]').allTextContents();
+  const options = await dialog.getByRole("button").allTextContents();
 
   // Close dropdown
   await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden", timeout: 5000 });
 
   // Verify we have at least the default option
   expect(options.length).toBeGreaterThan(0);

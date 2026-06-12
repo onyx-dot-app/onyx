@@ -29,7 +29,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
-import { Button, SelectButton } from "@opal/components";
+import { SelectButton } from "@opal/components";
 import TTSButton from "./TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
@@ -300,6 +300,7 @@ export default function MessageToolbar({
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector
+                    includeGlobalDefault
                     value={findModelConfigId(
                       llmManager.llmProviders,
                       llmManager.currentLlm.provider,
