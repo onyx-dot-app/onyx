@@ -192,7 +192,7 @@ def verify_user_auth_secret() -> None:
 
     This only runs on app startup, not during migrations/scripts.
     """
-    if USER_AUTH_SECRET:
+    if USER_AUTH_SECRET.strip():
         return
 
     message = (
