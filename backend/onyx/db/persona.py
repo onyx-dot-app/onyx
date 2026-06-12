@@ -621,6 +621,10 @@ def _transfer_persona_ownership(
         )
         if group is None:
             raise ValueError("New owner group not found")
+        # A group whose deletion is already in flight would re-orphan the agent
+        # as soon as its sync worker runs.
+        if group.is_up_for_deletion:
+            raise ValueError("New owner group is being deleted")
         if group.id == prev_owner_group_id:
             raise ValueError("This group already owns the agent")
         persona.owner_group_id = group.id

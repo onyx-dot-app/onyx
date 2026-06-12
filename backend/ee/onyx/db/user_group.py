@@ -101,7 +101,13 @@ def _handle_owned_personas_for_group_deletion__no_commit(
 
     NOTE: does not commit the transaction."""
     owned_personas = (
-        db_session.query(Persona).filter(Persona.owner_group_id == user_group_id).all()
+        db_session.query(Persona)
+        .options(
+            selectinload(Persona.user_shares),
+            selectinload(Persona.group_shares),
+        )
+        .filter(Persona.owner_group_id == user_group_id)
+        .all()
     )
     for persona in owned_personas:
         if (
