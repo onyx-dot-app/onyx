@@ -17,6 +17,8 @@ from collections.abc import Generator
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.build import tasks as tasks_module
+from onyx.background.celery.tasks.build.tasks import cleanup_idle_sandboxes_task
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
@@ -26,8 +28,6 @@ from onyx.db.models import Snapshot
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.sandbox.models import SnapshotResult
-from onyx.server.features.build.sandbox.tasks import tasks as tasks_module
-from onyx.server.features.build.sandbox.tasks.tasks import cleanup_idle_sandboxes_task
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import make_sandbox

@@ -9,7 +9,9 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import SandboxStatus
 from onyx.db.models import Snapshot
+from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
@@ -17,6 +19,10 @@ from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_u
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
+from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
+from onyx.server.features.build.db.sandbox import get_idle_sandboxes
+from onyx.server.features.build.db.sandbox import get_snapshots_for_session
+from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 
@@ -80,16 +86,6 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
         return
 
     try:
-        # Import here to avoid circular imports
-        from onyx.db.enums import SandboxStatus
-        from onyx.file_store.file_store import get_default_file_store
-        from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
-        from onyx.server.features.build.db.sandbox import get_idle_sandboxes
-        from onyx.server.features.build.db.sandbox import get_snapshots_for_session
-        from onyx.server.features.build.db.sandbox import (
-            update_sandbox_status__no_commit,
-        )
-
         sandbox_manager = get_sandbox_manager()
         snapshot_manager = SnapshotManager(get_default_file_store())
 
