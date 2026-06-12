@@ -470,7 +470,14 @@ def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> Non
 
 @pytest.mark.parametrize(
     "model_name",
-    ["claude-opus-4-7", "claude-opus-4-8", "claude-fable-5", "claude-mythos-5"],
+    [
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-fable-5",
+        "claude-5-fable",
+        "claude-mythos-5",
+        "claude-5-mythos",
+    ],
 )
 @pytest.mark.parametrize(
     "reasoning_effort, expected_effort",
