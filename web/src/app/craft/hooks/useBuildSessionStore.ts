@@ -8,12 +8,9 @@ import {
   Artifact,
   ArtifactType,
   BuildMessage,
-  Session,
   SessionHistoryItem,
   SessionOrigin,
   SessionStatus,
-  ToolCall,
-  ToolCallStatus,
 } from "@/app/craft/types/streamingTypes";
 
 import {
@@ -519,16 +516,7 @@ function splitActiveTurnTranscript(
 }
 
 // Re-export types for consumers
-export type {
-  Artifact,
-  ArtifactType,
-  BuildMessage,
-  Session,
-  SessionHistoryItem,
-  SessionStatus,
-  ToolCall,
-  ToolCallStatus,
-};
+export type { Artifact, ArtifactType, SessionHistoryItem };
 
 // =============================================================================
 // Store Types (mirrors chat's useChatSessionStore pattern)
@@ -580,8 +568,6 @@ export interface BuildSessionData {
   status: SessionStatus;
   messages: BuildMessage[];
   artifacts: Artifact[];
-  /** Active tool calls for the current response */
-  toolCalls: ToolCall[];
   /** Active backend turn, if this session is currently running. */
   activeTurnId: string | null;
   /** The user-message turn index for the active backend turn. */
@@ -677,32 +663,14 @@ interface BuildSessionStore {
   ) => void;
 
   // Actions - Current Session Shortcuts
-  setCurrentSessionStatus: (status: SessionStatus) => void;
   appendMessageToCurrent: (message: BuildMessage) => void;
-  updateLastMessageInCurrent: (content: string) => void;
   addArtifactToCurrent: (artifact: Artifact) => void;
   setCurrentError: (error: string | null) => void;
-  setCurrentOutputPanelOpen: (open: boolean) => void;
   toggleCurrentOutputPanel: () => void;
 
   // Actions - Session-specific operations (for streaming - immune to currentSessionId changes)
   appendMessageToSession: (sessionId: string, message: BuildMessage) => void;
-  updateLastMessageInSession: (sessionId: string, content: string) => void;
-  updateMessageByIdInSession: (
-    sessionId: string,
-    messageId: string,
-    content: string
-  ) => void;
   addArtifactToSession: (sessionId: string, artifact: Artifact) => void;
-
-  // Actions - Tool Call Management
-  addToolCallToSession: (sessionId: string, toolCall: ToolCall) => void;
-  updateToolCallInSession: (
-    sessionId: string,
-    toolCallId: string,
-    updates: Partial<ToolCall>
-  ) => void;
-  clearToolCallsInSession: (sessionId: string) => void;
 
   // Actions - Stream Items (FIFO rendering)
   appendStreamItem: (sessionId: string, item: StreamItem) => void;
@@ -719,11 +687,6 @@ interface BuildSessionStore {
     updates: Partial<ToolCallState>
   ) => void;
   cancelLatestInFlightToolCallStreamItem: (sessionId: string) => void;
-  updateTodoListStreamItem: (
-    sessionId: string,
-    todoListId: string,
-    updates: Partial<TodoListState>
-  ) => void;
   upsertTodoListStreamItem: (
     sessionId: string,
     todoListId: string,
@@ -741,7 +704,6 @@ interface BuildSessionStore {
   abortCurrentSession: () => void;
 
   // Actions - Session Lifecycle
-  createNewSession: (prompt: string) => Promise<string | null>;
   loadSession: (
     sessionId: string,
     options?: { force?: boolean }
@@ -759,13 +721,10 @@ interface BuildSessionStore {
   // Pre-provisioning Actions
   ensurePreProvisionedSession: () => Promise<string | null>;
   consumePreProvisionedSession: () => Promise<string | null>;
-  /** Clear and delete any pre-provisioned session (used when settings change) */
-  clearPreProvisionedSession: () => Promise<void>;
 
   // Controller State Actions (for useBuildSessionController - replaces refs)
   setControllerTriggered: (url: string | null) => void;
   setControllerLoaded: (sessionId: string | null) => void;
-  resetControllerState: () => void;
 
   // Webapp Refresh Actions
   triggerWebappRefresh: (sessionId: string) => void;
@@ -860,7 +819,6 @@ const createInitialSessionData = (
   status: "idle",
   messages: [],
   artifacts: [],
-  toolCalls: [],
   activeTurnId: null,
   activeTurnIndex: null,
   activeTurnLocalOwner: false,
@@ -1022,13 +980,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // Current Session Shortcuts
   // ===========================================================================
 
-  setCurrentSessionStatus: (status: SessionStatus) => {
-    const { currentSessionId, updateSessionData } = get();
-    if (currentSessionId) {
-      updateSessionData(currentSessionId, { status });
-    }
-  },
-
   appendMessageToCurrent: (message: BuildMessage) => {
     const { currentSessionId } = get();
     if (!currentSessionId) return;
@@ -1040,28 +991,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...currentSession,
         messages: [...currentSession.messages, message],
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(currentSessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  updateLastMessageInCurrent: (content: string) => {
-    const { currentSessionId } = get();
-    if (!currentSessionId) return;
-
-    set((state) => {
-      const session = state.sessions.get(currentSessionId);
-      if (!session || session.messages.length === 0) return state;
-
-      const messages = session.messages.map((msg, idx) =>
-        idx === session.messages.length - 1 ? { ...msg, content } : msg
-      );
-      const updatedSession: BuildSessionData = {
-        ...session,
-        messages,
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -1093,16 +1022,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const { currentSessionId, updateSessionData } = get();
     if (currentSessionId) {
       updateSessionData(currentSessionId, { error });
-    }
-  },
-
-  setCurrentOutputPanelOpen: (open: boolean) => {
-    const { currentSessionId, updateSessionData } = get();
-    if (currentSessionId) {
-      updateSessionData(currentSessionId, { outputPanelOpen: open });
-    } else {
-      // No session - update temporary state
-      set({ noSessionOutputPanelOpen: open });
     }
   },
 
@@ -1148,48 +1067,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     });
   },
 
-  updateLastMessageInSession: (sessionId: string, content: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session || session.messages.length === 0) return state;
-
-      const messages = session.messages.map((msg, idx) =>
-        idx === session.messages.length - 1 ? { ...msg, content } : msg
-      );
-      const updatedSession: BuildSessionData = {
-        ...session,
-        messages,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  updateMessageByIdInSession: (
-    sessionId: string,
-    messageId: string,
-    content: string
-  ) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const messages = session.messages.map((msg) =>
-        msg.id === messageId ? { ...msg, content } : msg
-      );
-      const updatedSession: BuildSessionData = {
-        ...session,
-        messages,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
   addArtifactToSession: (sessionId: string, artifact: Artifact) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
@@ -1198,65 +1075,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         artifacts: [...session.artifacts, artifact],
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  // ===========================================================================
-  // Tool Call Management
-  // ===========================================================================
-
-  addToolCallToSession: (sessionId: string, toolCall: ToolCall) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        toolCalls: [...session.toolCalls, toolCall],
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  updateToolCallInSession: (
-    sessionId: string,
-    toolCallId: string,
-    updates: Partial<ToolCall>
-  ) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const toolCalls = session.toolCalls.map((tc) =>
-        tc.id === toolCallId ? { ...tc, ...updates } : tc
-      );
-      const updatedSession: BuildSessionData = {
-        ...session,
-        toolCalls,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  clearToolCallsInSession: (sessionId: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        toolCalls: [],
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -1431,36 +1249,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     });
   },
 
-  updateTodoListStreamItem: (
-    sessionId: string,
-    todoListId: string,
-    updates: Partial<TodoListState>
-  ) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) return state;
-
-      const streamItems = session.streamItems.map((item) => {
-        if (item.type === "todo_list" && item.todoList.id === todoListId) {
-          return {
-            ...item,
-            todoList: { ...item.todoList, ...updates },
-          };
-        }
-        return item;
-      }) as StreamItem[];
-
-      const updatedSession: BuildSessionData = {
-        ...session,
-        streamItems,
-        lastAccessed: new Date(),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
   upsertTodoListStreamItem: (
     sessionId: string,
     todoListId: string,
@@ -1593,69 +1381,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // ===========================================================================
   // Session Lifecycle
   // ===========================================================================
-
-  createNewSession: async (prompt: string) => {
-    const {
-      setCurrentSession,
-      updateSessionData,
-      refreshSessionHistory,
-      nameBuildSession,
-    } = get();
-
-    const tempId = `temp-${Date.now()}`;
-    setCurrentSession(tempId);
-    updateSessionData(tempId, { status: "creating" });
-
-    try {
-      // Provision with the backend default; the per-message override sets it later.
-      const sessionData = await apiCreateSession({
-        name: prompt.slice(0, 50),
-      });
-      const realSessionId = sessionData.id;
-
-      // Remove temp session and create real one
-      set((state) => {
-        const newSessions = new Map(state.sessions);
-        newSessions.delete(tempId);
-        newSessions.set(
-          realSessionId,
-          createInitialSessionData(realSessionId, {
-            status: "idle",
-            messages: [
-              {
-                id: `msg-${Date.now()}`,
-                type: "user",
-                content: prompt,
-                timestamp: new Date(),
-              },
-            ],
-            isLoaded: true,
-            // Inherit output panel state from no-session state
-            outputPanelOpen: state.noSessionOutputPanelOpen,
-          })
-        );
-        return {
-          currentSessionId: realSessionId,
-          sessions: newSessions,
-        };
-      });
-
-      // Auto-name the session after a short delay
-      setTimeout(() => {
-        nameBuildSession(realSessionId);
-      }, 200);
-
-      await refreshSessionHistory();
-      return realSessionId;
-    } catch (err) {
-      console.error("Failed to create session:", err);
-      updateSessionData(tempId, {
-        status: "failed",
-        error: (err as Error).message,
-      });
-      return null;
-    }
-  },
 
   loadSession: async (sessionId: string, options?: { force?: boolean }) => {
     const { setCurrentSession, updateSessionData, sessions } = get();
@@ -2046,38 +1771,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     return null;
   },
 
-  clearPreProvisionedSession: async () => {
-    const { preProvisioning } = get();
-
-    // If provisioning is in progress, wait for it to complete
-    if (preProvisioning.status === "provisioning") {
-      await provisioningPromise;
-    }
-
-    // Re-check state after awaiting
-    const { preProvisioning: currentState } = get();
-
-    if (currentState.status === "ready") {
-      const { sessionId } = currentState;
-
-      // Reset to idle first
-      set({ preProvisioning: { status: "idle" } });
-
-      // Delete the session and wait for completion
-      try {
-        await apiDeleteSession(sessionId);
-      } catch (err) {
-        console.error(
-          "[PreProvision] Failed to delete pre-provisioned session:",
-          err
-        );
-      }
-    } else {
-      // Just reset to idle if not ready
-      set({ preProvisioning: { status: "idle" } });
-    }
-  },
-
   // ===========================================================================
   // Controller State Actions (replaces refs in useBuildSessionController)
   // ===========================================================================
@@ -2098,15 +1791,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         loadedSessionId: sessionId,
       },
     }));
-  },
-
-  resetControllerState: () => {
-    set({
-      controllerState: {
-        lastTriggeredForUrl: null,
-        loadedSessionId: null,
-      },
-    });
   },
 
   // ===========================================================================
@@ -2803,7 +2487,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 // =============================================================================
 
 // Stable empty references for SSR hydration (prevents infinite loop)
-const EMPTY_ARRAY: never[] = [];
 const EMPTY_PANEL_TABS: PanelTab[] = [];
 const EMPTY_FILES_TAB_STATE: FilesTabState = {
   expandedPaths: [],
@@ -2815,12 +2498,6 @@ const EMPTY_TAB_HISTORY: TabNavigationHistory = {
   currentIndex: 0,
 };
 const EMPTY_SUBAGENTS: Map<string, SubagentState> = new Map();
-
-export const useCurrentSession = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    return currentSessionId ? sessions.get(currentSessionId) : null;
-  });
 
 /**
  * Returns the current session data with stable reference.
@@ -2852,27 +2529,6 @@ export const useIsInterrupting = () =>
     const { currentSessionId, sessions } = state;
     if (!currentSessionId) return false;
     return sessions.get(currentSessionId)?.isInterrupting ?? false;
-  });
-
-export const useMessages = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_ARRAY;
-    return sessions.get(currentSessionId)?.messages ?? EMPTY_ARRAY;
-  });
-
-export const useArtifacts = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_ARRAY;
-    return sessions.get(currentSessionId)?.artifacts ?? EMPTY_ARRAY;
-  });
-
-export const useToolCalls = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_ARRAY;
-    return sessions.get(currentSessionId)?.toolCalls ?? EMPTY_ARRAY;
   });
 
 export const useSessionHistory = () =>
@@ -2911,27 +2567,6 @@ export const usePreProvisionedSessionId = () =>
       ? state.preProvisioning.sessionId
       : null
   );
-
-// Controller state selectors (for useBuildSessionController)
-export const useControllerState = () =>
-  useBuildSessionStore((state) => state.controllerState);
-
-export const useSetControllerTriggered = () =>
-  useBuildSessionStore((state) => state.setControllerTriggered);
-
-export const useSetControllerLoaded = () =>
-  useBuildSessionStore((state) => state.setControllerLoaded);
-
-export const useResetControllerState = () =>
-  useBuildSessionStore((state) => state.resetControllerState);
-
-// Stream items selector
-export const useStreamItems = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_ARRAY;
-    return sessions.get(currentSessionId)?.streamItems ?? EMPTY_ARRAY;
-  });
 
 // Queued messages selector
 export const useQueuedMessages = () =>

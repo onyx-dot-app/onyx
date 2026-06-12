@@ -90,7 +90,7 @@ def get_user_rate_limit_status(
         )
 
     # Determine subscription status
-    is_subscribed = is_user_subscribed(user, db_session)
+    is_subscribed = is_user_subscribed(user)
 
     # Get limit based on subscription status
     limit = CRAFT_PAID_USER_RATE_LIMIT if is_subscribed else FREE_USER_RATE_LIMIT

@@ -1,7 +1,6 @@
-"""Comprehensive packet and sandbox event logger for build mode debugging.
+"""Packet logger for build mode debugging.
 
-Logs all packets, JSON-RPC messages, and sandbox events during build mode streaming.
-Provides detailed tracing for the entire agent loop and communication flow.
+Logs packets and session lifecycle events during build mode streaming.
 
 Log output locations (in priority order):
 1. /var/log/onyx/packets.log (for Docker - mounted to host via docker-compose volumes)
@@ -30,14 +29,11 @@ DEFAULT_MAX_LOG_LINES = 5000
 
 
 class PacketLogger:
-    """Comprehensive logger for opencode-serve communication and packet streaming.
+    """Logger for build mode packet streaming.
 
     Logs:
-    - All JSON-RPC requests sent to the agent
-    - All JSON-RPC responses/notifications received from the agent
-    - All sandbox events emitted during streaming
-    - Session and sandbox lifecycle events
-    - Timing information for debugging performance
+    - Packets emitted during streaming
+    - Session lifecycle events with timing information
 
     The log file is kept to a maximum number of lines (default 5000) to prevent
     unbounded growth. When the limit is exceeded, the oldest lines are trimmed.
@@ -214,51 +210,6 @@ class PacketLogger:
             except Exception:
                 pass  # Silently ignore errors during trim
 
-    def clear_log_file(self) -> None:
-        """Clear the log file contents.
-
-        Note: With the rotating log approach, this is optional. The log will
-        automatically trim itself. But this can still be useful to start fresh.
-        """
-        if not self._enabled or not self._log_file_path:
-            return
-
-        with self._file_lock:
-            try:
-                # Close the logger's file handler temporarily
-                if self._logger:
-                    for handler in self._logger.handlers:
-                        handler.close()
-
-                # Truncate the file
-                with open(self._log_file_path, "w", encoding="utf-8") as f:
-                    f.write("")  # Empty the file
-
-                # Reopen the handler
-                if self._logger:
-                    self._logger.handlers.clear()
-                    handler = logging.FileHandler(
-                        self._log_file_path, mode="a", encoding="utf-8"
-                    )
-                    handler.setLevel(logging.DEBUG)
-                    handler.setFormatter(
-                        logging.Formatter(
-                            "%(asctime)s.%(msecs)03d | %(message)s", "%Y-%m-%d %H:%M:%S"
-                        )
-                    )
-                    self._logger.addHandler(handler)
-
-                self._approx_line_count = 0
-                self._lines_since_last_trim = 0
-
-            except Exception:
-                pass  # Silently ignore errors
-
-    @property
-    def is_enabled(self) -> bool:
-        """Check if logging is enabled."""
-        return self._enabled and self._logger is not None
-
     def _format_uuid(self, value: Any) -> str:
         """Format UUID for logging (shortened for readability)."""
         if isinstance(value, UUID):
@@ -294,219 +245,6 @@ class PacketLogger:
             self._write_log(f"[PACKET] {packet_type}\n{output}")
         except Exception:
             self._write_log(f"[PACKET] {packet_type}\n{payload}")
-
-    def log_raw(self, label: str, data: Any) -> None:
-        """Log raw data with a label.
-
-        Args:
-            label: A label for this log entry
-            data: Any data to log
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        try:
-            if isinstance(data, (dict, list)):
-                output = json.dumps(data, indent=2, default=str)
-            else:
-                output = str(data)
-            self._write_log(f"[RAW] {label}\n{output}")
-        except Exception:
-            self._write_log(f"[RAW] {label}\n{data}")
-
-    # =========================================================================
-    # JSON-RPC Communication Logging
-    # =========================================================================
-
-    def log_jsonrpc_request(
-        self,
-        method: str,
-        request_id: int | None,
-        params: dict[str, Any] | None = None,
-        context: str = "",
-    ) -> None:
-        """Log a JSON-RPC request being sent to the agent.
-
-        Args:
-            method: The JSON-RPC method name
-            request_id: The request ID (None for notifications)
-            params: The request parameters
-            context: Additional context (e.g., "local", "k8s")
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        try:
-            req_type = "REQUEST" if request_id is not None else "NOTIFICATION"
-            ctx_prefix = f"[{context}] " if context else ""
-            params_str = json.dumps(params, indent=2, default=str) if params else "{}"
-            id_str = f" id={request_id}" if request_id is not None else ""
-            self._write_log(
-                f"{ctx_prefix}[JSONRPC-OUT] {req_type} {method}{id_str}\n{params_str}"
-            )
-        except Exception as e:
-            self._write_log(f"[JSONRPC-OUT] {method} (logging error: {e})")
-
-    def log_jsonrpc_response(
-        self,
-        request_id: int | None,
-        result: dict[str, Any] | None = None,
-        error: dict[str, Any] | None = None,
-        context: str = "",
-    ) -> None:
-        """Log a JSON-RPC response received from the agent.
-
-        Args:
-            request_id: The request ID this is responding to
-            result: The result payload (if success)
-            error: The error payload (if error)
-            context: Additional context (e.g., "local", "k8s")
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        try:
-            ctx_prefix = f"[{context}] " if context else ""
-            id_str = f" id={request_id}" if request_id is not None else ""
-            if error:
-                error_str = json.dumps(error, indent=2, default=str)
-                self._write_log(
-                    f"{ctx_prefix}[JSONRPC-IN] RESPONSE{id_str} ERROR\n{error_str}"
-                )
-            else:
-                result_str = (
-                    json.dumps(result, indent=2, default=str) if result else "{}"
-                )
-                self._write_log(
-                    f"{ctx_prefix}[JSONRPC-IN] RESPONSE{id_str}\n{result_str}"
-                )
-        except Exception as e:
-            self._write_log(f"[JSONRPC-IN] RESPONSE (logging error: {e})")
-
-    def log_jsonrpc_notification(
-        self,
-        method: str,
-        params: dict[str, Any] | None = None,
-        context: str = "",
-    ) -> None:
-        """Log a JSON-RPC notification received from the agent.
-
-        Args:
-            method: The notification method name
-            params: The notification parameters
-            context: Additional context (e.g., "local", "k8s")
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        try:
-            ctx_prefix = f"[{context}] " if context else ""
-            params_str = json.dumps(params, indent=2, default=str) if params else "{}"
-            self._write_log(
-                f"{ctx_prefix}[JSONRPC-IN] NOTIFICATION {method}\n{params_str}"
-            )
-        except Exception as e:
-            self._write_log(f"[JSONRPC-IN] NOTIFICATION {method} (logging error: {e})")
-
-    def log_jsonrpc_raw_message(
-        self,
-        direction: str,
-        message: dict[str, Any] | str,
-        context: str = "",
-    ) -> None:
-        """Log a raw JSON-RPC message (for debugging parsing issues).
-
-        Args:
-            direction: "IN" or "OUT"
-            message: The raw message (dict or string)
-            context: Additional context
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        try:
-            ctx_prefix = f"[{context}] " if context else ""
-            if isinstance(message, dict):
-                msg_str = json.dumps(message, indent=2, default=str)
-            else:
-                msg_str = str(message)
-            self._write_log(f"{ctx_prefix}[JSONRPC-RAW-{direction}]\n{msg_str}")
-        except Exception as e:
-            self._write_log(f"[JSONRPC-RAW-{direction}] (logging error: {e})")
-
-    # =========================================================================
-    # Sandbox Event Logging
-    # =========================================================================
-
-    def log_sandbox_event(
-        self,
-        event_type: str,
-        event_data: dict[str, Any],
-        sandbox_id: UUID | str | None = None,
-        session_id: UUID | str | None = None,
-    ) -> None:
-        """Log a sandbox event being emitted.
-
-        Args:
-            event_type: The sandbox event type (e.g., "agent_message_chunk")
-            event_data: The full event data
-            sandbox_id: The sandbox ID (optional, for context)
-            session_id: The session ID (optional, for context)
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        try:
-            ctx_parts = []
-            if sandbox_id:
-                ctx_parts.append(f"sandbox={self._format_uuid(sandbox_id)}")
-            if session_id:
-                ctx_parts.append(f"session={self._format_uuid(session_id)}")
-            ctx = f" ({', '.join(ctx_parts)})" if ctx_parts else ""
-
-            # For message chunks, show truncated content for readability
-            display_data = event_data.copy()
-            if event_type in ("agent_message_chunk", "agent_thought_chunk"):
-                content = display_data.get("content", {})
-                if isinstance(content, dict) and "text" in content:
-                    text = content.get("text", "")
-                    if len(text) > 200:
-                        display_data["content"] = {
-                            **content,
-                            "text": text[:200] + f"... ({len(text)} chars total)",
-                        }
-
-            event_str = json.dumps(display_data, indent=2, default=str)
-            self._write_log(f"[SANDBOX-EVENT] {event_type}{ctx}\n{event_str}")
-        except Exception as e:
-            self._write_log(f"[SANDBOX-EVENT] {event_type} (logging error: {e})")
-
-    def log_sandbox_event_yielded(
-        self,
-        event_type: str,
-        event_obj: Any,
-        sandbox_id: UUID | str | None = None,
-        session_id: UUID | str | None = None,
-    ) -> None:
-        """Log a sandbox event object being yielded from the generator.
-
-        Args:
-            event_type: The sandbox event type
-            event_obj: The Pydantic event object
-            sandbox_id: The sandbox ID (optional)
-            session_id: The session ID (optional)
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        try:
-            if hasattr(event_obj, "model_dump"):
-                event_data = event_obj.model_dump(mode="json", by_alias=True)
-            else:
-                event_data = {"raw": str(event_obj)}
-            self.log_sandbox_event(event_type, event_data, sandbox_id, session_id)
-        except Exception as e:
-            self._write_log(f"[SANDBOX-EVENT] {event_type} (logging error: {e})")
 
     # =========================================================================
     # Session and Sandbox Lifecycle Logging
@@ -572,53 +310,6 @@ class PacketLogger:
             f"{error_str}"
         )
 
-    # =========================================================================
-    # Streaming State Logging
-    # =========================================================================
-
-    def log_streaming_state_update(
-        self,
-        session_id: UUID | str,
-        state_type: str,
-        details: dict[str, Any] | None = None,
-    ) -> None:
-        """Log streaming state changes.
-
-        Args:
-            session_id: The session ID
-            state_type: Type of state change (e.g., "chunk_accumulated", "saved_to_db")
-            details: Additional details
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        try:
-            details_str = ""
-            if details:
-                details_str = "\n" + json.dumps(details, indent=2, default=str)
-            self._write_log(
-                f"[STREAMING-STATE] session={self._format_uuid(session_id)} type={state_type}{details_str}"
-            )
-        except Exception as e:
-            self._write_log(f"[STREAMING-STATE] {state_type} (logging error: {e})")
-
-    def log_sse_emit(
-        self,
-        event_type: str,
-        session_id: UUID | str | None = None,
-    ) -> None:
-        """Log SSE event being emitted to frontend.
-
-        Args:
-            event_type: The event type being emitted
-            session_id: The session ID
-        """
-        if not self._enabled or not self._logger:
-            return
-
-        session_str = f" session={self._format_uuid(session_id)}" if session_id else ""
-        self._write_log(f"[SSE-EMIT] {event_type}{session_str}")
-
 
 # Singleton instance
 _packet_logger: PacketLogger | None = None
@@ -630,20 +321,3 @@ def get_packet_logger() -> PacketLogger:
     if _packet_logger is None:
         _packet_logger = PacketLogger()
     return _packet_logger
-
-
-def log_separator(label: str = "") -> None:
-    """Log a visual separator for readability in the log file.
-
-    Args:
-        label: Optional label for the separator
-    """
-    logger = get_packet_logger()
-    if not logger.is_enabled or not logger._logger:
-        return
-
-    separator = "=" * 80
-    if label:
-        logger._write_log(f"\n{separator}\n{label}\n{separator}")
-    else:
-        logger._write_log(f"\n{separator}")
