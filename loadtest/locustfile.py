@@ -11,6 +11,7 @@ import os
 import prometheus_exporter  # noqa: F401  (registers the /metrics exporter)
 from onyx_client.chat_user import BasicChatUser
 from scenarios import ChatWithSearchUser
+from scenarios import CompressionUser
 from scenarios import DeepResearchUser
 from scenarios import DisconnectUser
 from scenarios import LongConversationUser
@@ -23,6 +24,7 @@ __all__ = [
     "DeepResearchUser",
     "LongConversationUser",
     "DisconnectUser",
+    "CompressionUser",
 ]
 
 # Expose the ramp only on request: Locust auto-activates any shape it finds,

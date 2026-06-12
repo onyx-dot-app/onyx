@@ -40,6 +40,17 @@ DEFAULT_MESSAGES = [
     "Summarize how background indexing works.",
 ]
 
+_PAD = "Please consider the full context of the conversation so far in detail. "
+
+
+def _sized_message(question: str, target_chars: int) -> str:
+    """Pad a question with filler up to ~target_chars so histories grow fast
+    enough to cross the summarization threshold (compression testing)."""
+    if target_chars <= len(question):
+        return question
+    filler = _PAD * (target_chars // len(_PAD) + 1)
+    return (question + " " + filler)[:target_chars]
+
 
 class OnyxChatUser(HttpUser):
     abstract = True
@@ -54,6 +65,12 @@ class OnyxChatUser(HttpUser):
     # >1 keeps one session alive for N turns, chaining parent_message_id so
     # history grows; 1 (default) = a fresh session per turn.
     max_session_turns: int = env_int("ONYX_SESSION_TURNS", 1)
+
+    # Per-message size in chars (ONYX_MSG_CHARS overrides). 0 = the short
+    # default questions. Scenarios that need history to grow fast (compression)
+    # raise this default; larger messages cross the summarization threshold in
+    # fewer turns.
+    default_msg_chars: int = 0
 
     # If set to a milestone name, drop the stream the instant it arrives
     # (client disconnect). Recorded as <prefix>:disconnected, not a failure.
@@ -78,7 +95,12 @@ class OnyxChatUser(HttpUser):
             if provider:
                 self.llm_override["model_provider"] = provider
 
-        self.messages: list[str] = DEFAULT_MESSAGES
+        msg_chars = env_int("ONYX_MSG_CHARS", self.default_msg_chars)
+        self.messages: list[str] = (
+            [_sized_message(q, msg_chars) for q in DEFAULT_MESSAGES]
+            if msg_chars > 0
+            else DEFAULT_MESSAGES
+        )
         self.turn_index: int = 0
 
         # Multi-turn session state (only used when max_session_turns > 1).
