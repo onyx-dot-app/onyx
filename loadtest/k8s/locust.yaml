@@ -131,3 +131,29 @@ spec:
             limits:
               cpu: "2"
               memory: 1Gi
+# Metrics discovery:
+#   - Annotation-based Prometheus scrapes the master pod via the
+#     prometheus.io/* annotations above (no extra object needed).
+#   - Prometheus Operator (kube-prometheus-stack) ignores those annotations —
+#     it needs a ServiceMonitor. Uncomment below and set the `release` label to
+#     whatever your Prometheus's serviceMonitorSelector matches. Requires the
+#     monitoring.coreos.com CRDs, so it's left commented to keep this manifest
+#     applyable on clusters without the operator.
+#
+# ---
+# apiVersion: monitoring.coreos.com/v1
+# kind: ServiceMonitor
+# metadata:
+#   name: onyx-loadtest
+#   labels:
+#     release: <your-prometheus-release>
+# spec:
+#   namespaceSelector:
+#     matchNames: [<onyx-namespace>]
+#   selector:
+#     matchLabels:
+#       app: onyx-loadtest
+#   endpoints:
+#     - port: metrics
+#       path: /metrics
+#       interval: 15s

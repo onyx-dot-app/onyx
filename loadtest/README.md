@@ -177,8 +177,11 @@ The master exposes milestone metrics for Prometheus on a dedicated port
 - `locust_response_time_p50_milliseconds` / `..._p95_milliseconds{name,method}`
 - `locust_current_rps{name,method}`
 
-Scrape it (the `k8s/` master pod carries `prometheus.io/scrape` annotations,
-or point a ServiceMonitor at the `metrics` service port) and import
+Scrape it: annotation-based Prometheus uses the master pod's
+`prometheus.io/scrape` annotations; **Prometheus Operator
+(kube-prometheus-stack) ignores annotations and needs a ServiceMonitor**
+targeting the `metrics` service port (commented example in `k8s/locust.yaml`).
+Then import
 `dashboards/chat-loadtest-correlation.json` to overlay milestone latency and
 failure rate against server-side CPU/memory on one timeline — set the
 dashboard's `$namespace` / `$workload` variables to the deployment under
