@@ -2312,9 +2312,9 @@ pyparsing==3.2.0 \
     # via
     #   httplib2
     #   mitmproxy
-pypdf==6.10.2 \
-    --hash=sha256:7d09ce108eff6bf67465d461b6ef352dcb8d84f7a91befc02f904455c6eea11d \
-    --hash=sha256:aa53be9826655b51c96741e5d7983ca224d898ac0a77896e64636810517624aa
+pypdf==6.12.0 \
+    --hash=sha256:061f135db8934503ed301c2d4cfaccb12f0a2ef1db11c5d0768a72a5ab4097d8 \
+    --hash=sha256:a8e104ab950e655d0bcf5fa5e71317c06474bc707987335da44a210f73a8883b
     # via unstructured-client
 pyperclip==1.9.0 \
     --hash=sha256:b7de0142ddc81bfc5c7507eea19da920b92252b548b96186caf94a5e2527d310
