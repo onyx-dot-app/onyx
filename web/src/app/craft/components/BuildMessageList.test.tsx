@@ -84,6 +84,31 @@ const savedAssistantMessage: BuildMessage = {
   },
 };
 
+const userMessage: BuildMessage = {
+  id: "user-1",
+  type: "user",
+  content: "Build me a dashboard",
+  timestamp: new Date("2026-01-01T00:00:00Z"),
+};
+
+describe("BuildMessageList copy actions", () => {
+  it("renders a copy button for user messages", () => {
+    renderList({ messages: [userMessage] });
+
+    expect(
+      screen.getByTestId("CraftUserMessage/copy-button")
+    ).toBeInTheDocument();
+  });
+
+  it("renders a copy button for saved agent messages", () => {
+    renderList({ messages: [savedAssistantMessage] });
+
+    expect(
+      screen.getByTestId("CraftAgentMessage/copy-button")
+    ).toBeInTheDocument();
+  });
+});
+
 describe("BuildMessageList thinking visibility", () => {
   it("shows restored thought packets as collapsed thinking rows", () => {
     renderList({ messages: [savedAssistantMessage] });

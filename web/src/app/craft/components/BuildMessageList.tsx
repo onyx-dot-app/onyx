@@ -12,6 +12,7 @@ import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
 import UserMessage from "@/app/craft/components/UserMessage";
+import BuildAgentMessage from "@/app/craft/components/BuildAgentMessage";
 import { BuildMessage } from "@/app/craft/types/streamingTypes";
 import {
   StreamItem,
@@ -27,6 +28,28 @@ import {
 type RenderBlock =
   | { kind: "tools"; tools: ToolCallState[] }
   | { kind: "item"; item: Exclude<StreamItem, { type: "tool_call" }> };
+
+/**
+ * Extract the agent's textual output for an assistant message so it can be
+ * copied. Prefers the concatenated text from saved stream items (the prose the
+ * agent streamed out), falling back to the message's plain content.
+ */
+function getAgentCopyText(message: BuildMessage): string {
+  const savedStreamItems = message.message_metadata?.streamItems as
+    | StreamItem[]
+    | undefined;
+  if (savedStreamItems && savedStreamItems.length > 0) {
+    const text = savedStreamItems
+      .filter((it): it is Extract<StreamItem, { type: "text" }> =>
+        it.type === "text"
+      )
+      .map((it) => it.content)
+      .join("\n\n")
+      .trim();
+    if (text) return text;
+  }
+  return message.content;
+}
 
 interface BuildMessageListProps {
   messages: BuildMessage[];
@@ -248,29 +271,27 @@ export default function BuildMessageList({
         : null;
 
     return (
-      <div key={message.id} className="flex items-start gap-3 py-4">
-        <div className="shrink-0 h-9 flex items-center">
-          <Logo onyxBranded folded size={24} />
-        </div>
-        <div className="flex-1 flex flex-col gap-2 min-w-0">
-          {visibleSavedRender ? (
-            <>
-              {visibleSavedRender.pinnedTodo && (
-                <div>
-                  <TodoListCard
-                    todoList={visibleSavedRender.pinnedTodo}
-                    defaultOpen={visibleSavedRender.pinnedTodo.isOpen}
-                  />
-                </div>
-              )}
-              {visibleSavedRender.nodes}
-            </>
-          ) : (
-            <TextChunk content={message.content} />
-          )}
-          {trailing}
-        </div>
-      </div>
+      <BuildAgentMessage
+        key={message.id}
+        copyText={getAgentCopyText(message)}
+        trailing={trailing}
+      >
+        {visibleSavedRender ? (
+          <>
+            {visibleSavedRender.pinnedTodo && (
+              <div>
+                <TodoListCard
+                  todoList={visibleSavedRender.pinnedTodo}
+                  defaultOpen={visibleSavedRender.pinnedTodo.isOpen}
+                />
+              </div>
+            )}
+            {visibleSavedRender.nodes}
+          </>
+        ) : (
+          <TextChunk content={message.content} />
+        )}
+      </BuildAgentMessage>
     );
   };
 
