@@ -13,10 +13,23 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from onyx.connectors.models import Document
 from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
 from onyx.connectors.web.connector import WebConnector
 from onyx.file_processing.html_utils import ParsedHTML
+
+
+@pytest.fixture(autouse=True)
+def _skip_web_connector_ssrf_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This test crawls example.com and doesn't exercise SSRF. The default SSRF
+    level is VALIDATE_ALL, at which the web connector does a real DNS lookup per
+    fetch; neutralize the gate so the test stays hermetic (no network)."""
+    monkeypatch.setattr(
+        "onyx.connectors.web.connector.protected_url_check", lambda _url: None
+    )
+
 
 BASE_URL = "http://example.com"
 # A perfectly parseable Last-Modified value. If the connector ever reads it again,

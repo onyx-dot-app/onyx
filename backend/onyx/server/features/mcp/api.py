@@ -32,8 +32,6 @@ from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.auth.permissions import require_permission
 from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.configs.app_configs import MCP_SERVER_ALLOW_LOOPBACK
-from onyx.configs.app_configs import MCP_SERVER_ALLOW_PRIVATE_NETWORK
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -105,15 +103,25 @@ _SSRF_HINT_NEVER_ALLOWED = (
     " localhost, unspecified, and link-local/cloud-metadata addresses are never "
     "permitted; use a loopback or private-network address instead."
 )
+_SSRF_HINT_SET_ALLOW_PRIVATE = (
+    " To reach a private-network MCP server, set SSRF Protection to Allow Private "
+    "Network (or Disabled) in the admin Security settings (loopback and "
+    "cloud-metadata stay blocked at Allow Private Network)."
+)
+_SSRF_HINT_SET_DISABLED = (
+    " To reach a loopback MCP server, set SSRF Protection to Disabled in the admin "
+    "Security settings (cloud-metadata stays blocked)."
+)
 
 
 def _ssrf_error_hint(url: str, error: Exception) -> str:
-    """Suffix steering the operator to the right opt-in for a blocked host:
-    loopback → MCP_SERVER_ALLOW_LOOPBACK, other private → ALLOW_PRIVATE_NETWORK.
-    Link-local/metadata, unspecified, and BLOCKED_HOSTNAMES (e.g. localhost) are
-    never reachable, so suggest a different address; scheme errors get no hint.
-    Only literal IPs are classified — store-time validation doesn't resolve
-    hostnames, so a bare name can't reach the address-specific branches."""
+    """Suffix steering the operator to the remedy for a blocked host. A private
+    LAN target is reachable at Allow Private Network (or Disabled); loopback needs
+    Disabled (it hits the app host itself). Link-local/metadata, unspecified, and
+    BLOCKED_HOSTNAMES (e.g. localhost) are never reachable, so suggest a different
+    address; scheme errors get no hint. Only literal IPs are classified —
+    store-time validation doesn't resolve hostnames, so a bare name can't reach
+    the address-specific branches."""
     if "scheme" in str(error).lower():
         return ""
     host = (urlparse(url).hostname or "").lower()
@@ -125,28 +133,12 @@ def _ssrf_error_hint(url: str, error: Exception) -> str:
         return ""
     if ip.is_unspecified or ip.is_link_local:
         return _SSRF_HINT_NEVER_ALLOWED
+    # Loopback reaches the app host itself, so it needs the Disabled level; other
+    # private/reserved targets open one notch lower, at Allow Private Network.
     if ip.is_loopback:
-        # Loopback needs both gates, so name whichever is still missing.
-        missing = [
-            f"{var}=true"
-            for var, enabled in (
-                ("MCP_SERVER_ALLOW_LOOPBACK", MCP_SERVER_ALLOW_LOOPBACK),
-                ("MCP_SERVER_ALLOW_PRIVATE_NETWORK", MCP_SERVER_ALLOW_PRIVATE_NETWORK),
-            )
-            if not enabled
-        ]
-        if missing:
-            return (
-                f" To allow a loopback MCP server, set {' and '.join(missing)} "
-                "(cloud-metadata stays blocked)."
-            )
-        return ""
-    if not MCP_SERVER_ALLOW_PRIVATE_NETWORK:
-        return (
-            " To allow an MCP server on a private network, set "
-            "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true (loopback needs "
-            "MCP_SERVER_ALLOW_LOOPBACK; cloud-metadata stays blocked)."
-        )
+        return _SSRF_HINT_SET_DISABLED
+    if not ip.is_global:
+        return _SSRF_HINT_SET_ALLOW_PRIVATE
     return ""
 
 

@@ -18,6 +18,7 @@ def _settings(*, user_directory_admin_only: bool) -> SecuritySettings:
     return SecuritySettings(
         user_directory_admin_only=user_directory_admin_only,
         track_external_idp_expiry=base.track_external_idp_expiry,
+        ssrf_protection_level=base.ssrf_protection_level,
         mask_credential_prefix=base.mask_credential_prefix,
         valid_email_domains=base.valid_email_domains,
         password_min_length=base.password_min_length,
