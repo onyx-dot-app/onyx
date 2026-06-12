@@ -113,6 +113,7 @@ export interface ParsedToolCallStart {
   description: string;
   /** Command or task prompt resolved from rawInput, used before progress arrives. */
   command: string;
+  skillName: string | null;
   /** For task tool calls: the subagent type, when provided. */
   subagentType: string | null;
   /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
