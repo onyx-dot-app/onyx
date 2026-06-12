@@ -62,16 +62,11 @@ def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | 
 
 
 def resolve_oauth_handler(app: ExternalApp) -> OAuthFlowHandler | None:
-    """The single answer to "how does this app authenticate?": the registered
-    provider for a built-in OAuth ``app_type``, a config-driven handler for a
-    CUSTOM app carrying an ``oauth_config``, else ``None`` (static-credential
-    app). Every OAuth touchpoint — the start/callback routes, lazy token
-    refresh, the user-facing ``auth_flow`` — derives from this, so they can't
-    drift.
-
-    Only ``None`` means static: any other stored value must validate as a
-    ``CustomOAuthConfig`` or raise (corruption is surfaced, not masked as
-    "non-OAuth app")."""
+    """The single predicate every OAuth touchpoint dispatches on: the
+    registered provider for a built-in OAuth ``app_type``, a config-driven
+    handler for a CUSTOM app carrying an ``oauth_config``, else ``None``
+    (static-credential app). A stored config that doesn't validate raises —
+    corruption is surfaced, not masked as "non-OAuth app"."""
     if app.app_type == ExternalAppType.CUSTOM:
         if app.oauth_config is None:
             return None

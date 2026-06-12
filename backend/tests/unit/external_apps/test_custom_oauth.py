@@ -149,10 +149,8 @@ def test_authorize_url_custom_scope_param_and_extra_params() -> None:
     "param", ["response_type", "client_id", "redirect_uri", "state"]
 )
 def test_config_rejects_reserved_authorize_params(param: str) -> None:
-    """The flow owns the protocol params: a `response_type` override would
-    request a grant the callback can't exchange, and a `state` override would
-    disable the callback's CSRF/replay protection. Rejected loudly at write
-    time rather than silently re-overridden."""
+    """Reserved protocol params are rejected at write time — e.g. a `state`
+    override would disable the callback's CSRF protection."""
     with pytest.raises(ValidationError):
         _config(extra_authorize_params={param: "x"})
 
@@ -197,6 +195,22 @@ def test_exchange_posts_client_credentials_in_body_by_default(
     assert creds["expires_in"] == 3600
 
 
+def test_exchange_keeps_zero_expires_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`expires_in: 0` means already-expired — dropping it would read as a
+    never-expiring token and suppress refresh."""
+    _capturing_post(
+        monkeypatch,
+        _response(200, {"access_token": "at", "expires_in": 0}),
+    )
+    creds = CustomOAuthHandler(_config()).exchange_authorization_code(
+        code="c0de",
+        redirect_uri="https://onyx.example.com/cb",
+        client_id="cid",
+        client_secret="secret",
+    )
+    assert creds["expires_in"] == 0
+
+
 def test_exchange_with_basic_auth_sends_header_not_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -213,6 +227,24 @@ def test_exchange_with_basic_auth_sends_header_not_body(
     assert captured["headers"]["Authorization"] == "Basic Y2lkOnNlY3JldA=="
     assert "client_id" not in captured["data"]
     assert "client_secret" not in captured["data"]
+
+
+def test_basic_auth_form_encodes_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RFC 6749 §2.3.1: each credential is form-urlencoded before the
+    `id:secret` join."""
+    captured = _capturing_post(monkeypatch, _response(200, {"access_token": "at"}))
+    CustomOAuthHandler(
+        _config(token_endpoint_auth_method=TokenEndpointAuthMethod.CLIENT_SECRET_BASIC)
+    ).exchange_authorization_code(
+        code="c0de",
+        redirect_uri="https://onyx.example.com/cb",
+        client_id="c:id",
+        client_secret="s ecret&",
+    )
+    # b64("c%3Aid:s+ecret%26")
+    assert captured["headers"]["Authorization"] == "Basic YyUzQWlkOnMrZWNyZXQlMjY="
 
 
 def test_exchange_missing_access_token_raises_onyx_error(

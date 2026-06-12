@@ -128,8 +128,7 @@ def _to_user_response(
         credential_keys=required_keys,
         credential_values=credential_values,
         authenticated=authenticated,
-        # Same predicate the OAuth routes and lazy refresh dispatch on, so the
-        # FE's connect flow can't drift from the backend's.
+        # Same predicate the OAuth routes dispatch on, so the FE can't drift.
         auth_flow="oauth" if resolve_oauth_handler(app) is not None else "manual",
     )
 

@@ -12,6 +12,7 @@ from abc import abstractmethod
 from enum import Enum
 from typing import Any
 from typing import ClassVar
+from urllib.parse import quote_plus
 from urllib.parse import urlencode
 
 import requests
@@ -35,23 +36,17 @@ class TokenRequestTransientError(TokenRequestError):
 
 
 def token_response_error(http_response: requests.Response, body: Any) -> str | None:
-    """Slack returns 200 + ``{"ok": false}`` on failure; everyone else uses
-    non-2xx. Returns the error string or ``None`` on success.
-
-    ``body`` is whatever ``response.json()`` produced, so it may not be a JSON
-    object (a gateway can return a bare array / string / number / ``null``). A
-    non-object can't carry an OAuth error code, so a non-2xx is reported as a
-    generic failure and a 2xx falls through to credential mapping — never an
-    unguarded ``.get()`` that would escape the token-request error handling."""
+    """Error string from a token response, or ``None`` on success. Slack
+    returns 200 + ``{"ok": false}``; everyone else uses non-2xx. ``body`` is
+    whatever ``response.json()`` produced and may not be a dict (gateways can
+    return any JSON value), so no unguarded ``.get()``."""
     if not isinstance(body, dict):
         if http_response.status_code >= 400:
             return f"unexpected token response (status={http_response.status_code})"
         return None
     if http_response.status_code >= 400:
-        # Prefer the machine-readable `error` code over the human-readable
-        # `error_description`: terminal-vs-transient classification matches against
-        # OAuth error codes (e.g. `invalid_grant`), so returning the prose would
-        # misclassify a dead grant as transient and skip required reconnect handling.
+        # Prefer the machine-readable `error` code — terminal-vs-transient
+        # classification matches against codes like `invalid_grant`.
         return body.get("error") or body.get("error_description") or "unknown"
     if body.get("ok") is False:
         return body.get("error") or "unknown"
@@ -84,13 +79,9 @@ class OAuthFlowSpec(BaseModel):
 
 class OAuthFlowHandler(ABC):
     """OAuth mechanics for one app: the authorize URL, the authorization-code
-    exchange, and token refresh.
-
-    Both grants go through :meth:`_post_token_request`, so a divergent app
-    overrides a hook (:meth:`extract_credentials`, :meth:`build_refresh_request`,
-    :meth:`classify_token_response`) or an attribute below — never the
-    POST/error-handling flow itself.
-    """
+    exchange, and token refresh. Both grants go through
+    :meth:`_post_token_request`; divergent apps override a hook or attribute,
+    never the POST/error-handling flow itself."""
 
     # Bounded so a slow token endpoint can't pin the caller (and the gate).
     token_http_timeout_seconds: ClassVar[float] = 20.0
@@ -113,9 +104,8 @@ class OAuthFlowHandler(ABC):
     @abstractmethod
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
         """Map a successful token response (initial grant *or* refresh) to the
-        credentials to persist for the user (e.g. pull the user access token out
-        of Slack's nested ``authed_user``). Raise ``OnyxError`` if the expected
-        token is absent."""
+        credentials to persist (e.g. Slack's nested ``authed_user``). Raise
+        ``OnyxError`` if the expected token is absent."""
 
     def build_authorize_url(
         self, *, client_id: str, redirect_uri: str, state: str
@@ -144,13 +134,10 @@ class OAuthFlowHandler(ABC):
         client_id: str,
         client_secret: str,
     ) -> dict[str, Any]:
-        """The initial authorization-code grant (RFC 6749 §4.1.3): exchange the
-        code and map the response via :meth:`extract_credentials`.
-
-        Raises :class:`TokenRequestError` for transport/provider failures (the
-        caller maps it to its own error vocabulary); :meth:`extract_credentials`
-        may raise ``OnyxError`` for an unmappable success response.
-        """
+        """The initial authorization-code grant (RFC 6749 §4.1.3). Raises
+        :class:`TokenRequestError` for transport/provider failures;
+        :meth:`extract_credentials` may raise ``OnyxError`` for an unmappable
+        success response."""
         body = self._post_token_request(
             {
                 "grant_type": "authorization_code",
@@ -169,8 +156,7 @@ class OAuthFlowHandler(ABC):
         client_secret: str,
     ) -> dict[str, Any]:
         """Exchange the stored refresh token for a fresh access token (RFC 6749
-        §6). Clockless (the caller stamps ``expires_at``), mirroring
-        :meth:`extract_credentials`.
+        §6). Clockless — the caller stamps ``expires_at``.
 
         Raises:
             TokenRequestTerminalError: the grant is dead (reconnect required).
@@ -192,16 +178,14 @@ class OAuthFlowHandler(ABC):
         except TokenRequestError:
             raise
         except Exception as exc:
-            # A 2xx body we can't map (unexpected shape) isn't a dead grant —
-            # transient, so the caller keeps the existing token, not clears it.
-            # Keeps this method's contract: it raises only TokenRequestError.
+            # An unmappable 2xx body isn't a dead grant — transient, so the
+            # caller keeps the existing token rather than clearing it.
             raise TokenRequestTransientError(
                 f"could not map refresh response: {exc}"
             ) from exc
 
-        # Merge onto the stored creds (response wins) rather than replace, so
-        # connect-time-only fields (Slack's team_id, a prior id_token, …) and the
-        # refresh token survive a refresh that returns only the rotated subset.
+        # Merge (response wins) rather than replace, so connect-time-only
+        # fields survive a refresh that returns only the rotated subset.
         return {**stored, **mapped}
 
     def build_refresh_request(self, refresh_token: str) -> dict[str, str]:
@@ -229,13 +213,9 @@ class OAuthFlowHandler(ABC):
         client_secret: str,
     ) -> dict[str, Any]:
         """POST ``data`` to the token endpoint with client auth applied per
-        ``token_endpoint_auth_method``; parse and classify the response. The
-        single transport path for both grants.
-
-        Returns the parsed JSON object. Raises :class:`TokenRequestTerminalError`
-        for dead-grant error codes, :class:`TokenRequestTransientError` for
-        everything else (network, non-JSON, non-object body, other error codes).
-        """
+        ``token_endpoint_auth_method``; the single transport path for both
+        grants. Raises :class:`TokenRequestTerminalError` for dead-grant error
+        codes, :class:`TokenRequestTransientError` for everything else."""
         headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             # Ask for JSON so providers that default to form-encoded token
@@ -247,9 +227,11 @@ class OAuthFlowHandler(ABC):
             self.token_endpoint_auth_method
             is TokenEndpointAuthMethod.CLIENT_SECRET_BASIC
         ):
-            basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode(
-                "ascii"
-            )
+            # RFC 6749 §2.3.1: form-encode each part before the `id:secret`
+            # join so a `:` in either can't corrupt the pair.
+            basic = base64.b64encode(
+                f"{quote_plus(client_id)}:{quote_plus(client_secret)}".encode()
+            ).decode("ascii")
             headers["Authorization"] = f"Basic {basic}"
         else:
             form["client_id"] = client_id

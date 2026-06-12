@@ -464,9 +464,8 @@ class OAuthStartResponse(BaseModel):
 
 
 class OAuthRedirectUriResponse(BaseModel):
-    """The WEB_DOMAIN-derived redirect URI the OAuth flow sends. Served so the
-    admin UI never guesses it from the browser origin, which can differ
-    (proxies, tunnels) and would mismatch at the provider."""
+    """The redirect URI the OAuth flow sends, derived from WEB_DOMAIN — the
+    browser origin can differ (proxies, tunnels)."""
 
     redirect_uri: str
 

@@ -83,8 +83,8 @@ class _OAuthStateRecord(BaseModel):
 def get_oauth_redirect_uri(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> OAuthRedirectUriResponse:
-    """The redirect URI the OAuth routes send, for the admin to register with
-    the provider. See ``OAuthRedirectUriResponse``."""
+    """The redirect URI the OAuth routes send, for the admin to register
+    with the provider."""
     return OAuthRedirectUriResponse(redirect_uri=_frontend_callback_url())
 
 

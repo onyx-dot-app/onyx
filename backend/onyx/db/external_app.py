@@ -83,10 +83,9 @@ def validate_oauth_auth_template(
     auth_template: dict[str, Any],
     organization_credentials: dict[str, Any],
 ) -> None:
-    """OAuth apps never prompt for manual values, so every placeholder the org
-    hasn't pre-filled must be ``access_token`` (what the exchange stores), and
-    the template must reference it without the org pre-filling it — otherwise
-    users read as "connected" without ever going through OAuth."""
+    """OAuth apps never prompt for manual values: the only org-unfilled
+    placeholder allowed is ``access_token``, which must be referenced and
+    never org-pre-filled (else users read as "connected" without OAuth)."""
     placeholders = _placeholders_in_template(auth_template)
     if "access_token" not in placeholders:
         raise OnyxError(

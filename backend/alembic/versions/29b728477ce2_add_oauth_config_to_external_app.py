@@ -24,7 +24,15 @@ def upgrade() -> None:
         "external_app",
         sa.Column("oauth_config", postgresql.JSONB(), nullable=True),
     )
+    op.create_check_constraint(
+        "ck_external_app_oauth_config_custom_only",
+        "external_app",
+        "app_type = 'CUSTOM' OR oauth_config IS NULL",
+    )
 
 
 def downgrade() -> None:
+    op.drop_constraint(
+        "ck_external_app_oauth_config_custom_only", "external_app", type_="check"
+    )
     op.drop_column("external_app", "oauth_config")

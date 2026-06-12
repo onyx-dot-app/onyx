@@ -153,10 +153,12 @@ export default function CreateCustomAppModal({
 
   // Server-derived (WEB_DOMAIN): the URI the flow actually sends — the
   // browser origin can differ (proxy, tunnel) and would mislead.
-  const { data: redirectUriData } = useSWR<{ redirect_uri: string }>(
-    SWR_KEYS.buildExternalAppsOAuthRedirectUri,
-    errorHandlingFetcher
-  );
+  const { data: redirectUriData, error: redirectUriError } = useSWR<{
+    redirect_uri: string;
+  }>(SWR_KEYS.buildExternalAppsOAuthRedirectUri, errorHandlingFetcher, {
+    onError: (err) =>
+      console.error("Failed to fetch the OAuth redirect URI:", err),
+  });
   const redirectUri = redirectUriData?.redirect_uri ?? null;
 
   async function copyRedirectUri() {
@@ -411,7 +413,10 @@ export default function CreateCustomAppModal({
                         </Text>
                         <div className="flex items-center gap-2">
                           <Text font="main-ui-body" color="text-03">
-                            {redirectUri ?? "Loading…"}
+                            {redirectUri ??
+                              (redirectUriError
+                                ? "Couldn't load the redirect URI."
+                                : "Loading…")}
                           </Text>
                           <Button
                             prominence="secondary"

@@ -15,21 +15,17 @@ from onyx.external_apps.oauth_handler import OAuthFlowHandler
 from onyx.external_apps.oauth_handler import OAuthFlowSpec
 from onyx.external_apps.oauth_handler import TokenEndpointAuthMethod
 
-# Authorize-URL params the flow itself owns: the downstream path is hardwired
-# to the code grant (`response_type`) and the callback's CSRF/replay
-# protection rides on `state`, so admin extras may not collide.
+# Protocol params the flow itself sets (code grant + CSRF state); admin
+# extras may not override them.
 _RESERVED_AUTHORIZE_PARAMS = frozenset(
     {"response_type", "client_id", "redirect_uri", "state"}
 )
 
 
 class CustomOAuthConfig(BaseModel):
-    """Authorization-code-flow parameters for an admin-defined OAuth app.
-
-    Stored as ``external_app.oauth_config``; validated on every write and
-    parsed back only in ``resolve_oauth_handler``, so a corrupt stored value
-    fails loudly in one place. No secrets — client creds live in
-    ``organization_credentials``, same as built-ins."""
+    """Authorization-code-flow parameters for an admin-defined OAuth app,
+    stored as ``external_app.oauth_config``. No secrets — client creds live
+    in ``organization_credentials``."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -38,8 +34,7 @@ class CustomOAuthConfig(BaseModel):
     # Empty means "don't send a scope param" (provider-default scopes).
     scope: str = ""
     scope_param: str = "scope"
-    # Params beyond RFC 6749 §4.1.1 (e.g. access_type=offline). May not name
-    # a protocol param the flow owns — see `_RESERVED_AUTHORIZE_PARAMS`.
+    # E.g. access_type=offline. May not name a reserved protocol param.
     extra_authorize_params: dict[str, str] = {}
     token_endpoint_auth_method: TokenEndpointAuthMethod = (
         TokenEndpointAuthMethod.CLIENT_SECRET_POST
@@ -79,9 +74,7 @@ class CustomOAuthConfig(BaseModel):
 
 class CustomOAuthHandler(OAuthFlowHandler):
     """Config-driven handler for a CUSTOM app. Credential extraction is plain
-    RFC 6749: ``access_token`` required; ``refresh_token`` / ``expires_in`` /
-    ``scope`` / ``token_type`` kept when present (matching `stamp_expires_at` /
-    `needs_refresh` semantics for expiring and non-expiring tokens)."""
+    RFC 6749: ``access_token`` required, optional fields kept when present."""
 
     def __init__(self, config: CustomOAuthConfig) -> None:
         self.token_endpoint_auth_method = config.token_endpoint_auth_method
@@ -115,6 +108,8 @@ class CustomOAuthHandler(OAuthFlowHandler):
         }
         if response_data.get("refresh_token"):
             creds["refresh_token"] = response_data["refresh_token"]
-        if response_data.get("expires_in"):
+        # Presence, not truthiness: `expires_in: 0` means already-expired,
+        # and dropping it would read downstream as never-expiring.
+        if response_data.get("expires_in") is not None:
             creds["expires_in"] = response_data["expires_in"]
         return creds

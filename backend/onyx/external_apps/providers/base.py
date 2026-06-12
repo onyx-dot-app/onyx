@@ -155,15 +155,10 @@ class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
 
 
 class OAuthExternalAppProvider(ExternalAppProvider, OAuthFlowHandler, abstract=True):
-    """A provider whose users authenticate via OAuth 2.0: an
-    :class:`ExternalAppProvider` that is also an :class:`OAuthFlowHandler`,
-    sourcing its flow parameters from ``spec.oauth``.
-
-    Subclasses supply an :class:`OAuthProviderSpec` and implement
-    :meth:`extract_credentials`; a divergent provider overrides one of the
-    handler hooks (`build_refresh_request`, `classify_token_response`,
-    `terminal_token_errors`), not the POST/error-handling flow.
-    """
+    """An :class:`ExternalAppProvider` that is also an :class:`OAuthFlowHandler`,
+    sourcing flow parameters from ``spec.oauth``. Subclasses supply an
+    :class:`OAuthProviderSpec` and implement :meth:`extract_credentials`;
+    divergent providers override a handler hook, not the POST flow."""
 
     spec: ClassVar[OAuthProviderSpec]
     _spec_type: ClassVar[type[ProviderSpec]] = OAuthProviderSpec
