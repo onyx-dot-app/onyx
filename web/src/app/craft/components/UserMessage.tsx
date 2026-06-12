@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Text, Button } from "@opal/components";
+import { Text, Button, CopyButton } from "@opal/components";
 import { SvgChevronDown } from "@opal/icons";
+import { Hoverable } from "@opal/core";
 
 const COLLAPSED_MAX_PX = 240; // ~10 lines
 
@@ -51,10 +52,19 @@ function ClampedContent({ content }: { content: string }) {
 
 export default function UserMessage({ content }: UserMessageProps) {
   return (
-    <div className="flex justify-end py-4">
-      <div className="max-w-[80%] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-3 px-4">
-        <ClampedContent content={content} />
+    <Hoverable.Root group="craftUserMessage" width="full">
+      <div className="flex items-start justify-end gap-1 py-4">
+        <Hoverable.Item group="craftUserMessage" variant="appear-on-hover">
+          <CopyButton
+            getCopyText={() => content}
+            prominence="tertiary"
+            data-testid="CraftUserMessage/copy-button"
+          />
+        </Hoverable.Item>
+        <div className="max-w-[80%] whitespace-break-spaces rounded-t-16 rounded-bl-16 bg-background-tint-02 py-3 px-4">
+          <ClampedContent content={content} />
+        </div>
       </div>
-    </div>
+    </Hoverable.Root>
   );
 }
