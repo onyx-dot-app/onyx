@@ -16,8 +16,8 @@ opencode-auth + push-key env, proxy hostAliases IP).
 {{- $nextjsStart := (index $cm "SANDBOX_NEXTJS_PORT_START") | default "3010" | int }}
 {{- $nextjsEnd := (index $cm "SANDBOX_NEXTJS_PORT_END") | default "3100" | int }}
 {{- $opencodePort := (index $cm "OPENCODE_SERVE_PORT") | default "4096" | int }}
-{{/* Keep in sync with PUSH_DAEMON_PORT in kubernetes_sandbox_manager.py. */}}
-{{- $pushDaemonPort := 8731 }}
+{{/* Keep in sync with PUSH_DAEMON_PORT in sandbox_daemon/contract.py. */}}
+{{- $pushDaemonPort := include "onyx.sandboxPushDaemonPort" . }}
 {{- $proxyPort := include "onyx.sandboxProxyPort" . }}
 {{- $proxyHost := include "onyx.sandboxProxyHost" . }}
 {{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
@@ -95,6 +95,7 @@ template:
           {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
         volumeMounts:
           - { name: workspace, mountPath: /workspace/sessions }
+          - { name: opencode-data, mountPath: /workspace/opencode-data }
           - { name: managed, mountPath: /workspace/managed }
           - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
         resources:
@@ -111,6 +112,10 @@ template:
           httpGet: { path: /health, port: {{ $pushDaemonPort }} }
           initialDelaySeconds: 5
           periodSeconds: 30
+        startupProbe:
+          httpGet: { path: /ready, port: {{ $pushDaemonPort }} }
+          periodSeconds: 2
+          failureThreshold: 180
         readinessProbe:
           httpGet: { path: /health, port: {{ $pushDaemonPort }} }
           initialDelaySeconds: 1
@@ -131,9 +136,11 @@ template:
           - { name: ONYX_SERVER_URL, value: "{{ $serverUrl }}" }
           - { name: GH_TOKEN, value: "replaced_by_egress_proxy" }
           - { name: GH_NO_UPDATE_NOTIFIER, value: "1" }
+          - { name: OPENCODE_DATA_HOME, value: "/workspace/opencode-data" }
           {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
         volumeMounts:
           - { name: workspace, mountPath: /workspace/sessions }
+          - { name: opencode-data, mountPath: /workspace/opencode-data }
           - { name: managed, mountPath: /workspace/managed, readOnly: true }
           - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
         resources:
@@ -148,6 +155,8 @@ template:
     volumes:
       - name: workspace
         emptyDir: { sizeLimit: 50Gi }
+      - name: opencode-data
+        emptyDir: { sizeLimit: 5Gi }
       - name: managed
         emptyDir: { sizeLimit: 5Gi }
       - name: sandbox-ca-source

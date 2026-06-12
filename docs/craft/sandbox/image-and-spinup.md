@@ -282,7 +282,8 @@ overhead, not realistic prod cold-pull time. See the caveats under
 
 `sandbox_daemon/snapshot.py` runs inside the sidecar process and only touches
 the shared pod filesystem. It is responsible for session-level snapshots under
-`/workspace/sessions/<session_id>/{outputs,attachments,.opencode-data}`.
+`/workspace/sessions/<session_id>/{outputs,attachments}`. Sandbox-global
+opencode history lives outside the session tree and is snapshotted separately.
 Storage is handled by the API server through FileStore.
 
 `node_modules` and `.next` are deliberately excluded from snapshots

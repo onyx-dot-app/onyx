@@ -170,7 +170,7 @@ api_server                              sandbox container
 **Existing files to touch:**
 - `backend/onyx/server/features/build/sandbox/base.py` — add `list_session_workspaces(sandbox_id) -> list[UUID]` to the ABC. Implement it on K8s and Local (the local version walks the directory; K8s's logic moves out of `tasks.py` onto the manager). The docker version execs `ls /workspace/sessions/`.
 - `backend/onyx/server/features/build/sandbox/tasks/tasks.py:67-101` — `cleanup_idle_sandboxes_task` no longer special-cases backends. Drop the `if SANDBOX_BACKEND == LOCAL: return` (replaced with: `manager.supports_idle_cleanup()` → bool, default False for local) and the `isinstance(KubernetesSandboxManager)` cast. `_list_session_directories` deleted; calls go through `manager.list_session_workspaces(...)`.
-- `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py` — already takes a `FileStore` and works in tar/upload terms. Add a `create_snapshot_from_stream(stream, ...)` and `restore_snapshot_to_stream(...)` so docker can hand it raw bytes from `exec_run` rather than a path on disk. Local uses the existing path-based methods unchanged.
+- `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py` — already takes a `FileStore` and works in tar/upload terms. Add a `persist_snapshot_from_stream(stream, ...)` and `restore_snapshot_to_stream(...)` so docker can hand it raw bytes from `exec_run` rather than a path on disk. Local uses the existing path-based methods unchanged.
 - `backend/onyx/server/features/build/sandbox/README.md` — section on `docker` backend, comparison table of the three backends, explicit warning that `local` is dev-only, and the trust-boundary note about the docker socket.
 
 **Deployment / packaging:**
@@ -202,7 +202,7 @@ Two small refactors before the docker manager lands cleanly. Both are independen
    - Docker: `container.exec_run("ls /workspace/sessions")`, same parser as K8s.
 2. **Extend `SnapshotManager` to accept streams.** Today it takes a `Path` and reads/writes the local filesystem. Docker hands it bytes from a `docker exec` socket. Add:
    ```python
-   def create_snapshot_from_stream(self, stream: BinaryIO, sandbox_id: str, tenant_id: str) -> SnapshotResult: ...
+   def persist_snapshot_from_stream(self, stream: BinaryIO, sandbox_id: str, tenant_id: str) -> SnapshotResult: ...
    def restore_snapshot_to_stream(self, storage_path: str) -> BinaryIO: ...
    ```
    The existing path-based methods become thin wrappers that read/write a tempfile around the stream methods.
@@ -246,7 +246,7 @@ Lightweight. Sandbox correctness is dominated by the K8s integration tests alrea
 - Singleton caching is preserved across the three branches.
 
 `backend/tests/unit/onyx/server/features/build/sandbox/test_snapshot_manager_streams.py`
-- The new `create_snapshot_from_stream` / `restore_snapshot_to_stream` methods round-trip correctly with an in-memory `BytesIO`, against a fake `FileStore`. Confirms the tempfile-wrapping path-based API still produces the same `(snapshot_id, storage_path, size_bytes)` shape.
+- The new `persist_snapshot_from_stream` / `restore_snapshot_to_stream` methods round-trip correctly with an in-memory `BytesIO`, against a fake `FileStore`. Confirms the tempfile-wrapping path-based API still produces the same `(snapshot_id, storage_path, size_bytes)` shape.
 
 **Integration (no new tests):**
 - The existing Craft session integration tests in `backend/tests/integration/tests/craft/` (which run against `local`) should be re-run with `SANDBOX_BACKEND=docker` in a CI matrix lane *if* CI has Docker-in-Docker. If not, treat docker mode as covered by the external-dependency-unit tests plus manual verification.

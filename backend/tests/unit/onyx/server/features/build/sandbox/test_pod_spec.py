@@ -36,17 +36,33 @@ from cryptography.hazmat.primitives.serialization import PrivateFormat
 from kubernetes import client
 
 import onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager as ksm
+import onyx.server.features.build.sandbox.kubernetes.sidecar_client as sidecar
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    PUSH_DAEMON_PORT,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_HEALTH_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_READY_PATH,
 )
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    PUSH_DAEMON_PORT,
+    KubernetesSandboxManager,
 )
 
 # backend/tests/unit/onyx/server/features/build/sandbox/ -> repo root
 _REPO_ROOT = Path(__file__).resolve().parents[8]
 _CHART_DIR = _REPO_ROOT / "deployment" / "helm" / "charts" / "onyx"
+_DEFAULT_KUBE_VERSION_ARGS = ["--kube-version", "1.33.0"]
+
+
+def _chart_args_with_default_kube_version(
+    extra_args: list[str] | None = None,
+) -> list[str]:
+    if extra_args is not None and "--kube-version" in extra_args:
+        return list(extra_args)
+    return [*_DEFAULT_KUBE_VERSION_ARGS, *(extra_args or [])]
 
 
 def _gen_key_b64() -> str:
@@ -63,9 +79,9 @@ _TEST_PROXY_IP = "10.255.255.254"
 
 @pytest.fixture(autouse=True)
 def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _gen_key_b64())
-    monkeypatch.setattr(ksm, "_push_private_key", None, raising=False)
-    monkeypatch.setattr(ksm, "_push_public_key_b64", None, raising=False)
+    monkeypatch.setattr(sidecar, "SANDBOX_PUSH_PRIVATE_KEY", _gen_key_b64())
+    monkeypatch.setattr(sidecar, "_push_private_key", None, raising=False)
+    monkeypatch.setattr(sidecar, "_push_public_key_b64", None, raising=False)
     monkeypatch.setattr(ksm, "SANDBOX_PROXY_HOST", "sandbox-proxy.onyx.svc")
     monkeypatch.setattr(
         ksm.KubernetesSandboxManager,
@@ -74,37 +90,87 @@ def _push_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _render_pod_template() -> client.V1PodTemplate:
-    """Render the sandbox-pod PodTemplate from the chart and deserialize it
-    into the same model the K8s API would return."""
+def _render_pod_template_yaml(extra_args: list[str] | None = None) -> str:
+    """Render the sandbox-pod PodTemplate from the chart."""
     helm = shutil.which("helm")
     if helm is None:
         pytest.skip("helm binary not available")
-    result = subprocess.run(
-        [
-            helm,
-            "template",
-            "onyx",
-            str(_CHART_DIR),
-            "-n",
-            "onyx",
-            "-f",
-            str(_CHART_DIR / "values-ci.yaml"),
-            "--show-only",
-            "templates/sandbox-podtemplate.yaml",
-        ],
-        capture_output=True,
-        text=True,
-    )
+    cmd = [
+        helm,
+        "template",
+        "onyx",
+        str(_CHART_DIR),
+        "-n",
+        "onyx",
+        "-f",
+        str(_CHART_DIR / "values-ci.yaml"),
+        *_chart_args_with_default_kube_version(extra_args),
+        "--show-only",
+        "templates/sandbox-podtemplate.yaml",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         pytest.skip(f"helm template failed (chart deps?): {result.stderr.strip()}")
-    rendered = yaml.safe_load(result.stdout)
+    return result.stdout
+
+
+def _render_chart(
+    extra_args: list[str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    helm = shutil.which("helm")
+    if helm is None:
+        pytest.skip("helm binary not available")
+    cmd = [
+        helm,
+        "template",
+        "onyx",
+        str(_CHART_DIR),
+        "-n",
+        "onyx",
+        "-f",
+        str(_CHART_DIR / "values-ci.yaml"),
+        *_chart_args_with_default_kube_version(extra_args),
+    ]
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def _render_pod_template() -> client.V1PodTemplate:
+    """Render the sandbox-pod PodTemplate from the chart and deserialize it
+    into the same model the K8s API would return."""
+    rendered = yaml.safe_load(_render_pod_template_yaml())
 
     class _Resp:
         def __init__(self, obj: dict) -> None:
             self.data = json.dumps(obj)
 
     return client.ApiClient().deserialize(_Resp(rendered), "V1PodTemplate")
+
+
+def test_craft_helm_version_guard_rejects_old_kubernetes() -> None:
+    result = _render_chart(
+        [
+            "--kube-version",
+            "1.32.0",
+        ]
+    )
+
+    assert result.returncode != 0
+    assert "Kubernetes >= 1.33" in result.stderr
+    assert "v1.32.0" in result.stderr
+
+
+def test_craft_helm_rejects_docker_sandbox_backend_override() -> None:
+    result = _render_chart(
+        [
+            "--kube-version",
+            "1.33.0",
+            "--set",
+            "configMap.SANDBOX_BACKEND=docker",
+        ]
+    )
+
+    assert result.returncode != 0
+    assert 'configMap.SANDBOX_BACKEND must be "kubernetes"' in result.stderr
 
 
 def _build_pod() -> client.V1Pod:
@@ -202,12 +268,19 @@ def test_push_public_key_is_in_sidecar_env_only(pod: client.V1Pod) -> None:
     assert "ONYX_SANDBOX_PUSH_PUBLIC_KEY" not in sandbox_env
 
 
-def test_sidecar_health_probes_target_the_daemon_port(pod: client.V1Pod) -> None:
+def test_sidecar_probes_target_the_daemon_port(pod: client.V1Pod) -> None:
     sidecar = _sidecar(pod)
-    for probe in (sidecar.liveness_probe, sidecar.readiness_probe):
-        assert probe is not None
-        assert probe.http_get.path == "/health"
-        assert probe.http_get.port == PUSH_DAEMON_PORT
+    assert sidecar.liveness_probe is not None
+    assert sidecar.liveness_probe.http_get.path == SIDECAR_HEALTH_PATH
+    assert sidecar.liveness_probe.http_get.port == PUSH_DAEMON_PORT
+
+    assert sidecar.startup_probe is not None
+    assert sidecar.startup_probe.http_get.path == SIDECAR_READY_PATH
+    assert sidecar.startup_probe.http_get.port == PUSH_DAEMON_PORT
+
+    assert sidecar.readiness_probe is not None
+    assert sidecar.readiness_probe.http_get.path == SIDECAR_HEALTH_PATH
+    assert sidecar.readiness_probe.http_get.port == PUSH_DAEMON_PORT
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +308,7 @@ def test_workspace_volume_is_shared_for_session_io(pod: client.V1Pod) -> None:
     volume_names = {v.name for v in pod.spec.volumes}
     assert volume_names == {
         "workspace",
+        "opencode-data",
         "managed",
         "sandbox-ca-source",
         "sandbox-ca-bundle",
@@ -242,6 +316,24 @@ def test_workspace_volume_is_shared_for_session_io(pod: client.V1Pod) -> None:
     for container in (_container(pod, "sandbox"), _sidecar(pod)):
         mount = _mount(container, "workspace")
         assert mount.mount_path == "/workspace/sessions"
+        assert not mount.read_only
+
+
+def test_opencode_data_volume_is_shared_outside_session_tree(
+    pod: client.V1Pod,
+) -> None:
+    """Opencode's sandbox-global data must not live under /workspace/sessions,
+    which is the user/session workspace tree.
+    """
+    env = {e.name: e.value for e in _container(pod, "sandbox").env}
+    assert env["OPENCODE_DATA_HOME"] == "/workspace/opencode-data"
+
+    volume = next(v for v in pod.spec.volumes if v.name == "opencode-data")
+    assert volume.empty_dir.size_limit == "5Gi"
+
+    for container in (_container(pod, "sandbox"), _sidecar(pod)):
+        mount = _mount(container, "opencode-data")
+        assert mount.mount_path == "/workspace/opencode-data"
         assert not mount.read_only
 
 

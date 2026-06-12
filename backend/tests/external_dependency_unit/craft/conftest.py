@@ -85,12 +85,18 @@ _DEV_PUSH_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 @pytest.fixture(scope="module", autouse=True)
 def _sandbox_push_key() -> Generator[None, None, None]:
     # Module-scoped so it's set before ``_pool_pod`` (also module-scoped)
-    # provisions its pod — the K8s manager reads the env var at pod-spec
-    # build time. Function-scoped ``monkeypatch`` runs *after* higher-scoped
-    # fixtures, which is what triggered the CI breakage when the first
-    # test in the file moved onto ``pool_session``.
+    # provisions its pod. ``sidecar_client`` imports the config value as a
+    # module constant, so patch both the process env and the already-imported
+    # modules.
+    from onyx.server.features.build import configs as build_configs
+    from onyx.server.features.build.sandbox.kubernetes import sidecar_client
+
     mp = pytest.MonkeyPatch()
     mp.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+    mp.setattr(build_configs, "SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+    mp.setattr(sidecar_client, "SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+    mp.setattr(sidecar_client, "_push_private_key", None)
+    mp.setattr(sidecar_client, "_push_public_key_b64", None)
     try:
         yield
     finally:

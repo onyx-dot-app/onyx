@@ -24,8 +24,9 @@ Request body:
 Response:
 
 - `204` when there is no snapshot content.
-- `200 application/gzip` streaming a tarball of `outputs/`, `attachments/`,
-  and `.opencode-data/`.
+- `200 application/gzip` streaming a tarball of `outputs/` and `attachments/`.
+  Opencode history is sandbox-global and uses separate opencode-history
+  endpoints.
 
 ## Snapshot restore
 

@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.25
+version: 0.5.26
 appVersion: latest
 annotations:
   category: Productivity
@@ -17,8 +17,8 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: changed
-      description: Validate Craft Helm configuration and derive sandbox proxy
-        host and internal proxy port env settings from the chart.
+      description: Preserve Craft opencode history across Kubernetes sandbox
+        restarts by restoring it before opencode starts.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
