@@ -60,8 +60,10 @@ font-family, size, weight, line-height, letter-spacing). The build emits them as
 
 `bun run verify:tokens` proves the move is loss-less: it resolves every token
 variable (light **and** dark) from the new output and from Opal's pre-migration CSS
-at git HEAD, and fails on any name-set or resolved-value difference. Run it while the
-migration PR is open; it skips cleanly once the old baseline no longer exists at HEAD.
+on the PR **base branch** (`origin/main`, override with `PARITY_BASELINE_REF`), and
+fails on any name-set or resolved-value difference. Run it while the migration PR is
+open; once merged — when the baseline no longer exists on the base branch either — it
+skips cleanly. A missing/unfetched ref fails loudly rather than silently skipping.
 
 ## Build
 
