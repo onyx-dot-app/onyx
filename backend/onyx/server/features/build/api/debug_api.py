@@ -24,7 +24,7 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import User
 from onyx.server.features.build.configs import ENABLE_OPENCODE_DEBUGGING
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
-from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -1,7 +1,7 @@
-"""Abstract base class and factory for sandbox operations.
+"""Abstract base class for sandbox operations.
 
 SandboxManager is the abstract interface for sandbox lifecycle management.
-Use get_sandbox_manager() to get the appropriate implementation based on SANDBOX_BACKEND.
+Use sandbox.factory.get_sandbox_manager() to get the implementation for SANDBOX_BACKEND.
 
 IMPORTANT: SandboxManager implementations must NOT interface with the database directly.
 All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
@@ -14,7 +14,6 @@ Architecture Note (User-Shared Sandbox Model):
 - terminate() destroys the entire sandbox (all sessions)
 """
 
-import threading
 import time
 from abc import ABC
 from abc import abstractmethod
@@ -23,8 +22,6 @@ from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
@@ -710,41 +707,3 @@ class SandboxManager(_ServeMixin, ABC):
             session_id: The session ID
             nextjs_port: The port the Next.js server should be listening on
         """
-
-
-# Singleton instance cache for the factory
-_sandbox_manager_instance: SandboxManager | None = None
-_sandbox_manager_lock = threading.Lock()
-
-
-def get_sandbox_manager() -> SandboxManager:
-    """Get the appropriate SandboxManager implementation based on SANDBOX_BACKEND.
-
-    Returns:
-        SandboxManager instance:
-        - KubernetesSandboxManager for kubernetes backend (production + dev kind)
-        - DockerSandboxManager for self-hosted docker-compose
-    """
-    global _sandbox_manager_instance
-
-    if _sandbox_manager_instance is None:
-        with _sandbox_manager_lock:
-            if _sandbox_manager_instance is None:
-                if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
-                    from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-                        KubernetesSandboxManager,
-                    )
-
-                    _sandbox_manager_instance = KubernetesSandboxManager()
-                    logger.info("Using KubernetesSandboxManager for sandbox operations")
-                elif SANDBOX_BACKEND == SandboxBackend.DOCKER:
-                    from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
-                        DockerSandboxManager,
-                    )
-
-                    _sandbox_manager_instance = DockerSandboxManager()
-                    logger.info("Using DockerSandboxManager for sandbox operations")
-                else:
-                    raise ValueError(f"Unknown sandbox backend: {SANDBOX_BACKEND}")
-
-    return _sandbox_manager_instance

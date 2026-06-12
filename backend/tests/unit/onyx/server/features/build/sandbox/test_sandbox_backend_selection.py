@@ -12,24 +12,24 @@ import pytest
 
 from onyx.server.features.build import configs
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.sandbox import base as base_module
+from onyx.server.features.build.sandbox import factory as factory_module
 
 
 @pytest.fixture(autouse=True)
 def _reset_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
     """Reset the cached singleton before each test so backend switches are honored."""
-    monkeypatch.setattr(base_module, "_sandbox_manager_instance", None)
+    monkeypatch.setattr(factory_module, "_sandbox_manager_instance", None)
 
 
 def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(base_module, "SANDBOX_BACKEND", "totally-bogus")
+    monkeypatch.setattr(factory_module, "SANDBOX_BACKEND", "totally-bogus")
     with pytest.raises(ValueError, match="Unknown sandbox backend"):
-        base_module.get_sandbox_manager()
+        factory_module.get_sandbox_manager()
 
 
 def test_docker_backend_returns_docker_manager(monkeypatch: pytest.MonkeyPatch) -> None:
     """Backend=docker must dispatch to ``DockerSandboxManager``, not raise NotImplementedError."""
-    monkeypatch.setattr(base_module, "SANDBOX_BACKEND", SandboxBackend.DOCKER)
+    monkeypatch.setattr(factory_module, "SANDBOX_BACKEND", SandboxBackend.DOCKER)
 
     # Don't try to talk to /var/run/docker.sock in a unit test — stub _initialize.
     from onyx.server.features.build.sandbox.docker import docker_sandbox_manager
@@ -49,7 +49,7 @@ def test_docker_backend_returns_docker_manager(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(
         docker_sandbox_manager.DockerSandboxManager, "_initialize", _fake_init
     )
-    mgr = base_module.get_sandbox_manager()
+    mgr = factory_module.get_sandbox_manager()
     assert mgr.__class__.__name__ == "DockerSandboxManager"
 
 

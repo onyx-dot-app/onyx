@@ -17,7 +17,7 @@ from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_u
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
-from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 
 # 100 minutes - snapshotting can take time

@@ -1265,7 +1265,7 @@ def session_manager_with_stub(
 
     Patches both ``session.manager.get_sandbox_manager`` (which
     ``SessionManager.__init__`` captures into ``self._sandbox_manager`` at
-    construction time) AND ``sandbox.base._sandbox_manager_instance`` so any
+    construction time) AND ``sandbox.factory._sandbox_manager_instance`` so any
     deferred lookup also lands on the stub. The LLM lookup runs for real
     against the provider from ``_seed_default_llm_provider``.
     """
@@ -1274,7 +1274,7 @@ def session_manager_with_stub(
         lambda: stub_sandbox_manager,
     )
     monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.base._sandbox_manager_instance",
+        "onyx.server.features.build.sandbox.factory._sandbox_manager_instance",
         stub_sandbox_manager,
     )
     sm = SessionManager(db_session)
