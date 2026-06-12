@@ -1374,7 +1374,7 @@ def upsert_persona(
 
     # Fetch and attach hierarchy_nodes by IDs
     hierarchy_nodes = None
-    if hierarchy_node_ids:
+    if hierarchy_node_ids is not None:
         hierarchy_nodes = (
             db_session.query(HierarchyNode)
             .filter(HierarchyNode.id.in_(hierarchy_node_ids))
@@ -1383,7 +1383,7 @@ def upsert_persona(
         if not hierarchy_nodes and hierarchy_node_ids:
             raise ValueError("hierarchy_nodes not found")
 
-    if hierarchy_node_ids and knowledge_guard_applies and user is not None:
+    if hierarchy_node_ids is not None and knowledge_guard_applies and user is not None:
         existing_node_ids = (
             {node.id for node in existing_persona.hierarchy_nodes}
             if existing_persona
