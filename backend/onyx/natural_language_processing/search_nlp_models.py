@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -193,7 +194,7 @@ WARM_UP_STRINGS = [
 
 
 def clean_model_name(model_str: str) -> str:
-    return model_str.replace("/", "_").replace("-", "_").replace(".", "_")
+    return re.sub(r"[^a-zA-Z0-9_]", "_", model_str).strip("_")
 
 
 def build_model_server_url(
