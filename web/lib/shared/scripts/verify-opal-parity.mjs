@@ -3,8 +3,13 @@
 // It proves that every design-token CSS variable resolves to the IDENTICAL concrete
 // value (in BOTH light and dark) before and after the migration:
 //
-//   baseline  = Opal's token CSS at git HEAD (colors/sizes/z-index/typography)
+//   baseline  = Opal's token CSS on the PR BASE BRANCH (default origin/main), where
+//               the pre-migration colors/sizes/z-index/typography.css still exist
 //   new       = shared/dist/tokens.css  ∪  Opal's remaining src/styles/*.css
+//
+// The baseline is read from the base branch (NOT HEAD): on this PR, HEAD is already
+// the migration commit (colors.css deleted), so reading HEAD would make the gate
+// silently skip. Override the ref with PARITY_BASELINE_REF if needed.
 //
 // Asserts: same variable-name set, same resolved light value, same resolved dark
 // value, and that no variable is defined in BOTH shared and opal (no duplication).
@@ -20,6 +25,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const sharedRoot = join(here, "..");
 const repoRoot = join(sharedRoot, "..", "..", ".."); // web/lib/shared -> repo root
 const OPAL_STYLES = "web/lib/opal/src/styles";
+// The git ref holding the pre-migration baseline (the PR's base branch).
+const BASELINE_REF = process.env.PARITY_BASELINE_REF || "origin/main";
 
 const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "");
 
@@ -70,28 +77,64 @@ function makeResolver(root, dark, mode) {
 }
 
 function gitShow(path) {
-  // Argument array (no shell) — `path` comes only from the hardcoded file list.
-  return execFileSync("git", ["show", `HEAD:${path}`], {
+  // Argument array (no shell) — `path` and the ref come only from constants/env.
+  return execFileSync("git", ["show", `${BASELINE_REF}:${path}`], {
     cwd: repoRoot,
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
   });
 }
 
-// ---- baseline (git HEAD) ----
-// This gate compares the working tree against the pre-migration Opal token CSS at
-// HEAD. It is meaningful while the migration PR is open. Once merged, the baseline
-// files (notably colors.css) no longer exist at HEAD, so the check skips cleanly.
+// ---- baseline (pre-migration Opal CSS on the base branch) ----
+// Compares the new output against the pre-migration token CSS on BASELINE_REF. It is
+// meaningful while the migration PR is open. Once merged, those files no longer exist
+// on the base branch either, so `git show` exits 128 and the check skips cleanly.
+// The baseline ref must actually resolve. git uses exit 128 for BOTH "file missing
+// in ref" and "ref/repo missing", so check the ref up front: a missing ref (base
+// branch not fetched in CI, wrong cwd, git absent) is an infra failure, not a
+// legitimate post-migration skip — fail loudly so it can't masquerade as a pass.
+function refExists(ref) {
+  try {
+    execFileSync(
+      "git",
+      ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "ignore", "ignore"],
+      }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+if (!refExists(BASELINE_REF)) {
+  console.error(
+    `FAIL: baseline ref '${BASELINE_REF}' not found — fetch it (e.g. git fetch origin main) or set PARITY_BASELINE_REF.`
+  );
+  process.exit(2);
+}
+
 let baseCss;
 try {
   baseCss = ["colors.css", "sizes.css", "z-index.css", "typography.css"]
     .map((f) => gitShow(`${OPAL_STYLES}/${f}`))
     .join("\n");
-} catch {
-  console.log(
-    "ℹ️  Opal token baseline not present at HEAD (post-migration) — parity check skipped."
+} catch (err) {
+  // The ref resolves (checked above), so an exit-128 here means the token files are
+  // absent in it — the expected post-migration state once colors.css is deleted on
+  // the base branch. Any other failure is unexpected and must fail loudly.
+  if (err.status === 128) {
+    console.log(
+      `ℹ️  Opal token baseline not present on ${BASELINE_REF} (post-migration) — parity check skipped.`
+    );
+    process.exit(0);
+  }
+  console.error(
+    `FAIL: could not read baseline from ${BASELINE_REF}:`,
+    err.message
   );
-  process.exit(0);
+  throw err;
 }
 const base = parse(baseCss);
 
