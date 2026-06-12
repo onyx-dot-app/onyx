@@ -7,20 +7,20 @@
  */
 import React from "react";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
-import PasswordInputTypeIn from "./PasswordInputTypeIn";
+import PasswordInputTypeIn, {
+  type PasswordInputTypeInProps,
+} from "./PasswordInputTypeIn";
 
-interface ControlledPasswordProps {
+interface ControlledPasswordProps extends Omit<
+  PasswordInputTypeInProps,
+  "value" | "onChange"
+> {
   initialValue?: string;
-  isNonRevealable?: boolean;
-  placeholder?: string;
-  shrinkPlaceholder?: boolean;
 }
 
 function ControlledPassword({
   initialValue = "",
-  isNonRevealable,
-  placeholder,
-  shrinkPlaceholder,
+  ...props
 }: ControlledPasswordProps) {
   const [value, setValue] = React.useState(initialValue);
   return (
@@ -28,9 +28,7 @@ function ControlledPassword({
       data-testid="pw"
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      isNonRevealable={isNonRevealable}
-      placeholder={placeholder}
-      shrinkPlaceholder={shrinkPlaceholder}
+      {...props}
     />
   );
 }
