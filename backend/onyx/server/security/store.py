@@ -17,6 +17,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.models import OPERATOR_LOCKED_FIELDS
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
+from onyx.server.security.models import SSRFProtectionLevel
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -51,11 +52,39 @@ def _install_cache_for_test(
         _CACHE = TTLCache(maxsize=maxsize, ttl=ttl, timer=timer)
 
 
+def _derive_ssrf_level_from_env() -> SSRFProtectionLevel:
+    """Seed the new admin "SSRF Protection" setting's default from the legacy
+    per-path SSRF env vars so existing deployments keep their access without
+    touching the new control. VALIDATE_LLM is reachable solely through the admin
+    setting, never derived from env:
+
+    - DISABLED               open_url validation off, or MCP loopback opt-in.
+                             Only DISABLED reaches loopback / turns open_url off,
+                             so honoring these preserves prior access.
+    - ALLOW_PRIVATE_NETWORK  MCP allowed onto the private network without the
+                             loopback opt-in — the legacy "private without
+                             loopback" posture (MCP reaches RFC1918 hosts;
+                             loopback stays blocked).
+    - VALIDATE_ALL           otherwise — secure by default (every outbound path,
+                             incl. the web connector, refuses private IPs).
+
+    The web connector validates whenever the level is VALIDATE_ALL (the default);
+    an operator who needs it to reach private IPs picks a lower level in the admin
+    setting.
+    """
+    if not _cfg.OPEN_URL_VALIDATE_SSRF or _cfg.MCP_SERVER_ALLOW_LOOPBACK:
+        return SSRFProtectionLevel.DISABLED
+    if _cfg.MCP_SERVER_ALLOW_PRIVATE_NETWORK:
+        return SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK
+    return SSRFProtectionLevel.VALIDATE_ALL
+
+
 def _build_env_defaults() -> SecuritySettings:
     """Builds from env constants at call time so tests can monkeypatch them."""
     return SecuritySettings(
         user_directory_admin_only=_cfg.USER_DIRECTORY_ADMIN_ONLY,
         track_external_idp_expiry=_cfg.TRACK_EXTERNAL_IDP_EXPIRY,
+        ssrf_protection_level=_derive_ssrf_level_from_env(),
         mask_credential_prefix=_cfg.MASK_CREDENTIAL_PREFIX,
         valid_email_domains=tuple(_cfg.VALID_EMAIL_DOMAINS),
         password_min_length=_cfg.PASSWORD_MIN_LENGTH,

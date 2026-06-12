@@ -1,8 +1,8 @@
-"""Guards the SSRF policy for outbound MCP traffic: internal targets are blocked
-by default; the private-network opt-in re-opens RFC1918 but loopback needs its
-own MCP_SERVER_ALLOW_LOOPBACK gate (it reaches the app host itself), while
-cloud-metadata/link-local and unspecified stay blocked under both opt-ins; the
-httpx transport validates every hop; and the store-time error message steers
+"""Guards the SSRF policy for outbound MCP traffic. Validation is driven by the
+admin ``SSRF Protection`` setting: at the VALIDATE_* levels internal targets are
+blocked; setting it to ``DISABLED`` re-opens RFC1918 *and* loopback together,
+while cloud-metadata/link-local and unspecified stay blocked at every level. The
+httpx transport validates every hop, and the store-time error message steers
 operators to the right remedy."""
 
 import asyncio
@@ -10,11 +10,15 @@ import asyncio
 import httpx
 import pytest
 
+from onyx.auth import oauth_token_manager
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
 from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.mcp import api
+from onyx.server.security.models import SecuritySettings
+from onyx.server.security.models import SSRFProtectionLevel
+from onyx.server.security.store import _build_env_defaults
 from onyx.tools.tool_implementations.mcp import mcp_ssrf
 from onyx.utils.url import SSRFException
 
@@ -36,20 +40,28 @@ PUBLIC_HOSTS = [
     "https://1.1.1.1/mcp",
 ]
 
-# Never reachable, even with both opt-ins on.
+# Never reachable, even when SSRF protection is Disabled.
 ALWAYS_BLOCKED = NAMED_BLOCKED + METADATA_AND_UNSPECIFIED
 
 
-def _allow_private(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mcp_ssrf, "MCP_SERVER_ALLOW_PRIVATE_NETWORK", True)
-    monkeypatch.setattr(api, "MCP_SERVER_ALLOW_PRIVATE_NETWORK", True)
+def _settings_with(level: SSRFProtectionLevel) -> SecuritySettings:
+    return _build_env_defaults().model_copy(update={"ssrf_protection_level": level})
 
 
-def _allow_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Loopback also requires the private-network opt-in to take effect.
-    _allow_private(monkeypatch)
-    monkeypatch.setattr(mcp_ssrf, "MCP_SERVER_ALLOW_LOOPBACK", True)
-    monkeypatch.setattr(api, "MCP_SERVER_ALLOW_LOOPBACK", True)
+def _set_level(monkeypatch: pytest.MonkeyPatch, level: SSRFProtectionLevel) -> None:
+    """Pin the effective SSRF level for the validators under test, bypassing the
+    tenant-aware store (no DB in unit tests)."""
+    settings = _settings_with(level)
+    monkeypatch.setattr(mcp_ssrf, "get_security_settings", lambda: settings)
+    monkeypatch.setattr(oauth_token_manager, "get_security_settings", lambda: settings)
+
+
+@pytest.fixture(autouse=True)
+def _default_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default every test to the shipped default level unless it overrides.
+    MCP validation is identical at VALIDATE_ALL and VALIDATE_LLM (only DISABLED
+    relaxes it), so this just keeps the fixture aligned with the real default."""
+    _set_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
 
 
 @pytest.mark.parametrize("url", ALWAYS_BLOCKED + LOOPBACK + PRIVATE_HOSTS)
@@ -64,37 +76,52 @@ def test_validate_allows_public(url: str) -> None:
 
 
 @pytest.mark.parametrize("url", PRIVATE_HOSTS)
-def test_private_opt_in_allows_private(
-    url: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _allow_private(monkeypatch)
+def test_disabled_allows_private(url: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_level(monkeypatch, SSRFProtectionLevel.DISABLED)
     assert mcp_ssrf.validate_mcp_outbound_url(url) == url
 
 
 @pytest.mark.parametrize("url", LOOPBACK)
-def test_private_opt_in_alone_still_blocks_loopback(
-    url: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Loopback reaches the app host itself, so the private-network opt-in alone
-    must not unblock it — it needs the dedicated MCP_SERVER_ALLOW_LOOPBACK gate."""
-    _allow_private(monkeypatch)
-    with pytest.raises(SSRFException):
-        mcp_ssrf.validate_mcp_outbound_url(url)
-
-
-@pytest.mark.parametrize("url", LOOPBACK)
-def test_loopback_opt_in_allows_loopback(
-    url: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _allow_loopback(monkeypatch)
+def test_disabled_allows_loopback(url: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disabling SSRF protection opens private networks and loopback together —
+    the legacy two-step (private without loopback) no longer exists."""
+    _set_level(monkeypatch, SSRFProtectionLevel.DISABLED)
     assert mcp_ssrf.validate_mcp_outbound_url(url) == url
 
 
 @pytest.mark.parametrize("url", ALWAYS_BLOCKED)
-def test_opt_in_still_blocks_metadata_and_named_hosts(
+def test_disabled_still_blocks_metadata_and_named_hosts(
     url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _allow_loopback(monkeypatch)
+    _set_level(monkeypatch, SSRFProtectionLevel.DISABLED)
+    with pytest.raises(SSRFException):
+        mcp_ssrf.validate_mcp_outbound_url(url)
+
+
+@pytest.mark.parametrize("url", PRIVATE_HOSTS)
+def test_allow_private_network_allows_private(
+    url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_level(monkeypatch, SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK)
+    assert mcp_ssrf.validate_mcp_outbound_url(url) == url
+
+
+@pytest.mark.parametrize("url", LOOPBACK)
+def test_allow_private_network_blocks_loopback(
+    url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ALLOW_PRIVATE_NETWORK opens RFC1918 LAN hosts but keeps loopback blocked —
+    loopback reaches the app host itself, which needs the Disabled level."""
+    _set_level(monkeypatch, SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK)
+    with pytest.raises(SSRFException):
+        mcp_ssrf.validate_mcp_outbound_url(url)
+
+
+@pytest.mark.parametrize("url", ALWAYS_BLOCKED)
+def test_allow_private_network_still_blocks_metadata_and_named_hosts(
+    url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_level(monkeypatch, SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK)
     with pytest.raises(SSRFException):
         mcp_ssrf.validate_mcp_outbound_url(url)
 
@@ -120,61 +147,46 @@ def test_transport_blocks_before_network() -> None:
 @pytest.mark.parametrize(
     "url", ["http://localhost:9000/mcp", "http://169.254.169.254/x"]
 )
-def test_error_hint_for_never_allowed_omits_env_var(url: str) -> None:
+def test_error_hint_for_never_allowed_omits_remedy(url: str) -> None:
     """Named hosts (localhost) and link-local/metadata can't be opted into, so
-    the message must not dangle the env var as a remedy."""
+    the message must not dangle the SSRF setting as a remedy."""
     with pytest.raises(OnyxError) as exc_info:
         api._validate_mcp_server_url(url, "server_url", require_https=False)
     detail = exc_info.value.detail
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
     assert "never permitted" in detail
-    assert "MCP_SERVER_ALLOW_PRIVATE_NETWORK" not in detail
+    assert "SSRF Protection" not in detail
 
 
-def test_error_hint_for_private_points_at_private_var() -> None:
+def test_error_hint_for_private_points_at_allow_private_network() -> None:
+    """A private LAN target opens at Allow Private Network, so steer there rather
+    than all the way to Disabled."""
     with pytest.raises(OnyxError) as exc_info:
         api._validate_mcp_server_url(
             "http://10.0.0.5/mcp", "server_url", require_https=False
         )
     detail = exc_info.value.detail
-    assert "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true" in detail
+    assert "SSRF Protection to Allow Private Network" in detail
     assert "never permitted" not in detail
 
 
-def test_error_hint_for_loopback_points_at_loopback_var() -> None:
-    """Loopback is opt-in-able via its own gate, so steer the operator there."""
+def test_error_hint_for_loopback_points_at_disabled() -> None:
+    """Loopback reaches the app host itself, so it needs the Disabled level."""
     with pytest.raises(OnyxError) as exc_info:
         api._validate_mcp_server_url(
             "http://127.0.0.1:8010/mcp", "server_url", require_https=False
         )
     detail = exc_info.value.detail
-    assert "MCP_SERVER_ALLOW_LOOPBACK=true" in detail
+    assert "SSRF Protection to Disabled" in detail
     assert "never permitted" not in detail
 
 
-def test_error_hint_for_loopback_names_missing_private_gate(
+def test_store_time_allows_loopback_when_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With ALLOW_LOOPBACK on but ALLOW_PRIVATE_NETWORK off, loopback is still
-    blocked (it needs both), so the hint must name the still-missing gate rather
-    than going silent."""
-    monkeypatch.setattr(mcp_ssrf, "MCP_SERVER_ALLOW_LOOPBACK", True)
-    monkeypatch.setattr(api, "MCP_SERVER_ALLOW_LOOPBACK", True)
-    with pytest.raises(OnyxError) as exc_info:
-        api._validate_mcp_server_url(
-            "http://127.0.0.1:8010/mcp", "server_url", require_https=False
-        )
-    detail = exc_info.value.detail
-    assert "MCP_SERVER_ALLOW_PRIVATE_NETWORK=true" in detail
-    assert "MCP_SERVER_ALLOW_LOOPBACK=true" not in detail
-
-
-def test_store_time_allows_loopback_when_opted_in(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Mirrors the integration test: with both opt-ins on, a loopback MCP server
-    URL saves cleanly (the fetch-time transport guard applies the same policy)."""
-    _allow_loopback(monkeypatch)
+    """With SSRF protection Disabled, a loopback MCP server URL saves cleanly (the
+    fetch-time transport guard applies the same policy)."""
+    _set_level(monkeypatch, SSRFProtectionLevel.DISABLED)
     api._validate_mcp_server_url(
         "http://127.0.0.1:8010/mcp", "server_url", require_https=False
     )
@@ -190,7 +202,7 @@ def test_oauth_endpoint_rejects_http_at_store_time() -> None:
     detail = exc_info.value.detail
     assert "https" in detail.lower()
     # Scheme failure shouldn't tack on the private-network hint.
-    assert "MCP_SERVER_ALLOW_PRIVATE_NETWORK" not in detail
+    assert "SSRF Protection" not in detail
 
 
 def test_server_url_allows_http() -> None:

@@ -7,12 +7,12 @@ import requests
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import MCP_SERVER_ALLOW_LOOPBACK
-from onyx.configs.app_configs import MCP_SERVER_ALLOW_PRIVATE_NETWORK
 from onyx.db.models import OAuthConfig
 from onyx.db.models import OAuthUserToken
 from onyx.db.oauth_config import get_user_oauth_token
 from onyx.db.oauth_config import upsert_user_oauth_token
+from onyx.server.security.models import outbound_ssrf_params
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 from onyx.utils.url import validate_outbound_http_url
@@ -21,17 +21,18 @@ from onyx.utils.url import validate_outbound_http_url
 def validate_oauth_endpoint_url(url: str, *, resolve_dns: bool = True) -> None:
     """SSRF guard for admin-configured OAuth endpoints, shared by store-time
     (MCP upsert) and fetch-time (token exchange/refresh) so the policy can't
-    drift. Private targets gated behind ``MCP_SERVER_ALLOW_PRIVATE_NETWORK``;
-    loopback needs the additional ``MCP_SERVER_ALLOW_LOOPBACK`` opt-in;
-    cloud-metadata always blocked. ``https_only`` since OAuth endpoints must be
-    TLS. ``resolve_dns=False`` skips the DNS lookup at store time; fetch time
-    still resolves."""
+    drift. Validation is driven by the admin ``SSRF Protection`` setting: at the
+    VALIDATE_* levels private/internal targets are blocked; when DISABLED,
+    private + loopback become reachable while cloud-metadata stays blocked.
+    ``https_only`` since OAuth endpoints must be TLS. ``resolve_dns=False`` skips
+    the DNS lookup at store time; fetch time still resolves."""
+    params = outbound_ssrf_params(get_security_settings().ssrf_protection_level)
     validate_outbound_http_url(
         url,
-        allow_private_network=MCP_SERVER_ALLOW_PRIVATE_NETWORK,
+        allow_private_network=params.allow_private_network,
         https_only=True,
-        block_loopback_and_link_local=not MCP_SERVER_ALLOW_LOOPBACK,
-        block_link_local_only=MCP_SERVER_ALLOW_LOOPBACK,
+        block_loopback_and_link_local=params.block_loopback_and_link_local,
+        block_link_local_only=params.block_link_local_only,
         resolve_dns=resolve_dns,
     )
 

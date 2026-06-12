@@ -13,10 +13,12 @@ from onyx.server.security.models import PASSWORD_LENGTH_CAP
 from onyx.server.security.models import PASSWORD_MAX_LENGTH_FLOOR
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SecuritySettingsOverrides
+from onyx.server.security.models import SSRFProtectionLevel
 
 _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "user_directory_admin_only": False,
     "track_external_idp_expiry": False,
+    "ssrf_protection_level": SSRFProtectionLevel.VALIDATE_LLM,
     "mask_credential_prefix": True,
     "valid_email_domains": (),
     "password_min_length": 8,
