@@ -18,6 +18,7 @@ from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
+from onyx.utils.text_processing import parse_llm_json_response
 
 logger = setup_logger()
 
@@ -48,19 +49,8 @@ def _parse_source_filter_response(
     content: str | None, connected_sources: list[DocumentSource]
 ) -> list[DocumentSource] | None:
     """Parse the LLM JSON response into validated sources, failing open to None."""
-    if not content:
-        return None
-
-    # Tolerate code fences / prose around the JSON.
-    start = content.find("{")
-    end = content.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        return None
-
-    try:
-        data = json.loads(content[start : end + 1])
-    except json.JSONDecodeError:
-        logger.warning("Source filter extraction returned non-JSON output")
+    data = parse_llm_json_response(content) if content else None
+    if data is None:
         return None
 
     raw_sources = data.get(SOURCES_KEY)
