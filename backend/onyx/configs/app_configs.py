@@ -1454,6 +1454,35 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
 
+# Well-known MinIO default credential. A deployment left on this value lets anyone
+# who can reach the object-storage endpoint list, download, or modify stored files.
+DEFAULT_OBJECT_STORAGE_CREDENTIAL = "minioadmin"
+
+
+def _uses_default_object_storage_credentials(
+    s3_endpoint_url: str | None,
+    access_key: str | None,
+    secret_key: str | None,
+) -> bool:
+    # Only relevant for self-hosted S3-compatible storage (MinIO), which is
+    # signalled by an explicit endpoint URL. Real AWS S3 has no endpoint URL and
+    # never uses the minioadmin default, so it can't trip this check.
+    if not s3_endpoint_url:
+        return False
+    return DEFAULT_OBJECT_STORAGE_CREDENTIAL in (access_key, secret_key)
+
+
+if _uses_default_object_storage_credentials(
+    S3_ENDPOINT_URL, S3_AWS_ACCESS_KEY_ID, S3_AWS_SECRET_ACCESS_KEY
+):
+    logger.warning(
+        "Object storage is using the well-known default 'minioadmin' credentials. "
+        "Anyone who can reach the MinIO/S3 endpoint can read or modify stored files "
+        "(uploaded documents, file-store objects). Set S3_AWS_ACCESS_KEY_ID / "
+        "S3_AWS_SECRET_ACCESS_KEY (and MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) to "
+        "strong, unique values before deploying to production."
+    )
+
 # Should we force S3 local checksumming
 S3_GENERATE_LOCAL_CHECKSUM = (
     os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
