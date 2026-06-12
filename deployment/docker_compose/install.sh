@@ -1105,11 +1105,14 @@ else
     sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
     print_success "IMAGE_TAG set to $VERSION"
 
-    # In lite mode, clear COMPOSE_PROFILES so profiled services (MinIO, etc.)
-    # stay disabled — the template ships with s3-filestore enabled by default.
+    # In lite mode, MinIO never starts (COMPOSE_PROFILES cleared) and the
+    # onyx-lite overlay forces FILE_STORE_BACKEND=postgres at runtime; set it in
+    # .env too so the file isn't misleadingly left on s3 (the MinIO/S3 creds
+    # generated below are then unused, but stay ready if s3-filestore is enabled).
     if [[ "$LITE_MODE" = true ]]; then
         sed -i.bak 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Cleared COMPOSE_PROFILES for lite mode"
+        sed -i.bak 's/^FILE_STORE_BACKEND=.*/FILE_STORE_BACKEND=postgres/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Cleared COMPOSE_PROFILES and set FILE_STORE_BACKEND=postgres for lite mode"
     fi
 
     # Configure basic authentication (default)
