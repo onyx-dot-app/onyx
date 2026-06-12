@@ -857,6 +857,15 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
+# Cap the total text retained per file across a connector's extracted sections,
+# bounding worker memory when a source can't be size-checked before fetch —
+# e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
+# bypass GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD. Content past the cap is dropped
+# with a warning. 0 disables the cap.
+CONNECTOR_MAX_EXTRACTED_TEXT_CHARS = int(
+    os.environ.get("CONNECTOR_MAX_EXTRACTED_TEXT_CHARS") or 10_000_000
+)
+
 # Default size threshold for Drupal Wiki attachments (10MB)
 DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD = int(
     os.environ.get("DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
@@ -1022,6 +1031,23 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Documents exceeding this limit will surface a visible error rather than being silently dropped.
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
+
+# Max RSS (in MB) for a spawned indexing worker process. When exceeded, the
+# docfetching watchdog terminates the worker and fails the attempt with a clear
+# error, pre-empting a kernel OOM kill of the whole pod — which would also kill
+# the attempt heartbeat (surfacing as an opaque "No heartbeat received" failure)
+# and any other tenants' tasks running on the pod. 0 disables the check.
+INDEXING_WORKER_MEMORY_LIMIT_MB = int(
+    os.environ.get("INDEXING_WORKER_MEMORY_LIMIT_MB") or 0
+)
+
+# Enable tracemalloc in spawned indexing workers so the near-limit memory report
+# (see INDEXING_WORKER_MEMORY_LIMIT_MB) includes allocation sites. Adds meaningful
+# per-allocation CPU/memory overhead — enable only while chasing a leak.
+INDEXING_WORKER_TRACEMALLOC = (
+    os.environ.get("INDEXING_WORKER_TRACEMALLOC", "").lower() == "true"
+)
+
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
