@@ -98,7 +98,7 @@ export function AddPeoplePicker({
   ]);
 
   const hasStagedItems = stagedUsers.length > 0 || stagedGroups.length > 0;
-  const permissionOptions = useMemo(() => PERMISSION_OPTIONS, []);
+  const permissionOptions = PERMISSION_OPTIONS;
 
   function handleSelectSuggestion(suggestion: Suggestion) {
     if (suggestion.shared) {
