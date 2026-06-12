@@ -58,8 +58,11 @@ node_modules
 # MCP configs
 .playwright-mcp
 
-# plans
-plans/
+# plans (root-level scratch only; keep docs/ planning artifacts tracked + synced)
+/plans/
+
+# oh-my-claudecode local tool state
+.omc/
 
 # Added context for LLMs
 .claude/CLAUDE.md
