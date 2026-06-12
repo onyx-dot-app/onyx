@@ -21,7 +21,7 @@
     "postcss": "^8.5.10",
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
-    "react-day-picker": "^9.13.0",
+    "react-day-picker": "^10.0.1",
     "react-dom": "19.2.4",
     "react-resizable-panels": "^4.4.1",
     "recharts": "^2.15.4",
