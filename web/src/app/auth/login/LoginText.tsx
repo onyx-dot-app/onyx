@@ -1,19 +1,18 @@
 "use client";
 
-import React, { useContext } from "react";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import React from "react";
+import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 
 export default function LoginText() {
-  const settings = useContext(SettingsContext);
+  const t = useTranslations("auth");
   return (
     <div className="w-full flex flex-col ">
       <Text as="p" headingH2 text05>
-        Welcome to{" "}
-        {(settings && settings?.enterpriseSettings?.application_name) || "Onyx"}
+        {t("title")}
       </Text>
       <Text as="p" text03 mainUiMuted>
-        Your open source AI platform for work
+        {t("subtitle")}
       </Text>
     </div>
   );

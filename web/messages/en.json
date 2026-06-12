@@ -1,0 +1,70 @@
+{
+  "auth": {
+    "title": "Welcome to Glomi AI",
+    "subtitle": "Your AI platform for work",
+    "accountNotFound": {
+      "title": "Account Not Found",
+      "description": "We couldn't find your account in our records. To access Glomi AI, you need to either:",
+      "invite": "Be invited to an existing Glomi AI team",
+      "createTeam": "Create a new Glomi AI team",
+      "createOrganization": "Create New Organization",
+      "differentEmail": "Have an account with a different email?",
+      "signIn": "Sign in"
+    },
+    "error": {
+      "title": "Authentication Error",
+      "description": "There was a problem with your login attempt.",
+      "possibleIssues": "Possible Issues:",
+      "incorrectCredentials": "Incorrect or expired login credentials",
+      "temporaryDisruption": "Temporary authentication system disruption",
+      "accessRestrictions": "Account access restrictions or permissions",
+      "returnToLogin": "Return to Login Page",
+      "contactSupportCloud": "If you continue to experience problems, please reach out to the Glomi AI team at",
+      "contactSupportSelfHosted": "If you continue to experience problems, please reach out to your system administrator for assistance.",
+      "accessDenied": "Access was denied by your identity provider.",
+      "loginRequired": "You need to log in with your identity provider first.",
+      "consentRequired": "Your identity provider requires consent before continuing.",
+      "interactionRequired": "Additional interaction with your identity provider is required.",
+      "invalidScope": "The requested permissions are not available.",
+      "serverError": "Your identity provider encountered an error. Please try again.",
+      "temporarilyUnavailable": "Your identity provider is temporarily unavailable. Please try again later."
+    },
+    "signup": {
+      "complete": "Complete your sign up",
+      "createAccount": "Create account",
+      "subtitle": "Get started with Glomi AI",
+      "or": "or"
+    },
+    "flow": {
+      "newToApp": "New to {appName}?",
+      "createAccount": "Create an Account",
+      "alreadyHaveAccount": "Already have an account?",
+      "signIn": "Sign In"
+    }
+  },
+  "brand": {
+    "poweredBy": "Powered by Glomi AI",
+    "initializing": "Initializing {appName}"
+  },
+  "appPopup": {
+    "defaultTitle": "Welcome to Glomi AI!",
+    "consentCheckbox": "Consent checkbox",
+    "consentRequired": "You need to agree to the terms to access the application.",
+    "start": "Start"
+  },
+  "memories": {
+    "title": "Memory",
+    "description": "Let Glomi AI reference these stored notes and memories in chats.",
+    "placeholder": "Type or paste in a personal note or memory",
+    "removeLine": "Remove Line",
+    "preferencesSaved": "Preferences saved",
+    "preferencesSaveFailed": "Failed to save preferences",
+    "searchPlaceholder": "Search...",
+    "addLine": "Add Line",
+    "maximumReached": "Maximum of {count} memories reached",
+    "noSearchResults": "No memories match your search.",
+    "empty": "No memories yet. Click \"Add Line\" to get started.",
+    "line": "Line",
+    "lines": "Lines"
+  }
+}

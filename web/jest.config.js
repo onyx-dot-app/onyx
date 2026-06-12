@@ -37,6 +37,7 @@ const sharedConfig = {
   },
 
   testPathIgnorePatterns: ["/node_modules/", "/tests/e2e/", "/.next/"],
+  modulePathIgnorePatterns: ["<rootDir>/.next/"],
 
   // Transform ES Modules in node_modules to CommonJS for Jest compatibility
   // Add packages here when you encounter: "SyntaxError: Unexpected token 'export'"
@@ -44,12 +45,22 @@ const sharedConfig = {
   transformIgnorePatterns: [
     "/node_modules/(?!(" +
       [
+        // Bun stores packages under node_modules/.bun/<pkg>/node_modules/<pkg>.
+        // Let Jest traverse that store path so the package-level ESM allowlist
+        // below can still apply to the nested real package path.
+        "\\.bun",
         // Auth & Security
         "jose",
         // UI Libraries
         "@radix-ui",
         "@headlessui",
         "@phosphor-icons",
+        // i18n
+        "next-intl",
+        "use-intl",
+        "intl-messageformat",
+        "@formatjs",
+        "@schummar",
         // Testing & Mocking
         "msw",
         "until-async",

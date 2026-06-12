@@ -1,6 +1,9 @@
 // Always require withSentryConfig
 const { withSentryConfig } = require("@sentry/nextjs");
+const createNextIntlPlugin = require("next-intl/plugin");
 const { PHASE_DEVELOPMENT_SERVER } = require("next/constants");
+
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -192,10 +195,10 @@ const sentryWebpackPluginOptions = {
 module.exports = (phase) => {
   const isDevServer = phase === PHASE_DEVELOPMENT_SERVER;
   return withSentryConfig(
-    {
+    withNextIntl({
       ...nextConfig,
       reactCompiler: !isDevServer || process.env.ENABLE_REACT_COMPILER === "1",
-    },
+    }),
     sentryWebpackPluginOptions
   );
 };
