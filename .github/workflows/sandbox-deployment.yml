@@ -29,6 +29,7 @@ jobs:
       # metadata-action tags input: set by the check step for dev builds,
       # otherwise by the version step.
       image-tags: ${{ steps.check.outputs.image-tags || steps.version.outputs.image-tags }}
+      primary-image-tag: ${{ steps.check.outputs.primary-image-tag || steps.version.outputs.primary-image-tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -44,15 +45,20 @@ jobs:
           # Manual runs always build.
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "Manual dispatch: building unconditionally"
-            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "sandbox-changed=true"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # The sandbox-dev tag always builds and pushes the :dev image tag.
           if [ "$GITHUB_REF_NAME" = "sandbox-dev" ]; then
             echo "Dev tag: building and pushing :dev"
-            echo "image-tags=type=raw,value=dev" >> "$GITHUB_OUTPUT"
-            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "image-tags=type=raw,value=dev"
+              echo "primary-image-tag=dev"
+              echo "sandbox-changed=true"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -61,7 +67,9 @@ jobs:
           PREVIOUS_TAG=$(git tag --sort=-creatordate | grep '^nightly-latest-' | grep -v "^${CURRENT_TAG}$" | head -n 1)
           if [ -z "$PREVIOUS_TAG" ]; then
             echo "No previous nightly tag; building unconditionally"
-            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "sandbox-changed=true"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -69,10 +77,14 @@ jobs:
           if git diff --name-only "${PREVIOUS_TAG}..${CURRENT_TAG}" -- \
               "backend/onyx/server/features/build/sandbox/image/" | grep -q .; then
             echo "Sandbox image changed"
-            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "sandbox-changed=true"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "No sandbox image changes"
-            echo "sandbox-changed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "sandbox-changed=false"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Determine new sandbox version
@@ -103,6 +115,7 @@ jobs:
 
           echo "New version: $NEW_VERSION"
           {
+            echo "primary-image-tag=v${NEW_VERSION}"
             echo "image-tags<<EOF"
             echo "type=raw,value=v${NEW_VERSION}"
             echo "type=raw,value=latest"
@@ -311,3 +324,57 @@ jobs:
           docker buildx imagetools create \
             $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
+
+  trivy-scan:
+    needs:
+      - check-sandbox-changes
+      - merge-sandbox
+    if: >-
+      always() && !cancelled() &&
+      needs.check-sandbox-changes.outputs.sandbox-changed == 'true' &&
+      needs.merge-sandbox.result == 'success'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-arm64
+      - run-id=${{ github.run_id }}-trivy-scan-sandbox
+      - extras=ecr-cache
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    env:
+      REGISTRY_IMAGE: onyxdotapp/sandbox
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ needs.check-sandbox-changes.outputs.primary-image-tag }}
+          severity: CRITICAL,HIGH
+          format: "sarif"
+          output: "trivy-results.sarif"
+        env:
+          TRIVY_USERNAME: ${{ env.DOCKER_USERNAME }}
+          TRIVY_PASSWORD: ${{ env.DOCKER_TOKEN }}
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: "trivy-results.sarif"
