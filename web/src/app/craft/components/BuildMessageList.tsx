@@ -35,13 +35,14 @@ type RenderBlock =
  * agent streamed out), falling back to the message's plain content.
  */
 function getAgentCopyText(message: BuildMessage): string {
-  const savedStreamItems = message.message_metadata?.streamItems as
-    | StreamItem[]
-    | undefined;
+  const rawItems = message.message_metadata?.streamItems;
+  const savedStreamItems: StreamItem[] | undefined = Array.isArray(rawItems)
+    ? (rawItems as StreamItem[])
+    : undefined;
   if (savedStreamItems && savedStreamItems.length > 0) {
     const text = savedStreamItems
-      .filter((it): it is Extract<StreamItem, { type: "text" }> =>
-        it.type === "text"
+      .filter(
+        (it): it is Extract<StreamItem, { type: "text" }> => it.type === "text"
       )
       .map((it) => it.content)
       .join("\n\n")

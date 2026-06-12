@@ -18,6 +18,13 @@ jest.mock("@/app/app/message/BlinkingBar", () => ({
   BlinkingBar: () => <span data-testid="blinking-bar" />,
 }));
 
+// copyingUtils pulls in the ESM-only unified/rehype stack, which Jest cannot
+// parse. The copy text transform is exercised elsewhere; here we only need a
+// passthrough so the component tree renders.
+jest.mock("@/app/app/message/copyingUtils", () => ({
+  convertMarkdownTablesToTsv: (content: string) => content,
+}));
+
 jest.mock("motion/react", () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>

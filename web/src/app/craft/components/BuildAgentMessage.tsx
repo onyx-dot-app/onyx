@@ -37,10 +37,7 @@ export default function BuildAgentMessage({
         <div className="flex-1 flex flex-col gap-2 min-w-0">
           {children}
           {hasCopyableText && (
-            <Hoverable.Item
-              group="craftAgentMessage"
-              variant="appear-on-hover"
-            >
+            <Hoverable.Item group="craftAgentMessage" variant="appear-on-hover">
               <div className="flex pl-1">
                 <CopyButton
                   getCopyText={() => convertMarkdownTablesToTsv(copyText)}
