@@ -245,37 +245,6 @@ def get_snapshots_for_session(db_session: Session, session_id: UUID) -> list[Sna
     return list(db_session.execute(stmt).scalars().all())
 
 
-def delete_old_snapshots(
-    db_session: Session,
-    tenant_id: str,  # noqa: ARG001
-    retention_days: int,
-) -> int:
-    """Delete snapshots older than retention period, return count deleted.
-
-    Note: tenant_id parameter is kept for API compatibility but is not used
-    since Snapshot model no longer has tenant_id. This function deletes
-    all snapshots older than the retention period.
-    """
-    cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
-        days=retention_days
-    )
-
-    stmt = select(Snapshot).where(
-        Snapshot.created_at < cutoff_time,
-    )
-    old_snapshots = db_session.execute(stmt).scalars().all()
-
-    count = 0
-    for snapshot in old_snapshots:
-        db_session.delete(snapshot)
-        count += 1
-
-    if count > 0:
-        db_session.commit()
-
-    return count
-
-
 def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:
     """Delete a specific snapshot by ID. Returns True if deleted, False if not found."""
     stmt = select(Snapshot).where(Snapshot.id == snapshot_id)

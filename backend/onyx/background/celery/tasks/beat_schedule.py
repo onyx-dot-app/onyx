@@ -196,16 +196,6 @@ beat_task_templates: list[dict] = [
             "work_gated": True,
         },
     },
-    {
-        "name": "cleanup-old-snapshots",
-        "task": OnyxCeleryTask.CLEANUP_OLD_SNAPSHOTS,
-        "schedule": timedelta(hours=24),
-        "options": {
-            "priority": OnyxCeleryPriority.LOW,
-            "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.SANDBOX,
-        },
-    },
 ]
 
 # Mirror set_is_ee_based_on_env_variable(): EE features are active when either
