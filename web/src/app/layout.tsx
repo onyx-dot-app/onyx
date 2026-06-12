@@ -9,6 +9,8 @@ import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
 import { DM_Mono, Hanken_Grotesk } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
@@ -19,6 +21,7 @@ import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
 import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
+import { APP_NAME } from "@/lib/brand";
 
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
@@ -50,8 +53,8 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Onyx",
-  description: "Question answering for your documents",
+  title: APP_NAME,
+  description: "你的 AI 工作平台",
 };
 
 // force-dynamic prevents Next.js from statically prerendering pages at build
@@ -60,14 +63,17 @@ export const metadata: Metadata = {
 // all data is fetched client-side via SWR in the provider tree.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
     <html
-      lang="en"
+      lang={locale}
       className={cn(hankenGrotesk.variable, dmMono.variable)}
       suppressHydrationWarning
     >
@@ -95,37 +101,39 @@ export default function RootLayout({
       </head>
 
       <body className={`relative font-hanken`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <div className="text-text min-h-screen bg-background">
-            <TooltipProvider>
-              <PHProvider>
-                <SWRConfigProvider>
-                  <AppHealthBanner />
-                  <LicenseExpiryBanner />
-                  <AppProvider>
-                    <DynamicMetadata />
-                    <CustomAnalyticsScript />
-                    <Suspense fallback={null}>
-                      <PostHogPageView />
-                    </Suspense>
-                    <div id={MODAL_ROOT_ID} className="h-screen w-screen">
-                      <ProductGatingWrapper>{children}</ProductGatingWrapper>
-                    </div>
-                    {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
-                    {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
-                      <StatsOverlayLoader />
-                    )}
-                  </AppProvider>
-                </SWRConfigProvider>
-              </PHProvider>
-            </TooltipProvider>
-          </div>
-        </ThemeProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <div className="text-text min-h-screen bg-background">
+              <TooltipProvider>
+                <PHProvider>
+                  <SWRConfigProvider>
+                    <AppHealthBanner />
+                    <LicenseExpiryBanner />
+                    <AppProvider>
+                      <DynamicMetadata />
+                      <CustomAnalyticsScript />
+                      <Suspense fallback={null}>
+                        <PostHogPageView />
+                      </Suspense>
+                      <div id={MODAL_ROOT_ID} className="h-screen w-screen">
+                        <ProductGatingWrapper>{children}</ProductGatingWrapper>
+                      </div>
+                      {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
+                      {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
+                        <StatsOverlayLoader />
+                      )}
+                    </AppProvider>
+                  </SWRConfigProvider>
+                </PHProvider>
+              </TooltipProvider>
+            </div>
+          </ThemeProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );
