@@ -11,7 +11,6 @@ import requests
 from pyairtable import Api as AirtableApi
 from pyairtable.api.types import RecordDict
 from pyairtable.models.schema import TableSchema
-from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
@@ -26,6 +25,7 @@ from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -251,7 +251,7 @@ class AirtableConnector(LoadConnector):
                 if not url:
                     continue
 
-                @retry(
+                @retry_builder(
                     tries=5,
                     delay=1,
                     backoff=2,

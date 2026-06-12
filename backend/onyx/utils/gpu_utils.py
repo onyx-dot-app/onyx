@@ -2,9 +2,9 @@ import os
 from functools import lru_cache
 
 import requests
-from retry import retry
 
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import MODEL_SERVER_HOST
@@ -35,7 +35,8 @@ def _get_gpu_status_from_model_server(indexing: bool) -> bool:
         raise  # Re-raise exception to trigger a retry
 
 
-@retry(tries=5, delay=5)
+# backoff=1 preserves the constant 5s delay this had under the `retry` package
+@retry_builder(tries=5, delay=5, backoff=1)
 def gpu_status_request(indexing: bool) -> bool:
     return _get_gpu_status_from_model_server(indexing)
 

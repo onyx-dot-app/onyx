@@ -1,10 +1,10 @@
 import requests
-from retry import retry
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import IndexingStatus
 from onyx.server.documents.models import ConnectorBase
+from onyx.utils.retry_wrapper import retry_builder
 from tests.regression.answer_quality.cli_utils import get_api_server_host_port
 
 GENERAL_HEADERS = {"Content-Type": "application/json"}
@@ -17,7 +17,8 @@ def _api_url_builder(env_name: str, api_path: str) -> str:
         return "http://localhost:8080" + api_path
 
 
-@retry(tries=10, delay=10)
+# backoff=1 preserves the constant 10s delay this had under the `retry` package
+@retry_builder(tries=10, delay=10, backoff=1)
 def check_indexing_status(env_name: str) -> tuple[int, bool]:
     url = _api_url_builder(env_name, "/manage/admin/connector/indexing-status/")
     try:
@@ -147,7 +148,7 @@ def create_credential(env_name: str) -> int:
         raise RuntimeError(response.__dict__)
 
 
-@retry(tries=10, delay=2, backoff=2)
+@retry_builder(tries=10, delay=2, backoff=2)
 def upload_file(env_name: str, zip_file_path: str) -> list[str]:
     files = [
         ("files", open(zip_file_path, "rb")),
