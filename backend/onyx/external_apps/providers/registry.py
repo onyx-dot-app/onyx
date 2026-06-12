@@ -3,8 +3,12 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.custom_oauth import CustomOAuthConfig
+from onyx.external_apps.custom_oauth import CustomOAuthHandler
+from onyx.external_apps.oauth_handler import OAuthFlowHandler
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.base import ExternalAppProvider
+from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
@@ -55,6 +59,20 @@ def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | 
     None`` is the "is this app Onyx-managed" check)."""
     provider = PROVIDERS.get(app_type)
     return provider if isinstance(provider, OnyxManagedExtApp) else None
+
+
+def resolve_oauth_handler(app: ExternalApp) -> OAuthFlowHandler | None:
+    """The single predicate every OAuth touchpoint dispatches on: the
+    registered provider for a built-in OAuth ``app_type``, a config-driven
+    handler for a CUSTOM app carrying an ``oauth_config``, else ``None``
+    (static-credential app). A stored config that doesn't validate raises —
+    corruption is surfaced, not masked as "non-OAuth app"."""
+    if app.app_type == ExternalAppType.CUSTOM:
+        if app.oauth_config is None:
+            return None
+        return CustomOAuthHandler(CustomOAuthConfig.model_validate(app.oauth_config))
+    provider = PROVIDERS.get(app.app_type)
+    return provider if isinstance(provider, OAuthExternalAppProvider) else None
 
 
 def get_provider_or_raise(app: ExternalApp) -> ExternalAppProvider:
