@@ -25,9 +25,13 @@ import type { RichStr } from "@opal/types";
 
 const route = ADMIN_ROUTES.SECURITY_HARDENING;
 
-// Tri-state outbound-request validation policy. Mirrors `SSRFProtectionLevel`
+// Outbound-request validation policy. Mirrors `SSRFProtectionLevel`
 // in backend/onyx/server/security/models.py.
-type SSRFProtectionLevel = "validate_all" | "validate_llm" | "disabled";
+type SSRFProtectionLevel =
+  | "validate_all"
+  | "validate_llm"
+  | "allow_private_network"
+  | "disabled";
 
 // Read shape: the effective, env-merged settings returned by GET /admin/security.
 // Every field is concrete — the backend never returns null here (see
@@ -80,7 +84,7 @@ export default function SecurityHardeningPage() {
   const { data: settings, isLoading: settingsLoading } =
     useSWR<SecuritySettings>(
       SWR_KEYS.adminSecuritySettings,
-      errorHandlingFetcher
+      errorHandlingFetcher,
     );
 
   // Local state mirrors the loaded settings; we save on every change.
@@ -103,7 +107,7 @@ export default function SecurityHardeningPage() {
     setDraft((prev) => {
       if (!prev) return prev;
       const concrete = Object.fromEntries(
-        Object.entries(updates).filter(([, value]) => value != null)
+        Object.entries(updates).filter(([, value]) => value != null),
       ) as Partial<SecuritySettings>;
       return { ...prev, ...concrete };
     });
@@ -135,7 +139,7 @@ export default function SecurityHardeningPage() {
       // that may have succeeded while this request was in flight.
       try {
         const fresh = await mutate<SecuritySettings>(
-          SWR_KEYS.adminSecuritySettings
+          SWR_KEYS.adminSecuritySettings,
         );
         if (fresh) setDraft(fresh);
       } catch {
@@ -329,7 +333,7 @@ export default function SecurityHardeningPage() {
                 <ToggleRow
                   title="Require Special Characters"
                   description={markdown(
-                    "Accepted characters: `!@#$%^&*()_+-=[]{}|;:,.<>?`"
+                    "Accepted characters: `!@#$%^&*()_+-=[]{}|;:,.<>?`",
                   )}
                   checked={draft.password_require_special_char}
                   onCheckedChange={(checked) =>
@@ -475,6 +479,13 @@ export default function SecurityHardeningPage() {
                           description="Validate all LLM-initiated URL fetches. Admin-configured connectors can still reach private or internal IPs."
                         >
                           Validate LLM Requests
+                        </InputSelect.Item>
+                        <InputSelect.Item
+                          value="allow_private_network"
+                          wrapDescription
+                          description="Like Validate LLM Requests, but admin-configured MCP/OAuth endpoints may also reach private LAN hosts. Loopback (the app host itself) and cloud-metadata stay blocked."
+                        >
+                          Allow Private Network
                         </InputSelect.Item>
                         <InputSelect.Item
                           value="disabled"

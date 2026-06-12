@@ -728,18 +728,12 @@ WEB_CONNECTOR_OAUTH_CLIENT_SECRET = os.environ.get("WEB_CONNECTOR_OAUTH_CLIENT_S
 WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
 # NOTE: the SSRF env vars below (OPEN_URL_VALIDATE_SSRF,
 # MCP_SERVER_ALLOW_PRIVATE_NETWORK, MCP_SERVER_ALLOW_LOOPBACK) are no longer read
-# directly at their call sites. They now only seed the *default* of the runtime,
-# admin-configurable "SSRF Protection" setting (see `_derive_ssrf_level_from_env`
-# in onyx/server/security/store.py and `SSRFProtectionLevel` in
-# onyx/server/security/models.py): any of them opting an LLM-initiated path onto
-# the private network / loopback maps the default to DISABLED, otherwise it
-# defaults to VALIDATE_ALL. Admins change the effective behavior from the
-# Security Hardening page; these envs set the fallback when no override is saved.
+# at their call sites. They only seed the default "SSRF Protection" level when no
+# override is saved; admins set the effective behavior on the Security Hardening
+# page.
 #
-# WEB_CONNECTOR_VALIDATE_URLS is retained for backwards-compatible imports but no
-# longer affects behavior: the web connector validates whenever the effective
-# level is VALIDATE_ALL (now the default). To relax it, pick VALIDATE_LLM /
-# DISABLED in the admin setting.
+# WEB_CONNECTOR_VALIDATE_URLS no longer affects behavior — kept only for
+# backwards-compatible imports.
 WEB_CONNECTOR_VALIDATE_URLS = os.environ.get("WEB_CONNECTOR_VALIDATE_URLS")
 
 # When the OnyxWebCrawler (open_url tool) hits a 403 / Cloudflare challenge,

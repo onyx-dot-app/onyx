@@ -103,19 +103,25 @@ _SSRF_HINT_NEVER_ALLOWED = (
     " localhost, unspecified, and link-local/cloud-metadata addresses are never "
     "permitted; use a loopback or private-network address instead."
 )
+_SSRF_HINT_SET_ALLOW_PRIVATE = (
+    " To reach a private-network MCP server, set SSRF Protection to Allow Private "
+    "Network (or Disabled) in the admin Security settings (loopback and "
+    "cloud-metadata stay blocked at Allow Private Network)."
+)
 _SSRF_HINT_SET_DISABLED = (
-    " To reach a private-network or loopback MCP server, set SSRF Protection to "
-    "Disabled in the admin Security settings (cloud-metadata stays blocked)."
+    " To reach a loopback MCP server, set SSRF Protection to Disabled in the admin "
+    "Security settings (cloud-metadata stays blocked)."
 )
 
 
 def _ssrf_error_hint(url: str, error: Exception) -> str:
-    """Suffix steering the operator to the remedy for a blocked host. Private and
-    loopback targets are reachable only when SSRF Protection is set to Disabled,
-    so point there. Link-local/metadata, unspecified, and BLOCKED_HOSTNAMES (e.g.
-    localhost) are never reachable, so suggest a different address; scheme errors
-    get no hint. Only literal IPs are classified — store-time validation doesn't
-    resolve hostnames, so a bare name can't reach the address-specific branches."""
+    """Suffix steering the operator to the remedy for a blocked host. A private
+    LAN target is reachable at Allow Private Network (or Disabled); loopback needs
+    Disabled (it hits the app host itself). Link-local/metadata, unspecified, and
+    BLOCKED_HOSTNAMES (e.g. localhost) are never reachable, so suggest a different
+    address; scheme errors get no hint. Only literal IPs are classified —
+    store-time validation doesn't resolve hostnames, so a bare name can't reach
+    the address-specific branches."""
     if "scheme" in str(error).lower():
         return ""
     host = (urlparse(url).hostname or "").lower()
@@ -127,10 +133,12 @@ def _ssrf_error_hint(url: str, error: Exception) -> str:
         return ""
     if ip.is_unspecified or ip.is_link_local:
         return _SSRF_HINT_NEVER_ALLOWED
-    # Loopback + private/reserved (anything non-global that isn't one of the
-    # never-allowed classes above) become reachable only at the Disabled level.
-    if not ip.is_global:
+    # Loopback reaches the app host itself, so it needs the Disabled level; other
+    # private/reserved targets open one notch lower, at Allow Private Network.
+    if ip.is_loopback:
         return _SSRF_HINT_SET_DISABLED
+    if not ip.is_global:
+        return _SSRF_HINT_SET_ALLOW_PRIVATE
     return ""
 
 

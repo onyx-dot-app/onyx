@@ -41,14 +41,26 @@ def test_open_url_opt_out_disables(monkeypatch: pytest.MonkeyPatch) -> None:
     assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.DISABLED
 
 
-def test_mcp_private_network_disables(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mcp_private_network_allows_private_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Private-network opt-in without loopback maps to the in-between level —
+    MCP reaches RFC1918 hosts, loopback stays blocked."""
     _set_env(monkeypatch, mcp_allow_private_network=True)
-    assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.DISABLED
+    assert (
+        store._derive_ssrf_level_from_env() == SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK
+    )
 
 
 def test_mcp_loopback_alone_disables(monkeypatch: pytest.MonkeyPatch) -> None:
     """Loopback opt-in alone is enough — it grants access only DISABLED allows."""
     _set_env(monkeypatch, mcp_allow_loopback=True)
+    assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.DISABLED
+
+
+def test_mcp_private_and_loopback_disables(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Loopback opt-in wins over the private-network opt-in — it needs DISABLED."""
+    _set_env(monkeypatch, mcp_allow_private_network=True, mcp_allow_loopback=True)
     assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.DISABLED
 
 
@@ -63,13 +75,14 @@ def test_web_connector_validate_urls_is_ignored(
     assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.VALIDATE_ALL
 
 
-def test_opt_in_disables_even_with_web_connector_validation(
+def test_opt_in_overrides_web_connector_validation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A DISABLED opt-in wins over everything else."""
+    """A loopback opt-in derives DISABLED regardless of the (now-ignored)
+    WEB_CONNECTOR_VALIDATE_URLS value."""
     _set_env(
         monkeypatch,
-        mcp_allow_private_network=True,
+        mcp_allow_loopback=True,
         web_connector_validate_urls="true",
     )
     assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.DISABLED

@@ -22,6 +22,10 @@ class SSRFProtectionLevel(str, Enum):
     # LLM-initiated fetches (open_url, MCP, OAuth) are validated; admin-configured
     # connectors may still reach private IPs.
     VALIDATE_LLM = "validate_llm"
+    # Like VALIDATE_LLM, but admin-configured MCP/OAuth endpoints may also reach
+    # RFC1918 LAN hosts. Loopback (the app host itself) and cloud-metadata stay
+    # blocked; open_url and web connectors behave exactly as at VALIDATE_LLM.
+    ALLOW_PRIVATE_NETWORK = "allow_private_network"
     # Allow all outbound requests (trusted networks / local LLM backends).
     DISABLED = "disabled"
 
@@ -37,14 +41,22 @@ class OutboundSSRFParams(NamedTuple):
 
 def outbound_ssrf_params(level: SSRFProtectionLevel) -> OutboundSSRFParams:
     """Params for ``validate_outbound_http_url`` on LLM-initiated / admin-endpoint
-    paths. At the VALIDATE_* levels everything private/internal is blocked; when
-    DISABLED, private + loopback become reachable but cloud-metadata/link-local
-    (169.254.0.0/16) stays blocked as an always-on floor."""
+    paths. At the VALIDATE_* levels everything private/internal is blocked. At
+    ALLOW_PRIVATE_NETWORK, RFC1918 LAN hosts become reachable but loopback and
+    cloud-metadata/link-local stay blocked. When DISABLED, private + loopback
+    become reachable but cloud-metadata/link-local (169.254.0.0/16) stays blocked
+    as an always-on floor."""
     if level == SSRFProtectionLevel.DISABLED:
         return OutboundSSRFParams(
             allow_private_network=True,
             block_loopback_and_link_local=False,
             block_link_local_only=True,
+        )
+    if level == SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK:
+        return OutboundSSRFParams(
+            allow_private_network=True,
+            block_loopback_and_link_local=True,
+            block_link_local_only=False,
         )
     return OutboundSSRFParams(
         allow_private_network=False,

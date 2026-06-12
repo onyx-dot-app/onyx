@@ -55,29 +55,28 @@ def _install_cache_for_test(
 def _derive_ssrf_level_from_env() -> SSRFProtectionLevel:
     """Seed the new admin "SSRF Protection" setting's default from the legacy
     per-path SSRF env vars so existing deployments keep their access without
-    touching the new control. The mapping is intentionally lossy and only
-    distinguishes the two extremes — VALIDATE_LLM is reachable solely through
-    the admin setting, never derived from env:
+    touching the new control. VALIDATE_LLM is reachable solely through the admin
+    setting, never derived from env:
 
-    - DISABLED      if any LLM-initiated path was opted out of validation —
-                    open_url SSRF off, or MCP allowed onto the private network
-                    or loopback. DISABLED is the only level that lets those
-                    paths reach internal/loopback targets, so honoring any of
-                    these opt-ins preserves the access an operator already had.
-    - VALIDATE_ALL  otherwise — secure by default (every outbound path, incl.
-                    the web connector, refuses private/internal IPs).
+    - DISABLED               open_url validation off, or MCP loopback opt-in.
+                             Only DISABLED reaches loopback / turns open_url off,
+                             so honoring these preserves prior access.
+    - ALLOW_PRIVATE_NETWORK  MCP allowed onto the private network without the
+                             loopback opt-in — the legacy "private without
+                             loopback" posture (MCP reaches RFC1918 hosts;
+                             loopback stays blocked).
+    - VALIDATE_ALL           otherwise — secure by default (every outbound path,
+                             incl. the web connector, refuses private IPs).
 
     ``WEB_CONNECTOR_VALIDATE_URLS`` no longer affects the default: the web
     connector validates whenever the level is VALIDATE_ALL (the default). An
-    operator who needs the connector to reach private IPs picks VALIDATE_LLM /
-    DISABLED in the admin setting.
+    operator who needs the connector to reach private IPs picks a lower level in
+    the admin setting.
     """
-    if (
-        not _cfg.OPEN_URL_VALIDATE_SSRF
-        or _cfg.MCP_SERVER_ALLOW_PRIVATE_NETWORK
-        or _cfg.MCP_SERVER_ALLOW_LOOPBACK
-    ):
+    if not _cfg.OPEN_URL_VALIDATE_SSRF or _cfg.MCP_SERVER_ALLOW_LOOPBACK:
         return SSRFProtectionLevel.DISABLED
+    if _cfg.MCP_SERVER_ALLOW_PRIVATE_NETWORK:
+        return SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK
     return SSRFProtectionLevel.VALIDATE_ALL
 
 
