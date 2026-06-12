@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserGroup
+from onyx.db.models import User
+from onyx.db.persona import _transfer_persona_ownership
 from onyx.db.persona import apply_persona_user_share_diff
 from onyx.db.persona import mark_persona_user_files_for_sync
 from onyx.db.persona import resolve_desired_user_shares
@@ -111,3 +113,20 @@ def update_persona_access(
     # When sharing changes, user file ACLs need to be updated in the vector DB
     if needs_sync:
         mark_persona_user_files_for_sync(persona_id, db_session)
+
+
+def transfer_persona_ownership(
+    persona_id: int,
+    user: User,
+    db_session: Session,
+    new_owner_user_id: UUID | None = None,
+    new_owner_group_id: int | None = None,
+) -> None:
+    """EE version: additionally allows transferring ownership to a group."""
+    _transfer_persona_ownership(
+        persona_id=persona_id,
+        user=user,
+        db_session=db_session,
+        new_owner_user_id=new_owner_user_id,
+        new_owner_group_id=new_owner_group_id,
+    )
