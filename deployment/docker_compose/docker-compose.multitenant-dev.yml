@@ -493,8 +493,7 @@ services:
   minio:
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     restart: unless-stopped
-    # TODO(security): prefix with 127.0.0.1: so MinIO binds loopback instead of
-    # 0.0.0.0 and isn't reachable from the LAN (prod publishes no MinIO ports).
+    # TODO(security): prefix 127.0.0.1: to bind loopback, not 0.0.0.0 (LAN-exposed).
     ports:
       - "9004:9000"
       - "9005:9001"

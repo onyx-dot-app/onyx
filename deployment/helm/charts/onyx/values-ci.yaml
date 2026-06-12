@@ -39,10 +39,8 @@ auth:
     values:
       redis_password: "password"
   objectstorage:
-    # CI-only credentials. values.yaml ships no objectstorage defaults (fail
-    # closed), so all four keys must be provided explicitly here for ct/craft
-    # renders. Never ship minioadmin to a real cluster — use existingSecret /
-    # externalSecret there (see values.yaml).
+    # CI-only creds. values.yaml ships no defaults (fail closed), so all four keys
+    # must be set here. Never use minioadmin on a real cluster.
     values:
       s3_aws_access_key_id: "minioadmin"
       s3_aws_secret_access_key: "minioadmin"

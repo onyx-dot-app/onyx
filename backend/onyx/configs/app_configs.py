@@ -1454,8 +1454,7 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
 
-# Well-known MinIO default credential. A deployment left on this value lets anyone
-# who can reach the object-storage endpoint list, download, or modify stored files.
+# Well-known MinIO default; deployments left on it expose all stored files.
 DEFAULT_OBJECT_STORAGE_CREDENTIAL = "minioadmin"
 
 
@@ -1464,9 +1463,7 @@ def _uses_default_object_storage_credentials(
     access_key: str | None,
     secret_key: str | None,
 ) -> bool:
-    # Only relevant for self-hosted S3-compatible storage (MinIO), which is
-    # signalled by an explicit endpoint URL. Real AWS S3 has no endpoint URL and
-    # never uses the minioadmin default, so it can't trip this check.
+    # Only for self-hosted MinIO (has an endpoint URL); real AWS S3 has none.
     if not s3_endpoint_url:
         return False
     return DEFAULT_OBJECT_STORAGE_CREDENTIAL in (access_key, secret_key)

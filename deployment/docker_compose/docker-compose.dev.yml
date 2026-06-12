@@ -46,9 +46,7 @@ services:
 
   minio:
     # Use different ports to avoid conflicts with model servers.
-    # TODO(security): prefix with 127.0.0.1: so MinIO binds loopback instead of
-    # 0.0.0.0 and isn't reachable from the LAN on a dev machine (prod publishes
-    # no MinIO ports). Deferred to keep remote-host dev workflows working.
+    # TODO(security): prefix 127.0.0.1: to bind loopback, not 0.0.0.0 (LAN-exposed).
     ports:
       - "${MINIO_API_HOST_PORT:-9004}:9000"
       - "${MINIO_CONSOLE_HOST_PORT:-9005}:9001"

@@ -1126,13 +1126,8 @@ else
     USER_AUTH_SECRET=$(openssl rand -hex 32)
     sed -i.bak "s/^USER_AUTH_SECRET=.*/USER_AUTH_SECRET=\"$USER_AUTH_SECRET\"/" "$ENV_FILE" 2>/dev/null || true
 
-    # Generate strong, unique object-storage (MinIO/S3) credentials so the
-    # deployment never runs on the well-known minioadmin:minioadmin default.
-    # The app authenticates to MinIO using its root credentials, so the same
-    # access-key/secret pair must be written to both the MinIO server vars
-    # (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) and the app vars
-    # (S3_AWS_ACCESS_KEY_ID / S3_AWS_SECRET_ACCESS_KEY). openssl hex output is
-    # safe to use directly in sed replacements (no special characters).
+    # Random MinIO/S3 credentials instead of the minioadmin default. The app uses
+    # MinIO's root creds, so the same pair goes to both the server and app vars.
     MINIO_ACCESS_KEY=$(openssl rand -hex 16)
     MINIO_SECRET_KEY=$(openssl rand -hex 32)
     sed -i.bak "s/^MINIO_ROOT_USER=.*/MINIO_ROOT_USER=$MINIO_ACCESS_KEY/" "$ENV_FILE" 2>/dev/null || true

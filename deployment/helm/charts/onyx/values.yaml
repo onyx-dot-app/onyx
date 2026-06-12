@@ -1270,14 +1270,9 @@ auth:
       S3_AWS_ACCESS_KEY_ID: s3_aws_access_key_id
       S3_AWS_SECRET_ACCESS_KEY: s3_aws_secret_access_key
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
-    # SECURITY: no defaults are shipped — leaving these empty makes helm
-    # install/upgrade fail closed (see templates/auth-secrets.yaml) so a real
-    # cluster can never run on the well-known minioadmin:minioadmin. Provide
-    # values here, or (preferred) set `existingSecret` / the `externalSecret`
-    # block above to source credentials from a real secret store. Generate with:
-    # `openssl rand -hex 16` (key) and `openssl rand -hex 32` (secret). Keep the
-    # s3_aws_* pair identical to rootUser/rootPassword — the app authenticates to
-    # MinIO using its root credentials.
+    # SECURITY: no defaults shipped — empty values fail closed (see
+    # auth-secrets.yaml) so prod can't run on minioadmin. Set these, or better,
+    # use existingSecret/externalSecret above. Keep s3_aws_* == rootUser/rootPassword.
     values:
       s3_aws_access_key_id: ""
       s3_aws_secret_access_key: ""
