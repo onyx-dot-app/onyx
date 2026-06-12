@@ -125,6 +125,7 @@ async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
         stack.enter_context(patch.object(onyx_main, "validate_no_vector_db_settings"))
         stack.enter_context(patch.object(onyx_main, "validate_cache_backend_settings"))
         stack.enter_context(patch.object(onyx_main, "validate_registry"))
+        stack.enter_context(patch.object(onyx_main, "verify_user_auth_secret"))
         stack.enter_context(
             patch.object(
                 onyx_main,

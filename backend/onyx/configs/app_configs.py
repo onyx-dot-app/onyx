@@ -269,12 +269,6 @@ JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
-if AUTH_TYPE == AuthType.BASIC and not USER_AUTH_SECRET:
-    logger.warning(
-        "USER_AUTH_SECRET is not set. This is required for secure password reset "
-        "and email verification tokens. Please set USER_AUTH_SECRET in production."
-    )
-
 # Bearer token guarding the API server's /metrics endpoint. Auth is required by
 # default: scrapers must present this token as `Authorization: Bearer <token>`
 # (the standard Prometheus scrape format). If neither this nor
