@@ -18,6 +18,12 @@ down_revision = "01c63968ff8f"
 branch_labels = None
 depends_on = None
 
+# Lightweight table reference for the backfill DML — avoids importing ORM models.
+persona__user_group_table = sa.table(
+    "persona__user_group",
+    sa.column("permission", sa.String),
+)
+
 
 def upgrade() -> None:
     op.add_column(
@@ -30,7 +36,7 @@ def upgrade() -> None:
     )
     # Group shares previously granted group members edit access via
     # _add_user_filters; keep that for existing rows. New rows default VIEWER.
-    op.execute("UPDATE persona__user_group SET permission = 'EDITOR'")
+    op.execute(persona__user_group_table.update().values(permission="EDITOR"))
     op.add_column(
         "persona",
         sa.Column("owner_group_id", sa.Integer(), nullable=True),
