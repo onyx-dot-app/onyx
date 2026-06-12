@@ -5,7 +5,6 @@ from datetime import timezone
 from typing import List
 
 import requests
-from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
@@ -20,6 +19,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -80,7 +80,7 @@ _STATUS_NUMBER_TYPE_MAP: dict[int, str] = {
 
 
 # TODO: unify this with other generic rate limited requests with retries (e.g. Axero, Notion?)
-@retry(tries=3, delay=1, backoff=2)
+@retry_builder(tries=3, delay=1, backoff=2)
 def _rate_limited_freshdesk_get(
     url: str, auth: tuple, params: dict
 ) -> requests.Response:

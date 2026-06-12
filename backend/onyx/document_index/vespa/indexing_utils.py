@@ -11,7 +11,6 @@ from datetime import timezone
 from http import HTTPStatus
 
 import httpx
-from retry import retry
 
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -60,6 +59,7 @@ from onyx.document_index.vespa_constants import TITLE_EMBEDDING
 from onyx.document_index.vespa_constants import USER_PROJECT
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.text_processing import remove_invalid_unicode_chars
 
 logger = setup_logger()
@@ -70,7 +70,7 @@ INDEXING_BASE_DELAY = 1.0
 INDEXING_MAX_DELAY = 60.0
 
 
-@retry(tries=3, delay=1, backoff=2)
+@retry_builder(tries=3, delay=1, backoff=2)
 def _does_doc_chunk_exist(
     doc_chunk_id: uuid.UUID, index_name: str, http_client: httpx.Client
 ) -> bool:

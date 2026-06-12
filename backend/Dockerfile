@@ -35,7 +35,6 @@ RUN apt-get update && \
     apt-get clean
 
 # Install Python dependencies
-# Remove py which is pulled in by retry, py is not needed and is a CVE
 COPY ./requirements/default.txt /tmp/requirements.txt
 COPY ./requirements/ee.txt /tmp/ee-requirements.txt
 # requirements/*.txt are a complete, pre-resolved lock export, so --no-deps installs them as-is
@@ -45,7 +44,6 @@ COPY ./requirements/ee.txt /tmp/ee-requirements.txt
 RUN uv pip install --system --no-cache-dir --no-deps --require-hashes \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
-    pip uninstall -y py && \
     # https://github.com/tornadoweb/tornado/issues/3107
     rm -f /usr/local/lib/python3.13/site-packages/tornado/test/test.key && \
     rm -rf ~/.cache/uv /tmp/*.txt
