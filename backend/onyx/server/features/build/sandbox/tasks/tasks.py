@@ -18,7 +18,7 @@ from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
+from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 
 # 100 minutes - snapshotting can take time
 TIMEOUT_SECONDS = 6000
