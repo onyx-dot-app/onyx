@@ -16,12 +16,16 @@ FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb
 
 # Node.js source. The final image is Python-based, but the sandbox still needs
 # Node/npm/npx for MCP commands and skill-runtime packages.
-FROM ${BASE_IMAGE_REGISTRY}/library/node:20-trixie-slim@sha256:abfbe12cc943141a0c9e8c0a57d710df1dadd95d35e8662cc02958b284d1f35b AS node_source
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:45fbb3ca3b6c7e6646cd2889d0ac7bf314bb180036da792221fc2f48fe4d43fb AS node_source
+ARG NPM_VERSION=11.17.0
+RUN npm install -g "npm@${NPM_VERSION}" && \
+    npm cache clean --force && \
+    rm -rf /root/.npm
 
 # GitHub CLI (gh): downloaded + checksum-verified in its own stage (arch-matched
 # via buildx's TARGETARCH) so only the binary lands in the final image.
 FROM node_source AS gh_source
-ARG GH_CLI_VERSION=2.93.0
+ARG GH_CLI_VERSION=2.94.0
 ARG TARGETARCH
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -127,8 +131,9 @@ RUN mkdir -p /home/sandbox/.config/gh \
     && chown -R sandbox:sandbox /home/sandbox/.config
 
 USER sandbox
-RUN curl -fsSL https://opencode.ai/install \
-    | bash -s -- --version "${OPENCODE_VERSION}" --no-modify-path
+RUN curl -fsSL -o /tmp/opencode-install.sh https://opencode.ai/install && \
+    bash /tmp/opencode-install.sh --version "${OPENCODE_VERSION}" --no-modify-path && \
+    rm /tmp/opencode-install.sh
 # Pre-warm Bun's tarball cache so per-session installs hit a local store.
 RUN cd /workspace/templates/outputs/web && \
     bun install --frozen-lockfile && \
