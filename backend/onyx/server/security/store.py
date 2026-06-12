@@ -68,10 +68,9 @@ def _derive_ssrf_level_from_env() -> SSRFProtectionLevel:
     - VALIDATE_ALL           otherwise — secure by default (every outbound path,
                              incl. the web connector, refuses private IPs).
 
-    ``WEB_CONNECTOR_VALIDATE_URLS`` no longer affects the default: the web
-    connector validates whenever the level is VALIDATE_ALL (the default). An
-    operator who needs the connector to reach private IPs picks a lower level in
-    the admin setting.
+    The web connector validates whenever the level is VALIDATE_ALL (the default);
+    an operator who needs it to reach private IPs picks a lower level in the admin
+    setting.
     """
     if not _cfg.OPEN_URL_VALIDATE_SSRF or _cfg.MCP_SERVER_ALLOW_LOOPBACK:
         return SSRFProtectionLevel.DISABLED

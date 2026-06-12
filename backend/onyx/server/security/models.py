@@ -13,8 +13,8 @@ class SSRFProtectionLevel(str, Enum):
     """How aggressively outbound HTTP requests are validated against private /
     internal IP ranges (SSRF protection). A single admin-facing control that
     supersedes the older per-path env vars (OPEN_URL_VALIDATE_SSRF,
-    MCP_SERVER_ALLOW_PRIVATE_NETWORK, MCP_SERVER_ALLOW_LOOPBACK,
-    WEB_CONNECTOR_VALIDATE_URLS)."""
+    MCP_SERVER_ALLOW_PRIVATE_NETWORK, MCP_SERVER_ALLOW_LOOPBACK) and the
+    web connector's former WEB_CONNECTOR_VALIDATE_URLS toggle."""
 
     # Default. Most restrictive: every outbound path (incl. web connectors)
     # blocks private/internal IPs.

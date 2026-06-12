@@ -16,7 +16,6 @@ def _set_env(
     open_url_validate_ssrf: bool = True,
     mcp_allow_private_network: bool = False,
     mcp_allow_loopback: bool = False,
-    web_connector_validate_urls: str | None = None,
 ) -> None:
     """Pin the legacy SSRF env values the derivation reads. Defaults match the
     shipped env defaults (the all-defaults case)."""
@@ -25,9 +24,6 @@ def _set_env(
         store._cfg, "MCP_SERVER_ALLOW_PRIVATE_NETWORK", mcp_allow_private_network
     )
     monkeypatch.setattr(store._cfg, "MCP_SERVER_ALLOW_LOOPBACK", mcp_allow_loopback)
-    monkeypatch.setattr(
-        store._cfg, "WEB_CONNECTOR_VALIDATE_URLS", web_connector_validate_urls
-    )
 
 
 def test_all_defaults_is_validate_all(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -61,28 +57,4 @@ def test_mcp_loopback_alone_disables(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_mcp_private_and_loopback_disables(monkeypatch: pytest.MonkeyPatch) -> None:
     """Loopback opt-in wins over the private-network opt-in — it needs DISABLED."""
     _set_env(monkeypatch, mcp_allow_private_network=True, mcp_allow_loopback=True)
-    assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.DISABLED
-
-
-@pytest.mark.parametrize("web_connector_value", [None, "", "false", "true", "1"])
-def test_web_connector_validate_urls_is_ignored(
-    monkeypatch: pytest.MonkeyPatch, web_connector_value: str | None
-) -> None:
-    """WEB_CONNECTOR_VALIDATE_URLS no longer feeds the derivation; the default is
-    VALIDATE_ALL regardless of its value (web-connector validation now rides on
-    the level being VALIDATE_ALL)."""
-    _set_env(monkeypatch, web_connector_validate_urls=web_connector_value)
-    assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.VALIDATE_ALL
-
-
-def test_opt_in_overrides_web_connector_validation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A loopback opt-in derives DISABLED regardless of the (now-ignored)
-    WEB_CONNECTOR_VALIDATE_URLS value."""
-    _set_env(
-        monkeypatch,
-        mcp_allow_loopback=True,
-        web_connector_validate_urls="true",
-    )
     assert store._derive_ssrf_level_from_env() == SSRFProtectionLevel.DISABLED

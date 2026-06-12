@@ -726,15 +726,6 @@ WEB_CONNECTOR_IGNORED_ELEMENTS = os.environ.get(
 WEB_CONNECTOR_OAUTH_CLIENT_ID = os.environ.get("WEB_CONNECTOR_OAUTH_CLIENT_ID")
 WEB_CONNECTOR_OAUTH_CLIENT_SECRET = os.environ.get("WEB_CONNECTOR_OAUTH_CLIENT_SECRET")
 WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
-# NOTE: the SSRF env vars below (OPEN_URL_VALIDATE_SSRF,
-# MCP_SERVER_ALLOW_PRIVATE_NETWORK, MCP_SERVER_ALLOW_LOOPBACK) are no longer read
-# at their call sites. They only seed the default "SSRF Protection" level when no
-# override is saved; admins set the effective behavior on the Security Hardening
-# page.
-#
-# WEB_CONNECTOR_VALIDATE_URLS no longer affects behavior — kept only for
-# backwards-compatible imports.
-WEB_CONNECTOR_VALIDATE_URLS = os.environ.get("WEB_CONNECTOR_VALIDATE_URLS")
 
 # When the OnyxWebCrawler (open_url tool) hits a 403 / Cloudflare challenge,
 # fall back to a one-shot Playwright (Chromium) render to bypass JS-based
@@ -743,6 +734,12 @@ WEB_CONNECTOR_VALIDATE_URLS = os.environ.get("WEB_CONNECTOR_VALIDATE_URLS")
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
 )
+
+# NOTE: the three SSRF env vars below (OPEN_URL_VALIDATE_SSRF,
+# MCP_SERVER_ALLOW_PRIVATE_NETWORK, MCP_SERVER_ALLOW_LOOPBACK) are no longer read
+# at their call sites. They only seed the default "SSRF Protection" level when no
+# override is saved; admins set the effective behavior on the Security Hardening
+# page.
 
 # Whether the open_url tool enforces SSRF protection (rejecting URLs that
 # resolve to private/internal IPs). Default true to keep multi-tenant SaaS
