@@ -1,35 +1,42 @@
-// Style Dictionary build script (programmatic API, Style Dictionary v4).
+// ─────────────────────────────────────────────────────────────────────────────
+// Design-token build — Style Dictionary v4 (programmatic API).
 //
-// Single token source (tokens/opal/**.json) -> three platform outputs:
-//   - web/opal: dist/tokens.css         CSS custom properties, EXACT Opal names,
-//               :root (primitives + light semantic) + .dark (dark semantic),
-//               references preserved as var(--x) so dark mode flips at runtime.
-//   - mobile:   dist/nativewind-theme.cjs  a Tailwind `theme.extend` fragment
-//               (semantic colors as var(--name); dimensions resolved to px numbers).
-//   - mobile:   dist/native.js + native.d.ts  light/dark CSS-variable maps for the
-//               NativeWind vars() provider (the RN analog of web's `.dark` class).
+// ONE source of truth (tokens/opal/**.json) is compiled into several dist/ files,
+// one per consumer. Run via `node style-dictionary.config.mjs` (the `build:tokens`
+// script). Style Dictionary is a devDependency — it never ships to consumers.
 //
-// Run via `node style-dictionary.config.mjs` (the `build:tokens` script).
-// Style Dictionary is a devDependency and never ships, so it cannot affect a
-// consumer's runtime dependency graph.
+//   tokens.css            web/Opal  CSS vars — :root (primitives + light) + .dark
+//   typography.css        web/Opal  Tailwind `@utility font-*` text presets
+//   nativewind-theme.cjs  mobile    Tailwind `theme.extend` (class -> token)
+//   native.js (+ .d.ts)   mobile    light/dark value maps + text presets for vars()
 //
-// Token model (see tokens/opal/*.json):
-//   - primitives / size / typography: top-level keys, path = [name].
-//   - semantic light:  nested under "light", path = ["light", name].
-//   - semantic dark:   nested under "dark",  path = ["dark", name].
-// The CSS var name is always the LAST path segment, verbatim (no prefix, no
-// kebab mangling) — Opal's names like `alpha-grey-100-90` / `neon-amber-a60`
-// must survive byte-for-byte, which lodash kebab-case would break.
+// Two Style Dictionary concepts are used below:
+//   • transform = edits ONE field of ONE token (here only its `name`). Per token.
+//   • format    = prints ONE whole output file from all tokens. One per file.
+//
+// TOKEN MODEL — each JSON key IS the exact CSS var name (no prefix, no kebab
+// mangling, so `alpha-grey-100-90` / `neon-amber-a60` survive byte-for-byte). The
+// JSON nesting encodes tier + mode, which every filter below keys off via `path`:
+//   primitives / size / typography  top-level    path = ["radius-12"]
+//   semantic light                  under "light" path = ["light", "text-05"]
+//   semantic dark                   under "dark"  path = ["dark",  "text-05"]
+//   typography presets              under "text"  path = ["text", "heading-h1", "fontSize"]
+//   e.g. semantic-light.json: { "light": { "text-05": { "value": "{alpha-grey-100-90}", "type": "color" } } }
+//
+// PIPELINE:  read JSON  ->  name transform  ->  each format prints a file  ->  dist/
+// ─────────────────────────────────────────────────────────────────────────────
 
 import StyleDictionary from "style-dictionary";
 
-const leaf = (token) => token.path[token.path.length - 1];
+// Per-token accessors used by the formats below.
+const leaf = (token) => token.path[token.path.length - 1]; // ["dark","text-05"] -> "text-05" (the var name)
 const isColor = (token) => (token.type ?? token.$type) === "color";
-const rawOriginal = (token) => token.original.value ?? token.original.$value;
-const resolved = (token) => token.value ?? token.$value;
+const rawOriginal = (token) => token.original.value ?? token.original.$value; // authored, keeps "{ref}"
+const resolved = (token) => token.value ?? token.$value; // refs followed, e.g. "#000000e5"
 
-// `{a-b-c}` (or `{group.a-b-c}`) -> `var(--a-b-c)` using the reference's last
-// path segment, then collapse internal whitespace (font-family values span lines).
+// `{a-b-c}` (or `{group.a-b-c}`) -> `var(--a-b-c)` (the reference's last path
+// segment), then collapse internal whitespace (font-family values span lines).
+// e.g. "{alpha-grey-100-90}" -> "var(--alpha-grey-100-90)"
 function cssValue(rawValue) {
   return String(rawValue)
     .replace(/\{([^}]+)\}/g, (_, ref) => {
@@ -40,7 +47,8 @@ function cssValue(rawValue) {
     .trim();
 }
 
-// rem/px/unitless string -> Number of px (React Native style objects are unitless px).
+// rem/px/unitless string -> Number of px (RN style objects are unitless px).
+// e.g. "0.75rem" -> 12, "2px" -> 2, "600" -> 600
 function toPx(rawValue) {
   const v = String(rawValue).trim();
   if (v.endsWith("rem")) return parseFloat(v) * 16;
@@ -48,7 +56,8 @@ function toPx(rawValue) {
   return Number(v);
 }
 
-// A CSS font-family stack -> the first family name (React Native takes one family).
+// A CSS font-family stack -> its first family name (RN takes a single family).
+// e.g. '"Hanken Grotesk", -apple-system, sans-serif' -> "Hanken Grotesk"
 function firstFamily(stack) {
   return String(stack)
     .split(",")[0]
@@ -56,14 +65,21 @@ function firstFamily(stack) {
     .replace(/^["']|["']$/g, "");
 }
 
-// Identity name transform: the CSS var name is the verbatim last path segment.
+// TRANSFORM (name) — the CSS var name is the verbatim LAST path segment. This is
+// what stops SD's default kebab-casing from mangling Opal's names.
+// e.g. path ["light","text-05"] -> name "text-05"  ->  emitted as --text-05
 StyleDictionary.registerTransform({
   name: "name/opal-literal",
   type: "name",
   transform: (token) => leaf(token),
 });
 
-// ---- Web/opal CSS: exact names, :root + .dark, references kept as var() ----
+// FORMAT -> tokens.css (web/Opal). Primitives + light semantics go in :root; dark
+// overrides go in .dark. Reads token.original (the authored "{ref}") so references
+// stay `var(--x)` and dark mode flips at runtime. Typography presets (path[0] ===
+// "text") are skipped here — they're emitted as @utility by css/opal-typography.
+// e.g.  --text-05: var(--alpha-grey-100-90);   in :root
+//       --text-05: var(--alpha-grey-00-95);    in .dark
 StyleDictionary.registerFormat({
   name: "css/opal",
   format: ({ dictionary }) => {
@@ -89,10 +105,11 @@ StyleDictionary.registerFormat({
   },
 });
 
-// ---- Web/opal typography: regenerate the `@utility font-*` preset blocks ----
-// Each preset (path[0] === "text") becomes a Tailwind v4 @utility, byte-equivalent
-// to Opal's hand-authored blocks. Values keep their `var()` refs (font families and
-// height metrics) so they still resolve from tokens.css at runtime.
+// FORMAT -> typography.css (web/Opal). Each preset under "text" becomes a Tailwind
+// v4 @utility, byte-equivalent to Opal's hand-authored blocks. Values keep their
+// `var()` refs (font families + height metrics) so they resolve from tokens.css.
+// e.g.  text.heading-h1.{fontSize:"48px", fontWeight:"600", ...}  ->
+//         @utility font-heading-h1 { font-size: 48px; font-weight: 600; ... }
 const TYPO_PROP_ORDER = [
   ["fontFamily", "font-family"],
   ["fontSize", "font-size"],
@@ -130,7 +147,11 @@ StyleDictionary.registerFormat({
   },
 });
 
-// ---- Mobile: NativeWind `theme.extend` fragment (CJS, required by tailwind.config) ----
+// FORMAT -> nativewind-theme.cjs (mobile). mobile/tailwind.config requires this as
+// `theme.extend`. Colors map class -> var(--name) (themed at runtime by the vars()
+// provider, mirroring web); radius/spacing are resolved to plain px numbers because
+// RN can't use rem or var() for dimensions.
+// e.g.  colors["text-04"] = "var(--text-04)"   borderRadius["12"] = 12   spacing["16"] = 16
 StyleDictionary.registerFormat({
   name: "js/nativewind-theme",
   format: ({ dictionary }) => {
@@ -168,7 +189,8 @@ StyleDictionary.registerFormat({
   },
 });
 
-// ---- Mobile: type declarations for native.js ----
+// FORMAT -> native.d.ts (mobile). Hand-written types for native.js below — SD
+// generates that JS, not its declarations, so they're spelled out here.
 StyleDictionary.registerFormat({
   name: "dts/native-vars",
   format: () =>
@@ -185,7 +207,12 @@ StyleDictionary.registerFormat({
     "export declare const textPresets: Record<string, TextPreset>;\n",
 });
 
-// ---- Mobile: light/dark CSS-variable maps for the vars() provider (ESM) ----
+// FORMAT -> native.js (mobile, ESM). The RN analog of web's `.dark`: two fully
+// RESOLVED color maps the vars() provider swaps by color scheme, plus text presets
+// as RN style objects. Uses resolved values (concrete hex/numbers) since RN has no
+// var(). varsLight = primitives + light semantics; varsDark = primitives + dark.
+// e.g.  varsLight["--text-05"] = "#000000e5"   varsDark["--text-05"] = "#fffffff2"
+//       textPresets["heading-h1"] = { fontFamily: "Hanken Grotesk", fontSize: 48, ... }
 StyleDictionary.registerFormat({
   name: "js/native-vars",
   format: ({ dictionary }) => {
@@ -226,14 +253,17 @@ StyleDictionary.registerFormat({
   },
 });
 
+// Wire it together: load all token JSON, run the name transform on every token,
+// then run each format to write its file. One platform is enough — the formats,
+// not transforms, decide each file's shape.
 const sd = new StyleDictionary({
   source: ["tokens/opal/**/*.json"],
   log: { verbosity: "default", warnings: "warn" },
   platforms: {
     out: {
-      // Only a name transform — value transforms are intentionally omitted so
-      // token.value stays the exact authored literal (no hex/unit rewriting),
-      // while token.original.value preserves the `{ref}` form for the CSS output.
+      // ONLY a name transform — value transforms are intentionally omitted so
+      // token.value stays the exact authored literal (no hex/unit rewriting) and
+      // token.original keeps the `{ref}` form the CSS formats depend on.
       transforms: ["name/opal-literal"],
       buildPath: "dist/",
       files: [
