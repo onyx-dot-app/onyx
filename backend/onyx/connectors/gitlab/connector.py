@@ -94,35 +94,30 @@ def _convert_issue_to_document(issue: Any) -> Document:
 
 
 def _convert_code_to_document(
-    project: Project, file: Any, url: str, projectName: str, projectOwner: str
+    project: Project, file: Any, url: str, projectName: str, projectOwner: str, branch: str
 ) -> Document:
-    # Dynamically get the default branch from the project object
-    default_branch = project.default_branch
-
     # Fetch the file content using the correct branch
     file_content_obj = project.files.get(
         file_path=file["path"],
-        ref=default_branch,  # Use the default branch
+        ref=branch,
     )
     try:
         file_content = file_content_obj.decode().decode("utf-8")
     except UnicodeDecodeError:
         file_content = file_content_obj.decode().decode("latin-1")
 
-    # Construct the file URL dynamically using the default branch
-    file_url = (
-        f"{url}/{projectOwner}/{projectName}/-/blob/{default_branch}/{file['path']}"
-    )
+    # Construct the file URL dynamically using the provided branch
+    file_url = f"{url}/{projectOwner}/{projectName}/-/blob/{branch}/{file['path']}"
 
     # Create and return a Document object
     doc = Document(
-        id=file["id"],
+        id=file_url,
         sections=[TextSection(link=file_url, text=file_content)],
         source=DocumentSource.GITLAB,
         semantic_identifier=file["name"],
         doc_updated_at=datetime.now().replace(tzinfo=timezone.utc),
         primary_owners=[],  # Add owners if needed
-        metadata={"type": "CodeFile"},
+        metadata={"type": "CodeFile", "branch": branch},
     )
     return doc
 
@@ -169,32 +164,48 @@ class GitlabConnector(LoadConnector, PollConnector):
 
         # Fetch code files
         if self.include_code_files:
-            # Fetching using BFS as project.report_tree with recursion causing slow load
-            queue = deque([""])  # Start with the root directory
-            while queue:
-                current_path = queue.popleft()
-                files = project.repository_tree(path=current_path, all=True)
-                for file_batch in _batch_gitlab_objects(files, self.batch_size):
-                    code_doc_batch: list[Document | HierarchyNode] = []
-                    for file in file_batch:
-                        if _should_exclude(file["path"]):
-                            continue
+            processed_path_blobs: set[tuple[str, str]] = set()
+            all_branches = list(project.branches.list(iterator=True))
+            default_branch = project.default_branch
+            # Sort branches: default branch first, then alphabetically
+            all_branches.sort(key=lambda b: (b.name != default_branch, b.name))
 
-                        if file["type"] == "blob":
-                            code_doc_batch.append(
-                                _convert_code_to_document(
-                                    project,
-                                    file,
-                                    self.gitlab_client.url,
-                                    self.project_name,
-                                    self.project_owner,
+            for branch in all_branches:
+                branch_name = branch.name
+                # Fetching using BFS as project.report_tree with recursion causing slow load
+                queue = deque([""])  # Start with the root directory
+                while queue:
+                    current_path = queue.popleft()
+                    files = project.repository_tree(
+                        path=current_path, ref=branch_name, all=True
+                    )
+                    for file_batch in _batch_gitlab_objects(files, self.batch_size):
+                        code_doc_batch: list[Document | HierarchyNode] = []
+                        for file in file_batch:
+                            if _should_exclude(file["path"]):
+                                continue
+
+                            if file["type"] == "blob":
+                                path_blob = (file["path"], file["id"])
+                                if path_blob in processed_path_blobs:
+                                    continue
+                                processed_path_blobs.add(path_blob)
+
+                                code_doc_batch.append(
+                                    _convert_code_to_document(
+                                        project,
+                                        file,
+                                        self.gitlab_client.url,
+                                        self.project_name,
+                                        self.project_owner,
+                                        branch_name,
+                                    )
                                 )
-                            )
-                        elif file["type"] == "tree":
-                            queue.append(file["path"])
+                            elif file["type"] == "tree":
+                                queue.append(file["path"])
 
-                    if code_doc_batch:
-                        yield code_doc_batch
+                        if code_doc_batch:
+                            yield code_doc_batch
 
         if self.include_mrs:
             merge_requests = project.mergerequests.list(
