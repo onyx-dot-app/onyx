@@ -304,7 +304,7 @@ ensure_file() {
 
 # --- Interactive prompt helpers ---
 is_interactive() {
-    [[ "$NO_PROMPT" = false ]] && [[ -r /dev/tty ]] && [[ -w /dev/tty ]]
+    [[ "$NO_PROMPT" = false ]] && [[ -r /dev/tty ]] && [[ -w /dev/tty ]] || true
 }
 
 read_prompt_line() {
