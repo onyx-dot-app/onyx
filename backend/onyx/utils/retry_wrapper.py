@@ -54,6 +54,11 @@ def retry_builder(
     stop: stop_base = stop_after_attempt(tries) if tries >= 0 else stop_never
 
     def retry_with_default(func: F) -> F:
+        # `wraps` is intentionally applied *below* the tenacity decorator: it
+        # renames the inner function before tenacity captures it, so the
+        # `before_sleep_log` warnings name the real call site instead of
+        # `wrapped_func`. Final metadata is correct either way (tenacity
+        # applies `functools.wraps` to whatever it wraps).
         @tenacity_retry(
             retry=retry_if_exception_type(exceptions),
             wait=wait,
