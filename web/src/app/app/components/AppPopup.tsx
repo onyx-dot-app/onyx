@@ -13,6 +13,7 @@ import { transformLinkUri } from "@/lib/utils";
 import { SvgAlertCircle } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import type { IconProps } from "@opal/types";
+import { useTranslations } from "next-intl";
 
 const ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED =
   "allUsersInitialPopupFlowCompleted";
@@ -30,6 +31,7 @@ export function AppPopup() {
   const [completedFlow, setCompletedFlow] = useState(true);
   const [showConsentError, setShowConsentError] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
+  const t = useTranslations("appPopup");
 
   useEffect(() => {
     setCompletedFlow(
@@ -77,7 +79,7 @@ export function AppPopup() {
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={headerIcon}
-          title={popupTitle || "Welcome to Onyx!"}
+          title={popupTitle || t("defaultTitle")}
         />
         <Modal.Body>
           <div className="overflow-y-auto text-left">
@@ -124,7 +126,7 @@ export function AppPopup() {
                 <div className="flex items-center gap-1">
                   <FormField.Control>
                     <Checkbox
-                      aria-label="Consent checkbox"
+                      aria-label={t("consentCheckbox")}
                       checked={consentChecked}
                       onCheckedChange={(checked) => {
                         setConsentChecked(checked);
@@ -171,8 +173,7 @@ export function AppPopup() {
                 </div>
                 <FormField.Message
                   messages={{
-                    error:
-                      "You need to agree to the terms to access the application.",
+                    error: t("consentRequired"),
                   }}
                 />
               </FormField>
@@ -193,7 +194,7 @@ export function AppPopup() {
               setCompletedFlow(true);
             }}
           >
-            Start
+            {t("start")}
           </Button>
         </Modal.Footer>
       </Modal.Content>

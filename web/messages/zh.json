@@ -1,9 +1,70 @@
 {
   "auth": {
     "title": "欢迎使用 Glomi AI",
-    "subtitle": "你的 AI 工作平台"
+    "subtitle": "你的 AI 工作平台",
+    "accountNotFound": {
+      "title": "未找到账户",
+      "description": "我们没有在记录中找到你的账户。要访问 Glomi AI，你需要：",
+      "invite": "加入一个已有的 Glomi AI 团队",
+      "createTeam": "创建新的 Glomi AI 团队",
+      "createOrganization": "创建新组织",
+      "differentEmail": "已有其他邮箱的账户？",
+      "signIn": "登录"
+    },
+    "error": {
+      "title": "认证错误",
+      "description": "你的登录尝试遇到了问题。",
+      "possibleIssues": "可能原因：",
+      "incorrectCredentials": "登录凭据不正确或已过期",
+      "temporaryDisruption": "认证系统暂时异常",
+      "accessRestrictions": "账户访问受限或权限不足",
+      "returnToLogin": "返回登录页",
+      "contactSupportCloud": "如果问题持续出现，请联系 Glomi AI 团队：",
+      "contactSupportSelfHosted": "如果问题持续出现，请联系你的系统管理员寻求帮助。",
+      "accessDenied": "你的身份提供商拒绝了访问请求。",
+      "loginRequired": "你需要先通过身份提供商登录。",
+      "consentRequired": "你的身份提供商要求授权后才能继续。",
+      "interactionRequired": "你的身份提供商需要额外交互。",
+      "invalidScope": "请求的权限不可用。",
+      "serverError": "你的身份提供商遇到错误，请重试。",
+      "temporarilyUnavailable": "你的身份提供商暂时不可用，请稍后再试。"
+    },
+    "signup": {
+      "complete": "完成注册",
+      "createAccount": "创建账户",
+      "subtitle": "开始使用 Glomi AI",
+      "or": "或"
+    },
+    "flow": {
+      "newToApp": "第一次使用 {appName}？",
+      "createAccount": "创建账户",
+      "alreadyHaveAccount": "已有账户？",
+      "signIn": "登录"
+    }
   },
   "brand": {
-    "poweredBy": "由 Glomi AI 提供支持"
+    "poweredBy": "由 Glomi AI 提供支持",
+    "initializing": "正在初始化 {appName}"
+  },
+  "appPopup": {
+    "defaultTitle": "欢迎使用 Glomi AI！",
+    "consentCheckbox": "同意条款复选框",
+    "consentRequired": "你需要同意条款才能访问应用。",
+    "start": "开始"
+  },
+  "memories": {
+    "title": "记忆",
+    "description": "允许 Glomi AI 在对话中引用这些保存的笔记和记忆。",
+    "placeholder": "输入或粘贴个人笔记或记忆",
+    "removeLine": "删除行",
+    "preferencesSaved": "偏好设置已保存",
+    "preferencesSaveFailed": "保存偏好设置失败",
+    "searchPlaceholder": "搜索...",
+    "addLine": "添加行",
+    "maximumReached": "最多只能保存 {count} 条记忆",
+    "noSearchResults": "没有匹配搜索的记忆。",
+    "empty": "还没有记忆。点击“添加行”开始。",
+    "line": "行",
+    "lines": "行"
   }
 }

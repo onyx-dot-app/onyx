@@ -22,6 +22,7 @@ import { cn } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import type { MemoryItem } from "@/lib/types";
+import { useTranslations } from "next-intl";
 
 interface MemoryItemProps {
   memory: LocalMemory;
@@ -46,6 +47,7 @@ function MemoryItem({
   shouldHighlight,
   onHighlighted,
 }: MemoryItemProps) {
+  const t = useTranslations("memories");
   const [isFocused, setIsFocused] = useState(false);
   const [isHighlighting, setIsHighlighting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -91,7 +93,7 @@ function MemoryItem({
         <Section flexDirection="row" alignItems="start" gap={0.5}>
           <InputTextArea
             ref={textareaRef}
-            placeholder="Type or paste in a personal note or memory"
+            placeholder={t("placeholder")}
             value={memory.content}
             onChange={(e) => onUpdate(originalIndex, e.target.value)}
             onFocus={() => setIsFocused(true)}
@@ -121,8 +123,8 @@ function MemoryItem({
             prominence="tertiary"
             icon={SvgMinusCircle}
             onClick={() => void onRemove(originalIndex)}
-            aria-label="Remove Line"
-            tooltip="Remove Line"
+            aria-label={t("removeLine")}
+            tooltip={t("removeLine")}
           />
         </Section>
         <div
@@ -170,6 +172,7 @@ export default function MemoriesModal({
   highlightOnOpen = false,
   focusNewLine = false,
 }: MemoriesModalProps) {
+  const t = useTranslations("memories");
   const close = useModalClose(onClose);
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
 
@@ -179,8 +182,8 @@ export default function MemoriesModal({
     user,
     updateUserPersonalization,
     {
-      onSuccess: () => toast.success("Preferences saved"),
-      onError: () => toast.error("Failed to save preferences"),
+      onSuccess: () => toast.success(t("preferencesSaved")),
+      onError: () => toast.error(t("preferencesSaveFailed")),
     }
   );
 
@@ -267,13 +270,13 @@ export default function MemoriesModal({
       <Modal.Content width="sm" height="lg" position="top">
         <Modal.Header
           icon={SvgAddLines}
-          title="Memory"
-          description="Let Onyx reference these stored notes and memories in chats."
+          title={t("title")}
+          description={t("description")}
           onClose={close}
         >
           <Section flexDirection="row" gap={0.5}>
             <InputTypeIn
-              placeholder="Search..."
+              placeholder={t("searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               searchIcon
@@ -285,11 +288,11 @@ export default function MemoriesModal({
               rightIcon={SvgPlusCircle}
               title={
                 !canAddMemory
-                  ? `Maximum of ${MAX_MEMORY_COUNT} memories reached`
+                  ? t("maximumReached", { count: MAX_MEMORY_COUNT })
                   : undefined
               }
             >
-              Add Line
+              {t("addLine")}
             </Button>
           </Section>
         </Modal.Header>
@@ -299,8 +302,8 @@ export default function MemoriesModal({
             <Section alignItems="center" padding={2}>
               <Text secondaryBody text03>
                 {searchQuery.trim()
-                  ? "No memories match your search."
-                  : 'No memories yet. Click "Add Line" to get started.'}
+                  ? t("noSearchResults")
+                  : t("empty")}
               </Text>
             </Section>
           ) : (
@@ -329,7 +332,7 @@ export default function MemoriesModal({
           )}
           <TextSeparator
             count={totalLineCount}
-            text={totalLineCount === 1 ? "Line" : "Lines"}
+            text={totalLineCount === 1 ? t("line") : t("lines")}
           />
         </Modal.Body>
       </Modal.Content>

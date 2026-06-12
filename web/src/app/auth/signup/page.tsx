@@ -14,10 +14,12 @@ import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 import { AuthType } from "@/lib/constants";
+import { getTranslations } from "next-intl/server";
 
 const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) => {
+  const t = await getTranslations("auth.signup");
   const searchParams = await props.searchParams;
   const nextUrl = Array.isArray(searchParams?.next)
     ? searchParams?.next[0]
@@ -74,10 +76,10 @@ const Page = async (props: {
         >
           <div className="w-full">
             <Text as="p" headingH2 text05>
-              {cloud ? "Complete your sign up" : "Create account"}
+              {cloud ? t("complete") : t("createAccount")}
             </Text>
             <Text as="p" text03>
-              Get started with Onyx
+              {t("subtitle")}
             </Text>
           </div>
           {cloud && authUrl && (
@@ -86,7 +88,7 @@ const Page = async (props: {
               <div className="flex items-center w-full my-4">
                 <div className="grow border-t border-border-01" />
                 <Text as="p" mainUiMuted text03 className="mx-2">
-                  or
+                  {t("or")}
                 </Text>
                 <div className="grow border-t border-border-01" />
               </div>
