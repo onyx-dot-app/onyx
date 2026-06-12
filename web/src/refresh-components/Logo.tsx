@@ -10,6 +10,7 @@ import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { useMemo } from "react";
 import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
+import { useTranslations } from "next-intl";
 
 export interface LogoProps {
   folded?: boolean;
@@ -28,6 +29,7 @@ export default function Logo({
 }: LogoProps) {
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
   const settings = useSettingsContext();
+  const t = useTranslations("brand");
   const logoDisplayStyle = settings.enterpriseSettings?.logo_display_style;
   const applicationName = settings.enterpriseSettings?.application_name;
 
@@ -90,7 +92,7 @@ export default function Logo({
                   className={"line-clamp-1 truncate"}
                   nowrap
                 >
-                  Powered by Onyx
+                  {t("poweredBy")}
                 </Text>
               )}
           </div>
