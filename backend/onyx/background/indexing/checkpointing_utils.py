@@ -116,6 +116,9 @@ def get_latest_valid_checkpoint(
                 # if the background job was killed (and thus the attempt was canceled)
                 # we still want to use the checkpoint so that we can pick up where we left off
                 or candidate.status == IndexingStatus.CANCELED
+                # the watchdog marks INTERRUPTED on pod death so the next
+                # attempt can resume from the checkpoint we saved
+                or candidate.status == IndexingStatus.INTERRUPTED
             )
             and candidate.checkpoint_pointer is not None
             # NOTE: There are a couple connectors that may make progress but not have

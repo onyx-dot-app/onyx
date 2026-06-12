@@ -449,6 +449,66 @@ def mark_attempt_failed(
         raise
 
 
+def mark_attempt_interrupted(
+    index_attempt_id: int,
+    db_session: Session,
+    reason: str = "Worker died before attempt could complete",
+) -> None:
+    """Mark an attempt as INTERRUPTED — distinct from FAILED so the scheduler
+    retries immediately and the attempt isn't counted toward the repeated-error
+    auto-pause. Used by the heartbeat watchdog when a docfetching pod dies and
+    a checkpoint exists for the next attempt to resume from.
+    """
+    try:
+        attempt = db_session.execute(
+            select(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+        ).scalar_one()
+
+        # The watchdog reads attempt status without a lock before calling this
+        # function, so by the time we acquire the row lock the attempt may
+        # have already transitioned to a terminal state (e.g. the worker
+        # completed and called mark_attempt_succeeded). Overwriting a
+        # successful attempt with INTERRUPTED would trigger an unnecessary
+        # scheduler retry, so bail out if we're no longer IN_PROGRESS.
+        if attempt.status != IndexingStatus.IN_PROGRESS:
+            logger.info(
+                "Skipping INTERRUPTED marking for attempt %s: status is %s",
+                index_attempt_id,
+                attempt.status.value,
+            )
+            db_session.rollback()
+            return
+
+        if not attempt.time_started:
+            attempt.time_started = datetime.now(timezone.utc)
+        attempt.status = IndexingStatus.INTERRUPTED
+        attempt.error_msg = reason
+        attempt.celery_task_id = None
+        db_session.commit()
+
+        optional_telemetry(
+            record_type=RecordType.INDEX_ATTEMPT_STATUS,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "status": IndexingStatus.INTERRUPTED.value,
+                "cc_pair_id": attempt.connector_credential_pair_id,
+            },
+        )
+        try:
+            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+        except Exception:
+            logger.debug(
+                "Failed to clean up docprocessing counters for attempt %s",
+                index_attempt_id,
+                exc_info=True,
+            )
+    except Exception:
+        db_session.rollback()
+        raise
+
+
 def update_docs_indexed(
     db_session: Session,
     index_attempt_id: int,
