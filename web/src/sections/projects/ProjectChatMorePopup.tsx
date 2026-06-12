@@ -19,8 +19,8 @@ import { Button } from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { SvgFolder, SvgFolderIn, SvgShare, SvgTrash } from "@opal/icons";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
-const DEFAULT_PERSONA_ID = 0;
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
 
 interface ProjectChatMorePopupProps {
@@ -61,7 +61,7 @@ export function ProjectChatMorePopup({
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
 
-  const isChatUsingDefaultAgent = chatSession.persona_id === DEFAULT_PERSONA_ID;
+  const isChatUsingDefaultAgent = chatSession.persona_id === DEFAULT_AGENT_ID;
 
   const [showMoveOptions, setShowMoveOptions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
