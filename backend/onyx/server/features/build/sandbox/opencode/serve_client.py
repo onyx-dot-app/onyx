@@ -24,13 +24,13 @@ from typing import cast
 
 import httpx
 
-from onyx.server.features.build.api.packets import SubagentStartedPacket
 from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
+from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import Error

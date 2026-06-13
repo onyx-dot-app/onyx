@@ -5,21 +5,31 @@ from datetime import timedelta
 from datetime import timezone
 from typing import Literal
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.db.models import User
 from onyx.feature_flags.factory import get_default_feature_flag_provider
-from onyx.server.features.build.api.models import RateLimitResponse
-from onyx.server.features.build.api.subscription_check import is_user_subscribed
 from onyx.server.features.build.configs import CRAFT_PAID_USER_RATE_LIMIT
 from onyx.server.features.build.db.rate_limit import count_user_messages_in_window
 from onyx.server.features.build.db.rate_limit import count_user_messages_total
 from onyx.server.features.build.db.rate_limit import get_oldest_message_timestamp
+from onyx.server.features.build.subscription_check import is_user_subscribed
 from onyx.server.features.build.utils import CRAFT_HAS_USAGE_LIMITS
 from shared_configs.configs import MULTI_TENANT
 
 # Default limit for free/non-subscribed users (not configurable)
 FREE_USER_RATE_LIMIT = 5
+
+
+class RateLimitResponse(BaseModel):
+    """Rate limit information."""
+
+    is_limited: bool
+    limit_type: str  # "weekly" or "total"
+    messages_used: int
+    limit: int
+    reset_timestamp: str | None = None
 
 
 def _should_skip_rate_limiting(user: User) -> bool:
