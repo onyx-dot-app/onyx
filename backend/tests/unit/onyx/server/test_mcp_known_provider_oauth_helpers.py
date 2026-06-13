@@ -8,8 +8,12 @@ from mcp.shared.auth import OAuthClientInformationFull
 
 from onyx.auth.oauth_token_manager import build_oauth_authorization_url
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
+from onyx.auth.oauth_token_manager import exchange_refresh_token
+from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.base import TokenRefreshTerminalError
+from onyx.external_apps.providers.base import TokenRefreshTransientError
 from onyx.server.features.mcp.api import _mcp_known_provider_flow_params
 
 
@@ -139,3 +143,90 @@ def test_known_provider_code_exchange_sends_code_verifier(
     assert "expires_at" in token_payload
     assert captured["data"]["code_verifier"] == "verifier-123"
     assert captured["data"]["client_secret"] == "secret-123"
+
+
+def _patch_refresh_post(
+    monkeypatch: pytest.MonkeyPatch, body: dict[str, object], *, status: int = 200
+) -> dict[str, dict[str, str]]:
+    captured: dict[str, dict[str, str]] = {}
+
+    class _Response:
+        status_code = status
+
+        @staticmethod
+        def json() -> dict[str, object]:
+            return body
+
+    def _fake_post(url: str, data: dict[str, str], **kwargs: object) -> _Response:
+        del url, kwargs
+        captured["data"] = data
+        return _Response()
+
+    monkeypatch.setattr("onyx.auth.oauth_token_manager.requests.post", _fake_post)
+    monkeypatch.setattr(
+        "onyx.auth.oauth_token_manager.validate_oauth_endpoint_url",
+        lambda url: None,  # noqa: ARG005
+    )
+    return captured
+
+
+def _refresh_params() -> OAuthFlowParams:
+    return _mcp_known_provider_flow_params(
+        _make_mcp_server_stub(), _make_client_info_stub()
+    )
+
+
+def test_exchange_refresh_token_computes_expiry_and_sends_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _patch_refresh_post(
+        monkeypatch,
+        {"access_token": "fresh", "token_type": "Bearer", "expires_in": 3600},
+    )
+    result = exchange_refresh_token(_refresh_params(), "refresh-old")
+    assert result["access_token"] == "fresh"
+    assert "expires_at" in result  # computed from expires_in
+    assert captured["data"]["grant_type"] == "refresh_token"
+    assert captured["data"]["refresh_token"] == "refresh-old"
+    assert captured["data"]["client_secret"] == "secret-123"
+
+
+def test_exchange_refresh_token_preserves_refresh_token_when_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_refresh_post(monkeypatch, {"access_token": "fresh", "token_type": "Bearer"})
+    # Provider didn't rotate the refresh token → carry the incoming one forward.
+    assert (
+        exchange_refresh_token(_refresh_params(), "refresh-old")["refresh_token"]
+        == "refresh-old"
+    )
+
+
+def test_exchange_refresh_token_uses_rotated_refresh_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_refresh_post(
+        monkeypatch,
+        {"access_token": "fresh", "token_type": "Bearer", "refresh_token": "rotated"},
+    )
+    assert (
+        exchange_refresh_token(_refresh_params(), "refresh-old")["refresh_token"]
+        == "rotated"
+    )
+
+
+def test_exchange_refresh_token_dead_grant_is_terminal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_refresh_post(monkeypatch, {"error": "invalid_grant"}, status=400)
+    with pytest.raises(TokenRefreshTerminalError):
+        exchange_refresh_token(_refresh_params(), "refresh-old")
+
+
+def test_exchange_refresh_token_other_4xx_is_transient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # invalid_client is a misconfig, not a dead grant — reconnecting wouldn't fix it.
+    _patch_refresh_post(monkeypatch, {"error": "invalid_client"}, status=400)
+    with pytest.raises(TokenRefreshTransientError):
+        exchange_refresh_token(_refresh_params(), "refresh-old")
