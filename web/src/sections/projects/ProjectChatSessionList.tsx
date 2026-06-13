@@ -34,7 +34,6 @@ import type { IconFunctionComponent } from "@opal/types";
 import { noProp } from "@/lib/utils";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
@@ -130,29 +129,32 @@ function ProjectChatItem({
   const popoverItems = useMemo(() => {
     if (!showMoveOptions) {
       return [
-        <LineItem
+        <LineItemButton
           key="move"
+          sizePreset="main-ui"
+          rounding="sm"
           icon={SvgFolderIn}
+          title="Move to Project"
           onClick={noProp(() => setShowMoveOptions(true))}
-        >
-          Move to Project
-        </LineItem>,
-        <LineItem
+        />,
+        <LineItemButton
           key="remove"
+          sizePreset="main-ui"
+          rounding="sm"
           icon={SvgFolder}
+          title={`Remove from ${projects.find((p) => p.id === projectId)?.name ?? "Project"}`}
           onClick={noProp(handleRemoveFromProject)}
-        >
-          {`Remove from ${projects.find((p) => p.id === projectId)?.name ?? "Project"}`}
-        </LineItem>,
+        />,
         null,
-        <LineItem
+        <LineItemButton
           key="delete"
+          sizePreset="main-ui"
+          rounding="sm"
+          color="danger"
           icon={SvgTrash}
+          title="Delete"
           onClick={noProp(() => setIsDeleteModalOpen(true))}
-          danger
-        >
-          Delete
-        </LineItem>,
+        />,
       ];
     }
     return [
@@ -164,15 +166,16 @@ function ProjectChatItem({
       ...filteredProjects
         .filter((candidate) => candidate.id !== projectId)
         .map((target) => (
-          <LineItem
+          <LineItemButton
             key={target.id}
+            sizePreset="main-ui"
+            rounding="sm"
             icon={SvgFolder}
+            title={target.name}
             onClick={noProp(() =>
               handleMoveChatSession({ id: target.id, label: target.name })
             )}
-          >
-            {target.name}
-          </LineItem>
+          />
         )),
     ];
   }, [

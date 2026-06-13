@@ -163,7 +163,10 @@ export default function ProjectContextPanel({
           }
         />
 
-        <div className="flex flex-col gap-2">
+        <div
+          className="flex flex-col gap-2"
+          {...getRootProps({ onClick: (e) => e.stopPropagation() })}
+        >
           <ContentAction
             sizePreset="main-ui"
             variant="section"
