@@ -291,9 +291,7 @@ export default function ProjectChatSessionList() {
   if (!currentProjectId) return null;
 
   return (
-    <div className="flex flex-col gap-6 mx-auto">
-      <div />
-
+    <div className="flex flex-col gap-6 pt-6 mx-auto">
       <div>
         <div className="px-3 py-2">
           <Text as="p" font="secondary-body" color="text-02">
