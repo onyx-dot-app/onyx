@@ -78,6 +78,19 @@ def test_to_user_response_bad_user_creds_sets_credential_error() -> None:
     assert resp.authenticated is False
 
 
+def test_to_user_response_bad_org_creds_sets_credential_error() -> None:
+    """Bad org blob, no user row → credential_error True; org pre-fill degrades
+    to empty so the template placeholder becomes required."""
+    app = _make_app(
+        org_creds=_bad_sensitive(),
+        auth_template={"Authorization": "Bearer {token}"},
+    )
+    resp = _to_user_response(app, user_cred=None)
+    assert resp.credential_error is True
+    assert resp.authenticated is False
+    assert resp.credential_keys == ["token"]
+
+
 def test_to_user_response_good_creds_no_credential_error() -> None:
     """Good org creds, good user blob with required key → no error, authenticated."""
     app = _make_app(

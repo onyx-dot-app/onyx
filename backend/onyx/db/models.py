@@ -168,10 +168,16 @@ class _EncryptedBase(TypeDecorator):
     def compare_values(self, x: Any, y: Any) -> bool:
         if x is None or y is None:
             return x == y
-        if isinstance(x, SensitiveValue):
-            x = x.get_value(apply_mask=False)
-        if isinstance(y, SensitiveValue):
-            y = y.get_value(apply_mask=False)
+        # An undecryptable stored value (e.g. ENCRYPTION_KEY_SECRET changed)
+        # must compare as "changed" so the overwriting UPDATE is emitted at
+        # flush instead of raising.
+        try:
+            if isinstance(x, SensitiveValue):
+                x = x.get_value(apply_mask=False)
+            if isinstance(y, SensitiveValue):
+                y = y.get_value(apply_mask=False)
+        except ValueError:
+            return False
         return x == y
 
 

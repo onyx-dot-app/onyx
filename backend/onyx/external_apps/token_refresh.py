@@ -16,9 +16,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.external_app import decrypt_credentials_or_empty
 from onyx.db.external_app import delete_external_app_user_credential
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_app_user_credential
+from onyx.db.external_app import try_decrypt_credentials
 from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.models import ExternalApp
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
@@ -169,18 +171,29 @@ def _load_refresh_inputs(
 def _read_stored_credentials(
     db: Session, external_app_id: int, user_id: UUID
 ) -> dict[str, Any] | None:
-    """The user's stored credential dict for an app, or None if unset."""
+    """The user's stored credential dict for an app, or None if unset.
+
+    A broken blob also reads as None — there's no token to refresh.
+    """
     user_cred = get_external_app_user_credential(
         db, external_app_id=external_app_id, user_id=user_id
     )
     if user_cred is None:
         return None
-    return user_cred.user_credentials.get_value(apply_mask=False)
+    return try_decrypt_credentials(
+        user_cred.user_credentials,
+        apply_mask=False,
+        context=f"user credentials for external app {external_app_id}",
+    )
 
 
 def _client_credentials(app: ExternalApp) -> tuple[str, str] | None:
     """The app's OAuth client_id/client_secret, or None if an admin hasn't set them."""
-    org_credentials = app.organization_credentials.get_value(apply_mask=False)
+    org_credentials = decrypt_credentials_or_empty(
+        app.organization_credentials,
+        apply_mask=False,
+        context=f"organization credentials for external app {app.id}",
+    )
     client_id = org_credentials.get("client_id")
     client_secret = org_credentials.get("client_secret")
     if not client_id or not client_secret:
