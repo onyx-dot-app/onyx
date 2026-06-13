@@ -78,7 +78,7 @@
     "lucide-react": "^1.16.0",
     "mdast-util-find-and-replace": "^3.0.1",
     "mime": "^4.1.0",
-    "motion": "^12.29.0",
+    "motion": "^12.40.0",
     "next": "16.2.6",
     "next-themes": "^0.4.4",
     "postcss": "^8.5.10",
