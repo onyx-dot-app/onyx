@@ -57,7 +57,6 @@
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@sentry/nextjs": "^10.54.0",
-    "@sentry/tracing": "^7.120.3",
     "@stripe/stripe-js": "^4.6.0",
     "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.0",
