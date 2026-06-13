@@ -116,12 +116,27 @@ export async function approveRequest(email: string): Promise<void> {
   }
 }
 
+const INVITE_REQUEST_TIMEOUT_MS = 30_000;
+
 export async function inviteUsers(emails: string[]): Promise<void> {
-  const res = await fetch("/api/manage/admin/users", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ emails }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/manage/admin/users", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emails }),
+      // Seat enforcement can stall server-side (control-plane + Stripe round
+      // trips under a tenant lock); bound the wait so the failure surfaces.
+      signal: AbortSignal.timeout(INVITE_REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "TimeoutError") {
+      throw new Error(
+        "The invite request timed out. The invites may still be processing — check the user list before retrying."
+      );
+    }
+    throw err;
+  }
   if (!res.ok) {
     throw new Error(await parseErrorDetail(res, "Failed to invite users"));
   }
