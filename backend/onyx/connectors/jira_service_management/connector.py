@@ -11,7 +11,6 @@ from onyx.configs.app_configs import JIRA_SLIM_PAGE_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import IndexingHeartbeatInterface
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorCheckpoint
@@ -32,20 +31,22 @@ class JiraServiceManagementConnector(
 ):
     def __init__(self, **kwargs: Any) -> None:
         self.jira_url = kwargs.get("jira_url", "").strip().rstrip("/")
-        self.jira_user_email = kwargs.get("jira_user_email", "").strip()
-        self.jira_api_token = kwargs.get("jira_api_token", "").strip()
         self.service_desk_id = kwargs.get("service_desk_id", "").strip()
 
-        if not self.jira_url or not self.jira_user_email or not self.jira_api_token:
-            raise ConnectorMissingCredentialError(
-                "Missing required credentials (jira_url, jira_user_email, jira_api_token) for JSM."
-            )
+        if not self.jira_url:
+            raise ConnectorMissingCredentialError("JiraServiceManagement")
 
         # Enforce clean base URL structure
         if not self.jira_url.startswith(("http://", "https://")):
             self.jira_url = f"https://{self.jira_url}"
 
-        self.auth = HTTPBasicAuth(self.jira_user_email, self.jira_api_token)
+        # Initialize credentials from kwargs if present (helps unit tests)
+        self.jira_user_email = kwargs.get("jira_user_email", "").strip()
+        self.jira_api_token = kwargs.get("jira_api_token", "").strip()
+        self.auth = None
+        if self.jira_user_email and self.jira_api_token:
+            self.auth = HTTPBasicAuth(self.jira_user_email, self.jira_api_token)
+
         self.headers = {
             "Accept": "application/json",
             "X-ExperimentalApi": "opt-in",  # Required for certain advanced JSM service desk endpoints
@@ -55,10 +56,14 @@ class JiraServiceManagementConnector(
     def source(self) -> DocumentSource:
         return DocumentSource.JIRA_SERVICE_MANAGEMENT
 
-    def load_credentials(
-        self, credentials: dict[str, Any]
-    ) -> "JiraServiceManagementConnector":
-        return JiraServiceManagementConnector(**credentials)
+    def load_credentials(self, credentials: dict[str, Any]) -> None:
+        self.jira_user_email = credentials.get("jira_user_email", "").strip()
+        self.jira_api_token = credentials.get("jira_api_token", "").strip()
+
+        if not self.jira_user_email or not self.jira_api_token:
+            raise ConnectorMissingCredentialError("JiraServiceManagement")
+
+        self.auth = HTTPBasicAuth(self.jira_user_email, self.jira_api_token)
 
     def _get_service_desks(self) -> list[str]:
         """Fetches target service desk IDs or discovers all accessible desks."""
@@ -138,10 +143,9 @@ class JiraServiceManagementConnector(
                 )
                 raise e
 
-    @override
     def retrieve_all_slim_docs(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> Generator[GenerateSlimDocumentOutput, None, None]:
+    ) -> Generator[SlimDocument | ConnectorFailure, None, None]:
         service_desks = self._get_service_desks()
 
         for sd_id in service_desks:
@@ -152,9 +156,9 @@ class JiraServiceManagementConnector(
                         if not req_key:
                             continue
 
-                        # Extract timestamp verification fields safely
-                        created_data = req.get("createdDate", {})
-                        epoch_ms = created_data.get("epochMillis")
+                        # Extract timestamp verification fields safely (using updatedDate as identified by greptile)
+                        updated_data = req.get("updatedDate", {})
+                        epoch_ms = updated_data.get("epochMillis")
 
                         if epoch_ms:
                             updated_ts = int(epoch_ms / 1000)
@@ -210,7 +214,6 @@ class JiraServiceManagementConnector(
 
         return comments
 
-    @override
     def retrieve_docs(
         self,
         slim_docs: list[SlimDocument],
