@@ -10,6 +10,8 @@ on:
     - cron: "30 10 * * *"
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   nightly-external-dependency-unit-tests:
     # Runs every test under backend/tests/external_dependency_unit marked
@@ -25,7 +27,7 @@ jobs:
       contents: read
       id-token: write # Required for OIDC-based AWS credential exchange
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -59,6 +61,8 @@ jobs:
     runs-on: ubuntu-slim
     environment: ci-protected
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd

@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Onyx",
+    "slug": "mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "onyx",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "app.onyx.mobile",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "app.onyx.mobile",
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#208AEF",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 120
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "buildReactNativeFromSource": true
+          },
+          "android": {
+            "kotlinVersion": "2.1.20"
+          }
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

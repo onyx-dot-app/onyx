@@ -237,6 +237,7 @@ def fetch_rendered_html(
     *,
     navigation_timeout_ms: int = DEFAULT_NAVIGATION_TIMEOUT_MS,
     bot_challenge_grace_ms: int = DEFAULT_BOT_CHALLENGE_GRACE_MS,
+    allow_private_network: bool = False,
 ) -> RenderedPage | None:
     """Render a single URL via headless Chromium and return the final HTML.
 
@@ -245,6 +246,10 @@ def fetch_rendered_html(
     one-shot fetches where bot-detection mitigation is needed; not the
     right tool for high-volume crawling (use a long-lived `BrowserContext`
     via `start_playwright()` instead).
+
+    When ``allow_private_network`` is True, the private-IP guard is skipped
+    so operators on trusted networks can render URLs that resolve to RFC1918
+    addresses. Scheme/credential/blocked-hostname checks still apply.
 
     Returns:
         RenderedPage on success, or None if navigation failed entirely
@@ -258,7 +263,11 @@ def fetch_rendered_html(
     # small TOCTOU window between validation and the actual navigation, the
     # same window that ssrf_safe_get accepts for HTTPS URLs.
     try:
-        validate_outbound_http_url(url)
+        validate_outbound_http_url(
+            url,
+            allow_private_network=allow_private_network,
+            block_loopback_and_link_local=True,
+        )
     except (SSRFException, ValueError) as exc:
         logger.warning(
             "Refusing Playwright fallback for %s (%s)", url, exc.__class__.__name__

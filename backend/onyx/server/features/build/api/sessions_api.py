@@ -1,6 +1,10 @@
 """API endpoints for Build Mode session management."""
 
+import json
+import time
+from collections.abc import Generator
 from datetime import datetime
+from datetime import timezone
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -9,15 +13,18 @@ from fastapi import File
 from fastapi import HTTPException
 from fastapi import Response
 from fastapi import UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
+from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.models import BuildMessage
 from onyx.db.models import User
 from onyx.db.scheduled_task import get_scheduled_run_context
@@ -26,9 +33,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import ArtifactResponse
 from onyx.server.features.build.api.models import DetailedSessionResponse
-from onyx.server.features.build.api.models import DirectoryListing
-from onyx.server.features.build.api.models import GenerateSuggestionsRequest
-from onyx.server.features.build.api.models import GenerateSuggestionsResponse
 from onyx.server.features.build.api.models import PptxPreviewResponse
 from onyx.server.features.build.api.models import PreProvisionedCheckResponse
 from onyx.server.features.build.api.models import SessionCreateRequest
@@ -38,24 +42,28 @@ from onyx.server.features.build.api.models import SessionResponse
 from onyx.server.features.build.api.models import SessionUpdateRequest
 from onyx.server.features.build.api.models import SetSessionSharingRequest
 from onyx.server.features.build.api.models import SetSessionSharingResponse
-from onyx.server.features.build.api.models import SuggestionBubble
-from onyx.server.features.build.api.models import SuggestionTheme
 from onyx.server.features.build.api.models import UploadResponse
 from onyx.server.features.build.api.models import WebappInfo
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
+from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_session
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
-from onyx.server.features.build.sandbox import get_sandbox_manager
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.models import DirectoryListing
+from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.features.build.session.manager import UploadLimitExceededError
+from onyx.server.features.build.session.sandbox_lifecycle import (
+    snapshot_opencode_history_before_recovery,
+)
+from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
 from onyx.server.features.build.utils import sanitize_filename
 from onyx.server.features.build.utils import validate_file
+from onyx.skills.push import build_user_skills_payload
+from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -132,10 +140,9 @@ def create_session(
         session_manager = SessionManager(db_session)
         build_session = session_manager.get_or_create_empty_session(
             user.id,
-            user_work_area=request.user_work_area,
-            user_level=request.user_level,
             llm_provider_type=request.llm_provider_type,
             llm_model_name=request.llm_model_name,
+            headless=request.headless,
         )
         db_session.commit()
 
@@ -144,6 +151,11 @@ def create_session(
         return DetailedSessionResponse.from_session_response(
             base_response, session_loaded_in_sandbox=True
         )
+    except OnyxError:
+        # e.g. no provider exposes a supported model; let the global handler
+        # return its own status code instead of collapsing to 429/500.
+        db_session.rollback()
+        raise
     except ValueError as e:
         logger.exception("Session creation failed")
         db_session.rollback()
@@ -245,41 +257,6 @@ def generate_session_name(
     return SessionNameGenerateResponse(name=generated_name)
 
 
-@router.post(
-    "/{session_id}/generate-suggestions", response_model=GenerateSuggestionsResponse
-)
-def generate_suggestions(
-    session_id: UUID,
-    request: GenerateSuggestionsRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> GenerateSuggestionsResponse:
-    """Generate follow-up suggestions based on the first exchange in a session."""
-    session_manager = SessionManager(db_session)
-
-    # Verify session exists and belongs to user
-    session = session_manager.get_session(session_id, user.id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    # Generate suggestions
-    suggestions_data = session_manager.generate_followup_suggestions(
-        user_message=request.user_message,
-        assistant_message=request.assistant_message,
-    )
-
-    # Convert to response model
-    suggestions = [
-        SuggestionBubble(
-            theme=SuggestionTheme(item["theme"]),
-            text=item["text"],
-        )
-        for item in suggestions_data
-    ]
-
-    return GenerateSuggestionsResponse(suggestions=suggestions)
-
-
 @router.put("/{session_id}/name", response_model=SessionResponse)
 def update_session_name(
     session_id: UUID,
@@ -337,6 +314,9 @@ def delete_session(
         if not success:
             raise HTTPException(status_code=404, detail="Session not found")
         db_session.commit()
+    except OnyxError:
+        db_session.rollback()
+        raise
     except HTTPException:
         # Re-raise HTTP exceptions (like 404) without rollback
         raise
@@ -362,18 +342,9 @@ def restore_session(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> DetailedSessionResponse:
-    """Restore sandbox and load session snapshot. Blocks until complete.
-
-    Uses Redis lock to ensure only one restore runs per sandbox at a time.
-    If another restore is in progress, waits for it to complete.
-
-    Handles two cases:
-    1. Sandbox is SLEEPING: Re-provision pod, then load session snapshot
-    2. Sandbox is RUNNING but session not loaded: Just load session snapshot
-
-    Returns immediately if session workspace already exists in pod.
-    Always returns session_loaded_in_sandbox=True on success.
-    """
+    """Restore the sandbox (re-provisioning if asleep) and load the session
+    workspace. Serialized per-sandbox via a Redis lock; returns 409 if another
+    restore holds it."""
     session = get_build_session(session_id, user.id, db_session)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -382,17 +353,14 @@ def restore_session(
     if not sandbox:
         raise HTTPException(status_code=404, detail="Sandbox not found")
 
-    # If sandbox is already running, check if session workspace exists
     sandbox_manager = get_sandbox_manager()
     tenant_id = get_current_tenant_id()
 
-    # Need to do some work - acquire Redis lock
     redis_client = get_redis_client(tenant_id=tenant_id)
     lock_key = f"sandbox_restore:{sandbox.id}"
     lock = redis_client.lock(lock_key, timeout=RESTORE_LOCK_TIMEOUT_SECONDS)
 
-    # Non-blocking: if another restore is already running, return 409 immediately
-    # instead of making the user wait. The frontend will retry.
+    # 409 instead of blocking — the frontend retries.
     acquired = lock.acquire(blocking=False)
     if not acquired:
         raise HTTPException(
@@ -401,11 +369,8 @@ def restore_session(
         )
 
     try:
-        # Re-fetch sandbox status (may have changed while waiting for lock)
         db_session.refresh(sandbox)
 
-        # Also re-check if session workspace exists (another request may have
-        # restored it while we were waiting)
         if sandbox.status == SandboxStatus.RUNNING:
             is_healthy = sandbox_manager.health_check(sandbox.id, timeout=10.0)
             if is_healthy and sandbox_manager.session_workspace_exists(
@@ -423,22 +388,22 @@ def restore_session(
                     "Sandbox %s marked as RUNNING but pod is unhealthy/missing. Entering recovery mode.",
                     sandbox.id,
                 )
-                # Terminate to clean up any lingering K8s resources
+                snapshot_opencode_history_before_recovery(
+                    sandbox_manager, sandbox.id, tenant_id
+                )
                 sandbox_manager.terminate(sandbox.id)
-
                 update_sandbox_status__no_commit(
                     db_session, sandbox.id, SandboxStatus.TERMINATED
                 )
                 db_session.commit()
                 db_session.refresh(sandbox)
-                # Fall through to TERMINATED handling below
 
-        session_manager = SessionManager(db_session)
-        llm_config = session_manager._get_llm_config(None, None)
+        llm_config, all_llm_configs = SessionManager(db_session).build_llm_configs(user)
 
         if sandbox.status in (SandboxStatus.SLEEPING, SandboxStatus.TERMINATED):
-            # Mark as PROVISIONING before the long-running provision() call
-            # so other requests know work is in progress
+            # Mint the PAT before flipping to PROVISIONING so a failure is retriable.
+            onyx_pat = ensure_sandbox_pat(db_session, sandbox, user)
+
             update_sandbox_status__no_commit(
                 db_session, sandbox.id, SandboxStatus.PROVISIONING
             )
@@ -449,32 +414,30 @@ def restore_session(
                 user_id=user.id,
                 tenant_id=tenant_id,
                 llm_config=llm_config,
+                onyx_pat=onyx_pat,
+                all_llm_configs=all_llm_configs,
             )
 
-            # Mark as RUNNING after successful provision
             update_sandbox_status__no_commit(
                 db_session, sandbox.id, SandboxStatus.RUNNING
             )
             db_session.commit()
 
-        # 2. Check if session workspace needs to be loaded
         if sandbox.status == SandboxStatus.RUNNING:
             workspace_exists = sandbox_manager.session_workspace_exists(
                 sandbox.id, session_id
             )
 
             if not workspace_exists:
-                # Allocate port if not already set (needed for both snapshot restore and fresh setup)
                 if not session.nextjs_port:
                     session.nextjs_port = allocate_nextjs_port(db_session)
-                    # Commit port allocation before long-running operations
                     db_session.commit()
 
-                # Only Kubernetes backend supports snapshot restoration
-                snapshot = None
-                if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
-                    snapshot = get_latest_snapshot_for_session(db_session, session_id)
+                snapshot = get_latest_snapshot_for_session(db_session, session_id)
 
+                skills_section, skills_files = build_user_skills_payload(
+                    user, db_session
+                )
                 if snapshot:
                     try:
                         sandbox_manager.restore_snapshot(
@@ -484,6 +447,7 @@ def restore_session(
                             tenant_id=tenant_id,
                             nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
+                            skills_section=skills_section,
                         )
                         session.status = BuildSessionStatus.ACTIVE
                         db_session.commit()
@@ -495,17 +459,26 @@ def restore_session(
                         db_session.commit()
                         raise
                 else:
-                    # No snapshot - set up fresh workspace
                     sandbox_manager.setup_session_workspace(
                         sandbox_id=sandbox.id,
                         session_id=session_id,
                         llm_config=llm_config,
                         nextjs_port=session.nextjs_port,
+                        skills_section=skills_section,
                     )
                     session.status = BuildSessionStatus.ACTIVE
                     db_session.commit()
 
-                session_manager.push_dynamic_skills(sandbox.id, user.id)
+                try:
+                    hydrate_sandbox_skills(
+                        sandbox.id, user, db_session, files=skills_files
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to push skills to sandbox %s",
+                        sandbox.id,
+                        exc_info=True,
+                    )
         else:
             logger.warning(
                 "Sandbox %s status is %s after re-provision, expected RUNNING",
@@ -515,6 +488,39 @@ def restore_session(
 
     except Exception as e:
         logger.error("Failed to restore session %s: %s", session_id, e, exc_info=True)
+        # Recover so the next attempt isn't blocked by a half-finished state.
+        try:
+            db_session.rollback()
+            stuck = get_sandbox_by_user_id(db_session, user.id)
+            if stuck is not None and stuck.status == SandboxStatus.PROVISIONING:
+                # provision() failed — back to SLEEPING so it isn't stuck.
+                update_sandbox_status__no_commit(
+                    db_session, stuck.id, SandboxStatus.SLEEPING
+                )
+                db_session.commit()
+                logger.info(
+                    "Rolled sandbox %s back to SLEEPING after failed restore",
+                    stuck.id,
+                )
+            elif stuck is not None and stuck.status == SandboxStatus.RUNNING:
+                # Workspace load failed after provision — drop the partial dir
+                # so session_workspace_exists() doesn't later report it restored.
+                failed_session = get_build_session(session_id, user.id, db_session)
+                failed_port = (
+                    failed_session.nextjs_port if failed_session is not None else None
+                )
+                sandbox_manager.cleanup_session_workspace(
+                    stuck.id, session_id, failed_port
+                )
+                logger.info(
+                    "Cleaned up partial workspace for session %s after failed restore",
+                    session_id,
+                )
+        except Exception as rollback_err:
+            logger.warning(
+                "Failed to recover sandbox state after restore failure: %s",
+                rollback_err,
+            )
         raise HTTPException(
             status_code=500,
             detail=f"Failed to restore session: {e}",
@@ -824,8 +830,8 @@ def upload_file_endpoint(
     # Read file content (use sync file interface)
     content = file.file.read()
 
-    # Validate file (extension, mime type, size)
-    is_valid, error = validate_file(file.filename, file.content_type, len(content))
+    # Validate file size (extension/type are intentionally unrestricted)
+    is_valid, error = validate_file(len(content))
     if not is_valid:
         raise HTTPException(status_code=400, detail=error)
 
@@ -899,9 +905,12 @@ class ScheduledRunContextResponse(BaseModel):
     scheduled run. Returned by ``GET /sessions/{id}/scheduled-run-context``.
     """
 
+    run_id: str
     task_id: str
     task_name: str
+    status: ScheduledTaskRunStatus
     started_at: datetime
+    finished_at: datetime | None
 
 
 @router.get("/{session_id}/scheduled-run-context")
@@ -913,8 +922,8 @@ def get_session_scheduled_run_context(
     """Return the scheduled-task context for a session, if any.
 
     The web UI calls this on every session view; a 200 response means
-    "render the banner above the transcript and hide the chat input". A
-    404 means "this is an interactive session, behave normally".
+    "render the banner above the transcript and apply scheduled-run state".
+    A 404 means "this is an interactive session, behave normally".
     """
     context = get_scheduled_run_context(
         db_session=db_session,
@@ -924,7 +933,120 @@ def get_session_scheduled_run_context(
     if context is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session has no scheduled-run context")
     return ScheduledRunContextResponse(
+        run_id=str(context["run_id"]),
         task_id=str(context["task_id"]),
         task_name=context["task_name"],
+        status=context["status"],
         started_at=context["started_at"],
+        finished_at=context["finished_at"],
+    )
+
+
+LIVE_STREAM_READY_POLL_SECONDS = 1.0
+LIVE_STREAM_KEEPALIVE_SECONDS = 15.0
+
+
+def _scheduled_run_is_running(
+    *,
+    db_session: Session,
+    session_id: UUID,
+    user_id: UUID,
+) -> bool:
+    context = get_scheduled_run_context(
+        db_session=db_session,
+        session_id=session_id,
+        user_id=user_id,
+    )
+    return context is not None and context["status"] == ScheduledTaskRunStatus.RUNNING
+
+
+def _format_stream_error(detail: str) -> str:
+    payload = {
+        "type": "error",
+        "message": detail,
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+    }
+    return f"event: message\ndata: {json.dumps(payload)}\n\n"
+
+
+@router.get("/{session_id}/scheduled-run-events")
+def get_session_scheduled_run_events(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """Stream live ACP events for a running scheduled-origin Craft session."""
+    context = get_scheduled_run_context(
+        db_session=db_session,
+        session_id=session_id,
+        user_id=user.id,
+    )
+    if context is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session has no scheduled-run context")
+    if context["status"] != ScheduledTaskRunStatus.RUNNING:
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Scheduled run is not running")
+
+    user_id = user.id
+
+    def stream_generator() -> Generator[str, None, None]:
+        # The executor links ScheduledTaskRun.session_id just before it resolves
+        # and persists BuildSession.opencode_session_id. Keep the HTTP stream
+        # alive during that short handoff so a fast click from the run table can
+        # attach without a visible error.
+        while True:
+            with get_session_with_current_tenant() as stream_db_session:
+                if not _scheduled_run_is_running(
+                    db_session=stream_db_session,
+                    session_id=session_id,
+                    user_id=user_id,
+                ):
+                    return
+
+                session = get_build_session(session_id, user_id, stream_db_session)
+                if session is None:
+                    yield _format_stream_error("Session not found")
+                    return
+                if session.opencode_session_id:
+                    break
+
+            yield SSE_KEEPALIVE
+            time.sleep(LIVE_STREAM_READY_POLL_SECONDS)
+
+        try:
+            with get_session_with_current_tenant() as stream_db_session:
+                session_manager = SessionManager(stream_db_session)
+                for chunk in session_manager.subscribe_to_existing_session_events(
+                    session_id,
+                    user_id,
+                    keepalive_seconds=LIVE_STREAM_KEEPALIVE_SECONDS,
+                ):
+                    yield chunk
+                    stream_db_session.expire_all()
+                    if not _scheduled_run_is_running(
+                        db_session=stream_db_session,
+                        session_id=session_id,
+                        user_id=user_id,
+                    ):
+                        return
+        except GeneratorExit:
+            logger.info(
+                "Scheduled run live stream disconnected for session %s", session_id
+            )
+            raise
+        except OnyxError as exc:
+            yield _format_stream_error(exc.detail)
+        except Exception as exc:
+            logger.exception(
+                "Scheduled run live stream failed for session %s", session_id
+            )
+            yield _format_stream_error(str(exc))
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

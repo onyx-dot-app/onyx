@@ -23,7 +23,7 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/lib/agents/hooks";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import { useUser } from "@/providers/UserProvider";
-import NoAgentModal from "@/components/modals/NoAgentModal";
+import NoAgentModal from "@/sections/modals/NoAgentModal";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import Modal from "@/refresh-components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
@@ -64,21 +64,18 @@ import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
 import { OnboardingStep } from "@/interfaces/onboarding";
 import { useShowOnboarding } from "@/hooks/useShowOnboarding";
-import * as AppLayouts from "@/layouts/app-layouts";
 import { SvgChevronDown, SvgFileText } from "@opal/icons";
-import { Button } from "@opal/components";
-import { IllustrationContent } from "@opal/layouts";
-import SvgNotFound from "@opal/illustrations/not-found";
-import SvgNoAccess from "@opal/illustrations/no-access";
-import Spacer from "@/refresh-components/Spacer";
+import { Button, Spacer } from "@opal/components";
+import { IllustrationContent, RootLayout } from "@opal/layouts";
+import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
 import useAppFocus from "@/hooks/useAppFocus";
-import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
-import { eeGated } from "@/ce";
+import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
-const SearchUI = eeGated(EESearchUI);
+const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
 
 interface FadeProps {
@@ -151,6 +148,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // settings are passed in via Context and therefore aren't
   // available in server-side components
   const settings = useSettingsContext();
+
+  const appNameRef = useRef<string>("Onyx");
+  useEffect(() => {
+    const appName = settings.enterpriseSettings?.application_name || "Onyx";
+    appNameRef.current = appName;
+    document.title = currentChatSession?.name
+      ? `${currentChatSession.name} — ${appName}`
+      : appName;
+  }, [currentChatSession?.name, settings.enterpriseSettings?.application_name]);
+  useEffect(() => {
+    return () => {
+      document.title = appNameRef.current;
+    };
+  }, []);
+
   const vectorDbEnabled = useVectorDbEnabled();
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { tags } = useTags();
@@ -657,25 +669,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     setTimeout(() => updateCurrentDocumentSidebarVisible(false), 300);
   }, [updateCurrentDocumentSidebarVisible]);
 
-  const desktopDocumentSidebar =
-    retrievalEnabled && !settings.isMobile ? (
-      <div
-        className={cn(
-          "shrink-0 overflow-hidden transition-all duration-300 ease-in-out",
-          documentSidebarVisible ? "w-100" : "w-0"
-        )}
-      >
-        <div className="h-full w-100">
-          <DocumentsSidebar
-            setPresentingDocument={setPresentingDocument}
-            modal={false}
-            closeSidebar={handleDesktopDocumentSidebarClose}
-            selectedDocuments={selectedDocuments}
-          />
-        </div>
-      </div>
-    ) : null;
-
   // When no chat session exists but a project is selected, fetch the
   // total tokens for the project's files so upload UX can compare
   // against available context similar to session-based flows.
@@ -768,7 +761,27 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      <AppLayouts.Root enableBackground={!appFocus.isProject()}>
+      {!(noAgents && !isLoadingAgents) &&
+        retrievalEnabled &&
+        !settings.isMobile && (
+          <RootLayout.RightPanel>
+            <div
+              className={cn(
+                "overflow-hidden transition-all duration-300 ease-in-out h-full",
+                documentSidebarVisible ? "w-100" : "w-0"
+              )}
+            >
+              <DocumentsSidebar
+                setPresentingDocument={setPresentingDocument}
+                modal={false}
+                closeSidebar={handleDesktopDocumentSidebarClose}
+                selectedDocuments={selectedDocuments}
+              />
+            </div>
+          </RootLayout.RightPanel>
+        )}
+
+      <div className="w-full h-full overflow-hidden">
         <Dropzone
           onDrop={(acceptedFiles) =>
             handleMessageSpecificFileUpload(acceptedFiles)
@@ -1073,9 +1086,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             </div>
           )}
         </Dropzone>
-      </AppLayouts.Root>
-
-      {desktopDocumentSidebar}
+      </div>
     </>
   );
 }

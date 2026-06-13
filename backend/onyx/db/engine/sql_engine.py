@@ -366,6 +366,13 @@ class SqlEngine:
                 cls._engine = None
 
     @classmethod
+    def reset_readonly_engine(cls) -> None:
+        with cls._readonly_lock:
+            if cls._readonly_engine:
+                cls._readonly_engine.dispose()
+                cls._readonly_engine = None
+
+    @classmethod
     @contextmanager
     def scoped_engine(cls, **init_kwargs: Any) -> Generator[None, None, None]:
         """Context manager that initializes the engine and guarantees cleanup."""

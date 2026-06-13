@@ -11,6 +11,7 @@ jobs:
     environment:
       name: release-devtools
     permissions:
+      contents: read # needed to checkout the repo on private repos (no-op on public)
       id-token: write
     timeout-minutes: 10
     strategy:

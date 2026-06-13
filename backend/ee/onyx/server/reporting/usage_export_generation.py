@@ -21,6 +21,7 @@ from onyx.db.users import get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
+from onyx.utils.csv_utils import sanitize_csv_cell_or_none
 
 
 def generate_chat_messages_report(
@@ -64,14 +65,18 @@ def generate_chat_messages_report(
             db_session, period
         ):
             for chat_message_skeleton in chat_message_skeleton_batch:
+                # assistant_name and user_email are user-supplied — sanitize
+                # to prevent CSV/formula injection against whoever opens the
+                # report in a spreadsheet. The remaining fields are
+                # system-generated (UUIDs, enums, timestamps, ints).
                 csvwriter.writerow(
                     [
                         chat_message_skeleton.chat_session_id,
                         chat_message_skeleton.user_id,
                         chat_message_skeleton.flow_type,
                         chat_message_skeleton.time_sent.isoformat(),
-                        chat_message_skeleton.assistant_name,
-                        chat_message_skeleton.user_email,
+                        sanitize_csv_cell_or_none(chat_message_skeleton.assistant_name),
+                        sanitize_csv_cell_or_none(chat_message_skeleton.user_email),
                         chat_message_skeleton.number_of_tokens,
                         chat_message_skeleton.llm_model,
                     ]

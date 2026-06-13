@@ -10,7 +10,6 @@ from urllib.parse import urlparse
 
 import requests
 from pydantic import BaseModel
-from retry import retry
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -34,6 +33,7 @@ from onyx.connectors.models import TextSection
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -181,7 +181,7 @@ class NotionConnector(LoadConnector, PollConnector):
 
         return NormalizationResult(normalized_url=None, use_default=False)
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_child_blocks(
         self, block_id: str, cursor: str | None = None
     ) -> dict[str, Any] | None:
@@ -220,7 +220,7 @@ class NotionConnector(LoadConnector, PollConnector):
             return None
         return res.json()
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_page(self, page_id: str) -> NotionPage:
         """Fetch a page from its ID via the Notion API, retry with database if page fetch fails."""
         logger.debug("Fetching page for ID '%s'", page_id)
@@ -243,7 +243,7 @@ class NotionConnector(LoadConnector, PollConnector):
             return self._fetch_database_as_page(page_id)
         return NotionPage(**res.json())
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_database_as_page(self, database_id: str) -> NotionPage:
         """Attempt to fetch a database as a page.
 
@@ -272,7 +272,7 @@ class NotionConnector(LoadConnector, PollConnector):
 
         return NotionPage(**db_data, database_name=database_name)
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_data_sources_for_database(
         self, database_id: str
     ) -> list[NotionDataSource]:
@@ -306,7 +306,7 @@ class NotionConnector(LoadConnector, PollConnector):
             if ds.get("id")
         ]
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_data_source(
         self, data_source_id: str, cursor: str | None = None
     ) -> dict[str, Any]:
@@ -336,7 +336,7 @@ class NotionConnector(LoadConnector, PollConnector):
             raise e
         return res.json()
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_workspace_info(self) -> tuple[str, str]:
         """Fetch workspace ID and name from the bot user endpoint."""
         res = rl_requests.get(
@@ -893,7 +893,7 @@ class NotionConnector(LoadConnector, PollConnector):
                 ]
                 yield from self._read_pages(child_page_batch)
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _search_notion(self, query_dict: dict[str, Any]) -> NotionSearchResponse:
         """Search for pages from a Notion database. Includes some small number of
         retries to handle misc, flakey failures."""

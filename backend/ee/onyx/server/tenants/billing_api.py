@@ -39,8 +39,11 @@ from ee.onyx.server.tenants.models import ProductGatingResponse
 from ee.onyx.server.tenants.models import StripePublishableKeyResponse
 from ee.onyx.server.tenants.models import SubscriptionSessionResponse
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+from ee.onyx.server.tenants.models import TierUpdateRequest
+from ee.onyx.server.tenants.models import TierUpdateResponse
 from ee.onyx.server.tenants.product_gating import overwrite_full_gated_set
 from ee.onyx.server.tenants.product_gating import store_product_gating
+from ee.onyx.server.tenants.tier_management import update_tenant_tier
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
 from onyx.configs.app_configs import STRIPE_PUBLISHABLE_KEY_OVERRIDE
@@ -103,6 +106,23 @@ def gate_product_full_sync(
         return ProductGatingResponse(updated=False, error=str(e))
 
 
+@router.post("/tier-update")
+def update_tier(
+    tier_update_request: TierUpdateRequest,
+    _: None = Depends(control_plane_dep),
+) -> TierUpdateResponse:
+    try:
+        update_tenant_tier(
+            tier_update_request.tenant_id,
+            tier_update_request.customer_tier,
+            tier_update_request.trial_end,
+        )
+        return TierUpdateResponse(updated=True, error=None)
+    except Exception as e:
+        logger.exception("Failed to update tenant tier")
+        return TierUpdateResponse(updated=False, error=str(e))
+
+
 @router.get("/billing-information")
 async def billing_information(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -154,8 +174,8 @@ async def create_checkout_session(
     seats = request.seats if request else None
 
     try:
-        checkout_url = fetch_stripe_checkout_session(tenant_id, billing_period, seats)
-        return {"stripe_checkout_url": checkout_url}
+        result = fetch_stripe_checkout_session(tenant_id, billing_period, seats)
+        return {"stripe_checkout_url": result.url}
     except OnyxError:
         raise
     except Exception:
@@ -177,8 +197,12 @@ async def create_subscription_session(
             raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Tenant ID not found")
 
         billing_period = request.billing_period if request else "monthly"
-        session_id = fetch_stripe_checkout_session(tenant_id, billing_period)
-        return SubscriptionSessionResponse(sessionId=session_id)
+        result = fetch_stripe_checkout_session(tenant_id, billing_period)
+        return SubscriptionSessionResponse(
+            sessionId=result.session_id,
+            url=result.url,
+            requires_payment_method_update=result.requires_payment_method_update,
+        )
 
     except OnyxError:
         raise

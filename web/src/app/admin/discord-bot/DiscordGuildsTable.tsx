@@ -13,7 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { DeleteButton } from "@/components/DeleteButton";
 import { Button } from "@opal/components";
-import Switch from "@/refresh-components/inputs/Switch";
+import { Switch } from "@opal/components";
 import { SvgEdit, SvgServer } from "@opal/icons";
 import { EmptyMessageCard } from "@opal/components";
 import { DiscordGuildConfig } from "@/app/admin/discord-bot/types";
@@ -22,7 +22,7 @@ import {
   updateGuildConfig,
 } from "@/app/admin/discord-bot/lib";
 import { toast } from "@/hooks/useToast";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
 interface Props {
   guilds: DiscordGuildConfig[];

@@ -360,10 +360,17 @@ def read_pdf_file(
 
         return text, metadata, extracted_images
 
-    except PdfStreamError:
-        logger.exception("Invalid PDF file")
-    except Exception:
-        logger.exception("Failed to read PDF")
+    except PdfStreamError as e:
+        # Malformed/truncated PDF content — a per-document content issue, not
+        # a platform bug. The function returns empty text and the connector
+        # continues with the next doc; no need to ship a stack trace to
+        # Sentry for every corrupt file we encounter.
+        logger.warning("Invalid PDF file, skipping content extraction: %s", e)
+    except Exception as e:
+        # Unknown PDF parsing failure — elevate just the message, not a
+        # traceback, for the same reason. Callers treat empty text as a
+        # non-fatal skip.
+        logger.warning("Failed to read PDF, skipping content extraction: %s", e)
 
     return "", metadata, []
 

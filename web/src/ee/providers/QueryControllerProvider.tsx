@@ -9,7 +9,8 @@ import {
 } from "@/lib/search/interfaces";
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
 import useAppFocus from "@/hooks/useAppFocus";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
 import {
@@ -27,7 +28,7 @@ export function QueryControllerProvider({
   children,
 }: QueryControllerProviderProps) {
   const appFocus = useAppFocus();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const settings = useSettingsContext();
   const { isSearchModeAvailable: searchUiEnabled } = settings;
   const { user } = useUser();
@@ -47,7 +48,7 @@ export function QueryControllerProvider({
 
   useEffect(() => {
     let mode: AppMode = "chat";
-    if (isPaidEnterpriseFeaturesEnabled && searchUiEnabled && persistedMode) {
+    if (businessTier && searchUiEnabled && persistedMode) {
       const lower = persistedMode.toLowerCase();
       mode = (["auto", "search", "chat"] as const).includes(lower as AppMode)
         ? (lower as AppMode)
@@ -57,18 +58,18 @@ export function QueryControllerProvider({
     setState((prev) =>
       prev.phase === "idle" ? { phase: "idle", appMode: mode } : prev
     );
-  }, [isPaidEnterpriseFeaturesEnabled, searchUiEnabled, persistedMode]);
+  }, [businessTier, searchUiEnabled, persistedMode]);
 
   const setAppMode = useCallback(
     (mode: AppMode) => {
-      if (!isPaidEnterpriseFeaturesEnabled || !searchUiEnabled) return;
+      if (!businessTier || !searchUiEnabled) return;
       setState((prev) => {
         if (prev.phase !== "idle") return prev;
         appModeRef.current = mode;
         return { phase: "idle", appMode: mode };
       });
     },
-    [isPaidEnterpriseFeaturesEnabled, searchUiEnabled]
+    [businessTier, searchUiEnabled]
   );
 
   // ── Ancillary state ───────────────────────────────────────────────────
@@ -183,7 +184,7 @@ export function QueryControllerProvider({
       // 3. Not in the "New Session" tab
       // 4. In "New Session" tab but app-mode is "Chat"
       if (
-        !isPaidEnterpriseFeaturesEnabled ||
+        !businessTier ||
         !searchUiEnabled ||
         !appFocus.isNewSession() ||
         currentAppMode === "chat"
@@ -239,7 +240,7 @@ export function QueryControllerProvider({
       appFocus,
       performClassification,
       performSearch,
-      isPaidEnterpriseFeaturesEnabled,
+      businessTier,
       searchUiEnabled,
     ]
   );

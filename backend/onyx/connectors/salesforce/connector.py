@@ -35,6 +35,7 @@ from onyx.connectors.salesforce.utils import ID_FIELD
 from onyx.connectors.salesforce.utils import MODIFIED_FIELD
 from onyx.connectors.salesforce.utils import NAME_FIELD
 from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
+from onyx.connectors.salesforce.utils import validate_sf_identifier
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -1156,7 +1157,10 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnectorWithPermSyn
     ) -> GenerateSlimDocumentOutput:
         doc_metadata_list: list[SlimDocument | HierarchyNode] = []
         for parent_object_type in self.parent_object_list:
-            query = f"SELECT Id FROM {parent_object_type}"
+            # parent_object_type comes from connector config; SOQL has no
+            # parameter binding for table identifiers, so validate it.
+            validate_sf_identifier(parent_object_type)
+            query = f"SELECT Id FROM {parent_object_type}"  # noqa: S608
             query_result = self.sf_client.safe_query_all(query)
             doc_metadata_list.extend(
                 SlimDocument(

@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 import { useHookSpecs } from "@/ee/hooks/useHookSpecs";
 import { useHooks } from "@/ee/hooks/useHooks";
 import useFilter from "@/hooks/useFilter";
@@ -14,7 +15,6 @@ import {
   useCreateModal,
   useModalClose,
 } from "@/refresh-components/contexts/ModalContext";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Button, LinkButton, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { markdown } from "@opal/utils";
@@ -31,10 +31,11 @@ import {
   SvgSettings,
   SvgTrash,
   SvgUnplug,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { SvgNoResult, SvgEmpty } from "@opal/illustrations";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import HookFormModal from "@/ee/refresh-pages/admin/HooksPage/HookFormModal";
 import HookStatusPopover from "@/ee/refresh-pages/admin/HooksPage/HookStatusPopover";
 import {
@@ -449,7 +450,7 @@ function ConnectedHookCard({
 export default function HooksPage() {
   const router = useRouter();
   const { settings, settingsLoading } = useSettingsContext();
-  const isEE = usePaidEnterpriseFeaturesEnabled();
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const [connectSpec, setConnectSpec] = useState<HookPointMeta | null>(null);
   const [editHook, setEditHook] = useState<HookResponse | null>(null);
@@ -507,17 +508,17 @@ export default function HooksPage() {
 
   useEffect(() => {
     if (settingsLoading) return;
-    if (!isEE) {
+    if (!enterpriseTier) {
       toast.info("Hook Extensions require an Enterprise license.");
       router.replace("/");
     } else if (!settings.hooks_enabled) {
       toast.info("Hook Extensions are not enabled for this deployment.");
       router.replace("/");
     }
-  }, [settingsLoading, isEE, settings.hooks_enabled, router]);
+  }, [settingsLoading, enterpriseTier, settings.hooks_enabled, router]);
 
-  if (settingsLoading || !isEE || !settings.hooks_enabled) {
-    return <SimpleLoader />;
+  if (settingsLoading || !enterpriseTier || !settings.hooks_enabled) {
+    return <SvgSimpleLoader />;
   }
 
   const isLoading = specsLoading || hooksLoading;
@@ -583,7 +584,7 @@ export default function HooksPage() {
         />
         <SettingsLayouts.Body>
           {isLoading ? (
-            <SimpleLoader />
+            <SvgSimpleLoader />
           ) : specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {`Failed to load${
@@ -597,7 +598,7 @@ export default function HooksPage() {
                   placeholder="Search hooks..."
                   value={search}
                   variant="internal"
-                  leftSearchIcon
+                  searchIcon
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>

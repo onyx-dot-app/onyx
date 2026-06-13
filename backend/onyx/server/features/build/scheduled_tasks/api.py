@@ -38,6 +38,7 @@ from onyx.db.enums import Permission
 from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
+from onyx.db.external_app import get_external_apps
 from onyx.db.models import ScheduledTask
 from onyx.db.models import ScheduledTaskRun
 from onyx.db.models import User
@@ -56,7 +57,6 @@ from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
 from onyx.server.features.build.scheduled_tasks.schedule import EditorPayload
 from onyx.server.features.build.scheduled_tasks.schedule import human_readable
 from onyx.server.features.build.scheduled_tasks.schedule import next_n_fires
-from onyx.server.features.build.scheduled_tasks.schedule import validate_timezone
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -129,9 +129,9 @@ class ScheduledTaskCreate(_Forbid):
     prompt: str = Field(..., min_length=1)
     editor_mode: EditorMode
     editor_payload: EditorPayload
-    timezone: str
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
     run_immediately: bool = False
+    pre_approved_app_ids: list[int] = Field(default_factory=list)
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -147,8 +147,8 @@ class ScheduledTaskPatch(_Forbid):
     prompt: str | None = Field(default=None, min_length=1)
     editor_mode: EditorMode | None = None
     editor_payload: EditorPayload | None = None
-    timezone: str | None = None
     status: ScheduledTaskStatus | None = None
+    pre_approved_app_ids: list[int] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -196,7 +196,6 @@ class ScheduledTaskListItem(BaseModel):
     name: str
     human_readable_schedule: str
     cron_expression: str
-    timezone: str
     editor_mode: str
     status: ScheduledTaskStatus
     next_run_at: datetime | None
@@ -215,12 +214,12 @@ class ScheduledTaskDetail(BaseModel):
     prompt: str
     human_readable_schedule: str
     cron_expression: str
-    timezone: str
     editor_mode: str
     status: ScheduledTaskStatus
     next_run_at: datetime | None
     next_runs: list[datetime]
     last_run: RunSummary | None
+    pre_approved_app_ids: list[int]
     created_at: datetime
     updated_at: datetime
 
@@ -273,9 +272,8 @@ def _list_item(
     return ScheduledTaskListItem(
         id=str(task.id),
         name=task.name,
-        human_readable_schedule=human_readable(task.cron_expression, task.timezone),
+        human_readable_schedule=human_readable(task.cron_expression),
         cron_expression=task.cron_expression,
-        timezone=task.timezone,
         editor_mode=task.editor_mode,
         status=task.status,
         next_run_at=task.next_run_at,
@@ -295,7 +293,6 @@ def _detail(
     if task.status == ScheduledTaskStatus.ACTIVE:
         next_runs = next_n_fires(
             task.cron_expression,
-            task.timezone,
             datetime.now(tz=timezone.utc),
             NEXT_RUNS_PREVIEW_COUNT,
         )
@@ -303,17 +300,36 @@ def _detail(
         id=str(task.id),
         name=task.name,
         prompt=task.prompt,
-        human_readable_schedule=human_readable(task.cron_expression, task.timezone),
+        human_readable_schedule=human_readable(task.cron_expression),
         cron_expression=task.cron_expression,
-        timezone=task.timezone,
         editor_mode=task.editor_mode,
         status=task.status,
         next_run_at=task.next_run_at,
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
+        pre_approved_app_ids=task.pre_approved_app_ids,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
+
+
+def _validated_app_ids(db_session: Session, app_ids: list[int]) -> list[int]:
+    """Dedupe (order-preserving) and verify each id is a configured app.
+
+    Existence-only: a grant on an app that never produces an ASK match is
+    inert, so credential / has-ASK-action filtering stays editor-side.
+    """
+    deduped = list(dict.fromkeys(app_ids))
+    if not deduped:
+        return []
+    known_ids = {app.id for app in get_external_apps(db_session)}
+    unknown = [app_id for app_id in deduped if app_id not in known_ids]
+    if unknown:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Unknown external app id(s): {unknown}",
+        )
+    return deduped
 
 
 def _enqueue_executor(run_id: UUID) -> None:
@@ -381,14 +397,12 @@ def create_task(
     """Create a new scheduled task.
 
     Pipeline:
-      1. Validate the timezone.
-      2. Compile ``editor_mode`` + ``editor_payload`` to a canonical cron.
-      3. Insert via ``create_scheduled_task`` (which computes ``next_run_at``
+      1. Compile ``editor_mode`` + ``editor_payload`` to a canonical cron.
+      2. Insert via ``create_scheduled_task`` (which computes ``next_run_at``
          when the task is created ACTIVE).
-      4. If ``run_immediately`` is set, insert a ``manual_run_now`` run row
+      3. If ``run_immediately`` is set, insert a ``manual_run_now`` run row
          and enqueue the executor. Does NOT touch ``next_run_at``.
     """
-    validate_timezone(request.timezone)
     cron_expression = compile_to_cron(request.editor_payload)
 
     task = create_scheduled_task(
@@ -397,9 +411,11 @@ def create_task(
         name=request.name,
         prompt=request.prompt,
         cron_expression=cron_expression,
-        timezone_name=request.timezone,
         editor_mode=request.editor_mode,
         status=request.status,
+        pre_approved_app_ids=_validated_app_ids(
+            db_session, request.pre_approved_app_ids
+        ),
     )
 
     if request.run_immediately:
@@ -442,8 +458,8 @@ def patch_task(
 
     If ``editor_mode`` + ``editor_payload`` are provided, the cron is
     recompiled before being handed to ``update_scheduled_task``. The DB op
-    handles ``next_run_at`` recomputation (schedule/timezone change,
-    pause/resume) on its own.
+    handles ``next_run_at`` recomputation (schedule change, pause/resume) on
+    its own.
     """
     cron_expression: str | None = None
     if request.editor_payload is not None:
@@ -458,9 +474,13 @@ def patch_task(
         name=request.name,
         prompt=request.prompt,
         cron_expression=cron_expression,
-        timezone_name=request.timezone,
         editor_mode=request.editor_mode,
         status=request.status,
+        pre_approved_app_ids=(
+            _validated_app_ids(db_session, request.pre_approved_app_ids)
+            if request.pre_approved_app_ids is not None
+            else None
+        ),
     )
     db_session.commit()
     db_session.refresh(task)

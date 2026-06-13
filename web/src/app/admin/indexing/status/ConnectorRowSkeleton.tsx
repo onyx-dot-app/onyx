@@ -7,7 +7,8 @@ import {
   TableCell,
   TableHeader,
 } from "@/components/ui/table";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 
 // Staggered loading animation skeleton with proper table column alignment
 export function ConnectorStaggeredSkeleton({
@@ -19,7 +20,7 @@ export function ConnectorStaggeredSkeleton({
   standalone?: boolean; // if you want to show skeleton which is not in a table, set this to true
   height?: string;
 }) {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   const skeletonRows = [...Array(rowCount)].map((_, index) => (
     <TableRow
@@ -55,7 +56,7 @@ export function ConnectorStaggeredSkeleton({
       </TableCell>
 
       {/* Access Type (Enterprise only) */}
-      {isPaidEnterpriseFeaturesEnabled && (
+      {businessTier && (
         <TableCell>
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 bg-neutral-200 dark:bg-neutral-700 rounded-sm"></div>

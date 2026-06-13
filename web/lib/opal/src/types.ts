@@ -21,7 +21,15 @@ import type { SVGProps } from "react";
  * This is the complete scale of size presets available in the design system.
  * Components needing the full range use this type directly.
  */
-export type SizeVariants = "fit" | "full" | "lg" | "md" | "sm" | "xs" | "2xs";
+export type SizeVariants =
+  | "fit"
+  | "full"
+  | "xl"
+  | "lg"
+  | "md"
+  | "sm"
+  | "xs"
+  | "2xs";
 
 // Convenience Size Types:
 //
@@ -35,7 +43,7 @@ export type SizeVariants = "fit" | "full" | "lg" | "md" | "sm" | "xs" | "2xs";
  * Used by components that control height, min-width, and padding.
  * Excludes "full" since containers need a fixed height preset.
  */
-export type ContainerSizeVariants = Exclude<SizeVariants, "full">;
+export type ContainerSizeVariants = Exclude<SizeVariants, "full" | "xl">;
 
 /**
  * Padding size variants.
@@ -59,12 +67,16 @@ export type PaddingVariants = Extract<
  *
  * | Variant | Class        |
  * |---------|--------------|
+ * | `xl`    | `rounded-20` |
  * | `lg`    | `rounded-16` |
  * | `md`    | `rounded-12` |
  * | `sm`    | `rounded-08` |
  * | `xs`    | `rounded-04` |
  */
-export type RoundingVariants = Extract<SizeVariants, "lg" | "md" | "sm" | "xs">;
+export type RoundingVariants = Extract<
+  SizeVariants,
+  "xl" | "lg" | "md" | "sm" | "xs"
+>;
 
 /**
  * Extreme size variants ("fit" and "full" only).
@@ -80,6 +92,13 @@ export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
  * Used in components that need programmatic sizing flexibility.
  */
 export type OverridableExtremaSizeVariants = ExtremaSizeVariants | number;
+
+// ---------------------------------------------------------------------------
+// Orientation Variants
+// ---------------------------------------------------------------------------
+
+/** Axis orientation — `"horizontal"` or `"vertical"`. */
+export type OrientationVariants = "horizontal" | "vertical";
 
 // ---------------------------------------------------------------------------
 // Border Variants
@@ -187,6 +206,26 @@ export interface RichStr {
   readonly __brand: "RichStr";
   readonly raw: string;
 }
+
+// ---------------------------------------------------------------------------
+// Input Variants
+// ---------------------------------------------------------------------------
+
+/**
+ * Visual state variants for text input components.
+ *
+ * - `"primary"` — default editable state
+ * - `"internal"` — subtle/borderless style for inline use
+ * - `"error"` — error state with red border
+ * - `"disabled"` — non-interactive, grayed out
+ * - `"readOnly"` — visually transparent, not editable
+ */
+export type InputVariants =
+  | "primary"
+  | "internal"
+  | "error"
+  | "disabled"
+  | "readOnly";
 
 /**
  * HTML button `type` attribute values.

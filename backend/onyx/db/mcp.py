@@ -8,7 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
+from onyx.db.constants import UNSET
+from onyx.db.constants import UnsetType
 from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPAuthenticationType
@@ -104,6 +107,11 @@ def create_mcp_server__no_commit(
     transport: MCPTransport | None,
     auth_performer: MCPAuthenticationPerformer | None,
     db_session: Session,
+    oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY,
+    oauth_authorization_endpoint: str | None = None,
+    oauth_token_endpoint: str | None = None,
+    oauth_scopes_override: list[str] | None = None,
+    oauth_additional_auth_params: dict[str, str] | None = None,
     admin_connection_config_id: int | None = None,
 ) -> MCPServer:
     """Create a new MCP server"""
@@ -115,6 +123,11 @@ def create_mcp_server__no_commit(
         transport=transport,
         auth_type=auth_type,
         auth_performer=auth_performer,
+        oauth_provider_mode=oauth_provider_mode,
+        oauth_authorization_endpoint=oauth_authorization_endpoint,
+        oauth_token_endpoint=oauth_token_endpoint,
+        oauth_scopes_override=oauth_scopes_override,
+        oauth_additional_auth_params=oauth_additional_auth_params,
         admin_connection_config_id=admin_connection_config_id,
     )
     db_session.add(new_server)
@@ -131,6 +144,11 @@ def update_mcp_server__no_commit(
     auth_type: MCPAuthenticationType | None = None,
     admin_connection_config_id: int | None = None,
     auth_performer: MCPAuthenticationPerformer | None = None,
+    oauth_provider_mode: MCPOAuthProviderMode | None = None,
+    oauth_authorization_endpoint: str | None | UnsetType = UNSET,
+    oauth_token_endpoint: str | None | UnsetType = UNSET,
+    oauth_scopes_override: list[str] | None | UnsetType = UNSET,
+    oauth_additional_auth_params: dict[str, str] | None | UnsetType = UNSET,
     transport: MCPTransport | None = None,
     status: MCPServerStatus | None = None,
     last_refreshed_at: datetime.datetime | None = None,
@@ -150,6 +168,16 @@ def update_mcp_server__no_commit(
         server.admin_connection_config_id = admin_connection_config_id
     if auth_performer is not None:
         server.auth_performer = auth_performer
+    if oauth_provider_mode is not None:
+        server.oauth_provider_mode = oauth_provider_mode
+    if not isinstance(oauth_authorization_endpoint, UnsetType):
+        server.oauth_authorization_endpoint = oauth_authorization_endpoint
+    if not isinstance(oauth_token_endpoint, UnsetType):
+        server.oauth_token_endpoint = oauth_token_endpoint
+    if not isinstance(oauth_scopes_override, UnsetType):
+        server.oauth_scopes_override = oauth_scopes_override
+    if not isinstance(oauth_additional_auth_params, UnsetType):
+        server.oauth_additional_auth_params = oauth_additional_auth_params
     if transport is not None:
         server.transport = transport
     if status is not None:

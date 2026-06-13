@@ -10,6 +10,7 @@ from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from onyx.auth.users import auth_backend
 from onyx.auth.users import get_redis_strategy
 from onyx.auth.users import User
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import get_user_by_email
 from onyx.utils.logger import setup_logger
@@ -47,7 +48,7 @@ async def impersonate_user(
 
     response = await auth_backend.transport.get_login_response(token)
     response.set_cookie(
-        key="fastapiusersauth",
+        key=FASTAPI_USERS_AUTH_COOKIE_NAME,
         value=token,
         httponly=True,
         secure=True,

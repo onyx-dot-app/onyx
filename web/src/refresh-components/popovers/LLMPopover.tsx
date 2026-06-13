@@ -150,7 +150,7 @@ export default function LLMPopover({
         (m) => m.name === currentModel
       );
       if (config) {
-        return config.display_name || config.name;
+        return config.custom_display_name || config.display_name || config.name;
       }
     }
     return currentModel;

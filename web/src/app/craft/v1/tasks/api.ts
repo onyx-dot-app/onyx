@@ -14,8 +14,9 @@ import type {
   ScheduledRunListResponse,
   RunNowResponse,
 } from "@/app/craft/v1/tasks/interfaces";
+import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 
-const API_BASE = "/api/build/scheduled-tasks";
+const API_BASE = `${BUILD_API_BASE}/scheduled-tasks`;
 
 async function readError(res: Response, fallback: string): Promise<never> {
   let detail: string | undefined;

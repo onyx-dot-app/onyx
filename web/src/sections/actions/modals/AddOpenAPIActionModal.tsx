@@ -7,7 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import { InputVertical } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
@@ -254,7 +254,7 @@ function FormContent({
                     variant="appear-on-hover"
                   >
                     <div className="flex">
-                      <CopyIconButton
+                      <CopyButton
                         prominence="tertiary"
                         size="sm"
                         getCopyText={() => values.definition}

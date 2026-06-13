@@ -1,19 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import SidebarSection from "@/sections/sidebar/SidebarSection";
-import * as SidebarLayouts from "@/layouts/sidebar-layouts";
-import { useSidebarFolded } from "@/layouts/sidebar-layouts";
+import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { CombinedSettings } from "@/interfaces/settings";
-import { Divider, SidebarTab } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import Spacer from "@/refresh-components/Spacer";
+import { CombinedSettings, Tier } from "@/interfaces/settings";
+import { tierAtLeast } from "@/lib/tiers";
+import { Divider, InputTypeIn, Spacer, SidebarTab } from "@opal/components";
 import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
 import {
   useBillingInformation,
@@ -25,11 +21,12 @@ import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import useFilter from "@/hooks/useFilter";
 import { IconFunctionComponent } from "@opal/types";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { markdown } from "@opal/utils";
 
 const SECTIONS = {
-  UNLABELED: "",
+  UNLABELED: null,
   AGENTS_AND_ACTIONS: "Agents & Actions",
   DOCUMENTS_AND_KNOWLEDGE: "Documents & Knowledge",
   INTEGRATIONS: "Integrations",
@@ -39,36 +36,44 @@ const SECTIONS = {
 } as const;
 
 interface SidebarItemEntry {
-  section: string;
+  section: string | null;
   name: string;
   icon: IconFunctionComponent;
   link: string;
   error?: boolean;
   disabled?: boolean;
+  requiredTier?: Tier;
 }
 
 function buildItems(
   isCurator: boolean,
   enableCloud: boolean,
-  enableEnterprise: boolean,
+  tier: Tier | undefined,
   settings: CombinedSettings | null,
   customAnalyticsEnabled: boolean,
   hasSubscription: boolean,
   hooksEnabled: boolean
 ): SidebarItemEntry[] {
-  const vectorDbEnabled = settings?.settings.vector_db_enabled !== false;
   const items: SidebarItemEntry[] = [];
 
-  const add = (section: string, route: Parameters<typeof sidebarItem>[0]) => {
+  const add = (
+    section: string | null,
+    route: Parameters<typeof sidebarItem>[0]
+  ) => {
     items.push({ ...sidebarItem(route), section });
   };
 
-  const addDisabled = (
-    section: string,
+  const addGated = (
+    section: string | null,
     route: Parameters<typeof sidebarItem>[0],
-    isDisabled: boolean
+    requiredTier: Tier
   ) => {
-    items.push({ ...sidebarItem(route), section, disabled: isDisabled });
+    items.push({
+      ...sidebarItem(route),
+      section,
+      disabled: !tierAtLeast(tier, requiredTier),
+      requiredTier,
+    });
   };
 
   // 1. No header — core configuration (admin only)
@@ -81,10 +86,10 @@ function buildItems(
     add(SECTIONS.UNLABELED, ADMIN_ROUTES.CHAT_PREFERENCES);
 
     if (!enableCloud && customAnalyticsEnabled) {
-      addDisabled(
+      addGated(
         SECTIONS.UNLABELED,
         ADMIN_ROUTES.CUSTOM_ANALYTICS,
-        !enableEnterprise
+        Tier.ENTERPRISE
       );
     }
   }
@@ -95,63 +100,55 @@ function buildItems(
   add(SECTIONS.AGENTS_AND_ACTIONS, ADMIN_ROUTES.OPENAPI_ACTIONS);
 
   // 3. Documents & Knowledge
-  if (vectorDbEnabled) {
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
-    add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
-    if (!isCurator) {
-      items.push({
-        ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
-        section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
-        error: settings?.settings.needs_reindexing,
-      });
-    }
-    if (!isCurator && settings?.settings.opensearch_indexing_enabled) {
-      add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEX_MIGRATION);
-    }
+  // Shown even in Lite mode; the pages themselves render a no-indexing notice.
+  add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.INDEXING_STATUS);
+  add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.ADD_CONNECTOR);
+  add(SECTIONS.DOCUMENTS_AND_KNOWLEDGE, ADMIN_ROUTES.DOCUMENT_SETS);
+  if (!isCurator) {
+    items.push({
+      ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
+      section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
+      error: settings?.settings.needs_reindexing,
+    });
   }
 
   // 4. Integrations (admin only)
   if (!isCurator) {
-    add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS);
+    addGated(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.API_KEYS, Tier.BUSINESS);
     add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.SLACK_BOTS);
     add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.DISCORD_BOTS);
     if (hooksEnabled) {
-      add(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.HOOKS);
+      addGated(SECTIONS.INTEGRATIONS, ADMIN_ROUTES.HOOKS, Tier.ENTERPRISE);
     }
   }
 
   // 5. Permissions
   if (!isCurator) {
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.USERS);
-    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, !enableEnterprise);
-    addDisabled(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, !enableEnterprise);
-  } else if (enableEnterprise) {
+    addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS, Tier.BUSINESS);
+    addGated(SECTIONS.PERMISSIONS, ADMIN_ROUTES.SCIM, Tier.ENTERPRISE);
+  } else if (tierAtLeast(tier, Tier.BUSINESS)) {
     add(SECTIONS.PERMISSIONS, ADMIN_ROUTES.GROUPS);
   }
 
-  // 6. Organization (admin only)
+  // 6. Usage (admin only)
   if (!isCurator) {
-    if (hasSubscription) {
-      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
+    addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
+    addGated(SECTIONS.USAGE, ADMIN_ROUTES.TOKEN_RATE_LIMITS, Tier.ENTERPRISE);
+    if (
+      settings?.settings.query_history_type !== "disabled" &&
+      !settings?.settings.hide_query_history_from_admin_panel
+    ) {
+      addGated(SECTIONS.USAGE, ADMIN_ROUTES.QUERY_HISTORY, Tier.BUSINESS);
     }
-    addDisabled(
-      SECTIONS.ORGANIZATION,
-      ADMIN_ROUTES.TOKEN_RATE_LIMITS,
-      !enableEnterprise
-    );
-    addDisabled(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, !enableEnterprise);
   }
 
-  // 7. Usage (admin only)
+  // 7. Organization (admin only)
   if (!isCurator) {
-    addDisabled(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, !enableEnterprise);
-    if (settings?.settings.query_history_type !== "disabled") {
-      addDisabled(
-        SECTIONS.USAGE,
-        ADMIN_ROUTES.QUERY_HISTORY,
-        !enableEnterprise
-      );
+    addGated(SECTIONS.ORGANIZATION, ADMIN_ROUTES.THEME, Tier.BUSINESS);
+    add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.SECURITY_HARDENING);
+    if (hasSubscription) {
+      add(SECTIONS.ORGANIZATION, ADMIN_ROUTES.BILLING);
     }
   }
 
@@ -170,7 +167,7 @@ function buildItems(
 
 /** Preserve section ordering while grouping consecutive items by section. */
 function groupBySection(items: SidebarItemEntry[]) {
-  const groups: { section: string; items: SidebarItemEntry[] }[] = [];
+  const groups: { section: string | null; items: SidebarItemEntry[] }[] = [];
   for (const item of items) {
     const last = groups[groups.length - 1];
     if (last && last.section === item.section) {
@@ -182,9 +179,9 @@ function groupBySection(items: SidebarItemEntry[]) {
   return groups;
 }
 
-function AdminSidebarInner() {
-  const { setFolded } = useSidebarState();
-  const folded = useSidebarFolded();
+export default function AdminSidebar() {
+  const { folded, setFolded } = useSidebarState();
+  const showLogoWhenFolded = useShowLogoWhenFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
 
@@ -198,7 +195,7 @@ function AdminSidebarInner() {
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
   const settings = useSettingsContext();
-  const enableEnterprise = usePaidEnterpriseFeaturesEnabled();
+  const tier = settings?.settings.tier;
   const { data: billingData, isLoading: billingLoading } =
     useBillingInformation();
   const { data: licenseData, isLoading: licenseLoading } = useLicense();
@@ -212,13 +209,15 @@ function AdminSidebarInner() {
           (billingData && hasActiveSubscription(billingData)) ||
           licenseData?.has_license
         );
+  // Hooks are ENTERPRISE-only and only available for self-hosted single-tenant.
   const hooksEnabled =
-    enableEnterprise && (settings?.settings.hooks_enabled ?? false);
+    tierAtLeast(tier, Tier.ENTERPRISE) &&
+    (settings?.settings.hooks_enabled ?? false);
 
   const allItems = buildItems(
     isCurator,
     NEXT_PUBLIC_CLOUD_ENABLED,
-    enableEnterprise,
+    tier,
     settings,
     customAnalyticsEnabled,
     hasSubscriptionOrLicense,
@@ -235,8 +234,11 @@ function AdminSidebarInner() {
   const disabledGroups = groupBySection(disabled);
 
   return (
-    <>
-      <SidebarLayouts.Header>
+    <SidebarLayouts.Root>
+      <SidebarLayouts.Header
+        logo={renderAppLogo}
+        showLogoWhenFolded={showLogoWhenFolded}
+      >
         {folded ? (
           <SidebarTab
             icon={SvgSearch}
@@ -252,69 +254,64 @@ function AdminSidebarInner() {
           <InputTypeIn
             ref={searchRef}
             variant="internal"
-            leftSearchIcon
+            searchIcon
             placeholder="Search..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            clearButton
           />
         )}
       </SidebarLayouts.Header>
 
       <SidebarLayouts.Body scrollKey="admin-sidebar">
-        {enabledGroups.map((group, groupIndex) => {
-          const tabs = group.items.map(({ link, icon, name }) => (
-            <SidebarTab
-              key={link}
-              icon={icon}
-              href={link}
-              selected={pathname.startsWith(link)}
-            >
-              {name}
-            </SidebarTab>
-          ));
+        {enabledGroups.map((group, groupIndex) => (
+          <React.Fragment key={groupIndex}>
+            <SidebarLayouts.Section title={group.section ?? undefined}>
+              {group.items.map(({ link, icon, name }) => (
+                <SidebarTab
+                  key={link}
+                  icon={icon}
+                  href={link}
+                  selected={pathname.startsWith(link)}
+                >
+                  {name}
+                </SidebarTab>
+              ))}
+            </SidebarLayouts.Section>
+          </React.Fragment>
+        ))}
 
-          if (!group.section) {
-            return <div key={groupIndex}>{tabs}</div>;
-          }
-
-          return (
-            <SidebarSection key={groupIndex} title={group.section}>
-              {tabs}
-            </SidebarSection>
-          );
-        })}
-
-        {disabledGroups.length > 0 && <Divider paddingPerpendicular="fit" />}
-
+        {disabledGroups.length > 0 && (
+          <>
+            <Divider paddingPerpendicular="fit" />
+            {/* Empty div here just to add spacing (via the `gap` property on `SidebarLayouts.Body`) */}
+            <div />
+          </>
+        )}
         {disabledGroups.map((group, groupIndex) => (
-          <SidebarSection
-            key={`disabled-${groupIndex}`}
-            title={group.section}
-            disabled
-          >
-            {group.items.map(({ link, icon, name }) => (
-              <SidebarTab
-                key={link}
-                disabled
-                icon={icon}
-                tooltip={markdown(
-                  "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
-                )}
-              >
-                {name}
-              </SidebarTab>
-            ))}
-          </SidebarSection>
+          <React.Fragment key={`disabled-${groupIndex}`}>
+            <SidebarLayouts.Section title={group.section ?? undefined} disabled>
+              {group.items.map(({ link, icon, name, requiredTier }) => (
+                <SidebarTab
+                  key={link}
+                  disabled
+                  icon={icon}
+                  tooltip={markdown(
+                    requiredTier === Tier.ENTERPRISE
+                      ? "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
+                      : "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                  )}
+                >
+                  {name}
+                </SidebarTab>
+              ))}
+            </SidebarLayouts.Section>
+          </React.Fragment>
         ))}
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        {!folded && (
-          <>
-            <Divider paddingPerpendicular="fit" />
-            <Spacer rem={0.5} />
-          </>
-        )}
+        {!folded && <Divider paddingPerpendicular="sm" />}
         <SidebarTab
           icon={SvgX}
           href="/app"
@@ -325,14 +322,6 @@ function AdminSidebarInner() {
         </SidebarTab>
         <AccountPopover folded={folded} />
       </SidebarLayouts.Footer>
-    </>
-  );
-}
-
-export default function AdminSidebar() {
-  return (
-    <SidebarLayouts.Root>
-      <AdminSidebarInner />
     </SidebarLayouts.Root>
   );
 }

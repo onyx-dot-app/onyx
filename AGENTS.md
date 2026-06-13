@@ -4,8 +4,8 @@ This file provides guidance to AI agents when working with code in this reposito
 
 ## KEY NOTES
 
-- If you run into any missing python dependency errors, try running your command with `source .venv/bin/activate` \
-  to assume the python venv.
+- Python deps live in a `uv`-managed virtualenv at `.venv` (repo root). If it doesn't exist yet, create it \
+  with `uv sync --frozen`, then `source .venv/bin/activate`.
 - To make tests work, check the `.env` file at the root of the project to find an OpenAI key.
 - If using `playwright` to explore the frontend, you can usually log in with username `a@example.com` and password
   `a`. The app can be accessed at `http://localhost:3000`.
@@ -135,7 +135,7 @@ NOTE: Always make sure everything is strictly typed (both in Python and Typescri
 
 ### Technology Stack
 
-- **Backend**: Python 3.11, FastAPI, SQLAlchemy, Alembic, Celery
+- **Backend**: Python 3.13, FastAPI, SQLAlchemy, Alembic, Celery
 - **Frontend**: Next.js 15+, React 18, TypeScript, Tailwind CSS
 - **Database**: PostgreSQL with Redis caching
 - **Search**: Vespa vector database
@@ -195,9 +195,17 @@ Write the migration manually and place it in the file that alembic creates when 
 
 ## Testing Strategy
 
-First, you must activate the virtual environment with `source .venv/bin/activate`.
+First, activate the virtualenv: `source .venv/bin/activate`. If `.venv` doesn't exist yet, create it first with `uv sync --frozen`.
 
 There are 4 main types of tests within Onyx:
+
+### Model choice for tests that make real LLM calls
+
+When a test makes a real LLM call (e.g. External Dependency Unit / integration tests
+that hit a live provider), use the cheap-and-fast tier for each provider:
+
+- **OpenAI**: `gpt-5-mini` (never `gpt-4o` / `gpt-4o-mini`)
+- **Anthropic**: `claude-haiku-4-5`
 
 ### Unit Tests
 
@@ -264,7 +272,7 @@ Tests are located at `web/tests/e2e`. Tests are written in TypeScript.
 To run them:
 
 ```bash
-npx playwright test <TEST_NAME>
+bunx playwright test <TEST_NAME>
 ```
 
 For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.

@@ -2,8 +2,6 @@ import ipaddress
 import random
 import socket
 import time
-from datetime import datetime
-from datetime import timezone
 from enum import Enum
 from typing import Any
 from typing import cast
@@ -20,7 +18,6 @@ from urllib3.exceptions import MaxRetryError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
-from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -37,6 +34,8 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.server.security.models import web_connector_ssrf_enforced
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
 # Re-exported for backwards compatibility with existing tests/callers that
@@ -116,7 +115,9 @@ def protected_url_check(url: str) -> None:
     - To be extra safe, all IPs associated with the URL must be global
     - This is to prevent misuse and not explicit attacks
     """
-    if not WEB_CONNECTOR_VALIDATE_URLS:
+    # The web connector is only guarded at the most restrictive SSRF level; at
+    # VALIDATE_LLM / DISABLED admin-configured connectors may reach private IPs.
+    if not web_connector_ssrf_enforced(get_security_settings().ssrf_protection_level):
         return
 
     parse = urlparse(url)
@@ -143,6 +144,10 @@ def protected_url_check(url: str) -> None:
 
 
 def check_internet_connection(url: str) -> None:
+    # SSRF guard on the fetch primitive itself, so no call site can reach an
+    # internal target. No-op unless SSRF protection is at its strictest level.
+    protected_url_check(url)
+
     try:
         # Use a more realistic browser-like request
         session = requests.Session()
@@ -239,6 +244,11 @@ def get_internal_links(
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
+    # SSRF guard. This fetch runs in __init__, before validation, so the check
+    # must live here. Placed before the try so it surfaces as the SSRF error
+    # rather than a wrapped sitemap-parse failure.
+    protected_url_check(sitemap_url)
+
     # Note: brotli compression is handled automatically by the requests library
     # as long as the brotli package is installed in the venv.
     try:
@@ -288,15 +298,6 @@ def _read_urls_file(location: str) -> list[str]:
     with open(location, "r") as f:
         urls = [_ensure_valid_url(line.strip()) for line in f if line.strip()]
     return urls
-
-
-def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | None:
-    try:
-        return datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z").replace(
-            tzinfo=timezone.utc
-        )
-    except (ValueError, TypeError):
-        return None
 
 
 def _handle_cookies(context: BrowserContext, url: str) -> None:
@@ -442,8 +443,14 @@ class WebConnector(LoadConnector, SlimConnector):
                 initial_url, headers=DEFAULT_HEADERS, timeout=REQUEST_TIMEOUT_SECONDS
             )
             page_text, metadata = extract_pdf_text(response.content)
-            last_modified = response.headers.get("Last-Modified")
 
+            # doc_updated_at is intentionally left unset for web documents. The HTTP
+            # Last-Modified header is an unreliable change signal: CDN/SSR origins
+            # (e.g. Vercel ISR) regenerate it on every fetch, so it advances on each
+            # crawl even when content is identical. A spurious advance bypasses the
+            # content-hash dedup gate in the indexing pipeline, forcing pointless
+            # re-indexing. The content hash is the authoritative change signal for
+            # web docs (see DocumentBase.content_hash).
             result.doc = Document(
                 id=initial_url,
                 sections=[TextSection(link=initial_url, text=page_text)],
@@ -451,11 +458,6 @@ class WebConnector(LoadConnector, SlimConnector):
                 semantic_identifier=initial_url.rstrip("/").split("/")[-1]
                 or initial_url,
                 metadata=metadata,
-                doc_updated_at=(
-                    _get_datetime_from_last_modified_header(last_modified)
-                    if last_modified
-                    else None
-                ),
             )
 
             return result
@@ -488,9 +490,6 @@ class WebConnector(LoadConnector, SlimConnector):
             except TimeoutError:
                 pass
 
-            last_modified = (
-                page_response.header_value("Last-Modified") if page_response else None
-            )
             final_url = page.url
             if final_url != initial_url:
                 protected_url_check(final_url)
@@ -607,17 +606,15 @@ class WebConnector(LoadConnector, SlimConnector):
 
             session_ctx.content_hashes.add(hashed_text)
 
+            # doc_updated_at is intentionally left unset — see the comment in the PDF
+            # branch above. The HTTP Last-Modified header is an unreliable change
+            # signal for web content, so we rely on the content hash for dedup.
             result.doc = Document(
                 id=initial_url,
                 sections=[TextSection(link=initial_url, text=parsed_html.cleaned_text)],
                 source=DocumentSource.WEB,
                 semantic_identifier=parsed_html.title or initial_url,
                 metadata={},
-                doc_updated_at=(
-                    _get_datetime_from_last_modified_header(last_modified)
-                    if last_modified
-                    else None
-                ),
             )
         finally:
             page.close()
@@ -737,16 +734,11 @@ class WebConnector(LoadConnector, SlimConnector):
                 "No URL configured. Please provide at least one valid URL."
             )
 
-        if (
-            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
-            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
-        ):
-            return None
-
         # We'll just test the first URL for connectivity and correctness
         test_url = self.to_visit_list[0]
 
-        # Check that the URL is allowed and well-formed
+        # SSRF check runs for every connector type so an internal target is
+        # rejected at creation rather than at index time.
         try:
             protected_url_check(test_url)
         except ValueError as e:
@@ -757,7 +749,16 @@ class WebConnector(LoadConnector, SlimConnector):
             # Typically DNS or other network issues
             raise ConnectorValidationError(str(e))
 
-        # Make a quick request to see if we get a valid response
+        # Recursive/sitemap defer page fetches to index time; skip the connectivity
+        # probe for them (the SSRF check above still ran).
+        if (
+            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
+            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
+        ):
+            return None
+
+        # Make a quick request to see if we get a valid response. This re-runs the
+        # SSRF check internally (intentional, cheap defense-in-depth).
         try:
             check_internet_connection(test_url)
         except Exception as e:

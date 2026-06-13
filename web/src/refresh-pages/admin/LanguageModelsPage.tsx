@@ -16,7 +16,7 @@ import {
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { getProvider } from "@/lib/languageModels";
@@ -28,7 +28,7 @@ import {
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
+import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 
@@ -372,7 +372,9 @@ export default function LanguageModelsPage() {
                             key={`${provider.id}:${model.name}`}
                             value={`${provider.id}:${model.name}`}
                           >
-                            {model.display_name || model.name}
+                            {model.custom_display_name ||
+                              model.display_name ||
+                              model.name}
                           </InputSelect.Item>
                         ))}
                       </InputSelect.Group>

@@ -71,7 +71,9 @@ def test_403_triggers_playwright_fallback(
 
     result = OnyxWebCrawler()._fetch_url("https://example.com/")
 
-    mock_render.assert_called_once_with("https://example.com/")
+    mock_render.assert_called_once_with(
+        "https://example.com/", allow_private_network=False
+    )
     assert result.scrape_successful
     assert "Hello world" in result.full_content
     assert result.title == "Real Page"

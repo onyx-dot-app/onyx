@@ -1,0 +1,10 @@
+{{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $sandboxNs }}
+  labels:
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/part-of: {{ include "onyx.fullname" . }}
+{{- end }}

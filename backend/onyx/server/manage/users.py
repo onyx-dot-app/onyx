@@ -34,6 +34,7 @@ from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import enforce_seat_limit_locked
 from onyx.auth.users import optional_user
+from onyx.auth.users import scope_exempt
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import AuthBackend
@@ -44,8 +45,6 @@ from onyx.configs.app_configs import NUM_FREE_TRIAL_USER_INVITES
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import USER_DIRECTORY_ADMIN_ONLY
-from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.api_key import is_api_key_email_address
@@ -117,8 +116,10 @@ from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.server.models import UserGroupInfo
+from onyx.server.security.store import get_security_settings
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.csv_utils import sanitize_csv_cell
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import (
@@ -412,11 +413,13 @@ def download_users_csv(
     # Write CSV header
     writer.writerow(["Email", "Role", "Status"])
 
-    # Write user data
+    # Write user data. Emails are user-supplied (a local part can legally
+    # start with a formula trigger like `=`), so sanitize to prevent
+    # CSV/formula injection against the admin opening the export.
     for user in users:
         writer.writerow(
             [
-                user.email,
+                sanitize_csv_cell(user.email),
                 user.role.value if user.role else "",
                 "Active" if user.is_active else "Inactive",
             ]
@@ -470,8 +473,11 @@ def bulk_invite_users(
     ]
 
     # Must run before the trial counter reservation — a seat-limit
-    # failure must not burn trial quota.
-    if emails_needing_seats:
+    # failure must not burn trial quota. Self-hosted only: the cloud
+    # check runs inside add_users_to_tenant, atomic with the mapping
+    # insert. Locking here too re-acquires the tenant advisory lock on
+    # a second connection and self-deadlocks (#10900).
+    if emails_needing_seats and not MULTI_TENANT:
         enforce_seat_limit_locked(db_session, seats_needed=len(emails_needing_seats))
 
     # Enforce the trial invite cap via the monotonic `tenant_invite_counter`.
@@ -506,7 +512,10 @@ def bulk_invite_users(
             fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.provisioning", "add_users_to_tenant", None
             )(new_invited_emails, tenant_id)
-
+        except OnyxError:
+            # Seat-limit / billing declines from the cloud check must reach
+            # the caller now that this is the only enforcement point.
+            raise
         except Exception as e:
             logger.error("Failed to add users to tenant %s: %s", tenant_id, str(e))
 
@@ -736,7 +745,7 @@ def activate_user_api(
 def get_valid_domains(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> list[str]:
-    return VALID_EMAIL_DOMAINS
+    return list(get_security_settings().valid_email_domains)
 
 
 """Endpoints for all"""
@@ -749,7 +758,7 @@ def list_all_users_basic_info(
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserSnapshot]:
     if (
-        USER_DIRECTORY_ADMIN_ONLY
+        get_security_settings().user_directory_admin_only
         and Permission.READ_USERS not in get_effective_permissions(user)
     ):
         raise OnyxError(
@@ -873,7 +882,7 @@ def get_current_user_permissions(
     return sorted(p.value for p in get_effective_permissions(user))
 
 
-@router.get("/me", tags=PUBLIC_API_TAGS)
+@router.get("/me", tags=PUBLIC_API_TAGS, dependencies=[Depends(scope_exempt)])
 def verify_user_logged_in(
     request: Request,
     user: User | None = Depends(optional_user),
@@ -930,6 +939,7 @@ def verify_user_logged_in(
 
     user_info = UserInfo.from_model(
         user,
+        track_external_idp_expiry=get_security_settings().track_external_idp_expiry,
         current_token_created_at=token_created_at,
         expiry_length=SESSION_EXPIRE_TIME_SECONDS,
         is_cloud_superuser=user.email in super_users_list,
@@ -1116,7 +1126,10 @@ def update_user_assistant_visibility_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_preferences = UserInfo.from_model(user).preferences
+    user_preferences = UserInfo.from_model(
+        user,
+        track_external_idp_expiry=get_security_settings().track_external_idp_expiry,
+    ).preferences
     updated_preferences = update_assistant_visibility(
         user_preferences, assistant_id, show
     )

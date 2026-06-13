@@ -451,7 +451,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await navigateToAdminLlmPageFromChat(page);
 
     const editModal = await openProviderEditModal(page, providerName);
-    await editModal.getByText(modelToEnable, { exact: true }).click();
+    await editModal
+      .locator(`[data-model-name="${modelToEnable}"]`)
+      .getByRole("button")
+      .first()
+      .click();
 
     const updateButton = editModal.getByRole("button", { name: "Update" });
     const providerUpdateResponsePromise = page.waitForResponse(
@@ -515,7 +519,11 @@ test.describe("LLM Provider Setup @exclusive", () => {
     await navigateToAdminLlmPageFromChat(page);
 
     const editModal = await openProviderEditModal(page, providerName);
-    await editModal.getByText(modelToDisable, { exact: true }).click();
+    await editModal
+      .locator(`[data-model-name="${modelToDisable}"]`)
+      .getByRole("button")
+      .first()
+      .click();
 
     const updateButton = editModal.getByRole("button", { name: "Update" });
     const providerUpdateResponsePromise = page.waitForResponse(

@@ -73,6 +73,7 @@ from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
+from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -151,7 +152,7 @@ def _get_available_tokens_for_persona(
 
 @router.get("/get-user-chat-sessions", tags=PUBLIC_API_TAGS)
 def get_user_chat_sessions(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_CHAT)),
     db_session: Session = Depends(get_session),
     project_id: int | None = None,
     only_non_project_chats: bool = True,
@@ -267,7 +268,9 @@ def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
     include_deleted: bool = False,
-    user: User = Depends(current_chat_accessible_user),
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionDetailResponse:
     user_id = user.id
@@ -379,7 +382,9 @@ def get_chat_session(
 @router.post("/create-chat-session", tags=PUBLIC_API_TAGS)
 def create_new_chat_session(
     chat_session_creation_request: ChatSessionCreationRequest,
-    user: User = Depends(current_chat_accessible_user),
+    user: User = Depends(
+        require_permission(Permission.WRITE_CHAT, allow_anonymous=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
     try:
@@ -457,6 +462,7 @@ def rename_chat_session(
         metadata={
             "tenant_id": get_current_tenant_id(),
             "chat_session_id": str(chat_session_id),
+            "user_id": str(user_id) if user_id else None,
         },
     ):
         new_name = generate_chat_session_name(chat_history=simple_chat_history, llm=llm)
@@ -549,7 +555,9 @@ def delete_chat_session_by_id(
 def handle_send_chat_message(
     chat_message_req: SendMessageRequest,
     request: Request,
-    user: User = Depends(current_chat_accessible_user),
+    user: User = Depends(
+        require_permission(Permission.WRITE_CHAT, allow_anonymous=True)
+    ),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     _api_key_usage_check: None = Depends(check_api_key_usage),
 ) -> StreamingResponse | ChatFullResponse:
@@ -651,6 +659,15 @@ def handle_send_chat_message(
             external_state_container=state_container,
         )
         result = gather_stream_full(packets, state_container)
+        # CreateChatSessionID is only yielded for newly-created sessions, so for
+        # follow-up messages on an existing session the aggregated response would
+        # otherwise omit chat_session_id. Backfill it from the request so the
+        # field is always present for non-streaming clients.
+        if (
+            result.chat_session_id is None
+            and chat_message_req.chat_session_id is not None
+        ):
+            result.chat_session_id = chat_message_req.chat_session_id
         return result
 
     # Streaming path, normal Onyx UI behavior
@@ -727,7 +744,10 @@ def set_preferred_response_endpoint(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
 
-@router.post("/create-chat-message-feedback")
+@router.post(
+    "/create-chat-message-feedback",
+    dependencies=get_feedback_rate_limiters(),
+)
 def create_chat_feedback(
     feedback: ChatFeedbackRequest,
     user: User = Depends(current_chat_accessible_user),
@@ -745,7 +765,10 @@ def create_chat_feedback(
     )
 
 
-@router.delete("/remove-chat-message-feedback")
+@router.delete(
+    "/remove-chat-message-feedback",
+    dependencies=get_feedback_rate_limiters(),
+)
 def remove_chat_feedback(
     chat_message_id: int,
     user: User = Depends(current_chat_accessible_user),
@@ -904,7 +927,7 @@ async def search_chats(
     query: str | None = Query(None),
     page: int = Query(1),
     page_size: int = Query(10),
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> ChatSearchResponse:
     """
@@ -982,7 +1005,7 @@ async def search_chats(
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     """

@@ -22,3 +22,49 @@ updates:
       - "jmelahman"
     labels:
       - "dependabot:python"
+  - package-ecosystem: "bun"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    assignees:
+      - "jmelahman"
+    labels:
+      - "dependabot:javascript"
+  - package-ecosystem: "bun"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    assignees:
+      - "jmelahman"
+    labels:
+      - "dependabot:javascript"
+  - package-ecosystem: "bun"
+    directory: "/backend/onyx/server/features/build/sandbox/image/templates/outputs/web"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    assignees:
+      - "wenxi-onyx"
+    labels:
+      - "dependabot:javascript"
+      - "dependabot:sandbox"
+  - package-ecosystem: "docker"
+    directory: "/backend/onyx/server/features/build/sandbox/image"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    assignees:
+      - "wenxi-onyx"
+    labels:
+      - "dependabot:docker"
+      - "dependabot:sandbox"

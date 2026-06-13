@@ -71,7 +71,7 @@ def write_cloud_services(cloud_services_template_path: str, output_path: Path) -
     # Create output directory if it doesn't exist
     output_path.mkdir(parents=True, exist_ok=True)
 
-    jinja_env = jinja2.Environment()
+    jinja_env = jinja2.Environment()  # noqa: S701 — renders Vespa schema files, not HTML
 
     with open(cloud_services_template_path, "r", encoding="utf-8") as f:
         template_str = f.read()
@@ -112,7 +112,7 @@ def main() -> None:
     # Convert output path to Path object
     output_path = Path(args.output_path)
 
-    jinja_env = jinja2.Environment()
+    jinja_env = jinja2.Environment()  # noqa: S701 — renders Vespa schema files, not HTML
 
     # Generate schema files
     with open(args.template, "r", encoding="utf-8") as f:

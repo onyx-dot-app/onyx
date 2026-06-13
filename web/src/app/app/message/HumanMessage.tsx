@@ -7,7 +7,7 @@ import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgEdit } from "@opal/icons";
 import { Hoverable } from "@opal/core";
@@ -174,21 +174,23 @@ const HumanMessage = React.memo(function HumanMessage({
   const copyEditButtonContent = useMemo(
     () => (
       <div className="flex flex-row shrink px-1">
-        <CopyIconButton
+        <CopyButton
           getCopyText={() => content}
           prominence="tertiary"
           data-testid="HumanMessage/copy-button"
         />
-        <Button
-          icon={SvgEdit}
-          prominence="tertiary"
-          tooltip="Edit"
-          onClick={() => setIsEditing(true)}
-          data-testid="HumanMessage/edit-button"
-        />
+        {onEdit && (
+          <Button
+            icon={SvgEdit}
+            prominence="tertiary"
+            tooltip="Edit"
+            onClick={() => setIsEditing(true)}
+            data-testid="HumanMessage/edit-button"
+          />
+        )}
       </div>
     ),
-    [content]
+    [content, onEdit]
   );
 
   const copyEditButton = (
@@ -221,7 +223,7 @@ const HumanMessage = React.memo(function HumanMessage({
           />
         ) : (
           <div className="flex justify-end">
-            {onEdit && !isMobile && copyEditButton}
+            {!isMobile && copyEditButton}
             <div className="md:max-w-150">
               <div
                 className={
@@ -251,7 +253,7 @@ const HumanMessage = React.memo(function HumanMessage({
           </div>
         )}
         <div className="flex justify-end pt-1">
-          {!isEditing && onEdit && isMobile && copyEditButton}
+          {!isEditing && isMobile && copyEditButton}
           {currentMessageInd !== undefined &&
             onMessageSelection &&
             otherMessagesCanSwitchTo &&

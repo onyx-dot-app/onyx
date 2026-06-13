@@ -12,7 +12,7 @@ import { fetchDirectoryListing } from "@/app/craft/services/apiServices";
 import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
 import { getFileIcon } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   SvgHardDrive,
   SvgFolder,
@@ -288,10 +288,10 @@ export default function FilesTab({
         padding={2}
       >
         <SvgHardDrive size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
+        <Text font="heading-h3" color="text-03">
           {isProvisioning ? "Preparing sandbox..." : "No files yet"}
         </Text>
-        <Text secondaryBody text02>
+        <Text font="secondary-body" color="text-02">
           {isProvisioning
             ? "Setting up your development environment"
             : "Files created during the build will appear here"}
@@ -309,10 +309,10 @@ export default function FilesTab({
         padding={2}
       >
         <SvgHardDrive size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
+        <Text font="heading-h3" color="text-03">
           Error loading files
         </Text>
-        <Text secondaryBody text02>
+        <Text font="secondary-body" color="text-02">
           {error.message}
         </Text>
       </Section>
@@ -327,7 +327,7 @@ export default function FilesTab({
         justifyContent="center"
         padding={2}
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           Loading files...
         </Text>
       </Section>
@@ -353,7 +353,7 @@ export default function FilesTab({
           ) : (
             <SvgFileText size={16} className="stroke-text-03" />
           )}
-          <Text secondaryBody text04 className="truncate">
+          <Text font="secondary-body" color="text-04" maxLines={1}>
             {previewingFile.fileName}
           </Text>
         </div>
@@ -384,7 +384,7 @@ export default function FilesTab({
             justifyContent="center"
             padding={2}
           >
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               No files in this directory
             </Text>
           </Section>
@@ -542,19 +542,17 @@ function FileTreeNode({
               )}
 
               {/* Name */}
-              <Text
-                secondaryBody
-                text04
-                className="truncate flex-1 text-left ml-1"
-              >
-                {entry.name}
-              </Text>
+              <span className="flex-1 text-left ml-1 min-w-0">
+                <Text font="secondary-body" color="text-04" maxLines={1}>
+                  {entry.name}
+                </Text>
+              </span>
 
               {/* File size */}
               {!entry.is_directory && entry.size !== null && (
-                <Text text02 className="ml-2 mr-2 shrink-0">
-                  {formatFileSize(entry.size)}
-                </Text>
+                <span className="ml-2 mr-2 shrink-0">
+                  <Text color="text-02">{formatFileSize(entry.size)}</Text>
+                </span>
               )}
             </button>
 
@@ -580,7 +578,7 @@ function FileTreeNode({
                   className="flex items-center py-1"
                   style={{ paddingLeft: `${(depth + 1) * 20 + 24}px` }}
                 >
-                  <Text secondaryBody text02>
+                  <Text font="secondary-body" color="text-02">
                     Loading...
                   </Text>
                 </div>

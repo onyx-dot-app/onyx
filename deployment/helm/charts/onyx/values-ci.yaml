@@ -1,0 +1,67 @@
+# Values overlay for the Craft K8s CI lane (pr-craft-k8s-tests.yml).
+#
+# The CI workflow renders specific templates with `helm template --show-only`
+# and applies them to a kind cluster, so chart edits flow into the test lane
+# automatically. When you add a new chart component that the K8s sandbox tests
+# depend on, render it here and apply it in the workflow.
+
+configMap:
+  ENABLE_CRAFT: "true"
+  # Placeholder; the K8s sandbox tests don't call back to it. Required to
+  # satisfy the chart's fail() guard for ENABLE_CRAFT=true.
+  SANDBOX_API_SERVER_URL: "http://api.invalid"
+  # Sandbox image the kind cluster pulls (built+pushed by the CI workflow).
+  SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
+  # Tiny requests so the 4 vCPU runner can fit 4 concurrent sandbox pods.
+  SANDBOX_POD_CPU_REQUEST: "100m"
+  SANDBOX_POD_MEMORY_REQUEST: "256Mi"
+  SANDBOX_POD_CPU_LIMIT: "2000m"
+  SANDBOX_POD_MEMORY_LIMIT: "4Gi"
+  # kind runner disks are small; production default is 5Gi/20Gi.
+  SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST: "512Mi"
+  SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT: "4Gi"
+
+# test_sigterm_drain_unblocks_parked_request deletes "the" proxy pod via an
+# arbitrary `items[0]` from the label selector and expects that pod to be the
+# one parking the request. With a default other than 1, the test deletes the
+# wrong replica and the curl never unblocks.
+sandboxProxy:
+  replicaCount: 1
+
+# Placeholder secret values so auth-secrets.yaml renders without erroring.
+# Postgres/Redis run in docker-compose alongside the kind
+# cluster in this lane (see pr-craft-k8s-tests.yml), so the in-chart values
+# only need to satisfy the chart's pre-validate fail() guards.
+auth:
+  postgresql:
+    values:
+      username: "postgres"
+      # Must match the docker-compose Postgres the proxy reads from.
+      password: "password"
+  redis:
+    values:
+      redis_password: "password"
+  objectstorage:
+    # CI-only creds. values.yaml ships no defaults (fail closed), so all four keys
+    # must be set here. Never use minioadmin on a real cluster.
+    values:
+      s3_aws_access_key_id: "minioadmin"
+      s3_aws_secret_access_key: "minioadmin"
+      rootUser: "minioadmin"
+      rootPassword: "minioadmin"
+  opensearch:
+    values:
+      opensearch_admin_password: "ci-test-not-used"
+  sandboxPushSecret:
+    enabled: true
+    values:
+      private_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+# Keep MinIO chart-backed in CI so the workflow exercises chart object-storage
+# wiring, but size it for the 4 CPU runner.
+minio:
+  persistence:
+    size: 1Gi
+  resources:
+    requests:
+      memory: 256Mi

@@ -12,7 +12,6 @@ import {
   SvgX,
 } from "@opal/icons";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
-import Tabs from "@/refresh-components/Tabs";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import { ContentAction, InputHorizontal } from "@opal/layouts";
 import SwitchField from "@/refresh-components/form/SwitchField";
@@ -23,7 +22,14 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import { useUser } from "@/providers/UserProvider";
 import { Formik, useFormikContext } from "formik";
 import { useAgent, useLabels } from "@/lib/agents/hooks";
-import { Button, Card, Divider, MessageCard, Text } from "@opal/components";
+import {
+  Button,
+  Card,
+  Divider,
+  MessageCard,
+  Tabs,
+  Text,
+} from "@opal/components";
 import { Disabled } from "@opal/core";
 import { AgentLabel } from "@/lib/agents/types";
 import { FetchError } from "@/lib/fetcher";
@@ -321,8 +327,8 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
               )}
             </Tabs.Content>
 
-            <Tabs.Content value={YOUR_ORGANIZATION_TAB} padding={0.5}>
-              <Section gap={1} alignItems="stretch">
+            <Tabs.Content value={YOUR_ORGANIZATION_TAB}>
+              <Section gap={1} alignItems="stretch" padding={0.5}>
                 <InputHorizontal
                   title="Publish This Agent"
                   description="Make this agent available to everyone in your organization."

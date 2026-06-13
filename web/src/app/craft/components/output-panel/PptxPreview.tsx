@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgChevronLeft, SvgChevronRight, SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { fetchPptxPreview } from "@/app/craft/services/apiServices";
@@ -86,7 +86,7 @@ export default function PptxPreview({
         justifyContent="center"
         padding={2}
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           Converting presentation...
         </Text>
       </Section>
@@ -102,12 +102,14 @@ export default function PptxPreview({
         padding={2}
       >
         <SvgFileText size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
+        <Text font="heading-h3" color="text-03">
           Cannot preview presentation
         </Text>
-        <Text secondaryBody text02 className="text-center max-w-md">
-          {error.message}
-        </Text>
+        <div className="text-center max-w-md">
+          <Text font="secondary-body" color="text-02">
+            {error.message}
+          </Text>
+        </div>
       </Section>
     );
   }
@@ -121,7 +123,7 @@ export default function PptxPreview({
         padding={2}
       >
         <SvgFileText size={48} className="stroke-text-02" />
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           No slides in this presentation
         </Text>
       </Section>
@@ -137,7 +139,7 @@ export default function PptxPreview({
       <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
         {imageLoading && (
           <div className="absolute">
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               Loading slide...
             </Text>
           </div>
@@ -169,8 +171,8 @@ export default function PptxPreview({
           >
             <SvgChevronLeft size={16} className="stroke-text-02" />
           </button>
-          <Text secondaryBody text03>
-            Slide {currentSlide + 1} of {slideCount}
+          <Text font="secondary-body" color="text-03">
+            {`Slide ${currentSlide + 1} of ${slideCount}`}
           </Text>
           <button
             onClick={goToNext}

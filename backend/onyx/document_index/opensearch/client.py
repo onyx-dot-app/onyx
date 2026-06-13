@@ -25,7 +25,8 @@ from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
 from onyx.document_index.opensearch.schema import get_opensearch_doc_chunk_id
 from onyx.document_index.opensearch.search import DEFAULT_OPENSEARCH_MAX_RESULT_WINDOW
 from onyx.server.metrics.opensearch_search import observe_opensearch_search
-from onyx.server.metrics.opensearch_search import track_opensearch_search_in_progress
+from onyx.server.metrics.opensearch_search import record_opensearch_search_error
+from onyx.server.metrics.opensearch_search import track_opensearch_search
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -98,8 +99,6 @@ class OpenSearchUpdateError(Exception):
     exceptions update calls can raise.
     """
 
-    pass
-
 
 class OpenSearchIndexError(Exception):
     """
@@ -108,7 +107,11 @@ class OpenSearchIndexError(Exception):
     exceptions index calls can raise.
     """
 
-    pass
+
+class OpenSearchServerSideTimeout(Exception):
+    """
+    A server-side timeout occurred when searching an OpenSearch index.
+    """
 
 
 def get_new_body_without_vectors(body: dict[str, Any]) -> dict[str, Any]:
@@ -278,6 +281,104 @@ class OpenSearchClient(AbstractContextManager):
                 )
             )
         return indices
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def cluster_health(
+        self,
+        level: str = "cluster",
+        index: str | None = None,
+    ) -> dict[str, Any]:
+        """Gets the cluster health.
+
+        See the OpenSearch documentation for more information on the cluster
+        health API:
+        https://docs.opensearch.org/latest/api-reference/cluster-api/cluster-health/
+
+        Args:
+            level: The level of detail. One of "cluster", "indices", "shards",
+                or "awareness_attributes". Defaults to "cluster".
+            index: Optionally scope the health response to a specific index.
+                Defaults to None (whole cluster).
+
+        Returns:
+            The raw cluster health response.
+        """
+        return self._client.cluster.health(index=index, level=level)
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def cat_shards(
+        self,
+        index: str | None = None,
+        columns: str = "index,shard,prirep,state,unassigned.reason,unassigned.for,node",
+    ) -> list[dict[str, Any]]:
+        """Lists shards in the cluster.
+
+        See the OpenSearch documentation for more information on the cat shards
+        API:
+        https://docs.opensearch.org/latest/api-reference/cat/cat-shards/
+
+        Args:
+            index: Optionally scope to a specific index. Defaults to None (all
+                indices).
+            columns: Comma-separated list of columns to return. Maps to the
+                ``h`` query parameter.
+
+        Returns:
+            A list of dicts, one per shard, with the requested columns as keys.
+        """
+        return self._client.cat.shards(format="json", h=columns, index=index)
+
+    @log_function_time(print_only=True, debug_only=True, include_args=True)
+    def allocation_explain(
+        self,
+        index: str | None = None,
+        shard: int | None = None,
+        primary: bool | None = None,
+    ) -> dict[str, Any]:
+        """Explains why a shard is or is not allocated.
+
+        With no args, OpenSearch picks an arbitrary unassigned shard to explain.
+        To scope to a specific shard, all three args must be provided together.
+
+        See the OpenSearch documentation for more information on the cluster
+        allocation explain API:
+        https://docs.opensearch.org/latest/api-reference/cluster-api/cluster-allocation/
+
+        Args:
+            index: The index name.
+            shard: The shard ID.
+            primary: Whether the shard is a primary (True) or replica (False).
+
+        Returns:
+            The raw allocation explanation response.
+        """
+        body: dict[str, Any] = {}
+        if index is not None:
+            body["index"] = index
+        if shard is not None:
+            body["shard"] = shard
+        if primary is not None:
+            body["primary"] = primary
+        return self._client.cluster.allocation_explain(body=body or None)
+
+    @log_function_time(print_only=True, debug_only=True)
+    def reroute_retry_failed(self) -> dict[str, Any]:
+        """Triggers a cluster reroute with retry_failed=true.
+
+        Useful when shards are stuck UNASSIGNED due to ALLOCATION_FAILED with
+        max retries exceeded (default 5). This resets the failure counter and
+        attempts allocation again. The cluster's own allocation_explain output
+        recommends this when the ``max_retry`` decider is blocking.
+
+        See the OpenSearch documentation for more information on the cluster
+        reroute API:
+        https://docs.opensearch.org/latest/api-reference/cluster-api/cluster-reroute/
+
+        Returns:
+            The raw reroute response. Includes ``acknowledged`` and the
+                post-reroute cluster state.
+        """
+        return self._client.cluster.reroute(retry_failed=True)
 
     @log_function_time(print_only=True, debug_only=True)
     def ping(self) -> bool:
@@ -1185,35 +1286,39 @@ class OpenSearchIndexClient(OpenSearchClient):
         result: dict[str, Any]
         params = {"phase_took": "true"}
         ctx = self._get_emit_metrics_context_manager(search_type)
-        t0 = time.perf_counter()
         with ctx:
-            if search_pipeline_id:
+            try:
+                t0 = time.perf_counter()
                 result = self._client.search(
                     index=self._index_name,
                     search_pipeline=search_pipeline_id,
                     body=body,
                     params=params,
                 )
-            else:
-                result = self._client.search(
-                    index=self._index_name, body=body, params=params
+                client_duration_s = time.perf_counter() - t0
+                hits, time_took, timed_out, phase_took, profile = (
+                    self._get_hits_and_profile_from_search_result(result)
                 )
-        client_duration_s = time.perf_counter() - t0
-
-        hits, time_took, timed_out, phase_took, profile = (
-            self._get_hits_and_profile_from_search_result(result)
-        )
-        if self._emit_metrics:
-            observe_opensearch_search(search_type, client_duration_s, time_took)
-        self._log_search_result_perf(
-            time_took=time_took,
-            timed_out=timed_out,
-            phase_took=phase_took,
-            profile=profile,
-            body=body,
-            search_pipeline_id=search_pipeline_id,
-            raise_on_timeout=True,
-        )
+                # Inside the try/except so that server-side timeouts (which
+                # raise inside this helper) land in
+                # record_opensearch_search_error and never reach
+                # observe_opensearch_search — keeping the latency histograms
+                # clean of timed-out queries.
+                self._log_search_result_perf(
+                    time_took=time_took,
+                    timed_out=timed_out,
+                    phase_took=phase_took,
+                    profile=profile,
+                    body=body,
+                    search_pipeline_id=search_pipeline_id,
+                    raise_on_timeout=True,
+                )
+                if self._emit_metrics:
+                    observe_opensearch_search(search_type, client_duration_s, time_took)
+            except Exception as e:
+                if self._emit_metrics:
+                    record_opensearch_search_error(search_type, e)
+                raise
 
         search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
         for hit in hits:
@@ -1284,26 +1389,35 @@ class OpenSearchIndexClient(OpenSearchClient):
 
         params = {"phase_took": "true"}
         ctx = self._get_emit_metrics_context_manager(search_type)
-        t0 = time.perf_counter()
         with ctx:
-            result: dict[str, Any] = self._client.search(
-                index=self._index_name, body=body, params=params
-            )
-        client_duration_s = time.perf_counter() - t0
-
-        hits, time_took, timed_out, phase_took, profile = (
-            self._get_hits_and_profile_from_search_result(result)
-        )
-        if self._emit_metrics:
-            observe_opensearch_search(search_type, client_duration_s, time_took)
-        self._log_search_result_perf(
-            time_took=time_took,
-            timed_out=timed_out,
-            phase_took=phase_took,
-            profile=profile,
-            body=body,
-            raise_on_timeout=True,
-        )
+            try:
+                t0 = time.perf_counter()
+                result: dict[str, Any] = self._client.search(
+                    index=self._index_name, body=body, params=params
+                )
+                client_duration_s = time.perf_counter() - t0
+                hits, time_took, timed_out, phase_took, profile = (
+                    self._get_hits_and_profile_from_search_result(result)
+                )
+                # Inside the try/except so that server-side timeouts (which
+                # raise inside this helper) land in
+                # record_opensearch_search_error and never reach
+                # observe_opensearch_search — keeping the latency histograms
+                # clean of timed-out queries.
+                self._log_search_result_perf(
+                    time_took=time_took,
+                    timed_out=timed_out,
+                    phase_took=phase_took,
+                    profile=profile,
+                    body=body,
+                    raise_on_timeout=True,
+                )
+                if self._emit_metrics:
+                    observe_opensearch_search(search_type, client_duration_s, time_took)
+            except Exception as e:
+                if self._emit_metrics:
+                    record_opensearch_search_error(search_type, e)
+                raise
 
         # TODO(andrei): Implement scroll/point in time for results so that we
         # can return arbitrarily-many IDs.
@@ -1419,18 +1533,18 @@ class OpenSearchIndexClient(OpenSearchClient):
             error_str = f"OpenSearch client error: Search timed out for index {self._index_name}."
             logger.error(error_str)
             if raise_on_timeout:
-                raise RuntimeError(error_str)
+                raise OpenSearchServerSideTimeout(error_str)
 
     def _get_emit_metrics_context_manager(
         self, search_type: OpenSearchSearchType
     ) -> AbstractContextManager[None]:
         """
-        Returns a context manager that tracks in-flight OpenSearch searches via
-        a Gauge if emit_metrics is True, otherwise returns a null context
-        manager.
+        Returns the OpenSearch search tracking context manager (which bumps the
+        attempt counter and the in-flight gauge) if emit_metrics is True,
+        otherwise returns a null context manager.
         """
         return (
-            track_opensearch_search_in_progress(search_type)
+            track_opensearch_search(search_type)
             if self._emit_metrics
             else nullcontext()
         )

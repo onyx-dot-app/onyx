@@ -14,7 +14,7 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.document_index.interfaces_new import DocumentSectionRequest
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.server.documents.models import ChunkInfo
@@ -38,7 +38,7 @@ def get_document_info(
 
     user_acl_filters = build_access_filters_for_user(user, db_session)
     inference_chunks = document_index.id_based_retrieval(
-        chunk_requests=[VespaChunkRequest(document_id=document_id)],
+        chunk_requests=[DocumentSectionRequest(document_id=document_id)],
         filters=IndexFilters(access_control_list=user_acl_filters),
     )
 
@@ -82,7 +82,7 @@ def get_chunk_info(
     document_index = get_default_document_index(search_settings, None, db_session)
 
     user_acl_filters = build_access_filters_for_user(user, db_session)
-    chunk_request = VespaChunkRequest(
+    chunk_request = DocumentSectionRequest(
         document_id=document_id,
         min_chunk_ind=chunk_id,
         max_chunk_ind=chunk_id,

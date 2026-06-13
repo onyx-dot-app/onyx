@@ -1,6 +1,11 @@
 #!/bin/bash
 
-set -euo pipefail
+# This script must remain compatible with bash 3.2 — macOS still ships
+# 3.2.57 by default and the curl-pipe installer is invoked with /bin/bash.
+# Avoid bash 4+ features (associative arrays, ${var,,}, etc.). Notably,
+# do not re-enable `set -u`: on bash 3.2, `"${arr[@]}"` errors as
+# "unbound variable" when arr is an explicitly-declared empty array.
+set -eo pipefail
 
 # Expected resource requirements (overridden below if --lite)
 EXPECTED_DOCKER_RAM_GB=10
@@ -15,6 +20,8 @@ USE_LOCAL_FILES=false # Disabled by default, use --local to skip downloading con
 NO_PROMPT=false
 DRY_RUN=false
 VERBOSE=false
+NO_WAIT=false  # When false (default), pass --wait to `docker compose up`
+WAIT_TIMEOUT_SECONDS=600
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -50,6 +57,10 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
+        --no-wait)
+            NO_WAIT=true
+            shift
+            ;;
         --help|-h)
             echo "Onyx Installation Script"
             echo ""
@@ -64,6 +75,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-prompt      Run non-interactively with defaults (for CI/automation)"
             echo "  --dry-run        Show what would be done without making changes"
             echo "  --verbose        Show detailed output for debugging"
+            echo "  --no-wait        Skip 'docker compose up --wait'; return as soon as"
+            echo "                   containers are started (they may still be initializing)"
             echo "  --help, -h       Show this help message"
             echo ""
             echo "Examples:"
@@ -106,17 +119,25 @@ fi
 INSTALL_ROOT="${INSTALL_PREFIX:-onyx_data}"
 
 LITE_COMPOSE_FILE="docker-compose.onyx-lite.yml"
+CRAFT_COMPOSE_FILE="docker-compose.craft.yml"
 
-# Build the -f flags for docker compose.
-# Pass "true" as $1 to auto-detect a previously-downloaded lite overlay
-# (used by shutdown/delete-data so users don't need to remember --lite).
-compose_file_args() {
+# Populate COMPOSE_FILE_ARGS with the -f flags for docker compose.
+# Pass "true" as $1 to auto-detect previously-downloaded overlays (used by
+# shutdown/delete-data so users don't need to remember --lite/--include-craft).
+COMPOSE_FILE_ARGS=()
+build_compose_file_args() {
     local auto_detect="${1:-false}"
-    local args="-f docker-compose.yml"
+    COMPOSE_FILE_ARGS=(-f docker-compose.yml)
     if [[ "$LITE_MODE" = true ]] || { [[ "$auto_detect" = true ]] && [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; }; then
-        args="$args -f ${LITE_COMPOSE_FILE}"
+        COMPOSE_FILE_ARGS+=(-f "${LITE_COMPOSE_FILE}")
     fi
-    echo "$args"
+    # Craft Docker sandbox backend is opt-in (--include-craft) so the host
+    # Docker socket isn't bind-mounted on default deployments. Layer the
+    # craft overlay on top when explicitly enabled, or auto-detect a
+    # previously-downloaded overlay on shutdown/delete-data.
+    if [[ "$INCLUDE_CRAFT" = true ]] || { [[ "$auto_detect" = true ]] && [[ -f "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" ]]; }; then
+        COMPOSE_FILE_ARGS+=(-f "${CRAFT_COMPOSE_FILE}")
+    fi
 }
 
 # --- Downloader detection (curl with wget fallback) ---
@@ -143,6 +164,115 @@ download_file() {
     else
         wget -q --tries=3 --timeout=20 -O "$output" "$url"
     fi
+}
+
+# Fetches the most recent published release tag from the Onyx GitHub repo.
+# Used to default the installer to a pinned, tested release (instead of the
+# rolling "edge" tag) and to pull compose/nginx files that match it.
+LATEST_RELEASE_TAG=""
+fetch_latest_release_tag() {
+    local api_url="https://api.github.com/repos/onyx-dot-app/onyx/releases/latest"
+    local response=""
+    if [[ "$DOWNLOADER" == "curl" ]]; then
+        response=$(curl -fsSL --retry 2 --retry-delay 1 \
+            --connect-timeout 5 --max-time 10 \
+            -H "Accept: application/vnd.github+json" \
+            "$api_url" 2>/dev/null) || return 1
+    else
+        response=$(wget -q --tries=2 --timeout=10 \
+            --header="Accept: application/vnd.github+json" \
+            -O- "$api_url" 2>/dev/null) || return 1
+    fi
+    local tag
+    tag=$(echo "$response" \
+        | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"[^"]+"' \
+        | head -1 \
+        | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+    if [[ -z "$tag" ]]; then
+        return 1
+    fi
+    LATEST_RELEASE_TAG="$tag"
+    return 0
+}
+
+# Craft sandbox backend for an image tag. The docker backend exists only in
+# v4.0.6+; older pinned tags get "kubernetes" (rolling tags track newest).
+sandbox_backend_for_tag() {
+    local ver="${1#v}"; ver="${ver%%-*}"
+    printf '%s' "$ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo docker; return; }
+    local major="${ver%%.*}" rest="${ver#*.}"
+    local minor="${rest%%.*}" patch="${rest#*.}"
+    if [ "$major" -gt 4 ] ||
+        { [ "$major" -eq 4 ] && [ "$minor" -gt 0 ]; } ||
+        { [ "$major" -eq 4 ] && [ "$minor" -eq 0 ] && [ "$patch" -ge 6 ]; }; then
+        echo docker
+    else
+        echo kubernetes
+    fi
+}
+
+# Write SANDBOX_BACKEND to .env for image tag $1; sets SANDBOX_BACKEND_VALUE.
+set_sandbox_backend_for_tag() {
+    SANDBOX_BACKEND_VALUE="$(sandbox_backend_for_tag "$1")"
+    if grep -q "^#* *SANDBOX_BACKEND=" "$ENV_FILE"; then
+        sed -i.bak "s/^#* *SANDBOX_BACKEND=.*/SANDBOX_BACKEND=$SANDBOX_BACKEND_VALUE/" "$ENV_FILE"
+    else
+        echo "SANDBOX_BACKEND=$SANDBOX_BACKEND_VALUE" >> "$ENV_FILE"
+    fi
+}
+
+# --- Docker Compose detection ---
+# Sets COMPOSE_CMD to "docker compose" (plugin) or "docker-compose" (standalone).
+# Returns 0 if either is available, 1 otherwise. Safe to re-run after installing
+# compose mid-script.
+COMPOSE_CMD=""
+detect_compose_cmd() {
+    if docker compose version &> /dev/null; then
+        COMPOSE_CMD="docker compose"
+        return 0
+    fi
+    if command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD="docker-compose"
+        return 0
+    fi
+    COMPOSE_CMD=""
+    return 1
+}
+detect_compose_cmd || true
+
+# --- Docker daemon access detection ---
+# On Linux, a non-root user can only talk to /var/run/docker.sock when they're
+# in the "docker" group. Group membership doesn't apply to the current shell,
+# so when we add the user to the group mid-script we instead prefix subsequent
+# docker commands with sudo to finish this run. Future runs (after the user
+# logs out and back in) won't need it.
+#
+# Trailing ``env`` anchors the splat with a literal command so bash 3.2's
+# single-pass parser doesn't misclassify the inline ``VAR=val`` prefixes, and
+# so sudo's ``env_reset`` can't strip them (they're positional args to ``env``).
+DOCKER_SUDO=(env)
+refresh_docker_sudo() {
+    DOCKER_SUDO=(env)
+    if ! command -v docker &> /dev/null; then
+        return
+    fi
+    if [[ "$(id -u)" -eq 0 ]]; then
+        return
+    fi
+    if docker info &> /dev/null; then
+        return
+    fi
+    if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; then
+        DOCKER_SUDO=(sudo env)
+    fi
+}
+refresh_docker_sudo
+
+# 0 iff DOCKER_SUDO runs commands under sudo. Wrapped so callers don't
+# open-code the [0]-element check (the ``env``-anchor workaround above
+# precludes the cleaner `${#DOCKER_SUDO[@]} > 0` form).
+is_using_sudo() {
+    [[ "${DOCKER_SUDO[0]}" == "sudo" ]]
 }
 
 # Ensures a required file is present. With --local, verifies the file exists on
@@ -234,7 +364,7 @@ NC='\033[0m' # No Color
 
 # Step counter variables
 CURRENT_STEP=0
-TOTAL_STEPS=10
+TOTAL_STEPS=9
 
 # Print colored output
 print_success() {
@@ -265,25 +395,21 @@ if [ "$SHUTDOWN_MODE" = true ]; then
     echo ""
     echo -e "${BLUE}${BOLD}=== Shutting down Onyx ===${NC}"
     echo ""
-    
+
     if [ -d "${INSTALL_ROOT}/deployment" ]; then
         print_info "Stopping Onyx containers..."
 
         # Check if docker-compose.yml exists
         if [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
-            # Determine compose command
-            if docker compose version &> /dev/null; then
-                COMPOSE_CMD="docker compose"
-            elif command -v docker-compose &> /dev/null; then
-                COMPOSE_CMD="docker-compose"
-            else
+            if [[ -z "$COMPOSE_CMD" ]]; then
                 print_error "Docker Compose not found. Cannot stop containers."
                 exit 1
             fi
 
             # Stop containers (without removing them)
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) stop)
-            if [ $? -eq 0 ]; then
+            build_compose_file_args true
+            # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+            if (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="${HOST_PORT:-3000}" IMAGE_TAG="${IMAGE_TAG:-edge}" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" stop); then
                 print_success "Onyx containers stopped (paused)"
             else
                 print_error "Failed to stop containers"
@@ -329,19 +455,15 @@ if [ "$DELETE_DATA_MODE" = true ]; then
     if [ -d "${INSTALL_ROOT}/deployment" ]; then
         # Check if docker-compose.yml exists
         if [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
-            # Determine compose command
-            if docker compose version &> /dev/null; then
-                COMPOSE_CMD="docker compose"
-            elif command -v docker-compose &> /dev/null; then
-                COMPOSE_CMD="docker-compose"
-            else
+            if [[ -z "$COMPOSE_CMD" ]]; then
                 print_error "Docker Compose not found. Cannot remove containers."
                 exit 1
             fi
 
             # Stop and remove containers with volumes
-            (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) down -v)
-            if [ $? -eq 0 ]; then
+            build_compose_file_args true
+            # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+            if (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="${HOST_PORT:-3000}" IMAGE_TAG="${IMAGE_TAG:-edge}" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" down -v); then
                 print_success "Onyx containers and volumes removed"
             else
                 print_error "Failed to remove containers and volumes"
@@ -367,6 +489,7 @@ fi
 install_docker_linux() {
     local distro_id=""
     if [[ -f /etc/os-release ]]; then
+        # shellcheck source=/dev/null
         distro_id="$(. /etc/os-release && echo "${ID:-}")"
     fi
 
@@ -397,6 +520,22 @@ if [[ -n "${WSL_DISTRO_NAME:-}" ]] || grep -qi microsoft /proc/version 2>/dev/nu
     IS_WSL=true
 fi
 
+# Resolve the git ref to pull deployment files from, and the default image tag
+# to suggest at the version prompt. Both default to the most recent GitHub
+# release so users land on a pinned, tested version. If the API is unreachable,
+# fall back to main / edge (the pre-existing defaults).
+RELEASE_REF="main"
+DEFAULT_IMAGE_TAG="edge"
+RELEASE_LOOKUP_FAILED=false
+if [[ "$USE_LOCAL_FILES" = false ]]; then
+    if fetch_latest_release_tag; then
+        RELEASE_REF="$LATEST_RELEASE_TAG"
+        DEFAULT_IMAGE_TAG="$LATEST_RELEASE_TAG"
+    else
+        RELEASE_LOOKUP_FAILED=true
+    fi
+fi
+
 # Dry-run: show plan and exit
 if [[ "$DRY_RUN" = true ]]; then
     print_info "Dry run mode — showing what would happen:"
@@ -405,6 +544,7 @@ if [[ "$DRY_RUN" = true ]]; then
     echo "  • Include Craft: ${INCLUDE_CRAFT}"
     echo "  • OS type: ${OSTYPE:-unknown} (WSL: ${IS_WSL})"
     echo "  • Downloader: ${DOWNLOADER}"
+    echo "  • Default image tag: ${DEFAULT_IMAGE_TAG} (config ref: ${RELEASE_REF})"
     echo ""
     print_success "Dry run complete (no changes made)"
     exit 0
@@ -424,13 +564,14 @@ if ! command -v docker &> /dev/null; then
             exit 1
         fi
         print_success "Docker installed successfully"
+        # Compose plugin may ship with Docker — re-detect.
+        detect_compose_cmd || true
     fi
 fi
 
 # --- Auto-install Docker Compose plugin (Linux only) ---
 if command -v docker &> /dev/null \
-    && ! docker compose version &> /dev/null \
-    && ! command -v docker-compose &> /dev/null \
+    && [[ -z "$COMPOSE_CMD" ]] \
     && { [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; }; then
 
     print_info "Docker Compose is required but not installed."
@@ -446,7 +587,7 @@ if command -v docker &> /dev/null \
     if download_file "$COMPOSE_URL" "$COMPOSE_TMP"; then
         sudo mv "$COMPOSE_TMP" "$COMPOSE_DIR/docker-compose"
         sudo chmod +x "$COMPOSE_DIR/docker-compose"
-        if docker compose version &> /dev/null; then
+        if detect_compose_cmd && [[ "$COMPOSE_CMD" == "docker compose" ]]; then
             print_success "Docker Compose plugin installed"
         else
             print_error "Docker Compose plugin installed but not detected."
@@ -461,25 +602,22 @@ if command -v docker &> /dev/null \
     fi
 fi
 
-# On Linux, ensure the current user can talk to the Docker daemon without
-# sudo.  If necessary, add them to the "docker" group and re-exec the
-# script under that group so the rest of the install proceeds normally.
-if command -v docker &> /dev/null \
-    && { [[ "$OSTYPE" == "linux-gnu"* ]] || [[ -n "${WSL_DISTRO_NAME:-}" ]]; } \
-    && [[ "$(id -u)" -ne 0 ]] \
-    && ! docker info &> /dev/null; then
-    if [[ "${_ONYX_REEXEC:-}" = "1" ]]; then
-        print_error "Cannot connect to Docker after group re-exec."
-        print_info "Log out and back in, then run the script again."
-        exit 1
+# On Linux, ensure docker commands can talk to the daemon. If `docker info`
+# fails, fall back to sudo for the rest of this run. Add the user to the
+# "docker" group only when they aren't already a member — `docker info` also
+# fails when the daemon is stopped, and we don't want to silently mutate
+# group membership in that case. The downstream daemon check will exit with
+# a clearer message if the daemon really is down.
+refresh_docker_sudo
+if is_using_sudo; then
+    if ! id -nG "$USER" | grep -qw docker; then
+        if ! getent group docker &> /dev/null; then
+            sudo groupadd docker
+        fi
+        print_info "Adding $USER to the docker group (effective on next login)..."
+        sudo usermod -aG docker "$USER"
     fi
-    if ! getent group docker &> /dev/null; then
-        sudo groupadd docker
-    fi
-    print_info "Adding $USER to the docker group..."
-    sudo usermod -aG docker "$USER"
-    print_info "Re-launching with docker group active..."
-    exec sg docker -c "_ONYX_REEXEC=1 bash $(printf '%q ' "$0" "$@")"
+    print_info "Using sudo for docker commands in this run."
 fi
 
 # ASCII Art Banner
@@ -498,6 +636,10 @@ echo "Welcome to Onyx Installation Script"
 echo "===================================="
 echo ""
 
+if [[ "$RELEASE_LOOKUP_FAILED" = true ]]; then
+    print_warning "Could not determine latest Onyx release — falling back to main / edge"
+fi
+
 # User acknowledgment section
 echo -e "${YELLOW}${BOLD}This script will:${NC}"
 echo "1. Download deployment files for Onyx into a new '${INSTALL_ROOT}' directory"
@@ -514,8 +656,9 @@ else
     echo ""
 fi
 
-# GitHub repo base URL - using main branch
-GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose"
+# GitHub repo base URL — pinned to the resolved release ref (latest release tag
+# if reachable, otherwise main).
+GITHUB_RAW_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/${RELEASE_REF}/deployment/docker_compose"
 
 # Check system requirements
 print_step "Verifying Docker installation"
@@ -530,29 +673,25 @@ DOCKER_VERSION=$(docker --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 print_success "Docker $DOCKER_VERSION is installed"
 
 # Check Docker Compose
-if docker compose version &> /dev/null; then
-    COMPOSE_VERSION=$(docker compose version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    COMPOSE_CMD="docker compose"
-    if [ -z "$COMPOSE_VERSION" ]; then
-        # Handle non-standard versions like "dev" - assume recent enough
-        COMPOSE_VERSION="dev"
-        print_success "Docker Compose (dev build) is installed (plugin)"
-    else
-        print_success "Docker Compose $COMPOSE_VERSION is installed (plugin)"
-    fi
-elif command -v docker-compose &> /dev/null; then
-    COMPOSE_VERSION=$(docker-compose --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-    COMPOSE_CMD="docker-compose"
-    if [ -z "$COMPOSE_VERSION" ]; then
-        COMPOSE_VERSION="dev"
-        print_success "Docker Compose (dev build) is installed (standalone)"
-    else
-        print_success "Docker Compose $COMPOSE_VERSION is installed (standalone)"
-    fi
-else
+if [[ -z "$COMPOSE_CMD" ]]; then
     print_error "Docker Compose is not installed. Please install Docker Compose first."
     echo "Visit: https://docs.docker.com/compose/install/"
     exit 1
+fi
+
+if [[ "$COMPOSE_CMD" == "docker compose" ]]; then
+    COMPOSE_VERSION=$($COMPOSE_CMD version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    COMPOSE_TYPE="plugin"
+else
+    COMPOSE_VERSION=$($COMPOSE_CMD --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    COMPOSE_TYPE="standalone"
+fi
+if [ -z "$COMPOSE_VERSION" ]; then
+    # Handle non-standard versions like "dev" - assume recent enough
+    COMPOSE_VERSION="dev"
+    print_success "Docker Compose (dev build) is installed (${COMPOSE_TYPE})"
+else
+    print_success "Docker Compose $COMPOSE_VERSION is installed (${COMPOSE_TYPE})"
 fi
 
 # Returns 0 if $1 <= $2, 1 if $1 > $2
@@ -587,7 +726,7 @@ version_compare() {
 }
 
 # Check Docker daemon
-if ! docker info &> /dev/null; then
+if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker info &> /dev/null; then
     if [[ "$OSTYPE" == "darwin"* ]]; then
         print_info "Docker daemon is not running. Starting Docker Desktop..."
         open -a Docker
@@ -616,9 +755,6 @@ fi
 
 # Check Docker resources
 print_step "Verifying Docker resources"
-
-# Get Docker system info
-DOCKER_INFO=$(docker system info 2>/dev/null)
 
 # Try to get memory allocation (method varies by platform)
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -711,7 +847,7 @@ mkdir -p "${INSTALL_ROOT}/data/nginx/local"
 print_success "Directory structure created"
 
 # Ensure all required configuration files are present
-NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/data/nginx"
+NGINX_BASE_URL="https://raw.githubusercontent.com/onyx-dot-app/onyx/${RELEASE_REF}/deployment/data/nginx"
 
 if [[ "$USE_LOCAL_FILES" = true ]]; then
     print_step "Verifying existing configuration files"
@@ -796,6 +932,18 @@ elif [[ -f "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" ]]; then
     print_info "Removed previous lite overlay (switching to standard mode)"
 fi
 
+# Handle craft overlay file based on selected mode. Keeps the Docker socket
+# bind-mount out of the default file so non-Craft deployments never inherit
+# it; only `--include-craft` (or an existing overlay from a prior install)
+# adds it back.
+if [[ "$INCLUDE_CRAFT" = true ]]; then
+    ensure_file "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" \
+        "${GITHUB_RAW_URL}/${CRAFT_COMPOSE_FILE}" "${CRAFT_COMPOSE_FILE}" || exit 1
+elif [[ -f "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" ]]; then
+    rm -f "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}"
+    print_info "Removed previous craft overlay (Craft disabled this run)"
+fi
+
 ensure_file "${INSTALL_ROOT}/deployment/env.template" \
     "${GITHUB_RAW_URL}/env.template" "env.template" || exit 1
 
@@ -818,29 +966,19 @@ ENV_FILE="${INSTALL_ROOT}/deployment/.env"
 ENV_TEMPLATE="${INSTALL_ROOT}/deployment/env.template"
 # Check if services are already running
 if [ -d "${INSTALL_ROOT}/deployment" ] && [ -f "${INSTALL_ROOT}/deployment/docker-compose.yml" ]; then
-    # Determine compose command
-    if docker compose version &> /dev/null; then
-        COMPOSE_CMD="docker compose"
-    elif command -v docker-compose &> /dev/null; then
-        COMPOSE_CMD="docker-compose"
-    else
-        COMPOSE_CMD=""
-    fi
-
-    if [ -n "$COMPOSE_CMD" ]; then
-        # Check if any containers are running
-        RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args true) ps -q 2>/dev/null | wc -l)
-        if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
-            print_error "Onyx services are currently running!"
-            echo ""
-            print_info "To make configuration changes, you must first shut down the services."
-            echo ""
-            print_info "Please run the following command to shut down Onyx:"
-            echo -e "   ${BOLD}./install.sh --shutdown${NC}"
-            echo ""
-            print_info "Then run this script again to make your changes."
-            exit 1
-        fi
+    build_compose_file_args true
+    # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+    RUNNING_CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps -q 2>/dev/null | wc -l)
+    if [ "$RUNNING_CONTAINERS" -gt 0 ]; then
+        print_error "Onyx services are currently running!"
+        echo ""
+        print_info "To make configuration changes, you must first shut down the services."
+        echo ""
+        print_info "Please run the following command to shut down Onyx:"
+        echo -e "   ${BOLD}./install.sh --shutdown${NC}"
+        echo ""
+        print_info "Then run this script again to make your changes."
+        exit 1
     fi
 fi
 
@@ -854,33 +992,21 @@ if [ -f "$ENV_FILE" ]; then
     echo ""
 
     if [ "$REPLY" = "update" ]; then
+        # Craft uses the regular backend image (ENABLE_CRAFT is a runtime flag),
+        # so the tag is prompted for normally even with --include-craft.
         print_info "Update selected. Which tag would you like to deploy?"
         echo ""
-        echo "• Press Enter for edge (recommended)"
+        echo "• Press Enter for ${DEFAULT_IMAGE_TAG} (recommended)"
         echo "• Type a specific tag (e.g., v0.1.0)"
         echo ""
-        if [ "$INCLUDE_CRAFT" = true ]; then
-            prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
-            VERSION="$REPLY"
-        else
-            prompt_or_default "Enter tag [default: edge]: " "edge"
-            VERSION="$REPLY"
-        fi
+        prompt_or_default "Enter tag [default: ${DEFAULT_IMAGE_TAG}]: " "${DEFAULT_IMAGE_TAG}"
+        VERSION="$REPLY"
         echo ""
 
-        if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
-            print_info "Selected: craft-latest (Craft enabled)"
-        elif [ "$VERSION" = "edge" ]; then
+        if [ "$VERSION" = "edge" ]; then
             print_info "Selected: edge (latest nightly)"
         else
             print_info "Selected: $VERSION"
-        fi
-
-        # Reject craft image tags when running in lite mode
-        if [[ "$LITE_MODE" = true ]] && [[ "${VERSION:-}" == craft-* ]]; then
-            print_error "Cannot use a craft image tag (${VERSION}) with --lite."
-            print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
-            exit 1
         fi
 
         # Update .env file with new version
@@ -893,24 +1019,24 @@ if [ -f "$ENV_FILE" ]; then
             echo "IMAGE_TAG=$VERSION" >> "$ENV_FILE"
         fi
         print_success "Updated IMAGE_TAG to $VERSION in .env file"
-
-        # If using craft image, also enable ENABLE_CRAFT
-        if [[ "$VERSION" == craft-* ]]; then
-            sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
-            print_success "ENABLE_CRAFT set to true"
-        fi
         print_success "Configuration updated for upgrade"
     else
-        # Reject restarting a craft deployment in lite mode
-        EXISTING_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
-        if [[ "$LITE_MODE" = true ]] && [[ "${EXISTING_TAG:-}" == craft-* ]]; then
-            print_error "Cannot restart a craft deployment (${EXISTING_TAG}) with --lite."
-            print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
-            exit 1
-        fi
-
         print_info "Keeping existing configuration..."
         print_success "Will restart with current settings"
+    fi
+
+    # Honor --include-craft on existing installs regardless of update/restart:
+    # enable Craft at runtime and align SANDBOX_BACKEND with the effective tag
+    # (the one just chosen, or the pinned IMAGE_TAG already in .env on a restart).
+    if [ "$INCLUDE_CRAFT" = true ]; then
+        if grep -q "^#* *ENABLE_CRAFT=" "$ENV_FILE"; then
+            sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE"
+        else
+            echo "ENABLE_CRAFT=true" >> "$ENV_FILE"
+        fi
+        EFFECTIVE_TAG="${VERSION:-$(grep -E '^IMAGE_TAG=' "$ENV_FILE" | head -1 | cut -d= -f2-)}"
+        set_sandbox_backend_for_tag "$EFFECTIVE_TAG"
+        print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=$SANDBOX_BACKEND_VALUE, image tag: ${EFFECTIVE_TAG})"
     fi
 
     # Ensure COMPOSE_PROFILES is cleared when running in lite mode on an
@@ -923,27 +1049,18 @@ else
     print_info "No existing .env file found. Setting up new deployment..."
     echo ""
 
-    # Ask for version
+    # Craft uses the regular backend image (ENABLE_CRAFT is a runtime flag), so
+    # the tag is prompted for normally even with --include-craft.
     print_info "Which tag would you like to deploy?"
     echo ""
-    if [ "$INCLUDE_CRAFT" = true ]; then
-        echo "• Press Enter for craft-latest (recommended for Craft)"
-        echo "• Type a specific tag (e.g., craft-v1.0.0)"
-        echo ""
-        prompt_or_default "Enter tag [default: craft-latest]: " "craft-latest"
-        VERSION="$REPLY"
-    else
-        echo "• Press Enter for edge (recommended)"
-        echo "• Type a specific tag (e.g., v0.1.0)"
-        echo ""
-        prompt_or_default "Enter tag [default: edge]: " "edge"
-        VERSION="$REPLY"
-    fi
+    echo "• Press Enter for ${DEFAULT_IMAGE_TAG} (recommended)"
+    echo "• Type a specific tag (e.g., v0.1.0)"
+    echo ""
+    prompt_or_default "Enter tag [default: ${DEFAULT_IMAGE_TAG}]: " "${DEFAULT_IMAGE_TAG}"
+    VERSION="$REPLY"
     echo ""
 
-    if [ "$INCLUDE_CRAFT" = true ] && [ "$VERSION" = "craft-latest" ]; then
-        print_info "Selected: craft-latest (Craft enabled)"
-    elif [ "$VERSION" = "edge" ]; then
+    if [ "$VERSION" = "edge" ]; then
         print_info "Selected: edge (latest nightly)"
     else
         print_info "Selected: $VERSION"
@@ -976,14 +1093,8 @@ else
 
     # TODO (jessica): Uncomment this once no auth users still have an account
     # Use basic auth by default
+    # shellcheck disable=SC2034  # Referenced by the commented-out auth prompt above.
     AUTH_SCHEMA="basic"
-
-    # Reject craft image tags when running in lite mode (must check before writing .env)
-    if [[ "$LITE_MODE" = true ]] && [[ "${VERSION:-}" == craft-* ]]; then
-        print_error "Cannot use a craft image tag (${VERSION}) with --lite."
-        print_info "Craft requires services (Vespa, Redis, background workers) that lite mode disables."
-        exit 1
-    fi
 
     # Create .env file from template
     print_info "Creating .env file with your selections..."
@@ -994,11 +1105,14 @@ else
     sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
     print_success "IMAGE_TAG set to $VERSION"
 
-    # In lite mode, clear COMPOSE_PROFILES so profiled services (MinIO, etc.)
-    # stay disabled — the template ships with s3-filestore enabled by default.
+    # In lite mode, MinIO never starts (COMPOSE_PROFILES cleared) and the
+    # onyx-lite overlay forces FILE_STORE_BACKEND=postgres at runtime; set it in
+    # .env too so the file isn't misleadingly left on s3 (the MinIO/S3 creds
+    # generated below are then unused, but stay ready if s3-filestore is enabled).
     if [[ "$LITE_MODE" = true ]]; then
         sed -i.bak 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Cleared COMPOSE_PROFILES for lite mode"
+        sed -i.bak 's/^FILE_STORE_BACKEND=.*/FILE_STORE_BACKEND=postgres/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Cleared COMPOSE_PROFILES and set FILE_STORE_BACKEND=postgres for lite mode"
     fi
 
     # Configure basic authentication (default)
@@ -1015,12 +1129,36 @@ else
     USER_AUTH_SECRET=$(openssl rand -hex 32)
     sed -i.bak "s/^USER_AUTH_SECRET=.*/USER_AUTH_SECRET=\"$USER_AUTH_SECRET\"/" "$ENV_FILE" 2>/dev/null || true
 
-    # Configure Craft based on flag or if using a craft-* image tag
-    # By default, env.template has Craft commented out (disabled)
-    if [ "$INCLUDE_CRAFT" = true ] || [[ "$VERSION" == craft-* ]]; then
+    # Random MinIO/S3 credentials instead of the minioadmin default. The app uses
+    # MinIO's root creds, so the same pair goes to both the server and app vars.
+    MINIO_ACCESS_KEY=$(openssl rand -hex 16)
+    MINIO_SECRET_KEY=$(openssl rand -hex 32)
+    sed -i.bak "s/^MINIO_ROOT_USER=.*/MINIO_ROOT_USER=$MINIO_ACCESS_KEY/" "$ENV_FILE" 2>/dev/null || true
+    sed -i.bak "s/^MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=$MINIO_SECRET_KEY/" "$ENV_FILE" 2>/dev/null || true
+    sed -i.bak "s/^S3_AWS_ACCESS_KEY_ID=.*/S3_AWS_ACCESS_KEY_ID=$MINIO_ACCESS_KEY/" "$ENV_FILE" 2>/dev/null || true
+    sed -i.bak "s/^S3_AWS_SECRET_ACCESS_KEY=.*/S3_AWS_SECRET_ACCESS_KEY=$MINIO_SECRET_KEY/" "$ENV_FILE" 2>/dev/null || true
+
+    # Configure Craft based on --include-craft.
+    # By default, env.template has Craft commented out (disabled).
+    if [ "$INCLUDE_CRAFT" = true ]; then
         # Set ENABLE_CRAFT=true for runtime configuration (handles commented and uncommented lines)
         sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Onyx Craft enabled (ENABLE_CRAFT=true)"
+        # docker backend exists only in v4.0.6+; older tags get kubernetes.
+        set_sandbox_backend_for_tag "$VERSION"
+        print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=$SANDBOX_BACKEND_VALUE)"
+
+        if [ "$SANDBOX_BACKEND_VALUE" = "docker" ]; then
+            echo ""
+            print_warning "Craft + docker backend: api_server and background bind-mount"
+            print_warning "/var/run/docker.sock (RW = root on host on compromise);"
+            print_warning "sandbox-proxy bind-mounts it RO (still exposes container env,"
+            print_warning "labels, and the events stream). Only enable on hosts you fully"
+            print_warning "control. On EC2, require IMDSv2 (HttpTokens=required) so"
+            print_warning "sandboxes cannot pull IAM credentials from instance metadata."
+            echo ""
+        else
+            print_info "Image tag ${VERSION} predates the docker sandbox backend (v4.0.6+); using SANDBOX_BACKEND=${SANDBOX_BACKEND_VALUE}."
+        fi
     else
         print_info "Onyx Craft disabled (use --include-craft to enable)"
     fi
@@ -1036,6 +1174,31 @@ else
     echo ""
 fi
 
+# Pre-create the sandbox bridge — compose overlay references it as external.
+if [ "$INCLUDE_CRAFT" = true ]; then
+    SANDBOX_NET="${SANDBOX_DOCKER_NETWORK:-onyx_craft_sandbox}"
+    if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network inspect "$SANDBOX_NET" >/dev/null 2>&1; then
+        if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker network create "$SANDBOX_NET" >/dev/null 2>&1; then
+            print_success "Created sandbox bridge network: $SANDBOX_NET"
+        else
+            print_warning "Could not create sandbox network $SANDBOX_NET — create it manually:"
+            echo "    docker network create $SANDBOX_NET"
+        fi
+    fi
+
+    # Same for the CA volume. Name pinned to match
+    # configs.SANDBOX_PROXY_CA_VOLUME_NAME.
+    SANDBOX_PROXY_CA_VOL="sandbox_proxy_ca"
+    if ! ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume inspect "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
+        if ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} docker volume create "$SANDBOX_PROXY_CA_VOL" >/dev/null 2>&1; then
+            print_success "Created sandbox proxy CA volume: $SANDBOX_PROXY_CA_VOL"
+        else
+            print_warning "Could not create sandbox proxy CA volume $SANDBOX_PROXY_CA_VOL — create it manually:"
+            echo "    docker volume create $SANDBOX_PROXY_CA_VOL"
+        fi
+    fi
+fi
+
 # Function to check if a port is available
 is_port_available() {
     local port=$1
@@ -1043,15 +1206,24 @@ is_port_available() {
     # Try netcat first if available
     if command -v nc &> /dev/null; then
         # Try to connect to the port, if it fails, the port is available
-        ! nc -z localhost "$port" 2>/dev/null
+        if nc -z localhost "$port" 2>/dev/null; then
+            return 1
+        fi
+        return 0
     # Fallback using curl/telnet approach
     elif command -v curl &> /dev/null; then
         # Try to connect with curl, if it fails, the port might be available
-        ! curl -s --max-time 1 --connect-timeout 1 "http://localhost:$port" >/dev/null 2>&1
+        if curl -s --max-time 1 --connect-timeout 1 "http://localhost:$port" >/dev/null 2>&1; then
+            return 1
+        fi
+        return 0
     # Final fallback using lsof if available
     elif command -v lsof &> /dev/null; then
         # Check if any process is listening on the port
-        ! lsof -i ":$port" >/dev/null 2>&1
+        if lsof -i ":$port" >/dev/null 2>&1; then
+            return 1
+        fi
+        return 0
     else
         # No port checking tools available, assume port is available
         print_warning "No port checking tools available (nc, curl, lsof). Assuming port $port is available."
@@ -1064,7 +1236,7 @@ find_available_port() {
     local start_port=${1:-3000}
     local port=$start_port
 
-    while [ $port -le 65535 ]; do
+    while [ "$port" -le 65535 ]; do
         if is_port_available "$port"; then
             echo "$port"
             return 0
@@ -1102,36 +1274,42 @@ fi
 export HOST_PORT=$AVAILABLE_PORT
 print_success "Using port $AVAILABLE_PORT for nginx"
 
-# Determine if we're using a floating tag (edge, latest, craft-*) that should force pull
-# Read IMAGE_TAG from .env file and remove any quotes or whitespace
+# Determine if we're using a floating tag (edge, latest) that should force pull.
+# Read IMAGE_TAG from .env file and remove any quotes or whitespace.
 CURRENT_IMAGE_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
-if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
+
+if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ]; then
     USE_LATEST=true
-    if [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
-        print_info "Using craft tag '$CURRENT_IMAGE_TAG' - will force pull and recreate containers"
-    else
-        print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
-    fi
+    # Floating tags track main, so configs should come from main.
+    CONFIG_REF="main"
+    print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
 else
     USE_LATEST=false
+    # Pinned release tags use their own ref so configs match the images.
+    CONFIG_REF="$CURRENT_IMAGE_TAG"
 fi
 
-# For pinned version tags, re-download config files from that tag so the
-# compose file matches the images being pulled (the initial download used main).
-if [[ "$USE_LATEST" = false ]] && [[ "$USE_LOCAL_FILES" = false ]]; then
-    PINNED_BASE="https://raw.githubusercontent.com/onyx-dot-app/onyx/${CURRENT_IMAGE_TAG}/deployment"
-    print_info "Fetching config files matching tag ${CURRENT_IMAGE_TAG}..."
-    if download_file "${PINNED_BASE}/docker_compose/docker-compose.yml" "${INSTALL_ROOT}/deployment/docker-compose.yml" 2>/dev/null; then
-        download_file "${PINNED_BASE}/data/nginx/app.conf.template" "${INSTALL_ROOT}/data/nginx/app.conf.template" 2>/dev/null || true
-        download_file "${PINNED_BASE}/data/nginx/run-nginx.sh" "${INSTALL_ROOT}/data/nginx/run-nginx.sh" 2>/dev/null || true
+# The initial download pulled configs from RELEASE_REF (latest release, or main
+# on fallback). If the chosen image tag wants configs from a different ref,
+# re-fetch them so the compose file matches the images being pulled.
+if [[ "$CONFIG_REF" != "$RELEASE_REF" ]] && [[ "$USE_LOCAL_FILES" = false ]]; then
+    CONFIG_BASE="https://raw.githubusercontent.com/onyx-dot-app/onyx/${CONFIG_REF}/deployment"
+    print_info "Fetching config files matching ${CONFIG_REF}..."
+    if download_file "${CONFIG_BASE}/docker_compose/docker-compose.yml" "${INSTALL_ROOT}/deployment/docker-compose.yml" 2>/dev/null; then
+        download_file "${CONFIG_BASE}/data/nginx/app.conf.template" "${INSTALL_ROOT}/data/nginx/app.conf.template" 2>/dev/null || true
+        download_file "${CONFIG_BASE}/data/nginx/run-nginx.sh" "${INSTALL_ROOT}/data/nginx/run-nginx.sh" 2>/dev/null || true
         chmod +x "${INSTALL_ROOT}/data/nginx/run-nginx.sh"
         if [[ "$LITE_MODE" = true ]]; then
-            download_file "${PINNED_BASE}/docker_compose/${LITE_COMPOSE_FILE}" \
+            download_file "${CONFIG_BASE}/docker_compose/${LITE_COMPOSE_FILE}" \
                 "${INSTALL_ROOT}/deployment/${LITE_COMPOSE_FILE}" 2>/dev/null || true
         fi
-        print_success "Config files updated to match ${CURRENT_IMAGE_TAG}"
+        if [[ "$INCLUDE_CRAFT" = true ]]; then
+            download_file "${CONFIG_BASE}/docker_compose/${CRAFT_COMPOSE_FILE}" \
+                "${INSTALL_ROOT}/deployment/${CRAFT_COMPOSE_FILE}" 2>/dev/null || true
+        fi
+        print_success "Config files updated to match ${CONFIG_REF}"
     else
-        print_warning "Tag ${CURRENT_IMAGE_TAG} not found on GitHub — using main branch configs"
+        print_warning "Ref ${CONFIG_REF} not found on GitHub — keeping configs from ${RELEASE_REF}"
     fi
 fi
 
@@ -1140,144 +1318,70 @@ print_step "Pulling Docker images"
 print_info "This may take several minutes depending on your internet connection..."
 echo ""
 print_info "Downloading Docker images (this may take a while)..."
-(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) pull --quiet)
-if [ $? -eq 0 ]; then
+# Pass IMAGE_TAG inline so the value the user picked at the prompt wins over
+# any `export IMAGE_TAG=...` inherited from the caller's shell. Compose's
+# substitution prefers shell env over .env, so without this an exported
+# IMAGE_TAG in the user's shellrc would silently swap the images being pulled.
+build_compose_file_args
+# shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+if (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" pull --quiet); then
     print_success "Docker images downloaded successfully"
 else
     print_error "Failed to download Docker images"
     exit 1
 fi
 
+# Build the up flags. With --wait (default), Compose waits until every
+# container with a healthcheck reports healthy before returning, and names any
+# service that stays unhealthy past the timeout.
+UP_WAIT_ARGS=()
+if [[ "$NO_WAIT" = false ]]; then
+    UP_WAIT_ARGS=(--wait --wait-timeout "${WAIT_TIMEOUT_SECONDS}")
+fi
+
 # Start services
 print_step "Starting Onyx services"
 print_info "Launching containers..."
+if [[ "$NO_WAIT" = false ]]; then
+    print_info "Waiting up to ${WAIT_TIMEOUT_SECONDS}s for all services to become healthy..."
+fi
 echo ""
+UP_EXIT=0
 if [ "$USE_LATEST" = true ]; then
     print_info "Force pulling latest images and recreating containers..."
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d --pull always --force-recreate)
+    # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+    (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d --pull always --force-recreate "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 else
-    (cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) up -d)
+    # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+    (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" up -d "${UP_WAIT_ARGS[@]}") || UP_EXIT=$?
 fi
-if [ $? -ne 0 ]; then
+if [ $UP_EXIT -ne 0 ]; then
     print_error "Failed to start Onyx services"
-    exit 1
-fi
-
-# Monitor container startup
-print_step "Verifying container health"
-print_info "Waiting for containers to initialize (10 seconds)..."
-
-# Progress bar for waiting
-for i in {1..10}; do
-    printf "\r[%-10s] %d%%" $(printf '#%.0s' $(seq 1 $((i*10/10)))) $((i*100/10))
-    sleep 1
-done
-echo ""
-echo ""
-
-# Check for restart loops
-print_info "Checking container health status..."
-RESTART_ISSUES=false
-CONTAINERS=$(cd "${INSTALL_ROOT}/deployment" && $COMPOSE_CMD $(compose_file_args) ps -q 2>/dev/null)
-
-for CONTAINER in $CONTAINERS; do
-    PROJECT_NAME="$(basename "$INSTALL_ROOT")_deployment_"
-    CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "$CONTAINER" | sed "s/^\/\|^${PROJECT_NAME}//g")
-    RESTART_COUNT=$(docker inspect --format '{{.RestartCount}}' "$CONTAINER")
-    STATUS=$(docker inspect --format '{{.State.Status}}' "$CONTAINER")
-
-    if [ "$STATUS" = "running" ]; then
-        if [ "$RESTART_COUNT" -gt 2 ]; then
-            print_error "$CONTAINER_NAME is in a restart loop (restarted $RESTART_COUNT times)"
-            RESTART_ISSUES=true
-        else
-            print_success "$CONTAINER_NAME is healthy"
-        fi
-    elif [ "$STATUS" = "restarting" ]; then
-        print_error "$CONTAINER_NAME is stuck restarting"
-        RESTART_ISSUES=true
-    else
-        print_warning "$CONTAINER_NAME status: $STATUS"
-    fi
-done
-
-echo ""
-
-if [ "$RESTART_ISSUES" = true ]; then
-    print_error "Some containers are experiencing issues!"
     echo ""
-    print_info "Please check the logs for more information:"
-    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $COMPOSE_CMD $(compose_file_args) logs)"
-
+    print_info "Current container status:"
+    # shellcheck disable=SC2086 # COMPOSE_CMD is "docker compose" and needs word-splitting
+    (cd "${INSTALL_ROOT}/deployment" && ${DOCKER_SUDO[@]+"${DOCKER_SUDO[@]}"} HOST_PORT="$HOST_PORT" IMAGE_TAG="$CURRENT_IMAGE_TAG" $COMPOSE_CMD "${COMPOSE_FILE_ARGS[@]}" ps)
+    echo ""
+    print_info "Check the logs of any unhealthy service:"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $(is_using_sudo && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} logs <service>)"
     echo ""
     print_info "If the issue persists, please contact: founders@onyx.app"
-    echo "Include the output of the logs command in your message."
     exit 1
 fi
-
-# Health check function
-check_onyx_health() {
-    local max_attempts=600  # 10 minutes * 60 attempts per minute (every 1 second)
-    local attempt=1
-    local port=${HOST_PORT:-3000}
-
-    print_info "Checking Onyx service health..."
-    echo "Containers are healthy, waiting for database migrations and service initialization to finish."
-    echo ""
-
-    while [ $attempt -le $max_attempts ]; do
-        local http_code=""
-        if [[ "$DOWNLOADER" == "curl" ]]; then
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port" 2>/dev/null || echo "000")
-        else
-            http_code=$(wget -q --spider -S "http://localhost:$port" 2>&1 | grep "HTTP/" | tail -1 | awk '{print $2}' || echo "000")
-        fi
-        if echo "$http_code" | grep -qE "^(200|301|302|303|307|308)$"; then
-            return 0
-        fi
-
-        # Show animated progress with time elapsed
-        local elapsed=$((attempt))
-        local minutes=$((elapsed / 60))
-        local seconds=$((elapsed % 60))
-
-        # Create animated dots with fixed spacing (cycle through 1-3 dots)
-        local dots=""
-        case $((attempt % 3)) in
-            0) dots=".  " ;;
-            1) dots=".. " ;;
-            2) dots="..." ;;
-        esac
-
-        # Clear line and show progress with fixed spacing
-        printf "\r\033[KChecking Onyx service%s (%dm %ds elapsed)" "$dots" "$minutes" "$seconds"
-
-        sleep 1
-        attempt=$((attempt + 1))
-    done
-
-    echo ""  # New line after the progress line
-    return 1
-}
 
 # Success message
 print_step "Installation Complete!"
-print_success "All containers are running successfully!"
 echo ""
-
-# Run health check
-if check_onyx_health; then
-    echo ""
+if [[ "$NO_WAIT" = false ]]; then
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}${BOLD}   🎉 Onyx service is ready! 🎉${NC}"
     echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 else
-    print_warning "Health check timed out after 10 minutes"
-    print_info "Containers are running, but the web service may still be initializing (or something went wrong)"
-    echo ""
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers are running ⚠️${NC}"
+    echo -e "${YELLOW}${BOLD}   ⚠️  Onyx containers started  ⚠️${NC}"
     echo -e "${YELLOW}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    print_info "Services may still be initializing. Check status with:"
+    echo "  (cd \"${INSTALL_ROOT}/deployment\" && $(is_using_sudo && echo "sudo ")$COMPOSE_CMD ${COMPOSE_FILE_ARGS[*]} ps)"
 fi
 echo ""
 print_info "Access Onyx at:"
@@ -1310,7 +1414,7 @@ echo ""
 if is_interactive && command -v gh &>/dev/null; then
     prompt_yn_or_default "Enjoying Onyx? Star the repo on GitHub? [Y/n] " "Y"
     if [[ ! "$REPLY" =~ ^[Nn] ]]; then
-        if GH_PAGER= gh api -X PUT /user/starred/onyx-dot-app/onyx < /dev/null >/dev/null 2>&1; then
+        if GH_PAGER='' gh api -X PUT /user/starred/onyx-dot-app/onyx < /dev/null >/dev/null 2>&1; then
             print_success "Thanks for the star!"
         else
             print_info "Star us at: https://github.com/onyx-dot-app/onyx"

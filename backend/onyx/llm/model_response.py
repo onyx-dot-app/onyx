@@ -137,25 +137,23 @@ def _parse_message_tool_calls(
     return parsed_tool_calls
 
 
-def _validate_and_extract_base_fields(
+def _extract_id_and_created(
     response_data: dict[str, Any], error_prefix: str
-) -> tuple[str, str, dict[str, Any]]:
-    """
-    Validate and extract common fields (id, created, first choice) from a LiteLLM response.
-
-    Returns:
-        Tuple of (id, created, choice_data)
-    """
+) -> tuple[str, str]:
     response_id = response_data.get("id")
     created = response_data.get("created")
     if response_id is None or created is None:
         raise ValueError(f"{error_prefix} must include 'id' and 'created'.")
+    return str(response_id), str(created)
 
+
+def _require_first_choice(
+    response_data: dict[str, Any], error_prefix: str
+) -> dict[str, Any]:
     choices: list[dict[str, Any]] = response_data.get("choices") or []
     if not choices:
         raise ValueError(f"{error_prefix} must include at least one choice.")
-
-    return str(response_id), str(created), choices[0] or {}
+    return choices[0] or {}
 
 
 def _usage_from_usage_data(usage_data: dict[str, Any]) -> Usage:
@@ -181,9 +179,15 @@ def from_litellm_model_response_stream(
     Convert a LiteLLM ModelResponseStream into the simplified Onyx representation.
     """
     response_data = response.model_dump()
-    response_id, created, choice_data = _validate_and_extract_base_fields(
+    response_id, created = _extract_id_and_created(
         response_data, "LiteLLM response stream"
     )
+
+    # OpenAI (and other providers) emit a final usage-only chunk with an empty
+    # `choices` array when stream_options.include_usage is set. Treat it as an
+    # empty-delta chunk that still carries usage rather than failing the stream.
+    choices: list[dict[str, Any]] = response_data.get("choices") or []
+    choice_data: dict[str, Any] = (choices[0] or {}) if choices else {}
 
     delta_data: dict[str, Any] = choice_data.get("delta") or {}
     parsed_delta = Delta(
@@ -214,9 +218,8 @@ def from_litellm_model_response(
     Convert a LiteLLM ModelResponse into the simplified Onyx representation.
     """
     response_data = response.model_dump()
-    response_id, created, choice_data = _validate_and_extract_base_fields(
-        response_data, "LiteLLM response"
-    )
+    response_id, created = _extract_id_and_created(response_data, "LiteLLM response")
+    choice_data = _require_first_choice(response_data, "LiteLLM response")
 
     message_data: dict[str, Any] = choice_data.get("message") or {}
     parsed_tool_calls = _parse_message_tool_calls(message_data.get("tool_calls"))

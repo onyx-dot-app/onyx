@@ -58,7 +58,7 @@ func devcontainerImage() string {
 // checkDevcontainerCLI ensures the devcontainer CLI is installed.
 func checkDevcontainerCLI() {
 	if _, err := exec.LookPath("devcontainer"); err != nil {
-		log.Fatal("devcontainer CLI is not installed. Install it with: npm install -g @devcontainers/cli")
+		log.Fatal("devcontainer CLI is not installed. Install it with: bun install -g @devcontainers/cli")
 	}
 }
 
@@ -153,10 +153,28 @@ func worktreeGitMount(root string) (string, bool) {
 // the socket is not accessible.
 func sshAgentMount() (string, bool) {
 	sock := os.Getenv("SSH_AUTH_SOCK")
+
+	// On macOS the default SSH_AUTH_SOCK is a launchd socket
+	// (/private/tmp/com.apple.launchd.*/Listeners) that Docker Desktop cannot
+	// reliably bind-mount into its Linux VM. For that case -- or when
+	// SSH_AUTH_SOCK is unset entirely (common on macOS where launchd manages
+	// the agent implicitly) -- use Docker Desktop's built-in ssh-agent
+	// forwarding. Custom agents (1Password, GPG, Secretive, etc.) at normal
+	// filesystem paths fall through to the regular bind-mount below.
+	if runtime.GOOS == "darwin" {
+		if sock == "" || strings.Contains(sock, "com.apple.launchd") {
+			const dockerDesktopSSHSock = "/run/host-services/ssh-auth.sock"
+			mount := fmt.Sprintf("type=bind,source=%s,target=/tmp/ssh-agent.sock", dockerDesktopSSHSock)
+			log.Debugf("Forwarding SSH agent via Docker Desktop helper: %s", dockerDesktopSSHSock)
+			return mount, true
+		}
+	}
+
 	if sock == "" {
 		log.Warn("SSH_AUTH_SOCK not set — SSH agent forwarding disabled (git over SSH won't work inside the container)")
 		return "", false
 	}
+
 	if _, err := os.Stat(sock); err != nil {
 		log.Warnf("SSH_AUTH_SOCK=%s not accessible — SSH agent forwarding disabled: %v", sock, err)
 		return "", false
@@ -175,18 +193,29 @@ func ensureRemoteUser() {
 		return
 	}
 
-	if runtime.GOOS == "linux" {
+	setRemoteUserRoot := func(reason string) {
+		log.Debugf("%s — setting DEVCONTAINER_REMOTE_USER=root", reason)
+		if err := os.Setenv("DEVCONTAINER_REMOTE_USER", "root"); err != nil {
+			log.Warnf("Failed to set DEVCONTAINER_REMOTE_USER: %v", err)
+		}
+	}
+
+	switch runtime.GOOS {
+	case "linux":
 		sock := os.Getenv("DOCKER_SOCK")
 		xdg := os.Getenv("XDG_RUNTIME_DIR")
 		// Heuristic: rootless Docker on Linux typically places its socket
 		// under $XDG_RUNTIME_DIR. If DOCKER_SOCK was set to a custom path
 		// outside XDG_RUNTIME_DIR, set DEVCONTAINER_REMOTE_USER=root manually.
 		if xdg != "" && strings.HasPrefix(sock, xdg) {
-			log.Debug("Rootless Docker detected — setting DEVCONTAINER_REMOTE_USER=root")
-			if err := os.Setenv("DEVCONTAINER_REMOTE_USER", "root"); err != nil {
-				log.Warnf("Failed to set DEVCONTAINER_REMOTE_USER: %v", err)
-			}
+			setRemoteUserRoot("Rootless Docker detected")
 		}
+	case "darwin":
+		// Docker Desktop on macOS bind-mounts host paths through the Linux VM
+		// as root-owned (no host-UID mapping like native Linux Docker), so
+		// init-dev-user.sh's WS_UID=0 branch always fires and rejects the
+		// non-root `dev` user.
+		setRemoteUserRoot("Docker Desktop on macOS")
 	}
 }
 

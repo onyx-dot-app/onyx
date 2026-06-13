@@ -1,10 +1,47 @@
 import csv
 import io
 from collections.abc import Generator
+from collections.abc import Mapping
 
 from pydantic import BaseModel
 
+# Python's csv default field size limit is 131072 bytes (128 KiB), which
+# real-world data (long descriptions, pasted docs, base64 blobs) routinely
+# exceeds — the parser then raises `Error: field larger than field limit
+# (131072)` and fails the whole row, aborting indexing of the CSV section
+# (ONYX-BACKEND-H6FM). Bump to 128 MiB, matching the order of magnitude the
+# salesforce connector already opts into for bulk exports.
+_CSV_FIELD_SIZE_LIMIT_BYTES = 128 * 1024 * 1024
+csv.field_size_limit(_CSV_FIELD_SIZE_LIMIT_BYTES)
+
 _NEWLINE_CSV_ERROR = "new-line character seen in unquoted field"
+
+# Leading characters that spreadsheet software (Excel, LibreOffice, Google
+# Sheets) interprets as the start of a formula. Exporting user-supplied text
+# beginning with one of these enables CSV/formula injection (e.g. DDE payloads
+# like `=cmd|' /C calc'!A1`) against whoever opens the export.
+_FORMULA_PREFIX_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def sanitize_csv_cell(value: str) -> str:
+    """Neutralize spreadsheet formula injection in a CSV cell.
+
+    Prefixes values that start with a formula-trigger character with a
+    single quote, which spreadsheet software treats as "render as text".
+    """
+    if value.startswith(_FORMULA_PREFIX_CHARS):
+        return "'" + value
+    return value
+
+
+def sanitize_csv_cell_or_none(value: str | None) -> str | None:
+    """sanitize_csv_cell that passes None through."""
+    return sanitize_csv_cell(value) if value is not None else None
+
+
+def sanitize_csv_row(row: Mapping[str, str | None]) -> dict[str, str | None]:
+    """Apply sanitize_csv_cell to every non-None value of a CSV row dict."""
+    return {key: sanitize_csv_cell_or_none(value) for key, value in row.items()}
 
 
 class ParsedRow(BaseModel):

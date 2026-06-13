@@ -19,7 +19,7 @@ logger = setup_logger()
 #####
 # App Configs
 #####
-APP_HOST = "0.0.0.0"
+APP_HOST = "0.0.0.0"  # noqa: S104 — server bind address; intentional default for containerized deployment
 APP_PORT = 8080
 # API_PREFIX is used to prepend a base path for all API routes
 # generally used if using a reverse proxy which doesn't support stripping the `/api`
@@ -106,6 +106,12 @@ SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "
 # 3. no queries
 ONYX_QUERY_HISTORY_TYPE = QueryHistoryType(
     (os.environ.get("ONYX_QUERY_HISTORY_TYPE") or QueryHistoryType.NORMAL.value).lower()
+)
+
+# Visibility-only: hides the Query History page from the admin sidebar; the
+# history APIs + recording stay on (unlike ONYX_QUERY_HISTORY_TYPE=disabled).
+HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL = (
+    os.environ.get("HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL", "").lower() == "true"
 )
 
 #####
@@ -263,11 +269,22 @@ JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
-if AUTH_TYPE == AuthType.BASIC and not USER_AUTH_SECRET:
-    logger.warning(
-        "USER_AUTH_SECRET is not set. This is required for secure password reset "
-        "and email verification tokens. Please set USER_AUTH_SECRET in production."
-    )
+# Bearer token guarding the API server's /metrics endpoint. Auth is required by
+# default: scrapers must present this token as `Authorization: Bearer <token>`
+# (the standard Prometheus scrape format). If neither this nor
+# DISABLE_METRICS_AUTH is set, /metrics is locked (returns 401) — set one or the
+# other deliberately.
+METRICS_AUTH_TOKEN = os.environ.get("METRICS_AUTH_TOKEN") or ""
+
+# Explicit opt-out: expose /metrics with no authentication. Only honored as a
+# deliberate choice, since auth is otherwise required by default.
+DISABLE_METRICS_AUTH = os.environ.get("DISABLE_METRICS_AUTH", "").lower() == "true"
+
+# Explicit opt-in: serve the interactive API docs and schema (/openapi.json,
+# /docs, /redoc) publicly with no authentication. Default off so the API surface
+# is not exposed on a fresh deployment. When disabled the routes are not
+# registered at all (404). Note: these renderers never bypass per-route auth.
+ENABLE_PUBLIC_DOCS = os.environ.get("ENABLE_PUBLIC_DOCS", "").lower() == "true"
 
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
 # By default, this is set to match the Redis expiry time for consistency.
@@ -283,10 +300,15 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER") or ""
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER") or ""
 SMTP_PASS = os.environ.get("SMTP_PASS") or ""
+SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "true").lower() not in (
+    "false",
+    "0",
+    "no",
+)
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
 
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
-EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS]) or SENDGRID_API_KEY
+EMAIL_CONFIGURED = (bool(SMTP_SERVER) and bool(EMAIL_FROM)) or bool(SENDGRID_API_KEY)
 
 # If set, Onyx will listen to the `expires_at` returned by the identity
 # provider (e.g. Okta, Google, etc.) and force the user to re-authenticate
@@ -369,7 +391,7 @@ ENABLE_OPENSEARCH_RETRIEVAL_FOR_ONYX = (
 DISABLE_OPENSEARCH_MIGRATION_TASK = (
     os.environ.get("DISABLE_OPENSEARCH_MIGRATION_TASK", "").lower() == "true"
 )
-ONYX_DISABLE_VESPA = os.environ.get("ONYX_DISABLE_VESPA", "").lower() == "true"
+ONYX_DISABLE_VESPA = os.environ.get("ONYX_DISABLE_VESPA", "true").lower() == "true"
 # Whether we should check for and create an index if necessary every time we
 # instantiate an OpenSearchDocumentIndex on multitenant cloud. Defaults to True.
 VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT = (
@@ -529,6 +551,24 @@ if _rate_limit_max_requests_str is not None:
         pass
 
 AUTH_RATE_LIMITING_ENABLED = RATE_LIMIT_MAX_REQUESTS and RATE_LIMIT_WINDOW_SECONDS
+
+# Rate limiting for the chat message feedback endpoints. Unlike the auth rate
+# limiting above, this is enabled by default — set either value to 0 to
+# disable. Requires the Redis cache backend (no-op under CACHE_BACKEND=postgres).
+# The limit is per user (all sessions/API keys of an account share one bucket),
+# so the default leaves headroom for legitimate bursts while still blocking floods.
+FEEDBACK_RATE_LIMIT_MAX_REQUESTS = int(
+    os.environ.get("FEEDBACK_RATE_LIMIT_MAX_REQUESTS", "100")
+)
+FEEDBACK_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.environ.get("FEEDBACK_RATE_LIMIT_WINDOW_SECONDS", "60")
+)
+FEEDBACK_RATE_LIMITING_ENABLED = (
+    FEEDBACK_RATE_LIMIT_MAX_REQUESTS > 0
+    and FEEDBACK_RATE_LIMIT_WINDOW_SECONDS > 0
+    and CACHE_BACKEND == CacheBackendType.REDIS
+)
+
 # Used for general redis things
 REDIS_DB_NUMBER = int(os.environ.get("REDIS_DB_NUMBER", 0))
 
@@ -680,7 +720,6 @@ WEB_CONNECTOR_IGNORED_ELEMENTS = os.environ.get(
 WEB_CONNECTOR_OAUTH_CLIENT_ID = os.environ.get("WEB_CONNECTOR_OAUTH_CLIENT_ID")
 WEB_CONNECTOR_OAUTH_CLIENT_SECRET = os.environ.get("WEB_CONNECTOR_OAUTH_CLIENT_SECRET")
 WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
-WEB_CONNECTOR_VALIDATE_URLS = os.environ.get("WEB_CONNECTOR_VALIDATE_URLS")
 
 # When the OnyxWebCrawler (open_url tool) hits a 403 / Cloudflare challenge,
 # fall back to a one-shot Playwright (Chromium) render to bypass JS-based
@@ -688,6 +727,38 @@ WEB_CONNECTOR_VALIDATE_URLS = os.environ.get("WEB_CONNECTOR_VALIDATE_URLS")
 # the Chromium binary installed).
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
+)
+
+# NOTE: the three SSRF env vars below (OPEN_URL_VALIDATE_SSRF,
+# MCP_SERVER_ALLOW_PRIVATE_NETWORK, MCP_SERVER_ALLOW_LOOPBACK) are no longer read
+# at their call sites. They only seed the default "SSRF Protection" level when no
+# override is saved; admins set the effective behavior on the Security Hardening
+# page.
+
+# Whether the open_url tool enforces SSRF protection (rejecting URLs that
+# resolve to private/internal IPs). Default true to keep multi-tenant SaaS
+# safe. Self-hosted operators on trusted networks (e.g. internal docs that
+# resolve to RFC1918 addresses via split-horizon DNS) can set to false to
+# allow fetching from private ranges.
+OPEN_URL_VALIDATE_SSRF = (
+    os.environ.get("OPEN_URL_VALIDATE_SSRF", "true").lower() == "true"
+)
+
+# Allow outbound MCP/OAuth calls (server_url, oauth endpoints) to resolve to
+# private/internal IPs. Default false to block SSRF; self-hosted operators with
+# an internal MCP server can opt in. Loopback/unspecified/link-local (incl.
+# cloud-metadata) stay blocked regardless.
+MCP_SERVER_ALLOW_PRIVATE_NETWORK = (
+    os.environ.get("MCP_SERVER_ALLOW_PRIVATE_NETWORK", "false").lower() == "true"
+)
+
+# Separately allow loopback (127.0.0.0/8, ::1) targets. Loopback reaches the app
+# host itself (its admin APIs, sidecars, other localhost services), so it stays
+# blocked even under MCP_SERVER_ALLOW_PRIVATE_NETWORK unless explicitly opted in.
+# Requires the private-network opt-in above to take effect. Used by our tests'
+# local mock MCP servers; cloud-metadata/link-local stay blocked regardless.
+MCP_SERVER_ALLOW_LOOPBACK = (
+    os.environ.get("MCP_SERVER_ALLOW_LOOPBACK", "false").lower() == "true"
 )
 
 HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY = os.environ.get(
@@ -780,6 +851,15 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
+# Cap the total text retained per file across a connector's extracted sections,
+# bounding worker memory when a source can't be size-checked before fetch —
+# e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
+# bypass GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD. Content past the cap is dropped
+# with a warning. 0 disables the cap.
+CONNECTOR_MAX_EXTRACTED_TEXT_CHARS = int(
+    os.environ.get("CONNECTOR_MAX_EXTRACTED_TEXT_CHARS") or 10_000_000
+)
+
 # Default size threshold for Drupal Wiki attachments (10MB)
 DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD = int(
     os.environ.get("DRUPAL_WIKI_ATTACHMENT_SIZE_THRESHOLD", 10 * 1024 * 1024)
@@ -856,7 +936,7 @@ LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE = (
     == "true"
 )
 
-DEFAULT_PRUNING_FREQ = 60 * 60 * 24 * 10  # 10 days
+DEFAULT_PRUNING_FREQ = 60 * 60 * 24 * 7  # 7 days
 
 ALLOW_SIMULTANEOUS_PRUNING = (
     os.environ.get("ALLOW_SIMULTANEOUS_PRUNING", "").lower() == "true"
@@ -882,6 +962,20 @@ ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS = os.environ.get(
 CONTINUE_ON_CONNECTOR_FAILURE = os.environ.get(
     "CONTINUE_ON_CONNECTOR_FAILURE", ""
 ).lower() not in ["false", ""]
+# When true, indexing makes a best effort to keep going past errors that it
+# can bound:
+#   1. The >3-failures-AND->10%-ratio threshold abort is disabled, so a
+#      connector that yields many per-doc/entity `ConnectorFailure`s no longer
+#      aborts the attempt.
+#   2. Unhandled exceptions inside docprocessing (per-batch) are converted into
+#      `DocumentFailure`s for the docs in the batch (or an `EntityFailure` if
+#      the batch couldn't be loaded). The batch is marked complete so the
+#      attempt can resolve as COMPLETED_WITH_ERRORS.
+# Does NOT swallow unhandled exceptions raised from the connector generator
+# itself: those still mark the attempt FAILED, because we have no entity
+# context to isolate the failing item and silently advancing would risk
+# skipping source data. Operators must triage those by fixing the connector.
+PERSISTENT_INDEXING = os.environ.get("PERSISTENT_INDEXING", "").lower() == "true"
 # When swapping to a new embedding model, a secondary index is created in the background, to conserve
 # resources, we pause updates on the primary index by default while the secondary index is created
 DISABLE_INDEX_UPDATE_ON_SWAP = (
@@ -931,6 +1025,23 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Documents exceeding this limit will surface a visible error rather than being silently dropped.
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
+
+# Max RSS (in MB) for a spawned indexing worker process. When exceeded, the
+# docfetching watchdog terminates the worker and fails the attempt with a clear
+# error, pre-empting a kernel OOM kill of the whole pod — which would also kill
+# the attempt heartbeat (surfacing as an opaque "No heartbeat received" failure)
+# and any other tenants' tasks running on the pod. 0 disables the check.
+INDEXING_WORKER_MEMORY_LIMIT_MB = int(
+    os.environ.get("INDEXING_WORKER_MEMORY_LIMIT_MB") or 0
+)
+
+# Enable tracemalloc in spawned indexing workers so the near-limit memory report
+# (see INDEXING_WORKER_MEMORY_LIMIT_MB) includes allocation sites. Adds meaningful
+# per-allocation CPU/memory overhead — enable only while chasing a leak.
+INDEXING_WORKER_TRACEMALLOC = (
+    os.environ.get("INDEXING_WORKER_TRACEMALLOC", "").lower() == "true"
+)
+
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
@@ -1004,11 +1115,17 @@ CODE_INTERPRETER_MAX_OUTPUT_LENGTH = int(
     os.environ.get("CODE_INTERPRETER_MAX_OUTPUT_LENGTH") or 50_000
 )
 
+# Per-call MCP read timeout; configurable since some tools (e.g. data-agent
+# servers) run longer than the default.
+MCP_TOOL_CALL_TIMEOUT_SECONDS = int(
+    os.environ.get("MCP_TOOL_CALL_TIMEOUT_SECONDS") or 300
+)
+
 
 #####
 # Miscellaneous
 #####
-JOB_TIMEOUT = 60 * 60 * 6  # 6 hours default
+JOB_TIMEOUT = int(os.environ.get("JOB_TIMEOUT_SECONDS") or 60 * 60 * 6)  # default 6h
 # Logs Onyx only model interactions like prompts, responses, messages etc.
 LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
@@ -1017,6 +1134,13 @@ LOG_ONYX_MODEL_INTERACTIONS = (
 PROMPT_CACHE_CHAT_HISTORY = (
     os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
 )
+
+# Opt-in cap on outgoing image-count for Azure providers (any model_provider
+# starting with "azure"). When enabled, requests are capped at 50 images each
+# (matching the documented Azure OpenAI ceiling) to avoid raw 400s from the
+# gateway. Off by default.
+ENABLE_AZURE_IMAGE_CAP = os.environ.get("ENABLE_AZURE_IMAGE_CAP", "").lower() == "true"
+
 # If set to `true` will enable additional logs about Vespa query performance
 # (time spent on finding the right docs + time spent fetching summaries from disk)
 LOG_VESPA_TIMING_INFORMATION = (
@@ -1202,7 +1326,7 @@ API_KEY_HASH_ROUNDS = (
 # MCP Server Configs
 #####
 MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
-MCP_SERVER_HOST = os.environ.get("MCP_SERVER_HOST", "0.0.0.0")
+MCP_SERVER_HOST = os.environ.get("MCP_SERVER_HOST", "0.0.0.0")  # noqa: S104 — server bind address; intentional default for containerized deployment
 MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
 
 # CORS origins for MCP clients (comma-separated)
@@ -1324,6 +1448,32 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
 
+# Well-known MinIO default; deployments left on it expose all stored files.
+DEFAULT_OBJECT_STORAGE_CREDENTIAL = "minioadmin"
+
+
+def _uses_default_object_storage_credentials(
+    s3_endpoint_url: str | None,
+    access_key: str | None,
+    secret_key: str | None,
+) -> bool:
+    # Only for self-hosted MinIO (has an endpoint URL); real AWS S3 has none.
+    if not s3_endpoint_url:
+        return False
+    return DEFAULT_OBJECT_STORAGE_CREDENTIAL in (access_key, secret_key)
+
+
+if _uses_default_object_storage_credentials(
+    S3_ENDPOINT_URL, S3_AWS_ACCESS_KEY_ID, S3_AWS_SECRET_ACCESS_KEY
+):
+    logger.warning(
+        "Object storage is using the well-known default 'minioadmin' credentials. "
+        "Anyone who can reach the MinIO/S3 endpoint can read or modify stored files "
+        "(uploaded documents, file-store objects). Set S3_AWS_ACCESS_KEY_ID / "
+        "S3_AWS_SECRET_ACCESS_KEY (and MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) to "
+        "strong, unique values before deploying to production."
+    )
+
 # Should we force S3 local checksumming
 S3_GENERATE_LOCAL_CHECKSUM = (
     os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
@@ -1362,6 +1512,33 @@ OPENROUTER_DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_API_KEY")
 AUTO_PROVISION_DEFAULT_LLM_PROVIDERS = (
     os.environ.get("AUTO_PROVISION_DEFAULT_LLM_PROVIDERS", "true").lower() == "true"
 )
+
+# Auto-create Onyx-managed built-in external app rows (disabled, Onyx-owned creds)
+# per tenant. Default False; set True on cloud so tenants can enable built-ins
+# without registering their own OAuth app.
+AUTO_PROVISION_DEFAULT_EXTERNAL_APPS = (
+    os.environ.get("AUTO_PROVISION_DEFAULT_EXTERNAL_APPS", "false").lower() == "true"
+)
+
+# Onyx-owned OAuth credentials for built-in external apps (managed cloud)
+EXT_APP_SLACK_CLIENT_ID = os.environ.get("EXT_APP_SLACK_CLIENT_ID", "")
+EXT_APP_SLACK_CLIENT_SECRET = os.environ.get("EXT_APP_SLACK_CLIENT_SECRET", "")
+EXT_APP_GMAIL_CLIENT_ID = os.environ.get("EXT_APP_GMAIL_CLIENT_ID", "")
+EXT_APP_GMAIL_CLIENT_SECRET = os.environ.get("EXT_APP_GMAIL_CLIENT_SECRET", "")
+EXT_APP_GOOGLE_CALENDAR_CLIENT_ID = os.environ.get(
+    "EXT_APP_GOOGLE_CALENDAR_CLIENT_ID", ""
+)
+EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET = os.environ.get(
+    "EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET", ""
+)
+EXT_APP_GOOGLE_DRIVE_CLIENT_ID = os.environ.get("EXT_APP_GOOGLE_DRIVE_CLIENT_ID", "")
+EXT_APP_GOOGLE_DRIVE_CLIENT_SECRET = os.environ.get(
+    "EXT_APP_GOOGLE_DRIVE_CLIENT_SECRET", ""
+)
+EXT_APP_LINEAR_CLIENT_ID = os.environ.get("EXT_APP_LINEAR_CLIENT_ID", "")
+EXT_APP_LINEAR_CLIENT_SECRET = os.environ.get("EXT_APP_LINEAR_CLIENT_SECRET", "")
+EXT_APP_GITHUB_CLIENT_ID = os.environ.get("EXT_APP_GITHUB_CLIENT_ID", "")
+EXT_APP_GITHUB_CLIENT_SECRET = os.environ.get("EXT_APP_GITHUB_CLIENT_SECRET", "")
 
 INSTANCE_TYPE = (
     "managed"

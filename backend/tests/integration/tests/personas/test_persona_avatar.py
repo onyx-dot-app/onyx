@@ -14,9 +14,9 @@ import io
 from typing import NamedTuple
 
 import pytest
-import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -39,7 +39,7 @@ class PersonaAvatarSetup(NamedTuple):
 def _upload_persona_avatar(user: DATestUser) -> str:
     """Upload avatar bytes via the admin upload-image endpoint and return
     the storage file_id the frontend would receive."""
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/persona/upload-image",
         files={
             "file": ("avatar.png", io.BytesIO(_AVATAR_PNG_BYTES), "image/png"),
@@ -71,7 +71,7 @@ def _create_persona_with_avatar(
         "datetime_aware": False,
         "uploaded_image_id": uploaded_image_id,
     }
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/persona",
         json=payload,
         headers=owner.headers,
@@ -123,7 +123,7 @@ def persona_avatar_setup(reset: None) -> PersonaAvatarSetup:  # noqa: ARG001
 def test_persona_owner_can_fetch_their_avatar(
     persona_avatar_setup: PersonaAvatarSetup,
 ) -> None:
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/persona/{persona_avatar_setup.public_persona_id}/avatar",
         headers=persona_avatar_setup.owner.headers,
     )
@@ -135,7 +135,7 @@ def test_persona_owner_can_fetch_their_avatar(
 def test_public_persona_avatar_is_accessible_to_other_users(
     persona_avatar_setup: PersonaAvatarSetup,
 ) -> None:
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/persona/{persona_avatar_setup.public_persona_id}/avatar",
         headers=persona_avatar_setup.other_user.headers,
     )
@@ -146,7 +146,7 @@ def test_public_persona_avatar_is_accessible_to_other_users(
 def test_private_persona_avatar_is_denied_to_other_users(
     persona_avatar_setup: PersonaAvatarSetup,
 ) -> None:
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/persona/{persona_avatar_setup.private_persona_id}/avatar",
         headers=persona_avatar_setup.other_user.headers,
     )
@@ -160,7 +160,7 @@ def test_private_persona_avatar_is_denied_to_other_users(
 def test_persona_avatar_returns_404_when_no_avatar_configured(
     persona_avatar_setup: PersonaAvatarSetup,
 ) -> None:
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/persona/{persona_avatar_setup.no_avatar_persona_id}/avatar",
         headers=persona_avatar_setup.owner.headers,
     )
@@ -171,7 +171,7 @@ def test_persona_avatar_returns_404_for_missing_persona(
     reset: None,  # noqa: ARG001
 ) -> None:
     user: DATestUser = UserManager.create(name="missing_persona_user")
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/persona/99999999/avatar",
         headers=user.headers,
     )

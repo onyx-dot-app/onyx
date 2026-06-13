@@ -72,7 +72,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
@@ -567,6 +567,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 and self.user_selected_filters.document_set
                 and not self.bypass_acl
                 and self.user
+                and not self.user.is_anonymous
             ):
                 requested = self.user_selected_filters.document_set
                 accessible = filter_document_set_names_by_user_access(

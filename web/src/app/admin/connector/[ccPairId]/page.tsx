@@ -37,10 +37,10 @@ import {
   statusIsNotCurrentlyActive,
 } from "./types";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
-import EditPropertyModal from "@/components/modals/EditPropertyModal";
+import EditPropertyModal from "@/sections/modals/EditPropertyModal";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { deleteCCPair } from "@/lib/documentDeletion";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import * as Yup from "yup";
 import {
   AlertCircle,
@@ -61,7 +61,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import { Button } from "@opal/components";
@@ -264,7 +264,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const handleUpdateName = async (newName: string) => {
     try {
       const response = await updateConnectorCredentialPairName(
-        ccPair?.id!,
+        ccPair!.id,
         newName
       );
       if (!response.ok) {

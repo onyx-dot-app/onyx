@@ -7,6 +7,12 @@ export enum ApplicationStatus {
   SEAT_LIMIT_EXCEEDED = "seat_limit_exceeded",
 }
 
+export enum Tier {
+  COMMUNITY = "community",
+  BUSINESS = "business",
+  ENTERPRISE = "enterprise",
+}
+
 export enum QueryHistoryType {
   DISABLED = "disabled",
   ANONYMIZED = "anonymized",
@@ -27,6 +33,9 @@ export interface Settings {
   auto_scroll: boolean;
   temperature_override_enabled: boolean;
   query_history_type: QueryHistoryType;
+
+  // Visibility-only: hides the sidebar page; query-history APIs + recording stay on.
+  hide_query_history_from_admin_panel?: boolean;
 
   deep_research_enabled?: boolean;
   multi_model_chat_enabled?: boolean;
@@ -50,9 +59,16 @@ export interface Settings {
   // Onyx Craft (Build Mode) feature flag
   onyx_craft_enabled?: boolean;
 
+  // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
+  // button that streams the user's sandbox pod logs in real time. Backed
+  // by the ENABLE_OPENCODE_DEBUGGING env var on the server. Never set in
+  // production — the underlying SSE endpoint also gates on the env var.
+  opencode_debugging_enabled?: boolean;
+
   // Whether EE features are unlocked (user has a valid enterprise license).
   // Controls UI visibility of EE features like user groups, analytics, RBAC.
   ee_features_enabled?: boolean;
+  tier?: Tier;
 
   // Seat usage - populated when seat limit is exceeded
   seat_count?: number | null;
@@ -78,6 +94,10 @@ export interface Settings {
   default_pruning_freq?: number;
   default_user_file_max_upload_size_mb?: number;
   default_file_token_count_threshold_k?: number;
+
+  // True when the backend runs inside a container (Docker/Podman).
+  // Used to default local-service URLs to host.docker.internal.
+  is_containerized?: boolean;
 }
 
 export interface NavigationItem {
@@ -106,6 +126,13 @@ export interface EnterpriseSettings {
   consent_screen_prompt: string | null;
   show_first_visit_notice: boolean | null;
   custom_greeting_message: string | null;
+
+  // Custom help link surfaced in the profile dropdown alongside "Help & FAQ".
+  custom_help_link_url: string | null;
+  custom_help_link_label: string | null;
+
+  // Hide the "Powered by Onyx" tagline under the sidebar logo.
+  hide_onyx_branding: boolean | null;
 }
 
 export interface CombinedSettings {

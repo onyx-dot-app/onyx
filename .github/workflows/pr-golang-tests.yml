@@ -13,10 +13,11 @@ on:
     tags:
       - "v*.*.*"
 
-permissions: {}
+permissions:
+  contents: read # needed to checkout the repo on private repos (no-op on public)
 
 env:
-  GO_VERSION: "1.26"
+  GO_VERSION: "1.26.4"
 
 jobs:
   detect-modules:

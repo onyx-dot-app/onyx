@@ -99,9 +99,9 @@ links in the deeper sections.
   messages and artifacts, session naming, and follow-up suggestions.
 - **Demo mode** (`BuildSession.demo_data_enabled`) — when true, the
   session's `files/` symlink points at the bundled demo dataset
-  (`kubernetes/docker/demo_data/`) instead of the user's real corpus, and
-  `org_info/` is populated from `persona_mapping.py`. Used for onboarding
-  and unauthenticated demos. V1 removes this in favor of real data only.
+  (`kubernetes/docker/demo_data/`) instead of the user's real corpus.
+  Used for onboarding and unauthenticated demos. V1 removes this in favor
+  of real data only.
 - **Trigger** — V1 concept (not present today): a saved Craft prompt that
   runs on a schedule. Each scheduled run gets a brand-new session. See
   `triggers.md`.

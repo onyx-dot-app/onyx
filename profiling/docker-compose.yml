@@ -28,6 +28,10 @@ services:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
+      # Helm chart dashboards are the source of truth for any dashboard that
+      # ships to prod. Mounted read-only so this stack can't accidentally modify
+      # them.
+      - ../deployment/helm/charts/onyx/dashboards:/var/lib/grafana/dashboards/helm:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

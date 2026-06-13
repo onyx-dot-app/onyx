@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.pat import hash_pat
 from onyx.db.enums import PatType
+from onyx.db.enums import Permission
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import PersonalAccessToken
 from onyx.db.models import Sandbox
@@ -55,6 +56,7 @@ def ensure_sandbox_pat(db_session: Session, sandbox: Sandbox, user: User) -> str
         name=f"craft-{user.id}",
         expiration_days=_PAT_EXPIRATION_DAYS,
         pat_type=PatType.CRAFT,
+        scopes=[Permission.READ_SEARCH],
     )
 
     sandbox.encrypted_pat = raw_token  # ty: ignore[invalid-assignment]
@@ -243,37 +245,6 @@ def get_snapshots_for_session(db_session: Session, session_id: UUID) -> list[Sna
     return list(db_session.execute(stmt).scalars().all())
 
 
-def delete_old_snapshots(
-    db_session: Session,
-    tenant_id: str,  # noqa: ARG001
-    retention_days: int,
-) -> int:
-    """Delete snapshots older than retention period, return count deleted.
-
-    Note: tenant_id parameter is kept for API compatibility but is not used
-    since Snapshot model no longer has tenant_id. This function deletes
-    all snapshots older than the retention period.
-    """
-    cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
-        days=retention_days
-    )
-
-    stmt = select(Snapshot).where(
-        Snapshot.created_at < cutoff_time,
-    )
-    old_snapshots = db_session.execute(stmt).scalars().all()
-
-    count = 0
-    for snapshot in old_snapshots:
-        db_session.delete(snapshot)
-        count += 1
-
-    if count > 0:
-        db_session.commit()
-
-    return count
-
-
 def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:
     """Delete a specific snapshot by ID. Returns True if deleted, False if not found."""
     stmt = select(Snapshot).where(Snapshot.id == snapshot_id)
@@ -285,3 +256,21 @@ def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:
     db_session.delete(snapshot)
     db_session.commit()
     return True
+
+
+def get_sandbox_user_map(user_ids: list[UUID], db_session: Session) -> dict[UUID, User]:
+    """Return ``{sandbox_id: user}`` for active sandboxes owned by *user_ids*.
+
+    Only sandboxes with ``status == RUNNING`` are included — sleeping or
+    terminated pods can't receive pushes.
+    """
+    if not user_ids:
+        return {}
+
+    stmt = (
+        select(Sandbox, User)
+        .join(User, User.id == Sandbox.user_id)  # ty: ignore[invalid-argument-type]
+        .where(Sandbox.user_id.in_(user_ids))
+        .where(Sandbox.status == SandboxStatus.RUNNING)
+    )
+    return {row.Sandbox.id: row.User for row in db_session.execute(stmt).unique()}

@@ -1,5 +1,5 @@
 "use client";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import React, { createContext, useContext, useCallback } from "react";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
 

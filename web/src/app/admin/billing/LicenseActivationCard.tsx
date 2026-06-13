@@ -191,7 +191,6 @@ export default function LicenseActivationCard({
                 setError(null);
               }}
               error={!!error}
-              className="billing-license-input"
             />
             {error && (
               <Section
@@ -202,7 +201,7 @@ export default function LicenseActivationCard({
                 height="auto"
               >
                 <div className="billing-error-icon">
-                  <SvgXCircle />
+                  <SvgXCircle size={12} />
                 </div>
                 <Text secondaryBody text04>
                   {error}.{" "}

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
@@ -45,7 +45,7 @@ import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
-import UserFilesModal from "@/components/modals/UserFilesModal";
+import UserFilesModal from "@/sections/modals/UserFilesModal";
 import {
   ProjectFile,
   UserFileStatus,
@@ -62,6 +62,7 @@ import {
   SvgSliders,
   SvgUsers,
   SvgTrash,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
@@ -76,7 +77,7 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -92,8 +93,8 @@ import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/interfaces/settings";
 
 interface AgentIconEditorProps {
   existingAgent?: FullAgent | null;
@@ -241,7 +242,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                 Upload Image
               </LineItem>,
               null,
-              <div className="grid grid-cols-4 gap-1">
+              <div key="icon-grid" className="grid grid-cols-4 gap-1">
                 <SquareButton
                   key="default-icon"
                   icon={() => (
@@ -324,7 +325,7 @@ function MCPServerCard({
     cardContent = (
       <div className="flex flex-col gap-2 p-2">
         <GeneralLayouts.Section padding={1}>
-          <SimpleLoader />
+          <SvgSimpleLoader />
         </GeneralLayouts.Section>
       </div>
     );
@@ -375,7 +376,7 @@ function MCPServerCard({
             <InputTypeIn
               placeholder="Search tools..."
               variant="internal"
-              leftSearchIcon
+              searchIcon
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -491,7 +492,7 @@ export default function AgentEditorPage({
   const { isAdmin, isCurator } = useUser();
   const canUpdateFeaturedStatus = isAdmin || isCurator;
   const vectorDbEnabled = useVectorDbEnabled();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   // Hooks for Knowledge section
   const { allRecentFiles, beginUpload } = useProjectsContext();
@@ -885,7 +886,7 @@ export default function AgentEditorPage({
 
       // Call API
       let personaResponse;
-      if (!!existingAgent) {
+      if (existingAgent) {
         personaResponse = await updateAgent(existingAgent.id, submissionData);
       } else {
         personaResponse = await createAgent(submissionData);
@@ -1173,7 +1174,7 @@ export default function AgentEditorPage({
                           userIds,
                           groupIds,
                           isPublic,
-                          isPaidEnterpriseFeaturesEnabled,
+                          businessTier,
                           labelIds
                         );
                       } catch (error) {

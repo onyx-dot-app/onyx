@@ -3,11 +3,13 @@
 import asyncio
 from datetime import datetime
 from datetime import timezone
+from typing import NamedTuple
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import contains_eager
 from sqlalchemy.orm import Session
 
 from onyx.auth.pat import build_displayable_pat
@@ -16,42 +18,62 @@ from onyx.auth.pat import generate_pat
 from onyx.auth.pat import hash_pat
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import PatType
+from onyx.db.enums import Permission
 from onyx.db.models import PersonalAccessToken
 from onyx.db.models import User
+from onyx.db.permissions import parse_permission_values
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 
-async def fetch_user_for_pat(
+class PatAuthResult(NamedTuple):
+    """A PAT resolved to its user and scopes (scopes None = unrestricted)."""
+
+    user: User
+    scopes: list[Permission] | None
+
+
+async def resolve_pat(
     hashed_token: str, async_db_session: AsyncSession
-) -> User | None:
-    """Fetch user associated with PAT. Returns None if invalid, expired, or inactive user.
+) -> PatAuthResult | None:
+    """Resolve a PAT to its user and scopes. Returns None if invalid, expired, or inactive user.
 
     NOTE: This is async since it's used during auth (which is necessarily async due to FastAPI Users).
     NOTE: Expired includes both naturally expired and user-revoked tokens (revocation sets expires_at=NOW()).
 
-    Uses select(User) as primary entity so that joined-eager relationships (e.g. oauth_accounts)
-    are loaded correctly — matching the pattern in fetch_user_for_api_key.
+    Loads the PAT with its user eagerly via contains_eager so the user's own
+    joined-eager relationships (e.g. oauth_accounts) populate, and .unique()
+    collapses the duplicate rows that joined collection produces.
     """
     now = datetime.now(timezone.utc)
 
-    user = await async_db_session.scalar(
-        select(User)
-        .join(PersonalAccessToken, PersonalAccessToken.user_id == User.id)
-        .where(PersonalAccessToken.hashed_token == hashed_token)
-        .where(User.is_active)  # ty: ignore[invalid-argument-type]
-        .where(
-            (PersonalAccessToken.expires_at.is_(None))
-            | (PersonalAccessToken.expires_at > now)
+    pat = (
+        (
+            await async_db_session.execute(
+                select(PersonalAccessToken)
+                .join(PersonalAccessToken.user)
+                .options(contains_eager(PersonalAccessToken.user))
+                .where(PersonalAccessToken.hashed_token == hashed_token)
+                .where(User.is_active)  # ty: ignore[invalid-argument-type]
+                .where(
+                    (PersonalAccessToken.expires_at.is_(None))
+                    | (PersonalAccessToken.expires_at > now)
+                )
+            )
         )
+        .scalars()
+        .unique()
+        .one_or_none()
     )
-    if not user:
+    if pat is None:
         return None
 
     _schedule_pat_last_used_update(hashed_token, now)
-    return user
+    # None (no scopes) = unrestricted; a stored list is parsed to Permissions.
+    scopes = parse_permission_values(pat.scopes) if pat.scopes is not None else None
+    return PatAuthResult(user=pat.user, scopes=scopes)
 
 
 def _schedule_pat_last_used_update(hashed_token: str, now: datetime) -> None:
@@ -91,8 +113,12 @@ def create_pat(
     name: str,
     expiration_days: int | None,
     pat_type: PatType = PatType.USER,
+    scopes: list[Permission] | None = None,
 ) -> tuple[PersonalAccessToken, str]:
     """Create new PAT. Returns (db_record, raw_token).
+
+    scopes defaults to None (no restriction — full user access); pass a list to
+    scope the token to specific permissions.
 
     Raises ValueError if user is inactive or not found.
     """
@@ -112,6 +138,7 @@ def create_pat(
         user_id=user_id,
         expires_at=calculate_expiration(expiration_days),
         pat_type=pat_type,
+        scopes=[s.value for s in scopes] if scopes is not None else None,
     )
     db_session.add(pat)
     db_session.flush()
