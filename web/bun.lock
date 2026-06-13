@@ -137,6 +137,7 @@
         "tailwind-merge": "^2.0.0",
       },
       "devDependencies": {
+        "@onyx-ai/shared": "file:../shared",
         "tsup": "^8.3.0",
         "typescript": "^5.0.0",
       },

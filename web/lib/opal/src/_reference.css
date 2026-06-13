@@ -18,6 +18,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @config "../tailwind-preset.cjs";
-@import "./styles/colors.css";
+@import "@onyx-ai/shared/tokens.css";
+@import "@onyx-ai/shared/typography.css";
 @import "./styles/sizes.css";
 @import "./styles/typography.css";

@@ -10,11 +10,13 @@
  * (files are already inlined) but serve as the canonical source of truth for
  * what the design system includes and in what order.
  *
- * Layout tokens (container widths, page widths, etc.) are library-owned and
- * live here — app-specific overrides should be applied in the app's own CSS.
+ * Design tokens (colors, spacing, radius, z-index, typography metrics) live in
+ * @onyx-ai/shared and are pulled in via `@import "@onyx-ai/shared/tokens.css"` in
+ * _reference.css (which leads the bundle). Layout tokens (container widths, page
+ * widths, etc.) are library-owned and live in sizes.css — app-specific overrides
+ * should be applied in the app's own CSS.
  */
 
-@import "./styles/colors.css";
 @import "./styles/sizes.css";
 @import "./styles/typography.css";
 @import "./styles/z-index.css";
