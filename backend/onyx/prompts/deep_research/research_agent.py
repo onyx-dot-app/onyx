@@ -1,5 +1,6 @@
 from onyx.prompts.deep_research.dr_tool_prompts import GENERATE_REPORT_TOOL_NAME
 from onyx.prompts.deep_research.dr_tool_prompts import THINK_TOOL_NAME
+from onyx.prompts.search_strategy import RESEARCH_AGENT_EVIDENCE_GUIDANCE
 
 MAX_RESEARCH_CYCLES = 8
 
@@ -11,6 +12,8 @@ You iteratively call the tools available to you including {{available_tools}} un
 NEVER output normal response tokens, you must only call tools.
 
 For context, the date is {{current_datetime}}.
+
+{RESEARCH_AGENT_EVIDENCE_GUIDANCE}
 
 # Tools
 You have a limited number of cycles to complete your research and you do not have to use all cycles. You are on cycle {{current_cycle_count}} of {MAX_RESEARCH_CYCLES}.\
@@ -51,6 +54,8 @@ If a statement seems not trustworthy or is contradictory to other statements, it
 
 Write the report in the same language as the provided task.
 
+Preserve source context, confidence, conflicts, and remaining gaps from the research history. If a fact is useful but uncertain, keep it and label why it is uncertain rather than dropping it.
+
 Cite all sources INLINE using the format [1], [2], [3], etc. based on the `document` field of the source. \
 Cite inline as opposed to leaving all citations until the very end of the response.
 """
@@ -81,6 +86,8 @@ Once you have completed your research, call the `{GENERATE_REPORT_TOOL_NAME}` to
 NEVER output normal response tokens, you must only call tools.
 
 For context, the date is {{current_datetime}}.
+
+{RESEARCH_AGENT_EVIDENCE_GUIDANCE}
 
 # Tools
 You have a limited number of cycles to complete your research and you do not have to use all cycles. You are on cycle {{current_cycle_count}} of {MAX_RESEARCH_CYCLES}.\
