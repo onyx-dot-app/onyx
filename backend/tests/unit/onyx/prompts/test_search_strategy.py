@@ -1,5 +1,6 @@
 from onyx.prompts.search_strategy import CHAT_SEARCH_STRATEGY_GUIDANCE
 from onyx.prompts.search_strategy import DEEP_RESEARCH_FINAL_REPORT_GUIDANCE
+from onyx.prompts.search_strategy import DEEP_RESEARCH_ORCHESTRATOR_GUIDANCE
 from onyx.prompts.search_strategy import DEEP_RESEARCH_PLAN_GUIDANCE
 from onyx.prompts.search_strategy import EVIDENCE_EVALUATION_GUIDANCE
 from onyx.prompts.search_strategy import OPEN_URL_EVIDENCE_GUIDANCE
@@ -46,3 +47,9 @@ def test_deep_research_guidance_contains_chinese_report_expectations() -> None:
     assert "Evidence Pack" in combined
     assert "摘要" in combined
     assert "关键结论" in combined
+
+
+def test_deep_research_orchestrator_guidance_covers_execution_strategy() -> None:
+    assert "parallel" in DEEP_RESEARCH_ORCHESTRATOR_GUIDANCE
+    assert "serial follow-up" in DEEP_RESEARCH_ORCHESTRATOR_GUIDANCE
+    assert "information gaps" in DEEP_RESEARCH_ORCHESTRATOR_GUIDANCE
