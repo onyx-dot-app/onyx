@@ -2,6 +2,9 @@ from onyx.prompts.deep_research.dr_tool_prompts import GENERATE_PLAN_TOOL_NAME
 from onyx.prompts.deep_research.dr_tool_prompts import GENERATE_REPORT_TOOL_NAME
 from onyx.prompts.deep_research.dr_tool_prompts import RESEARCH_AGENT_TOOL_NAME
 from onyx.prompts.deep_research.dr_tool_prompts import THINK_TOOL_NAME
+from onyx.prompts.search_strategy import DEEP_RESEARCH_FINAL_REPORT_GUIDANCE
+from onyx.prompts.search_strategy import DEEP_RESEARCH_ORCHESTRATOR_GUIDANCE
+from onyx.prompts.search_strategy import DEEP_RESEARCH_PLAN_GUIDANCE
 
 # ruff: noqa: E501, W605 start
 CLARIFICATION_PROMPT = f"""
@@ -45,8 +48,14 @@ The research plan should be formatted as a numbered list of steps and have 6 or 
 
 Each step should be a standalone exploration question or topic that can be researched independently but may build on previous steps. The plan should be in the same language as the user's query.
 
+{deep_research_plan_guidance}
+
 Output only the numbered list of steps with no additional prefix or suffix.
 """.strip()
+RESEARCH_PLAN_PROMPT = RESEARCH_PLAN_PROMPT.replace(
+    "{deep_research_plan_guidance}",
+    DEEP_RESEARCH_PLAN_GUIDANCE,
+)
 
 
 # Specifically for some models, it really struggles to not just answer the user when there are questions about internal knowledge.
@@ -67,6 +76,8 @@ For context, the date is {{current_datetime}}.
 Before calling {GENERATE_REPORT_TOOL_NAME}, reason to double check that all aspects of the user's query have been well researched and that all key topics around the plan have been researched. \
 There are cases where new discoveries from research may lead to a deviation from the original research plan.
 In these cases, ensure that the new directions are thoroughly investigated prior to calling {GENERATE_REPORT_TOOL_NAME}.
+
+{DEEP_RESEARCH_ORCHESTRATOR_GUIDANCE}
 
 NEVER output normal response tokens, you must only call tools.
 
@@ -130,8 +141,14 @@ Structure your response logically into relevant sections. You may find it helpfu
 
 You use different text styles and formatting to make the response easier to read. You may use markdown rarely when necessary to make the response more digestible.
 
+{deep_research_final_report_guidance}
+
 Provide inline citations in the format [1], [2], [3], etc. based on the citations included by the research agents.
 """.strip()
+FINAL_REPORT_PROMPT = FINAL_REPORT_PROMPT.replace(
+    "{deep_research_final_report_guidance}",
+    DEEP_RESEARCH_FINAL_REPORT_GUIDANCE,
+)
 
 
 USER_FINAL_REPORT_QUERY = f"""
@@ -160,6 +177,8 @@ Before calling {GENERATE_REPORT_TOOL_NAME}, reason to double check that all aspe
 There are cases where new discoveries from research may lead to a deviation from the original research plan. In these cases, ensure that the new directions are thoroughly investigated prior to calling {GENERATE_REPORT_TOOL_NAME}.
 
 Between calls, think deeply on what to do next. Be curious, identify knowledge gaps and consider new potential directions of research. Use paragraph format for your reasoning, do not use bullet points or lists.
+
+{DEEP_RESEARCH_ORCHESTRATOR_GUIDANCE}
 
 NEVER output normal response tokens, you must only call tools.
 
