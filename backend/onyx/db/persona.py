@@ -22,8 +22,10 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
+from onyx.db.document_set import filter_document_set_ids_by_user_access
 from onyx.db.enums import AccountType
 from onyx.db.enums import PersonaSharePermission
+from onyx.db.hierarchy import filter_accessible_hierarchy_node_ids
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentSet
@@ -1321,6 +1323,24 @@ def upsert_persona(
         if not document_sets and document_set_ids:
             raise ValueError("document_sets not found")
 
+    # Editors may only ATTACH knowledge they can access themselves; anything
+    # already attached survives an update, but once removed it can't be
+    # re-added by someone without access (ENG-4180).
+    knowledge_guard_applies: bool = user is not None and user.role != UserRole.ADMIN
+    if document_set_ids is not None and knowledge_guard_applies and user is not None:
+        existing_set_ids = (
+            {ds.id for ds in existing_persona.document_sets}
+            if existing_persona
+            else set()
+        )
+        added_set_ids = set(document_set_ids) - existing_set_ids
+        if added_set_ids:
+            accessible_set_ids = filter_document_set_ids_by_user_access(
+                db_session, list(added_set_ids), user
+            )
+            if added_set_ids - accessible_set_ids:
+                raise ValueError("Cannot attach document sets you don't have access to")
+
     # Fetch and attach user_files by IDs
     user_files = None
     if user_file_ids is not None:
@@ -1329,6 +1349,20 @@ def upsert_persona(
         )
         if not user_files and user_file_ids:
             raise ValueError("user_files not found")
+
+        # Editors may only attach files they own (admins bypass)
+        if knowledge_guard_applies and user is not None:
+            existing_file_ids = (
+                {uf.id for uf in existing_persona.user_files}
+                if existing_persona
+                else set()
+            )
+            for user_file in user_files:
+                if (
+                    user_file.id not in existing_file_ids
+                    and user_file.user_id != user.id
+                ):
+                    raise ValueError("Cannot attach files you don't own")
 
     labels = None
     if label_ids is not None:
@@ -1340,7 +1374,7 @@ def upsert_persona(
 
     # Fetch and attach hierarchy_nodes by IDs
     hierarchy_nodes = None
-    if hierarchy_node_ids:
+    if hierarchy_node_ids is not None:
         hierarchy_nodes = (
             db_session.query(HierarchyNode)
             .filter(HierarchyNode.id.in_(hierarchy_node_ids))
@@ -1348,6 +1382,25 @@ def upsert_persona(
         )
         if not hierarchy_nodes and hierarchy_node_ids:
             raise ValueError("hierarchy_nodes not found")
+
+    if hierarchy_node_ids is not None and knowledge_guard_applies and user is not None:
+        existing_node_ids = (
+            {node.id for node in existing_persona.hierarchy_nodes}
+            if existing_persona
+            else set()
+        )
+        added_node_ids = set(hierarchy_node_ids) - existing_node_ids
+        if added_node_ids:
+            accessible_node_ids = filter_accessible_hierarchy_node_ids(
+                db_session,
+                list(added_node_ids),
+                user.email,
+                get_user_external_group_ids(db_session, user),
+            )
+            if added_node_ids - accessible_node_ids:
+                raise ValueError(
+                    "Cannot attach hierarchy nodes you don't have access to"
+                )
 
     # Fetch and attach documents by IDs, filtering for access permissions
     attached_documents = None
