@@ -14,6 +14,8 @@ import BuiltinSkillsTable from "@/refresh-pages/admin/SkillsPage/BuiltinSkillsTa
 import CustomSkillsTable from "@/refresh-pages/admin/SkillsPage/CustomSkillsTable";
 import UploadSkillModal from "@/refresh-pages/admin/SkillsPage/UploadSkillModal";
 import ShareSkillModal from "@/refresh-pages/admin/SkillsPage/ShareSkillModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import { SvgGlobe } from "@opal/icons";
 import {
   deleteCustomSkill,
   patchCustomSkill,
@@ -34,6 +36,8 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<CustomSkill | null>(null);
+  const [promoteTarget, setPromoteTarget] = useState<CustomSkill | null>(null);
+  const [promoting, setPromoting] = useState(false);
   const replaceBundleTarget = useRef<CustomSkill | null>(null);
   const replaceFileRef = useRef<HTMLInputElement>(null);
 
@@ -49,6 +53,26 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
       toast.error(
         err instanceof Error ? err.message : "Failed to update skill"
       );
+    }
+  }
+
+  async function handlePromoteConfirmed() {
+    const target = promoteTarget;
+    if (!target || promoting) return;
+
+    setPromoting(true);
+    try {
+      await patchCustomSkill(target.id, { is_public: true });
+      toast.success(`Promoted "${target.name}" to the whole organization`);
+      setPromoteTarget(null);
+      refresh();
+    } catch (err) {
+      console.error("Failed to promote skill", err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to promote skill"
+      );
+    } finally {
+      setPromoting(false);
     }
   }
 
@@ -151,6 +175,7 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
               <CustomSkillsTable
                 skills={data.customs}
                 onShareSkill={setShareTarget}
+                onPromoteSkill={setPromoteTarget}
                 onReplaceBundle={handleReplaceBundleClick}
                 onToggleEnabled={handleToggleEnabled}
                 onDeleteSkill={handleDelete}
@@ -182,6 +207,21 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
         onClose={() => setShareTarget(null)}
         onSaved={refresh}
       />
+
+      {promoteTarget && (
+        <ConfirmEntityModal
+          icon={SvgGlobe}
+          entityType="skill"
+          entityName={promoteTarget.name}
+          action="promote"
+          actionButtonText="Promote"
+          additionalDetails={`"${promoteTarget.name}" is a personal skill of ${
+            promoteTarget.author_email ?? "its author"
+          }. Promoting makes it available to everyone in the organization, and the author loses self-serve management of it.`}
+          onClose={() => setPromoteTarget(null)}
+          onSubmit={handlePromoteConfirmed}
+        />
+      )}
     </SettingsLayouts.Root>
   );
 }

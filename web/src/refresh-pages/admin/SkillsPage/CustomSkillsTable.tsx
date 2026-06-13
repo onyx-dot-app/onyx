@@ -21,6 +21,7 @@ import CustomSkillRowActions from "@/refresh-pages/admin/SkillsPage/CustomSkillR
 interface CustomSkillsTableProps {
   skills: CustomSkill[];
   onShareSkill: (skill: CustomSkill) => void;
+  onPromoteSkill: (skill: CustomSkill) => void;
   onReplaceBundle: (skill: CustomSkill) => void;
   onToggleEnabled: (skill: CustomSkill) => void;
   onDeleteSkill: (skill: CustomSkill) => void;
@@ -60,6 +61,7 @@ function renderAccessColumn(_value: boolean, row: CustomSkill) {
 export default function CustomSkillsTable({
   skills,
   onShareSkill,
+  onPromoteSkill,
   onReplaceBundle,
   onToggleEnabled,
   onDeleteSkill,
@@ -108,6 +110,7 @@ export default function CustomSkillsTable({
           <CustomSkillRowActions
             skill={row}
             onShare={() => onShareSkill(row)}
+            onPromote={() => onPromoteSkill(row)}
             onReplaceBundle={() => onReplaceBundle(row)}
             onToggleEnabled={() => onToggleEnabled(row)}
             onDelete={() => onDeleteSkill(row)}
@@ -115,7 +118,13 @@ export default function CustomSkillsTable({
         ),
       }),
     ];
-  }, [onShareSkill, onReplaceBundle, onToggleEnabled, onDeleteSkill]);
+  }, [
+    onShareSkill,
+    onPromoteSkill,
+    onReplaceBundle,
+    onToggleEnabled,
+    onDeleteSkill,
+  ]);
 
   return (
     <Section gap={0.75} alignItems="stretch">
