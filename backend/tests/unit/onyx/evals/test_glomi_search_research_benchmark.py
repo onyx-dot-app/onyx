@@ -20,7 +20,9 @@ def test_benchmark_covers_required_categories() -> None:
     assert BenchmarkCategory.PRODUCT_COMPARISON in categories
     assert BenchmarkCategory.TECHNICAL_RESEARCH in categories
     assert BenchmarkCategory.MARKET_RESEARCH in categories
+    assert BenchmarkCategory.CONSUMER_DECISION in categories
     assert BenchmarkCategory.FACT_CHECK in categories
+    assert BenchmarkCategory.COMPANY_RESEARCH in categories
 
 
 def test_each_case_has_expected_behaviors_and_tools() -> None:
