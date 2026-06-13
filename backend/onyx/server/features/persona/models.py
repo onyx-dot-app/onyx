@@ -6,11 +6,15 @@ from pydantic import Field
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
+from onyx.db.enums import PersonaAccessLevel
+from onyx.db.enums import PersonaSharePermission
+from onyx.db.enums import PersonaSharingStatus
 from onyx.db.models import Document
 from onyx.db.models import HierarchyNode
 from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
 from onyx.db.models import StarterMessage
+from onyx.db.persona_sharing import derive_persona_sharing_status
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
@@ -18,6 +22,53 @@ from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+class PersonaUserShare(BaseModel):
+    user: MinimalUserSnapshot
+    permission: PersonaSharePermission
+
+
+class PersonaGroupShare(BaseModel):
+    group_id: int
+    group_name: str
+    permission: PersonaSharePermission
+
+
+class PersonaOwnerGroupSnapshot(BaseModel):
+    id: int
+    name: str
+
+
+def _user_shares_from_model(persona: Persona) -> list[PersonaUserShare]:
+    return [
+        PersonaUserShare(
+            user=MinimalUserSnapshot(id=share.user.id, email=share.user.email),
+            permission=share.permission,
+        )
+        for share in persona.user_shares
+        if share.user is not None
+    ]
+
+
+def _group_shares_from_model(persona: Persona) -> list[PersonaGroupShare]:
+    return [
+        PersonaGroupShare(
+            group_id=share.user_group_id,
+            group_name=share.user_group.name,
+            permission=share.permission,
+        )
+        for share in persona.group_shares
+        if share.user_group is not None
+    ]
+
+
+def _owner_group_from_model(persona: Persona) -> PersonaOwnerGroupSnapshot | None:
+    if persona.owner_group is None:
+        return None
+    return PersonaOwnerGroupSnapshot(
+        id=persona.owner_group.id, name=persona.owner_group.name
+    )
 
 
 class HierarchyNodeSnapshot(BaseModel):
@@ -106,12 +157,14 @@ class PersonaUpsertRequest(BaseModel):
     name: str
     description: str
     document_set_ids: list[int]
-    is_public: bool
+    # None leaves the stored value/shares unchanged — sharing is managed by
+    # the share endpoint, so form saves must not clobber it with stale state
+    is_public: bool | None = None
     default_model_configuration_id: int | None = None
     starter_messages: list[StarterMessage] | None = None
     # For Private Personas, who should be able to access these
-    users: list[UUID] = Field(default_factory=list)
-    groups: list[int] = Field(default_factory=list)
+    users: list[UUID] | None = None
+    groups: list[int] | None = None
     # e.g. ID of SearchTool or ImageGenerationTool or <USER_DEFINED_TOOL>
     tool_ids: list[int]
     remove_image: bool | None = None
@@ -121,7 +174,8 @@ class PersonaUpsertRequest(BaseModel):
     )
     search_start_date: datetime | None = None
     label_ids: list[int] | None = None
-    is_featured: bool = False
+    # None preserves the stored value; non-admins can never change it
+    is_featured: bool | None = None
     display_priority: int | None = None
     # Accept string UUIDs from frontend
     user_file_ids: list[str] | None = None
@@ -172,9 +226,16 @@ class MinimalPersonaSnapshot(BaseModel):
 
     # Used to display ownership
     owner: MinimalUserSnapshot | None
+    owner_group: PersonaOwnerGroupSnapshot | None
+    # Computed for the requesting user when the list endpoint provides it
+    user_permission: PersonaAccessLevel | None = None
 
     @classmethod
-    def from_model(cls, persona: Persona) -> "MinimalPersonaSnapshot":
+    def from_model(
+        cls,
+        persona: Persona,
+        user_permission: PersonaAccessLevel | None = None,
+    ) -> "MinimalPersonaSnapshot":
         # Collect unique sources from document sets, hierarchy nodes, and attached documents
         sources: set[DocumentSource] = set()
 
@@ -231,6 +292,8 @@ class MinimalPersonaSnapshot(BaseModel):
                 if persona.user
                 else None
             ),
+            owner_group=_owner_group_from_model(persona),
+            user_permission=user_permission,
         )
 
 
@@ -251,8 +314,13 @@ class PersonaSnapshot(BaseModel):
     tools: list[ToolSnapshot]
     labels: list["PersonaLabelSnapshot"]
     owner: MinimalUserSnapshot | None
+    owner_group: PersonaOwnerGroupSnapshot | None
     users: list[MinimalUserSnapshot]
     groups: list[int]
+    user_shares: list[PersonaUserShare]
+    group_shares: list[PersonaGroupShare]
+    public_permission: PersonaSharePermission
+    sharing_status: PersonaSharingStatus
     document_sets: list[DocumentSetSummary]
     default_model_configuration_id: int | None = None
     # Hierarchy nodes attached for scoped search
@@ -300,11 +368,16 @@ class PersonaSnapshot(BaseModel):
                 if persona.user
                 else None
             ),
+            owner_group=_owner_group_from_model(persona),
             users=[
                 MinimalUserSnapshot(id=user.id, email=user.email)
                 for user in persona.users
             ],
             groups=[user_group.id for user_group in persona.groups],
+            user_shares=_user_shares_from_model(persona),
+            group_shares=_group_shares_from_model(persona),
+            public_permission=persona.public_permission,
+            sharing_status=derive_persona_sharing_status(persona),
             document_sets=[
                 DocumentSetSummary.from_model(document_set_model)
                 for document_set_model in persona.document_sets
@@ -321,6 +394,10 @@ class PersonaSnapshot(BaseModel):
 # This is used for flows which need to know all settings
 class FullPersonaSnapshot(PersonaSnapshot):
     search_start_date: datetime | None = None
+    # Per-requesting-user context, set by the single-persona endpoint
+    user_permission: PersonaAccessLevel | None = None
+    admin_count: int = 0
+    ownership_vacant: bool = False
 
     @classmethod
     def from_model(
@@ -351,6 +428,10 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 for user in persona.users
             ],
             groups=[user_group.id for user_group in persona.groups],
+            user_shares=_user_shares_from_model(persona),
+            group_shares=_group_shares_from_model(persona),
+            public_permission=persona.public_permission,
+            sharing_status=derive_persona_sharing_status(persona),
             tools=[
                 ToolSnapshot.from_model(tool)
                 for tool in persona.tools
@@ -370,6 +451,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 if persona.user
                 else None
             ),
+            owner_group=_owner_group_from_model(persona),
             document_sets=[
                 DocumentSetSummary.from_model(document_set_model)
                 for document_set_model in persona.document_sets

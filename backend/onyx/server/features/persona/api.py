@@ -9,6 +9,7 @@ from fastapi import Response
 from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from pydantic import model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,7 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.enums import PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
 from onyx.db.persona import create_assistant_label
@@ -42,6 +44,8 @@ from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared
 from onyx.db.persona import update_persona_visibility
 from onyx.db.persona import update_personas_display_priority
+from onyx.db.persona_sharing import get_persona_access_level
+from onyx.db.persona_sharing import get_user_group_ids_for_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -404,11 +408,36 @@ def delete_label(
     delete_persona_label(label_id=label_id, db_session=db_session)
 
 
+class PersonaUserShareRequest(BaseModel):
+    user_id: UUID
+    permission: PersonaSharePermission
+
+
+class PersonaGroupShareRequest(BaseModel):
+    group_id: int
+    permission: PersonaSharePermission
+
+
 class PersonaShareRequest(BaseModel):
+    # Legacy id-lists: shares keep an existing row's level, new rows get VIEWER
     user_ids: list[UUID] | None = None
     group_ids: list[int] | None = None
+    # Leveled shares: full replacement including permission levels
+    user_shares: list[PersonaUserShareRequest] | None = None
+    group_shares: list[PersonaGroupShareRequest] | None = None
     is_public: bool | None = None
+    public_permission: PersonaSharePermission | None = None
     label_ids: list[int] | None = None
+
+    @model_validator(mode="after")
+    def _reject_legacy_and_leveled(self) -> "PersonaShareRequest":
+        # A stale client sending both forms would silently lose the legacy list
+        # (the leveled map wins downstream); reject the ambiguity at the boundary.
+        if self.user_ids is not None and self.user_shares is not None:
+            raise ValueError("Provide either user_ids or user_shares, not both")
+        if self.group_ids is not None and self.group_shares is not None:
+            raise ValueError("Provide either group_ids or group_shares, not both")
+        return self
 
 
 # We notify each user when a user is shared with them
@@ -419,6 +448,19 @@ def share_persona(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
+    user_shares = (
+        {share.user_id: share.permission for share in persona_share_request.user_shares}
+        if persona_share_request.user_shares is not None
+        else None
+    )
+    group_shares = (
+        {
+            share.group_id: share.permission
+            for share in persona_share_request.group_shares
+        }
+        if persona_share_request.group_shares is not None
+        else None
+    )
     try:
         update_persona_shared(
             persona_id=persona_id,
@@ -426,7 +468,10 @@ def share_persona(
             db_session=db_session,
             user_ids=persona_share_request.user_ids,
             group_ids=persona_share_request.group_ids,
+            user_shares=user_shares,
+            group_shares=group_shares,
             is_public=persona_share_request.is_public,
+            public_permission=persona_share_request.public_permission,
             label_ids=persona_share_request.label_ids,
         )
     except PermissionError as e:
@@ -541,7 +586,12 @@ def get_persona(
             persona.default_model_configuration_id = None
             db_session.commit()
 
-    return FullPersonaSnapshot.from_model(persona)
+    snapshot = FullPersonaSnapshot.from_model(persona)
+    if user is not None:
+        snapshot.user_permission = get_persona_access_level(
+            persona, user, get_user_group_ids_for_user(db_session, user.id)
+        )
+    return snapshot
 
 
 @basic_router.get("/{persona_id}/avatar")
