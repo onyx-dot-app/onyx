@@ -61,7 +61,7 @@ def _prune_prior_session_snapshots(
         db_session.delete(old)
 
 
-def _is_idle(sandbox: Sandbox, now: datetime.datetime) -> bool:
+def is_sandbox_idle(sandbox: Sandbox, now: datetime.datetime) -> bool:
     """Idle = no heartbeat for the timeout (NULL heartbeat falls back to
     created_at so legacy/edge-case rows don't sit RUNNING forever)."""
     reference = sandbox.last_heartbeat or sandbox.created_at
@@ -119,7 +119,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
             for sandbox in running_sandboxes:
                 sandbox_id = sandbox.id
-                idle = _is_idle(sandbox, now)
+                idle = is_sandbox_idle(sandbox, now)
 
                 try:
                     # DB-only prefilter: listing workspaces is a pod exec, so
