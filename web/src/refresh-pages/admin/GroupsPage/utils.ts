@@ -7,8 +7,8 @@ export function isBuiltInGroup(group: UserGroup): boolean {
 
 /** Human-readable description for built-in groups. */
 const BUILT_IN_DESCRIPTIONS: Record<string, string> = {
-  Basic: "Default group for all users with basic permissions.",
-  Admin: "Built-in admin group with full access to manage all permissions.",
+  Basic: "所有用户默认加入的基础权限用户组。",
+  Admin: "内置管理员用户组，拥有管理全部权限的访问能力。",
 };
 
 /**
@@ -25,31 +25,19 @@ export function buildGroupDescription(group: UserGroup): string {
 
   const parts: string[] = [];
   if (group.cc_pairs.length > 0) {
-    parts.push(
-      `${group.cc_pairs.length} connector${
-        group.cc_pairs.length !== 1 ? "s" : ""
-      }`
-    );
+    parts.push(`${group.cc_pairs.length} 个连接器`);
   }
   if (group.document_sets.length > 0) {
-    parts.push(
-      `${group.document_sets.length} document set${
-        group.document_sets.length !== 1 ? "s" : ""
-      }`
-    );
+    parts.push(`${group.document_sets.length} 个文档集`);
   }
   if (group.personas.length > 0) {
-    parts.push(
-      `${group.personas.length} agent${group.personas.length !== 1 ? "s" : ""}`
-    );
+    parts.push(`${group.personas.length} 个智能体`);
   }
 
-  return parts.length > 0
-    ? parts.join(" · ")
-    : "No private connectors / document sets / agents";
+  return parts.length > 0 ? parts.join(" · ") : "暂无私有连接器 / 文档集 / 智能体";
 }
 
 /** Format the member count badge, e.g. "306 Members" or "1 Member". */
 export function formatMemberCount(count: number): string {
-  return `${count} ${count === 1 ? "Member" : "Members"}`;
+  return `${count} 位成员`;
 }

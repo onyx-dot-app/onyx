@@ -57,7 +57,7 @@ const TabsField: FC<TabsFieldProps> = ({
       {/* Ensure there's at least one tab before rendering */}
       {tabField.tabs.length === 0 ? (
         <Text text03 secondaryBody>
-          No tabs to display.
+          没有可显示的标签页。
         </Text>
       ) : (
         <Tabs
@@ -227,7 +227,7 @@ export const RenderField: FC<RenderFieldProps> = ({
             withLabel={field.name}
             title={label}
             description={description}
-            suffix={field.optional ? "optional" : undefined}
+            suffix={field.optional ? "可选" : undefined}
           >
             <InputTextAreaField
               name={field.name}
@@ -256,7 +256,7 @@ export const RenderField: FC<RenderFieldProps> = ({
           </Text>
         </GeneralLayouts.Section>
       ) : (
-        <>INVALID FIELD TYPE</>
+        <>无效字段类型</>
       )}
     </>
   );

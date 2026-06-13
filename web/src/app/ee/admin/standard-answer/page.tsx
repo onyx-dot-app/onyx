@@ -93,7 +93,7 @@ const CategoryBubble = ({
     {onDelete && (
       <button
         className="ml-1 text-subtle hover:text-emphasis"
-        aria-label="Remove category"
+        aria-label="移除分类"
       >
         &times;
       </button>
@@ -133,9 +133,9 @@ const StandardAnswersTableRow = ({
           className="flex items-center"
         >
           {standardAnswer.match_regex ? (
-            <span className="text-green-500 font-medium">Yes</span>
+            <span className="text-green-500 font-medium">是</span>
           ) : (
-            <span className="text-gray-500">No</span>
+            <span className="text-gray-500">否</span>
           )}
         </div>,
         <ReactMarkdown
@@ -171,10 +171,10 @@ const StandardAnswersTable = ({
   >([]);
   const columns = [
     { name: "", key: "edit" },
-    { name: "Categories", key: "category" },
-    { name: "Keywords/Pattern", key: "keyword" },
-    { name: "Match regex?", key: "match_regex" },
-    { name: "Answer", key: "answer" },
+    { name: "分类", key: "category" },
+    { name: "关键词/模式", key: "keyword" },
+    { name: "匹配 Regex？", key: "match_regex" },
+    { name: "答案", key: "answer" },
     { name: "", key: "delete" },
   ];
 
@@ -216,10 +216,10 @@ const StandardAnswersTable = ({
   const handleDelete = async (id: number) => {
     const response = await deleteStandardAnswer(id);
     if (response.ok) {
-      toast.success(`Standard answer ${id} deleted`);
+      toast.success(`标准答案 ${id} 已删除`);
     } else {
       const errorMsg = await response.text();
-      toast.error(`Failed to delete standard answer - ${errorMsg}`);
+      toast.error(`删除标准答案失败 - ${errorMsg}`);
     }
     refresh();
   };
@@ -243,7 +243,7 @@ const StandardAnswersTable = ({
           className="grow ml-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"
           role="textarea"
           aria-multiline
-          placeholder="Find standard answers by keyword/phrase..."
+          placeholder="按关键词/短语查找标准答案..."
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -278,7 +278,7 @@ const StandardAnswersTable = ({
               <FiTag size={16} />
             </div>
           }
-          defaultDisplay="All Categories"
+          defaultDisplay="全部分类"
         />
         <div className="flex flex-wrap pb-4 mt-3">
           {selectedCategories.map((category) => (
@@ -317,7 +317,7 @@ const StandardAnswersTable = ({
         <div>
           {paginatedStandardAnswers.length === 0 && (
             <div className="flex justify-center">
-              <Text as="p">No matching standard answers found...</Text>
+              <Text as="p">未找到匹配的标准答案...</Text>
             </div>
           )}
         </div>
@@ -326,7 +326,7 @@ const StandardAnswersTable = ({
             <div className="mt-4">
               <Text as="p">
                 {markdown(
-                  "Ensure that you have added the category to the relevant [Slack Bot](/admin/bots)."
+                  "请确保已将该分类添加到相关的 [Slack Bot](/admin/bots)。"
                 )}
               </Text>
             </div>
@@ -365,7 +365,7 @@ function Main() {
   if (standardAnswersError || !standardAnswers) {
     return (
       <ErrorCallout
-        errorTitle="Error loading standard answers"
+        errorTitle="加载标准答案失败"
         errorMsg={
           standardAnswersError.info?.detail ||
           standardAnswersError.info?.message
@@ -377,7 +377,7 @@ function Main() {
   if (standardAnswerCategoriesError || !standardAnswerCategories) {
     return (
       <ErrorCallout
-        errorTitle="Error loading standard answer categories"
+        errorTitle="加载标准答案分类失败"
         errorMsg={
           standardAnswerCategoriesError.info?.detail ||
           standardAnswerCategoriesError.info?.message
@@ -390,13 +390,13 @@ function Main() {
     <div className="mb-8">
       <Text as="p">
         {markdown(
-          "Manage the standard answers for pre-defined questions.\nNote: Currently, only questions asked from Slack can receive standard answers."
+          "管理预定义问题的标准答案。\n注意：目前只有来自 Slack 的问题可以收到标准答案。"
         )}
       </Text>
       <Spacer rem={0.5} />
       {standardAnswers.length == 0 && (
         <>
-          <Text as="p">Add your first standard answer below!</Text>
+          <Text as="p">在下方添加你的第一个标准答案！</Text>
           <Spacer rem={0.5} />
         </>
       )}
@@ -407,7 +407,7 @@ function Main() {
         prominence="secondary"
         href="/admin/standard-answer/new"
       >
-        New Standard Answer
+        新建标准答案
       </Button>
 
       <Divider />

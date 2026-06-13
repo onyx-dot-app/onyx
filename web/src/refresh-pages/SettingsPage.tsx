@@ -136,14 +136,14 @@ function ScopeSelector({
   if (scopesError) {
     return (
       <Text font="secondary-body" color="text-03">
-        Couldn&apos;t load permissions.
+        权限加载失败。
       </Text>
     );
   }
   if (scopeOptions.length === 0) {
     return (
       <Text font="secondary-body" color="text-03">
-        Loading permissions...
+        正在加载权限...
       </Text>
     );
   }
@@ -176,7 +176,7 @@ function ScopeSelector({
                 <div className="flex flex-col">
                   <Text font="main-ui-body" color="text-04">
                     {locked
-                      ? `${option.label} (included with ${lockReason})`
+                      ? `${option.label}（已包含在 ${lockReason} 中）`
                       : option.label}
                   </Text>
                   {/* Fixed 2-line slot so every row is the same height. */}
@@ -233,10 +233,10 @@ function PATModal({
       <Modal open onOpenChange={(open) => !open && onClose()}>
         <Modal.Content width="sm" height="sm">
           <Modal.Header
-            title="Access Token"
+            title="访问令牌"
             icon={SvgKey}
             onClose={onClose}
-            description="Save this token before continuing. It won't be shown again."
+            description="继续前请保存此令牌，之后不会再次显示。"
           />
           <Modal.Body>
             <Code showCopyButton={false}>{createdToken.token}</Code>
@@ -248,7 +248,7 @@ function PATModal({
                   getCopyText={() => createdToken.token}
                   prominence="primary"
                 >
-                  Copy Token
+                  复制令牌
                 </CopyButton>
               }
             />
@@ -261,8 +261,8 @@ function PATModal({
   return (
     <ConfirmationModalLayout
       icon={SvgKey}
-      title="Create Access Token"
-      description="All API requests using this token will inherit your access permissions and be attributed to you as an individual."
+      title="创建访问令牌"
+      description="使用此令牌的所有 API 请求都会继承你的访问权限，并归属到你的个人账号。"
       onClose={onClose}
       submit={
         <Button
@@ -273,14 +273,14 @@ function PATModal({
           }
           onClick={onCreate}
         >
-          {isCreating ? "Creating Token..." : "Create Token"}
+          {isCreating ? "正在创建令牌..." : "创建令牌"}
         </Button>
       }
     >
       <Section gap={1}>
-        <InputVertical title="Token Name" withLabel>
+        <InputVertical title="令牌名称" withLabel>
           <InputTypeIn
-            placeholder="Name your token"
+            placeholder="为令牌命名"
             value={newTokenName}
             onChange={(e) => setNewTokenName(e.target.value)}
             variant={isCreating ? "disabled" : undefined}
@@ -288,7 +288,7 @@ function PATModal({
           />
         </InputVertical>
         <InputVertical
-          title="Expires in"
+          title="有效期"
           subDescription={
             expirationDays === "null"
               ? undefined
@@ -298,10 +298,10 @@ function PATModal({
                     expiryDate.getUTCDate() + parseInt(expirationDays)
                   );
                   expiryDate.setUTCHours(23, 59, 59, 999);
-                  return `This token will expire at: ${expiryDate
+                  return `此令牌将于 ${expiryDate
                     .toISOString()
                     .replace("T", " ")
-                    .replace(".999Z", " UTC")}`;
+                    .replace(".999Z", " UTC")} 过期`;
                 })()
           }
           withLabel
@@ -311,21 +311,21 @@ function PATModal({
             onValueChange={setExpirationDays}
             disabled={isCreating}
           >
-            <InputSelect.Trigger placeholder="Select expiration" />
+            <InputSelect.Trigger placeholder="选择有效期" />
             <InputSelect.Content>
-              <InputSelect.Item value="7">7 days</InputSelect.Item>
-              <InputSelect.Item value="30">30 days</InputSelect.Item>
-              <InputSelect.Item value="365">365 days</InputSelect.Item>
-              <InputSelect.Item value="null">No expiration</InputSelect.Item>
+              <InputSelect.Item value="7">7 天</InputSelect.Item>
+              <InputSelect.Item value="30">30 天</InputSelect.Item>
+              <InputSelect.Item value="365">365 天</InputSelect.Item>
+              <InputSelect.Item value="null">永不过期</InputSelect.Item>
             </InputSelect.Content>
           </InputSelect>
         </InputVertical>
         <InputVertical
-          title="Permissions"
+          title="权限"
           subDescription={
             accessMode === "full"
-              ? "Inherits all of your permissions."
-              : "Limit this token to specific capabilities."
+              ? "继承你的全部权限。"
+              : "将此令牌限制为特定能力。"
           }
           withLabel
         >
@@ -334,11 +334,11 @@ function PATModal({
             onValueChange={(value) => setAccessMode(value as AccessMode)}
             disabled={isCreating}
           >
-            <InputSelect.Trigger placeholder="Select permissions" />
+            <InputSelect.Trigger placeholder="选择权限" />
             <InputSelect.Content>
-              <InputSelect.Item value="full">Full access</InputSelect.Item>
+              <InputSelect.Item value="full">完整访问权限</InputSelect.Item>
               <InputSelect.Item value="limited">
-                Limited access
+                受限访问权限
               </InputSelect.Item>
             </InputSelect.Content>
           </InputSelect>
@@ -394,8 +394,8 @@ function GeneralSettings() {
     updatePersonalizationField,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success("Personalization updated successfully"),
-    onError: () => toast.error("Failed to update personalization"),
+    onSuccess: () => toast.success("个性化设置已更新"),
+    onError: () => toast.error("更新个性化设置失败"),
   });
 
   // Track initial values to detect changes
@@ -413,14 +413,14 @@ function GeneralSettings() {
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
-        toast.success("All your chat sessions have been deleted.");
+        toast.success("你的全部聊天会话已删除。");
         await refreshChatSessions();
         setShowDeleteConfirmation(false);
       } else {
-        throw new Error("Failed to delete all chat sessions");
+        throw new Error("删除全部聊天会话失败");
       }
     } catch (error) {
-      toast.error("Failed to delete all chat sessions");
+      toast.error("删除全部聊天会话失败");
     } finally {
       setIsDeleting(false);
     }
@@ -431,7 +431,7 @@ function GeneralSettings() {
       {showDeleteConfirmation && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete All Chats"
+          title="删除全部聊天"
           onClose={() => setShowDeleteConfirmation(false)}
           submit={
             <Button
@@ -441,17 +441,16 @@ function GeneralSettings() {
                 void handleDeleteAllChats();
               }}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? "正在删除..." : "删除"}
             </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
             <Text color="text-05">
-              All your chat sessions and history will be permanently deleted.
-              Deletion cannot be undone.
+              你的全部聊天会话和历史记录将被永久删除，此操作无法撤销。
             </Text>
             <Text color="text-05">
-              Are you sure you want to delete all chats?
+              确定要删除全部聊天吗？
             </Text>
           </Section>
         </ConfirmationModalLayout>
@@ -460,20 +459,20 @@ function GeneralSettings() {
       <Section gap={2}>
         <Section gap={0.75}>
           <Content
-            title="Profile"
+            title="个人资料"
             sizePreset="main-content"
             variant="section"
             width="full"
           />
           <Card>
             <InputHorizontal
-              title="Full Name"
-              description="We'll display this name in the app."
+              title="姓名"
+              description="Glomi AI 会在应用中显示这个名称。"
               center
               withLabel
             >
               <InputTypeIn
-                placeholder="Your name"
+                placeholder="你的姓名"
                 value={personalizationValues.name}
                 onChange={(e) =>
                   updatePersonalizationField("name", e.target.value)
@@ -493,13 +492,13 @@ function GeneralSettings() {
               />
             </InputHorizontal>
             <InputHorizontal
-              title="Work Role"
-              description="Share your role to better tailor responses."
+              title="工作角色"
+              description="填写你的角色，让回复更贴合你的工作场景。"
               center
               withLabel
             >
               <InputTypeIn
-                placeholder="Your role"
+                placeholder="你的角色"
                 value={personalizationValues.role}
                 onChange={(e) =>
                   updatePersonalizationField("role", e.target.value)
@@ -523,15 +522,15 @@ function GeneralSettings() {
 
         <Section gap={0.75}>
           <Content
-            title="Appearance"
+            title="外观"
             sizePreset="main-content"
             variant="section"
             width="full"
           />
           <Card>
             <InputHorizontal
-              title="Color Mode"
-              description="Select your preferred color mode for the UI."
+              title="颜色模式"
+              description="选择你偏好的界面颜色模式。"
               center
               withLabel
             >
@@ -559,25 +558,25 @@ function GeneralSettings() {
                         : undefined
                     }
                   >
-                    Auto
+                    自动
                   </InputSelect.Item>
                   <InputSelect.Separator />
                   <InputSelect.Item
                     value={ThemePreference.LIGHT}
                     icon={() => <ColorSwatch light />}
                   >
-                    Light
+                    浅色
                   </InputSelect.Item>
                   <InputSelect.Item
                     value={ThemePreference.DARK}
                     icon={() => <ColorSwatch dark />}
                   >
-                    Dark
+                    深色
                   </InputSelect.Item>
                 </InputSelect.Content>
               </InputSelect>
             </InputHorizontal>
-            <InputVertical title="Chat Background">
+            <InputVertical title="聊天背景">
               <div className="flex flex-wrap gap-2">
                 {CHAT_BACKGROUND_OPTIONS.map((bg) => {
                   const currentBackgroundId =
@@ -591,13 +590,13 @@ function GeneralSettings() {
                       onClick={() => applyBackground(bg)}
                       className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
                       title={bg.label}
-                      aria-label={`${bg.label} background${
-                        isSelected ? " (selected)" : ""
+                      aria-label={`${bg.label}背景${
+                        isSelected ? "（已选择）" : ""
                       }`}
                     >
                       {isNone ? (
                         <div className="absolute inset-0 bg-background flex items-center justify-center">
-                          <span className="text-xs text-text-02">None</span>
+                          <span className="text-xs text-text-02">无</span>
                         </div>
                       ) : (
                         <div
@@ -630,15 +629,15 @@ function GeneralSettings() {
 
         <Section gap={0.75}>
           <Content
-            title="Danger Zone"
+            title="危险操作"
             sizePreset="main-content"
             variant="section"
             width="full"
           />
           <Card>
             <InputHorizontal
-              title="Delete All Chats"
-              description="Permanently delete all your chat sessions."
+              title="删除全部聊天"
+              description="永久删除你的全部聊天会话。"
               center
             >
               <Button
@@ -648,7 +647,7 @@ function GeneralSettings() {
                 icon={SvgTrash}
                 interaction={showDeleteConfirmation ? "hover" : "rest"}
               >
-                Delete All Chats
+                删除全部聊天
               </Button>
             </InputHorizontal>
           </Card>
@@ -698,7 +697,7 @@ function PromptShortcuts() {
   // Show error popup if fetch fails
   useEffect(() => {
     if (!error) return;
-    toast.error("Failed to load shortcuts");
+    toast.error("加载快捷方式失败");
   }, [error]);
 
   const handleUpdateShortcut = useCallback(
@@ -768,15 +767,15 @@ function PromptShortcuts() {
           method: "DELETE",
         });
 
-        if (response.ok) {
-          setShortcuts((prev) => prev.filter((_, i) => i !== index));
-          await refresh();
-          toast.success("Shortcut deleted");
-        } else {
-          throw new Error("Failed to delete shortcut");
-        }
-      } catch (error) {
-        toast.error("Failed to delete shortcut");
+          if (response.ok) {
+            setShortcuts((prev) => prev.filter((_, i) => i !== index));
+            await refresh();
+          toast.success("快捷方式已删除");
+          } else {
+          throw new Error("删除快捷方式失败");
+          }
+        } catch (error) {
+        toast.error("删除快捷方式失败");
       }
     },
     [shortcuts, refresh]
@@ -786,7 +785,7 @@ function PromptShortcuts() {
     async (index: number) => {
       const shortcut = shortcuts[index];
       if (!shortcut || !shortcut.prompt.trim() || !shortcut.content.trim()) {
-        toast.error("Both shortcut and expansion are required");
+        toast.error("快捷指令和展开内容都必填");
         return;
       }
 
@@ -806,9 +805,9 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success("Shortcut created");
+            toast.success("快捷方式已创建");
           } else {
-            throw new Error("Failed to create shortcut");
+            throw new Error("创建快捷方式失败");
           }
         } else {
           // Update existing shortcut
@@ -825,13 +824,13 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success("Shortcut updated");
+            toast.success("快捷方式已更新");
           } else {
-            throw new Error("Failed to update shortcut");
+            throw new Error("更新快捷方式失败");
           }
         }
       } catch (error) {
-        toast.error("Failed to save shortcut");
+        toast.error("保存快捷方式失败");
       }
     },
     [shortcuts, refresh]
@@ -877,7 +876,7 @@ function PromptShortcuts() {
               >
                 <InputTypeIn
                   prefixText="/"
-                  placeholder="Summarize"
+                  placeholder="总结"
                   value={shortcut.prompt}
                   onChange={(e) =>
                     handleUpdateShortcut(index, "prompt", e.target.value)
@@ -901,16 +900,16 @@ function PromptShortcuts() {
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
                     prominence="tertiary"
-                    aria-label="Remove shortcut"
+                    aria-label="移除快捷方式"
                     tooltip={
                       shortcut.is_public
-                        ? "Cannot delete public prompt-shortcuts."
+                        ? "无法删除公开提示词快捷方式。"
                         : undefined
                     }
                   />
                 </Section>
                 <InputTextArea
-                  placeholder="Provide a concise 1–2 sentence summary of the following:"
+                  placeholder="请用 1-2 句话简洁总结以下内容："
                   value={shortcut.content}
                   onChange={(e) =>
                     handleUpdateShortcut(index, "content", e.target.value)
@@ -966,8 +965,8 @@ function ChatPreferencesSettings() {
     updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success("Preferences saved"),
-    onError: () => toast.error("Failed to save preferences"),
+    onSuccess: () => toast.success("偏好设置已保存"),
+    onError: () => toast.error("保存偏好设置失败"),
   });
   const [draftVoicePlaybackSpeed, setDraftVoicePlaybackSpeed] = useState(
     user?.preferences.voice_playback_speed ?? 1
@@ -985,9 +984,9 @@ function ChatPreferencesSettings() {
     }) => {
       try {
         await updateUserVoiceSettings(settings);
-        toast.success("Preferences saved");
+        toast.success("偏好设置已保存");
       } catch {
-        toast.error("Failed to save preferences");
+        toast.error("保存偏好设置失败");
       }
     },
     [updateUserVoiceSettings]
@@ -1023,15 +1022,15 @@ function ChatPreferencesSettings() {
     <Section gap={2}>
       <Section gap={0.75}>
         <Content
-          title="Chats"
+          title="聊天"
           sizePreset="main-content"
           variant="section"
           width="full"
         />
         <Card>
           <InputHorizontal
-            title="Default Model"
-            description="This model will be used by Onyx by default in your chats."
+            title="默认模型"
+            description="Glomi AI 会在你的对话中默认使用这个模型。"
             withLabel
           >
             <LLMPopover
@@ -1043,8 +1042,8 @@ function ChatPreferencesSettings() {
           </InputHorizontal>
 
           <InputHorizontal
-            title="Chat Auto-scroll"
-            description="Automatically scroll to new content as chat generates response."
+            title="聊天自动滚动"
+            description="生成回复时自动滚动到最新内容。"
             withLabel
           >
             <Switch
@@ -1056,8 +1055,8 @@ function ChatPreferencesSettings() {
           </InputHorizontal>
 
           <InputHorizontal
-            title="Smooth Streaming"
-            description="Animate streamed responses character-by-character. Disable to render chunks as they arrive."
+            title="平滑流式输出"
+            description="逐字显示流式回复。关闭后会按数据块即时渲染。"
             withLabel
           >
             <Switch
@@ -1067,8 +1066,8 @@ function ChatPreferencesSettings() {
           </InputHorizontal>
 
           <InputHorizontal
-            title="Collapse Large Pastes"
-            description="When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text."
+            title="折叠大段粘贴内容"
+            description="粘贴超过 3 行或 200 字符的内容时，折叠为紧凑卡片而不是直接插入。点击卡片可查看或编辑完整文本。"
             withLabel
           >
             <Switch
@@ -1084,13 +1083,13 @@ function ChatPreferencesSettings() {
               tooltip={
                 searchUiEnabled
                   ? undefined
-                  : "Search UI is disabled and can only be enabled by an admin."
+                  : "搜索界面已禁用，只能由管理员启用。"
               }
               side="top"
             >
               <InputHorizontal
-                title="Default App Mode"
-                description="Choose whether new sessions start in Search or Chat mode."
+                title="默认应用模式"
+                description="选择新会话默认以搜索模式还是聊天模式开始。"
                 center
                 disabled={!searchUiEnabled}
                 withLabel
@@ -1104,8 +1103,8 @@ function ChatPreferencesSettings() {
                 >
                   <InputSelect.Trigger />
                   <InputSelect.Content>
-                    <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
-                    <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
+                    <InputSelect.Item value="CHAT">聊天</InputSelect.Item>
+                    <InputSelect.Item value="SEARCH">搜索</InputSelect.Item>
                   </InputSelect.Content>
                 </InputSelect>
               </InputHorizontal>
@@ -1116,12 +1115,12 @@ function ChatPreferencesSettings() {
 
       <Section gap={0.75}>
         <InputVertical
-          title="Personal Preferences"
-          description="Provide your custom preferences in natural language."
+          title="个人偏好"
+          description="用自然语言填写你的个性化偏好。"
           withLabel
         >
           <InputTextArea
-            placeholder="Describe how you want the system to behave and the tone it should use."
+            placeholder="描述你希望系统如何回应，以及应该使用怎样的语气。"
             value={personalizationValues.user_preferences}
             onChange={(e) => updateUserPreferences(e.target.value)}
             onBlur={() => void handleSavePersonalization()}
@@ -1136,15 +1135,15 @@ function ChatPreferencesSettings() {
           />
         </InputVertical>
         <Content
-          title="Memory"
+          title="记忆"
           sizePreset="main-content"
           variant="section"
           width="full"
         />
         <Card>
           <InputHorizontal
-            title="Reference Stored Memories"
-            description="Let Onyx reference stored memories in chats."
+            title="引用已保存的记忆"
+            description="允许 Glomi AI 在对话中引用保存的记忆。"
             withLabel
           >
             <Switch
@@ -1156,8 +1155,8 @@ function ChatPreferencesSettings() {
             />
           </InputHorizontal>
           <InputHorizontal
-            title="Update Memories"
-            description="Let Onyx generate and update stored memories."
+            title="更新记忆"
+            description="允许 Glomi AI 自动生成和更新记忆。"
             withLabel
           >
             <Switch
@@ -1184,15 +1183,15 @@ function ChatPreferencesSettings() {
 
       <Section gap={0.75}>
         <Content
-          title="Prompt Shortcuts"
+          title="提示词快捷方式"
           sizePreset="main-content"
           variant="section"
           width="full"
         />
         <Card>
           <InputHorizontal
-            title="Use Prompt Shortcuts"
-            description="Enable shortcuts to quickly insert common prompts."
+            title="使用提示词快捷方式"
+            description="启用快捷方式以快速插入常用提示词。"
             withLabel
           >
             <Switch
@@ -1209,15 +1208,15 @@ function ChatPreferencesSettings() {
 
       <Section gap={0.75}>
         <Content
-          title="Voice"
+          title="语音"
           sizePreset="main-content"
           variant="section"
           width="full"
         />
         <Card>
           <InputHorizontal
-            title="Auto-Send on Pause"
-            description="Automatically send voice input when you stop speaking."
+            title="暂停时自动发送"
+            description="当你停止说话时自动发送语音输入。"
             withLabel
           >
             <Switch
@@ -1229,8 +1228,8 @@ function ChatPreferencesSettings() {
           </InputHorizontal>
 
           <InputHorizontal
-            title="Auto-Playback"
-            description="Automatically play voice responses."
+            title="自动播放"
+            description="自动播放语音回复。"
             withLabel
           >
             <Switch
@@ -1242,8 +1241,8 @@ function ChatPreferencesSettings() {
           </InputHorizontal>
 
           <InputHorizontal
-            title="Playback Speed"
-            description="Adjust the speed of voice playback."
+            title="播放速度"
+            description="调整语音播放速度。"
             withLabel
           >
             <div className="flex items-center gap-3">
@@ -1282,16 +1281,16 @@ function AccountsAccessSettings() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const passwordValidationSchema = Yup.object().shape({
-    currentPassword: Yup.string().required("Current password is required"),
+    currentPassword: Yup.string().required("请输入当前密码"),
     newPassword: Yup.string()
       .min(
         authTypeMetadata.passwordMinLength,
-        `Password must be at least ${authTypeMetadata.passwordMinLength} characters`
+        `密码至少需要 ${authTypeMetadata.passwordMinLength} 个字符`
       )
       .required("New password is required"),
     confirmPassword: Yup.string()
-      .oneOf([Yup.ref("newPassword")], "Passwords do not match")
-      .required("Please confirm your new password"),
+      .oneOf([Yup.ref("newPassword")], "两次输入的密码不一致")
+      .required("请确认新密码"),
   });
 
   // PAT state
@@ -1361,19 +1360,19 @@ function AccountsAccessSettings() {
   // Show error popup if SWR fetch fails
   useEffect(() => {
     if (error) {
-      toast.error("Failed to load tokens");
+      toast.error("加载令牌失败");
     }
   }, [error]);
 
   useEffect(() => {
     if (scopeOptionsError) {
-      toast.error("Failed to load permission options");
+      toast.error("权限选项加载失败");
     }
   }, [scopeOptionsError]);
 
   const createPAT = useCallback(async () => {
     if (!newTokenName.trim()) {
-      toast.error("Token name is required");
+      toast.error("请输入令牌名称");
       return;
     }
 
@@ -1398,15 +1397,15 @@ function AccountsAccessSettings() {
           token: data.token,
           name: newTokenName,
         });
-        toast.success("Token created successfully");
+        toast.success("令牌已创建");
         // Revalidate the token list
         await mutate();
       } else {
         const errorData = await response.json();
-        toast.error(errorData.detail || "Failed to create token");
+        toast.error(errorData.detail || "令牌创建失败");
       }
     } catch (error) {
-      toast.error("Network error creating token");
+      toast.error("创建令牌时发生网络错误");
     } finally {
       setIsCreating(false);
     }
@@ -1425,13 +1424,13 @@ function AccountsAccessSettings() {
             setNewlyCreatedToken(null);
           }
           await mutate();
-          toast.success("Token deleted successfully");
+          toast.success("令牌已删除");
           setTokenToDelete(null);
         } else {
-          toast.error("Failed to delete token");
+          toast.error("令牌删除失败");
         }
       } catch (error) {
-        toast.error("Network error deleting token");
+        toast.error("删除令牌时发生网络错误");
       }
     },
     [newlyCreatedToken, mutate]
@@ -1456,14 +1455,14 @@ function AccountsAccessSettings() {
         });
 
         if (response.ok) {
-          toast.success("Password updated successfully");
+          toast.success("密码已更新");
           setShowPasswordModal(false);
         } else {
           const errorData = await response.json();
-          toast.error(errorData.detail || "Failed to change password");
+          toast.error(errorData.detail || "密码修改失败");
         }
       } catch (error) {
-        toast.error("An error occurred while changing the password");
+        toast.error("修改密码时发生错误");
       }
     },
     []
@@ -1500,23 +1499,23 @@ function AccountsAccessSettings() {
       {tokenToDelete && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Revoke Access Token"
+          title="撤销访问令牌"
           onClose={() => setTokenToDelete(null)}
           submit={
             <Button
               variant="danger"
               onClick={() => deletePAT(tokenToDelete.id)}
             >
-              Revoke
+              撤销
             </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
             <Text color="text-05">
-              {`Any application using the token ${tokenToDelete.name} (${tokenToDelete.token_display}) will lose access to Onyx. This action cannot be undone.`}
+              {`任何使用令牌 ${tokenToDelete.name} (${tokenToDelete.token_display}) 的应用都将失去 Glomi AI 访问权限。此操作无法撤销。`}
             </Text>
             <Text color="text-05">
-              Are you sure you want to revoke this token?
+              确定要撤销此令牌吗？
             </Text>
           </Section>
         </ConfirmationModalLayout>
@@ -1548,7 +1547,7 @@ function AccountsAccessSettings() {
             <Form>
               <ConfirmationModalLayout
                 icon={SvgLock}
-                title="Change Password"
+                title="修改密码"
                 submit={
                   <Button
                     disabled={isSubmitting || !dirty || !isValid}
@@ -1561,7 +1560,7 @@ function AccountsAccessSettings() {
                       }
                     }}
                   >
-                    {isSubmitting ? "Updating..." : "Update"}
+                    {isSubmitting ? "更新中..." : "更新"}
                   </Button>
                 }
                 onClose={() => {
@@ -1572,7 +1571,7 @@ function AccountsAccessSettings() {
                   <Section gap={0.25} alignItems="start">
                     <InputVertical
                       withLabel="currentPassword"
-                      title="Current Password"
+                      title="当前密码"
                     >
                       <PasswordInputTypeIn
                         name="currentPassword"
@@ -1586,7 +1585,7 @@ function AccountsAccessSettings() {
                     </InputVertical>
                   </Section>
                   <Section gap={0.25} alignItems="start">
-                    <InputVertical withLabel="newPassword" title="New Password">
+                    <InputVertical withLabel="newPassword" title="新密码">
                       <PasswordInputTypeIn
                         name="newPassword"
                         value={values.newPassword}
@@ -1599,7 +1598,7 @@ function AccountsAccessSettings() {
                   <Section gap={0.25} alignItems="start">
                     <InputVertical
                       withLabel="confirmPassword"
-                      title="Confirm New Password"
+                      title="确认新密码"
                     >
                       <PasswordInputTypeIn
                         name="confirmPassword"
@@ -1622,15 +1621,15 @@ function AccountsAccessSettings() {
       <Section gap={2}>
         <Section gap={0.75}>
           <Content
-            title="Accounts"
+            title="账号"
             sizePreset="main-content"
             variant="section"
             width="full"
           />
           <Card>
             <InputHorizontal
-              title="Email"
-              description="Your account email address."
+              title="邮箱"
+              description="你的账号邮箱地址。"
               center
             >
               <Text color="text-05">{user?.email ?? "anonymous"}</Text>
@@ -1638,8 +1637,8 @@ function AccountsAccessSettings() {
 
             {showPasswordSection && (
               <InputHorizontal
-                title="Password"
-                description="Update your account password."
+                title="密码"
+                description="更新你的账号密码。"
                 center
               >
                 <Button
@@ -1648,7 +1647,7 @@ function AccountsAccessSettings() {
                   onClick={() => setShowPasswordModal(true)}
                   interaction={showPasswordModal ? "hover" : "rest"}
                 >
-                  Change Password
+                  修改密码
                 </Button>
               </InputHorizontal>
             )}
@@ -1658,7 +1657,7 @@ function AccountsAccessSettings() {
         {showTokensSection && (
           <Section gap={0.75}>
             <Content
-              title="Access Tokens"
+              title="访问令牌"
               sizePreset="main-content"
               variant="section"
               width="full"
@@ -1671,13 +1670,13 @@ function AccountsAccessSettings() {
                       <Section padding={0.5} alignItems="start">
                         <Text font="secondary-body" color="text-03">
                           {isLoading
-                            ? "Loading tokens..."
-                            : "No access tokens created."}
+                            ? "正在加载令牌..."
+                            : "尚未创建访问令牌。"}
                         </Text>
                       </Section>
                     ) : (
                       <InputTypeIn
-                        placeholder="Search..."
+                        placeholder="搜索..."
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         searchIcon
@@ -1691,7 +1690,7 @@ function AccountsAccessSettings() {
                         interaction={showCreateModal ? "active" : "rest"}
                         onClick={() => setShowCreateModal(true)}
                       >
-                        New Access Token
+                        新建访问令牌
                       </Button>
                     </div>
                   </Section>
@@ -1705,31 +1704,27 @@ function AccountsAccessSettings() {
                           (1000 * 60 * 60 * 24)
                       );
 
-                      let expiryText = "Never expires";
+                      let expiryText = "永不过期";
                       if (pat.expires_at) {
                         const expiresDate = new Date(pat.expires_at);
                         const daysUntilExpiry = Math.ceil(
                           (expiresDate.getTime() - now.getTime()) /
                             (1000 * 60 * 60 * 24)
                         );
-                        expiryText = `Expires in ${daysUntilExpiry} day${
-                          daysUntilExpiry === 1 ? "" : "s"
-                        }`;
+                        expiryText = `${daysUntilExpiry} 天后过期`;
                       }
 
                       const scopeText =
                         pat.scopes === null
-                          ? "Full access"
+                          ? "完整访问权限"
                           : pat.scopes
                               .map((scope) => scopeLabels.get(scope) ?? scope)
                               .join(", ");
 
                       const createdText =
                         daysSinceCreation === 0
-                          ? "Created today"
-                          : `Created ${daysSinceCreation} day${
-                              daysSinceCreation === 1 ? "" : "s"
-                            } ago`;
+                          ? "今天创建"
+                          : `${daysSinceCreation} 天前创建`;
 
                       const middleText = `${createdText} - ${expiryText} - ${scopeText}`;
 
@@ -1751,7 +1746,7 @@ function AccountsAccessSettings() {
                                   onClick={() => setTokenToDelete(pat)}
                                   prominence="tertiary"
                                   size="sm"
-                                  aria-label={`Delete token ${pat.name}`}
+                                  aria-label={`删除令牌 ${pat.name}`}
                                 />
                               }
                             />
@@ -1766,10 +1761,10 @@ function AccountsAccessSettings() {
               <Card>
                 <Section flexDirection="row" justifyContent="between">
                   <Text font="secondary-body" color="text-03">
-                    Access tokens require an active paid subscription.
+                    访问令牌需要有效的付费订阅。
                   </Text>
                   <Button prominence="secondary" href="/admin/billing">
-                    Upgrade Plan
+                    升级套餐
                   </Button>
                 </Section>
               </Card>
@@ -1794,7 +1789,7 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
       <Content
         icon={sourceMetadata.icon}
         title={sourceMetadata.displayName}
-        description={isActive ? "Connected" : "Paused"}
+        description={isActive ? "已连接" : "已暂停"}
         sizePreset="main-content"
         variant="section"
       />
@@ -1825,14 +1820,14 @@ function FederatedConnectorCard({
       );
 
       if (response.ok) {
-        toast.success("Disconnected successfully");
+        toast.success("已断开连接");
         setShowDisconnectConfirmation(false);
         onDisconnectSuccess();
       } else {
-        throw new Error("Failed to disconnect");
+        throw new Error("断开连接失败");
       }
     } catch (error) {
-      toast.error("Failed to disconnect");
+      toast.error("断开连接失败");
     } finally {
       setIsDisconnecting(false);
     }
@@ -1843,7 +1838,7 @@ function FederatedConnectorCard({
       {showDisconnectConfirmation && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={markdown(`Disconnect *${sourceMetadata.displayName}*`)}
+          title={markdown(`断开 *${sourceMetadata.displayName}*`)}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
             <Button
@@ -1851,16 +1846,16 @@ function FederatedConnectorCard({
               variant="danger"
               onClick={() => void handleDisconnect()}
             >
-              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+              {isDisconnecting ? "正在断开..." : "断开连接"}
             </Button>
           }
         >
           <Section gap={0.5} alignItems="start">
             <Text color="text-05">
-              {`Onyx will no longer be able to access or search content from your ${sourceMetadata.displayName} account.`}
+              {`Glomi AI 将无法再访问或搜索你的 ${sourceMetadata.displayName} 账户内容。`}
             </Text>
             <Text color="text-05">
-              {`You can still continue existing sessions referencing ${sourceMetadata.displayName} content.`}
+              {`你仍可继续使用已引用 ${sourceMetadata.displayName} 内容的现有会话。`}
             </Text>
           </Section>
         </ConfirmationModalLayout>
@@ -1871,7 +1866,7 @@ function FederatedConnectorCard({
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
           description={
-            connector.has_oauth_token ? "Connected" : "Not connected"
+            connector.has_oauth_token ? "已连接" : "未连接"
           }
           sizePreset="main-content"
           variant="section"
@@ -1892,7 +1887,7 @@ function FederatedConnectorCard({
                 target="_blank"
                 rightIcon={SvgArrowExchange}
               >
-                Connect
+                连接
               </Button>
             ) : undefined
           }
@@ -1945,7 +1940,7 @@ function ConnectorsSettings() {
     <Section gap={2}>
       <Section gap={0.75} justifyContent="start">
         <Content
-          title="Connectors"
+          title="连接器"
           sizePreset="main-content"
           variant="section"
           width="full"
@@ -1973,7 +1968,7 @@ function ConnectorsSettings() {
         ) : (
           <EmptyMessageCard
             sizePreset="main-ui"
-            title="No connectors set up for your organization."
+            title="你的组织尚未设置连接器。"
           />
         )}
       </Section>

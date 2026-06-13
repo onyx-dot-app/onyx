@@ -47,9 +47,9 @@ import useSyncAttemptsPaginatedFetch from "./useSyncAttemptsPaginatedFetch";
 const ITEMS_PER_PAGE = 8;
 const PAGES_PER_BATCH = 4;
 const NOT_APPLICABLE_DOC_PERMISSIONS_MESSAGE =
-  "This connector does not use a separate document-permission syncing job.";
+  "此连接器不使用单独的文档权限同步任务。";
 const NOT_APPLICABLE_GROUP_MEMBERSHIP_MESSAGE =
-  "This connector does not use a separate group-membership syncing job.";
+  "此连接器不使用单独的组成员同步任务。";
 
 enum SyncAttemptsTab {
   INDEXING = "indexing",
@@ -85,12 +85,12 @@ export function SyncAttemptsTabs({
       onValueChange={(value) => setTab(value as SyncAttemptsTab)}
     >
       <Tabs.List>
-        <Tabs.Trigger value={SyncAttemptsTab.INDEXING}>Indexing</Tabs.Trigger>
+        <Tabs.Trigger value={SyncAttemptsTab.INDEXING}>索引</Tabs.Trigger>
         <Tabs.Trigger value={SyncAttemptsTab.DOC_PERMISSIONS}>
-          Document Permission Sync
+          文档权限同步
         </Tabs.Trigger>
         <Tabs.Trigger value={SyncAttemptsTab.GROUP_MEMBERSHIP}>
-          Group Membership Sync
+          组成员同步
         </Tabs.Trigger>
       </Tabs.List>
 
@@ -190,7 +190,7 @@ function renderTabGate(
     return (
       <MessageCard
         variant="error"
-        title="Failed to load sync attempts"
+        title="加载同步尝试失败"
         description={applicableError.message}
       />
     );
@@ -202,7 +202,7 @@ function renderTabGate(
     return (
       <MessageCard
         variant="info"
-        title="Not applicable"
+        title="不适用"
         description={notApplicableMessage}
       />
     );
@@ -214,7 +214,7 @@ function renderTabGate(
     return (
       <MessageCard
         variant="error"
-        title="Failed to load sync attempts"
+        title="加载同步尝试失败"
         description={error.message}
       />
     );

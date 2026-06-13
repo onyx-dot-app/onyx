@@ -65,9 +65,9 @@ import {
   SvgEditBig,
   SvgFolderPlus,
   SvgMoreHorizontal,
-  SvgOnyxOctagon,
   SvgSearchMenu,
   SvgSettings,
+  SvgSparkle,
 } from "@opal/icons";
 import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
@@ -81,6 +81,7 @@ import { dismissNotification } from "@/lib/notifications/api";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
+import { useTranslations } from "next-intl";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -121,6 +122,7 @@ function RecentsSection({
   isLoadingMore,
   onLoadMore,
 }: RecentsSectionProps) {
+  const t = useTranslations("appShell.sidebar");
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
@@ -163,10 +165,10 @@ function RecentsSection({
         isOver && "bg-background-tint-03"
       )}
     >
-      <SidebarLayouts.Section title="Recents">
+      <SidebarLayouts.Section title={t("recents")}>
         {chatSessions.length === 0 ? (
           <Text as="p" text01 className="px-3">
-            Try sending a message! Your chat history will appear here.
+            {t("emptyRecents")}
           </Text>
         ) : (
           <>
@@ -198,6 +200,7 @@ function RecentsSection({
 }
 
 const AppSidebar = memo(function AppSidebarInner() {
+  const t = useTranslations("appShell.sidebar");
   const { folded } = useSidebarState();
   const router = useRouter();
   const combinedSettings = useSettingsContext();
@@ -247,7 +250,7 @@ const AppSidebar = memo(function AppSidebarInner() {
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
     useState(false);
 
-  // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
+  // Check if Glomi 创作 is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled
   const isOnyxCraftEnabled =
     combinedSettings?.settings?.onyx_craft_enabled === true;
@@ -257,7 +260,7 @@ const AppSidebar = memo(function AppSidebarInner() {
     enabled: isOnyxCraftEnabled,
   });
 
-  // Find build_mode feature announcement notification (only if Onyx Craft is enabled)
+  // Find build_mode feature announcement notification (only if Glomi 创作 is enabled)
   const buildModeNotification = isOnyxCraftEnabled
     ? notifications?.find(
         (n) =>
@@ -495,7 +498,7 @@ const AppSidebar = memo(function AppSidebarInner() {
             reset();
           }}
         >
-          New Session
+          {t("newSession")}
         </SidebarTab>
       </div>
     );
@@ -505,6 +508,7 @@ const AppSidebar = memo(function AppSidebarInner() {
     combinedSettings,
     currentAgent,
     defaultAppMode,
+    t,
   ]);
 
   const buildButton = useMemo(
@@ -516,11 +520,11 @@ const AppSidebar = memo(function AppSidebarInner() {
           href={CRAFT_PATH}
           onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
         >
-          Craft
+          {t("craft")}
         </SidebarTab>
       </div>
     ),
-    [folded, posthog]
+    [folded, posthog, t]
   );
 
   const searchChatsButton = useMemo(
@@ -528,12 +532,12 @@ const AppSidebar = memo(function AppSidebarInner() {
       <ChatSearchCommandMenu
         trigger={
           <SidebarTab icon={SvgSearchMenu} folded={folded}>
-            Search Chats
+            {t("searchChats")}
           </SidebarTab>
         }
       />
     ),
-    [folded]
+    [folded, t]
   );
   const moreAgentsButton = useMemo(
     () => (
@@ -541,7 +545,7 @@ const AppSidebar = memo(function AppSidebarInner() {
         <SidebarTab
           icon={
             folded || visibleAgents.length === 0
-              ? SvgOnyxOctagon
+              ? SvgSparkle
               : SvgMoreHorizontal
           }
           href="/app/agents"
@@ -549,11 +553,11 @@ const AppSidebar = memo(function AppSidebarInner() {
           selected={activeSidebarTab.isMoreAgents()}
           variant={folded ? "sidebar-heavy" : "sidebar-light"}
         >
-          {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
+          {visibleAgents.length === 0 ? t("exploreAgents") : t("moreAgents")}
         </SidebarTab>
       </div>
     ),
-    [folded, activeSidebarTab, visibleAgents]
+    [folded, activeSidebarTab, visibleAgents, t]
   );
   const newProjectButton = useMemo(
     () => (
@@ -564,10 +568,10 @@ const AppSidebar = memo(function AppSidebarInner() {
         folded={folded}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
-        New Project
+        {t("newProject")}
       </SidebarTab>
     ),
-    [folded, createProjectModal.toggle, createProjectModal.isOpen]
+    [folded, createProjectModal.toggle, createProjectModal.isOpen, t]
   );
   const handleShowBuildIntro = useCallback(() => {
     setShowIntroAnimation(true);
@@ -586,7 +590,7 @@ const AppSidebar = memo(function AppSidebarInner() {
             icon={SvgSettings}
             folded={folded}
           >
-            {isAdmin ? "Admin Panel" : "Curator Panel"}
+            {isAdmin ? t("adminPanel") : t("curatorPanel")}
           </SidebarTab>
         )}
         <AccountPopover
@@ -597,7 +601,7 @@ const AppSidebar = memo(function AppSidebarInner() {
         />
       </div>
     ),
-    [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
+    [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled, t]
   );
 
   return (
@@ -685,7 +689,7 @@ const AppSidebar = memo(function AppSidebarInner() {
                 collisionDetection={closestCenter}
                 onDragEnd={handleAgentDragEnd}
               >
-                <SidebarLayouts.Section title="Agents">
+                <SidebarLayouts.Section title={t("agents")}>
                   <SortableContext
                     items={visibleAgentIds}
                     strategy={verticalListSortingStrategy}
@@ -710,13 +714,13 @@ const AppSidebar = memo(function AppSidebarInner() {
               >
                 {/* Projects */}
                 <SidebarLayouts.Section
-                  title="Projects"
+                  title={t("projects")}
                   action={
                     <OpalButton
                       icon={SvgFolderPlus}
                       prominence="tertiary"
                       size="sm"
-                      tooltip="New Project"
+                      tooltip={t("newProject")}
                       onClick={() => createProjectModal.toggle(true)}
                     />
                   }

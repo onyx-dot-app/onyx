@@ -53,7 +53,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
-import { APP_SLOGAN } from "@/lib/constants";
+import { useTranslations } from "next-intl";
 
 // ---------------------------------------------------------------------------
 // Header
@@ -70,6 +70,7 @@ function HeaderInner({
 }: {
   appFocus: ReturnType<typeof useAppFocus>;
 }) {
+  const t = useTranslations("appShell.header");
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
@@ -178,7 +179,7 @@ function HeaderInner({
       setDeleteModalOpen(false);
     } catch (error) {
       console.error("Failed to delete chat:", error);
-      showErrorNotification("Failed to delete chat. Please try again.");
+      showErrorNotification(t("deleteChatFailed"));
     }
   }, [
     currentChatSession,
@@ -186,6 +187,7 @@ function HeaderInner({
     removeSession,
     fetchProjects,
     router,
+    t,
   ]);
 
   const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
@@ -220,7 +222,7 @@ function HeaderInner({
             sizePreset="main-ui"
             rounding="sm"
             icon={SvgFolderIn}
-            title="Move to Project"
+            title={t("moveToProject")}
             onClick={noProp(() => setShowMoveOptions(true))}
           />,
           <LineItemButton
@@ -229,7 +231,7 @@ function HeaderInner({
             rounding="sm"
             color="danger"
             icon={SvgTrash}
-            title="Delete"
+            title={t("delete")}
             onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
           />,
         ];
@@ -241,6 +243,7 @@ function HeaderInner({
     currentChatSession,
     setDeleteConfirmationModalOpen,
     handleMoveClick,
+    t,
   ]);
 
   return (
@@ -271,17 +274,16 @@ function HeaderInner({
 
       {deleteModalOpen && (
         <ConfirmationModalLayout
-          title="Delete Chat"
+          title={t("deleteChat")}
           icon={SvgTrash}
           onClose={() => setDeleteModalOpen(false)}
           submit={
             <Button variant="danger" onClick={handleDeleteChat}>
-              Delete
+              {t("delete")}
             </Button>
           }
         >
-          Are you sure you want to delete this chat? This action cannot be
-          undone.
+          {t("deleteChatDescription")}
         </ConfirmationModalLayout>
       )}
 
@@ -306,12 +308,12 @@ function HeaderInner({
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
                 <Popover.Trigger asChild>
                   <OpenButton
-                    aria-label="Change app mode"
+                    aria-label={t("changeAppMode")}
                     icon={
                       effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                     }
                   >
-                    {effectiveMode === "search" ? "Search" : "Chat"}
+                    {effectiveMode === "search" ? t("search") : t("chat")}
                   </OpenButton>
                 </Popover.Trigger>
                 <Popover.Content align="start" width="lg">
@@ -321,8 +323,8 @@ function HeaderInner({
                       rounding="sm"
                       icon={SvgSearchMenu}
                       state={effectiveMode === "search" ? "selected" : "empty"}
-                      title="Search"
-                      description="Quick search for documents"
+                      title={t("search")}
+                      description={t("searchDescription")}
                       onClick={noProp(() => {
                         setAppMode("search");
                         setModePopoverOpen(false);
@@ -333,8 +335,8 @@ function HeaderInner({
                       rounding="sm"
                       icon={SvgBubbleText}
                       state={effectiveMode === "chat" ? "selected" : "empty"}
-                      title="Chat"
-                      description="Conversation and research"
+                      title={t("chat")}
+                      description={t("chatDescription")}
                       onClick={noProp(() => {
                         setAppMode("chat");
                         setModePopoverOpen(false);
@@ -378,9 +380,9 @@ function HeaderInner({
                 interaction={showShareModal ? "hover" : "rest"}
                 responsiveHideText
                 onClick={() => setShowShareModal(true)}
-                aria-label="share-chat-button"
+                aria-label={t("share")}
               >
-                Share
+                {t("share")}
               </Button>
               <SimplePopover
                 trigger={
@@ -441,14 +443,15 @@ const footerMarkdownComponents = {
 } satisfies Partial<Components>;
 
 function Footer() {
+  const tBrand = useTranslations("brand");
   const settings = useSettingsContext();
   const appFocus = useAppFocus();
 
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
-    `[Onyx ${
-      settings?.webVersion || "dev"
-    }](https://www.onyx.app/) - ${APP_SLOGAN}`;
+    `[${tBrand("version", {
+      version: settings?.webVersion || "dev",
+    })}](https://glomi.ai/) - ${tBrand("slogan")}`;
 
   return (
     <footer

@@ -3,7 +3,23 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, extname } from "node:path";
 
-const ROOTS = ["src/app/app", "src/app/auth", "src/refresh-components"];
+const TARGETS = [
+  "src/app/app",
+  "src/app/auth",
+  "src/refresh-components",
+  "src/providers/DynamicMetadata.tsx",
+  "src/refresh-pages/AppPage.tsx",
+  "src/sections/agents/AgentCard.tsx",
+  "src/sections/app-chrome/AppChrome.tsx",
+  "src/sections/cards/SkillCard.tsx",
+  "src/sections/input/AppInputBar.tsx",
+  "src/sections/input/SharedAppInputBar.tsx",
+  "src/sections/modals/AgentViewerModal.tsx",
+  "src/sections/sidebar/AccountPopover.tsx",
+  "src/sections/sidebar/AppSidebar.tsx",
+  "src/sections/sidebar/ChatButton.tsx",
+  "src/sections/sidebar/ChatSearchCommandMenu.tsx",
+];
 const ALLOW = [
   "@onyx-ai",
   "onyxBranded",
@@ -15,6 +31,7 @@ const ALLOW = [
   "MinimalOnyxDocument",
   "LoadedOnyxDocument",
   "hide_onyx_branding",
+  "isOnyxCraftEnabled",
   "OnyxInitializingLoader",
   "onyx.ico",
   "@opal/logos",
@@ -42,9 +59,27 @@ function walk(dir, out = []) {
   return out;
 }
 
+function targetFiles(target) {
+  try {
+    const s = statSync(target);
+    if (s.isDirectory()) return walk(target);
+    if (
+      s.isFile() &&
+      [".ts", ".tsx"].includes(extname(target)) &&
+      !target.includes(".test.") &&
+      !target.includes(".stories.")
+    ) {
+      return [target];
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
 let hits = 0;
-for (const root of ROOTS) {
-  for (const file of walk(root)) {
+for (const target of TARGETS) {
+  for (const file of targetFiles(target)) {
     const lines = readFileSync(file, "utf8").split("\n");
     lines.forEach((line, i) => {
       if (!/Onyx/.test(line)) return;

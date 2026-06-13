@@ -41,7 +41,7 @@ export default function UpgradePlanModal({
               </Text>
               <Text font="main-ui-body" color="text-03">
                 {isPaidUser
-                  ? `You've used all ${limits?.limit ?? 25} messages for this week. Your message limit will automatically reset at the start of each week, allowing you to continue crafting with Onyx.`
+                  ? `You've used all ${limits?.limit ?? 25} messages for this week. Your message limit will automatically reset at the start of each week, allowing you to continue crafting with Glomi AI.`
                   : `You've used all ${limits?.limit ?? 5} free messages available in your trial. You've reached the limit for your free account.`}
               </Text>
             </div>

@@ -168,7 +168,7 @@ const GDriveMain = () => {
         (appCredentialData?.client_id ||
           serviceAccountKeyData?.service_account_email) && (
           <>
-            <Title className="mb-2 mt-6">Step 2: Authenticate with Onyx</Title>
+            <Title className="mb-2 mt-6">第 2 步：连接 Glomi AI</Title>
             <DriveAuthSection
               refreshCredentials={handleRefresh}
               googleDrivePublicUploadedCredential={

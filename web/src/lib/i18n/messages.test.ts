@@ -30,4 +30,24 @@ describe("message catalogs", () => {
   it("are non-empty", () => {
     expect(loadKeys("zh").length).toBeGreaterThan(0);
   });
+
+  it("cover the visible app shell", () => {
+    expect(loadKeys("zh")).toEqual(
+      expect.arrayContaining([
+        "appShell.sidebar.newSession",
+        "appShell.sidebar.searchChats",
+        "appShell.sidebar.agents",
+        "appShell.sidebar.projects",
+        "appShell.sidebar.recents",
+        "appShell.input.placeholder",
+        "appShell.input.searchPlaceholder",
+        "appShell.input.attachFiles",
+        "appShell.input.deepResearch",
+        "appShell.search.placeholder",
+        "appShell.account.settings",
+        "brand.slogan",
+        "brand.version",
+      ])
+    );
+  });
 });

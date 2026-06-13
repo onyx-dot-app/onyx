@@ -56,12 +56,12 @@ export default function NoLlmProvidersModal({
                 LLM Provider Required
               </Text>
               <Text font="main-ui-body" color="text-03">
-                Onyx Craft requires an LLM provider to be configured, but only
+                Glomi 创作 requires an LLM provider to be configured, but only
                 admins can set this up.
               </Text>
               <Text font="main-ui-body" color="text-03">
                 Please ask your admin to configure an LLM provider, or create a
-                new Onyx account to become an admin yourself!
+                new Glomi AI account to become an admin yourself!
               </Text>
             </div>
           </div>

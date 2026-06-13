@@ -209,7 +209,7 @@ export const SELF_HOSTED_PROVIDERS: EmbeddingProvider[] = [
         queryPrefix: "query: ",
         passagePrefix: "passage: ",
         description:
-          "The smallest and fastest version of the E5 line of models. If you're running Onyx on a resource constrained system, then this may be a good choice.",
+          "The smallest and fastest version of the E5 line of models. If you're running Glomi AI on a resource constrained system, then this may be a good choice.",
       },
       {
         modelName: "intfloat/multilingual-e5-base",

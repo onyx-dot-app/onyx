@@ -30,7 +30,7 @@ const fetchResubscriptionSession =
       },
     });
     if (!response.ok) {
-      throw new Error("Failed to create resubscription session");
+      throw new Error("创建续订会话失败");
     }
     return response.json();
   };
@@ -51,18 +51,18 @@ export default function AccessRestricted() {
     const { used_seats, seat_count } = settings.settings;
     const counts =
       used_seats != null && seat_count != null
-        ? ` (${used_seats} users / ${seat_count} seats)`
+        ? `（${used_seats} 个用户 / ${seat_count} 个席位）`
         : "";
-    return `Your organization has exceeded its licensed seat count${counts}. Access is restricted until the number of users is reduced or your license is upgraded.`;
+    return `你的组织已超出许可证席位数${counts}。在减少用户数或升级许可证之前，访问会受到限制。`;
   }
 
   const initialModalMessage = isSeatLimitExceeded
     ? getSeatLimitMessage()
     : showRenewalMessage
       ? NEXT_PUBLIC_CLOUD_ENABLED
-        ? "Your access to Onyx has been temporarily suspended due to a lapse in your subscription."
-        : "Your access to Onyx has been temporarily suspended due to a lapse in your license."
-      : "An Enterprise license is required to use Onyx. Your data is protected and will be available once a license is activated.";
+        ? "你的 Glomi AI 访问权限因订阅失效而暂时暂停。"
+        : "你的 Glomi AI 访问权限因许可证失效而暂时暂停。"
+      : "需要企业许可证才能使用 Glomi AI。你的数据仍受保护，许可证激活后即可继续访问。";
 
   const handleResubscribe = async () => {
     setIsLoading(true);
@@ -71,12 +71,12 @@ export default function AccessRestricted() {
       // `url` covers both the new-checkout and past_due payment-update responses.
       const { url } = await fetchResubscriptionSession();
       if (!url) {
-        throw new Error("No redirect URL returned");
+        throw new Error("未返回重定向 URL");
       }
       window.location.href = url;
     } catch (error) {
       console.error("Error creating resubscription session:", error);
-      setError("Error opening resubscription page. Please try again later.");
+      setError("打开续订页面失败。请稍后重试。");
       setIsLoading(false);
     }
   };
@@ -84,7 +84,7 @@ export default function AccessRestricted() {
   return (
     <ErrorPageLayout>
       <div className="flex items-center gap-2">
-        <Text headingH2>Access Restricted</Text>
+        <Text headingH2>访问受限</Text>
         <SvgLock className="stroke-status-error-05 w-6 h-6" />
       </div>
 
@@ -93,15 +93,15 @@ export default function AccessRestricted() {
       {isSeatLimitExceeded ? (
         <>
           <Text text03>
-            If you are an administrator, you can manage users on the{" "}
+            如果你是管理员，可以在{" "}
             <Link className={linkClassName} href="/admin/users">
-              User Management
+              用户管理
             </Link>{" "}
-            page or upgrade your license on the{" "}
+            页面管理用户，或在{" "}
             <Link className={linkClassName} href="/admin/billing">
-              Admin Billing
+              管理员账单
             </Link>{" "}
-            page.
+            页面升级许可证。
           </Text>
 
           <div className="flex flex-row gap-2">
@@ -111,26 +111,23 @@ export default function AccessRestricted() {
                 window.location.reload();
               }}
             >
-              Log out
+              退出登录
             </Button>
           </div>
         </>
       ) : NEXT_PUBLIC_CLOUD_ENABLED ? (
         <>
           <Text text03>
-            To reinstate your access and continue benefiting from Onyx&apos;s
-            powerful features, please update your payment information.
+            请更新付款信息，以恢复访问并继续使用 Glomi AI 的完整能力。
           </Text>
 
           <Text text03>
-            If you&apos;re an admin, you can manage your subscription by
-            clicking the button below. For other users, please reach out to your
-            administrator to address this matter.
+            如果你是管理员，可以点击下方按钮管理订阅。其他用户请联系管理员处理。
           </Text>
 
           <div className="flex flex-row gap-2">
             <Button disabled={isLoading} onClick={handleResubscribe}>
-              {isLoading ? "Loading..." : "Resubscribe"}
+              {isLoading ? "正在加载..." : "重新订阅"}
             </Button>
             <Button
               prominence="secondary"
@@ -139,7 +136,7 @@ export default function AccessRestricted() {
                 window.location.reload();
               }}
             >
-              Log out
+              退出登录
             </Button>
           </div>
 
@@ -149,21 +146,20 @@ export default function AccessRestricted() {
         <>
           <Text text03>
             {hadPreviousLicense
-              ? "To reinstate your access and continue using Onyx, please contact your system administrator to renew your license."
-              : "To get started, please contact your system administrator to obtain an Enterprise license."}
+              ? "如需恢复访问并继续使用 Glomi AI，请联系系统管理员续订许可证。"
+              : "如需开始使用，请联系系统管理员获取企业许可证。"}
           </Text>
 
           <Text text03>
-            If you are the administrator, please visit the{" "}
+            如果你是管理员，请前往{" "}
             <Link className={linkClassName} href="/admin/billing">
-              Admin Billing
+              管理员账单
             </Link>{" "}
-            page to {hadPreviousLicense ? "renew" : "activate"} your license,
-            sign up through Stripe or reach out to{" "}
-            <a className={linkClassName} href="mailto:support@onyx.app">
-              support@onyx.app
+            页面{hadPreviousLicense ? "续订" : "激活"}许可证，通过 Stripe 注册，或联系{" "}
+            <a className={linkClassName} href="mailto:support@glomi.ai">
+              support@glomi.ai
             </a>{" "}
-            for billing assistance.
+            获取账单协助。
           </Text>
 
           <div className="flex flex-row gap-2">
@@ -173,21 +169,21 @@ export default function AccessRestricted() {
                 window.location.reload();
               }}
             >
-              Log out
+              退出登录
             </Button>
           </div>
         </>
       )}
 
       <Text text03>
-        Need help? Join our{" "}
+        需要帮助？加入我们的{" "}
         <InlineExternalLink
           className={linkClassName}
           href="https://discord.gg/4NA5SbzrWb"
         >
-          Discord community
+          Discord 社区
         </InlineExternalLink>{" "}
-        for support.
+        获取支持。
       </Text>
     </ErrorPageLayout>
   );

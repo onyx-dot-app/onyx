@@ -40,7 +40,7 @@ export default function ExternalAppsPage({
       <SettingsLayouts.Header
         icon={SvgPlug}
         title="External Apps"
-        description="Connect third-party integrations so users in your org can authorize them with their personal accounts in Onyx Craft."
+        description="Connect third-party integrations so users in your org can authorize them with their personal accounts in Glomi 创作."
         rightChildren={
           onBack ? (
             <div className="flex items-center gap-2">

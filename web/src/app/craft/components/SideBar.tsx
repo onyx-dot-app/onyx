@@ -59,21 +59,17 @@ import {
 // ============================================================================
 
 const DELETING_MESSAGES = [
-  "Mining away your blocks...",
-  "Returning diamonds to the caves...",
-  "Creeper blew up your save file...",
-  "Throwing items into lava...",
-  "Despawning your entities...",
-  "Breaking bedrock illegally...",
-  "Enderman teleported your data away...",
-  "Falling into the void...",
-  "Your build ran out of hearts...",
-  "Respawning at world spawn...",
-  "Feeding your code to the Ender Dragon...",
-  "Activating TNT chain reaction...",
-  "Zombie horde consumed your bytes...",
-  "Wither withering your session...",
-  "Herobrine deleted your world...",
+  "正在清理构建记录...",
+  "正在回收会话资源...",
+  "正在移除工作区快照...",
+  "正在整理临时文件...",
+  "正在关闭后台任务...",
+  "正在删除会话数据...",
+  "正在释放缓存...",
+  "正在归档历史状态...",
+  "正在同步删除结果...",
+  "正在刷新侧边栏...",
+  "正在完成最后一步...",
 ];
 
 function DeletingMessage() {
@@ -181,7 +177,7 @@ function BuildSessionButton({
       } catch (err) {
         setIsDeleting(false);
         setDeleteError(
-          err instanceof Error ? err.message : "Failed to delete session"
+          err instanceof Error ? err.message : "删除会话失败"
         );
       }
     },
@@ -212,7 +208,7 @@ function BuildSessionButton({
               icon={SvgEdit}
               onClick={noProp(() => setRenaming(true))}
             >
-              Rename
+              重命名
             </LineItem>,
             null,
             <LineItem
@@ -221,7 +217,7 @@ function BuildSessionButton({
               onClick={noProp(() => setIsDeleteModalOpen(true))}
               danger
             >
-              Delete
+              删除
             </LineItem>,
           ]}
         </PopoverMenu>
@@ -273,10 +269,10 @@ function BuildSessionButton({
         <ConfirmationModalLayout
           title={
             deleteSuccess
-              ? "Deleted"
+              ? "已删除"
               : deleteError
-                ? "Delete Failed"
-                : "Delete Craft"
+                ? "删除失败"
+                : "删除 Glomi 创作会话"
           }
           icon={deleteSuccess ? SvgCheckCircle : SvgTrash}
           onClose={isDeleting || deleteSuccess ? undefined : closeModal}
@@ -285,11 +281,11 @@ function BuildSessionButton({
           submit={
             deleteSuccess ? (
               <Button disabled variant="action" icon={SvgCheckCircle}>
-                Done
+                完成
               </Button>
             ) : deleteError ? (
               <Button variant="danger" onClick={closeModal}>
-                Close
+                关闭
               </Button>
             ) : (
               <Button
@@ -298,14 +294,14 @@ function BuildSessionButton({
                 onClick={handleConfirmDelete}
                 icon={isDeleting ? SvgSimpleLoader : undefined}
               >
-                {isDeleting ? "Deleting..." : "Delete"}
+                {isDeleting ? "正在删除..." : "删除"}
               </Button>
             )
           }
         >
           {deleteSuccess ? (
             <Text as="p" color="text-03">
-              Build deleted successfully.
+              构建已成功删除。
             </Text>
           ) : deleteError ? (
             <Text as="p" color="status-error-02">
@@ -314,7 +310,7 @@ function BuildSessionButton({
           ) : isDeleting ? (
             <DeletingMessage />
           ) : (
-            "Are you sure you want to delete this craft? This action cannot be undone."
+            "确定要删除此 Glomi 创作会话吗？此操作无法撤销。"
           )}
         </ConfirmationModalLayout>
       )}
@@ -356,9 +352,9 @@ const MemoizedBuildSidebarInner = memo(() => {
   // limit=0 indicates unlimited (local/self-hosted mode), so hide the count
   const sessionsTitle = useMemo(() => {
     if (isEnabled && limits && limits.limit > 0) {
-      return `Total Messages (${limits.messagesUsed}/${limits.limit})`;
+      return `总消息数（${limits.messagesUsed}/${limits.limit}）`;
     }
-    return "Sessions";
+    return "会话";
   }, [isEnabled, limits]);
 
   // Navigate to new build - session controller handles setCurrentSession and pre-provisioning
@@ -381,7 +377,7 @@ const MemoizedBuildSidebarInner = memo(() => {
   const newBuildButton = useMemo(
     () => (
       <SidebarTab icon={SvgEditBig} folded={folded} onClick={handleNewBuild}>
-        Start Crafting
+        开始创作
       </SidebarTab>
     ),
     [folded, handleNewBuild]
@@ -395,7 +391,7 @@ const MemoizedBuildSidebarInner = memo(() => {
         href={CRAFT_TASKS_PATH}
         selected={pathname.startsWith(CRAFT_TASKS_PATH)}
       >
-        Scheduled Tasks
+        定时任务
       </SidebarTab>
     ),
     [folded, pathname]
@@ -409,7 +405,7 @@ const MemoizedBuildSidebarInner = memo(() => {
         href={CRAFT_APPS_PATH}
         selected={pathname.startsWith(CRAFT_APPS_PATH)}
       >
-        Apps
+        应用
       </SidebarTab>
     ),
     [folded, pathname]
@@ -423,7 +419,7 @@ const MemoizedBuildSidebarInner = memo(() => {
         href={CRAFT_SKILLS_PATH}
         selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
       >
-        Skills
+        技能
       </SidebarTab>
     ),
     [folded, pathname]
@@ -432,7 +428,7 @@ const MemoizedBuildSidebarInner = memo(() => {
   const backToChatButton = useMemo(
     () => (
       <SidebarTab icon={SvgArrowLeft} folded={folded} href="/app">
-        Back to Chat
+        返回聊天
       </SidebarTab>
     ),
     [folded]
@@ -471,7 +467,7 @@ const MemoizedBuildSidebarInner = memo(() => {
             {sessionHistory.length === 0 ? (
               <div className="pl-2 pr-1.5 py-1">
                 <Text color="text-01">
-                  Start building! Session history will appear here.
+                  开始创作吧！会话历史会显示在这里。
                 </Text>
               </div>
             ) : (

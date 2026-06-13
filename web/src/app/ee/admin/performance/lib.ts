@@ -1,6 +1,6 @@
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
-import { OnyxBotAnalytics, QueryAnalytics, UserAnalytics } from "./usage/types";
+import { GlomiBotAnalytics, QueryAnalytics, UserAnalytics } from "./usage/types";
 import { useState } from "react";
 import { buildApiPath } from "@/lib/urlBuilder";
 
@@ -46,16 +46,16 @@ export const useUserAnalytics = (timeRange: DateRangePickerValue) => {
   };
 };
 
-export const useOnyxBotAnalytics = (timeRange: DateRangePickerValue) => {
+export const useGlomiBotAnalytics = (timeRange: DateRangePickerValue) => {
   const url = buildApiPath("/api/analytics/admin/onyxbot", {
     start: convertDateToStartOfDay(timeRange.from)?.toISOString(),
     end: convertDateToEndOfDay(timeRange.to)?.toISOString(),
   });
-  const swrResponse = useSWR<OnyxBotAnalytics[]>(url, errorHandlingFetcher); // TODO
+  const swrResponse = useSWR<GlomiBotAnalytics[]>(url, errorHandlingFetcher); // TODO
 
   return {
     ...swrResponse,
-    refreshOnyxBotAnalytics: () => mutate(url),
+    refreshGlomiBotAnalytics: () => mutate(url),
   };
 };
 

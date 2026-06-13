@@ -76,8 +76,8 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
           {NEXT_PUBLIC_CLOUD_ENABLED ? (
             <>
               {t("contactSupportCloud")}{" "}
-              <a href="mailto:support@onyx.app" className="text-action-link-05">
-                support@onyx.app
+              <a href="mailto:support@glomi.ai" className="text-action-link-05">
+                support@glomi.ai
               </a>
             </>
           ) : (

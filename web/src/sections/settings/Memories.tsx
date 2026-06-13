@@ -24,7 +24,7 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
       {memories.length === 0 ? (
         <LineItem
           skeleton
-          description="Add personal note or memory that Onyx should remember."
+          description="添加你希望 Glomi AI 记住的个人笔记或记忆。"
           onClick={() => {
             setTargetMemoryId(null);
             memoriesModal.toggle(true);

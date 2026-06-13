@@ -30,7 +30,7 @@ export default function BillingInformationPage() {
     const url = new URL(window.location.href);
     if (url.searchParams.has("session_id")) {
       toast.success(
-        "Congratulations! Your subscription has been updated successfully."
+        "订阅已成功更新。"
       );
       url.searchParams.delete("session_id");
       window.history.replaceState({}, "", url.toString());
@@ -38,21 +38,21 @@ export default function BillingInformationPage() {
   }, []);
 
   if (isLoading) {
-    return <div className="text-center py-8">Loading...</div>;
+    return <div className="text-center py-8">正在加载...</div>;
   }
 
   if (error) {
     console.error("Failed to fetch billing information:", error);
     return (
       <div className="text-center py-8 text-red-500">
-        Error loading billing information. Please try again later.
+        加载计费信息出错。请稍后重试。
       </div>
     );
   }
 
   if (!billingInformation || !hasActiveSubscription(billingInformation)) {
     return (
-      <div className="text-center py-8">No billing information available.</div>
+      <div className="text-center py-8">暂无可用计费信息。</div>
     );
   }
 
@@ -61,12 +61,12 @@ export default function BillingInformationPage() {
       const response = await createCustomerPortalSession();
       console.log("response", response);
       if (!response.stripe_customer_portal_url) {
-        throw new Error("No portal URL returned from the server");
+        throw new Error("服务器未返回门户 URL");
       }
       window.location.href = response.stripe_customer_portal_url;
     } catch (error) {
       console.error("Error creating customer portal session:", error);
-      toast.error("Error creating customer portal session");
+      toast.error("创建客户门户会话出错");
     }
   };
 
@@ -76,7 +76,7 @@ export default function BillingInformationPage() {
         <CardHeader>
           <CardTitle className="text-2xl font-bold flex items-center">
             <SvgWallet className="mr-4 text-muted-foreground h-6 w-6" />
-            Subscription Details
+            订阅详情
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -88,10 +88,10 @@ export default function BillingInformationPage() {
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-xl font-semibold">
-            Manage Subscription
+            管理订阅
           </CardTitle>
           <CardDescription>
-            View your plan, update payment, or change subscription
+            查看套餐、更新付款方式或更改订阅
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -100,7 +100,7 @@ export default function BillingInformationPage() {
             width="full"
             icon={SvgClipboard}
           >
-            Manage Subscription
+            管理订阅
           </Button>
         </CardContent>
       </Card>

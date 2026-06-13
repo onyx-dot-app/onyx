@@ -30,9 +30,9 @@ interface ScimModalProps {
 async function copyToClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text);
-    toast.success("Token copied to clipboard");
+    toast.success("Token 已复制到剪贴板");
   } catch {
-    toast.error("Failed to copy token");
+    toast.error("复制 Token 失败");
   }
 }
 
@@ -51,7 +51,7 @@ export default function ScimModal({
       return (
         <ConfirmationModalLayout
           icon={SvgRefreshCw}
-          title="Regenerate SCIM Token"
+          title="重新生成 SCIM Token"
           onClose={onClose}
           submit={
             <Button
@@ -59,15 +59,14 @@ export default function ScimModal({
               variant="danger"
               onClick={onRegenerate}
             >
-              Regenerate Token
+              重新生成 Token
             </Button>
           }
         >
           <Section alignItems="start" gap={0.5}>
             <Text as="p" text03>
-              Your current SCIM token will be revoked and a new token will be
-              generated. You will need to update the token on your identity
-              provider before SCIM provisioning will resume.
+              当前 SCIM Token 将被撤销并生成新的 Token。你需要在身份提供商中更新 Token，
+              SCIM 预配才会恢复。
             </Text>
           </Section>
         </ConfirmationModalLayout>
@@ -80,7 +79,7 @@ export default function ScimModal({
             <Modal.Header
               icon={SvgKey}
               title="SCIM Token"
-              description="Save this key before continuing. It won't be shown again."
+              description="继续前请保存此 Key。它不会再次显示。"
               onClose={onClose}
             />
             <Modal.Body>
@@ -118,7 +117,7 @@ export default function ScimModal({
                       })
                     }
                   >
-                    Download
+                    下载
                   </Button>
                 }
                 submit={
@@ -126,7 +125,7 @@ export default function ScimModal({
                     autoFocus
                     onClick={() => copyToClipboard(view.rawToken)}
                   >
-                    Copy Token
+                    复制 Token
                   </Button>
                 }
               />

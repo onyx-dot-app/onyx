@@ -110,7 +110,7 @@ function MCPServerCard({
   const serverEnabled = tools.some((t) => isToolEnabled(t.id));
   const needsAuth = !server.is_authenticated;
   const authTooltip = needsAuth
-    ? "Authenticate this MCP server before enabling its tools."
+    ? "请先认证此 MCP 服务，再启用它的工具。"
     : undefined;
 
   const expanded = !isFolded;
@@ -155,7 +155,7 @@ function MCPServerCard({
           tools.length > 0 ? (
             <Section flexDirection="row" gap={0.5}>
               <InputTypeIn
-                placeholder="Search tools..."
+                placeholder="搜索工具..."
                 variant="internal"
                 searchIcon
                 value={query}
@@ -167,7 +167,7 @@ function MCPServerCard({
                 prominence="internal"
                 size="lg"
               >
-                {isFolded ? "Expand" : "Fold"}
+                {isFolded ? "展开" : "收起"}
               </Button>
             </Section>
           ) : undefined
@@ -295,14 +295,14 @@ function NumericLimitField({
         pattern="[0-9]*"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder={allowZero ? "No limit" : `Default: ${defaultValue}`}
+        placeholder={allowZero ? "不限制" : `默认：${defaultValue}`}
         variant={isOverMax ? "error" : undefined}
         rightChildren={
           (value || "") !== defaultValue ? (
             <Hoverable.Item group="numericLimit" variant="appear-on-hover">
               <Button
                 icon={SvgRefreshCw}
-                tooltip="Restore default"
+                tooltip="恢复默认值"
                 prominence="internal"
                 onClick={handleRestore}
               />
@@ -336,11 +336,11 @@ function FileSizeLimitFields({
     <div className="flex gap-4 w-full items-start pt-2">
       <div className="flex-1">
         <InputVertical
-          title="File Size Limit"
+          title="文件大小限制"
           suffix="(MB)"
           subDescription={
             maxAllowedUploadSizeMb
-              ? `Max: ${maxAllowedUploadSizeMb} MB`
+              ? `最大：${maxAllowedUploadSizeMb} MB`
               : undefined
           }
           withLabel
@@ -356,9 +356,9 @@ function FileSizeLimitFields({
       </div>
       <div className="flex-1">
         <InputVertical
-          title="File Token Limit"
+          title="文件 Token 限制"
           withLabel
-          suffix="(thousand tokens)"
+          suffix="（千 token）"
         >
           <NumericLimitField
             name="file_token_count_threshold_k"
@@ -491,9 +491,9 @@ export default function ChatPreferencesPage() {
           },
           { optimisticData, revalidate: true }
         );
-        toast.success("Tools updated");
+        toast.success("工具已更新");
       } catch {
-        toast.error("Failed to update tools");
+        toast.error("工具更新失败");
       }
     },
     [defaultAgentConfig, mutateDefaultAgent]
@@ -543,9 +543,9 @@ export default function ChatPreferencesPage() {
 
         router.refresh();
         await mutate(SWR_KEYS.settings);
-        toast.success("Settings updated");
+        toast.success("设置已更新");
       } catch (error) {
-        toast.error("Failed to update settings");
+        toast.error("设置更新失败");
       }
     },
     [settings, router]
@@ -557,7 +557,7 @@ export default function ChatPreferencesPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Organization-wide chat settings and defaults. Users can override some of these in their personal settings."
+          description="组织级聊天设置和默认值。部分设置可由用户在个人设置中覆盖。"
           divider
         />
 
@@ -570,22 +570,22 @@ export default function ChatPreferencesPage() {
                 allowClick={businessTier}
                 tooltip={
                   !businessTier
-                    ? "Search Mode requires the Business or Enterprise plan."
-                    : "Set up connectors to use Search Mode"
+                    ? "搜索模式需要商业版或企业版套餐。"
+                    : "请先设置连接器以使用搜索模式"
                 }
               >
                 <InputHorizontal
-                  title="Search Mode"
+                  title="搜索模式"
                   tag={
                     !businessTier
                       ? {
-                          title: "Business Plan",
+                          title: "商业版套餐",
                           color: "amber",
                           icon: SvgOrganization,
                         }
                       : { title: "beta", color: "blue" }
                   }
-                  description="UI mode for quick document search across your organization."
+                  description="用于在组织文档中快速搜索的界面模式。"
                   disabled={!businessTier || uniqueSources.length === 0}
                   withLabel
                 >
@@ -601,9 +601,9 @@ export default function ChatPreferencesPage() {
                 </InputHorizontal>
               </Disabled>
               <InputHorizontal
-                title="Multi-Model Generation"
+                title="多模型生成"
                 tag={{ title: "beta", color: "blue" }}
-                description="Allow multiple models to generate responses in parallel in chat."
+                description="允许多个模型在聊天中并行生成回复。"
                 withLabel
               >
                 <Switch
@@ -614,8 +614,8 @@ export default function ChatPreferencesPage() {
                 />
               </InputHorizontal>
               <InputHorizontal
-                title="Deep Research"
-                description="Agentic research system that works across the web and connected sources. Uses significantly more tokens per query."
+                title="深度研究"
+                description="可跨网页和已连接数据源工作的智能研究系统。每次查询会消耗更多 token。"
                 withLabel
               >
                 <Switch
@@ -626,8 +626,8 @@ export default function ChatPreferencesPage() {
                 />
               </InputHorizontal>
               <InputHorizontal
-                title="Chat Auto-Scroll"
-                description="Automatically scroll to new content as chat generates response. Users can override this in their personal settings."
+                title="聊天自动滚动"
+                description="生成回复时自动滚动到最新内容。用户可在个人设置中覆盖此项。"
                 withLabel
               >
                 <Switch
@@ -645,12 +645,12 @@ export default function ChatPreferencesPage() {
           {/* Team Context */}
           <Section gap={1}>
             <InputVertical
-              title="Team Name"
-              subDescription="This is added to all chat sessions as additional context to provide a richer/customized experience."
+              title="团队名称"
+              subDescription="此信息会作为额外上下文加入全部聊天会话，提供更丰富、个性化的体验。"
               withLabel
             >
               <InputTypeIn
-                placeholder="Enter team name"
+                placeholder="输入团队名称"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
                 onBlur={() => {
@@ -665,12 +665,12 @@ export default function ChatPreferencesPage() {
             </InputVertical>
 
             <InputVertical
-              title="Team Context"
-              subDescription="Users can also provide additional individual context in their personal settings."
+              title="团队上下文"
+              subDescription="用户也可以在个人设置中提供额外的个人上下文。"
               withLabel
             >
               <InputTextArea
-                placeholder="Describe your team and how Onyx should behave."
+                placeholder="描述你的团队，以及希望 Glomi AI 如何回应。"
                 rows={4}
                 maxRows={10}
                 autoResize
@@ -689,15 +689,15 @@ export default function ChatPreferencesPage() {
           </Section>
 
           <InputHorizontal
-            title="System Prompt"
-            description="Base prompt for all chats, agents, and projects. Modify with caution: Significant changes may degrade response quality."
+            title="系统提示词"
+            description="适用于全部聊天、智能体和项目的基础提示词。请谨慎修改，较大的变更可能降低回复质量。"
           >
             <Button
               prominence="tertiary"
               icon={SvgAddLines}
               onClick={() => setSystemPromptModalOpen(true)}
             >
-              Modify Prompt
+              修改提示词
             </Button>
           </InputHorizontal>
 
@@ -723,7 +723,7 @@ export default function ChatPreferencesPage() {
                     {uniqueSources.length === 0 ? (
                       <EmptyMessageCard
                         sizePreset="main-ui"
-                        title="No connectors set up"
+                        title="尚未设置连接器"
                       />
                     ) : (
                       <>
@@ -754,7 +754,7 @@ export default function ChatPreferencesPage() {
                           prominence="tertiary"
                           rightIcon={SvgExternalLink}
                         >
-                          Manage All
+                          全部管理
                         </Button>
                       </>
                     )}
@@ -764,16 +764,16 @@ export default function ChatPreferencesPage() {
                 {/* Actions & Tools */}
                 <SimpleCollapsible>
                   <SimpleCollapsible.Header
-                    title="Actions & Tools"
-                    description="Tools and capabilities available for chat to use. This does not apply to agents."
+                    title="操作与工具"
+                    description="可供聊天使用的工具和能力。此设置不适用于智能体。"
                   />
                   <SimpleCollapsible.Content>
                     <Section gap={0.5}>
                       {vectorDbEnabled && searchTool && (
                         <Card border="solid" rounding="lg">
                           <InputHorizontal
-                            title="Internal Search"
-                            description="Search through your organization's connected knowledge base and documents."
+                            title="内部搜索"
+                            description="搜索组织已连接的知识库和文档。"
                             withLabel
                           >
                             <Switch
@@ -788,12 +788,12 @@ export default function ChatPreferencesPage() {
 
                       <Disabled
                         disabled={!imageGenTool}
-                        tooltip="Image generation requires a configured model. Set one up under Configuration > Image Generation, or ask an admin."
+                        tooltip="图像生成需要先配置模型。请前往“配置 > 图像生成”设置，或联系管理员。"
                       >
                         <Card border="solid" rounding="lg">
                           <InputHorizontal
-                            title="Image Generation"
-                            description="Generate and manipulate images using AI-powered tools."
+                            title="图像生成"
+                            description="使用 AI 工具生成和编辑图像。"
                             disabled={!imageGenTool}
                             withLabel
                           >
@@ -816,8 +816,8 @@ export default function ChatPreferencesPage() {
                       <Disabled disabled={!webSearchTool}>
                         <Card border="solid" rounding="lg">
                           <InputHorizontal
-                            title="Web Search"
-                            description="Search the web for real-time information and up-to-date results."
+                            title="网页搜索"
+                            description="搜索网页以获取实时信息和最新结果。"
                             disabled={!webSearchTool}
                             withLabel
                           >
@@ -840,8 +840,8 @@ export default function ChatPreferencesPage() {
                       <Disabled disabled={!openURLTool}>
                         <Card border="solid" rounding="lg">
                           <InputHorizontal
-                            title="Open URL"
-                            description="Fetch and read content from web URLs."
+                            title="打开 URL"
+                            description="获取并读取网页 URL 内容。"
                             disabled={!openURLTool}
                             withLabel
                           >
@@ -864,8 +864,8 @@ export default function ChatPreferencesPage() {
                       <Disabled disabled={!codeInterpreterTool}>
                         <Card border="solid" rounding="lg">
                           <InputHorizontal
-                            title="Code Interpreter"
-                            description="Generate and run code."
+                            title="代码解释器"
+                            description="生成并运行代码。"
                             disabled={!codeInterpreterTool}
                             withLabel
                           >
@@ -888,8 +888,8 @@ export default function ChatPreferencesPage() {
                       <Disabled disabled={!codingAgentTool}>
                         <Card border="solid" rounding="lg">
                           <InputHorizontal
-                            title="Coding Agent"
-                            description="Investigate a GitHub repository and answer questions about its code."
+                            title="代码智能体"
+                            description="分析 GitHub 仓库并回答代码相关问题。"
                             disabled={!codingAgentTool}
                             withLabel
                           >
@@ -959,22 +959,22 @@ export default function ChatPreferencesPage() {
 
           {/* Advanced Options */}
           <SimpleCollapsible defaultOpen={false}>
-            <SimpleCollapsible.Header title="Advanced Options" />
+            <SimpleCollapsible.Header title="高级选项" />
             <SimpleCollapsible.Content>
               <Section gap={1}>
                 <Card border="solid" rounding="lg">
                   <Section>
                     <Disabled
                       disabled={!enterpriseTier}
-                      tooltip="Chat history retention is an Enterprise Plan feature."
+                      tooltip="聊天历史保留是企业版套餐功能。"
                     >
                       <InputHorizontal
-                        title="Keep Chat History"
-                        description="Specify how long Onyx should retain chats in your organization."
+                        title="保留聊天历史"
+                        description="指定 Glomi AI 在组织内保留聊天记录的时长。"
                         tag={
                           !enterpriseTier
                             ? {
-                                title: "Enterprise Plan",
+                                title: "企业版套餐",
                                 color: "amber",
                                 icon: SvgOrganization,
                               }
@@ -1001,19 +1001,19 @@ export default function ChatPreferencesPage() {
                           <InputSelect.Trigger />
                           <InputSelect.Content>
                             <InputSelect.Item value="forever">
-                              Forever
+                              永久
                             </InputSelect.Item>
                             <InputSelect.Item value="7">
-                              7 days
+                              7 天
                             </InputSelect.Item>
                             <InputSelect.Item value="30">
-                              30 days
+                              30 天
                             </InputSelect.Item>
                             <InputSelect.Item value="90">
-                              90 days
+                              90 天
                             </InputSelect.Item>
                             <InputSelect.Item value="365">
-                              365 days
+                              365 天
                             </InputSelect.Item>
                           </InputSelect.Content>
                         </InputSelect>
@@ -1021,8 +1021,8 @@ export default function ChatPreferencesPage() {
                     </Disabled>
 
                     <InputHorizontal
-                      title="Query History Visibility"
-                      description="Control how your organization's full chat history appears in the Admin Panel."
+                      title="查询历史可见性"
+                      description="控制组织完整聊天历史在管理面板中的显示方式。"
                       withLabel
                     >
                       <InputSelect
@@ -1037,21 +1037,21 @@ export default function ChatPreferencesPage() {
                         <InputSelect.Content>
                           <InputSelect.Item
                             value={QueryHistoryType.NORMAL}
-                            description="All queries are visible to admins and linked to individual users."
+                            description="管理员可查看全部查询，并可关联到具体用户。"
                           >
-                            Show with User Info
+                            显示用户信息
                           </InputSelect.Item>
                           <InputSelect.Item
                             value={QueryHistoryType.ANONYMIZED}
-                            description="Queries are visible to admins with user identity removed"
+                            description="管理员可查看查询，但移除用户身份信息。"
                           >
-                            Anonymized
+                            匿名化
                           </InputSelect.Item>
                           <InputSelect.Item
                             value={QueryHistoryType.DISABLED}
-                            description="Query history reporting is disabled."
+                            description="禁用查询历史报告。"
                           >
-                            Hidden
+                            隐藏
                           </InputSelect.Item>
                         </InputSelect.Content>
                       </InputSelect>
@@ -1061,8 +1061,8 @@ export default function ChatPreferencesPage() {
 
                 <Card border="solid" rounding="lg">
                   <InputVertical
-                    title="File Attachment Size Limit"
-                    description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
+                    title="文件附件大小限制"
+                    description="聊天和项目中的附件必须同时满足两个限制才会被接受。较大的文件会增加延迟、内存占用和 token 成本。"
                     withLabel
                   >
                     <FileSizeLimitFields
@@ -1097,8 +1097,8 @@ export default function ChatPreferencesPage() {
                 <Card border="solid" rounding="lg">
                   <Section>
                     <InputHorizontal
-                      title="Allow Anonymous Users"
-                      description="Allow anyone to start chats without logging in. They do not see any other chats and cannot create agents or update settings."
+                      title="允许匿名用户"
+                      description="允许任何人在不登录的情况下开始对话。他们无法看到其他对话，也不能创建智能体或更新设置。"
                       withLabel
                     >
                       <Switch
@@ -1112,8 +1112,8 @@ export default function ChatPreferencesPage() {
                     </InputHorizontal>
 
                     <InputHorizontal
-                      title="Always Start with an Agent"
-                      description="This removes the default chat. Users will always start in an agent, and new chats will be created in their last active agent. Set featured agents to help new users get started."
+                      title="始终从智能体开始"
+                      description="这会移除默认对话。用户始终会从某个智能体开始，新对话会在其最近使用的智能体中创建。设置精选智能体可帮助新用户开始使用。"
                       withLabel
                     >
                       <Switch
@@ -1159,9 +1159,9 @@ export default function ChatPreferencesPage() {
                 }
                 await mutateDefaultAgent();
                 setSystemPromptModalOpen(false);
-                toast.success("System prompt updated");
+                toast.success("系统提示词已更新");
               } catch {
-                toast.error("Failed to update system prompt");
+                toast.error("系统提示词更新失败");
               }
             }}
           >
@@ -1177,8 +1177,8 @@ export default function ChatPreferencesPage() {
                 <Form>
                   <Modal.Header
                     icon={SvgAddLines}
-                    title="System Prompt"
-                    description="This base prompt is prepended to all chats, agents, and projects."
+                    title="系统提示词"
+                    description="此基础提示词会添加到全部聊天、智能体和项目之前。"
                     onClose={() => setSystemPromptModalOpen(false)}
                   />
                   <Modal.Body>
@@ -1186,7 +1186,7 @@ export default function ChatPreferencesPage() {
                       <Hoverable.Root group="systemPromptRestore" width="full">
                         <InputTextAreaField
                           name="system_prompt"
-                          placeholder="Enter your system prompt..."
+                          placeholder="输入系统提示词..."
                           rows={8}
                           maxRows={20}
                           autoResize
@@ -1197,7 +1197,7 @@ export default function ChatPreferencesPage() {
                             >
                               <Button
                                 icon={SvgRefreshCw}
-                                tooltip="Restore default"
+                                tooltip="恢复默认值"
                                 prominence="internal"
                                 onClick={handleRestore}
                               />
@@ -1207,13 +1207,13 @@ export default function ChatPreferencesPage() {
                       </Hoverable.Root>
                       <Text font="secondary-body" color="text-03">
                         {markdown(
-                          "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used.\n`{{REMINDER_TAG_DESCRIPTION}}` - Instructions for how to interpret system reminders in user messages."
+                          "你可以在提示词中使用以下占位符：\n`{{CURRENT_DATETIME}}` - 以易读格式插入当前日期和星期。\n`{{CITATION_GUIDANCE}}` - 当事实来自搜索工具时，用于提供引用的说明。仅在使用搜索工具时包含。\n`{{REMINDER_TAG_DESCRIPTION}}` - 用于解释用户消息中系统提醒的说明。"
                         )}
                       </Text>
                     </Section>
                     <MessageCard
-                      title="Modify with caution."
-                      description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
+                      title="请谨慎修改。"
+                      description="系统提示词会影响全部聊天、智能体和项目。较大的变更可能降低回复质量。"
                       padding="xs"
                     />
                   </Modal.Body>
@@ -1222,14 +1222,14 @@ export default function ChatPreferencesPage() {
                       prominence="secondary"
                       onClick={() => setSystemPromptModalOpen(false)}
                     >
-                      Cancel
+                      取消
                     </Button>
                     <Button
                       prominence="primary"
                       onClick={submitForm}
                       disabled={!dirty || isSubmitting}
                     >
-                      Save
+                      保存
                     </Button>
                   </Modal.Footer>
                 </Form>

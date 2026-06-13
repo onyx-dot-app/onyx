@@ -35,10 +35,10 @@ function GroupCard({ group }: GroupCardProps) {
     try {
       await renameGroup(group.id, newName);
       mutate(SWR_KEYS.adminUserGroups);
-      toast.success(`Group renamed to "${newName}"`);
+      toast.success(`用户组已重命名为"${newName}"`);
     } catch (e) {
-      console.error("Failed to rename group:", e);
-      toast.error(e instanceof Error ? e.message : "Failed to rename group");
+      console.error("用户组重命名失败：", e);
+      toast.error(e instanceof Error ? e.message : "用户组重命名失败");
     }
   }
 
@@ -50,7 +50,7 @@ function GroupCard({ group }: GroupCardProps) {
         description={buildGroupDescription(group)}
         sizePreset="main-content"
         variant="section"
-        tag={isBasic ? { title: "Default" } : undefined}
+        tag={isBasic ? { title: "默认" } : undefined}
         editable={!builtIn && !isSyncing}
         onTitleChange={!builtIn && !isSyncing ? handleRename : undefined}
         rightChildren={
@@ -65,8 +65,8 @@ function GroupCard({ group }: GroupCardProps) {
             <Button
               icon={SvgChevronRight}
               prominence="tertiary"
-              tooltip="View group"
-              aria-label="View group"
+              tooltip="查看用户组"
+              aria-label="查看用户组"
               onClick={() => router.push(`/admin/groups/${group.id}` as Route)}
             />
           </Section>

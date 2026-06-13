@@ -97,7 +97,7 @@ export default function InlineFileManagement({
 
     if (remainingFiles === 0 && filesToAdd.length === 0) {
       toast.error(
-        "Cannot remove all files from a connector. Delete the connector if this is desired."
+        "不能移除连接器中的所有文件。如需这样做，请删除该连接器。"
       );
       return;
     }
@@ -117,8 +117,7 @@ export default function InlineFileManagement({
       );
 
       toast.success(
-        "Files updated successfully! Document index is being updated in the background. " +
-          "New files are being indexed and removed files will be pruned from the search results."
+        "文件已更新！文档索引正在后台更新。新文件会被索引，已移除文件会从搜索结果中清理。"
       );
 
       // Reset editing state
@@ -131,7 +130,7 @@ export default function InlineFileManagement({
       onRefresh();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to update files"
+        error instanceof Error ? error.message : "更新文件失败"
       );
     } finally {
       setIsSaving(false);
@@ -155,7 +154,7 @@ export default function InlineFileManagement({
   if (error) {
     return (
       <Text as="p" className="text-error">
-        Error loading files: {error.message}
+        加载文件失败：{error.message}
       </Text>
     );
   }
@@ -170,7 +169,7 @@ export default function InlineFileManagement({
       {/* Header with Edit/Save buttons */}
       <div className="flex justify-between items-center mb-4">
         <Text as="p" mainUiBody>
-          Files ({totalFiles} file{totalFiles !== 1 ? "s" : ""})
+          文件（{totalFiles} 个）
         </Text>
         <div className="flex gap-2">
           {!isEditing ? (
@@ -179,7 +178,7 @@ export default function InlineFileManagement({
               onClick={() => setIsEditing(true)}
               icon={SvgEdit}
             >
-              Edit
+              编辑
             </Button>
           ) : (
             <>
@@ -189,7 +188,7 @@ export default function InlineFileManagement({
                 onClick={handleCancel}
                 icon={SvgX}
               >
-                Cancel
+                取消
               </Button>
               <Button
                 disabled={
@@ -199,7 +198,7 @@ export default function InlineFileManagement({
                 onClick={handleSaveClick}
                 icon={SvgCheck}
               >
-                {isSaving ? "Saving..." : "Save Changes"}
+                {isSaving ? "正在保存..." : "保存更改"}
               </Button>
             </>
           )}
@@ -209,7 +208,7 @@ export default function InlineFileManagement({
       {/* File List */}
       {files.length === 0 && filesToAdd.length === 0 ? (
         <Text as="p" mainUiMuted className="text-center py-8">
-          No files in this connector
+          此连接器中没有文件
         </Text>
       ) : (
         <div className="border rounded-lg overflow-hidden mb-4">
@@ -219,9 +218,9 @@ export default function InlineFileManagement({
               <TableHeader className="sticky top-0 bg-background z-10">
                 <TableRow>
                   {isEditing && <TableHead className="w-12"></TableHead>}
-                  <TableHead>File Name</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Upload Date</TableHead>
+                  <TableHead>文件名</TableHead>
+                  <TableHead>大小</TableHead>
+                  <TableHead>上传日期</TableHead>
                   {isEditing && <TableHead className="w-12"></TableHead>}
                 </TableRow>
               </TableHeader>
@@ -260,7 +259,7 @@ export default function InlineFileManagement({
                         </span>
                         {isMarkedForRemoval && (
                           <span className="ml-2 text-xs font-semibold text-red-600 dark:text-red-400">
-                            Removing
+                            正在移除
                           </span>
                         )}
                       </TableCell>
@@ -299,15 +298,15 @@ export default function InlineFileManagement({
                           prominence="tertiary"
                           size="sm"
                           onClick={() => handleRemoveNewFile(index)}
-                          tooltip="Remove file"
-                          title="Remove file"
+                          tooltip="移除文件"
+                          title="移除文件"
                         />
                       </TableCell>
                     )}
                     <TableCell className="font-medium">
                       {file.name}
                       <Text as="p" figureSmallValue>
-                        New
+                        新增
                       </Text>
                     </TableCell>
                     <TableCell>{formatBytes(file.size)}</TableCell>
@@ -338,7 +337,7 @@ export default function InlineFileManagement({
             onClick={() => fileInputRef.current?.click()}
             icon={SvgPlusCircle}
           >
-            Add Files
+            添加文件
           </Button>
         </div>
       )}
@@ -348,8 +347,8 @@ export default function InlineFileManagement({
         <Modal.Content width="sm">
           <Modal.Header
             icon={SvgFolderPlus}
-            title="Confirm File Changes"
-            description="When you save these changes, the following will happen:"
+            title="确认文件更改"
+            description="保存这些更改后，将发生以下操作："
           />
 
           <Modal.Body>
@@ -360,15 +359,14 @@ export default function InlineFileManagement({
                   mainUiBody
                   className="font-semibold text-red-800 dark:text-red-200"
                 >
-                  🗑️ {selectedFilesToRemove.size} file(s) will be removed
+                  将移除 {selectedFilesToRemove.size} 个文件
                 </Text>
                 <Text
                   as="p"
                   secondaryBody
                   className="text-red-700 dark:text-red-300 mt-1"
                 >
-                  Documents from these files will be pruned from the Document
-                  Index
+                  这些文件中的文档会从文档索引中清理。
                 </Text>
               </div>
             )}
@@ -380,15 +378,14 @@ export default function InlineFileManagement({
                   mainUiBody
                   className="font-semibold text-green-800 dark:text-green-200"
                 >
-                  {filesToAdd.length} file(s) will be added
+                  将添加 {filesToAdd.length} 个文件
                 </Text>
                 <Text
                   as="p"
                   secondaryBody
                   className="text-green-700 dark:text-green-300 mt-1"
                 >
-                  New files will be uploaded, chunked, embedded, and indexed in
-                  the Document Index
+                  新文件会被上传、分块、嵌入，并写入文档索引。
                 </Text>
               </div>
             )}
@@ -400,10 +397,10 @@ export default function InlineFileManagement({
               prominence="secondary"
               onClick={() => setShowSaveConfirm(false)}
             >
-              Cancel
+              取消
             </Button>
             <Button disabled={isSaving} onClick={handleConfirmSave}>
-              {isSaving ? "Saving..." : "Confirm & Save"}
+              {isSaving ? "正在保存..." : "确认并保存"}
             </Button>
           </Modal.Footer>
         </Modal.Content>

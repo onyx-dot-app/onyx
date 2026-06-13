@@ -13,8 +13,8 @@ import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 
 const ImpersonateSchema = Yup.object().shape({
-  email: Yup.string().email("Invalid email").required("Required"),
-  apiKey: Yup.string().required("Required"),
+  email: Yup.string().email("邮箱格式无效").required("必填"),
+  apiKey: Yup.string().required("必填"),
 });
 
 export default function ImpersonatePage() {
@@ -45,7 +45,7 @@ export default function ImpersonatePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        toast.error(errorData.detail || "Failed to impersonate user");
+        toast.error(errorData.detail || "冒充用户失败");
         helpers.setSubmitting(false);
       } else {
         helpers.setSubmitting(false);
@@ -53,7 +53,7 @@ export default function ImpersonatePage() {
       }
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to impersonate user"
+        error instanceof Error ? error.message : "冒充用户失败"
       );
       helpers.setSubmitting(false);
     }
@@ -64,7 +64,7 @@ export default function ImpersonatePage() {
       <div className="flex flex-col w-full justify-center">
         <div className="w-full flex flex-col items-center justify-center">
           <Text as="p" headingH3 className="mb-6 text-center">
-            Impersonate User
+            冒充用户
           </Text>
         </div>
 
@@ -78,7 +78,7 @@ export default function ImpersonatePage() {
               <TextFormField
                 name="email"
                 type="email"
-                label="Email"
+                label="邮箱"
                 placeholder="email@yourcompany.com"
               />
 
@@ -86,11 +86,11 @@ export default function ImpersonatePage() {
                 name="apiKey"
                 type="password"
                 label="API Key"
-                placeholder="Enter API Key"
+                placeholder="输入 API Key"
               />
 
               <Button disabled={isSubmitting} type="submit" width="full">
-                Impersonate User
+                冒充用户
               </Button>
             </Form>
           )}
@@ -101,7 +101,7 @@ export default function ImpersonatePage() {
           mainUiMuted
           text03
           className="mt-4 text-center px-4"
-        >{`Note: This feature is only available for @onyx.app administrators`}</Text>
+        >{`注意：此功能仅面向 @glomi.ai 管理员开放`}</Text>
       </div>
     </AuthFlowContainer>
   );

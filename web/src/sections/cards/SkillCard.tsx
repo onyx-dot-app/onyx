@@ -8,6 +8,8 @@ import { CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 import { useSettingsContext } from "@/providers/SettingsProvider";
+import { APP_NAME } from "@/lib/brand";
+import { useTranslations } from "next-intl";
 
 export type SkillCardSource = "builtin" | "custom";
 
@@ -36,8 +38,9 @@ export interface SkillCardProps {
 }
 
 export default function SkillCard({ item, onClick }: SkillCardProps) {
+  const t = useTranslations("appShell.skillCard");
   const { enterpriseSettings } = useSettingsContext();
-  const appName = enterpriseSettings?.application_name || "Onyx";
+  const appName = enterpriseSettings?.application_name || APP_NAME;
 
   const handleClick = useCallback(() => {
     onClick?.(item);
@@ -75,19 +78,21 @@ export default function SkillCard({ item, onClick }: SkillCardProps) {
           <div className="p-0.5 pr-1.5">
             {item.source === "builtin" ? (
               item.is_available ? (
-                <Tag title="Built-in" color="blue" />
+                <Tag title={t("builtIn")} color="blue" />
               ) : (
                 <Tag
                   title={
                     item.unavailable_reason
-                      ? `Unavailable — ${item.unavailable_reason}`
-                      : "Unavailable"
+                      ? t("unavailableWithReason", {
+                          reason: item.unavailable_reason,
+                        })
+                      : t("unavailable")
                   }
                   color="amber"
                 />
               )
             ) : (
-              <Tag title="Custom" color="gray" />
+              <Tag title={t("custom")} color="gray" />
             )}
           </div>
         </div>

@@ -22,8 +22,8 @@ export default function AddInstructionModal() {
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgAddLines}
-          title="Set Project Instructions"
-          description="Specify the behaviors or tone for the chat sessions in this project."
+          title="设置项目指令"
+          description="指定此项目中聊天会话的行为或语气。"
           onClose={() => modal.toggle(false)}
         />
         <Formik
@@ -36,7 +36,7 @@ export default function AddInstructionModal() {
               await upsertInstructions(values.instructions.trim());
               modal.toggle(false);
             } catch (e) {
-              console.error("Failed to save instructions", e);
+              console.error("保存指令失败", e);
             } finally {
               setSubmitting(false);
             }
@@ -47,7 +47,7 @@ export default function AddInstructionModal() {
               <Modal.Body>
                 <InputTextAreaField
                   name="instructions"
-                  placeholder="My goal with is to... be sure to... in your responses."
+                  placeholder="我的目标是... 请在回答中注意..."
                 />
               </Modal.Body>
               <Modal.Footer>
@@ -56,13 +56,13 @@ export default function AddInstructionModal() {
                   type="button"
                   onClick={() => modal.toggle(false)}
                 >
-                  Cancel
+                  取消
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting || !dirty || !isValid}
                 >
-                  Save Instructions
+                  保存指令
                 </Button>
               </Modal.Footer>
             </Form>

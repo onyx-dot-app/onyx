@@ -63,10 +63,10 @@ export default function ScheduledTaskDetailPage() {
     try {
       const updated = await updateScheduledTask(data.id, { status: next });
       await mutate(updated, { revalidate: false });
-      toast.success(next === "ACTIVE" ? "Task resumed." : "Task paused.");
+      toast.success(next === "ACTIVE" ? "任务已恢复。" : "任务已暂停。");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update status"
+        err instanceof Error ? err.message : "更新状态失败"
       );
     } finally {
       setBusy(false);
@@ -78,7 +78,7 @@ export default function ScheduledTaskDetailPage() {
     setBusy(true);
     try {
       await runScheduledTaskNow(data.id);
-      toast.success(`Queued run for "${data.name}".`);
+      toast.success(`已为“${data.name}”加入运行队列。`);
       void mutate();
       // The run history table owns paginated SWR keys under this prefix —
       // invalidate every variant so the new ``manual_run_now`` row appears.
@@ -87,7 +87,7 @@ export default function ScheduledTaskDetailPage() {
         (key) => typeof key === "string" && key.startsWith(runsPrefix)
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start run");
+      toast.error(err instanceof Error ? err.message : "启动运行失败");
     } finally {
       setBusy(false);
     }
@@ -98,10 +98,10 @@ export default function ScheduledTaskDetailPage() {
     setBusy(true);
     try {
       await deleteScheduledTask(data.id);
-      toast.success(`Deleted "${data.name}".`);
+      toast.success(`已删除“${data.name}”。`);
       router.push(TASKS_PATH);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete task");
+      toast.error(err instanceof Error ? err.message : "删除任务失败");
       setBusy(false);
     }
   }, [data, router]);
@@ -111,12 +111,12 @@ export default function ScheduledTaskDetailPage() {
       <SettingsLayouts.Root width="lg">
         <SettingsLayouts.Header
           icon={SvgClock}
-          title="Scheduled task"
+          title="定时任务"
           backButton={handleBack}
         />
         <SettingsLayouts.Body>
           <Text font="main-ui-body" color="text-03">
-            Missing task id.
+            缺少任务 ID。
           </Text>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -127,7 +127,7 @@ export default function ScheduledTaskDetailPage() {
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
         icon={SvgClock}
-        title={data?.name ?? "Scheduled task"}
+        title={data?.name ?? "定时任务"}
         description={scheduleDescription}
         backButton={handleBack}
         rightChildren={
@@ -142,7 +142,7 @@ export default function ScheduledTaskDetailPage() {
                 disabled={busy}
                 data-testid="run-now-button"
               >
-                Run now
+                立即运行
               </Button>
               <Button
                 icon={data.status === "ACTIVE" ? SvgPauseCircle : SvgPlayCircle}
@@ -152,7 +152,7 @@ export default function ScheduledTaskDetailPage() {
                 disabled={busy}
                 data-testid="status-toggle"
               >
-                {data.status === "ACTIVE" ? "Pause" : "Resume"}
+                {data.status === "ACTIVE" ? "暂停" : "恢复"}
               </Button>
               <Button
                 icon={SvgEdit}
@@ -161,7 +161,7 @@ export default function ScheduledTaskDetailPage() {
                 href={taskEditPath(data.id)}
                 disabled={busy}
               >
-                Edit
+                编辑
               </Button>
               <Button
                 icon={SvgTrash}
@@ -171,7 +171,7 @@ export default function ScheduledTaskDetailPage() {
                 disabled={busy}
                 data-testid="delete-button"
               >
-                Delete
+                删除
               </Button>
             </div>
           ) : undefined
@@ -184,7 +184,7 @@ export default function ScheduledTaskDetailPage() {
           </div>
         ) : error || !data ? (
           <Text font="main-ui-body" color="text-03">
-            Failed to load scheduled task.
+            加载定时任务失败。
           </Text>
         ) : (
           <div className="flex flex-col gap-6">
@@ -199,8 +199,8 @@ export default function ScheduledTaskDetailPage() {
       {confirmDelete && data && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={`Delete "${data.name}"?`}
-          description="This stops future runs and removes the task. Past run history (and the underlying sessions) will be preserved for audit."
+          title={`删除“${data.name}”？`}
+          description="这会停止未来运行并移除此任务。历史运行记录及其底层会话会保留用于审计。"
           onClose={() => setConfirmDelete(false)}
           submit={
             <Button
@@ -210,7 +210,7 @@ export default function ScheduledTaskDetailPage() {
               disabled={busy}
               data-testid="confirm-delete-task"
             >
-              {busy ? "Deleting..." : "Delete"}
+              {busy ? "正在删除..." : "删除"}
             </Button>
           }
         />

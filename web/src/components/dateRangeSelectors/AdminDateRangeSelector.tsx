@@ -31,14 +31,14 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
 
   const presets = [
     {
-      label: "Last 30 days",
+      label: "最近 30 天",
       value: {
         from: getXDaysAgo(30),
         to: getXDaysAgo(0),
       },
     },
     {
-      label: "Today",
+      label: "今天",
       value: {
         from: getXDaysAgo(1),
         to: getXDaysAgo(0),
@@ -59,12 +59,12 @@ export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
           >
             {value?.from
               ? value.to
-                ? `${format(value.from, "LLL dd, y")} - ${format(
+                ? `${format(value.from, "yyyy-MM-dd")} - ${format(
                     value.to,
-                    "LLL dd, y"
+                    "yyyy-MM-dd"
                   )}`
-                : format(value.from, "LLL dd, y")
-              : "Pick a date range"}
+                : format(value.from, "yyyy-MM-dd")
+              : "选择日期范围"}
           </Button>
         </Popover.Trigger>
         <Popover.Content align="start">

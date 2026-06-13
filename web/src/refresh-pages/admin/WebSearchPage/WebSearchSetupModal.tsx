@@ -3,7 +3,7 @@
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
-import { SvgOnyxLogo } from "@opal/logos";
+import { GlomiLogoMark } from "@/refresh-components/GlomiLogo";
 import { Button } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
@@ -141,10 +141,10 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
   const validationSchema = Yup.object().shape({
     api_key:
       requiresApiKey && !hasStoredKey
-        ? Yup.string().required("API key is required")
+        ? Yup.string().required("请输入 API Key")
         : Yup.string(),
     config: configField
-      ? Yup.string().required(`${configField.title} is required`)
+      ? Yup.string().required(`请输入${configField.title}`)
       : Yup.string(),
   });
 
@@ -190,7 +190,7 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
         onSaving: () => {},
         onError: (message) => toast.error(message),
         onClose: () => {
-          toast.success("Provider connected");
+          toast.success("服务商已连接");
           onClose?.();
         },
         mutate,
@@ -215,11 +215,11 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
               <Modal.Header
                 icon={icon}
                 moreIcon1={SvgArrowExchange}
-                moreIcon2={SvgOnyxLogo}
+                moreIcon2={GlomiLogoMark}
                 title={
                   isEditing
-                    ? `Configure ${providerLabel}`
-                    : `Set up ${providerLabel}`
+                    ? `配置 ${providerLabel}`
+                    : `设置 ${providerLabel}`
                 }
                 onClose={onClose}
               />
@@ -242,7 +242,7 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
               )}
               <Modal.Footer>
                 <Button prominence="secondary" type="button" onClick={onClose}>
-                  Cancel
+                  取消
                 </Button>
                 <Button
                   type="submit"
@@ -251,7 +251,7 @@ export function WebSearchSetupModal({ state }: WebSearchSetupModalProps) {
                   }
                   icon={isSubmitting ? SvgSimpleLoader : undefined}
                 >
-                  {isEditing ? "Update" : "Connect"}
+                  {isEditing ? "更新" : "连接"}
                 </Button>
               </Modal.Footer>
             </Form>

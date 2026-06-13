@@ -172,7 +172,7 @@ function SubscriptionCard({
   const settings = useSettingsContext();
   const tier = settings?.settings.tier;
   const isEnterprise = tier === Tier.ENTERPRISE || tier == null;
-  const planName = isEnterprise ? "Enterprise Plan" : "Business Plan";
+  const planName = isEnterprise ? "企业版计划" : "商业版计划";
   const PlanIcon = isEnterprise ? SvgOrganization : SvgUsers;
   const expirationDate = billing?.current_period_end ?? license?.expires_at;
   const formattedDate = formatDateShort(expirationDate);
@@ -188,13 +188,13 @@ function SubscriptionCard({
 
   let subtitle: string;
   if (isExpired) {
-    subtitle = `Expired on ${formattedDate}`;
+    subtitle = `已于 ${formattedDate} 过期`;
   } else if (isCanceling) {
-    subtitle = `Valid until ${formattedDate}`;
+    subtitle = `有效期至 ${formattedDate}`;
   } else if (billing) {
-    subtitle = `Next payment on ${formattedDate}`;
+    subtitle = `下次付款日期 ${formattedDate}`;
   } else {
-    subtitle = `Valid until ${formattedDate}`;
+    subtitle = `有效期至 ${formattedDate}`;
   }
 
   const handleManagePlan = async () => {
@@ -245,12 +245,12 @@ function SubscriptionCard({
         } catch (portalError) {
           console.error("Failed to open customer portal:", portalError);
           setEndTrialError(
-            "Add a payment method first, then try upgrading again."
+            "请先添加付款方式，然后再次尝试升级。"
           );
         }
       } else {
         setEndTrialError(
-          error instanceof Error ? error.message : "Failed to end trial"
+          error instanceof Error ? error.message : "结束试用失败"
         );
       }
     } finally {
@@ -287,15 +287,15 @@ function SubscriptionCard({
         >
           {isManualLicenseOnly ? (
             <Text secondaryBody text03 className="text-right">
-              Your plan is managed through sales.
+              你的计划由销售团队管理。
               <br />
               <a
-                href="mailto:support@onyx.app?subject=Billing%20change%20request"
+                href="mailto:support@glomi.ai?subject=Billing%20change%20request"
                 className="underline"
               >
-                Contact billing
+                联系账单支持
               </a>{" "}
-              to make changes.
+              以进行变更。
             </Text>
           ) : disabled ? (
             <OpalButton
@@ -304,7 +304,7 @@ function SubscriptionCard({
               onClick={handleReconnect}
               rightIcon={SvgArrowRight}
             >
-              {isReconnecting ? "Connecting..." : "Connect to Stripe"}
+              {isReconnecting ? "正在连接..." : "连接 Stripe"}
             </OpalButton>
           ) : (
             <Section
@@ -320,7 +320,7 @@ function SubscriptionCard({
                   onClick={handleEndTrial}
                   rightIcon={SvgArrowRight}
                 >
-                  {isEndingTrial ? "Upgrading..." : "Upgrade now"}
+                  {isEndingTrial ? "正在升级..." : "立即升级"}
                 </OpalButton>
               )}
               <OpalButton
@@ -328,7 +328,7 @@ function SubscriptionCard({
                 onClick={handleManagePlan}
                 rightIcon={SvgExternalLink}
               >
-                Manage Plan
+                管理计划
               </OpalButton>
             </Section>
           )}
@@ -340,7 +340,7 @@ function SubscriptionCard({
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button tertiary onClick={onViewPlans} className="billing-text-link">
             <Text secondaryBody text03>
-              View Plan Details
+              查看计划详情
             </Text>
           </Button>
         </Section>
@@ -420,7 +420,7 @@ function SeatsCard({
       await onRefresh?.();
       setIsEditing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update seats");
+      setError(err instanceof Error ? err.message : "更新席位失败");
     } finally {
       setIsSubmitting(false);
     }
@@ -431,7 +431,6 @@ function SeatsCard({
   const isRemoving = seatDifference < 0;
   const nextBillingDate = formatDateShort(billing?.current_period_end);
   const seatCount = Math.abs(seatDifference);
-  const seatWord = seatCount === 1 ? "seat" : "seats";
 
   if (isEditing) {
     return (
@@ -449,8 +448,8 @@ function SeatsCard({
           height="auto"
         >
           <Content
-            title="Update Seats"
-            description="Add or remove seats to reflect your team size."
+            title="更新席位"
+            description="增加或减少席位以匹配团队规模。"
             sizePreset="main-content"
             variant="section"
           />
@@ -459,7 +458,7 @@ function SeatsCard({
             prominence="secondary"
             onClick={handleCancel}
           >
-            Cancel
+            取消
           </OpalButton>
         </Section>
 
@@ -471,7 +470,7 @@ function SeatsCard({
             padding={1}
             height="auto"
           >
-            <InputVertical title="Seats" withLabel>
+            <InputVertical title="席位" withLabel>
               <InputNumber
                 value={newSeatCount}
                 onChange={(v) => setNewSeatCount(v ?? 1)}
@@ -484,22 +483,21 @@ function SeatsCard({
 
             {isBelowMinimum ? (
               <InputErrorText type="error">
-                You cannot set seats below current{" "}
-                <span className="font-semibold">{minRequiredSeats}</span> seats
-                in use/pending.{" "}
+                席位数不能低于当前正在使用或待接受邀请的{" "}
+                <span className="font-semibold">{minRequiredSeats}</span>{" "}
+                个席位。请先
                 <Link
                   href="/admin/users"
                   className="underline hover:no-underline"
                 >
-                  Remove users
+                  移除用户
                 </Link>{" "}
-                first before adjusting seats.
+                再调整席位。
               </InputErrorText>
             ) : seatDifference !== 0 ? (
               <Text secondaryBody text03>
-                {Math.abs(seatDifference)} seat
-                {Math.abs(seatDifference) !== 1 ? "s" : ""} to be{" "}
-                {isAdding ? "added" : "removed"}
+                将{isAdding ? "增加" : "减少"} {Math.abs(seatDifference)}{" "}
+                个席位
               </Text>
             ) : null}
 
@@ -524,22 +522,22 @@ function SeatsCard({
               <Text secondaryBody text04>
                 {seatCount}
               </Text>{" "}
-              additional {seatWord} at a pro-rated amount.
+              个新增席位按比例计费。
             </Text>
           ) : isRemoving ? (
             <Text secondaryBody text03>
               <Text secondaryBody text04>
                 {seatCount}
               </Text>{" "}
-              {seatWord} will be removed on{" "}
+              个席位将在{" "}
               <Text secondaryBody text04>
                 {nextBillingDate}
               </Text>{" "}
-              (after current billing cycle).
+              （当前账单周期结束后）移除。
             </Text>
           ) : (
             <Text secondaryBody text03>
-              No changes to your billing.
+              账单没有变化。
             </Text>
           )}
           <OpalButton
@@ -548,7 +546,7 @@ function SeatsCard({
             }
             onClick={handleConfirm}
           >
-            {isSubmitting ? "Saving..." : "Confirm Change"}
+            {isSubmitting ? "正在保存..." : "确认变更"}
           </OpalButton>
         </Section>
       </Card>
@@ -565,11 +563,11 @@ function SeatsCard({
       >
         <Section gap={0.25} alignItems="start" height="auto" width="auto">
           <Text mainContentMuted text04>
-            {totalSeats} Seats
+            {totalSeats} 个席位
           </Text>
           <Text secondaryBody text03>
-            {usedSeats} in use • {pendingSeats} pending • {remainingSeats}{" "}
-            remaining
+            {usedSeats} 个使用中 • {pendingSeats} 个待接受 • {remainingSeats}{" "}
+            个剩余
           </Text>
         </Section>
         <Section
@@ -584,7 +582,7 @@ function SeatsCard({
             href="/admin/users"
             icon={SvgExternalLink}
           >
-            View Users
+            查看用户
           </OpalButton>
           {!hideUpdateSeats && (
             <OpalButton
@@ -593,7 +591,7 @@ function SeatsCard({
               onClick={handleStartEdit}
               icon={SvgPlus}
             >
-              Update Seats
+              更新席位
             </OpalButton>
           )}
         </Section>
@@ -627,7 +625,7 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
   return (
     <div className="billing-payment-section">
       <Section alignItems="start" height="auto" width="full">
-        <Text mainContentEmphasis>Payment</Text>
+        <Text mainContentEmphasis>付款</Text>
         <Section
           flexDirection="row"
           gap={0.5}
@@ -644,14 +642,14 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
               <InfoBlock
                 icon={SvgWallet}
                 title="Visa ending in 1234"
-                description="Payment method"
+                description="付款方式"
               />
               <OpalButton
                 prominence="tertiary"
                 onClick={handleOpenPortal}
                 rightIcon={SvgExternalLink}
               >
-                Update
+                更新
               </OpalButton>
             </Section>
           </Card>
@@ -666,14 +664,14 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
                 <InfoBlock
                   icon={SvgFileText}
                   title={lastPaymentDate}
-                  description="Last payment"
+                  description="最近付款"
                 />
                 <OpalButton
                   prominence="tertiary"
                   onClick={handleOpenPortal}
                   rightIcon={SvgExternalLink}
                 >
-                  View Invoice
+                  查看发票
                 </OpalButton>
               </Section>
             </Card>
@@ -719,8 +717,8 @@ export default function BillingDetailsView({
       {hasStripeError && (
         <MessageCard
           variant="warning"
-          title="Unable to connect to Stripe payment portal."
-          description="Check your internet connection or manually provide a license."
+          title="无法连接到 Stripe 付款门户。"
+          description="请检查网络连接，或手动提供许可证。"
         />
       )}
 
@@ -728,8 +726,8 @@ export default function BillingDetailsView({
       {isAirGapped && !hasStripeError && !isManualLicenseOnly && (
         <MessageCard
           variant="info"
-          title="Air-gapped deployment"
-          description="Online billing management is disabled. Contact support to update your subscription."
+          title="隔离网络部署"
+          description="在线账单管理已禁用。请联系支持团队更新订阅。"
         />
       )}
 
@@ -740,16 +738,16 @@ export default function BillingDetailsView({
           title={
             expirationState.variant === "error"
               ? expirationState.daysUntilDeletion
-                ? `Your subscription has expired. Data will be deleted in ${expirationState.daysUntilDeletion} days.`
-                : "Your subscription has expired."
-              : `Your subscription is expiring in ${expirationState.daysRemaining} days.`
+                ? `你的订阅已过期。数据将在 ${expirationState.daysUntilDeletion} 天后删除。`
+                : "你的订阅已过期。"
+              : `你的订阅将在 ${expirationState.daysRemaining} 天后过期。`
           }
           description={
             expirationState.variant === "error"
               ? expirationState.expirationDate
-                ? `Renew your subscription by ${expirationState.expirationDate} to restore access.`
-                : "Renew your subscription to restore access to paid features."
-              : `Renew your subscription by ${expirationState.expirationDate} to avoid disruption.`
+                ? `请在 ${expirationState.expirationDate} 前续订以恢复访问。`
+                : "请续订以恢复付费功能访问。"
+              : `请在 ${expirationState.expirationDate} 前续订以避免服务中断。`
           }
         />
       )}

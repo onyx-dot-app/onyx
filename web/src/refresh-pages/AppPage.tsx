@@ -77,6 +77,7 @@ import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
+import { APP_NAME } from "@/lib/brand";
 
 interface FadeProps {
   show: boolean;
@@ -149,9 +150,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // available in server-side components
   const settings = useSettingsContext();
 
-  const appNameRef = useRef<string>("Onyx");
+  const appNameRef = useRef<string>(APP_NAME);
   useEffect(() => {
-    const appName = settings.enterpriseSettings?.application_name || "Onyx";
+    const appName = settings.enterpriseSettings?.application_name || APP_NAME;
     appNameRef.current = appName;
     document.title = currentChatSession?.name
       ? `${currentChatSession.name} — ${appName}`

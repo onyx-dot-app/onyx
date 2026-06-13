@@ -22,7 +22,7 @@ import {
   SvgUserManage,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
+import { UserRole } from "@/lib/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
@@ -49,6 +49,15 @@ import { Section } from "@/layouts/general-layouts";
 
 const API_KEY_SWR_KEY = SWR_KEYS.adminApiKeys;
 const route = ADMIN_ROUTES.API_KEYS;
+const SERVICE_ACCOUNT_ROLE_LABELS: Record<UserRole, string> = {
+  [UserRole.ADMIN]: "管理员",
+  [UserRole.BASIC]: "标准用户",
+  [UserRole.CURATOR]: "策展人",
+  [UserRole.GLOBAL_CURATOR]: "全局策展人",
+  [UserRole.LIMITED]: "受限账号",
+  [UserRole.SLACK_USER]: "Slack 用户",
+  [UserRole.EXT_PERM_USER]: "外部权限用户",
+};
 
 const tc = createTableColumns<APIKey>();
 
@@ -95,13 +104,13 @@ export default function ServiceAccountsPage() {
       });
       if (!response.ok) {
         const errorMsg = await response.text();
-        toast.error(`Failed to update role: ${errorMsg}`);
+        toast.error(`角色更新失败：${errorMsg}`);
         return;
       }
       mutate(API_KEY_SWR_KEY);
-      toast.success("Role updated.");
+      toast.success("角色已更新。");
     } catch {
-      toast.error("Failed to update role.");
+      toast.error("角色更新失败。");
     }
   };
 
@@ -110,7 +119,7 @@ export default function ServiceAccountsPage() {
       const response = await regenerateApiKey(apiKey);
       if (!response.ok) {
         const errorMsg = await response.text();
-        toast.error(`Failed to regenerate API Key: ${errorMsg}`);
+        toast.error(`API Key 重新生成失败：${errorMsg}`);
         return;
       }
       const newKey = (await response.json()) as APIKey;
@@ -118,7 +127,7 @@ export default function ServiceAccountsPage() {
       mutate(API_KEY_SWR_KEY);
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : "Failed to regenerate API Key."
+        e instanceof Error ? e.message : "API Key 重新生成失败。"
       );
     }
   };
@@ -128,12 +137,12 @@ export default function ServiceAccountsPage() {
       const response = await deleteApiKey(apiKey.api_key_id);
       if (!response.ok) {
         const errorMsg = await response.text();
-        toast.error(`Failed to delete API Key: ${errorMsg}`);
+        toast.error(`API Key 删除失败：${errorMsg}`);
         return;
       }
       mutate(API_KEY_SWR_KEY);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete API Key.");
+      toast.error(e instanceof Error ? e.message : "API Key 删除失败。");
     }
   };
 
@@ -144,11 +153,11 @@ export default function ServiceAccountsPage() {
         getContent: () => SvgUserKey,
       }),
       tc.column("api_key_name", {
-        header: "Name",
+        header: "名称",
         weight: 25,
         cell: (value) => (
           <Content
-            title={value || "Unnamed"}
+            title={value || "未命名"}
             sizePreset="main-ui"
             variant="body"
           />
@@ -165,7 +174,7 @@ export default function ServiceAccountsPage() {
       }),
       tc.displayColumn({
         id: "account_type",
-        header: "Account Type",
+        header: "账号类型",
         width: { weight: 25, minWidth: 160 },
         cell: (row) => (
           <InputSelect
@@ -177,23 +186,23 @@ export default function ServiceAccountsPage() {
               <InputSelect.Item
                 value={UserRole.ADMIN.toString()}
                 icon={SvgUserManage}
-                description="Unrestricted admin access to all endpoints."
+                description="可无限制访问全部管理员接口。"
               >
-                {USER_ROLE_LABELS[UserRole.ADMIN]}
+                {SERVICE_ACCOUNT_ROLE_LABELS[UserRole.ADMIN]}
               </InputSelect.Item>
               <InputSelect.Item
                 value={UserRole.BASIC.toString()}
                 icon={SvgUser}
-                description="Standard user-level access to non-admin endpoints."
+                description="可访问非管理员接口的标准用户权限。"
               >
-                {USER_ROLE_LABELS[UserRole.BASIC]}
+                {SERVICE_ACCOUNT_ROLE_LABELS[UserRole.BASIC]}
               </InputSelect.Item>
               <InputSelect.Item
                 value={UserRole.LIMITED.toString()}
                 icon={SvgLock}
-                description="For agents: chat posting and read-only access to other endpoints."
+                description="面向智能体：可发送聊天消息，并对其他接口只读访问。"
               >
-                {USER_ROLE_LABELS[UserRole.LIMITED]}
+                {SERVICE_ACCOUNT_ROLE_LABELS[UserRole.LIMITED]}
               </InputSelect.Item>
             </InputSelect.Content>
           </InputSelect>
@@ -205,7 +214,7 @@ export default function ServiceAccountsPage() {
             <Button
               icon={SvgRefreshCw}
               prominence="tertiary"
-              tooltip="Regenerate"
+              tooltip="重新生成"
               onClick={() => setRegenerateTarget(row)}
             />
             <Popover>
@@ -213,7 +222,7 @@ export default function ServiceAccountsPage() {
                 <Button
                   icon={SvgMoreHorizontal}
                   prominence="tertiary"
-                  tooltip="More"
+                  tooltip="更多"
                 />
               </Popover.Trigger>
               <Popover.Content side="bottom" align="end" width="md">
@@ -225,14 +234,14 @@ export default function ServiceAccountsPage() {
                       setShowCreateUpdateForm(true);
                     }}
                   >
-                    Edit Account
+                    编辑账号
                   </LineItem>
                   <LineItem
                     icon={SvgTrash}
                     danger
                     onClick={() => setDeleteTarget(row)}
                   >
-                    Delete Account
+                    删除账号
                   </LineItem>
                 </PopoverMenu>
               </Popover.Content>
@@ -250,14 +259,14 @@ export default function ServiceAccountsPage() {
         <SettingsLayouts.Header
           title={route.title}
           icon={route.icon}
-          description="Use service accounts to programmatically access Onyx API."
+          description="使用服务账号以编程方式访问 Glomi AI API。"
           divider
         />
         <SettingsLayouts.Body>
           <IllustrationContent
             illustration={SvgNoResult}
-            title="Failed to load service accounts."
-            description="Please check the console for more details."
+            title="服务账号加载失败"
+            description="请查看控制台了解更多详情。"
           />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -270,7 +279,7 @@ export default function ServiceAccountsPage() {
         <SettingsLayouts.Header
           title={route.title}
           icon={route.icon}
-          description="Use service accounts to programmatically access Onyx API."
+          description="使用服务账号以编程方式访问 Glomi AI API。"
           divider
         />
         <SettingsLayouts.Body>
@@ -287,7 +296,7 @@ export default function ServiceAccountsPage() {
       <SettingsLayouts.Header
         title={route.title}
         icon={route.icon}
-        description="Use service accounts to programmatically access Onyx API."
+        description="使用服务账号以编程方式访问 Glomi AI API。"
         divider
       />
 
@@ -295,8 +304,8 @@ export default function ServiceAccountsPage() {
         {isTrialing && (
           <MessageCard
             variant="warning"
-            title="Upgrade to a paid plan to create API keys."
-            description="Trial accounts do not include API key access — purchase a paid subscription to unlock this feature."
+            title="升级到付费套餐后才能创建 API Key。"
+            description="试用账号不包含 API Key 访问能力，请购买付费订阅以解锁此功能。"
           />
         )}
 
@@ -305,13 +314,13 @@ export default function ServiceAccountsPage() {
             hasItems={hasKeys}
             searchQuery={search}
             onSearchQueryChange={setSearch}
-            placeholder="Search service accounts..."
-            emptyStateText="Create service account API keys with user-level access."
+            placeholder="搜索服务账号..."
+            emptyStateText="创建具备用户级访问权限的服务账号 API Key。"
             onAction={() => {
               setSelectedApiKey(undefined);
               setShowCreateUpdateForm(true);
             }}
-            actionLabel="New Service Account"
+            actionLabel="新建服务账号"
           />
 
           {hasKeys && (
@@ -328,10 +337,10 @@ export default function ServiceAccountsPage() {
       <Modal open={!!fullApiKey}>
         <Modal.Content width="sm" height="sm">
           <Modal.Header
-            title="Service Account API Key"
+            title="服务账号 API Key"
             icon={SvgKey}
             onClose={() => setFullApiKey(null)}
-            description="Save this key before continuing. It won't be shown again."
+            description="继续前请保存此密钥，之后不会再次显示。"
           />
           <Modal.Body>
             <Code showCopyButton={false}>{fullApiKey ?? ""}</Code>
@@ -355,7 +364,7 @@ export default function ServiceAccountsPage() {
                     URL.revokeObjectURL(url);
                   }}
                 >
-                  Download
+                  下载
                 </Button>
               }
               submit={
@@ -364,11 +373,11 @@ export default function ServiceAccountsPage() {
                   onClick={() => {
                     if (fullApiKey) {
                       navigator.clipboard.writeText(fullApiKey);
-                      toast.success("API key copied to clipboard.");
+                      toast.success("API Key 已复制到剪贴板。");
                     }
                   }}
                 >
-                  Copy API Key
+                  复制 API Key
                 </Button>
               }
             />
@@ -393,7 +402,7 @@ export default function ServiceAccountsPage() {
       {regenerateTarget && (
         <ConfirmationModalLayout
           icon={SvgRefreshCw}
-          title="Regenerate API Key"
+          title="重新生成 API Key"
           onClose={() => setRegenerateTarget(null)}
           submit={
             <Button
@@ -404,17 +413,17 @@ export default function ServiceAccountsPage() {
                 await handleRegenerate(target);
               }}
             >
-              Regenerate Key
+              重新生成密钥
             </Button>
           }
         >
           <Text as="p" color="text-03">
             {markdown(
               `Your current API key *${
-                regenerateTarget.api_key_name || "Unnamed"
+                regenerateTarget.api_key_name || "未命名"
               }* (\`${
                 regenerateTarget.api_key_display
-              }\`) will be revoked and a new key will be generated. You will need to update any applications using this key with the new one.`
+              }\`) 会被撤销并生成新密钥。所有正在使用此密钥的应用都需要更新为新密钥。`
             )}
           </Text>
         </ConfirmationModalLayout>
@@ -423,7 +432,7 @@ export default function ServiceAccountsPage() {
       {deleteTarget && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete Account"
+          title="删除账号"
           onClose={() => setDeleteTarget(null)}
           submit={
             <Button
@@ -433,7 +442,7 @@ export default function ServiceAccountsPage() {
                 setDeleteTarget(null);
               }}
             >
-              Delete
+              删除
             </Button>
           }
         >
@@ -441,14 +450,14 @@ export default function ServiceAccountsPage() {
             <Text as="p" color="text-03">
               {markdown(
                 `Any application using the API key of account *${
-                  deleteTarget.api_key_name || "Unnamed"
+                  deleteTarget.api_key_name || "未命名"
                 }* (\`${
                   deleteTarget.api_key_display
-                }\`) will lose access to Onyx.`
+                }\`) 的应用都将失去 Glomi AI 访问权限。`
               )}
             </Text>
             <Text as="p" color="text-03">
-              Deletion cannot be undone.
+              删除后无法撤销。
             </Text>
           </Section>
         </ConfirmationModalLayout>

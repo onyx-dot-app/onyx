@@ -10,7 +10,7 @@ import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { SvgGlobe } from "@opal/icons";
-import { SvgOnyxLogo } from "@opal/logos";
+import { GlomiLogoMark } from "@/refresh-components/GlomiLogo";
 import { MessageCard } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
@@ -151,7 +151,7 @@ export default function WebSearchPage() {
           provider.provider_type,
           provider.name
         ),
-        subtitle: "Custom integration",
+        subtitle: "自定义集成",
         logo: undefined,
         provider,
       }));
@@ -171,7 +171,7 @@ export default function WebSearchPage() {
       if (providerType === "onyx_web_crawler") {
         return {
           id: -1,
-          name: "Onyx Web Crawler",
+          name: "Glomi AI 网页抓取器",
           provider_type: "onyx_web_crawler",
           is_active: true,
           config: null,
@@ -221,7 +221,7 @@ export default function WebSearchPage() {
     const message =
       searchProvidersError?.message ||
       contentProvidersError?.message ||
-      "Unable to load web search configuration.";
+      "无法加载网页搜索配置。";
 
     const detail =
       (searchProvidersError instanceof FetchError &&
@@ -238,13 +238,13 @@ export default function WebSearchPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Search settings for external search across the internet."
+          description="配置用于互联网检索的外部搜索服务。"
           divider
         />
         <SettingsLayouts.Body>
           <MessageCard
             variant="error"
-            title="Failed to load web search settings"
+            title="网页搜索设置加载失败"
             description={detail ?? message}
           />
         </SettingsLayouts.Body>
@@ -258,7 +258,7 @@ export default function WebSearchPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Search settings for external search across the internet."
+          description="配置用于互联网检索的外部搜索服务。"
           divider
         />
         <SettingsLayouts.Body>
@@ -274,7 +274,7 @@ export default function WebSearchPage() {
       await mutateSearchProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : "发生未知错误。";
       toast.error(message);
     }
   }
@@ -285,7 +285,7 @@ export default function WebSearchPage() {
       await mutateSearchProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : "发生未知错误。";
       toast.error(message);
     }
   }
@@ -298,7 +298,7 @@ export default function WebSearchPage() {
       await mutateContentProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : "发生未知错误。";
       toast.error(message);
     }
   }
@@ -312,7 +312,7 @@ export default function WebSearchPage() {
       await mutateContentProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : "发生未知错误。";
       toast.error(message);
     }
   }
@@ -323,15 +323,15 @@ export default function WebSearchPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Search settings for external search across the internet."
+          description="配置用于互联网检索的外部搜索服务。"
           divider
         />
 
         <SettingsLayouts.Body>
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Search Engine"
-              description="External search engine API used for web search result URLs, snippets, and metadata."
+              title="搜索引擎"
+              description="用于获取网页搜索结果链接、摘要和元数据的外部搜索引擎 API。"
               sizePreset="main-content"
               variant="section"
             />
@@ -341,8 +341,8 @@ export default function WebSearchPage() {
                 variant="info"
                 title={
                   hasConfiguredSearchProvider
-                    ? "Select a search engine to enable web search."
-                    : "Connect a search engine to set up web search."
+                    ? "请选择一个搜索引擎来启用网页搜索。"
+                    : "连接一个搜索引擎来完成网页搜索设置。"
                 }
               />
             )}
@@ -439,8 +439,8 @@ export default function WebSearchPage() {
 
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Web Crawler"
-              description="Used to read the full contents of search result pages."
+              title="网页抓取器"
+              description="用于读取搜索结果页面的完整内容。"
               sizePreset="main-content"
               variant="section"
             />
@@ -486,7 +486,7 @@ export default function WebSearchPage() {
                       ContentLogo ? (
                         <ContentLogo size={16} />
                       ) : provider.provider_type === "onyx_web_crawler" ? (
-                        <SvgOnyxLogo size={16} />
+                        <GlomiLogoMark size={16} />
                       ) : (
                         <SvgGlobe size={16} />
                       )
@@ -494,7 +494,7 @@ export default function WebSearchPage() {
                     title={label}
                     description={subtitle}
                     status={status}
-                    selectedLabel="Current Crawler"
+                    selectedLabel="当前抓取器"
                     onConnect={() => {
                       openContentModal(provider.provider_type, provider);
                     }}

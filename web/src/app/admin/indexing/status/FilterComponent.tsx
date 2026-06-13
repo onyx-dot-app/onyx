@@ -140,14 +140,14 @@ export const FilterComponent = forwardRef<
         >
           <div className="flex items-center justify-between px-2 py-1.5">
             <DropdownMenuLabel className="text-base font-medium">
-              Filter Connectors
+              筛选连接器
             </DropdownMenuLabel>
           </div>
           <DropdownMenuSeparator />
 
           <DropdownMenuGroup>
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
-              Access Type
+              访问类型
             </DropdownMenuLabel>
             <div onClick={(e) => e.stopPropagation()}>
               <DropdownMenuCheckboxItem
@@ -156,7 +156,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Public
+                公开
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedAccessTypes.includes("private")}
@@ -164,7 +164,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Private
+                私有
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedAccessTypes.includes("sync")}
@@ -172,7 +172,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Auto-Sync
+                自动同步
               </DropdownMenuCheckboxItem>
             </div>
           </DropdownMenuGroup>
@@ -181,7 +181,7 @@ export const FilterComponent = forwardRef<
 
           <DropdownMenuGroup>
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
-              Last Status
+              最近状态
             </DropdownMenuLabel>
             <div onClick={(e) => e.stopPropagation()}>
               <DropdownMenuCheckboxItem
@@ -190,7 +190,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Success
+                成功
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("failed")}
@@ -198,7 +198,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Failed
+                失败
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("in_progress")}
@@ -206,7 +206,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                In Progress
+                进行中
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("not_started")}
@@ -214,7 +214,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Not Started
+                未开始
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("completed_with_errors")}
@@ -224,7 +224,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Completed with Errors
+                已完成但有错误
               </DropdownMenuCheckboxItem>
             </div>
           </DropdownMenuGroup>
@@ -233,7 +233,7 @@ export const FilterComponent = forwardRef<
 
           <DropdownMenuGroup>
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
-              Document Count
+              文档数量
             </DropdownMenuLabel>
             <div
               className="flex items-center px-2 py-2 gap-2"
@@ -276,7 +276,7 @@ export const FilterComponent = forwardRef<
               </div>
               <Input
                 type="number"
-                placeholder="Count"
+                placeholder="数量"
                 value={docsValue}
                 onChange={(e) => setDocsValue(e.target.value)}
                 className="h-8 w-full"
@@ -293,7 +293,7 @@ export const FilterComponent = forwardRef<
                 }}
                 type="button"
               >
-                Apply
+                应用
               </Button>
             </div>
           </DropdownMenuGroup>

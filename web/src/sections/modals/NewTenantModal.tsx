@@ -13,7 +13,7 @@ import Text from "@/refresh-components/texts/Text";
 import { InputErrorText } from "@opal/layouts";
 
 // App domain should not be hardcoded
-const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "onyx.app";
+const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "glomi.ai";
 
 export interface NewTenantModalProps {
   tenantInfo: NewTenantInfo;
@@ -51,14 +51,14 @@ export default function NewTenantModal({
           throw new Error(
             errorData.detail ||
               errorData.message ||
-              "Failed to accept invitation"
+              "接受邀请失败"
           );
         }
 
-        toast.success("You have accepted the invitation.");
+        toast.success("你已接受邀请。");
       } else {
         // For non-invite flow, just show success message
-        toast.success("Processing your team join request...");
+        toast.success("正在处理你的团队加入请求...");
       }
 
       // Common logout and redirect for both flows
@@ -69,7 +69,7 @@ export default function NewTenantModal({
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to join the team. Please try again.";
+          : "加入团队失败，请重试。";
 
       setError(message);
       toast.error(message);
@@ -99,17 +99,17 @@ export default function NewTenantModal({
         throw new Error(
           errorData.detail ||
             errorData.message ||
-            "Failed to decline invitation"
+            "拒绝邀请失败"
         );
       }
 
-      toast.info("You have declined the invitation.");
+      toast.info("你已拒绝邀请。");
       onClose?.();
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to decline the invitation. Please try again.";
+          : "拒绝邀请失败，请重试。";
 
       setError(message);
       toast.error(message);
@@ -119,16 +119,14 @@ export default function NewTenantModal({
   }
 
   const title = isInvite
-    ? `You have been invited to join ${
+    ? `你受邀加入 ${APP_DOMAIN} 上已有 ${
         tenantInfo.number_of_users
-      } other teammate${
-        tenantInfo.number_of_users === 1 ? "" : "s"
-      } of ${APP_DOMAIN}.`
-    : `Your request to join ${tenantInfo.number_of_users} other users of ${APP_DOMAIN} has been approved.`;
+      } 位成员的团队。`
+    : `你加入 ${APP_DOMAIN} 上 ${tenantInfo.number_of_users} 位成员团队的请求已获批准。`;
 
   const description = isInvite
-    ? `By accepting this invitation, you will join the existing ${APP_DOMAIN} team and lose access to your current team. Note: you will lose access to your current agents, prompts, chats, and connected sources.`
-    : `To finish joining your team, please reauthenticate with ${user?.email}.`;
+    ? `接受邀请后，你将加入现有 ${APP_DOMAIN} 团队，并失去当前团队的访问权限。注意：你也会失去当前智能体、提示词、聊天和已连接数据源的访问权限。`
+    : `要完成加入团队，请使用 ${user?.email} 重新认证。`;
 
   return (
     <Modal open>
@@ -150,7 +148,7 @@ export default function NewTenantModal({
                   onClick={handleRejectInvite}
                   icon={SvgX}
                 >
-                  Decline
+                  拒绝
                 </Button>
               ) : undefined
             }
@@ -162,11 +160,11 @@ export default function NewTenantModal({
               >
                 {isLoading
                   ? isInvite
-                    ? "Accepting..."
-                    : "Joining..."
+                    ? "正在接受..."
+                    : "正在加入..."
                   : isInvite
-                    ? "Accept Invitation"
-                    : "Reauthenticate"}
+                    ? "接受邀请"
+                    : "重新认证"}
               </Button>
             }
           />

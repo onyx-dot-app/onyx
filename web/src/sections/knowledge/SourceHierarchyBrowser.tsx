@@ -215,7 +215,7 @@ export default function SourceHierarchyBrowser({
         setAllNodes(response.nodes);
       } catch (error) {
         setNodesError(
-          error instanceof Error ? error.message : "Failed to load folders"
+          error instanceof Error ? error.message : "加载文件夹失败"
         );
       } finally {
         setIsLoadingNodes(false);
@@ -654,7 +654,7 @@ export default function SourceHierarchyBrowser({
     return (
       <GeneralLayouts.Section height="auto" padding={1}>
         <Text text03 secondaryBody>
-          Loading folders...
+          正在加载文件夹...
         </Text>
       </GeneralLayouts.Section>
     );
@@ -686,7 +686,7 @@ export default function SourceHierarchyBrowser({
             searchIcon
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Search..."
+            placeholder="搜索..."
             variant="internal"
           />
         </GeneralLayouts.Section>
@@ -701,7 +701,7 @@ export default function SourceHierarchyBrowser({
             prominence="tertiary"
             onClick={handleToggleViewSelected}
           >
-            Selected items
+            已选项目
           </Button>
         </>
       ) : (
@@ -733,7 +733,7 @@ export default function SourceHierarchyBrowser({
         </TableLayouts.CheckboxCell>
         <TableLayouts.TableCell flex>
           <Text secondaryBody text03>
-            Name
+            名称
           </Text>
         </TableLayouts.TableCell>
         <TableLayouts.TableCell width={8}>
@@ -745,14 +745,14 @@ export default function SourceHierarchyBrowser({
                   transient={sortDropdownOpen}
                   onClick={() => setSortDropdownOpen(true)}
                 >
-                  {sortField === "name" ? "Name" : "Last Updated"}
+                  {sortField === "name" ? "名称" : "最近更新"}
                 </SelectButton>
               </div>
             </Popover.Trigger>
             <Popover.Content align="end" sideOffset={4} width="lg">
               <Popover.Menu>
                 {/* Sort by section */}
-                <Divider showTitle text="Sort by" dividerLine={false} />
+                <Divider showTitle text="排序字段" dividerLine={false} />
                 <LineItem
                   selected={sortField === "name"}
                   onClick={() => setSortField("name")}
@@ -760,7 +760,7 @@ export default function SourceHierarchyBrowser({
                     sortField === "name" ? <SvgCheck size={16} /> : undefined
                   }
                 >
-                  Name
+                  名称
                 </LineItem>
                 <LineItem
                   selected={sortField === "last_updated"}
@@ -771,10 +771,10 @@ export default function SourceHierarchyBrowser({
                     ) : undefined
                   }
                 >
-                  Last Updated
+                  最近更新
                 </LineItem>
                 {/* Sorting Order section */}
-                <Divider showTitle text="Sorting Order" dividerLine={false} />
+                <Divider showTitle text="排序顺序" dividerLine={false} />
                 <LineItem
                   selected={sortDirection === "desc"}
                   onClick={() => setSortDirection("desc")}
@@ -784,7 +784,7 @@ export default function SourceHierarchyBrowser({
                     ) : undefined
                   }
                 >
-                  {sortField === "name" ? "Z to A" : "Recent to Old"}
+                  {sortField === "name" ? "Z 到 A" : "从新到旧"}
                 </LineItem>
                 <LineItem
                   selected={sortDirection === "asc"}
@@ -793,10 +793,10 @@ export default function SourceHierarchyBrowser({
                     sortDirection === "asc" ? <SvgCheck size={16} /> : undefined
                   }
                 >
-                  {sortField === "name" ? "A to Z" : "Old to Recent"}
+                  {sortField === "name" ? "A 到 Z" : "从旧到新"}
                 </LineItem>
                 {/* Folders section */}
-                <Divider showTitle text="Folders" dividerLine={false} />
+                <Divider showTitle text="文件夹" dividerLine={false} />
                 <LineItem
                   selected={folderPosition === "on_top"}
                   onClick={() => setFolderPosition("on_top")}
@@ -806,7 +806,7 @@ export default function SourceHierarchyBrowser({
                     ) : undefined
                   }
                 >
-                  On top
+                  置顶
                 </LineItem>
                 <LineItem
                   selected={folderPosition === "mixed"}
@@ -817,7 +817,7 @@ export default function SourceHierarchyBrowser({
                     ) : undefined
                   }
                 >
-                  Mixed with Files
+                  与文件混排
                 </LineItem>
               </Popover.Menu>
             </Popover.Content>
@@ -837,8 +837,8 @@ export default function SourceHierarchyBrowser({
           <GeneralLayouts.Section height="auto" padding={1}>
             <Text text03 secondaryBody>
               {path.length === 0
-                ? "Select a folder to browse documents."
-                : "No items in this folder."}
+                ? "请选择文件夹以浏览文档。"
+                : "此文件夹中没有项目。"}
             </Text>
           </GeneralLayouts.Section>
         ) : (
@@ -901,7 +901,7 @@ export default function SourceHierarchyBrowser({
             {isLoadingDocuments && documents.length > 0 && (
               <GeneralLayouts.Section height="auto" padding={0.5}>
                 <Text text03 secondaryBody>
-                  Loading more...
+                  正在加载更多...
                 </Text>
               </GeneralLayouts.Section>
             )}
@@ -921,8 +921,7 @@ export default function SourceHierarchyBrowser({
             height="auto"
           >
             <Text text03 secondaryBody>
-              {currentSourceSelectedCount}{" "}
-              {currentSourceSelectedCount === 1 ? "item" : "items"} selected
+              已选择 {currentSourceSelectedCount} 项
             </Text>
             <Button
               icon={SvgEye}

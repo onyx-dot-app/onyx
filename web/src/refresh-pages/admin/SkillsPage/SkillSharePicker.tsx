@@ -9,8 +9,8 @@ import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboB
 import { Section } from "@/layouts/general-layouts";
 import useShareableGroups from "@/hooks/useShareableGroups";
 
-const GROUPS_TAB = "Groups";
-const YOUR_ORGANIZATION_TAB = "Your Organization";
+const GROUPS_TAB = "groups";
+const YOUR_ORGANIZATION_TAB = "organization";
 
 interface SkillSharePickerProps {
   isPublic: boolean;
@@ -71,10 +71,10 @@ export default function SkillSharePicker({
       <Tabs defaultValue={isPublic ? YOUR_ORGANIZATION_TAB : GROUPS_TAB}>
         <Tabs.List>
           <Tabs.Trigger icon={SvgUsers} value={GROUPS_TAB}>
-            {GROUPS_TAB}
+            用户组
           </Tabs.Trigger>
           <Tabs.Trigger icon={SvgOrganization} value={YOUR_ORGANIZATION_TAB}>
-            {YOUR_ORGANIZATION_TAB}
+            你的组织
           </Tabs.Trigger>
         </Tabs.List>
 
@@ -82,7 +82,7 @@ export default function SkillSharePicker({
           <Section gap={0.5} alignItems="start">
             <div className="w-full">
               <InputComboBox
-                placeholder="Add a group..."
+                placeholder="添加用户组..."
                 value=""
                 onChange={() => {}}
                 onValueChange={handleSelectGroup}
@@ -114,8 +114,7 @@ export default function SkillSharePicker({
             )}
             {!groupsLoading && !groupsError && groups.length === 0 && (
               <Text as="span" secondaryBody text03>
-                No user groups exist yet. Create groups in /admin/groups to
-                share skills with specific groups.
+                还没有用户组。请在 /admin/groups 创建用户组后，再将技能共享给指定用户组。
               </Text>
             )}
           </Section>
@@ -123,8 +122,8 @@ export default function SkillSharePicker({
             <Section>
               <MessageCard
                 icon={SvgOrganization}
-                title="This skill is public to your organization."
-                description="Everyone in your organization has access to this skill."
+                title="此技能已对你的组织公开。"
+                description="组织内所有成员都可以访问此技能。"
               />
             </Section>
           )}
@@ -133,8 +132,8 @@ export default function SkillSharePicker({
         <Tabs.Content value={YOUR_ORGANIZATION_TAB}>
           <Section gap={1} alignItems="stretch" padding={0.5}>
             <InputHorizontal
-              title="Publish This Skill"
-              description="Make this skill available to everyone in your organization."
+              title="发布此技能"
+              description="让组织内所有成员都可以使用此技能。"
               withLabel
             >
               <Switch checked={isPublic} onCheckedChange={onIsPublicChange} />

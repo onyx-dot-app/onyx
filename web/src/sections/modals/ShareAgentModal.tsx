@@ -34,8 +34,8 @@ import { Disabled } from "@opal/core";
 import { AgentLabel } from "@/lib/agents/types";
 import { FetchError } from "@/lib/fetcher";
 
-const YOUR_ORGANIZATION_TAB = "Your Organization";
-const USERS_AND_GROUPS_TAB = "Users & Groups";
+const YOUR_ORGANIZATION_TAB = "你的组织";
+const USERS_AND_GROUPS_TAB = "用户和用户组";
 
 // ============================================================================
 // Types
@@ -204,7 +204,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
 
   return (
     <Modal.Content width="sm" height="lg">
-      <Modal.Header icon={SvgShare} title="Share Agent" onClose={handleClose} />
+      <Modal.Header icon={SvgShare} title="分享智能体" onClose={handleClose} />
 
       <Modal.Body padding={0.5}>
         <Card padding="sm">
@@ -231,7 +231,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                   disabled={comboBoxDisabled}
                   tooltip={
                     comboBoxDisabled
-                      ? "Your administrator has restricted the user directory. Contact an admin to share this agent with other users."
+                      ? "管理员已限制用户目录。请联系管理员，将此智能体分享给其他用户。"
                       : undefined
                   }
                 >
@@ -239,8 +239,8 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                     <InputComboBox
                       placeholder={
                         userDirectoryRestricted
-                          ? "Add groups"
-                          : "Add users and groups"
+                          ? "添加用户组"
+                          : "添加用户和用户组"
                       }
                       value=""
                       onChange={() => {}}
@@ -265,7 +265,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                             variant="section"
                             icon={SvgUser}
                             title={user.email}
-                            description={isCurrentUser ? "You" : undefined}
+                            description={isCurrentUser ? "你" : undefined}
                             padding="fit"
                             rightChildren={
                               isOwner || (isCurrentUser && !agentId) ? (
@@ -276,7 +276,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                                 // This user, during creation, is assumed to be the "owner".
                                 // That is why the `(isCurrentUser && !agentId)` condition exists.
                                 <Text font="secondary-body" color="text-03">
-                                  Owner
+                                  所有者
                                 </Text>
                               ) : (
                                 // For all other cases (including for "self-unsharing"),
@@ -320,8 +320,8 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                 <Section>
                   <MessageCard
                     icon={SvgOrganization}
-                    title="This agent is public to your organization."
-                    description="Everyone in your organization has access to this agent."
+                    title="此智能体已对你的组织公开。"
+                    description="组织内所有人都可以访问此智能体。"
                   />
                 </Section>
               )}
@@ -330,8 +330,8 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
             <Tabs.Content value={YOUR_ORGANIZATION_TAB}>
               <Section gap={1} alignItems="stretch" padding={0.5}>
                 <InputHorizontal
-                  title="Publish This Agent"
-                  description="Make this agent available to everyone in your organization."
+                  title="发布此智能体"
+                  description="让组织内所有人都可以使用此智能体。"
                   withLabel
                 >
                   <SwitchField name="isPublic" />
@@ -342,8 +342,8 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                     <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
                     <InputHorizontal
-                      title="Feature This Agent"
-                      description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                      title="精选此智能体"
+                      description="将此智能体显示在探索智能体列表顶部，并为有访问权限的新用户自动固定到侧边栏。"
                       withLabel
                     >
                       <SwitchField name="isFeatured" />
@@ -358,12 +358,11 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                     onAdd={addLabel}
                     value={labelInputValue}
                     onChange={setLabelInputValue}
-                    placeholder="Add labels..."
+                    placeholder="添加标签..."
                     icon={SvgTag}
                   />
                   <Text font="secondary-body" color="text-03">
-                    Add labels and categories to help people better discover
-                    this agent.
+                    添加标签和分类，帮助大家更容易发现此智能体。
                   </Text>
                 </Section>
               </Section>
@@ -381,7 +380,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
                 icon={SvgLink}
                 onClick={handleCopyLink}
               >
-                Copy Link
+                复制链接
               </Button>
             ) : undefined
           }
@@ -391,7 +390,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
               prominence="secondary"
               onClick={handleClose}
             >
-              Cancel
+              取消
             </Button>
           }
           submit={
@@ -399,7 +398,7 @@ function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
               disabled={!dirty || isSubmitting}
               onClick={() => handleSubmit()}
             >
-              Save
+              保存
             </Button>
           }
         />

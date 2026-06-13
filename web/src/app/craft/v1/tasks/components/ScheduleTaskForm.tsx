@@ -167,8 +167,8 @@ export default function ScheduleTaskForm({
   // Validation states. These gate submission regardless of interaction, but
   // are only surfaced inline once the user has touched (blurred) the field so
   // a pristine form doesn't render red on load.
-  const nameError = trimmedName.length === 0 ? "Name is required." : null;
-  const promptError = trimmedPrompt.length === 0 ? "Prompt is required." : null;
+  const nameError = trimmedName.length === 0 ? "名称为必填项。" : null;
+  const promptError = trimmedPrompt.length === 0 ? "提示词为必填项。" : null;
   const scheduleError = !compiled.ok ? compiled.error : null;
 
   const shownNameError = nameTouched ? nameError : null;
@@ -180,7 +180,7 @@ export default function ScheduleTaskForm({
   // tooltip. A natively-disabled <button> is inert and never fires hover
   // events, so the tooltip must live on the (interactive) wrapper instead.
   const disabledReason = saving
-    ? "Saving..."
+    ? "正在保存..."
     : (nameError ?? promptError ?? scheduleError ?? undefined);
 
   const submit = useCallback(
@@ -201,7 +201,7 @@ export default function ScheduleTaskForm({
             initial.taskId,
             body
           );
-          toast.success("Scheduled task updated.");
+          toast.success("定时任务已更新。");
           router.push(taskDetailPath(updated.id));
         } else {
           const body: ScheduledTaskCreateBody = {
@@ -215,14 +215,14 @@ export default function ScheduleTaskForm({
           await createScheduledTask(body);
           toast.success(
             runImmediately
-              ? "Scheduled task created and queued."
-              : "Scheduled task created."
+              ? "定时任务已创建并加入队列。"
+              : "定时任务已创建。"
           );
           router.push(TASKS_PATH);
         }
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "Failed to save scheduled task"
+          err instanceof Error ? err.message : "保存定时任务失败"
         );
       } finally {
         setSaving(false);
@@ -258,7 +258,7 @@ export default function ScheduleTaskForm({
               onClick={() => router.push(TASKS_PATH)}
               disabled={saving}
             >
-              Cancel
+              取消
             </Button>
             {!isEdit && (
               <Disabled
@@ -274,7 +274,7 @@ export default function ScheduleTaskForm({
                   onClick={() => void submit(true)}
                   data-testid="save-and-run-now"
                 >
-                  Save and run now
+                  保存并立即运行
                 </Button>
               </Disabled>
             )}
@@ -291,7 +291,7 @@ export default function ScheduleTaskForm({
                 onClick={() => void submit(false)}
                 data-testid="save-task"
               >
-                {isEdit ? "Save changes" : "Save"}
+                {isEdit ? "保存更改" : "保存"}
               </Button>
             </Disabled>
           </div>
@@ -300,12 +300,12 @@ export default function ScheduleTaskForm({
 
       <SettingsLayouts.Body>
         <GeneralLayouts.Section>
-          <InputVertical withLabel title="Name">
+          <InputVertical withLabel title="名称">
             <InputTypeIn
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => setNameTouched(true)}
-              placeholder="e.g. Weekly customer escalations digest"
+              placeholder="例如：每周客户升级问题摘要"
               data-testid="task-name-input"
               variant={shownNameError ? "error" : undefined}
             />
@@ -318,8 +318,8 @@ export default function ScheduleTaskForm({
 
           <InputVertical
             withLabel
-            title="Prompt"
-            description="This message is sent to Craft each time the task fires."
+            title="提示词"
+            description="每次任务触发时，都会将此消息发送给 Glomi 创作。"
           >
             <InputTextArea
               ref={promptTextareaRef}
@@ -328,7 +328,7 @@ export default function ScheduleTaskForm({
               onKeyUp={handlePromptCursorChange}
               onClick={handlePromptCursorChange}
               onBlur={() => setPromptTouched(true)}
-              placeholder="Describe what Craft should do on each run..."
+              placeholder="描述 Glomi 创作每次运行时应该做什么..."
               rows={6}
               autoResize
               maxRows={12}
@@ -354,7 +354,7 @@ export default function ScheduleTaskForm({
         <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
         <GeneralLayouts.Section>
-          <InputVertical title="Schedule">
+          <InputVertical title="计划">
             <ScheduleEditor
               mode={mode}
               onModeChange={setMode}
@@ -369,8 +369,8 @@ export default function ScheduleTaskForm({
 
         <GeneralLayouts.Section>
           <InputVertical
-            title="Pre-approved apps"
-            description="Selected apps can act without pausing for approval while this task runs on its own. Note: an app you don't pre-approve will pause mid-run to ask for your approval. The run may stall or fail if you do not approve an action request."
+            title="预先批准的应用"
+            description="选中的应用可在任务自动运行时直接执行，无需暂停等待批准。注意：未预先批准的应用会在运行中暂停并请求你的批准；如果你未批准操作请求，本次运行可能会停滞或失败。"
           >
             <PreApprovalPicker
               selectedIds={preApprovedAppIds}

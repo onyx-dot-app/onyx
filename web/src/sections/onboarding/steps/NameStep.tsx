@@ -48,15 +48,15 @@ const NameStep = React.memo(
       >
         <ContentAction
           icon={SvgUser}
-          title="What should Onyx call you?"
-          description="We will display this name in the app."
+          title="Glomi AI 应该怎么称呼你？"
+          description="我们会在应用中显示这个名称。"
           sizePreset="main-ui"
           variant="section"
           padding="fit"
           rightChildren={
             <InputTypeIn
               ref={inputRef}
-              placeholder="Your name"
+              placeholder="你的名称"
               value={userName || ""}
               onChange={(e) => updateName(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -72,7 +72,7 @@ const NameStep = React.memo(
             setButtonActive(true);
             goToStep(OnboardingStep.Name);
           }}
-          aria-label="Edit display name"
+          aria-label="编辑显示名称"
           role="button"
           tabIndex={0}
         >
@@ -96,7 +96,7 @@ const NameStep = React.memo(
           <div className="p-1 flex items-center gap-1">
             {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Hoverable.Item group="nameStep" variant="appear-on-hover">
-              <IconButton internal icon={SvgEdit} tooltip="Edit" />
+              <IconButton internal icon={SvgEdit} tooltip="编辑" />
             </Hoverable.Item>
             <SvgCheckCircle
               className={cn(

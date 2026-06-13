@@ -58,8 +58,8 @@ import {
   SvgFold,
   SvgImage,
   SvgLock,
-  SvgOnyxOctagon,
   SvgSliders,
+  SvgSparkle,
   SvgUsers,
   SvgTrash,
   SvgSimpleLoader,
@@ -110,7 +110,7 @@ function FormWarningsEffect() {
     const warnings: Record<string, string> = {};
     if (values.web_search && !values.open_url) {
       warnings.open_url =
-        "Web Search without the ability to open URLs can lead to significantly worse web based results.";
+        "启用网页搜索但未启用打开链接，可能会显著降低网页结果质量。";
     }
     setStatus({ warnings });
   }, [values.web_search, values.open_url, setStatus]);
@@ -223,7 +223,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 mb-2">
                 <Hoverable.Item group="inputAvatar" variant="appear-on-hover">
                   <Button prominence="secondary" size="md">
-                    Edit
+                    编辑
                   </Button>
                 </Hoverable.Item>
               </div>
@@ -239,7 +239,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                 onClick={() => fileInputRef.current?.click()}
                 emphasized
               >
-                Upload Image
+                上传图片
               </LineItem>,
               null,
               <div key="icon-grid" className="grid grid-cols-4 gap-1">
@@ -374,7 +374,7 @@ function MCPServerCard({
         bottomChildren={
           <GeneralLayouts.Section flexDirection="row" gap={0.5}>
             <InputTypeIn
-              placeholder="Search tools..."
+              placeholder="搜索工具..."
               variant="internal"
               searchIcon
               value={query}
@@ -386,7 +386,7 @@ function MCPServerCard({
                 rightIcon={isFolded ? SvgExpand : SvgFold}
                 onClick={() => setIsFolded((prev) => !prev)}
               >
-                {isFolded ? "Expand" : "Fold"}
+                {isFolded ? "展开" : "收起"}
               </Button>
             )}
           </GeneralLayouts.Section>
@@ -464,7 +464,7 @@ function AgentStarterMessages() {
               name={`starter_messages.${i}`}
               placeholder={
                 STARTER_MESSAGES_EXAMPLES[i] ||
-                "Enter a conversation starter..."
+                "输入一条开场问题..."
               }
               onRemove={() => arrayHelpers.remove(i)}
             />
@@ -580,7 +580,7 @@ export default function AgentEditorPage({
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
     ? undefined
-    : "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin.";
+    : "图片生成需要先配置模型。如果你有权限，请在“设置 > 图片生成”中配置，或联系管理员。";
 
   // Group MCP server tools from availableTools by server ID
   const mcpServersWithTools = mcpServers.map((server) => {
@@ -725,11 +725,11 @@ export default function AgentEditorPage({
     icon_name: Yup.string().nullable(),
     remove_image: Yup.boolean().optional(),
     uploaded_image_id: Yup.string().nullable(),
-    name: Yup.string().required("Agent name is required."),
+    name: Yup.string().required("请输入智能体名称。"),
     description: Yup.string()
       .max(
         MAX_CHARACTERS_AGENT_DESCRIPTION,
-        `Description must be ${MAX_CHARACTERS_AGENT_DESCRIPTION} characters or less`
+        `描述不能超过 ${MAX_CHARACTERS_AGENT_DESCRIPTION} 个字符`
       )
       .optional(),
 
@@ -738,7 +738,7 @@ export default function AgentEditorPage({
     starter_messages: Yup.array().of(
       Yup.string().max(
         MAX_CHARACTERS_STARTER_MESSAGE,
-        `Conversation starter must be ${MAX_CHARACTERS_STARTER_MESSAGE} characters or less`
+        `开场问题不能超过 ${MAX_CHARACTERS_STARTER_MESSAGE} 个字符`
       )
     ),
 
@@ -757,7 +757,7 @@ export default function AgentEditorPage({
       .optional()
       .test(
         "knowledge-cutoff-date-not-in-future",
-        "Knowledge cutoff date must be today or earlier.",
+        "知识截止日期不能晚于今天。",
         (value) => !value || !isDateInFuture(value)
       ),
     replace_base_system_prompt: Yup.boolean(),
@@ -896,9 +896,9 @@ export default function AgentEditorPage({
       if (!personaResponse || !personaResponse.ok) {
         const error = personaResponse
           ? await personaResponse.text()
-          : "No response received";
+          : "未收到响应";
         toast.error(
-          `Failed to ${existingAgent ? "update" : "create"} agent - ${error}`
+          `${existingAgent ? "更新" : "创建"}智能体失败 - ${error}`
         );
         return;
       }
@@ -906,9 +906,7 @@ export default function AgentEditorPage({
       // Success
       const agent = await personaResponse.json();
       toast.success(
-        `Agent "${agent.name}" ${
-          existingAgent ? "updated" : "created"
-        } successfully`
+        `智能体“${agent.name}”已成功${existingAgent ? "更新" : "创建"}`
       );
 
       // Refresh agents list and the specific agent
@@ -921,7 +919,7 @@ export default function AgentEditorPage({
       appRouter({ agentId: agent.id });
     } catch (error) {
       console.error("Submit error:", error);
-      toast.error(`An error occurred: ${error}`);
+      toast.error(`发生错误：${error}`);
     }
   }
 
@@ -931,7 +929,7 @@ export default function AgentEditorPage({
 
     try {
       await deleteAgent(existingAgent.id);
-      toast.success("Agent deleted successfully");
+      toast.success("智能体已删除");
       deleteAgentModal.toggle(false);
       await refreshAgents();
       router.push("/app/agents");
@@ -939,7 +937,7 @@ export default function AgentEditorPage({
       console.error("Delete agent error:", e);
       toast.error(
         `Failed to delete agent: ${
-          e instanceof Error ? e.message : "Unknown error"
+          e instanceof Error ? e.message : "未知错误"
         }`
       );
     }
@@ -1023,7 +1021,7 @@ export default function AgentEditorPage({
     <>
       <div
         data-testid="AgentsEditorPage/container"
-        aria-label="Agents Editor Page"
+        aria-label="智能体编辑页"
         className="h-full w-full"
       >
         <Formik
@@ -1073,8 +1071,8 @@ export default function AgentEditorPage({
 
                 <userFilesModal.Provider>
                   <UserFilesModal
-                    title="User Files"
-                    description="All files selected for this agent"
+                    title="用户文件"
+                    description="此智能体已选择的全部文件"
                     recentFiles={values.user_file_ids
                       .map((userFileId: string) => {
                         const rf = allRecentFiles.find(
@@ -1083,7 +1081,7 @@ export default function AgentEditorPage({
                         if (rf) return rf;
                         return {
                           id: userFileId,
-                          name: `File ${userFileId.slice(0, 8)}`,
+                          name: `文件 ${userFileId.slice(0, 8)}`,
                           status: UserFileStatus.COMPLETED,
                           file_id: userFileId,
                           created_at: new Date().toISOString(),
@@ -1162,7 +1160,7 @@ export default function AgentEditorPage({
                             error
                           );
                           toast.error(
-                            "Agent sharing was saved, but failed to refresh. Please reload."
+                            "智能体共享设置已保存，但刷新失败。请重新加载页面。"
                           );
                         }
                       };
@@ -1182,12 +1180,12 @@ export default function AgentEditorPage({
                           "Share agent mutation failed unexpectedly:",
                           error
                         );
-                        toast.error("Failed to share agent. Please try again.");
+                        toast.error("共享智能体失败，请重试。");
                         return;
                       }
 
                       if (shareError) {
-                        toast.error(`Failed to share agent: ${shareError}`);
+                        toast.error(`共享智能体失败：${shareError}`);
                         return;
                       }
 
@@ -1207,7 +1205,7 @@ export default function AgentEditorPage({
                           applySharingFields();
                           await refreshSharedUi();
                           toast.error(
-                            "Failed to update featured status. Please try again."
+                            "更新精选状态失败，请重试。"
                           );
                           return;
                         }
@@ -1217,7 +1215,7 @@ export default function AgentEditorPage({
                           applySharingFields();
                           await refreshSharedUi();
                           toast.error(
-                            `Failed to update featured status: ${featuredError}`
+                            `更新精选状态失败：${featuredError}`
                           );
                           return;
                         }
@@ -1239,20 +1237,19 @@ export default function AgentEditorPage({
                   {deleteAgentModal.isOpen && (
                     <ConfirmationModalLayout
                       icon={SvgTrash}
-                      title="Delete Agent"
+                      title="删除智能体"
                       submit={
                         <Button variant="danger" onClick={handleDeleteAgent}>
-                          Delete Agent
+                          删除智能体
                         </Button>
                       }
                       onClose={() => deleteAgentModal.toggle(false)}
                     >
                       <GeneralLayouts.Section alignItems="start" gap={0.5}>
                         <Text>
-                          Anyone using this agent will no longer be able to
-                          access it. Deletion cannot be undone.
+                          正在使用此智能体的用户将无法再访问它。删除后无法撤销。
                         </Text>
-                        <Text>Are you sure you want to delete this agent?</Text>
+                        <Text>确定要删除这个智能体吗？</Text>
                       </GeneralLayouts.Section>
                     </ConfirmationModalLayout>
                   )}
@@ -1261,8 +1258,8 @@ export default function AgentEditorPage({
                 <Form className="h-full w-full">
                   <SettingsLayouts.Root>
                     <SettingsLayouts.Header
-                      icon={SvgOnyxOctagon}
-                      title={existingAgent ? "Edit Agent" : "Create Agent"}
+                      icon={SvgSparkle}
+                      title={existingAgent ? "编辑智能体" : "创建智能体"}
                       rightChildren={
                         <div className="flex gap-2">
                           <Button
@@ -1270,18 +1267,18 @@ export default function AgentEditorPage({
                             type="button"
                             onClick={() => router.back()}
                           >
-                            Cancel
+                            取消
                           </Button>
                           <Tooltip
                             tooltip={
                               isSubmitting
-                                ? "Saving changes..."
+                                ? "正在保存更改..."
                                 : !isValid
-                                  ? "Please fix the errors in the form before saving."
+                                  ? "请先修正表单错误再保存。"
                                   : !dirty
-                                    ? "No changes have been made."
+                                    ? "尚未进行任何更改。"
                                     : hasUploadingFiles
-                                      ? "Please wait for files to finish uploading."
+                                      ? "请等待文件上传完成。"
                                       : undefined
                             }
                             side="bottom"
@@ -1295,7 +1292,7 @@ export default function AgentEditorPage({
                               }
                               type="submit"
                             >
-                              {existingAgent ? "Save" : "Create"}
+                              {existingAgent ? "保存" : "创建"}
                             </Button>
                           </Tooltip>
                         </div>
@@ -1312,21 +1309,21 @@ export default function AgentEditorPage({
                         alignItems="start"
                       >
                         <GeneralLayouts.Section>
-                          <InputVertical withLabel="name" title="Name">
+                          <InputVertical withLabel="name" title="名称">
                             <InputTypeInField
                               name="name"
-                              placeholder="Name your agent"
+                              placeholder="为智能体命名"
                             />
                           </InputVertical>
 
                           <InputVertical
                             withLabel="description"
-                            title="Description"
-                            suffix="optional"
+                            title="描述"
+                            suffix="可选"
                           >
                             <InputTextAreaField
                               name="description"
-                              placeholder="What does this agent do?"
+                              placeholder="这个智能体能做什么？"
                             />
                           </InputVertical>
                         </GeneralLayouts.Section>
@@ -1334,7 +1331,7 @@ export default function AgentEditorPage({
                         <GeneralLayouts.Section width="fit">
                           <InputVertical
                             withLabel="agent_avatar"
-                            title="Agent Avatar"
+                            title="智能体头像"
                           >
                             <AgentIconEditor existingAgent={existingAgent} />
                           </InputVertical>
@@ -1349,21 +1346,21 @@ export default function AgentEditorPage({
                       <GeneralLayouts.Section>
                         <InputVertical
                           withLabel="instructions"
-                          title="Instructions"
-                          suffix="optional"
-                          description="Add instructions to tailor the response for this agent."
+                          title="指令"
+                          suffix="可选"
+                          description="添加指令，用来定制这个智能体的回答方式。"
                         >
                           <InputTextAreaField
                             name="instructions"
-                            placeholder="Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone."
+                            placeholder="请逐步思考，并在复杂问题中展示推理过程。使用具体示例，突出行动项；遇到未知信息时为用户留出待补充位置。语气礼貌且积极。"
                           />
                         </InputVertical>
 
                         <InputVertical
                           withLabel="starter_messages"
-                          title="Conversation Starters"
-                          description="Example messages that help users understand what this agent can do and how to interact with it effectively."
-                          suffix="optional"
+                          title="开场问题"
+                          description="示例问题可帮助用户了解这个智能体能做什么，以及如何更有效地与它互动。"
+                          suffix="可选"
                         >
                           <AgentStarterMessages />
                         </InputVertical>
@@ -1424,8 +1421,8 @@ export default function AgentEditorPage({
 
                       <SimpleCollapsible>
                         <SimpleCollapsible.Header
-                          title="Actions"
-                          description="Tools and capabilities available for this agent to use."
+                          title="工具与能力"
+                          description="此智能体可使用的工具和能力。"
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section gap={0.5}>
@@ -1436,8 +1433,8 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="image_generation"
-                                  title="Image Generation"
-                                  description="Generate and manipulate images using AI-powered tools."
+                                  title="图片生成"
+                                  description="使用 AI 工具生成和编辑图片。"
                                   disabled={!isImageGenerationAvailable}
                                 >
                                   <SwitchField
@@ -1452,8 +1449,8 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="web_search"
-                                  title="Web Search"
-                                  description="Search the web for real-time information and up-to-date results."
+                                  title="网页搜索"
+                                  description="搜索网页，获取实时信息和最新结果。"
                                   disabled={!webSearchTool}
                                 >
                                   <SwitchField
@@ -1468,8 +1465,8 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="open_url"
-                                  title="Open URL"
-                                  description="Fetch and read content from web URLs."
+                                  title="打开链接"
+                                  description="获取并读取网页链接中的内容。"
                                   disabled={!openURLTool}
                                 >
                                   <SwitchField
@@ -1484,8 +1481,8 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="code_interpreter"
-                                  title="Code Interpreter"
-                                  description="Generate and run code."
+                                  title="代码解释器"
+                                  description="生成并运行代码。"
                                   disabled={!codeInterpreterTool}
                                 >
                                   <SwitchField
@@ -1500,8 +1497,8 @@ export default function AgentEditorPage({
                               <Card border="solid" rounding="lg">
                                 <InputHorizontal
                                   withLabel="coding_agent"
-                                  title="Coding Agent"
-                                  description="Investigate a GitHub repository and answer questions about its code."
+                                  title="代码智能体"
+                                  description="分析 GitHub 仓库，并回答与代码相关的问题。"
                                   disabled={!codingAgentTool}
                                 >
                                   <SwitchField
@@ -1562,16 +1559,16 @@ export default function AgentEditorPage({
 
                       <SimpleCollapsible>
                         <SimpleCollapsible.Header
-                          title="Advanced Options"
-                          description="Fine-tune agent prompts and knowledge."
+                          title="高级选项"
+                          description="微调智能体提示词和知识设置。"
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section>
                             <Card border="solid" rounding="lg">
                               <GeneralLayouts.Section>
                                 <InputHorizontal
-                                  title="Share This Agent"
-                                  description="with other users, groups, or everyone in your organization."
+                                  title="共享此智能体"
+                                  description="与其他用户、用户组或组织内所有人共享。"
                                   center
                                 >
                                   <Button
@@ -1579,20 +1576,20 @@ export default function AgentEditorPage({
                                     icon={isShared ? SvgUsers : SvgLock}
                                     onClick={() => shareAgentModal.toggle(true)}
                                   >
-                                    Share
+                                    共享
                                   </Button>
                                 </InputHorizontal>
                                 {canUpdateFeaturedStatus && (
                                   <>
                                     <InputHorizontal
                                       withLabel="is_featured"
-                                      title="Feature This Agent"
-                                      description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                                      title="设为精选智能体"
+                                      description="将此智能体显示在探索智能体列表顶部，并为有访问权限的新用户自动固定到侧边栏。"
                                     >
                                       <SwitchField name="is_featured" />
                                     </InputHorizontal>
                                     {values.is_featured && !isShared && (
-                                      <MessageCard title="This agent is private to you and will only be featured for yourself." />
+                                      <MessageCard title="此智能体目前仅你可见，因此只会对你自己显示为精选。" />
                                     )}
                                   </>
                                 )}
@@ -1603,8 +1600,8 @@ export default function AgentEditorPage({
                               <GeneralLayouts.Section>
                                 <InputHorizontal
                                   withLabel="llm_model"
-                                  title="Default Model"
-                                  description="This model will be used by Onyx by default in your chats."
+                                  title="默认模型"
+                                  description="Glomi AI 会默认在你的对话中使用此模型。"
                                 >
                                   <LLMSelector
                                     name="llm_model"
@@ -1620,9 +1617,9 @@ export default function AgentEditorPage({
                                 </InputHorizontal>
                                 <InputHorizontal
                                   withLabel="knowledge_cutoff_date"
-                                  title="Knowledge Cutoff Date"
-                                  suffix="optional"
-                                  description="Documents with a last-updated date prior to this will be ignored."
+                                  title="知识截止日期"
+                                  suffix="可选"
+                                  description="最后更新时间早于此日期的文档将被忽略。"
                                 >
                                   <InputDatePickerField
                                     name="knowledge_cutoff_date"
@@ -1631,9 +1628,9 @@ export default function AgentEditorPage({
                                 </InputHorizontal>
                                 <InputHorizontal
                                   withLabel="replace_base_system_prompt"
-                                  title="Overwrite System Prompt"
-                                  suffix="(Not Recommended)"
-                                  description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
+                                  title="覆盖系统提示词"
+                                  suffix="（不推荐）"
+                                  description="移除基础系统提示词，其中包含有用指令（例如“你可以使用 Markdown 表格”）。这可能会影响回答质量。"
                                 >
                                   <SwitchField name="replace_base_system_prompt" />
                                 </InputHorizontal>
@@ -1643,20 +1640,16 @@ export default function AgentEditorPage({
                             <GeneralLayouts.Section gap={0.25}>
                               <InputVertical
                                 withLabel="reminders"
-                                title="Reminders"
-                                suffix="optional"
+                                title="提醒"
+                                suffix="可选"
                               >
                                 <InputTextAreaField
                                   name="reminders"
-                                  placeholder="Remember, I want you to always format your response as a numbered list."
+                                  placeholder="请记住，我希望你始终使用编号列表来组织回答。"
                                 />
                               </InputVertical>
                               <Text text03 secondaryBody>
-                                Append a brief reminder to the prompt messages.
-                                Use this to remind the agent if you find that it
-                                tends to forget certain instructions as the chat
-                                progresses. This should be brief and not
-                                interfere with the user messages.
+                                在提示词消息末尾追加一段简短提醒。如果你发现智能体在对话推进时容易忘记某些指令，可以用它来提醒。内容应保持简短，并避免干扰用户消息。
                               </Text>
                             </GeneralLayouts.Section>
                           </GeneralLayouts.Section>
@@ -1672,8 +1665,8 @@ export default function AgentEditorPage({
 
                           <Card border="solid" rounding="lg">
                             <InputHorizontal
-                              title="Delete This Agent"
-                              description="Anyone using this agent will no longer be able to access it."
+                              title="删除此智能体"
+                              description="正在使用此智能体的用户将无法再访问它。"
                               center
                             >
                               <Button
@@ -1681,7 +1674,7 @@ export default function AgentEditorPage({
                                 prominence="secondary"
                                 onClick={() => deleteAgentModal.toggle(true)}
                               >
-                                Delete Agent
+                                删除智能体
                               </Button>
                             </InputHorizontal>
                           </Card>

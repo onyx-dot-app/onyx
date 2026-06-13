@@ -528,7 +528,7 @@ export type StreamPacket =
   | CurrentModeUpdatePacket
   | PromptResponsePacket
   | SandboxErrorPacket
-  // Custom Onyx packets
+  // Custom Glomi AI packets
   | StepStartPacket
   | StepDeltaPacket
   | StepEndPacket

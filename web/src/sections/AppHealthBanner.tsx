@@ -131,7 +131,7 @@ export default function AppHealthBanner() {
           try {
             const refreshTokenData = await refreshToken(refreshUrl);
             if (!refreshTokenData) {
-              throw new Error("Failed to refresh token");
+              throw new Error("刷新令牌失败");
             }
 
             const response = await fetch(
@@ -180,7 +180,7 @@ export default function AppHealthBanner() {
                 );
                 setupExpirationTimeout(newSecondsUntilExpiration);
                 console.debug(
-                  `Token refreshed, new expiration in ${newSecondsUntilExpiration} seconds`
+                  `令牌已刷新，新的过期时间为 ${newSecondsUntilExpiration} 秒后`
                 );
               }
             }
@@ -233,14 +233,14 @@ export default function AppHealthBanner() {
     return (
       <Modal open>
         <Modal.Content width="sm" height="sm">
-          <Modal.Header icon={SvgLogOut} title="You Have Been Logged Out" />
+          <Modal.Header icon={SvgLogOut} title="你已退出登录" />
           <Modal.Body>
             <p className="text-sm">
-              Your session has expired. Please log in again to continue.
+              你的会话已过期。请重新登录以继续。
             </p>
           </Modal.Body>
           <Modal.Footer>
-            <Button onClick={handleLogin}>Log In</Button>
+            <Button onClick={handleLogin}>登录</Button>
           </Modal.Footer>
         </Modal.Content>
       </Modal>
@@ -258,8 +258,8 @@ export default function AppHealthBanner() {
       <div className="fixed top-0 left-0 z-101 w-full bg-status-error-01 p-3">
         <Content
           icon={SvgAlertTriangle}
-          title="The backend is currently unavailable"
-          description="If this is your initial setup or you just updated your Onyx deployment, this is likely because the backend is still starting up. Give it a minute or two, and then refresh the page. If that does not work, make sure the backend is setup and/or contact an administrator."
+          title="后端当前不可用"
+          description="如果这是首次启动或刚更新过 Glomi AI，通常是后端仍在启动。请等待一两分钟后刷新页面；如果仍未恢复，请确认后端已正确启动，或联系管理员。"
           sizePreset="main-content"
           variant="section"
         />

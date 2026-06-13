@@ -15,7 +15,7 @@ function Main() {
         <div className="mt-4">
           <Callout type="danger" title="Custom Analytics is not enabled.">
             To set up custom analytics scripts, please work with the team who
-            setup Onyx in your team to set the{" "}
+            setup Glomi AI in your team to set the{" "}
             <i>CUSTOM_ANALYTICS_SECRET_KEY</i> environment variable.
           </Callout>
         </div>
@@ -27,7 +27,7 @@ function Main() {
     <div>
       <Text as="p">
         {
-          "This allows you to bring your own analytics tool to Onyx! Copy the Web snippet from your analytics provider into the box below, and we'll start sending usage events."
+          "你可以把自己的分析工具接入 Glomi AI。将分析服务商提供的 Web snippet 粘贴到下方输入框后，我们会开始发送使用事件。"
         }
       </Text>
       <Spacer rem={2} />

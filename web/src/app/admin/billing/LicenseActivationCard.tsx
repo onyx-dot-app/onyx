@@ -12,7 +12,7 @@ import { uploadLicense } from "@/lib/billing/svc";
 import { LicenseStatus } from "@/lib/billing/interfaces";
 import { formatDateShort } from "@/lib/dateUtils";
 
-const BILLING_HELP_URL = "https://docs.onyx.app/admins/billing/overview";
+const BILLING_HELP_URL = "https://docs.glomi.ai/admins/billing/overview";
 
 interface LicenseActivationCardProps {
   isOpen: boolean;
@@ -49,7 +49,7 @@ export default function LicenseActivationCard({
 
   const handleActivate = async () => {
     if (!licenseKey.trim()) {
-      setError("Please enter a license key");
+      setError("请输入许可证 Key");
       return;
     }
 
@@ -66,7 +66,7 @@ export default function LicenseActivationCard({
     } catch (err) {
       console.error("Error activating license:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to activate license"
+        err instanceof Error ? err.message : "激活许可证失败"
       );
     } finally {
       setIsActivating(false);
@@ -107,10 +107,10 @@ export default function LicenseActivationCard({
             )}
             <Text secondaryBody text03>
               {isExpired ? (
-                <>License key expired</>
+                <>许可证 Key 已过期</>
               ) : (
                 <>
-                  License key active until{" "}
+                  许可证 Key 有效期至{" "}
                   <Text secondaryBody text04>
                     {expirationDate}
                   </Text>
@@ -120,11 +120,11 @@ export default function LicenseActivationCard({
           </Section>
           <Section flexDirection="row" gap={0.5} height="auto" width="auto">
             <Button prominence="secondary" onClick={() => setShowInput(true)}>
-              Update Key
+              更新 Key
             </Button>
             {!hideClose && (
               <Button prominence="tertiary" onClick={handleClose}>
-                Close
+                关闭
               </Button>
             )}
           </Section>
@@ -144,18 +144,18 @@ export default function LicenseActivationCard({
           alignItems="center"
         >
           <Text headingH3>
-            {hasLicense ? "Update License Key" : "Activate License Key"}
+            {hasLicense ? "更新许可证 Key" : "激活许可证 Key"}
           </Text>
           <Button
             disabled={isActivating}
             prominence="secondary"
             onClick={handleClose}
           >
-            Cancel
+            取消
           </Button>
         </Section>
         <Text secondaryBody text03>
-          Manually add and activate a license for this Onyx instance.
+          为此 Glomi AI 实例手动添加并激活许可证。
         </Text>
       </Section>
 
@@ -170,17 +170,17 @@ export default function LicenseActivationCard({
           {success && (
             <div className="billing-success-message">
               <Text secondaryBody>
-                License {hasLicense ? "updated" : "activated"} successfully!
+                许可证已成功{hasLicense ? "更新" : "激活"}！
               </Text>
             </div>
           )}
 
           <InputVertical
-            title="License Key"
+            title="许可证 Key"
             subDescription={
               error
                 ? undefined
-                : "Paste or attach your license key file you received from Onyx."
+                : "粘贴或附加你从 Glomi AI 收到的许可证 Key 文件。"
             }
             withLabel
           >
@@ -211,7 +211,7 @@ export default function LicenseActivationCard({
                     rel="noopener noreferrer"
                     className="billing-help-link"
                   >
-                    Billing Help
+                    计费帮助
                   </a>
                 </Text>
               </Section>
@@ -227,10 +227,10 @@ export default function LicenseActivationCard({
           onClick={handleActivate}
         >
           {isActivating
-            ? "Activating..."
+            ? "正在激活..."
             : hasLicense
-              ? "Update License"
-              : "Activate License"}
+              ? "更新许可证"
+              : "激活许可证"}
         </Button>
       </Section>
     </Card>

@@ -153,7 +153,7 @@ export default function UserLibraryModal({
         mutate();
         onChanges?.();
       } catch (err) {
-        setUploadError(err instanceof Error ? err.message : "Upload failed");
+        setUploadError(err instanceof Error ? err.message : "上传失败");
       } finally {
         setIsUploading(false);
       }
@@ -235,7 +235,7 @@ export default function UserLibraryModal({
     } catch (err) {
       console.error("Failed to create directory:", err);
       setUploadError(
-        err instanceof Error ? err.message : "Failed to create folder"
+        err instanceof Error ? err.message : "创建文件夹失败"
       );
     } finally {
       setShowNewFolderModal(false);
@@ -251,8 +251,8 @@ export default function UserLibraryModal({
         <Modal.Content width="lg" height="fit">
           <Modal.Header
             icon={SvgFileText}
-            title="Your Files"
-            description="Upload files for your agent to read (Excel, Word, PowerPoint, etc.)"
+            title="你的文件"
+            description="上传文件供智能体读取（Excel、Word、PowerPoint 等）"
             onClose={onClose}
           />
           <Modal.Body>
@@ -273,14 +273,14 @@ export default function UserLibraryModal({
                   icon={SvgFolderPlus}
                   onClick={() => setShowNewFolderModal(true)}
                 >
-                  New folder
+                  新建文件夹
                 </Button>
                 <Button
                   icon={SvgUploadCloud}
                   disabled={isUploading}
                   onClick={() => handleUploadToFolder("/")}
                 >
-                  {isUploading ? "Uploading…" : "Upload"}
+                  {isUploading ? "上传中..." : "上传"}
                 </Button>
               </div>
 
@@ -303,13 +303,13 @@ export default function UserLibraryModal({
                 {isLoading ? (
                   <div className="flex items-center justify-center py-12">
                     <Text font="secondary-body" color="text-03">
-                      Loading files…
+                      正在加载文件...
                     </Text>
                   </div>
                 ) : error ? (
                   <div className="flex items-center justify-center py-12">
                     <Text font="secondary-body" color="status-error-05">
-                      Failed to load files
+                      加载文件失败
                     </Text>
                   </div>
                 ) : fileCount === 0 ? (
@@ -335,7 +335,7 @@ export default function UserLibraryModal({
                 {isDragging && (
                   <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-12 border-2 border-dashed border-action-link-04 bg-action-link-01/90">
                     <Text font="main-ui-action" color="text-05">
-                      Drop files to upload
+                      拖放文件以上传
                     </Text>
                   </div>
                 )}
@@ -344,7 +344,7 @@ export default function UserLibraryModal({
           </Modal.Body>
 
           <Modal.Footer>
-            <Button onClick={onClose}>Done</Button>
+            <Button onClick={onClose}>完成</Button>
           </Modal.Footer>
         </Modal.Content>
       </Modal>
@@ -353,14 +353,14 @@ export default function UserLibraryModal({
       {entryToDelete && (
         <ConfirmEntityModal
           danger
-          entityType={entryToDelete.is_directory ? "folder" : "file"}
+          entityType={entryToDelete.is_directory ? "文件夹" : "文件"}
           entityName={entryToDelete.name}
-          action="delete"
-          actionButtonText="Delete"
+          action="删除"
+          actionButtonText="删除"
           additionalDetails={
             entryToDelete.is_directory
-              ? "This will delete the folder and all its contents."
-              : "This file will be removed from your library."
+              ? "这将删除该文件夹及其中的全部内容。"
+              : "此文件将从你的文件库中移除。"
           }
           onClose={() => setEntryToDelete(null)}
           onSubmit={handleDeleteConfirm}
@@ -380,7 +380,7 @@ export default function UserLibraryModal({
         <Modal.Content width="sm" height="fit">
           <Modal.Header
             icon={SvgFolder}
-            title="New Folder"
+            title="新建文件夹"
             onClose={() => {
               setShowNewFolderModal(false);
               setNewFolderName("");
@@ -389,12 +389,12 @@ export default function UserLibraryModal({
           <Modal.Body>
             <div className="flex flex-col items-stretch gap-2">
               <Text font="secondary-body" color="text-03">
-                Folder name
+                文件夹名称
               </Text>
               <InputTypeIn
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="Enter folder name"
+                placeholder="输入文件夹名称"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && newFolderName.trim()) {
                     handleCreateDirectory();
@@ -412,13 +412,13 @@ export default function UserLibraryModal({
                 setNewFolderName("");
               }}
             >
-              Cancel
+              取消
             </Button>
             <Button
               disabled={!newFolderName.trim()}
               onClick={handleCreateDirectory}
             >
-              Create
+              创建
             </Button>
           </Modal.Footer>
         </Modal.Content>
@@ -453,11 +453,10 @@ function UploadDropzone({ onClick, active }: UploadDropzoneProps) {
     >
       <SvgUploadCloud size={28} className="stroke-text-03" />
       <Text font="main-ui-action" color="text-04">
-        Drag files here or click to upload
+        将文件拖到此处，或点击上传
       </Text>
       <Text font="secondary-body" color="text-03">
-        Excel, Word, PowerPoint, PDF, or ZIP. PDFs with many embedded images may
-        be rejected.
+        支持 Excel、Word、PowerPoint、PDF 或 ZIP。包含大量嵌入图片的 PDF 可能会被拒绝。
       </Text>
     </div>
   );
@@ -511,7 +510,7 @@ function LibraryTreeView({
                   size="2xs"
                   icon={isExpanded ? SvgChevronDown : SvgChevronRight}
                   onClick={() => onToggleFolder(entry.path)}
-                  tooltip={isExpanded ? "Collapse" : "Expand"}
+                  tooltip={isExpanded ? "收起" : "展开"}
                 />
               ) : (
                 <span aria-hidden className="w-5 shrink-0" />
@@ -558,7 +557,7 @@ function LibraryTreeView({
                         entry.path.replace(/^user_library/, "") || "/";
                       onUploadToFolder(uploadPath);
                     }}
-                    tooltip="Upload to this folder"
+                    tooltip="上传到此文件夹"
                   />
                 )}
                 <Button
@@ -567,7 +566,7 @@ function LibraryTreeView({
                   size="sm"
                   icon={SvgTrash}
                   onClick={() => onDelete(entry)}
-                  tooltip="Delete"
+                  tooltip="删除"
                 />
               </div>
             </div>

@@ -97,11 +97,11 @@ const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
-const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud.";
+const CLOUD_TOOLTIP = "此设置由 Glomi Cloud 管理。";
 
 /**
  * Wrapper that disables its children when either:
- * 1. The app is running on Onyx Cloud (`NEXT_PUBLIC_CLOUD_ENABLED`), or
+ * 1. The app is running on Glomi Cloud (`NEXT_PUBLIC_CLOUD_ENABLED`), or
  * 2. A local `disabled` condition is true (e.g. a parent toggle is off).
  */
 interface CloudDisabledProps {
@@ -133,7 +133,7 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
     return (
       <Content
         icon={SvgServer}
-        title="Self-hosted"
+        title="自托管"
         sizePreset="secondary"
         variant="body"
         color="muted"
@@ -148,7 +148,7 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
     <>
       <Content
         icon={SvgCloud}
-        title="Cloud Provider"
+        title="云服务商"
         sizePreset="secondary"
         variant="body"
         color="muted"
@@ -156,12 +156,12 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
       />
       {provider.costslink && (
         <LinkButton href={provider.costslink} target="_blank">
-          Pricing
+          价格
         </LinkButton>
       )}
       {provider.docsLink && (
         <LinkButton href={provider.docsLink} target="_blank">
-          Docs
+          文档
         </LinkButton>
       )}
     </>
@@ -283,7 +283,7 @@ function LlmPicker({
               : undefined
           }
         >
-          {displayName ?? "Select a model"}
+          {displayName ?? "选择模型"}
         </OpenButton>
       </Popover.Trigger>
       <Popover.Content side="top" align="end" width="xl">
@@ -355,12 +355,12 @@ function ProviderGroup({
     if (!isCloud) return;
     try {
       await disconnectEmbeddingProvider(provider.providerName);
-      toast.success(`Disconnected ${provider.displayName}`);
+      toast.success(`已断开 ${provider.displayName}`);
       await mutate(SWR_KEYS.embeddingProviders);
       onDeselectModel();
       disconnectModal.toggle(false);
     } catch {
-      toast.error(`Failed to disconnect ${provider.displayName}`);
+      toast.error(`断开 ${provider.displayName} 失败`);
     }
   }, [
     isCloud,
@@ -416,16 +416,16 @@ function ProviderGroup({
           <disconnectModal.Provider>
             <ConfirmationModalLayout
               icon={SvgUnplug}
-              title={`Disconnect ${provider.displayName}`}
+              title={`断开 ${provider.displayName}`}
               submit={
                 <Button variant="danger" onClick={handleDisconnect}>
-                  Disconnect
+                  断开
                 </Button>
               }
             >
               <Text font="main-ui-body" color="text-03" as="p">
                 {markdown(
-                  `This will disconnect all embedding models from provider **${provider.displayName}**.`
+                  `这会断开服务商 **${provider.displayName}** 的全部嵌入模型。`
                 )}
               </Text>
             </ConfirmationModalLayout>
@@ -490,7 +490,7 @@ function ProviderGroup({
                       )
                     : provider.displayName
                 }
-                suffix={provider.deprecated ? "(deprecated)" : undefined}
+                suffix={provider.deprecated ? "（已弃用）" : undefined}
                 sizePreset="secondary"
               />
 
@@ -507,7 +507,7 @@ function ProviderGroup({
                     disabled={providerGroupContainsCurrentModelName}
                     tooltip={
                       providerGroupContainsCurrentModelName
-                        ? "Cannot disconnect this embedding model because it is the current default. Select a new one before proceeding."
+                        ? "无法断开当前默认嵌入模型。请先选择新模型。"
                         : undefined
                     }
                     onClick={() => disconnectModal.toggle(true)}
@@ -516,8 +516,8 @@ function ProviderGroup({
                     icon={SvgSettings}
                     prominence="tertiary"
                     size="sm"
-                    aria-label="Edit credentials"
-                    tooltip="Edit credentials"
+                    aria-label="编辑凭据"
+                    tooltip="编辑凭据"
                     onClick={() => editCredentialsModal.toggle(true)}
                   />
                   <Spacer orientation="horizontal" rem={0.25} />
@@ -535,7 +535,7 @@ function ProviderGroup({
             onClick={() => providerCreationModal.toggle(true)}
           >
             <ContentAction
-              title={`Add configs for your ${provider.displayName} embedding providers.`}
+              title={`为 ${provider.displayName} 嵌入服务商添加配置。`}
               sizePreset="secondary"
               variant="body"
               color="muted"
@@ -546,7 +546,7 @@ function ProviderGroup({
                   rightIcon={SvgPlusCircle}
                   onClick={() => providerCreationModal.toggle(true)}
                 >
-                  Add Configuration
+                  添加配置
                 </Button>
               }
               center
@@ -601,11 +601,11 @@ function EmbeddingModelCard({
             disabled={provider.deprecated}
             tooltip={
               provider.deprecated
-                ? "This embedding model is deprecated and cannot be connected to."
+                ? "此嵌入模型已弃用，无法连接。"
                 : undefined
             }
           >
-            Connect
+            连接
           </Button>
         );
       case "connected":
@@ -616,11 +616,11 @@ function EmbeddingModelCard({
             disabled={provider.deprecated}
             tooltip={
               provider.deprecated
-                ? "This embedding model is deprecated and cannot be selected."
+                ? "此嵌入模型已弃用，无法选择。"
                 : undefined
             }
           >
-            Select Model
+            选择模型
           </Button>
         );
       case "current":
@@ -631,7 +631,7 @@ function EmbeddingModelCard({
             rightIcon={SvgCheckSquare}
             onClick={onSelect}
           >
-            Current Model
+            当前模型
           </Button>
         );
       case "selected":
@@ -642,7 +642,7 @@ function EmbeddingModelCard({
             rightIcon={SvgCheckSquare}
             onClick={onSelect}
           >
-            Selected
+            已选择
           </Button>
         );
     }
@@ -753,9 +753,9 @@ export default function IndexSettingsPage() {
         await saveAdminSettings({ ...settings.settings, ...updates });
         router.refresh();
         await mutate(SWR_KEYS.settings);
-        toast.success("Settings updated");
+        toast.success("设置已更新");
       } catch {
-        toast.error("Failed to update settings");
+        toast.error("设置更新失败");
       }
     },
     [settings.settings, router]
@@ -833,7 +833,7 @@ export default function IndexSettingsPage() {
   } = useLlmDefaults();
 
   /**
-   * Persist a new default vision model. Onyx routes all image-captioning
+   * Persist a new default vision model. Glomi AI routes all image-captioning
    * calls through `get_default_llm_with_vision()` (`backend/onyx/llm/factory.py`),
    * which reads `default_vision` — so writing here switches the model the
    * indexer uses for new captions. Existing captions stay baked into the
@@ -849,7 +849,7 @@ export default function IndexSettingsPage() {
     }) => {
       const provider = llmProviders?.find((p) => p.name === providerName);
       if (!provider) {
-        toast.error("Could not resolve provider");
+        toast.error("无法识别服务商");
         return;
       }
       try {
@@ -863,14 +863,14 @@ export default function IndexSettingsPage() {
         });
         if (!response.ok) {
           throw new Error(
-            (await response.json()).detail ?? "Failed to update captioning LLM"
+            (await response.json()).detail ?? "图片描述 LLM 更新失败"
           );
         }
         await mutate(SWR_KEYS.llmProviders);
-        toast.success("Captioning LLM updated");
+        toast.success("图片描述 LLM 已更新");
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "An unknown error occurred"
+          error instanceof Error ? error.message : "发生未知错误"
         );
       }
     },
@@ -892,11 +892,11 @@ export default function IndexSettingsPage() {
   const handleCancelReindex = useCallback(async () => {
     const response = await cancelNewEmbedding();
     if (!response.ok) {
-      toast.error("Failed to cancel re-indexing");
+      toast.error("取消重新索引失败");
       return;
     }
     cancelReindexModal.toggle(false);
-    toast.success("Re-indexing canceled");
+    toast.success("重新索引已取消");
     await Promise.all([
       mutate(SWR_KEYS.currentSearchSettings),
       mutate(SWR_KEYS.secondarySearchSettings),
@@ -940,16 +940,15 @@ export default function IndexSettingsPage() {
       <cancelReindexModal.Provider>
         <ConfirmationModalLayout
           icon={SvgRevert}
-          title="Cancel Re-index"
+          title="取消重新索引"
           submit={
             <Button variant="danger" onClick={handleCancelReindex}>
-              Cancel
+              取消
             </Button>
           }
         >
           <Text font="main-ui-body" color="text-03" as="p">
-            Cancelling will revert to the previous embedding model and all
-            re-indexing progress will be lost.
+            取消后会回退到之前的嵌入模型，所有重新索引进度都会丢失。
           </Text>
         </ConfirmationModalLayout>
       </cancelReindexModal.Provider>
@@ -958,7 +957,7 @@ export default function IndexSettingsPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Configure how documents are indexed, embedded, and prepared for search and retrieval."
+          description="配置文档如何被索引、嵌入，并用于搜索和检索。"
           divider
         />
 
@@ -976,7 +975,7 @@ export default function IndexSettingsPage() {
               const stagedModel =
                 values.custom_model ?? findRegistryModel(values.model_name);
               if (!stagedModel) {
-                toast.error("Could not find the selected model");
+                toast.error("未找到所选模型");
                 return;
               }
               // A staged custom model from a no-registry cloud provider
@@ -998,11 +997,11 @@ export default function IndexSettingsPage() {
               });
 
               if (!response.ok) {
-                toast.error("Failed to apply settings");
+                toast.error("应用设置失败");
                 return;
               }
 
-              toast.success("Re-indexing started");
+              toast.success("重新索引已开始");
               setSwitchoverType(SwitchoverType.REINDEX);
               await Promise.all([
                 mutate(SWR_KEYS.currentSearchSettings),
@@ -1047,9 +1046,9 @@ export default function IndexSettingsPage() {
                     <MessageCard
                       variant="warning"
                       headerPadding="sm"
-                      title="Re-indexing in progress"
+                      title="正在重新索引"
                       description={markdown(
-                        `Switching to **${secondarySearchSettings?.model_name}**. Existing documents are being re-embedded — this may take hours or days depending on corpus size. The previous model continues to serve queries until the switchover completes.`
+                        `正在切换到 **${secondarySearchSettings?.model_name}**。现有文档正在重新嵌入，具体耗时取决于语料规模，可能需要数小时或数天。切换完成前，旧模型会继续服务查询。`
                       )}
                       bottomChildren={
                         <GeneralLayouts.Section
@@ -1062,14 +1061,14 @@ export default function IndexSettingsPage() {
                             icon={SvgExternalLink}
                             href="/admin/indexing/status"
                           >
-                            See Connectors
+                            查看连接器
                           </Button>
                           <Button
                             variant="danger"
                             prominence="secondary"
                             onClick={() => cancelReindexModal.toggle(true)}
                           >
-                            Cancel Re-index
+                            取消重新索引
                           </Button>
                         </GeneralLayouts.Section>
                       }
@@ -1079,9 +1078,9 @@ export default function IndexSettingsPage() {
                       <MessageCard
                         variant={statusVariant}
                         headerPadding="sm"
-                        title="Changes require a full re-index."
+                        title="更改需要完整重新索引。"
                         description={markdown(
-                          "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+                          "修改嵌入或检索设置后，需要对全部文档进行完整重新索引才能生效。具体耗时取决于语料规模，可能需要 **数小时或数天**。[了解更多](https://docs.glomi.ai/security/architecture/data_flows)"
                         )}
                         bottomChildren={
                           dirty ? (
@@ -1093,31 +1092,31 @@ export default function IndexSettingsPage() {
                                     setSwitchoverType(v as SwitchoverType)
                                   }
                                 >
-                                  <InputSelect.Trigger placeholder="Select a switchover strategy" />
+                                  <InputSelect.Trigger placeholder="选择切换策略" />
                                   <InputSelect.Content>
                                     <InputSelect.Item
                                       value={SwitchoverType.REINDEX}
                                       icon={SvgClock}
                                       wrapDescription
-                                      description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
+                                      description="最稳妥的选项。在全部连接器成功完成一次索引前，继续使用当前文档索引和现有设置。"
                                     >
-                                      Re-index All Connectors Then Switch
+                                      重新索引全部连接器后切换
                                     </InputSelect.Item>
                                     <InputSelect.Item
                                       value={SwitchoverType.ACTIVE_ONLY}
                                       icon={SvgSlowTime}
                                       wrapDescription
-                                      description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
+                                      description="在全部活跃连接器（未暂停/未删除）成功完成一次索引前，继续使用当前文档索引和现有设置。"
                                     >
-                                      Re-index Active Connectors Then Switch
+                                      重新索引活跃连接器后切换
                                     </InputSelect.Item>
                                     <InputSelect.Item
                                       value={SwitchoverType.INSTANT}
                                       icon={SvgEmpty}
                                       wrapDescription
-                                      description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
+                                      description="立即清空当前文档索引并切换到新设置。需要重新索引全部连接器后，搜索索引才会重新填充。"
                                     >
-                                      Switch Before Re-index
+                                      重新索引前立即切换
                                     </InputSelect.Item>
                                   </InputSelect.Content>
                                 </InputSelect>
@@ -1130,10 +1129,10 @@ export default function IndexSettingsPage() {
                                     setSwitchoverType(SwitchoverType.REINDEX);
                                   }}
                                 >
-                                  Revert
+                                  还原
                                 </Button>
                                 <Button onClick={() => void submitForm()}>
-                                  Apply & Re-index
+                                  应用并重新索引
                                 </Button>
                               </div>
                             </div>
@@ -1151,8 +1150,8 @@ export default function IndexSettingsPage() {
                     justifyContent="start"
                   >
                     <Content
-                      title="Embedding Model"
-                      description="Onyx uses this model to encode documents for search and retrieval."
+                      title="嵌入模型"
+                      description="Glomi AI 使用这个模型对文档进行编码，用于搜索和检索。"
                       sizePreset="main-content"
                       variant="section"
                     />
@@ -1163,7 +1162,7 @@ export default function IndexSettingsPage() {
                           <GeneralLayouts.Section padding={0.5}>
                             <Content
                               icon={SvgVector}
-                              title="Embedding model and settings are managed by Onyx Cloud."
+                              title="嵌入模型和设置由 Glomi Cloud 管理。"
                               sizePreset="main-ui"
                               variant="section"
                             />
@@ -1174,7 +1173,7 @@ export default function IndexSettingsPage() {
                       currentEmbeddingModel && (
                         <Disabled
                           disabled={isReindexing}
-                          tooltip="Cancel the in-progress re-index to switch models."
+                          tooltip="请先取消正在进行的重新索引，再切换模型。"
                         >
                           <Tabs
                             value={activeModelTab}
@@ -1262,8 +1261,8 @@ export default function IndexSettingsPage() {
                                     ) : (
                                       <IllustrationContent
                                         illustration={SvgNoResult}
-                                        title="No cloud-based models found"
-                                        description="Try a different search term."
+                                        title="未找到云端模型"
+                                        description="请尝试其他搜索词。"
                                       />
                                     )}
                                   </Tabs.Content>
@@ -1330,7 +1329,7 @@ export default function IndexSettingsPage() {
                                               <div className="flex flex-row justify-between items-center w-full py-1">
                                                 <Content
                                                   icon={CUSTOM_PROVIDER.icon}
-                                                  title="Custom Models"
+                                                  title="自定义模型"
                                                   sizePreset="secondary"
                                                 />
                                               </div>
@@ -1346,7 +1345,7 @@ export default function IndexSettingsPage() {
                                             }
                                           >
                                             <ContentAction
-                                              title="Set up a custom embedding model."
+                                              title="设置自定义嵌入模型。"
                                               sizePreset="secondary"
                                               variant="body"
                                               color="muted"
@@ -1361,7 +1360,7 @@ export default function IndexSettingsPage() {
                                                     )
                                                   }
                                                 >
-                                                  Add Custom Model
+                                                  添加自定义模型
                                                 </Button>
                                               }
                                               center
@@ -1372,8 +1371,8 @@ export default function IndexSettingsPage() {
                                     ) : (
                                       <IllustrationContent
                                         illustration={SvgNoResult}
-                                        title="No self-hosted models found"
-                                        description="Try a different search term."
+                                        title="未找到自托管模型"
+                                        description="请尝试其他搜索词。"
                                       />
                                     )}
                                   </Tabs.Content>
@@ -1384,7 +1383,7 @@ export default function IndexSettingsPage() {
                                 <div className="pt-1 px-1">
                                   <div className="pt-2 pb-1 px-2 flex flex-row items-center justify-between">
                                     <InputTypeIn
-                                      placeholder="Search models..."
+                                      placeholder="搜索模型..."
                                       variant="internal"
                                       searchIcon
                                       value={query}
@@ -1395,7 +1394,7 @@ export default function IndexSettingsPage() {
                                         <Button
                                           icon={SvgRevert}
                                           prominence="internal"
-                                          tooltip="Revert embedding model selection"
+                                          tooltip="还原嵌入模型选择"
                                           onClick={() => {
                                             void setFieldValue(
                                               "model_name",
@@ -1419,7 +1418,7 @@ export default function IndexSettingsPage() {
                                         }
                                         rightIcon={SvgFold}
                                       >
-                                        Fold Models
+                                        收起模型
                                       </Button>
                                     </div>
                                   </div>
@@ -1427,10 +1426,10 @@ export default function IndexSettingsPage() {
                                   <div className="px-2">
                                     <Tabs.List>
                                       <Tabs.Trigger value={MODEL_TAB_CLOUD}>
-                                        Cloud-based
+                                        云端
                                       </Tabs.Trigger>
                                       <Tabs.Trigger value={MODEL_TAB_SELF}>
-                                        Self-hosted
+                                        自托管
                                       </Tabs.Trigger>
                                     </Tabs.List>
                                   </div>
@@ -1486,7 +1485,7 @@ export default function IndexSettingsPage() {
                                         setViewAllModelsOpen(true);
                                       }}
                                     >
-                                      View All Models
+                                      查看全部模型
                                     </Button>
                                     {isCurrentCloudBased && (
                                       <div className="p-1">
@@ -1518,22 +1517,22 @@ export default function IndexSettingsPage() {
                     justifyContent="start"
                   >
                     <Content
-                      title="Retrieval Optimization"
-                      description="Additional indexing features that improve search accuracy by configuring how documents are chunked and contextualized. These can increase embedding cost."
+                      title="检索优化"
+                      description="通过配置文档分块和上下文化方式提升搜索准确性的额外索引功能。这可能增加嵌入成本。"
                       sizePreset="main-content"
                       variant="section"
                     />
 
                     <CloudDisabled
                       disabled
-                      tooltip="Multipass Indexing is disabled temporarily and will be available in the future."
+                      tooltip="多轮索引暂时不可用，未来会开放。"
                     >
                       <Card border="solid" rounding="lg">
                         <InputHorizontal
-                          title="Multipass Indexing"
-                          description="Index documents as chunks of varying sizes to better identify relevant sources."
+                          title="多轮索引"
+                          description="以不同大小的分块索引文档，以便更好地识别相关来源。"
                           tag={{
-                            title: "temporarily unavailable",
+                            title: "暂不可用",
                             color: "gray",
                           }}
                           withLabel
@@ -1552,10 +1551,10 @@ export default function IndexSettingsPage() {
                       disabled={isReindexing || !hasAnyLlm}
                       tooltip={
                         isReindexing
-                          ? "Cancel the in-progress re-index to change retrieval settings."
+                          ? "请先取消正在进行的重新索引，再修改检索设置。"
                           : !hasAnyLlm
                             ? markdown(
-                                "Contextual Retrieval is disabled because you have no models configured. Set up a [Language Model](/admin/configuration/language-models) first."
+                                "上下文检索已禁用，因为你还没有配置模型。请先设置一个[语言模型](/admin/configuration/language-models)。"
                               )
                             : undefined
                       }
@@ -1567,8 +1566,8 @@ export default function IndexSettingsPage() {
                       >
                         <GeneralLayouts.Section width="full">
                           <InputHorizontal
-                            title="Contextual Retrieval"
-                            description="Add document-level context to every indexed chunk to improve hybrid search relevance. This can increase embedding cost significantly."
+                            title="上下文检索"
+                            description="为每个索引分块添加文档级上下文，以提升混合搜索相关性。这可能显著增加嵌入成本。"
                             withLabel
                           >
                             <SwitchField name="enable_contextual_rag" />
@@ -1576,11 +1575,11 @@ export default function IndexSettingsPage() {
 
                           <Disabled
                             disabled={!values.enable_contextual_rag}
-                            tooltip="Cannot modify while Contextual Retrieval is off."
+                            tooltip="上下文检索关闭时无法修改。"
                           >
                             <InputHorizontal
-                              title="Contextual Retrieval LLM"
-                              description="This model will be used to generate context for chunks."
+                              title="上下文检索 LLM"
+                              description="此模型将用于为分块生成上下文。"
                               disabled={!values.enable_contextual_rag}
                               withLabel
                             >
@@ -1613,8 +1612,8 @@ export default function IndexSettingsPage() {
                     justifyContent="start"
                   >
                     <Content
-                      title="Image Processing"
-                      description="Use LLM model to analyze and add descriptions to images during indexing."
+                      title="图片处理"
+                      description="索引时使用 LLM 分析图片并添加描述。"
                       sizePreset="main-content"
                       variant="section"
                     />
@@ -1624,7 +1623,7 @@ export default function IndexSettingsPage() {
                       tooltip={
                         !hasAnyVisionLlm
                           ? markdown(
-                              "Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable [Language Model](/admin/configuration/language-models) first."
+                              "图片处理已禁用，因为你还没有配置支持视觉的模型。请先设置一个支持视觉的[语言模型](/admin/configuration/language-models)。"
                             )
                           : undefined
                       }
@@ -1632,8 +1631,8 @@ export default function IndexSettingsPage() {
                       <Card border="solid" rounding="lg">
                         <GeneralLayouts.Section width="full">
                           <InputHorizontal
-                            title="Extract & Caption Images"
-                            description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
+                            title="提取并描述图片"
+                            description="从上传文件（PDF、DOCX 等）中提取嵌入图片，并用支持视觉的 LLM 总结图片内容，使纯图片文档也可被搜索和回答。需要支持视觉的默认 LLM。"
                             withLabel
                           >
                             <Switch
@@ -1649,11 +1648,11 @@ export default function IndexSettingsPage() {
 
                           <Disabled
                             disabled={!imageProcessingEnabled}
-                            tooltip="Enable Extract & Caption Images to configure this."
+                            tooltip="请先启用“提取并描述图片”再配置此项。"
                           >
                             <InputHorizontal
-                              title="Captioning LLM"
-                              description="This model will be used to analyze images during indexing. Only vision-capable models can be selected. Updates apply to documents indexed going forward — existing captions are baked into prior embeddings."
+                              title="图片描述 LLM"
+                              description="此模型会在索引期间分析图片。只能选择支持视觉的模型。更新仅对后续索引的文档生效，已有图片描述已写入此前的嵌入结果。"
                               disabled={!imageProcessingEnabled}
                               withLabel
                             >
@@ -1671,12 +1670,12 @@ export default function IndexSettingsPage() {
 
                           <Disabled
                             disabled={!imageProcessingEnabled}
-                            tooltip="Enable Extract & Caption Images to configure this."
+                            tooltip="请先启用“提取并描述图片”再配置此项。"
                           >
                             <InputHorizontal
-                              title="Max Image Size for Analysis"
+                              title="图片分析最大大小"
                               suffix="(MB)"
-                              description="Images above this size will be skipped to limit resource usage."
+                              description="超过此大小的图片会被跳过，以限制资源使用。"
                               disabled={!imageProcessingEnabled}
                               withLabel
                             >

@@ -28,23 +28,23 @@ function GroupsPage() {
   return (
     <SettingsLayouts.Root>
       <div data-testid="groups-page-heading">
-        <SettingsLayouts.Header icon={SvgUsers} title="Groups" divider>
+        <SettingsLayouts.Header icon={SvgUsers} title="用户组" divider>
           <MessageCard
             variant="info"
-            title="Upcoming changes to permissions"
-            description="Onyx is transitioning to group-based permissions, enabling more flexible access control through configurable permissions per group. We recommend reviewing your group structure to prepare for this update."
+            title="权限体系即将更新"
+            description="Glomi AI 正在过渡到基于用户组的权限体系，可通过每个用户组的权限配置实现更灵活的访问控制。建议你检查用户组结构，为这次更新做好准备。"
             rightChildren={
               <Button
                 icon={SvgExternalLink}
                 onClick={() =>
                   window.open(
-                    "https://docs.onyx.app/admins/permissions/whats_changing",
+                    "https://docs.glomi.ai/admins/permissions/whats_changing",
                     "_blank",
                     "noopener,noreferrer"
                   )
                 }
               >
-                Learn more
+                了解更多
               </Button>
             }
           />
@@ -56,10 +56,10 @@ function GroupsPage() {
           hasItems={!isLoading && !error && (groups?.length ?? 0) > 0}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          placeholder="Search groups..."
-          emptyStateText="Create groups to organize users and manage access."
+          placeholder="搜索用户组..."
+          emptyStateText="创建用户组以组织用户并管理访问权限。"
           onAction={() => router.push("/admin/groups/create" as Route)}
-          actionLabel="New Group"
+          actionLabel="新建用户组"
         />
 
         {isLoading && <SvgSimpleLoader />}
@@ -67,8 +67,8 @@ function GroupsPage() {
         {error && (
           <IllustrationContent
             illustration={SvgNoResult}
-            title="Failed to load groups."
-            description="Please check the console for more details."
+            title="用户组加载失败"
+            description="请查看控制台了解更多详情。"
           />
         )}
 

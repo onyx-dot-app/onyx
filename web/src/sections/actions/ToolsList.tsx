@@ -45,8 +45,8 @@ const ToolsList: React.FC<ToolsListProps> = ({
   onUpdateToolsStatus,
   isEmpty = false,
   searchQuery,
-  emptyMessage = "No tools available",
-  emptySearchMessage = "No tools found",
+  emptyMessage = "暂无可用工具",
+  emptySearchMessage = "未找到工具",
   children,
   leftAction,
   className,
@@ -102,12 +102,12 @@ const ToolsList: React.FC<ToolsListProps> = ({
                   onClick={onToggleShowOnlyEnabled}
                   interaction={showOnlyEnabled ? "hover" : "rest"}
                   tooltip={
-                    showOnlyEnabled ? "Show all tools" : "Show only enabled"
+                    showOnlyEnabled ? "显示全部工具" : "仅显示已启用工具"
                   }
                   aria-label={
                     showOnlyEnabled
-                      ? "Show all tools"
-                      : "Show only enabled tools"
+                      ? "显示全部工具"
+                      : "仅显示已启用工具"
                   }
                 />
               )}
@@ -117,8 +117,8 @@ const ToolsList: React.FC<ToolsListProps> = ({
                   prominence="tertiary"
                   size="sm"
                   onClick={() => onUpdateToolsStatus(false)}
-                  tooltip="Disable all tools"
-                  aria-label="Disable all tools"
+                  tooltip="停用全部工具"
+                  aria-label="停用全部工具"
                 />
               )}
               {onUpdateToolsStatus && enabledCount === 0 && (
@@ -126,7 +126,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
                   prominence="tertiary"
                   onClick={() => onUpdateToolsStatus(true)}
                 >
-                  Enable all
+                  全部启用
                 </Button>
               )}
             </div>

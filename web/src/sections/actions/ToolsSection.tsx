@@ -28,8 +28,8 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
         {/* Search Bar */}
         <div className="flex-1 min-w-[160px]">
           <InputTypeIn
-            placeholder="Search tools…"
-            aria-label="Search tools"
+            placeholder="搜索工具..."
+            aria-label="搜索工具"
             value={searchQuery}
             onChange={handleSearchChange}
             searchIcon
@@ -42,7 +42,7 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({
           {/* Fold Button */}
           {onFold && (
             <Button prominence="tertiary" onClick={onFold} rightIcon={SvgFold}>
-              Fold
+              收起
             </Button>
           )}
         </div>

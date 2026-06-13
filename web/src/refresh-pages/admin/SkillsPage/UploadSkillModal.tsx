@@ -56,14 +56,14 @@ export default function UploadSkillModal({
         // grants that would be ignored by the visibility filter anyway.
         group_ids: isPublic ? [] : groupIds,
       });
-      toast.success(`Uploaded "${created.name}"`);
+      toast.success(`已上传"${created.name}"`);
       reset();
       onUploaded();
       onClose();
     } catch (err) {
-      console.error("Failed to upload skill bundle", err);
-      toast.error(err instanceof Error ? err.message : "Upload failed", {
-        description: "Skill bundle was not saved.",
+      console.error("技能包上传失败", err);
+      toast.error(err instanceof Error ? err.message : "上传失败", {
+        description: "技能包未保存。",
       });
     } finally {
       setSubmitting(false);
@@ -77,15 +77,15 @@ export default function UploadSkillModal({
       <Modal.Content width="md">
         <Modal.Header
           icon={SvgUploadCloud}
-          title="Upload skill"
-          description="Upload a zip bundle. The zip filename becomes the slug, and SKILL.md frontmatter provides the name + description."
+          title="上传技能"
+          description="上传 zip 包。zip 文件名会作为 slug，SKILL.md frontmatter 会提供名称和描述。"
           onClose={handleClose}
         />
         <Modal.Body>
           <Section gap={1} alignItems="stretch">
             <Section gap={0.25} alignItems="stretch">
               <Text as="span" mainUiAction text05>
-                Bundle (.zip)
+                技能包（.zip）
               </Text>
               <div className="flex items-center gap-2">
                 <input
@@ -100,17 +100,17 @@ export default function UploadSkillModal({
                   prominence="secondary"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  {file ? "Change file" : "Choose zip"}
+                  {file ? "更换文件" : "选择 zip"}
                 </Button>
                 <Text as="span" mainUiBody text03>
-                  {file ? file.name : "No file selected"}
+                  {file ? file.name : "尚未选择文件"}
                 </Text>
               </div>
             </Section>
 
             <Section gap={0.5} alignItems="stretch">
               <Text as="span" mainUiAction text05>
-                Share
+                共享
               </Text>
               <SkillSharePicker
                 isPublic={isPublic}
@@ -123,14 +123,14 @@ export default function UploadSkillModal({
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={handleClose}>
-            Cancel
+            取消
           </Button>
           <Button
             disabled={submitDisabled}
             onClick={handleSubmit}
             icon={SvgUploadCloud}
           >
-            {submitting ? "Uploading…" : "Upload"}
+            {submitting ? "上传中..." : "上传"}
           </Button>
         </Modal.Footer>
       </Modal.Content>

@@ -40,19 +40,19 @@ const STT_MODELS: ModelDetails[] = [
   {
     id: "whisper",
     label: "Whisper",
-    subtitle: "OpenAI's general purpose speech recognition model.",
+    subtitle: "OpenAI 通用语音识别模型。",
     providerType: "openai",
   },
   {
     id: "azure-speech-stt",
     label: "Azure Speech",
-    subtitle: "Speech to text in Microsoft Foundry Tools.",
+    subtitle: "Microsoft Foundry Tools 中的语音转文本能力。",
     providerType: "azure",
   },
   {
     id: "elevenlabs-stt",
     label: "ElevenAPI",
-    subtitle: "ElevenLabs Speech to Text API.",
+    subtitle: "ElevenLabs 语音转文本 API。",
     providerType: "elevenlabs",
   },
 ];
@@ -66,13 +66,13 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
       {
         id: "tts-1",
         label: "TTS-1",
-        subtitle: "OpenAI's text-to-speech model optimized for speed.",
+        subtitle: "OpenAI 针对速度优化的文本转语音模型。",
         providerType: "openai",
       },
       {
         id: "tts-1-hd",
         label: "TTS-1 HD",
-        subtitle: "OpenAI's text-to-speech model optimized for quality.",
+        subtitle: "OpenAI 针对质量优化的文本转语音模型。",
         providerType: "openai",
       },
     ],
@@ -84,7 +84,7 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
       {
         id: "azure-speech-tts",
         label: "Azure Speech",
-        subtitle: "Text to speech in Microsoft Foundry Tools.",
+        subtitle: "Microsoft Foundry Tools 中的文本转语音能力。",
         providerType: "azure",
       },
     ],
@@ -96,7 +96,7 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
       {
         id: "elevenlabs-tts",
         label: "ElevenAPI",
-        subtitle: "ElevenLabs Text to Speech API.",
+        subtitle: "ElevenLabs 文本转语音 API。",
         providerType: "elevenlabs",
       },
     ],
@@ -105,7 +105,7 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
 
 const route = ADMIN_ROUTES.VOICE;
 const pageDescription =
-  "Configure speech-to-text and text-to-speech providers for voice input and spoken responses.";
+  "配置用于语音输入和朗读回复的语音转文本、文本转语音提供商。";
 
 interface ModelCardProps {
   model: ModelDetails;
@@ -237,8 +237,8 @@ export default function VoicePage() {
         <Section gap={2}>
           <Section gap={0.75}>
             <Content
-              title="Speech to Text"
-              description="Select a model to transcribe speech to text in chats."
+              title="语音转文本"
+              description="选择用于在聊天中将语音转写为文本的模型。"
               sizePreset="main-content"
               variant="section"
             />
@@ -246,7 +246,7 @@ export default function VoicePage() {
             {!hasActiveSTTProvider && (
               <MessageCard
                 variant="info"
-                title="Connect a speech to text provider to use in chat."
+                title="连接语音转文本提供商后即可在聊天中使用。"
               />
             )}
 
@@ -284,8 +284,8 @@ export default function VoicePage() {
 
           <Section gap={0.75}>
             <Content
-              title="Text to Speech"
-              description="Select a model to speak out chat responses."
+              title="文本转语音"
+              description="选择用于朗读聊天回复的模型。"
               sizePreset="main-content"
               variant="section"
             />
@@ -293,7 +293,7 @@ export default function VoicePage() {
             {!hasActiveTTSProvider && (
               <MessageCard
                 variant="info"
-                title="Connect a text to speech provider to use in chat."
+                title="连接文本转语音提供商后即可在聊天中使用。"
               />
             )}
 

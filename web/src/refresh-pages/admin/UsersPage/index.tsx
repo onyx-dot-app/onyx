@@ -70,30 +70,30 @@ export default function UsersPage() {
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
-        title="Users & Requests"
+        title="用户与请求"
         icon={SvgUser}
         rightChildren={
           <Button icon={SvgUserPlus} onClick={() => setInviteOpen(true)}>
-            Invite Users
+            邀请用户
           </Button>
         }
       >
         <MessageCard
           variant="info"
-          title="Upcoming changes to permissions"
-          description="Onyx is transitioning to group-based permissions for more granular access control. Curator and Global Curator roles will be replaced by configurable group permissions. We recommend reviewing current role assignments to ensure a smooth transition."
+          title="权限即将更新"
+          description="Glomi AI 正在过渡到基于用户组的权限体系，以提供更细粒度的访问控制。Curator 和 Global Curator 角色将由可配置的用户组权限替代。建议你检查当前角色分配，确保平滑迁移。"
           rightChildren={
             <Button
               icon={SvgExternalLink}
               onClick={() =>
                 window.open(
-                  "https://docs.onyx.app/admins/permissions/whats_changing",
+                  "https://docs.glomi.ai/admins/permissions/whats_changing",
                   "_blank",
                   "noopener,noreferrer"
                 )
               }
             >
-              Learn more
+              了解更多
             </Button>
           }
         />

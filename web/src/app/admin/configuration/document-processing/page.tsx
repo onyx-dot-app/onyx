@@ -68,29 +68,27 @@ function Main() {
             text05
             className="border-b border-border-01 pb-2"
           >
-            Process with Unstructured API
+            使用 Unstructured API 处理
           </Text>
 
           <div className="flex flex-col gap-2">
             <Text as="p" mainContentBody text04 className="leading-relaxed">
-              Unstructured extracts and transforms complex data from formats
-              like .pdf, .docx, .png, .pptx, etc. into clean text for Onyx to
-              ingest. Provide an API key to enable Unstructured document
-              processing.
+              Unstructured 会从 .pdf、.docx、.png、.pptx 等格式中提取并转换复杂数据，
+              生成可供 Glomi AI 摄取的干净文本。提供 API Key 后即可启用 Unstructured 文档处理。
             </Text>
             <Text as="p" mainContentMuted text03>
-              <span className="font-main-ui-action text-text-03">Note:</span>{" "}
-              this will send documents to Unstructured servers for processing.
+              <span className="font-main-ui-action text-text-03">注意：</span>{" "}
+              这会将文档发送到 Unstructured 服务器进行处理。
             </Text>
             <Text as="p" mainContentBody text04 className="leading-relaxed">
-              Learn more about Unstructured{" "}
+              进一步了解 Unstructured{" "}
               <a
                 href="https://docs.unstructured.io/welcome"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-action-link-05 underline-offset-4 hover:underline"
               >
-                here
+                点击这里
               </a>
               .
             </Text>
@@ -121,7 +119,7 @@ function Main() {
                 </div>
               ) : (
                 <InputTypeIn
-                  placeholder="Enter API Key"
+                  placeholder="输入 API Key"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
@@ -131,15 +129,15 @@ function Main() {
               {isApiKeySet ? (
                 <>
                   <Button variant="danger" onClick={handleDelete}>
-                    Delete API Key
+                    删除 API Key
                   </Button>
                   <Text as="p" mainContentBody text04 className="sm:mt-0">
-                    Delete the current API key before updating.
+                    更新前请先删除当前 API Key。
                   </Text>
                 </>
               ) : (
                 <Button variant="action" onClick={handleSave}>
-                  Save API Key
+                  保存 API Key
                 </Button>
               )}
             </div>

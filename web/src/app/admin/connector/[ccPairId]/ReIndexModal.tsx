@@ -43,16 +43,16 @@ export function useReIndexModal(
       if (result.success) {
         toast.success(
           `${
-            fromBeginning ? "Complete re-indexing" : "Indexing update"
-          } started successfully`
+            fromBeginning ? "完整重新索引" : "索引更新"
+          }已成功启动`
         );
       } else {
-        toast.error(result.message || "Failed to start indexing");
+        toast.error(result.message || "启动索引失败");
       }
     } catch (error) {
-      console.error("Failed to trigger indexing:", error);
+      console.error("触发索引失败：", error);
       toast.error(
-        "An unexpected error occurred while trying to start indexing"
+        "尝试启动索引时发生意外错误"
       );
     }
   };
@@ -87,7 +87,7 @@ export default function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
       // First show immediate feedback with a toast
       toast.info(
         `Starting ${
-          fromBeginning ? "complete re-indexing" : "indexing update"
+          fromBeginning ? "完整重新索引" : "索引更新"
         }...`
       );
 
@@ -97,9 +97,9 @@ export default function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
       // Then run the indexing operation
       await onRunIndex(fromBeginning);
     } catch (error) {
-      console.error("Error starting indexing:", error);
+      console.error("启动索引出错：", error);
       // Show error in toast if needed
-      toast.error("Failed to start indexing process");
+      toast.error("启动索引流程失败");
     } finally {
       setIsProcessing(false);
     }
@@ -108,29 +108,26 @@ export default function ReIndexModal({ hide, onRunIndex }: ReIndexModalProps) {
   return (
     <Modal open onOpenChange={hide}>
       <Modal.Content width="sm" height="sm">
-        <Modal.Header icon={SvgRefreshCw} title="Run Indexing" onClose={hide} />
+        <Modal.Header icon={SvgRefreshCw} title="运行索引" onClose={hide} />
         <Modal.Body>
           <Text as="p">
-            This will pull in and index all documents that have changed and/or
-            have been added since the last successful indexing run.
+            这会拉取并索引自上次成功索引以来发生变化或新增的所有文档。
           </Text>
           <Button disabled={isProcessing} onClick={() => handleRunIndex(false)}>
-            Run Update
+            运行更新
           </Button>
 
           <Divider />
 
           <Text as="p">
-            This will cause a complete re-indexing of all documents from the
-            source.
+            这会对该来源中的所有文档执行完整重新索引。
           </Text>
           <Text as="p">
-            <strong>NOTE:</strong> depending on the number of documents stored
-            in the source, this may take a long time.
+            <strong>注意：</strong>根据来源中存储的文档数量，此过程可能需要较长时间。
           </Text>
 
           <Button disabled={isProcessing} onClick={() => handleRunIndex(true)}>
-            Run Complete Re-Indexing
+            运行完整重新索引
           </Button>
         </Modal.Body>
       </Modal.Content>

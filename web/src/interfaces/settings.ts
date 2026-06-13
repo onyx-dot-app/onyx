@@ -56,7 +56,7 @@ export interface Settings {
   // Default Assistant settings
   disable_default_assistant?: boolean;
 
-  // Onyx Craft (Build Mode) feature flag
+  // Glomi 创作 (Build Mode) feature flag
   onyx_craft_enabled?: boolean;
 
   // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"

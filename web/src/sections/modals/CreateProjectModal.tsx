@@ -13,7 +13,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { toast } from "@/hooks/useToast";
 
 const validationSchema = Yup.object({
-  projectName: Yup.string().trim().required("Project name is required"),
+  projectName: Yup.string().trim().required("项目名称为必填项"),
 });
 
 interface CreateProjectModalProps {
@@ -33,8 +33,8 @@ export default function CreateProjectModal({
         <Modal.Content width="sm">
           <Modal.Header
             icon={SvgFolderPlus}
-            title="Create New Project"
-            description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
+            title="新建项目"
+            description="使用项目集中整理文件和聊天，并为持续工作添加自定义指令。"
             onClose={() => modal.toggle(false)}
           />
           <Formik
@@ -48,7 +48,7 @@ export default function CreateProjectModal({
                 route({ projectId: newProject.id });
                 modal.toggle(false);
               } catch {
-                toast.error(`Failed to create the project ${name}`);
+                toast.error(`创建项目“${name}”失败`);
               } finally {
                 setSubmitting(false);
               }
@@ -57,10 +57,10 @@ export default function CreateProjectModal({
             {({ isSubmitting, isValid }) => (
               <Form>
                 <Modal.Body>
-                  <InputVertical title="Project Name" withLabel="projectName">
+                  <InputVertical title="项目名称" withLabel="projectName">
                     <InputTypeInField
                       name="projectName"
-                      placeholder="What are you working on?"
+                      placeholder="你正在做什么？"
                       clearButton
                     />
                   </InputVertical>
@@ -71,10 +71,10 @@ export default function CreateProjectModal({
                     type="button"
                     onClick={() => modal.toggle(false)}
                   >
-                    Cancel
+                    取消
                   </Button>
                   <Button type="submit" disabled={isSubmitting || !isValid}>
-                    Create Project
+                    创建项目
                   </Button>
                 </Modal.Footer>
               </Form>

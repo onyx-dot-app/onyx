@@ -128,7 +128,7 @@ export default function UserFilters({
         .slice(0, 2)
         .join(", ") +
       (selectedRoles.length > 2 ? `, +${selectedRoles.length - 2}` : "")
-    : "All Account Types";
+    : "全部账号类型";
 
   const groupLabel = hasGroupFilter
     ? groups
@@ -137,7 +137,7 @@ export default function UserFilters({
         .slice(0, 2)
         .join(", ") +
       (selectedGroups.length > 2 ? `, +${selectedGroups.length - 2}` : "")
-    : "All Groups";
+    : "全部用户组";
 
   const statusLabel = hasStatusFilter
     ? FILTERABLE_STATUSES.filter(([status]) =>
@@ -147,7 +147,7 @@ export default function UserFilters({
         .slice(0, 2)
         .join(", ") +
       (selectedStatuses.length > 2 ? `, +${selectedStatuses.length - 2}` : "")
-    : "All Status";
+    : "全部状态";
 
   const filteredGroups = groupSearch
     ? groups.filter((g) =>
@@ -161,7 +161,7 @@ export default function UserFilters({
       <Popover>
         <Popover.Trigger asChild>
           <FilterButton
-            aria-label="Filter by role"
+            aria-label="按角色筛选"
             icon={SvgUsers}
             active={hasRoleFilter}
             onClear={() => onRolesChange([])}
@@ -177,7 +177,7 @@ export default function UserFilters({
               emphasized={!hasRoleFilter}
               onClick={() => onRolesChange([])}
             >
-              All Account Types
+              全部账号类型
             </LineItem>
             {FILTERABLE_ROLES.map(([role, label]) => {
               const isSelected = selectedRoles.includes(role);
@@ -210,7 +210,7 @@ export default function UserFilters({
       >
         <Popover.Trigger asChild>
           <FilterButton
-            aria-label="Filter by group"
+            aria-label="按用户组筛选"
             icon={SvgUsers}
             active={hasGroupFilter}
             onClear={() => onGroupsChange([])}
@@ -223,7 +223,7 @@ export default function UserFilters({
             <InputTypeIn
               value={groupSearch}
               onChange={(e) => setGroupSearch(e.target.value)}
-              placeholder="Search groups..."
+              placeholder="搜索用户组..."
               searchIcon
               variant="internal"
             />
@@ -233,7 +233,7 @@ export default function UserFilters({
               emphasized={!hasGroupFilter}
               onClick={() => onGroupsChange([])}
             >
-              All Groups
+              全部用户组
             </LineItem>
             <ShadowDiv className="flex flex-col gap-1 max-h-[240px]">
               {filteredGroups.map((group) => {
@@ -253,7 +253,7 @@ export default function UserFilters({
               })}
               {filteredGroups.length === 0 && (
                 <Text as="span" secondaryBody text03 className="px-2 py-1.5">
-                  No groups found
+                  未找到用户组
                 </Text>
               )}
             </ShadowDiv>
@@ -265,7 +265,7 @@ export default function UserFilters({
       <Popover>
         <Popover.Trigger asChild>
           <FilterButton
-            aria-label="Filter by status"
+            aria-label="按状态筛选"
             icon={SvgUsers}
             active={hasStatusFilter}
             onClear={() => onStatusesChange([])}
@@ -281,7 +281,7 @@ export default function UserFilters({
               emphasized={!hasStatusFilter}
               onClick={() => onStatusesChange([])}
             >
-              All Status
+              全部状态
             </LineItem>
             {FILTERABLE_STATUSES.map(([status, label]) => {
               const isSelected = selectedStatuses.includes(status);

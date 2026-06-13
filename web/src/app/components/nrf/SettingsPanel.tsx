@@ -55,12 +55,12 @@ const BackgroundThumbnail = ({
     onClick={onClick}
     className="relative overflow-hidden rounded-xl transition-all aspect-video cursor-pointer border-none p-0 bg-transparent group"
     title={label}
-    aria-label={`${label} background${isSelected ? " (selected)" : ""}`}
+    aria-label={`${label} 背景${isSelected ? "（已选择）" : ""}`}
   >
     {isNone ? (
       <div className="absolute inset-0 bg-background flex items-center justify-center">
         <Text secondaryBody text03>
-          None
+          无
         </Text>
       </div>
     ) : (
@@ -152,7 +152,7 @@ export const SettingsPanel = ({
                 <SvgSettings className="w-5 h-5 stroke-text-03" />
               </div>
               <Text headingH3 text04>
-                Settings
+                设置
               </Text>
             </div>
             <div className="flex items-center gap-3">
@@ -161,13 +161,13 @@ export const SettingsPanel = ({
                 icon={isDark ? SvgMoon : SvgSun}
                 onClick={toggleTheme}
                 prominence="tertiary"
-                tooltip={`Switch to ${isDark ? "light" : "dark"} theme`}
+                tooltip={`切换到${isDark ? "浅色" : "深色"}主题`}
               />
               <Button
                 icon={SvgX}
                 onClick={toggleSettings}
                 prominence="tertiary"
-                tooltip="Close settings"
+                tooltip="关闭设置"
               />
             </div>
           </div>
@@ -177,10 +177,10 @@ export const SettingsPanel = ({
           {/* General Section */}
           <section className="flex flex-col gap-3">
             <Text secondaryAction text03 className="uppercase tracking-wider">
-              General
+              通用
             </Text>
             <div className="flex flex-col gap-1 bg-background-tint-01 rounded-2xl px-4">
-              <SettingRow label="Use Onyx as new tab page">
+              <SettingRow label="将 Glomi AI 设为新标签页">
                 <Switch
                   checked={useOnyxAsNewTab}
                   onCheckedChange={handleUseOnyxToggle}
@@ -192,7 +192,7 @@ export const SettingsPanel = ({
           {/* Background Section */}
           <section className="flex flex-col gap-3">
             <Text secondaryAction text03 className="uppercase tracking-wider">
-              Background
+              背景
             </Text>
             <div className="grid grid-cols-3 gap-2">
               {CHAT_BACKGROUND_OPTIONS.map((bg) => (

@@ -98,14 +98,14 @@ function SummaryRow({
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          Total Connectors
+          连接器总数
         </div>
         <div className="text-xl font-semibold">{summary.total_connectors}</div>
       </TableCell>
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          Active Connectors
+          活跃连接器
         </div>
         <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
           {summary.active_connectors}/{summary.total_connectors}
@@ -115,7 +115,7 @@ function SummaryRow({
       {businessTier && (
         <TableCell>
           <div className="text-sm text-neutral-500 dark:text-neutral-300">
-            Public Connectors
+            公开连接器
           </div>
           <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
             {summary.public_connectors}/{summary.total_connectors}
@@ -125,7 +125,7 @@ function SummaryRow({
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          Total Docs Indexed
+          已索引文档总数
         </div>
         <div className="text-xl font-semibold">
           {summary.total_docs_indexed.toLocaleString()}
@@ -189,19 +189,19 @@ function ConnectorRow({
         <TableCell>
           {ccPairsIndexingStatus.access_type === "public" ? (
             <Badge variant={isEditable ? "success" : "default"} icon={FiUnlock}>
-              Organization Public
+              组织公开
             </Badge>
           ) : ccPairsIndexingStatus.access_type === "sync" ? (
             <Badge
               variant={isEditable ? "auto-sync" : "default"}
               icon={FiRefreshCw}
             >
-              Inherited from{" "}
+              继承自{" "}
               {getSourceDisplayName(ccPairsIndexingStatus.source)}
             </Badge>
           ) : (
             <Badge variant={isEditable ? "private" : "default"} icon={FiLock}>
-              Private
+              私有
             </Badge>
           )}
         </TableCell>
@@ -209,7 +209,7 @@ function ConnectorRow({
       <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
       <TableCell>
         {isEditable && (
-          <Tooltip tooltip="Manage Connector">
+          <Tooltip tooltip="管理连接器">
             <Button icon={SvgSettings} prominence="tertiary" />
           </Tooltip>
         )}
@@ -250,12 +250,12 @@ function FederatedConnectorRow({
       </TableCell>
       <TableCell>N/A</TableCell>
       <TableCell>
-        <Badge variant="success">Indexed</Badge>
+        <Badge variant="success">已索引</Badge>
       </TableCell>
       {businessTier && (
         <TableCell>
           <Badge variant="secondary" icon={FiRefreshCw}>
-            Federated Access
+            联合访问
           </Badge>
         </TableCell>
       )}
@@ -268,7 +268,7 @@ function FederatedConnectorRow({
             e.stopPropagation();
             navigateWithModifier(e, federatedUrl, router);
           }}
-          tooltip="Manage Federated Connector"
+          tooltip="管理联合连接器"
         />
       </TableCell>
     </TableRow>
@@ -338,13 +338,13 @@ export function CCPairIndexingStatusTable({
                 {!sourceLoadingStates[ccPairStatus.source] && (
                   <>
                     <TableRow className="border border-border dark:border-neutral-700">
-                      <TableHead>Name</TableHead>
-                      <TableHead>Last Indexed</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>名称</TableHead>
+                      <TableHead>最近索引</TableHead>
+                      <TableHead>状态</TableHead>
                       {businessTier && (
-                        <TableHead>Permissions / Access</TableHead>
+                        <TableHead>权限 / 访问</TableHead>
                       )}
-                      <TableHead>Total Docs</TableHead>
+                      <TableHead>文档总数</TableHead>
                       <TableHead></TableHead>
                     </TableRow>
                     {ccPairStatus.indexing_statuses.map((indexingStatus) => {
@@ -411,7 +411,7 @@ export function CCPairIndexingStatusTable({
                                 className="h-[56px] text-center text-sm text-gray-400 dark:text-gray-500 border-b border-r border-l border-border dark:border-neutral-700"
                               >
                                 <span className="italic">
-                                  All caught up! No more connectors to show
+                                  已全部加载，没有更多连接器可显示
                                 </span>
                               </TableCell>
                             ) : (

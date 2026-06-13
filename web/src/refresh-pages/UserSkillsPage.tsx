@@ -60,8 +60,8 @@ export default function UserSkillsPage() {
     <SettingsLayouts.Root data-testid="UserSkillsPage/container">
       <SettingsLayouts.Header
         icon={SvgBlocks}
-        title="Skills"
-        description="Capability bundles your Craft agent can reach for. Skills are granted by admins; this page shows what's currently available to you."
+        title="技能"
+        description="技能是 Glomi 创作智能体可调用的能力包。管理员授予技能后，你可以在这里查看当前可用的能力。"
         rightChildren={
           isAdmin ? (
             <div className="flex items-center gap-2">
@@ -70,7 +70,7 @@ export default function UserSkillsPage() {
                 prominence="secondary"
                 icon={SvgSettings}
               >
-                Manage skills
+                管理技能
               </Button>
             </div>
           ) : undefined
@@ -78,7 +78,7 @@ export default function UserSkillsPage() {
       >
         <InputTypeIn
           ref={searchInputRef}
-          placeholder="Search skills..."
+          placeholder="搜索技能..."
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           searchIcon
@@ -91,8 +91,8 @@ export default function UserSkillsPage() {
         {error && !isLoading && (
           <MessageCard
             variant="error"
-            title="Failed to load skills"
-            description="Check the console for details and try refreshing the page."
+            title="技能加载失败"
+            description="请查看控制台详情，或刷新页面后重试。"
           />
         )}
 
@@ -103,20 +103,20 @@ export default function UserSkillsPage() {
                 illustration={SvgNoResult}
                 title={
                   items.length === 0
-                    ? "No skills available"
-                    : "No matching skills"
+                    ? "暂无可用技能"
+                    : "没有匹配的技能"
                 }
                 description={
                   items.length === 0
-                    ? "Your admin hasn't granted you access to any custom skills yet, and no built-ins are configured."
-                    : "Try a different search."
+                    ? "管理员还没有为你授权自定义技能，也尚未配置内置技能。"
+                    : "换个关键词试试。"
                 }
               />
             ) : (
               <>
                 <section className="flex flex-col gap-2">
                   <Text font="secondary-body" color="text-03">
-                    Browse skills
+                    浏览技能
                   </Text>
                   <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
                     {visibleItems.map((item) => (
@@ -126,7 +126,7 @@ export default function UserSkillsPage() {
                 </section>
                 <TextSeparator
                   count={visibleItems.length}
-                  text={visibleItems.length === 1 ? "Skill" : "Skills"}
+                  text="技能"
                 />
               </>
             )}
@@ -134,8 +134,8 @@ export default function UserSkillsPage() {
             {visibleItems.length > 0 && (
               <div className="pt-2">
                 <Text as="p" font="secondary-body" color="text-03">
-                  Skills are managed by org admins. To request a new custom
-                  skill, talk to your Onyx admin.
+                  技能由组织管理员管理。如需申请新的自定义技能，请联系你的
+                  Glomi AI 管理员。
                 </Text>
               </div>
             )}

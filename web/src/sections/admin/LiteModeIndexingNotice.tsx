@@ -17,7 +17,7 @@ export default function LiteModeIndexingNotice() {
         illustration={SvgUnPlugged}
         title="Indexing is unavailable in Lite mode"
         description={markdown(
-          `This deployment runs Onyx Lite, which has no vector database — connectors and document indexing are disabled, and nothing is indexed. To connect data sources and index documents, deploy Onyx in **Standard mode**. See the [deployment guide](${DEPLOYMENT_DOCS_URL}) to get started.`
+          `This deployment runs Glomi Lite, which has no vector database — connectors and document indexing are disabled, and nothing is indexed. To connect data sources and index documents, deploy Glomi AI in **Standard mode**. See the [deployment guide](${DEPLOYMENT_DOCS_URL}) to get started.`
         )}
       />
     </Section>

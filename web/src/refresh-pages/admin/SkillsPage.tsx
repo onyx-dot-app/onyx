@@ -41,13 +41,13 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
     try {
       await patchCustomSkill(skill.id, { enabled: !skill.enabled });
       toast.success(
-        `${skill.enabled ? "Disabled" : "Re-enabled"} "${skill.name}"`
+        `${skill.enabled ? "已停用" : "已重新启用"}“${skill.name}”`
       );
       refresh();
     } catch (err) {
       console.error("Failed to update skill enabled state", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to update skill"
+        err instanceof Error ? err.message : "更新技能失败"
       );
     }
   }
@@ -55,11 +55,11 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
   async function handleDelete(skill: CustomSkill) {
     try {
       await deleteCustomSkill(skill.id);
-      toast.success(`Deleted "${skill.name}"`);
+      toast.success(`已删除“${skill.name}”`);
       refresh();
     } catch (err) {
       console.error("Failed to delete skill", err);
-      toast.error(err instanceof Error ? err.message : "Failed to delete");
+      toast.error(err instanceof Error ? err.message : "删除失败");
     }
   }
 
@@ -79,12 +79,12 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
 
     try {
       await replaceCustomSkillBundle(target.id, file);
-      toast.success(`Replaced bundle for "${target.name}"`);
+      toast.success(`已替换“${target.name}”的 bundle`);
       refresh();
     } catch (err) {
       console.error("Failed to replace skill bundle", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to replace bundle"
+        err instanceof Error ? err.message : "替换 bundle 失败"
       );
     }
   }
@@ -93,8 +93,8 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgBlocks}
-        title="Skills"
-        description="Capability bundles the Craft agent can reach for. Built-in skills ship with Onyx; custom skills are uploaded zip bundles, gated by group grants."
+        title="技能"
+        description="Glomi 创作智能体可调用的能力包。内置技能随 Glomi AI 提供，自定义技能可上传 zip 包，并通过用户组授权控制。"
         rightChildren={
           onBack ? (
             <div className="flex items-center gap-2">
@@ -103,7 +103,7 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
                 icon={SvgArrowLeft}
                 onClick={onBack}
               >
-                Back
+                返回
               </Button>
             </div>
           ) : undefined
@@ -115,8 +115,8 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
         {error && !isLoading && (
           <MessageCard
             variant="error"
-            title="Failed to load skills"
-            description="Check the console for details and try refreshing the page."
+            title="加载技能失败"
+            description="请查看控制台详情，并尝试刷新页面。"
           />
         )}
 
@@ -125,13 +125,13 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
             {/* Built-ins */}
             <Section gap={0.5} alignItems="stretch">
               <Text as="p" headingH3 text05>
-                Built-in skills
+                内置技能
               </Text>
               {data.builtins.length === 0 ? (
                 <IllustrationContent
                   illustration={SvgNoResult}
-                  title="No built-in skills registered"
-                  description="Built-ins ship with the deploy."
+                  title="尚未注册内置技能"
+                  description="内置技能会随部署提供。"
                 />
               ) : (
                 <BuiltinSkillsTable skills={data.builtins} />
@@ -142,10 +142,10 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
             <Section gap={0.5} alignItems="stretch">
               <div className="flex items-center justify-between gap-2">
                 <Text as="p" headingH3 text05>
-                  Custom skills
+                  自定义技能
                 </Text>
                 <Button icon={SvgPlus} onClick={() => setUploadOpen(true)}>
-                  Upload skill
+                  上传技能
                 </Button>
               </div>
               <CustomSkillsTable

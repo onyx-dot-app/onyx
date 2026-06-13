@@ -298,8 +298,8 @@ export default function AdminSidebar() {
                   icon={icon}
                   tooltip={markdown(
                     requiredTier === Tier.ENTERPRISE
-                      ? "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
-                      : "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                      ? "此功能仅在 [Glomi AI 企业版](/admin/billing) 中可用。"
+                      : "此功能仅在 [Glomi AI 商业版或企业版](/admin/billing) 中可用。"
                   )}
                 >
                   {name}

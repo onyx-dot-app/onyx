@@ -40,8 +40,8 @@ export default function ExternalAppsPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgPlug}
-        title="Apps"
-        description="Connect the tools Onyx Craft can use as context while it works."
+        title="应用"
+        description="连接 Glomi 创作工作时可作为上下文使用的工具。"
         rightChildren={
           isAdmin ? (
             <div className="flex items-center gap-2">
@@ -50,7 +50,7 @@ export default function ExternalAppsPage() {
                 prominence="secondary"
                 icon={SvgSettings}
               >
-                Manage apps
+                管理应用
               </Button>
             </div>
           ) : undefined
@@ -58,7 +58,7 @@ export default function ExternalAppsPage() {
       >
         <InputTypeIn
           ref={searchInputRef}
-          placeholder="Search apps..."
+          placeholder="搜索应用..."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           searchIcon
@@ -97,7 +97,7 @@ function AppConnections({ query }: AppConnectionsProps) {
   if (data === undefined) {
     return (
       <Card background="none" border="dashed" rounding="lg">
-        <Text font="main-content-body">Loading…</Text>
+        <Text font="main-content-body">正在加载...</Text>
       </Card>
     );
   }
@@ -106,8 +106,7 @@ function AppConnections({ query }: AppConnectionsProps) {
     return (
       <Card background="none" border="dashed" rounding="lg">
         <Text font="main-content-body" color="text-03">
-          No external apps are enabled for your org yet. Ask an admin to enable
-          one.
+          你的组织尚未启用任何外部应用。请联系管理员启用。
         </Text>
       </Card>
     );
@@ -118,7 +117,7 @@ function AppConnections({ query }: AppConnectionsProps) {
       {connected.length > 0 && (
         <section className="flex flex-col gap-2">
           <Text font="secondary-body" color="text-03">
-            Connected
+            已连接
           </Text>
           <div className="flex flex-col gap-2">
             {connected.map((userApp) => (
@@ -135,11 +134,11 @@ function AppConnections({ query }: AppConnectionsProps) {
 
       <section className="flex flex-col gap-2">
         <Text font="secondary-body" color="text-03">
-          Browse apps
+          浏览应用
         </Text>
         {browse.length === 0 ? (
           <Text font="secondary-body" color="text-03">
-            {query ? "No apps match your search." : "Everything is connected."}
+            {query ? "没有匹配搜索的应用。" : "所有应用都已连接。"}
           </Text>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -199,7 +198,7 @@ function ProviderConnectCard({
       window.location.href = authorize_url;
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : "Failed to start authorization"
+        e instanceof Error ? e.message : "启动授权失败"
       );
       setIsStarting(false);
     }
@@ -213,7 +212,7 @@ function ProviderConnectCard({
       await disconnectUserFromApp(userApp.id);
       onChange();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to disconnect");
+      toast.error(e instanceof Error ? e.message : "断开连接失败");
     } finally {
       setIsStarting(false);
     }
@@ -240,7 +239,7 @@ function ProviderConnectCard({
                   <SvgCheckCircle className="w-4 h-4 text-status-success-05" />
                 </div>
                 <Text font="secondary-body" color="text-03">
-                  Connected
+                  已连接
                 </Text>
               </div>
               <Button
@@ -248,7 +247,7 @@ function ProviderConnectCard({
                 disabled={isStarting}
                 onClick={disconnect}
               >
-                {isStarting ? "…" : "Disconnect"}
+                {isStarting ? "..." : "断开连接"}
               </Button>
             </div>
           ) : (
@@ -261,7 +260,7 @@ function ProviderConnectCard({
                 {userApp.description}
               </Text>
               <Button disabled={isStarting} onClick={connect}>
-                {isStarting ? "Redirecting…" : "Connect"}
+                {isStarting ? "正在跳转..." : "连接"}
               </Button>
             </div>
           )}

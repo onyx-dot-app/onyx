@@ -80,17 +80,17 @@ async function validateCredentials(
       return {
         success: false,
         message:
-          errorData.detail || `Validation failed: ${response.statusText}`,
+          errorData.detail || `校验失败：${response.statusText}`,
       };
     }
 
     const result = await response.json();
     return {
       success: result,
-      message: result ? "Credentials are valid" : "Credentials are invalid",
+      message: result ? "凭据有效" : "凭据无效",
     };
   } catch (error) {
-    return { success: false, message: `Validation error: ${error}` };
+    return { success: false, message: `校验错误：${error}` };
   }
 }
 
@@ -115,13 +115,13 @@ async function createFederatedConnector(
     if (response.ok) {
       return {
         success: true,
-        message: "Federated connector created successfully!",
+        message: "联邦连接器创建成功！",
       };
     } else {
       const errorData = await response.json();
       return {
         success: false,
-        message: errorData.detail || "Failed to create federated connector",
+        message: errorData.detail || "创建联邦连接器失败",
       };
     }
   } catch (error) {
@@ -149,13 +149,13 @@ async function updateFederatedConnector(
     if (response.ok) {
       return {
         success: true,
-        message: "Federated connector updated successfully!",
+        message: "联邦连接器更新成功！",
       };
     } else {
       const errorData = await response.json();
       return {
         success: false,
-        message: errorData.detail || "Failed to update federated connector",
+        message: errorData.detail || "更新联邦连接器失败",
       };
     }
   } catch (error) {
@@ -174,13 +174,13 @@ async function deleteFederatedConnector(
     if (response.ok) {
       return {
         success: true,
-        message: "Federated connector deleted successfully!",
+        message: "联邦连接器已删除！",
       };
     } else {
       const errorData = await response.json();
       return {
         success: false,
-        message: errorData.detail || "Failed to delete federated connector",
+        message: errorData.detail || "删除联邦连接器失败",
       };
     }
   } catch (error) {
@@ -234,7 +234,7 @@ export function FederatedConnectorForm({
 
           if (!response.ok) {
             throw new Error(
-              `Failed to fetch credential schema: ${response.statusText}`
+              `获取凭据 schema 失败：${response.statusText}`
             );
           }
 
@@ -245,10 +245,10 @@ export function FederatedConnectorForm({
             schemaError: null,
           }));
         } catch (error) {
-          console.error("Error fetching credential schema:", error);
+          console.error("获取凭据 schema 出错：", error);
           setFormState((prev) => ({
             ...prev,
-            schemaError: `Failed to load credential schema: ${error}`,
+            schemaError: `加载凭据 schema 失败：${error}`,
           }));
         } finally {
           setIsLoadingSchema(false);
@@ -269,7 +269,7 @@ export function FederatedConnectorForm({
 
         if (!response.ok) {
           throw new Error(
-            `Failed to fetch configuration schema: ${response.statusText}`
+            `获取配置 schema 失败：${response.statusText}`
           );
         }
 
@@ -303,10 +303,10 @@ export function FederatedConnectorForm({
           }));
         }
       } catch (error) {
-        console.error("Error fetching configuration schema:", error);
+        console.error("获取配置 schema 出错：", error);
         setFormState((prev) => ({
           ...prev,
-          configurationSchemaError: `Failed to load configuration schema: ${error}`,
+          configurationSchemaError: `加载配置 schema 失败：${error}`,
         }));
       }
     };
@@ -322,10 +322,10 @@ export function FederatedConnectorForm({
           <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-4" />
           <div className="text-center">
             <p className="text-lg font-medium text-gray-700 mb-2">
-              Loading credential schema...
+              正在加载凭据 schema...
             </p>
             <p className="text-sm text-gray-500">
-              Retrieving required fields for this connector type
+              正在获取此连接器类型所需字段
             </p>
           </div>
         </div>
@@ -357,7 +357,7 @@ export function FederatedConnectorForm({
   const handleValidateCredentials = async () => {
     if (!formState.schema) return;
     if (isEditMode && !credentialsModified) {
-      setSubmitMessage("Enter new credential values before validating.");
+      setSubmitMessage("校验前请输入新的凭据值。");
       setSubmitSuccess(false);
       return;
     }
@@ -374,7 +374,7 @@ export function FederatedConnectorForm({
       setSubmitMessage(result.message);
       setSubmitSuccess(result.success);
     } catch (error) {
-      setSubmitMessage(`Validation error: ${error}`);
+      setSubmitMessage(`校验错误：${error}`);
       setSubmitSuccess(false);
     } finally {
       setIsValidating(false);
@@ -385,7 +385,7 @@ export function FederatedConnectorForm({
     if (!connectorId) return;
 
     const confirmed = window.confirm(
-      "Are you sure you want to delete this federated connector? This action cannot be undone."
+      "确定要删除此联邦连接器吗？此操作无法撤销。"
     );
 
     if (!confirmed) return;
@@ -405,7 +405,7 @@ export function FederatedConnectorForm({
         toast.error(result.message);
       }
     } catch (error) {
-      toast.error(`Error deleting connector: ${error}`);
+      toast.error(`删除连接器出错：${error}`);
     } finally {
       setIsDeleting(false);
     }
@@ -430,7 +430,7 @@ export function FederatedConnectorForm({
 
         if (missingRequired.length > 0) {
           setSubmitMessage(
-            `Missing required fields: ${missingRequired.join(", ")}`
+            `缺少必填字段：${missingRequired.join(", ")}`
           );
           setSubmitSuccess(false);
           setIsSubmitting(false);
@@ -459,7 +459,7 @@ export function FederatedConnectorForm({
         );
         if (!validation.success) {
           setSubmitMessage(
-            `Credential validation failed: ${validation.message}`
+            `凭据校验失败：${validation.message}`
           );
           setSubmitSuccess(false);
           setIsSubmitting(false);
@@ -492,7 +492,7 @@ export function FederatedConnectorForm({
         }, 500);
       }
     } catch (error) {
-      setSubmitMessage(`Error: ${error}`);
+      setSubmitMessage(`错误：${error}`);
       setSubmitSuccess(false);
       setIsSubmitting(false);
     }
@@ -520,7 +520,7 @@ export function FederatedConnectorForm({
     if (!formState.schema) {
       return (
         <div className="text-sm text-gray-500">
-          No credential schema available for this connector type.
+          此连接器类型没有可用的凭据 schema。
         </div>
       );
     }
@@ -552,7 +552,7 @@ export function FederatedConnectorForm({
               type={fieldSpec.secret ? "password" : "text"}
               placeholder={
                 isEditMode && !credentialsModified
-                  ? "••••••••  (leave blank to keep current value)"
+                  ? "••••••••（留空以保留当前值）"
                   : fieldSpec.example
                     ? String(fieldSpec.example)
                     : fieldSpec.description
@@ -599,7 +599,7 @@ export function FederatedConnectorForm({
           formState.config.channels.length === 0)
       ) {
         errors.channels =
-          "At least one channel is required when 'Search All Channels' is disabled";
+          "禁用“搜索所有频道”时至少需要一个频道";
       }
     }
 
@@ -619,13 +619,13 @@ export function FederatedConnectorForm({
     if (!formState.configurationSchema) {
       return (
         <div className="text-sm text-gray-500">
-          No search configuration available for this connector type.
+          此连接器类型没有可用的搜索配置。
         </div>
       );
     }
 
     const channelInputPlaceholder =
-      "Type channel name or regex pattern and press Enter";
+      "输入频道名称或 Regex 模式并按 Enter";
 
     return (
       <>
@@ -699,7 +699,7 @@ export function FederatedConnectorForm({
                             fieldKey === "channels" ||
                             fieldKey === "exclude_channels"
                               ? channelInputPlaceholder
-                              : "Type and press Enter to add an item"
+                              : "输入后按 Enter 添加项目"
                           }
                           disabled={disableSlackChannelInput(fieldKey)}
                           error={!!configValidationErrors[fieldKey]}
@@ -774,15 +774,15 @@ export function FederatedConnectorForm({
         <div className="ml-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 mr-4">
           <div className="text-2xl font-bold text-text-default flex items-center gap-2">
             <span>
-              {isEditMode ? "Edit" : "Setup"} {sourceMetadata.displayName}
+              {isEditMode ? "编辑" : "设置"} {sourceMetadata.displayName}
             </span>
             <Badge variant="outline" className="text-xs">
-              Federated
+              联邦
             </Badge>
             <Tooltip
               tooltip={
                 sourceMetadata.federatedTooltip ||
-                "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."
+                "这是联邦连接器。与常规连接器相比，它会带来更高延迟和较低搜索质量。"
               }
               side="bottom"
             >
@@ -797,7 +797,7 @@ export function FederatedConnectorForm({
               <DropdownMenuTrigger asChild>
                 <div>
                   <OpalButton prominence="secondary" icon={SvgSettings}>
-                    Manage
+                    管理
                   </OpalButton>
                 </div>
               </DropdownMenuTrigger>
@@ -806,10 +806,10 @@ export function FederatedConnectorForm({
                   onClick={handleDeleteConnector}
                   disabled={isDeleting}
                   className="flex items-center gap-x-2 cursor-pointer px-3 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                  tooltip={isDeleting ? "Deletion in progress" : undefined}
+                  tooltip={isDeleting ? "正在删除" : undefined}
                 >
                   <Trash2Icon className="h-4 w-4" />
-                  <span>{isDeleting ? "Deleting..." : "Delete"}</span>
+                  <span>{isDeleting ? "正在删除..." : "删除"}</span>
                 </DropdownMenuItemWithTooltip>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -818,22 +818,22 @@ export function FederatedConnectorForm({
       </div>
 
       <Title className="mb-2 mt-6" size="md">
-        Federated Connector Configuration
+        联邦连接器配置
       </Title>
 
       <Card className="px-8 py-4">
         <CardContent className="p-0">
           <form onSubmit={handleSubmit}>
             <Text as="p" headingH3>
-              Credentials
+              凭据
             </Text>
             <Text as="p" mainUiMuted>
-              Enter the credentials for this connector.
+              输入此连接器的凭据。
             </Text>
             <div className="space-y-4">{renderCredentialFields()}</div>
             <Divider />
             <Text as="p" headingH3>
-              Configuration
+              配置
             </Text>
             <div className="space-y-4">{renderConfigFields()}</div>
 
@@ -863,7 +863,7 @@ export function FederatedConnectorForm({
                 disabled={isValidating || !formState.schema}
                 className="flex ml-auto"
               >
-                {isValidating ? "Validating..." : "Validate"}
+                {isValidating ? "正在校验..." : "校验"}
               </Button>
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
@@ -874,11 +874,11 @@ export function FederatedConnectorForm({
               >
                 {isSubmitting
                   ? isEditMode
-                    ? "Updating..."
-                    : "Creating..."
+                    ? "正在更新..."
+                    : "正在创建..."
                   : isEditMode
-                    ? "Update"
-                    : "Create"}
+                    ? "更新"
+                    : "创建"}
               </Button>
             </div>
           </form>

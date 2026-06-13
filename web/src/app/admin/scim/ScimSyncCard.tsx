@@ -36,8 +36,8 @@ export default function ScimSyncCard({
   return (
     <Card gap={0.75}>
       <ContentAction
-        title="SCIM Sync"
-        description="Connect your identity provider to import and sync users and groups."
+        title="SCIM 同步"
+        description="连接你的身份提供商，以导入并同步用户和用户组。"
         sizePreset="main-ui"
         variant="section"
         padding="fit"
@@ -49,7 +49,7 @@ export default function ScimSyncCard({
               onClick={onRegenerate}
               icon={SvgRefreshCw}
             >
-              Regenerate Token
+              重新生成 Token
             </Button>
           ) : (
             <Button
@@ -57,7 +57,7 @@ export default function ScimSyncCard({
               rightIcon={SvgKey}
               onClick={onGenerate}
             >
-              Generate SCIM Token
+              生成 SCIM Token
             </Button>
           )
         }
@@ -80,7 +80,7 @@ export default function ScimSyncCard({
                 <SvgClock size={15} className="text-theme-amber-05" />
               )}
               <Text as="p" mainUiBody text04>
-                {isConnected ? "Connected" : "Waiting for Connection"}
+                {isConnected ? "已连接" : "等待连接"}
               </Text>
             </Section>
 
@@ -103,8 +103,7 @@ export default function ScimSyncCard({
                   text03
                   className="max-w-[240px] text-right"
                 >
-                  Provide the SCIM key to your identity provider to begin
-                  syncing users and groups.
+                  将 SCIM Key 提供给你的身份提供商，即可开始同步用户和用户组。
                 </Text>
               )}
             </Section>

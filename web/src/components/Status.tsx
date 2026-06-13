@@ -28,7 +28,7 @@ export function IndexAttemptStatus({
   if (status === "failed") {
     const icon = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Failed
+        失败
       </Badge>
     );
     if (errorMsg) {
@@ -43,43 +43,43 @@ export function IndexAttemptStatus({
   } else if (status === "completed_with_errors") {
     badge = (
       <Badge variant="secondary" icon={FiAlertTriangle}>
-        Completed with errors
+        已完成但有错误
       </Badge>
     );
   } else if (status === "success") {
     badge = (
       <Badge variant="success" icon={FiCheckCircle}>
-        Succeeded
+        成功
       </Badge>
     );
   } else if (status === "in_progress") {
     badge = (
       <Badge variant="in_progress" icon={FiClock}>
-        In Progress
+        进行中
       </Badge>
     );
   } else if (status === "not_started") {
     badge = (
       <Badge variant="not_started" icon={FiClock}>
-        Scheduled
+        已安排
       </Badge>
     );
   } else if (status === "canceled") {
     badge = (
       <Badge variant="canceled" icon={FiClock}>
-        Canceled
+        已取消
       </Badge>
     );
   } else if (status === "invalid") {
     badge = (
       <Badge variant="invalid" icon={FiAlertTriangle}>
-        Invalid
+        无效
       </Badge>
     );
   } else {
     badge = (
       <Badge variant="outline" icon={FiMinus}>
-        None
+        无
       </Badge>
     );
   }
@@ -99,7 +99,7 @@ export function PermissionSyncStatus({
   if (status === PermissionSyncStatusEnum.FAILED) {
     const icon = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Failed
+        失败
       </Badge>
     );
     if (errorMsg) {
@@ -114,31 +114,31 @@ export function PermissionSyncStatus({
   } else if (status === PermissionSyncStatusEnum.COMPLETED_WITH_ERRORS) {
     badge = (
       <Badge variant="secondary" icon={FiAlertTriangle}>
-        Completed with errors
+        已完成但有错误
       </Badge>
     );
   } else if (status === PermissionSyncStatusEnum.SUCCESS) {
     badge = (
       <Badge variant="success" icon={FiCheckCircle}>
-        Succeeded
+        成功
       </Badge>
     );
   } else if (status === PermissionSyncStatusEnum.IN_PROGRESS) {
     badge = (
       <Badge variant="in_progress" icon={FiClock}>
-        In Progress
+        进行中
       </Badge>
     );
   } else if (status === PermissionSyncStatusEnum.NOT_STARTED) {
     badge = (
       <Badge variant="not_started" icon={FiClock}>
-        Scheduled
+        已安排
       </Badge>
     );
   } else {
     badge = (
       <Badge variant="secondary" icon={FiClock}>
-        Not Started
+        未开始
       </Badge>
     );
   }
@@ -162,48 +162,48 @@ export function CCPairStatus({
   if (ccPairStatus == ConnectorCredentialPairStatus.DELETING) {
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Deleting
+        正在删除
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.PAUSED) {
     badge = (
       <Badge variant="paused" icon={FiPauseCircle}>
-        Paused
+        已暂停
       </Badge>
     );
   } else if (inRepeatedErrorState) {
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Error
+        错误
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.SCHEDULED) {
     badge = (
       <Badge variant="not_started" icon={FiClock}>
-        Scheduled
+        已安排
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.INITIAL_INDEXING) {
     badge = (
       <Badge variant="in_progress" icon={FiClock}>
-        Initial Indexing
+        初始索引中
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.INVALID) {
     badge = (
       <Badge
-        tooltip="Connector is in an invalid state. Please update the credentials or create a new connector."
+        tooltip="连接器处于无效状态。请更新凭据或创建新的连接器。"
         circle
         variant="invalid"
       >
-        Invalid
+        无效
       </Badge>
     );
   } else {
     if (lastIndexAttemptStatus && lastIndexAttemptStatus === "in_progress") {
       badge = (
         <Badge variant="in_progress" icon={FiClock}>
-          Indexing
+          索引中
         </Badge>
       );
     } else if (
@@ -212,7 +212,7 @@ export function CCPairStatus({
     ) {
       badge = (
         <Badge variant="not_started" icon={FiClock}>
-          Scheduled
+          已安排
         </Badge>
       );
     } else if (
@@ -221,13 +221,13 @@ export function CCPairStatus({
     ) {
       badge = (
         <Badge variant="canceled" icon={FiClock}>
-          Canceled
+          已取消
         </Badge>
       );
     } else {
       badge = (
         <Badge variant="success" icon={FiCheckCircle}>
-          Indexed
+          已索引
         </Badge>
       );
     }

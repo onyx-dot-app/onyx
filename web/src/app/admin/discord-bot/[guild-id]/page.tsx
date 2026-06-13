@@ -71,8 +71,8 @@ function GuildDetailContent({
   if (guildError || !guild) {
     return (
       <ErrorCallout
-        errorTitle="Failed to load server"
-        errorMsg={guildError?.info?.detail || "Server not found"}
+        errorTitle="加载服务器失败"
+        errorMsg={guildError?.info?.detail || "未找到服务器"}
       />
     );
   }
@@ -82,16 +82,15 @@ function GuildDetailContent({
   return (
     <>
       {!isRegistered && (
-        <Callout type="notice" title="Waiting for Registration">
-          Use the !register command in your Discord server with the registration
-          key to complete setup.
+        <Callout type="notice" title="等待注册">
+          在你的 Discord 服务器中使用 !register 命令和注册码完成设置。
         </Callout>
       )}
 
       <Card variant={disabled ? "disabled" : "primary"}>
         <ContentAction
-          title="Channel Configuration"
-          description="Run !sync-channels in Discord to update the channel list."
+          title="频道配置"
+          description="在 Discord 中运行 !sync-channels 以更新频道列表。"
           sizePreset="main-content"
           variant="section"
           rightChildren={
@@ -108,14 +107,14 @@ function GuildDetailContent({
                   prominence="secondary"
                   onClick={handleEnableAll}
                 >
-                  Enable All
+                  全部启用
                 </Button>
                 <Button
                   disabled={disabled}
                   prominence="secondary"
                   onClick={handleDisableAll}
                 >
-                  Disable All
+                  全部禁用
                 </Button>
               </Section>
             ) : undefined
@@ -124,15 +123,14 @@ function GuildDetailContent({
 
         {!isRegistered ? (
           <Text text03 secondaryBody>
-            Channel configuration will be available after the server is
-            registered.
+            服务器注册完成后即可配置频道。
           </Text>
         ) : channelsLoading ? (
           <ThreeDotsLoader />
         ) : channelsError ? (
           <ErrorCallout
-            errorTitle="Failed to load channels"
-            errorMsg={channelsError?.info?.detail || "Could not load channels"}
+            errorTitle="加载频道失败"
+            errorMsg={channelsError?.info?.detail || "无法加载频道"}
           />
         ) : (
           <DiscordChannelsTable
@@ -278,19 +276,19 @@ export default function Page({ params }: Props) {
       );
 
       if (failed > 0) {
-        toast.error(`Updated ${succeeded} channels, but ${failed} failed`);
+        toast.error(`已更新 ${succeeded} 个频道，但 ${failed} 个失败`);
         // Refresh to get actual server state when some updates failed
         refreshChannels();
       } else {
         toast.success(
-          `Updated ${succeeded} channel${succeeded !== 1 ? "s" : ""}`
+          `已更新 ${succeeded} 个频道`
         );
         // Update original to match local (avoids flash from refresh)
         setOriginalChannels(localChannels);
       }
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update channels"
+        err instanceof Error ? err.message : "更新频道失败"
       );
     } finally {
       setIsUpdating(false);
@@ -307,11 +305,11 @@ export default function Page({ params }: Props) {
       });
       refreshGuild();
       toast.success(
-        personaId ? "Default agent updated" : "Default agent cleared"
+        personaId ? "默认智能体已更新" : "默认智能体已清除"
       );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update agent"
+        err instanceof Error ? err.message : "更新智能体失败"
       );
     } finally {
       setIsUpdating(false);
@@ -319,8 +317,8 @@ export default function Page({ params }: Props) {
   };
 
   const registeredText = guild?.registered_at
-    ? `Registered: ${new Date(guild.registered_at).toLocaleString()}`
-    : "Pending registration";
+    ? `已注册：${new Date(guild.registered_at).toLocaleString()}`
+    : "等待注册";
 
   const isRegistered = !!guild?.guild_id;
   const isUpdateDisabled =
@@ -335,12 +333,12 @@ export default function Page({ params }: Props) {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgServer}
-        title={guild?.guild_name || `Server #${guildId}`}
+        title={guild?.guild_name || `服务器 #${guildId}`}
         description={registeredText}
         backButton
         rightChildren={
           <Button disabled={isUpdateDisabled} onClick={handleSaveChanges}>
-            Update Configuration
+            更新配置
           </Button>
         }
       />
@@ -348,8 +346,8 @@ export default function Page({ params }: Props) {
         {/* Default Agent Selector */}
         <Card variant={!guild?.enabled ? "disabled" : "primary"}>
           <ContentAction
-            title="Default Agent"
-            description="The agent used by the bot in all channels unless overridden."
+            title="默认智能体"
+            description="除非频道单独覆盖，否则机器人会在所有频道中使用此智能体。"
             sizePreset="main-content"
             variant="section"
             rightChildren={
@@ -362,10 +360,10 @@ export default function Page({ params }: Props) {
                 }
                 disabled={isUpdating || !guild?.enabled || personasLoading}
               >
-                <InputSelect.Trigger placeholder="Select agent" />
+                <InputSelect.Trigger placeholder="选择智能体" />
                 <InputSelect.Content>
                   <InputSelect.Item value="default">
-                    Default Agent
+                    默认智能体
                   </InputSelect.Item>
                   {agents.map((persona) => (
                     <InputSelect.Item
@@ -405,8 +403,8 @@ export default function Page({ params }: Props) {
         >
           <MessageCard
             variant="warning"
-            title="You have unsaved changes"
-            description="Click Update to save them."
+            title="你有未保存的更改"
+            description="点击“更新”以保存。"
           />
         </div>
       </SettingsLayouts.Body>

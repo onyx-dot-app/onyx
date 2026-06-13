@@ -82,17 +82,17 @@ export default function UserRowActions({
               icon={SvgUsers}
               onClick={() => openModal(Modal.EDIT_GROUPS)}
             >
-              Groups &amp; Roles
+              用户组和角色
             </LineItem>
           )}
           <Disabled disabled>
             <LineItem danger icon={SvgUserX}>
-              Deactivate User
+              停用用户
             </LineItem>
           </Disabled>
           <Divider paddingPerpendicular="md" />
           <Text as="p" secondaryBody text03 className="px-3 py-1">
-            This is a synced SCIM user managed by your identity provider.
+            这是由身份提供商管理的 SCIM 同步用户。
           </Text>
         </>
       );
@@ -106,7 +106,7 @@ export default function UserRowActions({
             icon={SvgXCircle}
             onClick={() => openModal(Modal.CANCEL_INVITE)}
           >
-            Cancel Invite
+            取消邀请
           </LineItem>
         );
 
@@ -120,16 +120,16 @@ export default function UserRowActions({
                 try {
                   await approveRequest(user.email);
                   onMutate();
-                  toast.success("Request approved");
+                  toast.success("请求已批准");
                 } catch (err) {
                   toast.error(
-                    err instanceof Error ? err.message : "An error occurred"
+                    err instanceof Error ? err.message : "发生错误"
                   );
                 }
               })();
             }}
           >
-            Approve
+            批准
           </LineItem>
         );
 
@@ -141,14 +141,14 @@ export default function UserRowActions({
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
               >
-                Groups &amp; Roles
+                用户组和角色
               </LineItem>
             )}
             <LineItem
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
             >
-              Reset Password
+              重置密码
             </LineItem>
             <Divider paddingPerpendicular="md" />
             <LineItem
@@ -156,7 +156,7 @@ export default function UserRowActions({
               icon={SvgUserX}
               onClick={() => openModal(Modal.DEACTIVATE)}
             >
-              Deactivate User
+              停用用户
             </LineItem>
           </>
         );
@@ -169,21 +169,21 @@ export default function UserRowActions({
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
               >
-                Groups &amp; Roles
+                用户组和角色
               </LineItem>
             )}
             <LineItem
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
             >
-              Reset Password
+              重置密码
             </LineItem>
             <Divider paddingPerpendicular="md" />
             <LineItem
               icon={SvgUserPlus}
               onClick={() => openModal(Modal.ACTIVATE)}
             >
-              Activate User
+              启用用户
             </LineItem>
             <Divider paddingPerpendicular="md" />
             <LineItem
@@ -191,7 +191,7 @@ export default function UserRowActions({
               icon={SvgUserX}
               onClick={() => openModal(Modal.DELETE)}
             >
-              Delete User
+              删除用户
             </LineItem>
           </>
         );

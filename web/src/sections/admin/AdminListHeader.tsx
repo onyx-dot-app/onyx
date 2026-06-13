@@ -54,7 +54,7 @@ export default function AdminListHeader({
   hasItems,
   searchQuery,
   onSearchQueryChange,
-  placeholder = "Search...",
+  placeholder = "搜索...",
   emptyStateText,
   onAction,
   actionLabel,

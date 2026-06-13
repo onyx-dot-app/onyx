@@ -59,7 +59,7 @@ export function BotConfigCard() {
 
   const handleSaveToken = async () => {
     if (!botToken.trim()) {
-      toast.error("Please enter a bot token");
+      toast.error("请输入 Bot Token");
       return;
     }
 
@@ -68,10 +68,10 @@ export function BotConfigCard() {
       await createBotConfig(botToken.trim());
       setBotToken("");
       refreshBotConfig();
-      toast.success("Bot token saved successfully");
+      toast.success("Bot Token 已保存");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to save bot token"
+        err instanceof Error ? err.message : "保存 Bot Token 失败"
       );
     } finally {
       setIsSubmitting(false);
@@ -83,10 +83,10 @@ export function BotConfigCard() {
     try {
       await deleteBotConfig();
       refreshBotConfig();
-      toast.success("Bot token deleted");
+      toast.success("Bot Token 已删除");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to delete bot token"
+        err instanceof Error ? err.message : "删除 Bot Token 失败"
       );
     } finally {
       setIsSubmitting(false);
@@ -99,11 +99,11 @@ export function BotConfigCard() {
       {showDeleteConfirm && (
         <ConfirmEntityModal
           danger
-          entityType="Discord bot token"
+          entityType="Discord Bot Token"
           entityName="Discord Bot Token"
           onClose={() => setShowDeleteConfirm(false)}
           onSubmit={handleDeleteToken}
-          additionalDetails="This will disconnect your Discord bot. You will need to re-enter the token to use the bot again."
+          additionalDetails="这会断开你的 Discord Bot。若要再次使用，需要重新输入 Token。"
         />
       )}
       <Card>
@@ -113,15 +113,15 @@ export function BotConfigCard() {
               Bot Token
             </Text>
             {isConfigured ? (
-              <Badge variant="success">Configured</Badge>
+              <Badge variant="success">已配置</Badge>
             ) : (
-              <Badge variant="secondary">Not Configured</Badge>
+              <Badge variant="secondary">未配置</Badge>
             )}
           </Section>
           {isConfigured && (
             <Tooltip
               tooltip={
-                hasServerConfigs ? "Delete server configs first" : undefined
+                hasServerConfigs ? "请先删除服务器配置" : undefined
               }
             >
               <Button
@@ -129,7 +129,7 @@ export function BotConfigCard() {
                 variant="danger"
                 onClick={() => setShowDeleteConfirm(true)}
               >
-                Delete Discord Token
+                删除 Discord Token
               </Button>
             </Tooltip>
           )}
@@ -138,36 +138,35 @@ export function BotConfigCard() {
         {isConfigured ? (
           <Section flexDirection="column" alignItems="start" gap={0.5}>
             <Text text03 secondaryBody>
-              Your Discord bot token is configured.
+              你的 Discord Bot Token 已配置。
               {botConfig?.created_at && (
                 <>
                   {" "}
-                  Added {getFormattedDateTime(new Date(botConfig.created_at))}.
+                  添加于 {getFormattedDateTime(new Date(botConfig.created_at))}。
                 </>
               )}
             </Text>
             <Text text03 secondaryBody>
-              To change the token, delete the current one and add a new one.
+              如需更改 Token，请删除当前 Token 后再添加新的 Token。
             </Text>
           </Section>
         ) : (
           <Section flexDirection="column" alignItems="start" gap={0.75}>
             <Text text03 secondaryBody>
-              Enter your Discord bot token to enable the bot. You can get this
-              from the Discord Developer Portal.
+              输入 Discord Bot Token 以启用 Bot。你可以从 Discord Developer Portal 获取它。
             </Text>
             <Section flexDirection="row" alignItems="end" gap={0.5}>
               <PasswordInputTypeIn
                 value={botToken}
                 onChange={(e) => setBotToken(e.target.value)}
-                placeholder="Enter bot token..."
+                placeholder="输入 Bot Token..."
                 disabled={isSubmitting}
               />
               <Button
                 disabled={isSubmitting || !botToken.trim()}
                 onClick={handleSaveToken}
               >
-                {isSubmitting ? "Saving..." : "Save Token"}
+                {isSubmitting ? "正在保存..." : "保存 Token"}
               </Button>
             </Section>
           </Section>

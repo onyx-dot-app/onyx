@@ -99,7 +99,7 @@ export default function ProjectContextPanel({
 
   // Handle project name editing
   const currentProject = projects.find((p) => p.id === currentProjectId);
-  const projectName = currentProject?.name || "Loading project...";
+  const projectName = currentProject?.name || "正在加载项目...";
 
   const startEditing = useCallback(() => {
     setIsEditingName(true);
@@ -124,8 +124,8 @@ export default function ProjectContextPanel({
 
       <projectFilesModal.Provider>
         <UserFilesModal
-          title="Project Files"
-          description="Sessions in this project can access the files here."
+          title="项目文件"
+          description="此项目中的会话可以访问这里的文件。"
           recentFiles={[...allCurrentProjectFiles]}
           onView={handleOnView}
           handleUploadChange={handleUploadChange}
@@ -162,7 +162,7 @@ export default function ProjectContextPanel({
                       icon={SvgEdit}
                       internal
                       onClick={startEditing}
-                      tooltip="Edit project name"
+                      tooltip="编辑项目名称"
                     />
                   </Hoverable.Item>
                 </>
@@ -175,7 +175,7 @@ export default function ProjectContextPanel({
         <div className="flex flex-row gap-2 justify-between">
           <div className="min-w-0 flex-1">
             <Text as="p" headingH3 text04>
-              Instructions
+              指令
             </Text>
             {isLoadingProjectDetails && !currentProjectDetails ? (
               <div className="h-5 w-3/4 rounded-sm bg-background-tint-02 animate-pulse" />
@@ -185,7 +185,7 @@ export default function ProjectContextPanel({
               </Text>
             ) : (
               <Text as="p" text02 secondaryBody className="truncate">
-                Add instructions to tailor the response in this project.
+                添加指令，让此项目中的回答更贴合你的需求。
               </Text>
             )}
           </div>
@@ -194,7 +194,7 @@ export default function ProjectContextPanel({
             icon={SvgAddLines}
             onClick={() => addInstructionModal.toggle(true)}
           >
-            Set Instructions
+            设置指令
           </Button>
         </div>
         <div
@@ -204,10 +204,10 @@ export default function ProjectContextPanel({
           <div className="flex flex-row gap-2 justify-between">
             <div>
               <Text as="p" headingH3 text04>
-                Files
+                文件
               </Text>
               <Text as="p" text02 secondaryBody>
-                Chats in this project can access these files.
+                此项目中的对话可以访问这些文件。
               </Text>
             </div>
             <FilePickerPopover
@@ -217,7 +217,7 @@ export default function ProjectContextPanel({
                   prominence="tertiary"
                   interaction={open ? "active" : "rest"}
                 >
-                  Add Files
+                  添加文件
                 </Button>
               )}
               onFileClick={handleOnView}
@@ -264,13 +264,13 @@ export default function ProjectContextPanel({
                 >
                   <div className="flex flex-col overflow-hidden">
                     <div className="flex items-center justify-between gap-2 w-full">
-                      <Text as="p" text04 secondaryAction>
-                        View files
+                        <Text as="p" text04 secondaryAction>
+                        查看文件
                       </Text>
                       <SvgFiles className="h-5 w-5 stroke-text-02" />
                     </div>
                     <Text as="p" text03 secondaryBody>
-                      {displayFileCount} files
+                      {displayFileCount} 个文件
                     </Text>
                   </div>
                 </button>
@@ -301,12 +301,12 @@ export default function ProjectContextPanel({
                     <div className="flex flex-col overflow-hidden h-12 p-1">
                       <div className="flex items-center justify-between gap-2 w-full">
                         <Text as="p" text04 secondaryAction>
-                          View All
+                          查看全部
                         </Text>
                         <SvgFiles className="h-5 w-5 stroke-text-02" />
                       </div>
                       <Text as="p" text03 secondaryBody>
-                        {displayFileCount} files
+                        {displayFileCount} 个文件
                       </Text>
                     </div>
                   </button>
@@ -317,9 +317,8 @@ export default function ProjectContextPanel({
               </div>
               {projectTokenCount > availableContextTokens && (
                 <Text as="p" text02 secondaryBody>
-                  This project exceeds the model&apos;s context limits. Sessions
-                  will automatically search for relevant files first before
-                  generating response.
+                  此项目已超出模型上下文限制。会话会先自动搜索相关文件，
+                  再生成回答。
                 </Text>
               )}
             </>
@@ -337,8 +336,8 @@ export default function ProjectContextPanel({
                 }`}
               >
                 {isDragActive
-                  ? "Drop files here to add to this project"
-                  : "Add documents, texts, or images to use in the project. Drag & drop supported."}
+                  ? "将文件拖到这里以添加到此项目"
+                  : "添加文档、文本或图片供项目使用。支持拖放。"}
               </p>
             </div>
           )}

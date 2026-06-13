@@ -11,7 +11,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { transformLinkUri } from "@/lib/utils";
 import { SvgAlertCircle } from "@opal/icons";
-import { SvgOnyxLogo } from "@opal/logos";
+import { GlomiLogoMark } from "@/refresh-components/GlomiLogo";
 import type { IconProps } from "@opal/types";
 import { useTranslations } from "next-intl";
 
@@ -62,17 +62,17 @@ export function AppPopup() {
   const logoDisplayStyle = enterpriseSettings?.logo_display_style;
 
   // Header icon rules:
-  // - If neither app name nor custom logo exists -> show Onyx icon
+  // - If neither app name nor custom logo exists -> show Glomi AI icon
   // - If logo display is "name_only" -> show alert icon
-  // - Otherwise -> show uploaded custom logo (fallback to Onyx icon)
+  // - Otherwise -> show uploaded custom logo (fallback to Glomi AI icon)
   const headerIcon =
     !hasApplicationName && !hasCustomLogo
-      ? (props: IconProps) => <SvgOnyxLogo size={24} {...props} />
+      ? (props: IconProps) => <GlomiLogoMark size={24} {...props} />
       : logoDisplayStyle === "name_only"
         ? SvgAlertCircle
         : hasCustomLogo
           ? CustomLogoHeaderIcon
-          : (props: IconProps) => <SvgOnyxLogo size={24} {...props} />;
+          : (props: IconProps) => <GlomiLogoMark size={24} {...props} />;
 
   return (
     <Modal open onOpenChange={() => {}}>

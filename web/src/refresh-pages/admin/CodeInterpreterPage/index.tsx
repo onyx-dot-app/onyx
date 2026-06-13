@@ -39,7 +39,7 @@ function CheckingStatus() {
       padding={0.5}
     >
       <Text mainUiAction text03>
-        Checking...
+        正在检查...
       </Text>
       <SvgSimpleLoader />
     </Section>
@@ -56,7 +56,7 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
     return <CheckingStatus />;
   }
 
-  const label = healthy ? "Connected" : "Connection Lost";
+  const label = healthy ? "已连接" : "连接丢失";
   const Icon = healthy ? SvgCheckCircle : SvgXOctagon;
   const iconColor = healthy
     ? "text-status-success-05!"
@@ -88,12 +88,11 @@ export default function CodeInterpreterPage() {
   const [isReconnecting, setIsReconnecting] = useState(false);
 
   async function handleToggle(enabled: boolean) {
-    const action = enabled ? "reconnect" : "disconnect";
     setIsReconnecting(enabled);
     try {
       const response = await updateCodeInterpreter({ enabled });
       if (!response.ok) {
-        toast.error(`Failed to ${action} Code Interpreter`);
+        toast.error(`${enabled ? "重新连接" : "断开"}代码解释器失败`);
         return;
       }
       setShowDisconnectModal(false);
@@ -108,7 +107,7 @@ export default function CodeInterpreterPage() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={route.title}
-        description="Safe and sandboxed Python runtime available to your LLM. See docs for more details."
+        description="为 LLM 提供安全、沙盒化的 Python 运行时。更多详情请查看文档。"
         divider
       />
 
@@ -124,8 +123,8 @@ export default function CodeInterpreterPage() {
                   sizePreset="main-ui"
                   variant="section"
                   icon={SvgTerminal}
-                  title="Code Interpreter"
-                  description="Built-in Python runtime"
+                  title="代码解释器"
+                  description="内置 Python 运行时"
                   padding="lg"
                   rightChildren={
                     <Section alignItems="end" gap={0}>
@@ -146,7 +145,7 @@ export default function CodeInterpreterPage() {
                                 size="md"
                                 icon={SvgUnplug}
                                 onClick={() => setShowDisconnectModal(true)}
-                                tooltip="Disconnect"
+                                tooltip="断开连接"
                               />
                             </Hoverable.Item>
                           </Disabled>
@@ -156,7 +155,7 @@ export default function CodeInterpreterPage() {
                             size="md"
                             icon={SvgRefreshCw}
                             onClick={refetch}
-                            tooltip="Refresh"
+                            tooltip="刷新"
                           />
                         </Section>
                       </div>
@@ -177,8 +176,8 @@ export default function CodeInterpreterPage() {
               sizePreset="main-ui"
               variant="section"
               icon={SvgTerminal}
-              title="Code Interpreter (Disconnected)"
-              description="Built-in Python runtime"
+              title="代码解释器（已断开）"
+              description="内置 Python 运行时"
               padding="lg"
               rightChildren={
                 isReconnecting ? (
@@ -192,7 +191,7 @@ export default function CodeInterpreterPage() {
                       handleToggle(true);
                     }}
                   >
-                    Reconnect
+                    重新连接
                   </Button>
                 )
               }
@@ -204,21 +203,21 @@ export default function CodeInterpreterPage() {
       {showDisconnectModal && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title="Disconnect Code Interpreter"
+          title="断开代码解释器"
           onClose={() => setShowDisconnectModal(false)}
           submit={
             <Button variant="danger" onClick={() => handleToggle(false)}>
-              Disconnect
+              断开连接
             </Button>
           }
         >
           <Text as="p" text03>
-            All running sessions connected to{" "}
+            所有连接到{" "}
             <Text as="span" mainContentEmphasis text03>
-              Code Interpreter
+              代码解释器
             </Text>{" "}
-            will stop working. Note that this will not remove any data from your
-            runtime. You can reconnect to this runtime later if needed.
+            的运行中会话都将停止工作。此操作不会删除运行时中的任何数据。
+            需要时你可以稍后重新连接此运行时。
           </Text>
         </ConfirmationModalLayout>
       )}

@@ -36,7 +36,6 @@ import {
 import {
   SvgArrowExchange,
   SvgChevronDown,
-  SvgOnyxOctagon,
   SvgOrganization,
   SvgPlusCircle,
   SvgRefreshCw,
@@ -46,7 +45,7 @@ import {
   SvgX,
   SvgSimpleLoader,
 } from "@opal/icons";
-import SvgOnyxLogo from "@opal/logos/onyx-logo";
+import { GlomiLogoMark } from "@/refresh-components/GlomiLogo";
 import { Card, EmptyMessageCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -67,13 +66,13 @@ export function DisplayNameField({ disabled }: DisplayNameFieldProps = {}) {
     <InputPadder>
       <InputVertical
         withLabel="name"
-        title="Display Name"
-        suffix="optional"
-        subDescription="Used to identify this provider in the app."
+        title="显示名称"
+        suffix="可选"
+        subDescription="用于在应用中识别此服务商。"
       >
         <InputTypeInField
           name="name"
-          placeholder="Display Name"
+          placeholder="显示名称"
           variant={disabled ? "disabled" : undefined}
         />
       </InputVertical>
@@ -105,10 +104,10 @@ export function APIKeyField({
           subDescription
             ? subDescription
             : providerName
-              ? `Paste your API key from ${providerName} to access your models.`
-              : "Paste your API key to access your models."
+              ? `粘贴来自 ${providerName} 的 API Key 以访问你的模型。`
+              : "粘贴 API Key 以访问你的模型。"
         }
-        suffix={optional ? "optional" : undefined}
+        suffix={optional ? "可选" : undefined}
       >
         <PasswordInputTypeInField name={name} />
       </InputVertical>
@@ -119,12 +118,12 @@ export function APIKeyField({
 // ─── APIBaseField ───────────────────────────────────────────────────────────
 
 /**
- * Sentence appended to an API Base URL `subDescription` when Onyx is detected
+ * Sentence appended to an API Base URL `subDescription` when Glomi AI is detected
  * to be running inside a container — explains why the default uses
  * `host.docker.internal`.
  */
 export const CONTAINERIZED_HOST_NOTE =
-  "With Onyx running in a container, `host.docker.internal` acts like `localhost` inside the container.";
+  "当 Glomi AI 运行在容器中时，`host.docker.internal` 在容器内相当于 `localhost`。";
 
 export interface APIBaseFieldProps {
   optional?: boolean;
@@ -142,7 +141,7 @@ export function APIBaseField({
         withLabel="api_base"
         title="API Base URL"
         subDescription={subDescription}
-        suffix={optional ? "optional" : undefined}
+        suffix={optional ? "可选" : undefined}
       >
         <InputTypeInField name="api_base" placeholder={placeholder} />
       </InputVertical>
@@ -176,14 +175,14 @@ export function ModelAccessField() {
       ? userGroups.map((g) => ({
           value: `${GROUP_PREFIX}${g.id}`,
           label: g.name,
-          description: "Group",
+          description: "用户组",
         }))
       : [];
 
   const agentOptions = agents.map((a) => ({
     value: `${AGENT_PREFIX}${a.id}`,
     label: a.name,
-    description: "Agent",
+    description: "智能体",
   }));
 
   // Exclude already-selected items from the dropdown
@@ -243,20 +242,20 @@ export function ModelAccessField() {
       <InputPadder>
         <InputHorizontal
           withLabel="is_public"
-          title="Models Access"
-          description="Who can access this provider."
+          title="模型访问权限"
+          description="谁可以访问此服务商。"
         >
           <InputSelect
             value={isPublic ? "public" : "private"}
             onValueChange={handleAccessChange}
           >
-            <InputSelect.Trigger placeholder="Select access level" />
+            <InputSelect.Trigger placeholder="选择访问级别" />
             <InputSelect.Content>
               <InputSelect.Item value="public" icon={SvgOrganization}>
-                All Users & Agents
+                所有用户和智能体
               </InputSelect.Item>
               <InputSelect.Item value="private" icon={SvgUsers}>
-                Named Groups & Agents
+                指定用户组和智能体
               </InputSelect.Item>
             </InputSelect.Content>
           </InputSelect>
@@ -267,7 +266,7 @@ export function ModelAccessField() {
         <Card background="light" border="none" padding="sm">
           <Section gap={0.5}>
             <InputComboBox
-              placeholder="Add groups and agents"
+              placeholder="添加用户组和智能体"
               value=""
               onChange={() => {}}
               onValueChange={handleSelect}
@@ -279,15 +278,15 @@ export function ModelAccessField() {
             <Card background="heavy" border="none" padding="sm">
               <ContentAction
                 icon={SvgUserManage}
-                title="Admin"
+                title="管理员"
                 description={`${adminCount} ${
-                  adminCount === 1 ? "member" : "members"
+                  "名成员"
                 }`}
                 sizePreset="main-ui"
                 variant="section"
                 rightChildren={
                   <Text secondaryBody text03>
-                    Always shared
+                    始终共享
                   </Text>
                 }
                 padding="fit"
@@ -303,9 +302,9 @@ export function ModelAccessField() {
                       <Card background="heavy" border="none" padding="sm">
                         <ContentAction
                           icon={SvgUsers}
-                          title={group?.name ?? `Group ${id}`}
+                          title={group?.name ?? `用户组 ${id}`}
                           description={`${memberCount} ${
-                            memberCount === 1 ? "member" : "members"
+                            "名成员"
                           }`}
                           sizePreset="main-ui"
                           variant="section"
@@ -342,8 +341,8 @@ export function ModelAccessField() {
                               ? () => <AgentAvatar agent={agent} size={20} />
                               : SvgSparkle
                           }
-                          title={agent?.name ?? `Agent ${id}`}
-                          description="Agent"
+                          title={agent?.name ?? `智能体 ${id}`}
+                          description="智能体"
                           sizePreset="main-ui"
                           variant="section"
                           rightChildren={
@@ -365,9 +364,9 @@ export function ModelAccessField() {
             ) : (
               <div className="w-full p-2">
                 <Content
-                  icon={SvgOnyxOctagon}
-                  title="No agents added"
-                  description="This provider will not be used by any agents."
+                  icon={SvgSparkle}
+                  title="未添加智能体"
+                  description="此服务商暂不会被任何智能体使用。"
                   variant="section"
                   sizePreset="main-ui"
                 />
@@ -411,7 +410,7 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
         } catch (err) {
           if (err instanceof DOMException && err.name === "AbortError") return;
           toast.error(
-            err instanceof Error ? err.message : "Failed to fetch models"
+            err instanceof Error ? err.message : "获取模型失败"
           );
         } finally {
           if (!controller.signal.aborted) {
@@ -582,8 +581,8 @@ export function ModelSelectionField({
     <Card background="light" border="none" padding="sm">
       <Section gap={0.5}>
         <InputHorizontal
-          title="Models"
-          description="Select models to make available for this provider."
+          title="模型"
+          description="选择此服务商可用的模型。"
           center
         >
           <Section flexDirection="row" gap={0}>
@@ -593,14 +592,14 @@ export function ModelSelectionField({
               size="md"
               onClick={handleToggleSelectAll}
             >
-              {allSelected ? "Deselect All" : "Select All"}
+              {allSelected ? "取消全选" : "全选"}
             </Button>
             {onRefetch && <RefetchButton onRefetch={onRefetch} />}
           </Section>
         </InputHorizontal>
 
         {models.length === 0 ? (
-          <EmptyMessageCard title="No models available." padding="sm" />
+          <EmptyMessageCard title="暂无可用模型。" padding="sm" />
         ) : (
           <Section gap={0.25} alignItems="stretch">
             {(() => {
@@ -635,7 +634,7 @@ export function ModelSelectionField({
                         <Content
                           sizePreset="secondary"
                           variant="body"
-                          title={isExpanded ? "Fold Models" : "More Models"}
+                          title={isExpanded ? "收起模型" : "更多模型"}
                           icon={() => (
                             <SvgChevronDown
                               className={cn(
@@ -659,7 +658,7 @@ export function ModelSelectionField({
           <Section flexDirection="row" gap={0.5}>
             <div className="flex-1">
               <InputTypeIn
-                placeholder="Enter model name"
+                placeholder="输入模型名称"
                 value={newModelName}
                 onChange={(e) => setNewModelName(e.target.value)}
                 onKeyDown={(e) => {
@@ -690,15 +689,15 @@ export function ModelSelectionField({
                 }
               }}
             >
-              Add Model
+              添加模型
             </Button>
           </Section>
         )}
 
         {shouldShowAutoUpdateToggle && (
           <InputHorizontal
-            title="Auto Update"
-            description="Update the available models when new models are released."
+            title="自动更新"
+            description="发布新模型时自动更新可用模型列表。"
             withLabel
           >
             <Switch
@@ -796,9 +795,9 @@ function ModalWrapperInner({
   const disabledTooltip = busy
     ? undefined
     : !isValid
-      ? "Please fill in all required fields."
+      ? "请填写所有必填字段。"
       : !dirty
-        ? "No changes to save."
+        ? "没有需要保存的更改。"
         : undefined;
 
   const {
@@ -808,11 +807,11 @@ function ModalWrapperInner({
   } = getProvider(providerName);
 
   const title = llmProvider
-    ? markdown(`Configure *${llmProvider.name ?? providerProductName}*`)
-    : `Set up ${providerProductName}`;
+    ? markdown(`配置 *${llmProvider.name ?? providerProductName}*`)
+    : `设置 ${providerProductName}`;
   const description =
     descriptionOverride ??
-    `Connect to ${providerDisplayName} and set up your ${providerProductName} models.`;
+    `连接到 ${providerDisplayName} 并设置你的 ${providerProductName} 模型。`;
 
   return (
     <Modal open onOpenChange={onClose}>
@@ -821,7 +820,7 @@ function ModalWrapperInner({
           <Modal.Header
             icon={providerIcon}
             moreIcon1={SvgArrowExchange}
-            moreIcon2={SvgOnyxLogo}
+          moreIcon2={GlomiLogoMark}
             title={title}
             description={description}
             onClose={onClose}
@@ -831,7 +830,7 @@ function ModalWrapperInner({
           </Modal.Body>
           <Modal.Footer>
             <Button prominence="secondary" onClick={onClose} type="button">
-              Cancel
+              取消
             </Button>
             <Button
               disabled={!isValid || !dirty || busy}
@@ -839,7 +838,7 @@ function ModalWrapperInner({
               icon={busy ? SvgSimpleLoader : undefined}
               tooltip={disabledTooltip}
             >
-              {llmProvider ? "Update" : "Connect"}
+              {llmProvider ? "更新" : "连接"}
             </Button>
           </Modal.Footer>
         </Form>

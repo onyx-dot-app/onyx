@@ -27,15 +27,15 @@ function buildCopy(
 
   if (stage === "t_30d") {
     return {
-      title: `Your Onyx license expires on ${expiresDisplay}.`,
+      title: `你的 Glomi AI 许可证将于 ${expiresDisplay} 到期。`,
       description:
-        "Renewal is due in approximately 30 days. Contact your Onyx representative to renew.",
+        "许可证约 30 天后需要续订。请联系 Glomi AI 代表完成续订。",
       variant: "warning",
     };
   }
   if (stage === "t_14d") {
     return {
-      title: `Your Onyx license expires on ${expiresDisplay}.`,
+      title: `你的 Glomi AI 许可证将于 ${expiresDisplay} 到期。`,
       description:
         "Renewal is due in approximately 2 weeks. Complete renewal soon to avoid service interruption.",
       variant: "warning",
@@ -43,7 +43,7 @@ function buildCopy(
   }
   if (stage === "t_1d") {
     return {
-      title: `Your Onyx license expires tomorrow (${expiresDisplay}).`,
+      title: `你的 Glomi AI 许可证将于明天（${expiresDisplay}）到期。`,
       description:
         "Renewal is due within 24 hours. Renew now to avoid service interruption.",
       variant: "error",
@@ -51,7 +51,7 @@ function buildCopy(
   }
   if (stage === "grace") {
     return {
-      title: `Your Onyx license expired on ${expiresDisplay}.`,
+      title: `你的 Glomi AI 许可证已于 ${expiresDisplay} 到期。`,
       description: `${graceDaysRemaining} grace day${
         graceDaysRemaining === 1 ? "" : "s"
       } remaining before access is gated. Renew now.`,

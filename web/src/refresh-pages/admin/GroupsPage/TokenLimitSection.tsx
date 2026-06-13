@@ -80,8 +80,8 @@ function TokenLimitSection({
   return (
     <SimpleCollapsible>
       <SimpleCollapsible.Header
-        title="Token Rate Limit"
-        description="Limit number of tokens this group can use within a given time period."
+        title="Token 速率限制"
+        description="限制此用户组在指定时间段内可使用的 token 数量。"
         tag={
           disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined
         }
@@ -100,18 +100,18 @@ function TokenLimitSection({
               <div className="flex flex-wrap items-center gap-1 pr-[40px]">
                 <div className="flex-1 flex items-center min-w-[160px]">
                   <Text mainUiAction text04>
-                    Token Limit
+                    Token 限制
                   </Text>
                   <Text mainUiMuted text03 className="ml-0.5">
-                    (thousand tokens)
+                    （千 token）
                   </Text>
                 </div>
                 <div className="flex-1 flex items-center min-w-[160px]">
                   <Text mainUiAction text04>
-                    Time Window
+                    时间窗口
                   </Text>
                   <Text mainUiMuted text03 className="ml-0.5">
-                    (hours)
+                    （小时）
                   </Text>
                 </div>
               </div>
@@ -127,7 +127,7 @@ function TokenLimitSection({
                       value={limit.tokenBudget}
                       onChange={(v) => updateLimit(i, "tokenBudget", v)}
                       min={0}
-                      placeholder="Token limit in thousands"
+                      placeholder="Token 限制（千）"
                     />
                   </div>
                   <div className="flex-1">
@@ -153,7 +153,7 @@ function TokenLimitSection({
                 size="md"
                 onClick={addLimit}
               >
-                Add Limit
+                添加限制
               </Button>
             </Section>
           </Card>

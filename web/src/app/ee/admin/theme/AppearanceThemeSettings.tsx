@@ -231,7 +231,7 @@ export const AppearanceThemeSettings = forwardRef<
                 />
               }
             >
-              Application Display Name
+              应用显示名称
             </FormField.Label>
             <FormField.Control asChild>
               <InputTypeIn
@@ -247,7 +247,7 @@ export const AppearanceThemeSettings = forwardRef<
               />
             </FormField.Control>
             <FormField.Description>
-              This name will show across the app and replace "Onyx" in the UI.
+              此名称会显示在应用各处，并替换界面中的“Glomi AI”。
             </FormField.Description>
             <FormField.Message
               messages={{ error: errors.application_name as string }}
@@ -255,7 +255,7 @@ export const AppearanceThemeSettings = forwardRef<
           </FormField>
 
           <FormField state="idle">
-            <FormField.Label>Logo Display Style</FormField.Label>
+            <FormField.Label>Logo 显示样式</FormField.Label>
             <FormField.Control>
               <Tabs
                 value={values.logo_display_style}
@@ -266,50 +266,49 @@ export const AppearanceThemeSettings = forwardRef<
                 <Tabs.List>
                   <Tabs.Trigger
                     value="logo_and_name"
-                    tooltip="Show both your application logo and name."
+                    tooltip="同时显示应用 Logo 和名称。"
                     tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
-                    Logo & Name
+                    Logo 和名称
                   </Tabs.Trigger>
                   <Tabs.Trigger
                     value="logo_only"
                     disabled={!hasLogo}
                     tooltip={
                       hasLogo
-                        ? "Show only your application logo."
-                        : "Upload a logo to enable this option."
+                        ? "仅显示应用 Logo。"
+                        : "上传 Logo 后可启用此选项。"
                     }
                     tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
-                    Logo Only
+                    仅 Logo
                   </Tabs.Trigger>
                   <Tabs.Trigger
                     value="name_only"
                     disabled={!hasApplicationName}
                     tooltip={
                       hasApplicationName
-                        ? "Show only your application name."
-                        : "Enter an application name to enable this option."
+                        ? "仅显示应用名称。"
+                        : "输入应用名称后可启用此选项。"
                     }
                     tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
-                    Name Only
+                    仅名称
                   </Tabs.Trigger>
                 </Tabs.List>
               </Tabs>
             </FormField.Control>
             <FormField.Description>
-              Choose what to display at the top of the sidebar. Options become
-              available once you add a logo or application name.
+              选择侧边栏顶部显示的内容。添加 Logo 或应用名称后，相关选项会变为可用。
             </FormField.Description>
           </FormField>
         </div>
 
         <FormField state="idle">
-          <FormField.Label>Application Logo</FormField.Label>
+          <FormField.Label>应用 Logo</FormField.Label>
           <FormField.Control>
             <InputImage
               src={logoSrc}
@@ -329,7 +328,7 @@ export const AppearanceThemeSettings = forwardRef<
               onClick={handleLogoEdit}
               icon={SvgEdit}
             >
-              Update
+              更新
             </Button>
           </div>
         </FormField>
@@ -342,13 +341,13 @@ export const AppearanceThemeSettings = forwardRef<
         logoDisplayStyle={values.logo_display_style}
         applicationDisplayName={values.application_name ?? ""}
         chat_footer_content={
-          values.custom_lower_disclaimer_content || "Chat Footer Content"
+          values.custom_lower_disclaimer_content || "聊天页底部内容"
         }
         chat_header_content={
-          values.custom_header_content || "Chat Header Content"
+          values.custom_header_content || "聊天页顶部内容"
         }
         greeting_message={
-          values.custom_greeting_message || "Welcome to Acme Chat"
+          values.custom_greeting_message || "欢迎使用 Glomi AI"
         }
         logoSrc={logoSrc}
         highlightTarget={highlightTarget}
@@ -363,7 +362,7 @@ export const AppearanceThemeSettings = forwardRef<
             />
           }
         >
-          Greeting Message
+          欢迎语
         </FormField.Label>
         <FormField.Control asChild>
           <InputTypeIn
@@ -379,7 +378,7 @@ export const AppearanceThemeSettings = forwardRef<
           />
         </FormField.Control>
         <FormField.Description>
-          Add a short message to the home page.
+          向首页添加一条简短欢迎语。
         </FormField.Description>
         <FormField.Message
           messages={{ error: errors.custom_greeting_message as string }}
@@ -395,7 +394,7 @@ export const AppearanceThemeSettings = forwardRef<
             />
           }
         >
-          Chat Header Text
+          聊天页顶部文本
         </FormField.Label>
         <FormField.Control asChild>
           <InputTypeIn
@@ -426,14 +425,14 @@ export const AppearanceThemeSettings = forwardRef<
             />
           }
         >
-          Chat Footer Text
+          聊天页底部文本
         </FormField.Label>
         <FormField.Control asChild>
           <InputTextArea
             ref={lowerDisclaimerInputRef}
             data-label="chat-footer-textarea"
             rows={3}
-            placeholder="Add markdown content"
+            placeholder="添加 Markdown 内容"
             variant={
               errors.custom_lower_disclaimer_content ? "error" : undefined
             }
@@ -445,7 +444,7 @@ export const AppearanceThemeSettings = forwardRef<
           />
         </FormField.Control>
         <FormField.Description>
-          Add markdown content for disclaimers or additional information.
+          添加免责声明或补充信息的 Markdown 内容。
         </FormField.Description>
         <FormField.Message
           messages={{ error: errors.custom_lower_disclaimer_content as string }}
@@ -454,7 +453,7 @@ export const AppearanceThemeSettings = forwardRef<
 
       <Disabled
         disabled={!enterpriseTier}
-        tooltip="Custom help link is an Enterprise Plan feature."
+        tooltip="自定义帮助链接是企业版功能。"
       >
         <div className="flex gap-2 items-start">
           <FormField
@@ -462,7 +461,7 @@ export const AppearanceThemeSettings = forwardRef<
             className="flex-1"
           >
             <FormField.Label>
-              Custom Help Link
+              自定义帮助链接
               {!enterpriseTier && (
                 <Tag {...planTagProps("enterprise")} size="sm" />
               )}
@@ -472,7 +471,7 @@ export const AppearanceThemeSettings = forwardRef<
                 ref={customHelpLinkUrlInputRef}
                 data-label="custom-help-link-url-input"
                 clearButton
-                placeholder="https://docs.onyx.app"
+                placeholder="https://docs.glomi.ai"
                 variant={
                   !enterpriseTier
                     ? "disabled"
@@ -487,8 +486,7 @@ export const AppearanceThemeSettings = forwardRef<
               />
             </FormField.Control>
             <FormField.Description>
-              Add a custom help link in the user menu in addition to the Onyx
-              documentation.
+              在用户菜单中添加自定义帮助链接，并保留 Glomi AI 文档入口。
             </FormField.Description>
             <FormField.Message
               messages={{ error: errors.custom_help_link_url as string }}
@@ -496,14 +494,14 @@ export const AppearanceThemeSettings = forwardRef<
           </FormField>
           <FormField state="idle" className="flex-1">
             <FormField.Label className="invisible" aria-hidden="true">
-              Custom Help Link Label
+              自定义帮助链接标签
             </FormField.Label>
             <FormField.Control asChild>
               <InputTypeIn
-                aria-label="Custom Help Link Label"
+                aria-label="自定义帮助链接标签"
                 data-label="custom-help-link-label-input"
                 clearButton
-                placeholder="Link label"
+                placeholder="链接标签"
                 variant={!enterpriseTier ? "disabled" : undefined}
                 value={values.custom_help_link_label}
                 onChange={(e) =>
@@ -517,19 +515,19 @@ export const AppearanceThemeSettings = forwardRef<
 
       <Disabled
         disabled={!enterpriseTier}
-        tooltip="Hiding Onyx branding is an Enterprise Plan feature."
+        tooltip="隐藏 Glomi AI 品牌是企业版功能。"
       >
         <FormField state="idle" className="gap-0">
           <div className="flex justify-between items-center">
             <FormField.Label>
-              Hide Onyx Branding
+              隐藏 Glomi AI 品牌
               {!enterpriseTier && (
                 <Tag {...planTagProps("enterprise")} size="sm" />
               )}
             </FormField.Label>
             <FormField.Control>
               <Switch
-                aria-label="Hide Onyx Branding"
+                aria-label="隐藏 Glomi AI 品牌"
                 data-label="hide-onyx-branding-toggle"
                 checked={values.hide_onyx_branding}
                 onCheckedChange={(checked) =>
@@ -540,8 +538,7 @@ export const AppearanceThemeSettings = forwardRef<
             </FormField.Control>
           </div>
           <FormField.Description>
-            Remove &ldquo;powered by Onyx&rdquo; and other Onyx branding
-            presence in the app.
+            移除 &ldquo;由 Glomi AI 提供支持&rdquo; 以及应用中的其他 Glomi AI 品牌露出。
           </FormField.Description>
         </FormField>
       </Disabled>
@@ -551,10 +548,10 @@ export const AppearanceThemeSettings = forwardRef<
       <div className="flex flex-col gap-4 p-4 bg-background-tint-00 rounded-16">
         <FormField state="idle" className="gap-0">
           <div className="flex justify-between items-center">
-            <FormField.Label>Show First Visit Notice</FormField.Label>
+            <FormField.Label>显示首次访问通知</FormField.Label>
             <FormField.Control>
               <Switch
-                aria-label="Show First Visit Notice"
+                aria-label="显示首次访问通知"
                 data-label="first-visit-notice-toggle"
                 checked={values.show_first_visit_notice}
                 onCheckedChange={(checked) =>
@@ -564,7 +561,7 @@ export const AppearanceThemeSettings = forwardRef<
             </FormField.Control>
           </div>
           <FormField.Description>
-            Show a one-time pop-up for new users at their first visit.
+            新用户首次访问时显示一次性弹窗。
           </FormField.Description>
         </FormField>
 
@@ -580,7 +577,7 @@ export const AppearanceThemeSettings = forwardRef<
                   />
                 }
               >
-                Notice Header
+                通知标题
               </FormField.Label>
               <FormField.Control asChild>
                 <InputTypeIn
@@ -609,14 +606,14 @@ export const AppearanceThemeSettings = forwardRef<
                   />
                 }
               >
-                Notice Content
+                通知内容
               </FormField.Label>
               <FormField.Control asChild>
                 <InputTextArea
                   ref={noticeContentInputRef}
                   data-label="notice-content-textarea"
                   rows={3}
-                  placeholder="Add markdown content"
+                  placeholder="添加 Markdown 内容"
                   variant={errors.custom_popup_content ? "error" : undefined}
                   value={values.custom_popup_content}
                   onChange={(e) =>
@@ -631,10 +628,10 @@ export const AppearanceThemeSettings = forwardRef<
 
             <FormField state="idle" className="gap-0">
               <div className="flex justify-between items-center">
-                <FormField.Label>Require Consent to Notice</FormField.Label>
+                <FormField.Label>要求同意通知</FormField.Label>
                 <FormField.Control>
                   <Switch
-                    aria-label="Require Consent to Notice"
+                    aria-label="要求同意通知"
                     data-label="require-consent-toggle"
                     checked={values.enable_consent_screen}
                     onCheckedChange={(checked) =>
@@ -644,8 +641,7 @@ export const AppearanceThemeSettings = forwardRef<
                 </FormField.Control>
               </div>
               <FormField.Description>
-                Require the user to read and agree to the notice before
-                accessing the application.
+                要求用户在访问应用前阅读并同意通知内容。
               </FormField.Description>
             </FormField>
 
@@ -662,14 +658,14 @@ export const AppearanceThemeSettings = forwardRef<
                     />
                   }
                 >
-                  Notice Consent Prompt
+                  通知同意提示
                 </FormField.Label>
                 <FormField.Control asChild>
                   <InputTextArea
                     ref={consentPromptTextAreaRef}
                     data-label="consent-prompt-textarea"
                     rows={3}
-                    placeholder="Add markdown content"
+                    placeholder="添加 Markdown 内容"
                     variant={errors.consent_screen_prompt ? "error" : undefined}
                     value={values.consent_screen_prompt}
                     onChange={(e) => {

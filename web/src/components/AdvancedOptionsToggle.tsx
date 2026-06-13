@@ -24,7 +24,7 @@ export function AdvancedOptionsToggle({
       onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
       className="mr-auto"
     >
-      {title || "Advanced Options"}
+      {title || "高级选项"}
     </Button>
   );
 }

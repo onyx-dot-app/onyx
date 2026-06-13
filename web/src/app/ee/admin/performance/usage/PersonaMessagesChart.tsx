@@ -124,9 +124,9 @@ export function PersonaMessagesChart({
       const messageData = messagesMap.get(dateStr);
       const uniqueUserData = uniqueUsersMap.get(dateStr);
       return {
-        Day: dateStr,
-        Messages: messageData?.total_messages || 0,
-        "Unique Users": uniqueUserData?.unique_users || 0,
+        日期: dateStr,
+        消息数: messageData?.total_messages || 0,
+        独立用户数: uniqueUserData?.unique_users || 0,
       };
     });
   }, [
@@ -146,20 +146,20 @@ export function PersonaMessagesChart({
   } else if (!availablePersonas || hasError) {
     content = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch data...</p>
+        <p className="m-auto">获取数据失败...</p>
       </div>
     );
   } else if (selectedPersonaId === undefined) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
-        <p className="m-auto">Select an agent to view analytics</p>
+        <p className="m-auto">选择智能体以查看分析</p>
       </div>
     );
   } else if (!personaMessagesData?.length) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
         <p className="m-auto">
-          No data found for selected agent in the specified time range
+          指定时间范围内未找到所选智能体的数据
         </p>
       </div>
     );
@@ -168,8 +168,8 @@ export function PersonaMessagesChart({
       <AreaChartDisplay
         className="mt-4"
         data={chartData}
-        categories={["Messages", "Unique Users"]}
-        index="Day"
+        categories={["消息数", "独立用户数"]}
+        index="日期"
         colors={["indigo", "fuchsia"]}
         yAxisWidth={60}
       />
@@ -178,10 +178,10 @@ export function PersonaMessagesChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>Agent Analytics</Title>
+      <Title>智能体分析</Title>
       <div className="flex flex-col gap-4">
         <Text as="p">
-          Messages and unique users per day for the selected agent
+          所选智能体每天的消息数和独立用户数
         </Text>
         <div className="flex items-center gap-4">
           <Select
@@ -191,14 +191,14 @@ export function PersonaMessagesChart({
             }}
           >
             <SelectTrigger className="flex w-full max-w-xs">
-              <SelectValue placeholder="Select an agent to display" />
+              <SelectValue placeholder="选择要显示的智能体" />
             </SelectTrigger>
             <SelectContent>
               <div className="flex items-center px-2 pb-2 sticky top-0 bg-background border-b">
                 <Search className="h-4 w-4 mr-2 shrink-0 opacity-50" />
                 <input
                   className="flex h-8 w-full rounded-xs bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="Search agents..."
+                  placeholder="搜索智能体..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onClick={(e) => e.stopPropagation()}

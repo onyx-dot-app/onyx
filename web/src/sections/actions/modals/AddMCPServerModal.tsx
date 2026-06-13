@@ -33,11 +33,11 @@ interface AddMCPServerModalProps {
 }
 
 const validationSchema = Yup.object().shape({
-  name: Yup.string().required("Server name is required"),
+  name: Yup.string().required("请输入服务名称"),
   description: Yup.string(),
   server_url: Yup.string()
-    .url("Must be a valid URL")
-    .required("Server URL is required"),
+    .url("请输入有效 URL")
+    .required("请输入服务 URL"),
 });
 
 export default function AddMCPServerModal({
@@ -80,13 +80,13 @@ export default function AddMCPServerModal({
       if (isEditMode && server) {
         // Update existing server
         await updateMCPServer(server.id, values);
-        toast.success("MCP Server updated successfully");
+        toast.success("MCP 服务已更新");
         await mutateMcpServers?.();
       } else {
         // Create new server
         const createdServer = await createMCPServer(values);
 
-        toast.success("MCP Server created successfully");
+        toast.success("MCP 服务已创建");
 
         await mutateMcpServers?.();
 
@@ -106,7 +106,7 @@ export default function AddMCPServerModal({
       toast.error(
         error instanceof Error
           ? error.message
-          : `Failed to ${isEditMode ? "update" : "create"} MCP server`
+          : `${isEditMode ? "更新" : "创建"} MCP 服务失败`
       );
     } finally {
       setIsSubmitting(false);
@@ -135,32 +135,32 @@ export default function AddMCPServerModal({
             <Form>
               <Modal.Header
                 icon={SvgServer}
-                title={isEditMode ? "Manage MCP Server" : "Add MCP Server"}
+                title={isEditMode ? "管理 MCP 服务" : "添加 MCP 服务"}
                 description={
                   isEditMode
-                    ? "Update your MCP server configuration and manage authentication."
-                    : "Connect MCP (Model Context Protocol) server to add custom actions."
+                    ? "更新 MCP 服务配置并管理认证。"
+                    : "连接 MCP (Model Context Protocol) 服务以添加自定义动作。"
                 }
                 onClose={() => handleModalClose(false)}
               />
 
               <Modal.Body>
-                <InputVertical withLabel="name" title="Server Name">
+                <InputVertical withLabel="name" title="服务名称">
                   <InputTypeInField
                     name="name"
-                    placeholder="Name your MCP server"
+                    placeholder="为 MCP 服务命名"
                     autoFocus
                   />
                 </InputVertical>
 
                 <InputVertical
                   withLabel="description"
-                  title="Description"
-                  suffix="optional"
+                  title="描述"
+                  suffix="可选"
                 >
                   <InputTextAreaField
                     name="description"
-                    placeholder="More details about the MCP server"
+                    placeholder="补充 MCP 服务详情"
                     rows={3}
                   />
                 </InputVertical>
@@ -169,8 +169,8 @@ export default function AddMCPServerModal({
 
                 <InputVertical
                   withLabel="server_url"
-                  title="MCP Server URL"
-                  subDescription="Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated."
+                  title="MCP 服务 URL"
+                  subDescription="只连接你信任的服务。你需要对通过此连接执行的操作负责，并保持工具更新。"
                 >
                   <InputTypeInField
                     name="server_url"
@@ -196,14 +196,14 @@ export default function AddMCPServerModal({
                           width="fit"
                         >
                           <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
-                          <Text>Authenticated &amp; Connected</Text>
+                          <Text>已认证并连接</Text>
                         </Section>
                         <Text secondaryBody text03>
                           {server.auth_type === "OAUTH"
                             ? `OAuth connected to ${server.owner}`
                             : server.auth_type === "API_TOKEN"
-                              ? "API token configured"
-                              : "Connected"}
+                              ? "已配置 API token"
+                              : "已连接"}
                         </Text>
                       </Section>
                       <Section
@@ -216,7 +216,7 @@ export default function AddMCPServerModal({
                           icon={SvgUnplug}
                           prominence="tertiary"
                           type="button"
-                          tooltip="Disconnect Server"
+                          tooltip="断开服务"
                           onClick={handleDisconnectClick}
                         />
                         <Button
@@ -228,7 +228,7 @@ export default function AddMCPServerModal({
                             handleAuthenticate(server.id);
                           }}
                         >
-                          Edit Configs
+                          编辑配置
                         </Button>
                       </Section>
                     </Section>
@@ -242,7 +242,7 @@ export default function AddMCPServerModal({
                   type="button"
                   onClick={() => handleModalClose(false)}
                 >
-                  Cancel
+                  取消
                 </Button>
                 <Button
                   disabled={isSubmitting || !isValid || !dirty}
@@ -250,11 +250,11 @@ export default function AddMCPServerModal({
                 >
                   {isSubmitting
                     ? isEditMode
-                      ? "Saving..."
-                      : "Adding..."
+                      ? "正在保存..."
+                      : "正在添加..."
                     : isEditMode
-                      ? "Save Changes"
-                      : "Add Server"}
+                      ? "保存更改"
+                      : "添加服务"}
                 </Button>
               </Modal.Footer>
             </Form>

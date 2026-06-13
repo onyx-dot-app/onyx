@@ -96,13 +96,11 @@ function SourceTileTooltipWrapper({
       tooltip={
         existingFederatedConnector ? (
           <Text as="p" textLight05 secondaryBody>
-            <strong>Federated connector already configured.</strong> Click to
-            edit the existing connector.
+            <strong>联合连接器已配置。</strong>点击可编辑现有连接器。
           </Text>
         ) : hasExistingSlackCredentials ? (
           <Text as="p" textLight05 secondaryBody>
-            <strong>Existing Slack credentials found.</strong> Click to manage
-            your Slack connector.
+            <strong>已找到 Slack 凭据。</strong>点击可管理你的 Slack 连接器。
           </Text>
         ) : undefined
       }
@@ -249,14 +247,14 @@ export default function Page() {
         icon={route.icon}
         title={route.title}
         rightChildren={
-          <Button href="/admin/indexing/status">See Connectors</Button>
+          <Button href="/admin/indexing/status">查看连接器</Button>
         }
         divider
       />
       <SettingsLayouts.Body>
         <InputTypeIn
           type="text"
-          placeholder="Search Connectors"
+          placeholder="搜索连接器"
           ref={searchInputRef}
           value={rawSearchTerm} // keep the input bound to immediate state
           onChange={(event) => setSearchTerm(event.target.value)}
@@ -266,7 +264,7 @@ export default function Page() {
         {dedupedPopular.length > 0 && (
           <div className="pt-8">
             <Text as="p" headingH3>
-              Popular
+              常用
             </Text>
             <div className="flex flex-wrap gap-4 p-4">
               {dedupedPopular.map((source) => (

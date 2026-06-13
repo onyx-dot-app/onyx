@@ -30,7 +30,7 @@ async function runAction(
     onDone();
     toast.success(successMessage);
   } catch (err) {
-    toast.error(err instanceof Error ? err.message : "An error occurred");
+    toast.error(err instanceof Error ? err.message : "发生错误");
   } finally {
     setIsSubmitting(false);
   }
@@ -58,7 +58,7 @@ export function CancelInviteModal({
       icon={(props) => (
         <SvgUserX {...props} className="text-action-danger-05" />
       )}
-      title="Cancel Invite"
+      title="取消邀请"
       onClose={isSubmitting ? undefined : onClose}
       submit={
         <Button
@@ -67,7 +67,7 @@ export function CancelInviteModal({
           onClick={() =>
             runAction(
               () => cancelInvite(email),
-              "Invite cancelled",
+              "邀请已取消",
               () => {
                 onMutate();
                 onClose();
@@ -76,7 +76,7 @@ export function CancelInviteModal({
             )
           }
         >
-          Cancel Invite
+          取消邀请
         </Button>
       }
     >
@@ -84,7 +84,7 @@ export function CancelInviteModal({
         <Text as="span" text05>
           {email}
         </Text>{" "}
-        will no longer be able to join Onyx with this invite.
+        将无法再通过此邀请加入 Glomi AI。
       </Text>
     </ConfirmationModalLayout>
   );
@@ -112,7 +112,7 @@ export function DeactivateUserModal({
       icon={(props) => (
         <SvgUserX {...props} className="text-action-danger-05" />
       )}
-      title="Deactivate User"
+      title="停用用户"
       onClose={isSubmitting ? undefined : onClose}
       submit={
         <Button
@@ -121,7 +121,7 @@ export function DeactivateUserModal({
           onClick={() =>
             runAction(
               () => deactivateUser(email),
-              "User deactivated",
+              "用户已停用",
               () => {
                 onMutate();
                 onClose();
@@ -130,7 +130,7 @@ export function DeactivateUserModal({
             )
           }
         >
-          Deactivate
+          停用
         </Button>
       }
     >
@@ -138,9 +138,8 @@ export function DeactivateUserModal({
         <Text as="span" text05>
           {email}
         </Text>{" "}
-        will immediately lose access to Onyx. Their sessions and agents will be
-        preserved. Their license seat will be freed. You can reactivate this
-        account later.
+        将立即失去 Glomi AI 访问权限。其会话和智能体会保留，许可证席位会释放。
+        你可以稍后重新启用此账号。
       </Text>
     </ConfirmationModalLayout>
   );
@@ -166,7 +165,7 @@ export function ActivateUserModal({
   return (
     <ConfirmationModalLayout
       icon={SvgUserPlus}
-      title="Activate User"
+      title="启用用户"
       onClose={isSubmitting ? undefined : onClose}
       submit={
         <Button
@@ -174,7 +173,7 @@ export function ActivateUserModal({
           onClick={() =>
             runAction(
               () => activateUser(email),
-              "User activated",
+              "用户已启用",
               () => {
                 onMutate();
                 onClose();
@@ -183,7 +182,7 @@ export function ActivateUserModal({
             )
           }
         >
-          Activate
+          启用
         </Button>
       }
     >
@@ -191,7 +190,7 @@ export function ActivateUserModal({
         <Text as="span" text05>
           {email}
         </Text>{" "}
-        will regain access to Onyx.
+        将重新获得 Glomi AI 访问权限。
       </Text>
     </ConfirmationModalLayout>
   );
@@ -219,7 +218,7 @@ export function DeleteUserModal({
       icon={(props) => (
         <SvgUserX {...props} className="text-action-danger-05" />
       )}
-      title="Delete User"
+      title="删除用户"
       onClose={isSubmitting ? undefined : onClose}
       submit={
         <Button
@@ -228,7 +227,7 @@ export function DeleteUserModal({
           onClick={() =>
             runAction(
               () => deleteUser(email),
-              "User deleted",
+              "用户已删除",
               () => {
                 onMutate();
                 onClose();
@@ -237,7 +236,7 @@ export function DeleteUserModal({
             )
           }
         >
-          Delete
+          删除
         </Button>
       }
     >
@@ -245,8 +244,8 @@ export function DeleteUserModal({
         <Text as="span" text05>
           {email}
         </Text>{" "}
-        will be permanently removed from Onyx. All of their session history will
-        be deleted. Deletion cannot be undone.
+        将从 Glomi AI 中永久移除。该用户的全部会话历史会被删除，
+        此操作无法撤销。
       </Text>
     </ConfirmationModalLayout>
   );
@@ -276,11 +275,11 @@ export function ResetPasswordModal({
   return (
     <ConfirmationModalLayout
       icon={SvgKey}
-      title={newPassword ? "Password Reset" : "Reset Password"}
+      title={newPassword ? "密码已重置" : "重置密码"}
       onClose={isSubmitting ? undefined : handleClose}
       submit={
         newPassword ? (
-          <Button onClick={handleClose}>Done</Button>
+          <Button onClick={handleClose}>完成</Button>
         ) : (
           <Button
             disabled={isSubmitting}
@@ -294,14 +293,14 @@ export function ResetPasswordModal({
                 toast.error(
                   err instanceof Error
                     ? err.message
-                    : "Failed to reset password"
+                    : "重置密码失败"
                 );
               } finally {
                 setIsSubmitting(false);
               }
             }}
           >
-            Reset Password
+            重置密码
           </Button>
         )
       }
@@ -309,12 +308,11 @@ export function ResetPasswordModal({
       {newPassword ? (
         <div className="flex flex-col gap-2">
           <Text as="p" text03>
-            The password for{" "}
+            用户{" "}
             <Text as="span" text05>
               {email}
             </Text>{" "}
-            has been reset. Copy the new password below — it will not be shown
-            again.
+            的密码已重置。请复制下方新密码，之后不会再次显示。
           </Text>
           <code className="rounded-xs bg-background-neutral-02 px-3 py-2 text-sm select-all">
             {newPassword}
@@ -322,11 +320,11 @@ export function ResetPasswordModal({
         </div>
       ) : (
         <Text as="p" text03>
-          This will generate a new random password for{" "}
+          这将为用户{" "}
           <Text as="span" text05>
             {email}
           </Text>
-          . Their current password will stop working immediately.
+          生成一个新的随机密码。其当前密码会立即失效。
         </Text>
       )}
     </ConfirmationModalLayout>

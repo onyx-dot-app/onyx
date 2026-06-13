@@ -34,8 +34,8 @@ import {
 } from "@/providers/SettingsProvider";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { useNotificationSummary } from "@/hooks/useNotifications";
-import { SvgOnyxLogo } from "@opal/logos";
 import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
@@ -48,6 +48,8 @@ function SettingsPopover({
   onOpenNotifications,
   undismissedCount,
 }: SettingsPopoverProps) {
+  const t = useTranslations("appShell.account");
+  const tBrand = useTranslations("brand");
   const { user } = useUser();
   const settings = useSettingsContext();
   const router = useRouter();
@@ -70,7 +72,7 @@ function SettingsPopover({
     logout()
       .then((response) => {
         if (!response?.ok) {
-          alert("Failed to logout");
+          alert(t("logoutFailed"));
           return;
         }
 
@@ -86,7 +88,7 @@ function SettingsPopover({
       })
 
       .catch(() => {
-        toast.error("Failed to logout");
+        toast.error(t("logoutFailed"));
       });
   };
 
@@ -103,7 +105,7 @@ function SettingsPopover({
             variant="section"
             rounding="sm"
             icon={SvgSliders}
-            title="Settings"
+            title={t("settings")}
             href="/app/settings"
             onClick={onUserSettingsClick}
           />
@@ -114,7 +116,7 @@ function SettingsPopover({
           variant="section"
           rounding="sm"
           icon={SvgBell}
-          title="Notifications"
+          title={t("notifications")}
           onClick={onOpenNotifications}
           rightChildren={
             undismissedCount ? (
@@ -128,8 +130,8 @@ function SettingsPopover({
           variant="section"
           rounding="sm"
           icon={SvgHelpCircle}
-          title="Help & FAQ"
-          href="https://docs.onyx.app"
+          title={t("helpFaq")}
+          href="https://docs.glomi.ai"
           target="_blank"
         />,
         settings?.enterpriseSettings?.custom_help_link_url && (
@@ -154,7 +156,7 @@ function SettingsPopover({
             variant="section"
             rounding="sm"
             icon={SvgUser}
-            title="Log in"
+            title={t("logIn")}
             onClick={handleLogin}
           />
         ),
@@ -166,7 +168,7 @@ function SettingsPopover({
             color="danger"
             rounding="sm"
             icon={SvgLogOut}
-            title="Log Out"
+            title={t("logOut")}
             onClick={handleLogout}
           />
         ),
@@ -177,11 +179,10 @@ function SettingsPopover({
             variant="body"
             color="muted"
             orientation="reverse"
-            icon={SvgOnyxLogo}
             title={markdown(
-              `[Onyx ${
-                settings?.webVersion ?? "dev"
-              }](https://docs.onyx.app/changelog)`
+              `[${tBrand("version", {
+                version: settings?.webVersion ?? "dev",
+              })}](https://docs.glomi.ai/changelog)`
             )}
           />
         </div>,

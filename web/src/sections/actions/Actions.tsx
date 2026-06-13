@@ -63,20 +63,20 @@ const Actions = React.memo(
               >
                 <Button
                   icon={SvgUnplug}
-                  tooltip="Disconnect Server"
+                  tooltip="断开服务器"
                   prominence="tertiary"
                   onClick={onDisconnect}
-                  aria-label={`Disconnect ${serverName} server`}
+                  aria-label={`断开 ${serverName} 服务器`}
                 />
               </div>
             )}
             {onManage && (
               <Button
                 icon={SvgSettings}
-                tooltip="Manage Server"
+                tooltip="管理服务器"
                 prominence="tertiary"
                 onClick={onManage}
-                aria-label={`Manage ${serverName} server`}
+                aria-label={`管理 ${serverName} 服务器`}
               />
             )}
           </div>
@@ -85,11 +85,11 @@ const Actions = React.memo(
               prominence="tertiary"
               onClick={onToggleTools}
               rightIcon={SvgChevronDown}
-              aria-label={`View tools for ${serverName}`}
+              aria-label={`查看 ${serverName} 的工具`}
             >
               {status === ActionStatus.FETCHING
-                ? "Fetching tools..."
-                : `View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
+                ? "正在获取工具..."
+                : `查看 ${toolCount ?? 0} 个工具`}
             </Button>
           )}
         </div>
@@ -105,9 +105,9 @@ const Actions = React.memo(
               prominence="tertiary"
               onClick={onAuthenticate}
               rightIcon={SvgArrowExchange}
-              aria-label={`Authenticate and connect to ${serverName}`}
+              aria-label={`认证并连接到 ${serverName}`}
             >
-              Authenticate
+              认证
             </Button>
           )}
           <div
@@ -121,19 +121,19 @@ const Actions = React.memo(
             {onDelete && (
               <Button
                 icon={SvgTrash}
-                tooltip="Delete Server"
+                tooltip="删除服务器"
                 prominence="tertiary"
                 onClick={onDelete}
-                aria-label={`Delete ${serverName} server`}
+                aria-label={`删除 ${serverName} 服务器`}
               />
             )}
             {onManage && (
               <Button
                 icon={SvgSettings}
-                tooltip="Manage Server"
+                tooltip="管理服务器"
                 prominence="tertiary"
                 onClick={onManage}
-                aria-label={`Manage ${serverName} server`}
+                aria-label={`管理 ${serverName} 服务器`}
               />
             )}
           </div>
@@ -150,18 +150,18 @@ const Actions = React.memo(
               prominence="secondary"
               onClick={onReconnect}
               rightIcon={SvgPlug}
-              aria-label={`Reconnect to ${serverName}`}
+              aria-label={`重新连接到 ${serverName}`}
             >
-              Reconnect
+              重新连接
             </Button>
           )}
           {onManage && (
             <Button
               icon={SvgSettings}
-              tooltip="Manage Server"
+              tooltip="管理服务器"
               prominence="tertiary"
               onClick={onManage}
-              aria-label={`Manage ${serverName} server`}
+              aria-label={`管理 ${serverName} 服务器`}
             />
           )}
         </div>
@@ -171,9 +171,9 @@ const Actions = React.memo(
             prominence="tertiary"
             onClick={onToggleTools}
             rightIcon={SvgChevronDown}
-            aria-label={`View tools for ${serverName}`}
+            aria-label={`查看 ${serverName} 的工具`}
           >
-            {`View ${toolCount ?? 0} tool${toolCount !== 1 ? "s" : ""}`}
+            {`查看 ${toolCount ?? 0} 个工具`}
           </Button>
         )}
       </div>

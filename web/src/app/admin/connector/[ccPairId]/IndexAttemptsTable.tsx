@@ -45,11 +45,10 @@ export function IndexAttemptsTable({
     return (
       <Callout
         className="mt-4"
-        title="No indexing attempts scheduled yet"
+        title="尚未安排索引尝试"
         type="notice"
       >
-        Index attempts are scheduled in the background, and may take some time
-        to appear. Try refreshing the page in ~30 seconds!
+        索引尝试会在后台安排，可能需要一些时间才会显示。请约 30 秒后刷新页面。
       </Callout>
     );
   }
@@ -77,21 +76,21 @@ export function IndexAttemptsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Time Started</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="whitespace-nowrap">New Docs</TableHead>
+            <TableHead>开始时间</TableHead>
+            <TableHead>状态</TableHead>
+            <TableHead className="whitespace-nowrap">新增文档</TableHead>
             <TableHead>
               <Tooltip
-                tooltip="Total number of documents replaced in the index during this indexing attempt"
+                tooltip="本次索引尝试中在索引内被替换的文档总数"
                 side="top"
               >
                 <span className="flex items-center">
-                  Total Docs
+                  文档总数
                   <SvgInfo className="ml-1 w-4 h-4" />
                 </span>
               </Tooltip>
             </TableHead>
-            <TableHead>Error Message</TableHead>
+            <TableHead>错误消息</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -101,11 +100,9 @@ export function IndexAttemptsTable({
             const isReindexInProgress =
               indexAttempt.status === "in_progress" ||
               indexAttempt.status === "not_started";
-            const reindexTooltip = `This index attempt ${
-              isReindexInProgress ? "is" : "was"
-            } a full re-index. All documents from the source ${
-              isReindexInProgress ? "are being" : "were"
-            } synced into the system.`;
+            const reindexTooltip = isReindexInProgress
+              ? "本次索引尝试是完整重新索引。来源中的所有文档正在同步到系统。"
+              : "本次索引尝试是完整重新索引。来源中的所有文档已同步到系统。";
             return (
               <TableRow
                 key={indexAttempt.id}
@@ -144,20 +141,20 @@ export function IndexAttemptsTable({
                         className="relative z-content"
                       >
                         <Text font="secondary-body" color="text-03">
-                          {`${docsPerMinute} docs / min`}
+                          {`${docsPerMinute} 文档 / 分钟`}
                         </Text>
                         <Button
                           icon={SvgBarChartSmall}
                           prominence="tertiary"
                           size="sm"
-                          tooltip="View stage metrics"
+                          tooltip="查看阶段指标"
                           onClick={() => setMetricsAttemptId(indexAttempt.id)}
                         />
                       </Section>
                     ) : (
                       indexAttempt.status === "success" && (
                         <Text font="secondary-body" color="text-03">
-                          No additional docs processed
+                          未处理额外文档
                         </Text>
                       )
                     )}
@@ -169,8 +166,8 @@ export function IndexAttemptsTable({
                       <div>{indexAttempt.new_docs_indexed}</div>
                       {indexAttempt.docs_removed_from_index > 0 && (
                         <div className="text-xs w-52 text-wrap flex italic overflow-hidden whitespace-normal px-1">
-                          (also removed {indexAttempt.docs_removed_from_index}{" "}
-                          docs that were detected as deleted in the source)
+                          （同时移除了 {indexAttempt.docs_removed_from_index}{" "}
+                          个在来源中已删除的文档）
                         </div>
                       )}
                     </div>
@@ -200,7 +197,7 @@ export function IndexAttemptsTable({
                   {indexAttempt.full_exception_trace && (
                     <button
                       type="button"
-                      aria-label="View full trace"
+                      aria-label="查看完整追踪"
                       onClick={() =>
                         setIndexAttemptTracePopupId(indexAttempt.id)
                       }

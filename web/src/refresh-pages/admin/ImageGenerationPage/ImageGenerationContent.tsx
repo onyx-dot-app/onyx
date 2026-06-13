@@ -96,11 +96,11 @@ export default function ImageGenerationContent() {
     if (config) {
       try {
         await setDefaultImageGenerationConfig(config.image_provider_id);
-        toast.success(`${provider.title} set as default`);
+        toast.success(`${provider.title} 已设为默认`);
         refetchConfigs();
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to set default"
+          error instanceof Error ? error.message : "设置默认模型失败"
         );
       }
     }
@@ -113,11 +113,11 @@ export default function ImageGenerationContent() {
     if (config) {
       try {
         await unsetDefaultImageGenerationConfig(config.image_provider_id);
-        toast.success(`${provider.title} deselected`);
+        toast.success(`${provider.title} 已取消默认`);
         refetchConfigs();
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to deselect"
+          error instanceof Error ? error.message : "取消默认模型失败"
         );
       }
     }
@@ -141,13 +141,13 @@ export default function ImageGenerationContent() {
       }
 
       await deleteImageGenerationConfig(disconnectProvider.image_provider_id);
-      toast.success(`${disconnectProvider.title} disconnected`);
+      toast.success(`${disconnectProvider.title} 已断开连接`);
       refetchConfigs();
       refetchProviders();
     } catch (error) {
       console.error("Failed to disconnect image generation provider:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to disconnect"
+        error instanceof Error ? error.message : "断开连接失败"
       );
     } finally {
       setDisconnectProvider(null);
@@ -156,7 +156,7 @@ export default function ImageGenerationContent() {
   };
 
   const handleModalSuccess = () => {
-    toast.success("Provider configured successfully");
+    toast.success("提供商配置成功");
     setEditConfig(null);
     refetchConfigs();
     refetchProviders();
@@ -165,7 +165,7 @@ export default function ImageGenerationContent() {
   if (llmError || configError) {
     return (
       <div className="text-error">
-        Failed to load configuration. Please refresh the page.
+        加载配置失败。请刷新页面。
       </div>
     );
   }
@@ -204,8 +204,8 @@ export default function ImageGenerationContent() {
     <>
       <div className="flex flex-col gap-4">
         <Content
-          title="Image Generation Model"
-          description="Select a model to generate images in chat."
+          title="图像生成模型"
+          description="选择用于在对话中生成图像的模型。"
           sizePreset="main-content"
           variant="section"
         />
@@ -213,7 +213,7 @@ export default function ImageGenerationContent() {
         {connectedProviderIds.size === 0 && (
           <MessageCard
             variant="info"
-            title="Connect an image generation model to use in chat."
+            title="连接图像生成模型后即可在对话中使用。"
           />
         )}
 
@@ -254,8 +254,8 @@ export default function ImageGenerationContent() {
       {disconnectProvider && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={markdown(`Disconnect *${disconnectProvider.title}*`)}
-          description="This will remove the stored credentials for this provider."
+          title={markdown(`断开 *${disconnectProvider.title}*`)}
+          description="这会移除此提供商已保存的凭据。"
           onClose={() => {
             setDisconnectProvider(null);
             setReplacementProviderId(null);
@@ -268,7 +268,7 @@ export default function ImageGenerationContent() {
                 needsReplacement && hasReplacements && !replacementProviderId
               }
             >
-              Disconnect
+              断开连接
             </Button>
           }
         >
@@ -277,18 +277,18 @@ export default function ImageGenerationContent() {
               <Section alignItems="start">
                 <Text as="p" color="text-03">
                   {markdown(
-                    `**${disconnectProvider.title}** is currently the default image generation model. Session history will be preserved.`
+                    `**${disconnectProvider.title}** 当前是默认图像生成模型。会话历史会保留。`
                   )}
                 </Text>
                 <Section alignItems="start" gap={0.25}>
                   <Text as="p" color="text-04">
-                    Set New Default
+                    设置新的默认模型
                   </Text>
                   <InputSelect
                     value={replacementProviderId ?? undefined}
                     onValueChange={(v) => setReplacementProviderId(v)}
                   >
-                    <InputSelect.Trigger placeholder="Select a replacement model" />
+                    <InputSelect.Trigger placeholder="选择替代模型" />
                     <InputSelect.Content>
                       {replacementGroups.map((group) => (
                         <InputSelect.Group key={group.name}>
@@ -310,10 +310,10 @@ export default function ImageGenerationContent() {
                         icon={SvgSlash}
                       >
                         <span>
-                          <b>No Default</b>
+                          <b>不设默认</b>
                           <span className="text-text-03">
                             {" "}
-                            (Disable Image Generation)
+                            （停用图像生成）
                           </span>
                         </span>
                       </InputSelect.Item>
@@ -325,11 +325,11 @@ export default function ImageGenerationContent() {
               <>
                 <Text as="p" color="text-03">
                   {markdown(
-                    `**${disconnectProvider.title}** is currently the default image generation model.`
+                    `**${disconnectProvider.title}** 当前是默认图像生成模型。`
                   )}
                 </Text>
                 <Text as="p" color="text-03">
-                  Connect another provider to continue using image generation.
+                  请连接其他提供商以继续使用图像生成。
                 </Text>
               </>
             )
@@ -337,11 +337,11 @@ export default function ImageGenerationContent() {
             <>
               <Text as="p" color="text-03">
                 {markdown(
-                  `**${disconnectProvider.title}** models will no longer be used to generate images.`
+                  `**${disconnectProvider.title}** 模型将不再用于生成图像。`
                 )}
               </Text>
               <Text as="p" color="text-03">
-                Session history will be preserved.
+                会话历史会保留。
               </Text>
             </>
           )}

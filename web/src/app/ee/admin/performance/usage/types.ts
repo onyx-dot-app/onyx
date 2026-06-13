@@ -12,7 +12,7 @@ export interface UserAnalytics {
   date: string;
 }
 
-export interface OnyxBotAnalytics {
+export interface GlomiBotAnalytics {
   total_queries: number;
   auto_resolved: number;
   date: string;

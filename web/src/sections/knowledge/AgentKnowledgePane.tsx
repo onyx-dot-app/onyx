@@ -86,7 +86,7 @@ function KnowledgeSidebar({
           ) : undefined
         }
       >
-        Your Files
+        你的文件
       </LineItem>
 
       {vectorDbEnabled && (
@@ -108,7 +108,7 @@ function KnowledgeSidebar({
               ) : undefined
             }
           >
-            Document Set
+            文档集
           </LineItem>
 
           <Divider paddingParallel="fit" paddingPerpendicular="fit" />
@@ -182,9 +182,9 @@ function KnowledgeTable<T>({
   onToggleItem,
   searchValue,
   onSearchChange,
-  searchPlaceholder = "Search...",
+  searchPlaceholder = "搜索...",
   headerActions,
-  emptyMessage = "No items available.",
+  emptyMessage = "暂无可用项目。",
   ariaLabelPrefix,
 }: KnowledgeTableProps<T> & { ariaLabelPrefix?: string }) {
   return (
@@ -311,7 +311,7 @@ function DocumentSetsTableContent({
   const columns: KnowledgeTableColumn<DocumentSetSummary>[] = [
     {
       key: "name",
-      header: "Name",
+      header: "名称",
       sortable: true,
       render: (ds) => (
         <Content
@@ -324,7 +324,7 @@ function DocumentSetsTableContent({
     },
     {
       key: "sources",
-      header: "Sources",
+      header: "来源",
       width: 8,
       render: (ds) => (
         <TableLayouts.SourceIconsRow>
@@ -353,8 +353,8 @@ function DocumentSetsTableContent({
       onToggleItem={(id) => onDocumentSetToggle(id as number)}
       searchValue={searchValue}
       onSearchChange={setSearchValue}
-      searchPlaceholder="Search document sets..."
-      emptyMessage="No document sets available."
+      searchPlaceholder="搜索文档集..."
+      emptyMessage="暂无可用文档集。"
       ariaLabelPrefix="document-set-row"
     />
   );
@@ -437,7 +437,7 @@ function RecentFilesTableContent({
   const columns: KnowledgeTableColumn<ProjectFile>[] = [
     {
       key: "name",
-      header: "Name",
+      header: "名称",
       sortable: true,
       render: (file) => (
         <Content
@@ -450,7 +450,7 @@ function RecentFilesTableContent({
     },
     {
       key: "lastUpdated",
-      header: "Last Updated",
+      header: "最近更新",
       sortable: true,
       width: 8,
       render: (file) => (
@@ -480,7 +480,7 @@ function RecentFilesTableContent({
         onToggleItem={(id) => onToggleFile(id as string)}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        searchPlaceholder="Search files..."
+        searchPlaceholder="搜索文件..."
         ariaLabelPrefix="user-file-row"
         headerActions={
           <Button
@@ -488,18 +488,17 @@ function RecentFilesTableContent({
             icon={SvgPlusCircle}
             onClick={() => fileInputRef.current?.click()}
           >
-            Add File
+            添加文件
           </Button>
         }
-        emptyMessage="No files available. Upload files to get started."
+        emptyMessage="暂无可用文件。上传文件即可开始。"
       />
 
       {hasProcessingFiles && (
         <GeneralLayouts.Section height="auto" alignItems="start">
           <Text as="p" text03 secondaryBody>
-            Onyx is still processing your uploaded files. You can create the
-            agent now, but it will not have access to all files until processing
-            completes.
+            Glomi AI 仍在处理你上传的文件。你可以先创建智能体，但文件处理完成前，
+            它暂时无法访问全部文件。
           </Text>
         </GeneralLayouts.Section>
       )}
@@ -680,13 +679,13 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
               ) : undefined
             }
           >
-            Document Sets
+            文档集
           </LineItem>
         )}
 
         <LineItem
           icon={SvgFiles}
-          description="Recent or new uploads"
+          description="最近或新上传的文件"
           onClick={onNavigateToRecent}
           emphasized={selectedFileIds.length > 0}
           aria-label="knowledge-add-files"
@@ -698,14 +697,14 @@ const KnowledgeAddView = memo(function KnowledgeAddView({
             ) : undefined
           }
         >
-          Your Files
+          你的文件
         </LineItem>
       </GeneralLayouts.Section>
 
       {vectorDbEnabled && connectedSources.length > 0 && (
         <>
           <Text as="p" text03 secondaryBody>
-            Connected Sources
+            已连接来源
           </Text>
           {connectedSources.map((connectedSource) => {
             const sourceMetadata = getSourceMetadata(connectedSource.source);
@@ -780,7 +779,7 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         height="auto"
       >
         <Text text03 secondaryBody>
-          Add documents or connected sources to use for this agent.
+          添加文档或已连接来源，供此智能体使用。
         </Text>
         <Button
           icon={SvgPlusCircle}
@@ -808,8 +807,7 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
       height="auto"
     >
       <Text as="p" text03 secondaryBody>
-        {totalSelected} knowledge source{totalSelected !== 1 ? "s" : ""}{" "}
-        selected
+        已选择 {totalSelected} 个知识来源
       </Text>
       <Button
         prominence="internal"
@@ -817,7 +815,7 @@ const KnowledgeMainContent = memo(function KnowledgeMainContent({
         onClick={onViewEdit}
         aria-label="knowledge-view-edit"
       >
-        View / Edit
+        查看 / 编辑
       </Button>
     </GeneralLayouts.Section>
   );
@@ -1135,8 +1133,8 @@ export default function AgentKnowledgePane({
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
       <Content
-        title="Knowledge"
-        description="Add specific connectors and documents for this agent to use to inform its responses."
+        title="知识"
+        description="添加指定连接器和文档，供此智能体在回答时参考。"
         sizePreset="main-content"
         variant="section"
       />
@@ -1144,8 +1142,8 @@ export default function AgentKnowledgePane({
       <Card>
         <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
           <InputHorizontal
-            title="Use Knowledge"
-            description="Let this agent reference these documents to inform its responses."
+            title="使用知识"
+            description="允许此智能体引用这些文档来生成回答。"
             withLabel
           >
             <Switch

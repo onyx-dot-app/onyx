@@ -49,7 +49,7 @@ interface ViewConfig {
 // FooterLinks (inlined)
 // ----------------------------------------------------------------------------
 
-const SUPPORT_EMAIL = "support@onyx.app";
+const SUPPORT_EMAIL = "support@glomi.ai";
 
 function FooterLinks({
   hasSubscription,
@@ -62,8 +62,8 @@ function FooterLinks({
 }) {
   const { user } = useUser();
   const licenseText = hasSubscription
-    ? "Update License Key"
-    : "Activate License Key";
+    ? "更新许可证 Key"
+    : "激活许可证 Key";
   const billingHelpHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
     `[Billing] support for ${user?.email ?? "unknown"}`
   )}`;
@@ -73,12 +73,12 @@ function FooterLinks({
       {onActivateLicense && !hideLicenseLink && (
         <>
           <Text secondaryBody text03>
-            Have a license key?
+            已有许可证 Key？
           </Text>
           <LinkButton onClick={onActivateLicense}>{licenseText}</LinkButton>
         </>
       )}
-      <LinkButton href={billingHelpHref}>Billing Help</LinkButton>
+      <LinkButton href={billingHelpHref}>账单帮助</LinkButton>
     </Section>
   );
 }
@@ -354,7 +354,7 @@ export default function BillingPage() {
     if (isLoading || view === null) {
       return {
         icon: SvgWallet,
-        title: "Plans & Billing",
+        title: "套餐和账单",
         showBackButton: false,
       };
     }
@@ -362,13 +362,13 @@ export default function BillingPage() {
       case "checkout":
         return {
           icon: SvgArrowUpCircle,
-          title: "Upgrade Plan",
+          title: "升级套餐",
           showBackButton: false,
         };
       case "plans":
         return {
           icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
-          title: hasSubscription ? "View Plans" : "Upgrade Plan",
+          title: hasSubscription ? "查看套餐" : "升级套餐",
           showBackButton: !!(
             hasSubscription ||
             (isSelfHosted && licenseData?.has_license)
@@ -377,7 +377,7 @@ export default function BillingPage() {
       case "details":
         return {
           icon: SvgWallet,
-          title: "Plans & Billing",
+          title: "套餐和账单",
           showBackButton: false,
         };
     }
@@ -507,8 +507,8 @@ export default function BillingPage() {
           {isActivating && (
             <MessageCard
               variant="warning"
-              title="Your license is still activating"
-              description="Your license is being processed. You'll be taken to billing details automatically once confirmed."
+              title="许可证仍在激活中"
+              description="你的许可证正在处理中。确认后会自动跳转到账单详情。"
               onClose={() => {
                 sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
                 setIsActivating(false);

@@ -13,38 +13,38 @@ export default function AdvancedFormPage({
   return (
     <div className="py-4 flex flex-col gap-y-6 rounded-lg max-w-2xl mx-auto">
       <h2 className="text-2xl font-bold mb-4 text-text-800">
-        Advanced Configuration
+        高级配置
       </h2>
 
       <NumberInput
         description={`
-          Checks all documents against the source to delete those that no longer exist.
-          Note: This process checks every document, so be cautious when increasing frequency.
-          Default is ${defaultPruneFreqHours} hours (${Math.round(
+          对照来源检查所有文档，并删除已不存在的文档。
+          注意：此过程会检查每个文档，因此提高频率时请谨慎。
+          默认值为 ${defaultPruneFreqHours} 小时（${Math.round(
             defaultPruneFreqHours / 24
-          )} days). Decimal hours are supported (e.g., 0.1 hours = 6 minutes).
-          Enter 0 to disable pruning for this connector.
+          )} 天）。支持小数小时（例如 0.1 小时 = 6 分钟）。
+          输入 0 可禁用此连接器的修剪。
         `}
-        label="Prune Frequency (hours)"
+        label="修剪频率（小时）"
         name="pruneFreq"
       />
 
       <NumberInput
-        description="This is how frequently we pull new documents from the source (in minutes). If you input 0, we will never pull new documents for this connector."
-        label="Refresh Frequency (minutes)"
+        description="从来源拉取新文档的频率（分钟）。如果输入 0，则不会为此连接器拉取新文档。"
+        label="刷新频率（分钟）"
         name="refreshFreq"
       />
 
       <TextFormField
         type="date"
-        subtext="Documents prior to this date will not be pulled in"
+        subtext="早于此日期的文档不会被拉取"
         optional
-        label="Indexing Start Date"
+        label="索引开始日期"
         name="indexingStart"
       />
       <div className="mt-4 flex w-full mx-auto max-w-2xl justify-start">
         <Button variant="danger" icon={SvgTrash} type="submit">
-          Reset
+          重置
         </Button>
       </div>
     </div>

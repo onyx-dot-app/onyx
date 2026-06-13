@@ -41,7 +41,7 @@ function CreateGroupPage() {
   async function handleCreate() {
     const trimmed = groupName.trim();
     if (!trimmed) {
-      toast.error("Group name is required");
+      toast.error("请输入用户组名称");
       return;
     }
 
@@ -55,10 +55,10 @@ function CreateGroupPage() {
       await updateAgentGroupSharing(groupId, [], selectedAgentIds);
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
       await saveTokenLimits(groupId, tokenLimits, []);
-      toast.success(`Group "${trimmed}" created`);
+      toast.success(`用户组“${trimmed}”已创建`);
       router.push("/admin/groups");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to create group");
+      toast.error(e instanceof Error ? e.message : "创建用户组失败");
     } finally {
       setIsSubmitting(false);
     }
@@ -70,13 +70,13 @@ function CreateGroupPage() {
         prominence="secondary"
         onClick={() => router.push("/admin/groups")}
       >
-        Cancel
+        取消
       </Button>
       <Button
         onClick={handleCreate}
         disabled={!groupName.trim() || isSubmitting}
       >
-        Create
+        创建
       </Button>
     </Section>
   );
@@ -85,7 +85,7 @@ function CreateGroupPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgUsers}
-        title="Create Group"
+        title="创建用户组"
         divider
         rightChildren={headerActions}
       />
@@ -99,10 +99,10 @@ function CreateGroupPage() {
           justifyContent="start"
         >
           <Text mainUiBody text04>
-            Group Name
+            用户组名称
           </Text>
           <InputTypeIn
-            placeholder="Name your group"
+            placeholder="为用户组命名"
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
           />
@@ -115,7 +115,7 @@ function CreateGroupPage() {
 
         {error ? (
           <Text as="p" secondaryBody text03>
-            Failed to load users.
+            加载用户失败。
           </Text>
         ) : null}
 
@@ -129,7 +129,7 @@ function CreateGroupPage() {
             <InputTypeIn
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search users and accounts..."
+              placeholder="搜索用户和账号..."
               searchIcon
             />
             <Table
@@ -144,8 +144,8 @@ function CreateGroupPage() {
               emptyState={
                 <IllustrationContent
                   illustration={SvgNoResult}
-                  title="No users found"
-                  description="No users match your search."
+                  title="未找到用户"
+                  description="没有用户匹配你的搜索。"
                 />
               }
             />

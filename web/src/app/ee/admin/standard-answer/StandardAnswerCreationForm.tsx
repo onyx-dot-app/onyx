@@ -63,13 +63,13 @@ export const StandardAnswerCreationForm = ({
           }}
           validationSchema={Yup.object().shape({
             keyword: Yup.string()
-              .required("Keywords or pattern is required")
+              .required("请输入关键词或匹配模式")
               .max(255)
               .min(1),
-            answer: Yup.string().required("Answer is required").min(1),
+            answer: Yup.string().required("请输入答案").min(1),
             categories: Yup.array()
               .required()
-              .min(1, "At least one category is required"),
+              .min(1, "请至少选择一个分类"),
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -99,8 +99,8 @@ export const StandardAnswerCreationForm = ({
               const errorMsg = responseJson.detail || responseJson.message;
               toast.error(
                 isUpdate
-                  ? `Error updating Standard Answer - ${errorMsg}`
-                  : `Error creating Standard Answer - ${errorMsg}`
+                  ? `更新标准答案失败 - ${errorMsg}`
+                  : `创建标准答案失败 - ${errorMsg}`
               );
             }
           }}
@@ -110,45 +110,45 @@ export const StandardAnswerCreationForm = ({
               {values.matchRegex ? (
                 <TextFormField
                   name="keyword"
-                  label="Regex pattern"
+                  label="Regex 模式"
                   isCode
-                  tooltip="Triggers if the question matches this regex pattern (using Python `re.search()`)"
+                  tooltip="当问题匹配此 Regex 模式时触发（使用 Python `re.search()`）"
                   placeholder="(?:it|support)\s*ticket"
                 />
               ) : values.matchAnyKeywords == "any" ? (
                 <TextFormField
                   name="keyword"
-                  label="Any of these keywords, separated by spaces"
-                  tooltip="A question must match these keywords in order to trigger the answer."
+                  label="任意关键词，用空格分隔"
+                  tooltip="问题匹配这些关键词后才会触发此答案。"
                   placeholder="ticket problem issue"
                 />
               ) : (
                 <TextFormField
                   name="keyword"
-                  label="All of these keywords, in any order, separated by spaces"
-                  tooltip="A question must match these keywords in order to trigger the answer."
+                  label="全部关键词，顺序不限，用空格分隔"
+                  tooltip="问题匹配这些关键词后才会触发此答案。"
                   placeholder="it ticket"
                 />
               )}
               <BooleanFormField
-                subtext="Match a regex pattern instead of an exact keyword"
+                subtext="使用 Regex 模式匹配，而不是精确关键词"
                 optional
-                label="Match regex"
+                label="匹配 Regex"
                 name="matchRegex"
               />
               {values.matchRegex ? null : (
                 <SelectorFormField
                   defaultValue={`all`}
-                  label="Keyword detection strategy"
-                  subtext="Choose whether to require the user's question to contain any or all of the keywords above to show this answer."
+                  label="关键词检测策略"
+                  subtext="选择用户问题需要包含上方任意关键词还是全部关键词，才显示此答案。"
                   name="matchAnyKeywords"
                   options={[
                     {
-                      name: "All keywords",
+                      name: "全部关键词",
                       value: "all",
                     },
                     {
-                      name: "Any keywords",
+                      name: "任意关键词",
                       value: "any",
                     },
                   ]}
@@ -160,14 +160,14 @@ export const StandardAnswerCreationForm = ({
               <div className="w-full">
                 <MarkdownFormField
                   name="answer"
-                  label="Answer"
-                  placeholder="The answer in Markdown. Example: If you need any help from the IT team, please email internalsupport@company.com"
+                  label="答案"
+                  placeholder="使用 Markdown 编写答案。例如：如果需要 IT 团队帮助，请发送邮件到 internalsupport@company.com"
                 />
               </div>
               <div className="w-4/12">
                 <MultiSelectDropdown
                   name="categories"
-                  label="Categories:"
+                  label="分类："
                   onChange={(selected_options) => {
                     const selected_categories = selected_options.map(
                       (option) => {
@@ -204,7 +204,7 @@ export const StandardAnswerCreationForm = ({
                   disabled={isSubmitting}
                   className="mx-auto w-64"
                 >
-                  {isUpdate ? "Update!" : "Create!"}
+                  {isUpdate ? "更新" : "创建"}
                 </Button>
               </div>
             </Form>

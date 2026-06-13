@@ -53,20 +53,19 @@ export default function IndexAttemptErrorsModal({
       <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgAlertTriangle}
-          title="Indexing Errors"
+          title="索引错误"
           onClose={onClose}
           height="fit"
         />
         <Modal.Body height="full">
           <div className="flex flex-col gap-2 shrink-0">
             <Text as="p">
-              Below are the errors encountered during indexing. Each row
-              represents a failed document or entity.
+              以下是索引过程中遇到的错误。每一行代表一个失败的文档或实体。
             </Text>
             <Text as="p">
               {supportsTargetedReindex
-                ? "Click the button below to re-fetch only the failing documents. Much faster than a full re-index."
-                : "Click the button below to kick off a full re-index to try and resolve these errors. This full re-index may take much longer than a normal update."}
+                ? "点击下方按钮仅重新获取失败的文档。这比完整重新索引快得多。"
+                : "点击下方按钮启动完整重新索引以尝试解决这些错误。完整重新索引可能比普通更新耗时更久。"}
             </Text>
           </div>
 
@@ -74,10 +73,10 @@ export default function IndexAttemptErrorsModal({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Document ID</TableHead>
-                  <TableHead className="w-1/2">Error Message</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>时间</TableHead>
+                  <TableHead>文档 ID</TableHead>
+                  <TableHead className="w-1/2">错误消息</TableHead>
+                  <TableHead>状态</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -95,10 +94,10 @@ export default function IndexAttemptErrorsModal({
                             rel="noopener noreferrer"
                             className="text-link hover:underline"
                           >
-                            {error.document_id || error.entity_id || "Unknown"}
+                            {error.document_id || error.entity_id || "未知"}
                           </a>
                         ) : (
-                          error.document_id || error.entity_id || "Unknown"
+                          error.document_id || error.entity_id || "未知"
                         )}
                       </TableCell>
                       <TableCell>
@@ -114,7 +113,7 @@ export default function IndexAttemptErrorsModal({
                               : "bg-status-error-02 text-status-error-05"
                           }`}
                         >
-                          {error.is_resolved ? "Resolved" : "Unresolved"}
+                          {error.is_resolved ? "已解决" : "未解决"}
                         </span>
                       </TableCell>
                     </TableRow>
@@ -125,7 +124,7 @@ export default function IndexAttemptErrorsModal({
                       colSpan={4}
                       className="text-center py-8 text-text-03"
                     >
-                      No errors found on this page
+                      此页未找到错误
                     </TableCell>
                   </TableRow>
                 )}
@@ -147,7 +146,7 @@ export default function IndexAttemptErrorsModal({
           {hasUnresolvedErrors && (
             // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button onClick={onResolveAll} className="ml-4 whitespace-nowrap">
-              Resolve All
+              全部解决
             </Button>
           )}
         </Modal.Footer>

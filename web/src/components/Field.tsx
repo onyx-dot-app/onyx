@@ -187,7 +187,7 @@ export const FieldLabel = ({
             {label}
           </Label>
         )}
-        {optional ? <span>(optional) </span> : ""}
+        {optional ? <span>（可选）</span> : ""}
         {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
       </div>
       {error ? (
@@ -371,7 +371,7 @@ export function TextFormField({
         {!isTextArea && isPasswordField && showPasswordToggle && (
           <button
             type="button"
-            aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+            aria-label={isPasswordVisible ? "隐藏密码" : "显示密码"}
             className="absolute right-3 top-1/2 -translate-y-1/2 stroke-text-02 hover:stroke-text-03 mt-0.5"
             onClick={() => setIsPasswordVisible((v) => !v)}
             tabIndex={0}
@@ -462,12 +462,12 @@ export function TypedFileUploadFormField({
         if (validation?.isValid) {
           setCustomError("");
         } else {
-          setCustomError(validation?.errors.join(", ") || "Unknown error");
+          setCustomError(validation?.errors.join(", ") || "未知错误");
           helpers.setValue(null);
         }
       } catch (error) {
         setCustomError(
-          error instanceof Error ? error.message : "Validation error"
+          error instanceof Error ? error.message : "校验失败"
         );
         helpers.setValue(null);
       } finally {
@@ -487,14 +487,14 @@ export function TypedFileUploadFormField({
 
     const file = files[0];
     if (!file) {
-      setCustomError("File selection error");
+      setCustomError("文件选择失败");
       return;
     }
 
     const typeDefinitionKey = getFileTypeDefinitionForField(name);
 
     if (!typeDefinitionKey) {
-      setCustomError(`No file type definition found for field: ${name}`);
+      setCustomError(`未找到字段对应的文件类型定义：${name}`);
       return;
     }
 
@@ -503,7 +503,7 @@ export function TypedFileUploadFormField({
       helpers.setValue(typedFile);
       setCustomError("");
     } catch (error) {
-      setCustomError(error instanceof Error ? error.message : "Unknown error");
+      setCustomError(error instanceof Error ? error.message : "未知错误");
       helpers.setValue(null);
     } finally {
       setIsValidating(false);
@@ -524,7 +524,7 @@ export function TypedFileUploadFormField({
       {/* Validation feedback */}
       {isValidating && (
         <div className="text-status-info-05 text-sm mt-1">
-          Validating file...
+          正在校验文件...
         </div>
       )}
 
@@ -623,7 +623,7 @@ export const MarkdownFormField = ({
   name,
   label,
   error,
-  placeholder = "Enter your markdown here...",
+  placeholder = "在此输入 Markdown...",
 }: MarkdownPreviewProps) => {
   const [field] = useField(name);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -646,7 +646,7 @@ export const MarkdownFormField = ({
             onClick={togglePreview}
             className="text-sm font-semibold text-text-04 hover:text-text-05 focus:outline-hidden"
           >
-            {isPreviewOpen ? "Write" : "Preview"}
+            {isPreviewOpen ? "编辑" : "预览"}
           </button>
         </div>
         {isPreviewOpen ? (
@@ -768,7 +768,7 @@ export const BooleanFormField = memo(function BooleanFormField({
                   >
                     <div className="flex items-center gap-x-2">
                       <Label small={small}>{`${label}${
-                        optional ? " (Optional)" : ""
+                        optional ? "（可选）" : ""
                       }`}</Label>
                       {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
                     </div>
@@ -884,7 +884,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
               type="button"
               disabled={disabled}
             >
-              Add New
+              新增
             </Button>
           </div>
         )}
@@ -995,7 +995,7 @@ export function SelectorFormField({
           disabled={disabled}
         >
           <SelectTrigger className={sizeClass.input} disabled={disabled}>
-            <SelectValue placeholder="Select...">
+            <SelectValue placeholder="请选择...">
               {currentlySelected?.name || defaultValue || ""}
             </SelectValue>
           </SelectTrigger>
@@ -1011,7 +1011,7 @@ export function SelectorFormField({
               container={container}
             >
               {options.length === 0 ? (
-                <SelectItem value="default">Select...</SelectItem>
+                <SelectItem value="default">请选择...</SelectItem>
               ) : (
                 options.map((option) => (
                   <SelectItem
@@ -1030,7 +1030,7 @@ export function SelectorFormField({
                   value={"__none__"}
                   onSelect={() => setFieldValue(name, null)}
                 >
-                  None
+                  无
                 </SelectItem>
               )}
             </SelectContent>

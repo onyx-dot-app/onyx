@@ -58,11 +58,11 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
           credentialFileType = "service_account";
         } else {
           throw new Error(
-            "Unknown credential type, expected one of 'OAuth Web application' or 'Service Account'"
+            "未知凭据类型，应为“OAuth Web application”或“Service Account”之一"
           );
         }
       } catch (e) {
-        toast.error(`Invalid file provided - ${e}`);
+        toast.error(`提供的文件无效 - ${e}`);
         setIsUploading(false);
         return;
       }
@@ -79,14 +79,14 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
           }
         );
         if (response.ok) {
-          toast.success("Successfully uploaded app credentials");
+          toast.success("应用凭据上传成功");
           mutate(SWR_KEYS.googleConnectorAppCredential("gmail"));
           if (onSuccess) {
             onSuccess();
           }
         } else {
           const errorMsg = await response.text();
-          toast.error(`Failed to upload app credentials - ${errorMsg}`);
+          toast.error(`应用凭据上传失败 - ${errorMsg}`);
         }
       }
 
@@ -102,14 +102,14 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
           }
         );
         if (response.ok) {
-          toast.success("Successfully uploaded service account key");
+          toast.success("Service Account Key 上传成功");
           mutate(SWR_KEYS.googleConnectorServiceAccountKey("gmail"));
           if (onSuccess) {
             onSuccess();
           }
         } else {
           const errorMsg = await response.text();
-          toast.error(`Failed to upload service account key - ${errorMsg}`);
+          toast.error(`Service Account Key 上传失败 - ${errorMsg}`);
         }
       }
       setIsUploading(false);
@@ -153,7 +153,7 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
       ) {
         handleFileUpload(file);
       } else {
-        toast.error("Please upload a JSON file");
+        toast.error("请上传 JSON 文件");
       }
     }
   };
@@ -184,11 +184,11 @@ const GmailCredentialUpload = ({ onSuccess }: { onSuccess?: () => void }) => {
               )}
               <span className="text-sm text-text-500">
                 {isUploading
-                  ? `Uploading ${truncateString(fileName || "file", 50)}...`
+                  ? `正在上传 ${truncateString(fileName || "文件", 50)}...`
                   : isDragging
-                    ? "Drop JSON file here"
+                    ? "将 JSON 文件拖到此处"
                     : truncateString(
-                        fileName || "Select or drag JSON credentials file...",
+                        fileName || "选择或拖入 JSON 凭据文件...",
                         50
                       )}
               </span>
@@ -258,8 +258,7 @@ export const GmailJsonUploadSection = ({
         <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded-sm">
           <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
           <p className="text-sm">
-            Curators are unable to set up the Gmail credentials. To add a Gmail
-            connector, please contact an administrator.
+            策展者无法设置 Gmail 凭据。若要添加 Gmail 连接器，请联系管理员。
           </p>
         </div>
       </div>
@@ -269,8 +268,7 @@ export const GmailJsonUploadSection = ({
   return (
     <div>
       <p className="text-sm mb-3">
-        To connect your Gmail, create credentials (either OAuth App or Service
-        Account), download the JSON file, and upload it below.
+        要连接 Gmail，请创建凭据（OAuth App 或 Service Account），下载 JSON 文件并在下方上传。
       </p>
       <div className="mb-4">
         <a
@@ -280,7 +278,7 @@ export const GmailJsonUploadSection = ({
           rel="noreferrer"
         >
           <FiLink className="h-3 w-3" />
-          View detailed setup instructions
+          查看详细设置说明
         </a>
       </div>
 
@@ -334,10 +332,10 @@ export const GmailJsonUploadSection = ({
                     );
 
                     toast.success(
-                      `Successfully deleted ${
+                      `已删除 ${
                         localServiceAccountData
-                          ? "service account key"
-                          : "app credentials"
+                          ? "Service Account Key"
+                          : "应用凭据"
                       }`
                     );
                     // Immediately update local state
@@ -349,11 +347,11 @@ export const GmailJsonUploadSection = ({
                     handleSuccess();
                   } else {
                     const errorMsg = await response.text();
-                    toast.error(`Failed to delete credentials - ${errorMsg}`);
+                    toast.error(`删除凭据失败 - ${errorMsg}`);
                   }
                 }}
               >
-                Delete Credentials
+                删除凭据
               </Button>
             </div>
           )}
@@ -394,14 +392,13 @@ async function handleRevokeAccess(
 ) {
   if (connectorExists) {
     const message =
-      "Cannot revoke the Gmail credential while any connector is still associated with the credential. " +
-      "Please delete all associated connectors, then try again.";
+      "仍有连接器关联到此 Gmail 凭据，无法撤销该凭据。请删除所有关联连接器后重试。";
     toast.error(message);
     return;
   }
 
   await adminDeleteCredential(existingCredential.id);
-  toast.success("Successfully revoked the Gmail credential!");
+  toast.success("Gmail 凭据已撤销！");
 
   refreshCredentials();
 }
@@ -455,10 +452,9 @@ export const GmailAuthSection = ({
           <div className="py-3 px-4 bg-blue-50/30 dark:bg-blue-900/5 rounded-sm mb-4 flex items-start">
             <FiCheck className="text-blue-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
             <div className="flex-1">
-              <span className="font-medium block">Authentication Complete</span>
+              <span className="font-medium block">认证完成</span>
               <p className="text-sm mt-1 text-text-500 dark:text-text-400 wrap-break-word">
-                Your Gmail credentials have been successfully uploaded and
-                authenticated.
+                Gmail 凭据已成功上传并完成认证。
               </p>
             </div>
           </div>
@@ -473,11 +469,11 @@ export const GmailAuthSection = ({
                 );
               }}
             >
-              Revoke Access
+              撤销访问
             </Button>
             {buildMode && onCredentialCreated && (
               <Button onClick={() => onCredentialCreated(existingCredential)}>
-                Continue
+                继续
               </Button>
             )}
           </Section>
@@ -493,13 +489,12 @@ export const GmailAuthSection = ({
   ) {
     return (
       <div>
-        <SectionHeader>Gmail Authentication</SectionHeader>
+        <SectionHeader>Gmail 认证</SectionHeader>
         <div className="mt-4">
           <div className="flex items-start py-3 px-4 bg-yellow-50/30 dark:bg-yellow-900/5 rounded-sm">
             <FiAlertTriangle className="text-yellow-500 h-5 w-5 mr-2 mt-0.5 shrink-0" />
             <p className="text-sm">
-              Please complete Step 1 by uploading either OAuth credentials or a
-              Service Account key before proceeding with authentication.
+              请先完成步骤 1，上传 OAuth 凭据或 Service Account Key，然后继续认证。
             </p>
           </div>
         </div>
@@ -517,8 +512,8 @@ export const GmailAuthSection = ({
             }}
             validationSchema={Yup.object().shape({
               google_primary_admin: Yup.string()
-                .email("Must be a valid email")
-                .required("Required"),
+                .email("请输入有效邮箱")
+                .required("必填"),
             })}
             onSubmit={async (values, formikHelpers) => {
               formikHelpers.setSubmitting(true);
@@ -538,18 +533,18 @@ export const GmailAuthSection = ({
 
                 if (response.ok) {
                   toast.success(
-                    "Successfully created service account credential"
+                    "Service Account 凭据创建成功"
                   );
                   refreshCredentials();
                 } else {
                   const errorMsg = await response.text();
                   toast.error(
-                    `Failed to create service account credential - ${errorMsg}`
+                    `创建 Service Account 凭据失败 - ${errorMsg}`
                   );
                 }
               } catch (error) {
                 toast.error(
-                  `Failed to create service account credential - ${error}`
+                  `创建 Service Account 凭据失败 - ${error}`
                 );
               } finally {
                 formikHelpers.setSubmitting(false);
@@ -560,12 +555,12 @@ export const GmailAuthSection = ({
               <Form>
                 <TextFormField
                   name="google_primary_admin"
-                  label="Primary Admin Email:"
-                  subtext="Enter the email of an admin/owner of the Google Organization that owns the Gmail account(s) you want to index."
+                  label="主管理员邮箱："
+                  subtext="输入拥有目标 Gmail 账号的 Google 组织管理员或所有者邮箱。"
                 />
                 <div className="flex">
                   <Button disabled={isSubmitting} type="submit">
-                    {isSubmitting ? "Creating..." : "Create Credential"}
+                    {isSubmitting ? "正在创建..." : "创建凭据"}
                   </Button>
                 </div>
               </Form>
@@ -581,8 +576,7 @@ export const GmailAuthSection = ({
       <div>
         <div className="bg-background-50/30 dark:bg-background-900/20 rounded-sm mb-4">
           <p className="text-sm">
-            Next, you need to authenticate with Gmail via OAuth. This gives us
-            read access to the emails you have access to in your Gmail account.
+            接下来，你需要通过 OAuth 认证 Gmail。这会授予我们读取你 Gmail 账号中可访问邮件的权限。
           </p>
         </div>
         <Button
@@ -607,12 +601,12 @@ export const GmailAuthSection = ({
                 setIsAuthenticating(false);
               }
             } catch (error) {
-              toast.error(`Failed to authenticate with Gmail - ${error}`);
+              toast.error(`Gmail 认证失败 - ${error}`);
               setIsAuthenticating(false);
             }
           }}
         >
-          {isAuthenticating ? "Authenticating..." : "Authenticate with Gmail"}
+          {isAuthenticating ? "正在认证..." : "使用 Gmail 认证"}
         </Button>
       </div>
     );

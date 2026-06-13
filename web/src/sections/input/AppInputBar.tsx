@@ -70,6 +70,7 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
+import { useTranslations } from "next-intl";
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -127,6 +128,7 @@ const AppInputBar = React.memo(
     currentTabUrl,
     onToggleTabReading,
   }: AppInputBarProps) => {
+    const t = useTranslations("appShell.input");
     const [isRecording, setIsRecording] = useState(false);
     const [recordingCycleCount, setRecordingCycleCount] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
@@ -576,7 +578,7 @@ const AppInputBar = React.memo(
               <Button
                 disabled={disabled}
                 icon={SvgPaperclip}
-                tooltip="Attach Files"
+                tooltip={t("attachFiles")}
                 interaction={open ? "hover" : "rest"}
                 prominence="tertiary"
               />
@@ -616,8 +618,8 @@ const AppInputBar = React.memo(
                           return currentTabUrl;
                         }
                       })()
-                    : "Reading tab..."
-                  : "Read this tab"}
+                    : t("readingTab")
+                  : t("readThisTab")}
               </SelectButton>
             ) : (
               showDeepResearch && (
@@ -630,11 +632,11 @@ const AppInputBar = React.memo(
                   foldable={!deepResearchEnabled}
                   tooltip={
                     isMultiModelActive
-                      ? "Deep Research is disabled in multi-model mode"
+                      ? t("deepResearchDisabled")
                       : undefined
                   }
                 >
-                  Deep Research
+                  {t("deepResearch")}
                 </SelectButton>
               )
             )}
@@ -694,9 +696,9 @@ const AppInputBar = React.memo(
               <Button
                 disabled
                 icon={SvgMicrophone}
-                aria-label="Set up voice"
+                aria-label={t("setUpVoice")}
                 prominence="tertiary"
-                tooltip="Voice not configured. Set up in admin settings."
+                tooltip={t("voiceNotConfigured")}
               />
             ))}
 
@@ -833,7 +835,7 @@ const AppInputBar = React.memo(
                       ref={inputRef}
                       id="onyx-chat-input-textbox"
                       role="textbox"
-                      aria-label="Message input"
+                      aria-label={t("ariaLabel")}
                       contentEditable={!disabled}
                       suppressContentEditableWarning
                       onPaste={handlePaste}
@@ -854,17 +856,17 @@ const AppInputBar = React.memo(
                       }}
                       aria-multiline={true}
                       aria-disabled={disabled}
-                      aria-placeholder="How can I help you today?"
+                      aria-placeholder={t("placeholder")}
                       data-placeholder={
                         queuedMessages.length > 0 && !message
-                          ? "Press up to edit queued messages"
+                          ? t("queuedPlaceholder")
                           : isRecording
-                            ? "Listening..."
+                            ? t("listening")
                             : isVoicePlaybackActive
-                              ? "Onyx is speaking..."
+                              ? t("speaking")
                               : isSearchMode
-                                ? "Search connected sources"
-                                : "How can I help you today?"
+                                ? t("searchPlaceholder")
+                                : t("placeholder")
                       }
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
@@ -940,7 +942,7 @@ const AppInputBar = React.memo(
                           tabbingIconIndex === sortedFilteredPrompts.length
                         }
                       >
-                        Create New Prompt
+                        {t("createNewPrompt")}
                       </LineItem>,
                     ]}
                   </Popover.Menu>

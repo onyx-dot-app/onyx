@@ -191,7 +191,7 @@ export const GmailMain = ({
       {isAdmin && hasUploadedCredentials && (
         <>
           <Title className="mb-2 mt-6 ml-auto mr-auto">
-            Step 2: Authenticate with Onyx
+            第 2 步：连接 Glomi AI
           </Title>
           <GmailAuthSection
             refreshCredentials={handleRefresh}

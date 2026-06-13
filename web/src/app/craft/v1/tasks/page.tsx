@@ -55,7 +55,7 @@ interface RowActionHandlers {
 function buildColumns(handlers: RowActionHandlers) {
   return [
     tc.column("name", {
-      header: "Name",
+      header: "名称",
       weight: 25,
       enableSorting: false,
       cell: (value) => (
@@ -65,7 +65,7 @@ function buildColumns(handlers: RowActionHandlers) {
       ),
     }),
     tc.column("human_readable_schedule", {
-      header: "Schedule",
+      header: "计划",
       weight: 22,
       enableSorting: false,
       cell: (value) => (
@@ -75,13 +75,13 @@ function buildColumns(handlers: RowActionHandlers) {
       ),
     }),
     tc.column("status", {
-      header: "Status",
+      header: "状态",
       weight: 12,
       enableSorting: false,
       cell: (status) => <TaskStatusBadge status={status} />,
     }),
     tc.column("last_run", {
-      header: "Last run",
+      header: "上次运行",
       weight: 18,
       enableSorting: false,
       cell: (lastRun) => {
@@ -103,7 +103,7 @@ function buildColumns(handlers: RowActionHandlers) {
       },
     }),
     tc.column("next_run_at", {
-      header: "Next run",
+      header: "下次运行",
       weight: 13,
       enableSorting: false,
       cell: (nextRunAt) => {
@@ -162,11 +162,11 @@ export default function ScheduledTasksListPage() {
     setBusyTaskId(pendingDelete.id);
     try {
       await deleteScheduledTask(pendingDelete.id);
-      toast.success(`Deleted "${pendingDelete.name}".`);
+      toast.success(`已删除“${pendingDelete.name}”。`);
       setPendingDelete(null);
       refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete task");
+      toast.error(err instanceof Error ? err.message : "删除任务失败");
     } finally {
       setBusyTaskId(null);
     }
@@ -190,7 +190,7 @@ export default function ScheduledTasksListPage() {
         href={NEW_TASK_PATH}
         data-testid="new-task-button"
       >
-        New Scheduled Task
+        新建定时任务
       </Button>
     ),
     []
@@ -200,8 +200,8 @@ export default function ScheduledTasksListPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgClock}
-        title="Scheduled Tasks"
-        description="Run Craft prompts on a timer. Each fire creates a fresh session that runs in the background."
+        title="定时任务"
+        description="按计划运行 Glomi 创作提示词。每次触发都会创建一个新的后台会话。"
         rightChildren={headerActions}
       />
       <SettingsLayouts.Body>
@@ -212,7 +212,7 @@ export default function ScheduledTasksListPage() {
         ) : error ? (
           <Section gap={0.5}>
             <Text font="main-ui-body" color="text-03">
-              Failed to load scheduled tasks.
+              加载定时任务失败。
             </Text>
             <Button
               variant="default"
@@ -220,7 +220,7 @@ export default function ScheduledTasksListPage() {
               icon={SvgRefreshCw}
               onClick={refresh}
             >
-              Try again
+              重试
             </Button>
           </Section>
         ) : (
@@ -236,8 +236,8 @@ export default function ScheduledTasksListPage() {
             emptyState={
               <IllustrationContent
                 illustration={SvgNoResult}
-                title="No scheduled tasks found"
-                description="No scheduled tasks have been created yet."
+                title="未找到定时任务"
+                description="尚未创建任何定时任务。"
               />
             }
           />
@@ -247,8 +247,8 @@ export default function ScheduledTasksListPage() {
       {pendingDelete && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={`Delete "${pendingDelete.name}"?`}
-          description="This stops future runs and removes the task. Past run history (and the underlying sessions) will be preserved for audit."
+          title={`删除“${pendingDelete.name}”？`}
+          description="这会停止未来运行并移除此任务。历史运行记录及其底层会话会保留用于审计。"
           onClose={() => setPendingDelete(null)}
           submit={
             <Button
@@ -258,7 +258,7 @@ export default function ScheduledTasksListPage() {
               disabled={busyTaskId === pendingDelete.id}
               data-testid="confirm-delete-task"
             >
-              {busyTaskId === pendingDelete.id ? "Deleting..." : "Delete"}
+              {busyTaskId === pendingDelete.id ? "正在删除..." : "删除"}
             </Button>
           }
         />
@@ -280,7 +280,7 @@ function TaskRowActions({ task, handlers }: TaskRowActionsProps) {
   const disabled = handlers.busyTaskId === task.id;
   return (
     <div className="flex items-center gap-0.5">
-      <Tooltip tooltip="Delete" side="top">
+      <Tooltip tooltip="删除" side="top">
         <Button
           icon={SvgTrash}
           variant="danger"

@@ -68,12 +68,12 @@ function ModelConfigurationItem({
   return (
     <>
       <InputTypeIn
-        placeholder="Model name"
+        placeholder="模型名称"
         value={model.name}
         onChange={(e) => onChange({ ...model, name: e.target.value })}
       />
       <InputTypeIn
-        placeholder="Display name"
+        placeholder="显示名称"
         value={model.display_name}
         onChange={(e) => onChange({ ...model, display_name: e.target.value })}
       />
@@ -83,14 +83,14 @@ function ModelConfigurationItem({
           onChange({ ...model, supports_image_input: value === "text-image" })
         }
       >
-        <InputSelect.Trigger placeholder="Input type" />
+        <InputSelect.Trigger placeholder="输入类型" />
         <InputSelect.Content>
-          <InputSelect.Item value="text-only">Text Only</InputSelect.Item>
-          <InputSelect.Item value="text-image">Text & Image</InputSelect.Item>
+          <InputSelect.Item value="text-only">仅文本</InputSelect.Item>
+          <InputSelect.Item value="text-image">文本和图片</InputSelect.Item>
         </InputSelect.Content>
       </InputSelect>
       <InputTypeIn
-        placeholder="Default"
+        placeholder="默认"
         value={model.max_input_tokens?.toString() ?? ""}
         onChange={(e) =>
           onChange({
@@ -147,11 +147,11 @@ function ModelConfigurationList() {
       {models.length > 0 ? (
         <div className={`grid items-center gap-1 ${MODEL_GRID_COLS}`}>
           <div className="pb-1">
-            <Text mainUiAction>Model Name</Text>
+            <Text mainUiAction>模型名称</Text>
           </div>
-          <Text mainUiAction>Display Name</Text>
-          <Text mainUiAction>Input Type</Text>
-          <Text mainUiAction>Max Tokens</Text>
+          <Text mainUiAction>显示名称</Text>
+          <Text mainUiAction>输入类型</Text>
+          <Text mainUiAction>最大 Token 数</Text>
           <div aria-hidden />
 
           {models.map((model, index) => (
@@ -165,7 +165,7 @@ function ModelConfigurationList() {
           ))}
         </div>
       ) : (
-        <EmptyMessageCard title="No models added yet." padding="sm" />
+        <EmptyMessageCard title="尚未添加模型。" padding="sm" />
       )}
 
       <Button
@@ -174,7 +174,7 @@ function ModelConfigurationList() {
         onClick={handleAdd}
         type="button"
       >
-        Add Model
+        添加模型
       </Button>
     </div>
   );
@@ -189,7 +189,7 @@ function CustomConfigKeyValue() {
       onChange={(items) =>
         formikProps.setFieldValue("custom_config_list", items)
       }
-      addButtonLabel="Add Line"
+      addButtonLabel="添加一行"
     />
   );
 }
@@ -215,9 +215,9 @@ function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
       value={values.provider}
       onValueChange={(value) => setFieldValue("provider", value)}
       options={options}
-      placeholder="Provider ID string as shown on LiteLLM"
+      placeholder="LiteLLM 中显示的服务商 ID 字符串"
       disabled={disabled}
-      createPrefix="Use"
+      createPrefix="使用"
       dropdownMaxHeight="60vh"
     />
   );
@@ -282,7 +282,7 @@ export default function CustomModal({
   };
 
   const modelConfigurationSchema = Yup.object({
-    name: Yup.string().required("Model name is required"),
+    name: Yup.string().required("请输入模型名称"),
     max_input_tokens: Yup.number()
       .transform((value, originalValue) =>
         originalValue === "" || originalValue === undefined ? null : value
@@ -293,12 +293,12 @@ export default function CustomModal({
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
-        provider: Yup.string().required("Provider Name is required"),
+        provider: Yup.string().required("请输入服务商名称"),
         model_configurations: Yup.array(modelConfigurationSchema),
       })
     : Yup.object().shape({
-        name: Yup.string().required("Display Name is required"),
-        provider: Yup.string().required("Provider Name is required"),
+        name: Yup.string().required("请输入显示名称"),
+        provider: Yup.string().required("请输入服务商名称"),
         model_configurations: Yup.array(modelConfigurationSchema),
       });
 
@@ -309,7 +309,7 @@ export default function CustomModal({
       onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      description="Connect models from other LiteLLM-compatible providers."
+      description="连接来自其他 LiteLLM 兼容服务商的模型。"
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         setSubmitting(true);
 
@@ -325,7 +325,7 @@ export default function CustomModal({
           }));
 
         if (modelConfigurations.length === 0) {
-          toast.error("At least one model name is required");
+          toast.error("请至少填写一个模型名称");
           setSubmitting(false);
           return;
         }
@@ -362,8 +362,8 @@ export default function CustomModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? "服务商已更新！"
+                  : "服务商已启用！"
               );
             }
           },
@@ -373,9 +373,9 @@ export default function CustomModal({
       <InputPadder>
         <InputVertical
           withLabel="provider"
-          title="Provider"
+          title="服务商"
           subDescription={markdown(
-            "See full list of supported LLM providers at [LiteLLM](https://docs.litellm.ai/docs/providers)."
+            "支持的 LLM 服务商完整列表请查看 [LiteLLM](https://docs.litellm.ai/docs/providers)。"
           )}
         >
           <ProviderNameSelect disabled={!!existingLlmProvider} />
@@ -384,7 +384,7 @@ export default function CustomModal({
 
       <APIKeyField
         optional
-        subDescription="Paste your API key if your model provider requires authentication."
+        subDescription="如果模型服务商需要认证，请粘贴 API Key。"
       />
 
       <APIBaseField optional />
@@ -393,7 +393,7 @@ export default function CustomModal({
         <InputVertical
           withLabel="api_version"
           title="API Version"
-          suffix="optional"
+          suffix="可选"
         >
           <InputTypeInField name="api_version" />
         </InputVertical>
@@ -402,9 +402,9 @@ export default function CustomModal({
       <InputPadder>
         <Section gap={0.75}>
           <Content
-            title="Environment Variables"
+            title="环境变量"
             description={markdown(
-              "Add extra properties as needed by the model provider. These are passed to LiteLLM's `completion()` call as [environment variables](https://docs.litellm.ai/docs/set_keys#environment-variables). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions."
+              "按模型服务商要求添加额外属性。这些属性会作为[环境变量](https://docs.litellm.ai/docs/set_keys#environment-variables)传递给 LiteLLM 的 `completion()` 调用。更多说明请查看[文档](https://docs.glomi.ai/admins/ai_models/custom_inference_provider)。"
             )}
             width="full"
             variant="section"
@@ -426,8 +426,8 @@ export default function CustomModal({
       <Section gap={0.5}>
         <InputPadder>
           <Content
-            title="Models"
-            description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
+            title="模型"
+            description="列出你希望使用的 LLM 模型及其配置。模型完整列表请查看 LiteLLM。"
             variant="section"
             sizePreset="main-content"
             width="full"

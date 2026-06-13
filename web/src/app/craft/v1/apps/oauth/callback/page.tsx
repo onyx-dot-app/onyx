@@ -30,12 +30,12 @@ export default function ExternalAppsOAuthCallbackPage() {
   useEffect(() => {
     if (slackError) {
       setStatus("error");
-      setErrorMessage(`OAuth was cancelled or denied: ${slackError}`);
+      setErrorMessage(`OAuth 已取消或被拒绝：${slackError}`);
       return;
     }
     if (!code || !state) {
       setStatus("error");
-      setErrorMessage("Missing code or state in callback URL.");
+      setErrorMessage("回调 URL 中缺少 code 或 state。");
       return;
     }
     if (hasExchanged.current) return;
@@ -60,25 +60,25 @@ export default function ExternalAppsOAuthCallbackPage() {
     <SettingsLayouts.Root width="sm">
       <SettingsLayouts.Header
         icon={SvgPlug}
-        title="Connecting your app"
-        description="Finishing the OAuth handshake…"
+        title="正在连接应用"
+        description="正在完成 OAuth 握手..."
       />
       <SettingsLayouts.Body>
         <Card background="light" border="solid" rounding="lg">
           <div className="flex flex-col gap-2">
             {status === "exchanging" && (
               <Text font="main-content-body">
-                Exchanging authorization code…
+                正在交换授权码...
               </Text>
             )}
             {status === "success" && (
               <Text font="main-content-body">
-                Connected. Redirecting back to your apps…
+                已连接。正在返回你的应用...
               </Text>
             )}
             {status === "error" && (
               <>
-                <Text font="main-content-body">Connection failed.</Text>
+                <Text font="main-content-body">连接失败。</Text>
                 {errorMessage && (
                   <Text font="secondary-body" color="text-03">
                     {errorMessage}
@@ -86,7 +86,7 @@ export default function ExternalAppsOAuthCallbackPage() {
                 )}
                 <div className="pt-2">
                   <Button onClick={() => router.push(CRAFT_APPS_PATH as Route)}>
-                    Back to My Apps
+                    返回我的应用
                   </Button>
                 </div>
               </>

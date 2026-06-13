@@ -84,21 +84,21 @@ function VertexAIModalInternals({
           {showAuthMethodSelector && (
             <InputVertical
               withLabel={FIELD_VERTEX_AUTH_METHOD}
-              title="Authentication Method"
-              subDescription="Choose how Onyx should authenticate with Google Vertex AI."
+              title="认证方式"
+              subDescription="选择 Glomi AI 如何与 Google Vertex AI 进行认证。"
             >
               <InputSelectField name={FIELD_VERTEX_AUTH_METHOD}>
                 <InputSelect.Trigger />
                 <InputSelect.Content>
                   <InputSelect.Item
                     value={AUTH_METHOD_SERVICE_ACCOUNT}
-                    description="Upload a GCP service account key JSON file"
+                    description="上传 GCP 服务账号 Key JSON 文件"
                   >
-                    Service Account JSON
+                    服务账号 JSON
                   </InputSelect.Item>
                   <InputSelect.Item
                     value={AUTH_METHOD_WORKLOAD_IDENTITY}
-                    description="Use the pod's ambient GCP credentials (GKE Workload Identity)"
+                    description="使用 Pod 环境中的 GCP 凭据（GKE Workload Identity）"
                   >
                     Workload Identity (GKE)
                   </InputSelect.Item>
@@ -109,8 +109,8 @@ function VertexAIModalInternals({
 
           <InputVertical
             withLabel={FIELD_VERTEX_LOCATION}
-            title="Google Cloud Region Name"
-            subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
+            title="Google Cloud 区域名称"
+            subDescription="托管 Google Vertex AI 模型的区域。支持区域完整列表请查看 Google Cloud。"
           >
             <InputTypeInField
               name={FIELD_VERTEX_LOCATION}
@@ -125,7 +125,7 @@ function VertexAIModalInternals({
           <InputVertical
             withLabel={FIELD_VERTEX_CREDENTIALS}
             title="API Key"
-            subDescription="Attach your API key JSON from Google Cloud to access your models."
+            subDescription="上传来自 Google Cloud 的 API Key JSON 以访问你的模型。"
           >
             <FileUploadFormField name={FIELD_VERTEX_CREDENTIALS} label="" />
           </InputVertical>
@@ -137,14 +137,14 @@ function VertexAIModalInternals({
           <InputPadder>
             <MessageCard
               variant="info"
-              title="Onyx will use the pod's ambient Google Cloud credentials (via google.auth.default). Ensure the Kubernetes ServiceAccount is bound to a GCP Service Account with access to Vertex AI."
+              title="Glomi AI 将使用 Pod 环境中的 Google Cloud 凭据（通过 google.auth.default）。请确保 Kubernetes ServiceAccount 已绑定到有权访问 Vertex AI 的 GCP Service Account。"
             />
           </InputPadder>
           <Card background="light" border="none" padding="sm">
             <InputVertical
               withLabel={FIELD_VERTEX_PROJECT}
               title="GCP Project ID"
-              subDescription="The GCP project where Vertex AI is enabled. Required because ADC cannot reliably infer the target project under service-account impersonation."
+              subDescription="已启用 Vertex AI 的 GCP 项目。由于使用服务账号模拟时 ADC 无法可靠推断目标项目，因此此项必填。"
             >
               <InputTypeInField
                 name={FIELD_VERTEX_PROJECT}
@@ -212,17 +212,17 @@ export default function VertexAIModal({
     extra: {
       custom_config: Yup.object({
         vertex_auth_method: Yup.string().required(
-          "Authentication method is required"
+          "请选择认证方式"
         ),
         vertex_location: Yup.string(),
         vertex_credentials: Yup.string().when("vertex_auth_method", {
           is: AUTH_METHOD_SERVICE_ACCOUNT,
-          then: (schema) => schema.required("Credentials file is required"),
+          then: (schema) => schema.required("请上传凭据文件"),
           otherwise: (schema) => schema.notRequired(),
         }),
         vertex_project: Yup.string().when("vertex_auth_method", {
           is: AUTH_METHOD_WORKLOAD_IDENTITY,
-          then: (schema) => schema.required("GCP Project ID is required"),
+          then: (schema) => schema.required("请输入 GCP Project ID"),
           otherwise: (schema) => schema.notRequired(),
         }),
       }),
@@ -270,8 +270,8 @@ export default function VertexAIModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? "服务商已更新！"
+                  : "服务商已启用！"
               );
             }
           },

@@ -56,7 +56,7 @@ function DirectoryNode({
       const listing = await listDirectory(sessionId, entry.path);
       setChildren(listing.entries);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load directory");
+      setError(err instanceof Error ? err.message : "加载目录失败");
     } finally {
       setIsLoading(false);
     }
@@ -191,7 +191,7 @@ function FileNode({ entry, sessionId, depth, onPreview }: FileNodeProps) {
               onPreview(entry);
             }}
           >
-            Preview
+            预览
           </Button>
         )}
         <a
@@ -204,7 +204,7 @@ function FileNode({ entry, sessionId, depth, onPreview }: FileNodeProps) {
             prominence="tertiary"
             icon={SvgDownloadCloud}
           >
-            Download
+            下载
           </Button>
         </a>
       </div>
@@ -231,7 +231,7 @@ export default function FileBrowser({ sessionId }: FileBrowserProps) {
       setRootEntries(listing.entries);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to load file system"
+        err instanceof Error ? err.message : "加载文件系统失败"
       );
     } finally {
       setIsLoading(false);
@@ -273,7 +273,7 @@ export default function FileBrowser({ sessionId }: FileBrowserProps) {
               )}
               <SvgHardDrive className="size-4 stroke-text-03" />
               <Text font="main-ui-action" color="text-03">
-                Workspace Files
+                工作区文件
               </Text>
             </button>
           </CollapsibleTrigger>
@@ -289,7 +289,7 @@ export default function FileBrowser({ sessionId }: FileBrowserProps) {
               {rootEntries?.length === 0 && (
                 <div className="p-2 text-center">
                   <Text font="secondary-body" color="text-03">
-                    No files yet
+                    暂无文件
                   </Text>
                 </div>
               )}

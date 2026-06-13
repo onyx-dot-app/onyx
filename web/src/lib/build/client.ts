@@ -88,7 +88,7 @@ export interface SandboxErrorEvent {
   message: string;
 }
 
-/** File write event (custom Onyx extension) */
+/** File write event (custom Glomi AI extension) */
 export interface FileWriteEvent {
   path: string;
   size_bytes?: number;
@@ -309,7 +309,7 @@ export async function sendMessage(
 
 /**
  * Map message API packet types to SandboxEvent types.
- * Uses direct sandbox-event names from the backend, plus custom Onyx packet types.
+ * Uses direct sandbox-event names from the backend, plus custom Glomi AI packet types.
  */
 function mapMessagePacketToEventType(packetType: string): string | null {
   const mapping: Record<string, string> = {
@@ -322,7 +322,7 @@ function mapMessagePacketToEventType(packetType: string): string | null {
     current_mode_update: "current_mode_update",
     prompt_response: "prompt_response",
     error: "error",
-    // Custom Onyx packet types
+    // Custom Glomi AI packet types
     artifact_created: "artifact",
     file_write: "file_write",
   };

@@ -8,41 +8,39 @@ export default function Error() {
     <ErrorPageLayout>
       <div className="flex flex-row items-center gap-2">
         <Text as="p" headingH2>
-          We encountered an issue
+          页面加载遇到问题
         </Text>
         <SvgAlertCircle className="w-6 h-6 stroke-text-04" />
       </div>
 
       <Text as="p" text03>
-        It seems there was a problem loading your Onyx settings. This could be
-        due to a configuration issue or incomplete setup.
+        加载 Glomi AI 设置时出现问题，可能是配置异常或初始化尚未完成。
       </Text>
 
       <Text as="p" text03>
-        If you&apos;re an admin, please review our{" "}
+        如果你是管理员，请查看{" "}
         <a
           className="text-action-link-05"
           href={`${DOCS_BASE_URL}?utm_source=app&utm_medium=error_page&utm_campaign=config_error`}
           target="_blank"
           rel="noopener noreferrer"
         >
-          documentation
+          配置文档
         </a>{" "}
-        for proper configuration steps. If you&apos;re a user, please contact
-        your admin for assistance.
+        确认配置步骤。如果你是普通用户，请联系管理员处理。
       </Text>
 
       <Text as="p" text03>
-        Need help? Join our{" "}
+        需要帮助？你也可以加入我们的{" "}
         <a
           className="text-action-link-05"
           href="https://discord.gg/4NA5SbzrWb"
           target="_blank"
           rel="noopener noreferrer"
         >
-          Discord community
+          Discord 社区
         </a>{" "}
-        for support.
+        获取支持。
       </Text>
     </ErrorPageLayout>
   );

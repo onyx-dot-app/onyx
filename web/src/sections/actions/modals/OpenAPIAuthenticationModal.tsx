@@ -68,7 +68,7 @@ export default function OpenAPIAuthenticationModal({
   isOpen,
   onClose,
   title,
-  description = "Authenticate your connection to start using the OpenAPI actions.",
+  description = "完成连接认证后即可开始使用 OpenAPI 动作。",
   skipOverlay = false,
   defaultMethod = "oauth",
   oauthConfigId = null,
@@ -129,7 +129,7 @@ export default function OpenAPIAuthenticationModal({
         if (isActive) {
           setExistingOAuthConfig(null);
           setOAuthConfigError(
-            "Failed to load existing OAuth configuration. Re-enter the details to update it."
+            "加载现有 OAuth 配置失败。请重新输入详情以更新配置。"
           );
         }
       } finally {
@@ -151,19 +151,19 @@ export default function OpenAPIAuthenticationModal({
       Yup.object({
         authMethod: Yup.mixed<AuthMethod>()
           .oneOf(["oauth", "pt-oauth", "custom-header"])
-          .required("Authentication method is required"),
+          .required("请选择认证方式"),
         authorizationUrl: Yup.string()
-          .url("Enter a valid URL")
+          .url("请输入有效 URL")
           .when("authMethod", {
             is: "oauth",
-            then: (schema) => schema.required("Authorization URL is required"),
+            then: (schema) => schema.required("请输入授权 URL"),
             otherwise: (schema) => schema.notRequired(),
           }),
         tokenUrl: Yup.string()
-          .url("Enter a valid URL")
+          .url("请输入有效 URL")
           .when("authMethod", {
             is: "oauth",
-            then: (schema) => schema.required("Token URL is required"),
+            then: (schema) => schema.required("请输入 Token URL"),
             otherwise: (schema) => schema.notRequired(),
           }),
         clientId: Yup.string().when("authMethod", {
@@ -171,7 +171,7 @@ export default function OpenAPIAuthenticationModal({
           then: (schema) =>
             isEditingOAuthConfig
               ? schema.optional()
-              : schema.required("Client ID is required"),
+              : schema.required("请输入 Client ID"),
           otherwise: (schema) => schema.notRequired(),
         }),
         clientSecret: Yup.string().when("authMethod", {
@@ -179,7 +179,7 @@ export default function OpenAPIAuthenticationModal({
           then: (schema) =>
             isEditingOAuthConfig
               ? schema.optional()
-              : schema.required("Client secret is required"),
+              : schema.required("请输入 Client Secret"),
           otherwise: (schema) => schema.notRequired(),
         }),
         scopes: Yup.string().notRequired(),
@@ -189,11 +189,11 @@ export default function OpenAPIAuthenticationModal({
             Yup.array()
               .of(
                 Yup.object({
-                  key: Yup.string().required("Header key is required"),
-                  value: Yup.string().required("Header value is required"),
+                  key: Yup.string().required("请输入 Header 名称"),
+                  value: Yup.string().required("请输入 Header 值"),
                 })
               )
-              .min(1, "Add at least one authentication header"),
+              .min(1, "请至少添加一个认证 Header"),
           otherwise: () =>
             Yup.array().of(
               Yup.object({
@@ -355,7 +355,7 @@ export default function OpenAPIAuthenticationModal({
                 {shouldDisableForm ? (
                   <div className="flex min-h-[220px] items-center justify-center rounded-12 border border-border-01 bg-background-tint-00">
                     <Text as="p" secondaryBody text03>
-                      Loading existing configuration...
+                      正在加载现有配置...
                     </Text>
                   </div>
                 ) : (
@@ -371,7 +371,7 @@ export default function OpenAPIAuthenticationModal({
                               : "idle"
                         }
                       >
-                        <FormField.Label>Authentication Method</FormField.Label>
+                        <FormField.Label>认证方式</FormField.Label>
                         <FormField.Control asChild>
                           <InputSelect
                             value={values.authMethod}
@@ -379,27 +379,27 @@ export default function OpenAPIAuthenticationModal({
                               setFieldValue("authMethod", value)
                             }
                           >
-                            <InputSelect.Trigger placeholder="Select method" />
+                            <InputSelect.Trigger placeholder="选择方式" />
                             <InputSelect.Content>
                               <InputSelect.Item
                                 value="oauth"
-                                description="Each user authenticates via OAuth with their own credentials."
+                                description="每位用户都使用自己的凭据通过 OAuth 认证。"
                               >
                                 OAuth
                               </InputSelect.Item>
                               {isOAuthEnabled && (
                                 <InputSelect.Item
                                   value="pt-oauth"
-                                  description="Forward the user's OAuth access token used to authenticate Onyx."
+                                  description="转发用户用于认证 Glomi AI 的 OAuth 访问令牌。"
                                 >
-                                  OAuth Pass-through
+                                  OAuth 透传
                                 </InputSelect.Item>
                               )}
                               <InputSelect.Item
                                 value="custom-header"
-                                description="Send custom headers with every request."
+                                description="每次请求都发送自定义 Header。"
                               >
-                                Custom Authorization Header
+                                自定义认证 Header
                               </InputSelect.Item>
                             </InputSelect.Content>
                           </InputSelect>
@@ -426,7 +426,7 @@ export default function OpenAPIAuthenticationModal({
                                 : "idle"
                           }
                         >
-                          <FormField.Label>Authorization URL</FormField.Label>
+                          <FormField.Label>授权 URL</FormField.Label>
                           <FormField.Control asChild>
                             <InputTypeIn
                               name="authorizationUrl"
@@ -489,7 +489,7 @@ export default function OpenAPIAuthenticationModal({
                           </FormField.Control>
                           {isEditingOAuthConfig && (
                             <FormField.Description>
-                              Leave blank to keep the current client ID.
+                              留空则保留当前 Client ID。
                             </FormField.Description>
                           )}
                           <FormField.Message
@@ -520,7 +520,7 @@ export default function OpenAPIAuthenticationModal({
                           </FormField.Control>
                           {isEditingOAuthConfig && (
                             <FormField.Description>
-                              Leave blank to keep the current client secret.
+                              留空则保留当前 Client Secret。
                             </FormField.Description>
                           )}
                           <FormField.Message
@@ -542,18 +542,18 @@ export default function OpenAPIAuthenticationModal({
                         >
                           <FormField.Label>
                             Scopes{" "}
-                            <span className="text-text-03">(Optional)</span>
+                            <span className="text-text-03">（可选）</span>
                           </FormField.Label>
                           <FormField.Control asChild>
                             <InputTypeIn
                               name="scopes"
                               value={values.scopes}
                               onChange={handleChange}
-                              placeholder="e.g. repo, user"
+                              placeholder="例如 repo, user"
                             />
                           </FormField.Control>
                           <FormField.Description>
-                            Comma-separated list of OAuth scopes to request.
+                            要请求的 OAuth scope 列表，用英文逗号分隔。
                           </FormField.Description>
                           <FormField.Message
                             messages={{
@@ -564,8 +564,7 @@ export default function OpenAPIAuthenticationModal({
 
                         <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
                           <Text as="p" text03 secondaryBody>
-                            OAuth passthrough is only available if you enable
-                            OIDC or OAuth authentication.
+                            只有启用 OIDC 或 OAuth 认证后，才能使用 OAuth 透传。
                           </Text>
                           <div className="flex flex-col gap-2 w-full">
                             <Text
@@ -574,7 +573,7 @@ export default function OpenAPIAuthenticationModal({
                               secondaryBody
                               className="flex flex-wrap gap-1"
                             >
-                              Use{" "}
+                              使用{" "}
                               <span className="font-secondary-action">
                                 redirect URI
                               </span>
@@ -590,7 +589,7 @@ export default function OpenAPIAuthenticationModal({
                               </Text>
                               <CopyButton
                                 getCopyText={() => redirectUri}
-                                tooltip="Copy redirect URI"
+                                tooltip="复制 redirect URI"
                                 prominence="tertiary"
                                 size="sm"
                               />
@@ -603,11 +602,10 @@ export default function OpenAPIAuthenticationModal({
                       <section className="flex flex-col gap-4 rounded-12 bg-background-tint-00 border border-border-01 p-4">
                         <div className="flex flex-col gap-2">
                           <Text as="p" mainUiAction text04>
-                            Authentication Headers
+                            认证 Header
                           </Text>
                           <Text as="p" secondaryBody text03>
-                            Specify custom headers for all requests sent to this
-                            action&apos;s API endpoint.
+                            为发送到此动作 API 端点的所有请求指定自定义 Header。
                           </Text>
                         </div>
                         <FormField
@@ -616,13 +614,13 @@ export default function OpenAPIAuthenticationModal({
                         >
                           <FormField.Control asChild>
                             <KeyValueInput
-                              keyTitle="Header"
-                              valueTitle="Value"
+                              keyTitle="Header 名称"
+                              valueTitle="值"
                               items={values.headers}
                               onChange={(items) =>
                                 setFieldValue("headers", items)
                               }
-                              addButtonLabel="Add Header"
+                              addButtonLabel="添加 Header"
                               onValidationError={(message) =>
                                 setFieldError("headers", message || undefined)
                               }
@@ -642,8 +640,8 @@ export default function OpenAPIAuthenticationModal({
                     )}
                     {values.authMethod === "pt-oauth" && (
                       <MessageCard
-                        title="Use pass-through for services with shared identity provider."
-                        description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
+                        title="对共享身份提供商的服务使用透传认证"
+                        description="Glomi AI 会把用户的 OAuth 访问令牌作为 Authorization 请求头直接转发给服务端。请确认该服务端支持同一身份提供商的认证。"
                       />
                     )}
                   </>
@@ -656,7 +654,7 @@ export default function OpenAPIAuthenticationModal({
                   type="button"
                   onClick={handleSkip}
                 >
-                  Cancel
+                  取消
                 </Button>
                 <Button
                   disabled={
@@ -664,7 +662,7 @@ export default function OpenAPIAuthenticationModal({
                   }
                   type="submit"
                 >
-                  {isSubmitting ? "Connecting..." : "Connect"}
+                  {isSubmitting ? "正在连接..." : "连接"}
                 </Button>
               </Modal.Footer>
             </Form>

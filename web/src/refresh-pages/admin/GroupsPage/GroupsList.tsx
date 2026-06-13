@@ -25,8 +25,8 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
     return (
       <IllustrationContent
         illustration={SvgNoResult}
-        title="No groups found"
-        description={`No groups matching "${searchQuery}"`}
+        title="未找到用户组"
+        description={`没有匹配"${searchQuery}"的用户组`}
       />
     );
   }

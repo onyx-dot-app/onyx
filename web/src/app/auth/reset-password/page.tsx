@@ -44,7 +44,7 @@ const ResetPasswordPage: React.FC = () => {
     <AuthFlowContainer>
       <div className="flex flex-col w-full justify-center">
         <div className="flex">
-          <Title className="mb-2 mx-auto font-bold">Reset Password</Title>
+          <Title className="mb-2 mx-auto font-bold">重置密码</Title>
         </div>
         {isWorking && <Spinner />}
         <Formik
@@ -53,21 +53,21 @@ const ResetPasswordPage: React.FC = () => {
             confirmPassword: "",
           }}
           validationSchema={Yup.object().shape({
-            password: Yup.string().required("Password is required"),
+            password: Yup.string().required("请输入密码"),
             confirmPassword: Yup.string()
-              .oneOf([Yup.ref("password"), undefined], "Passwords must match")
-              .required("Confirm Password is required"),
+              .oneOf([Yup.ref("password"), undefined], "两次输入的密码必须一致")
+              .required("请确认密码"),
           })}
           onSubmit={async (values) => {
             if (!token) {
-              toast.error("Invalid or missing reset token.");
+              toast.error("重置 token 无效或缺失。");
               return;
             }
             setIsWorking(true);
             try {
               await resetPassword(token, values.password);
               toast.success(
-                "Password reset successfully. Redirecting to login..."
+                "密码已重置。正在跳转到登录页..."
               );
               setTimeout(() => {
                 redirect("/auth/login");
@@ -75,10 +75,10 @@ const ResetPasswordPage: React.FC = () => {
             } catch (error) {
               if (error instanceof Error) {
                 toast.error(
-                  error.message || "An error occurred during password reset."
+                  error.message || "重置密码时发生错误。"
                 );
               } else {
-                toast.error("An unexpected error occurred. Please try again.");
+                toast.error("发生意外错误。请重试。");
               }
             } finally {
               setIsWorking(false);
@@ -89,20 +89,20 @@ const ResetPasswordPage: React.FC = () => {
             <Form className="w-full flex flex-col items-stretch mt-2">
               <TextFormField
                 name="password"
-                label="New Password"
+                label="新密码"
                 type="password"
-                placeholder="Enter your new password"
+                placeholder="输入新密码"
               />
               <TextFormField
                 name="confirmPassword"
-                label="Confirm New Password"
+                label="确认新密码"
                 type="password"
-                placeholder="Confirm your new password"
+                placeholder="再次输入新密码"
               />
 
               <div className="flex">
                 <Button disabled={isSubmitting} type="submit" width="full">
-                  Reset Password
+                  重置密码
                 </Button>
               </div>
             </Form>
@@ -111,7 +111,7 @@ const ResetPasswordPage: React.FC = () => {
         <Spacer rem={1} />
         <div className="flex">
           <div className="mx-auto">
-            <Text as="p">{markdown("[Back to Login](/auth/login)")}</Text>
+            <Text as="p">{markdown("[返回登录](/auth/login)")}</Text>
           </div>
         </div>
       </div>

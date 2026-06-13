@@ -35,7 +35,7 @@ interface SharedGroupResourcesProps {
 function SharedBadge() {
   return (
     <Text as="span" secondaryBody text03>
-      Shared
+      已共享
     </Text>
   );
 }
@@ -187,10 +187,10 @@ function SharedGroupResources({
 
     return [
       ...(connectorItems.length > 0
-        ? [{ label: "Connectors", items: connectorItems }]
+        ? [{ label: "连接器", items: connectorItems }]
         : []),
       ...(docSetItems.length > 0
-        ? [{ label: "Document Sets", items: docSetItems }]
+        ? [{ label: "文档集", items: docSetItems }]
         : []),
     ];
   }, [
@@ -224,7 +224,7 @@ function SharedGroupResources({
               interactive={!dimmed}
               muted={dimmed}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
-              description="agent"
+              description="智能体"
               rightChildren={
                 !a.is_public || dimmed ? <SharedBadge /> : undefined
               }
@@ -264,8 +264,8 @@ function SharedGroupResources({
   return (
     <SimpleCollapsible>
       <SimpleCollapsible.Header
-        title="Shared with This Group"
-        description="Share connectors, document sets, agents with members of this group."
+        title="与此用户组共享"
+        description="向此用户组成员共享连接器、文档集和智能体。"
       />
       <SimpleCollapsible.Content>
         <Card>
@@ -290,10 +290,10 @@ function SharedGroupResources({
                 justifyContent="start"
               >
                 <Text mainUiAction text04>
-                  Connectors & Document Sets
+                  连接器和文档集
                 </Text>
                 <ResourcePopover
-                  placeholder="Add connectors, document sets"
+                  placeholder="添加连接器、文档集"
                   searchValue={connectorSearch}
                   onSearchChange={setConnectorSearch}
                   sections={connectorDocSetSections}
@@ -312,8 +312,8 @@ function SharedGroupResources({
                     <ResourceContent
                       key={`c-${pair.cc_pair_id}`}
                       icon={getSourceMetadata(pair.connector.source).icon}
-                      title={pair.name ?? `Connector #${pair.cc_pair_id}`}
-                      description="Connector"
+                      title={pair.name ?? `连接器 #${pair.cc_pair_id}`}
+                      description="连接器"
                       onRemove={() => removeConnector(pair.cc_pair_id)}
                     />
                   ))}
@@ -322,7 +322,7 @@ function SharedGroupResources({
                       key={`d-${ds.id}`}
                       icon={SvgFiles}
                       title={ds.name}
-                      description="Document Set"
+                      description="文档集"
                       infoContent={
                         <SourceIconStack sources={ds.cc_pair_summaries} />
                       }
@@ -333,8 +333,8 @@ function SharedGroupResources({
               ) : (
                 <Content
                   icon={SvgEmpty}
-                  title="No connectors or document sets added"
-                  description="Add connectors or document set to share with this group."
+                  title="尚未添加连接器或文档集"
+                  description="添加要与此用户组共享的连接器或文档集。"
                   sizePreset="secondary"
                   variant="section"
                 />
@@ -357,10 +357,10 @@ function SharedGroupResources({
                 justifyContent="start"
               >
                 <Text mainUiAction text04>
-                  Agents
+                  智能体
                 </Text>
                 <ResourcePopover
-                  placeholder="Add agents"
+                  placeholder="添加智能体"
                   searchValue={agentSearch}
                   onSearchChange={setAgentSearch}
                   sections={agentSections}
@@ -384,7 +384,7 @@ function SharedGroupResources({
                         </div>
                       }
                       title={agent.name}
-                      description="agent"
+                      description="智能体"
                       onRemove={() => removeAgent(agent.id)}
                     />
                   ))}
@@ -392,8 +392,8 @@ function SharedGroupResources({
               ) : (
                 <Content
                   icon={SvgXOctagon}
-                  title="No agents added"
-                  description="Add agents to share with this group."
+                  title="尚未添加智能体"
+                  description="添加要与此用户组共享的智能体。"
                   sizePreset="secondary"
                   variant="section"
                 />

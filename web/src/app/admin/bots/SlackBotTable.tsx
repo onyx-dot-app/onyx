@@ -68,10 +68,10 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Default Config</TableHead>
-            <TableHead>Channel Count</TableHead>
+            <TableHead>名称</TableHead>
+            <TableHead>状态</TableHead>
+            <TableHead>默认配置</TableHead>
+            <TableHead>频道数量</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -90,13 +90,13 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 </TableCell>
                 <TableCell>
                   {slackBot.enabled ? (
-                    <Badge variant="success">Enabled</Badge>
+                    <Badge variant="success">已启用</Badge>
                   ) : (
-                    <Badge variant="destructive">Disabled</Badge>
+                    <Badge variant="destructive">已停用</Badge>
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary">Default Set</Badge>
+                  <Badge variant="secondary">默认集</Badge>
                 </TableCell>
                 <TableCell>{slackBot.configs_count}</TableCell>
                 <TableCell>
@@ -111,7 +111,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 colSpan={5}
                 className="text-center text-muted-foreground"
               >
-                Please add a New Slack Bot to begin chatting with Danswer!
+                请添加新的 Slack Bot 以开始使用 Glomi AI 聊天！
               </TableCell>
             </TableRow>
           )}

@@ -6,7 +6,7 @@ import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { ensureHrefProtocol } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import { SvgOnyxLogo } from "@opal/logos";
+import { GlomiLogoMark } from "@/refresh-components/GlomiLogo";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 const previewMarkdownComponents = {
@@ -68,16 +68,16 @@ export interface PreviewProps {
 
 function PreviewLogo({
   logoSrc,
-  forceOnyxIcon,
+  forceGlomiIcon,
   size,
   className,
 }: {
   logoSrc?: string;
-  forceOnyxIcon?: boolean;
+  forceGlomiIcon?: boolean;
   size: number;
   className?: string;
 }) {
-  return logoSrc && !forceOnyxIcon ? (
+  return logoSrc && !forceGlomiIcon ? (
     <img
       src={logoSrc}
       alt="Logo"
@@ -89,7 +89,7 @@ function PreviewLogo({
       className={cn("shrink-0 rounded-full", className)}
     />
   ) : (
-    <SvgOnyxLogo size={size} className={cn("shrink-0", className)} />
+    <GlomiLogoMark size={size} className={className} />
   );
 }
 
@@ -125,7 +125,7 @@ function PreviewStart({
               <PreviewLogo
                 logoSrc={logoSrc}
                 size={16}
-                forceOnyxIcon={
+                forceGlomiIcon={
                   logoDisplayStyle === "logo_and_name" &&
                   !applicationDisplayName
                 }
@@ -134,7 +134,7 @@ function PreviewStart({
             {(logoDisplayStyle === "logo_and_name" ||
               logoDisplayStyle === "name_only") && (
               <Truncated mainUiAction text04 nowrap>
-                {applicationDisplayName || "Onyx"}
+                {applicationDisplayName || "Glomi AI"}
               </Truncated>
             )}
           </div>

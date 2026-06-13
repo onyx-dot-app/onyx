@@ -1,24 +1,24 @@
 import { ThreeDotsLoader } from "@/components/Loading";
-import { getDatesList, useOnyxBotAnalytics } from "../lib";
+import { getDatesList, useGlomiBotAnalytics } from "../lib";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
 import CardSection from "@/components/admin/CardSection";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
 
-export function OnyxBotChart({
+export function GlomiBotChart({
   timeRange,
 }: {
   timeRange: DateRangePickerValue;
 }) {
   const {
     data: onyxBotAnalyticsData,
-    isLoading: isOnyxBotAnalyticsLoading,
+    isLoading: isGlomiBotAnalyticsLoading,
     error: onyxBotAnalyticsError,
-  } = useOnyxBotAnalytics(timeRange);
+  } = useGlomiBotAnalytics(timeRange);
 
   let chart;
-  if (isOnyxBotAnalyticsLoading) {
+  if (isGlomiBotAnalyticsLoading) {
     chart = (
       <div className="h-80 flex flex-col">
         <ThreeDotsLoader />
@@ -39,7 +39,7 @@ export function OnyxBotChart({
       timeRange.from || new Date(onyxBotAnalyticsData[0].date);
     const dateRange = getDatesList(initialDate);
 
-    const dateToOnyxBotAnalytics = new Map(
+    const dateToGlomiBotAnalytics = new Map(
       onyxBotAnalyticsData.map((onyxBotAnalyticsEntry) => [
         onyxBotAnalyticsEntry.date,
         onyxBotAnalyticsEntry,
@@ -50,7 +50,7 @@ export function OnyxBotChart({
       <AreaChartDisplay
         className="mt-4"
         data={dateRange.map((dateStr) => {
-          const onyxBotAnalyticsForDate = dateToOnyxBotAnalytics.get(dateStr);
+          const onyxBotAnalyticsForDate = dateToGlomiBotAnalytics.get(dateStr);
           return {
             Day: dateStr,
             "Total Queries": onyxBotAnalyticsForDate?.total_queries || 0,
@@ -68,8 +68,8 @@ export function OnyxBotChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>Slack Channel</Title>
-      <Text as="p">Total Queries vs Auto Resolved</Text>
+      <Title>Slack 频道</Title>
+      <Text as="p">总查询数与自动解决数</Text>
       {chart}
     </CardSection>
   );

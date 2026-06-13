@@ -40,10 +40,10 @@ function DiscordBotContent() {
       const result = await createGuildConfig();
       setRegistrationKey(result.registration_key);
       refreshGuilds();
-      toast.success("Server configuration created!");
+      toast.success("服务器配置已创建！");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to create server"
+        err instanceof Error ? err.message : "创建服务器失败"
       );
     } finally {
       setIsCreating(false);
@@ -57,8 +57,8 @@ function DiscordBotContent() {
   if (error || !guilds) {
     return (
       <ErrorCallout
-        errorTitle="Failed to load Discord servers"
-        errorMsg={error?.info?.detail || "An unknown error occurred"}
+        errorTitle="加载 Discord 服务器失败"
+        errorMsg={error?.info?.detail || "发生未知错误"}
       />
     );
   }
@@ -70,14 +70,14 @@ function DiscordBotContent() {
       <Modal open={!!registrationKey}>
         <Modal.Content width="sm">
           <Modal.Header
-            title="Registration Key"
+            title="注册码"
             icon={SvgKey}
             onClose={() => setRegistrationKey(null)}
-            description="This key will only be shown once!"
+            description="此 Key 只会显示一次！"
           />
           <Modal.Body>
             <Text text04 mainUiBody>
-              Copy the command and send it from any text channel in your server!
+              复制命令，并在你的服务器任意文本频道中发送！
             </Text>
             <Card variant="secondary">
               <Section
@@ -104,7 +104,7 @@ function DiscordBotContent() {
           alignItems="center"
         >
           <Text mainContentEmphasis text05>
-            Server Configurations
+            服务器配置
           </Text>
           <Button
             icon={SvgPlusCircle}
@@ -112,7 +112,7 @@ function DiscordBotContent() {
             onClick={handleCreateGuild}
             disabled={isCreating || !isBotAvailable}
           >
-            {isCreating ? "Creating..." : "Add Server"}
+            {isCreating ? "正在创建..." : "添加服务器"}
           </Button>
         </Section>
         <DiscordGuildsTable guilds={guilds} onRefresh={refreshGuilds} />
@@ -127,7 +127,7 @@ export default function Page() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={route.title}
-        description="Connect Onyx to your Discord servers. Users can ask questions directly in Discord channels."
+        description="将 Glomi AI 连接到你的 Discord 服务器。用户可以直接在 Discord 频道中提问。"
       />
       <SettingsLayouts.Body>
         <DiscordBotContent />

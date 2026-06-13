@@ -111,7 +111,7 @@ export default function InviteUsersModal({
     const validEmails = allChips.filter((c) => !c.error).map((c) => c.label);
 
     if (validEmails.length === 0) {
-      toast.error("Please add at least one valid email address");
+      toast.error("请至少添加一个有效邮箱地址");
       return;
     }
 
@@ -128,12 +128,12 @@ export default function InviteUsersModal({
         mutate(SWR_KEYS.userCounts),
       ]).catch(() => {});
       toast.success(
-        `Invited ${validEmails.length} user${validEmails.length > 1 ? "s" : ""}`
+        `已邀请 ${validEmails.length} 位用户`
       );
       handleClose();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to invite users"
+        err instanceof Error ? err.message : "邀请用户失败"
       );
     } finally {
       setIsSubmitting(false);
@@ -145,7 +145,7 @@ export default function InviteUsersModal({
       <Modal.Content width="sm" height="fit">
         <Modal.Header
           icon={SvgUsers}
-          title="Invite Users"
+          title="邀请用户"
           onClose={isSubmitting ? undefined : handleClose}
         />
 
@@ -156,7 +156,7 @@ export default function InviteUsersModal({
             onAdd={addEmail}
             value={inputValue}
             onChange={setInputValue}
-            placeholder="Add an email and press enter"
+            placeholder="添加邮箱并按 Enter"
             layout="stacked"
           />
           {chips.some((c) => c.error) && (
@@ -166,7 +166,7 @@ export default function InviteUsersModal({
                 className="text-status-warning-05 shrink-0"
               />
               <Text secondaryBody text03>
-                Some email addresses are invalid and will be skipped.
+                部分邮箱地址无效，将被跳过。
               </Text>
             </div>
           )}
@@ -180,7 +180,7 @@ export default function InviteUsersModal({
                 prominence="tertiary"
                 onClick={handleClose}
               >
-                Cancel
+                取消
               </Button>
             }
             submit={
@@ -188,7 +188,7 @@ export default function InviteUsersModal({
                 disabled={isSubmitting || chips.every((c) => c.error)}
                 onClick={handleInvite}
               >
-                Invite
+                邀请
               </Button>
             }
           />

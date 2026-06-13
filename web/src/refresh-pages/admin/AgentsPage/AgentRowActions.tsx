@@ -74,10 +74,10 @@ export default function AgentRowActions({
     try {
       await action();
       onMutate();
-      toast.success(`${agent.name} updated successfully.`);
+      toast.success(`${agent.name} 已更新。`);
       close();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "An error occurred");
+      toast.error(err instanceof Error ? err.message : "发生错误");
     } finally {
       setIsSubmitting(false);
     }
@@ -101,7 +101,7 @@ export default function AgentRowActions({
       );
 
       if (shareError) {
-        toast.error(`Failed to share agent: ${shareError}`);
+        toast.error(`分享智能体失败：${shareError}`);
         return;
       }
 
@@ -111,7 +111,7 @@ export default function AgentRowActions({
           isFeatured
         );
         if (featuredError) {
-          toast.error(`Failed to update featured status: ${featuredError}`);
+          toast.error(`更新精选状态失败：${featuredError}`);
           refreshAgent();
           return;
         }
@@ -148,7 +148,7 @@ export default function AgentRowActions({
             <Button
               prominence="tertiary"
               icon={SvgEdit}
-              tooltip="Edit Agent"
+              tooltip="编辑智能体"
               onClick={() =>
                 router.push(
                   `/app/agents/edit/${
@@ -163,7 +163,7 @@ export default function AgentRowActions({
           <Button
             prominence="tertiary"
             icon={SvgEyeOff}
-            tooltip="Re-list Agent"
+            tooltip="重新上架智能体"
             onClick={() =>
               handleAction(
                 () => toggleAgentListed(agent.id, agent.is_listed),
@@ -183,7 +183,7 @@ export default function AgentRowActions({
               icon={SvgStar}
               interaction={featuredOpen ? "hover" : "rest"}
               tooltip={
-                agent.is_featured ? "Remove Featured" : "Set as Featured"
+                agent.is_featured ? "取消精选" : "设为精选"
               }
               onClick={() => {
                 setPopoverOpen(false);
@@ -223,7 +223,7 @@ export default function AgentRowActions({
                     }
                   }}
                 >
-                  {agent.is_listed ? "Unlist Agent" : "List Agent"}
+                  {agent.is_listed ? "下架智能体" : "上架智能体"}
                 </LineItem>,
                 <LineItem
                   key="share"
@@ -233,7 +233,7 @@ export default function AgentRowActions({
                     shareModal.toggle(true);
                   }}
                 >
-                  Share
+                  分享
                 </LineItem>,
                 businessTier ? (
                   <LineItem
@@ -244,7 +244,7 @@ export default function AgentRowActions({
                       router.push(`/ee/agents/stats/${agent.id}` as Route);
                     }}
                   >
-                    Stats
+                    统计
                   </LineItem>
                 ) : undefined,
                 !agent.builtin_persona ? null : undefined,
@@ -258,7 +258,7 @@ export default function AgentRowActions({
                       setDeleteOpen(true);
                     }}
                   >
-                    Delete
+                    删除
                   </LineItem>
                 ) : undefined,
               ]}
@@ -270,7 +270,7 @@ export default function AgentRowActions({
       {deleteOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete Agent"
+          title="删除智能体"
           onClose={isSubmitting ? undefined : () => setDeleteOpen(false)}
           submit={
             <Button
@@ -283,16 +283,16 @@ export default function AgentRowActions({
                 );
               }}
             >
-              Delete
+              删除
             </Button>
           }
         >
           <Text as="p" text03>
-            Are you sure you want to delete{" "}
+            确定要删除{" "}
             <Text as="span" text05>
               {agent.name}
             </Text>
-            ? This action cannot be undone.
+            吗？此操作无法撤销。
           </Text>
         </ConfirmationModalLayout>
       )}
@@ -302,8 +302,8 @@ export default function AgentRowActions({
           icon={agent.is_featured ? SvgStarOff : SvgStar}
           title={
             agent.is_featured
-              ? `Remove ${agent.name} from Featured`
-              : `Feature ${agent.name}`
+              ? `将 ${agent.name} 移出精选`
+              : `精选 ${agent.name}`
           }
           onClose={isSubmitting ? undefined : () => setFeaturedOpen(false)}
           submit={
@@ -316,18 +316,18 @@ export default function AgentRowActions({
                 );
               }}
             >
-              {agent.is_featured ? "Unfeature" : "Feature"}
+              {agent.is_featured ? "取消精选" : "设为精选"}
             </Button>
           }
         >
           <div className="flex flex-col gap-2">
             <Text as="p" text03>
               {agent.is_featured
-                ? `This will remove ${agent.name} from the featured section on top of the explore agents list. New users will no longer see it pinned to their sidebar, but existing pins are unaffected.`
-                : "Featured agents appear at the top of the explore agents list and are automatically pinned to the sidebar for new users with access. Use this to highlight recommended agents across your organization."}
+                ? `这会将 ${agent.name} 从探索智能体列表顶部的精选区域移除。新用户不会再在侧边栏看到它被置顶，但现有置顶不受影响。`
+                : "精选智能体会显示在探索智能体列表顶部，并自动置顶到有访问权限的新用户侧边栏。可用于向组织重点推荐智能体。"}
             </Text>
             <Text as="p" text03>
-              This does not change who can access this agent.
+              这不会改变谁可以访问此智能体。
             </Text>
           </div>
         </ConfirmationModalLayout>
@@ -336,7 +336,7 @@ export default function AgentRowActions({
       {unlistOpen && (
         <ConfirmationModalLayout
           icon={SvgEyeOff}
-          title={markdown(`Unlist *${agent.name}*`)}
+          title={markdown(`下架 *${agent.name}*`)}
           onClose={isSubmitting ? undefined : () => setUnlistOpen(false)}
           submit={
             <Button
@@ -348,18 +348,17 @@ export default function AgentRowActions({
                 );
               }}
             >
-              Unlist
+              下架
             </Button>
           }
         >
           <div className="flex flex-col gap-2">
             <Text as="p" text03>
-              Unlisted agents don&apos;t appear in the explore agents list but
-              remain accessible via direct link, and to users who have
-              previously used or pinned them.
+              已下架的智能体不会显示在探索智能体列表中，但仍可通过直接链接访问，
+              也仍可被此前使用或置顶过它的用户访问。
             </Text>
             <Text as="p" text03>
-              This does not change who can access this agent.
+              这不会改变谁可以访问此智能体。
             </Text>
           </div>
         </ConfirmationModalLayout>

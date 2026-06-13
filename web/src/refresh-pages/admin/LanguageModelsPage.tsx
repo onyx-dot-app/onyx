@@ -83,10 +83,10 @@ function ExistingProviderCard({
       await deleteLlmProvider(provider.id, isLastProvider);
       await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
-      toast.success("Provider deleted successfully!");
+      toast.success("提供商已删除！");
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to delete provider: ${message}`);
+      const message = e instanceof Error ? e.message : "未知错误";
+      toast.error(`删除提供商失败：${message}`);
     }
   };
 
@@ -101,7 +101,7 @@ function ExistingProviderCard({
       {deleteModal.isOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={markdown(`Delete *${providerDisplayName(provider)}*`)}
+          title={markdown(`删除 *${providerDisplayName(provider)}*`)}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -109,15 +109,14 @@ function ExistingProviderCard({
               onClick={handleDelete}
               disabled={isDefault && !isLastProvider}
             >
-              Delete
+              删除
             </Button>
           }
         >
           <Section alignItems="start" gap={0.5}>
             {isDefault && !isLastProvider ? (
               <Text font="main-ui-body" color="text-03">
-                Cannot delete the default provider. Select another provider as
-                the default prior to deleting this one.
+                不能删除默认提供商。请先选择其他提供商作为默认值，再删除此提供商。
               </Text>
             ) : (
               <>
@@ -125,12 +124,12 @@ function ExistingProviderCard({
                   {markdown(
                     `All LLM models from provider **${providerDisplayName(
                       provider
-                    )}** will be removed and unavailable for future chats. Chat history will be preserved.`
+                    )}** 都将被移除，之后的聊天将无法使用这些模型。聊天历史会保留。`
                   )}
                 </Text>
                 {isLastProvider && (
                   <Text font="main-ui-body" color="text-03">
-                    Connect another provider to continue using chats.
+                    请连接其他提供商以继续使用聊天。
                   </Text>
                 )}
               </>
@@ -156,7 +155,7 @@ function ExistingProviderCard({
             sizePreset="main-ui"
             variant="section"
             padding="lg"
-            tag={isDefault ? { title: "Default", color: "blue" } : undefined}
+            tag={isDefault ? { title: "默认", color: "blue" } : undefined}
             rightChildren={
               <div className="flex flex-row">
                 <Hoverable.Item
@@ -166,7 +165,7 @@ function ExistingProviderCard({
                   <Button
                     icon={SvgTrash}
                     prominence="tertiary"
-                    aria-label={`Delete ${providerDisplayName(provider)}`}
+                    aria-label={`删除 ${providerDisplayName(provider)}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteModal.toggle(true);
@@ -176,7 +175,7 @@ function ExistingProviderCard({
                 <Button
                   icon={SvgSettings}
                   prominence="tertiary"
-                  aria-label={`Edit ${providerDisplayName(provider)}`}
+                  aria-label={`编辑 ${providerDisplayName(provider)}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setIsOpen(true);
@@ -230,7 +229,7 @@ function NewProviderCard({
               setIsOpen(true);
             }}
           >
-            Connect
+            连接
           </Button>
         }
       />
@@ -278,7 +277,7 @@ function NewCustomProviderCard({
               setIsOpen(true);
             }}
           >
-            Set Up
+            设置
           </Button>
         }
       />
@@ -335,10 +334,10 @@ export default function LanguageModelsPage() {
     try {
       await setDefaultLlmModel(providerId, modelName);
       await refreshLlmProviderCaches(mutate);
-      toast.success("Default model updated successfully!");
+      toast.success("默认模型已更新！");
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to set default model: ${message}`);
+      const message = e instanceof Error ? e.message : "未知错误";
+      toast.error(`设置默认模型失败：${message}`);
     }
   }
 
@@ -350,8 +349,8 @@ export default function LanguageModelsPage() {
         {hasProviders ? (
           <Card border="solid" rounding="lg">
             <InputHorizontal
-              title="Default Model"
-              description="This model will be used by Onyx by default in your chats."
+              title="默认模型"
+              description="Glomi AI 会在你的聊天中默认使用此模型。"
               center
               withLabel
             >
@@ -359,7 +358,7 @@ export default function LanguageModelsPage() {
                 value={currentDefaultValue}
                 onValueChange={handleDefaultModelChange}
               >
-                <InputSelect.Trigger placeholder="Select a default model" />
+                <InputSelect.Trigger placeholder="选择默认模型" />
                 <InputSelect.Content>
                   {providersWithVisibleModels.map(
                     ({ provider, visibleModels }) => (
@@ -387,7 +386,7 @@ export default function LanguageModelsPage() {
         ) : (
           <MessageCard
             variant="info"
-            title="Set up an LLM provider to start chatting."
+            title="设置 LLM 提供商后即可开始聊天。"
           />
         )}
 
@@ -401,7 +400,7 @@ export default function LanguageModelsPage() {
               justifyContent="start"
             >
               <Content
-                title="Available Providers"
+                title="可用提供商"
                 sizePreset="main-content"
                 variant="section"
               />
@@ -430,8 +429,8 @@ export default function LanguageModelsPage() {
           justifyContent="start"
         >
           <Content
-            title="Add Provider"
-            description="Onyx supports both popular providers and self-hosted models."
+            title="添加提供商"
+            description="Glomi AI 支持主流模型服务商和自托管模型。"
             sizePreset="main-content"
             variant="section"
           />

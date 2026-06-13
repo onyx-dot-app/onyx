@@ -13,7 +13,7 @@ export default function SidePanelHeader({
   onNewChat,
   chatSessionId,
 }: SidePanelHeaderProps) {
-  const handleOpenInOnyx = () => {
+  const handleOpenInGlomi = () => {
     const path = chatSessionId ? `/app?chatId=${chatSessionId}` : "/app";
     window.open(`${window.location.origin}${path}`, "_blank");
   };
@@ -31,8 +31,8 @@ export default function SidePanelHeader({
         <Button
           prominence="tertiary"
           icon={SvgExternalLink}
-          onClick={handleOpenInOnyx}
-          tooltip="Open in Onyx"
+          onClick={handleOpenInGlomi}
+          tooltip="在 Glomi AI 中打开"
         />
       </div>
     </header>

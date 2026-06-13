@@ -10,7 +10,9 @@
       "Bash(git merge *)",
       "Bash(git fetch *)",
       "Bash(git cherry-pick *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(ls -la \"C:/Users/vayneluo/.claude/projects/d--dev-agent-glomi-ai/memory/\" 2>/dev/null && echo \"===MEMORY.md===\" && cat \"C:/Users/vayneluo/.claude/projects/d--dev-agent-glomi-ai/memory/MEMORY.md\" 2>/dev/null || echo \"no MEMORY.md yet\")",
+      "Read(//c/Users/vayneluo/.claude/projects/d--dev-agent-glomi-ai/**)"
     ]
   },
   "enabledPlugins": {

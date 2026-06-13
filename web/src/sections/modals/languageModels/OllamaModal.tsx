@@ -100,7 +100,7 @@ function OllamaModalInternals({
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
           <Tabs.List>
             <Tabs.Trigger value={Tab.TAB_SELF_HOSTED}>
-              Self-hosted Ollama
+              自托管 Ollama
             </Tabs.Trigger>
             <Tabs.Trigger value={Tab.TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
           </Tabs.List>
@@ -112,14 +112,14 @@ function OllamaModalInternals({
                 subDescription={
                   settings.is_containerized
                     ? markdown(
-                        `The base URL for your Ollama instance. ${CONTAINERIZED_HOST_NOTE}`
+                        `你的 Ollama 实例 Base URL。${CONTAINERIZED_HOST_NOTE}`
                       )
-                    : "The base URL for your Ollama instance."
+                    : "你的 Ollama 实例 Base URL。"
                 }
               >
                 <InputTypeInField
                   name="api_base"
-                  placeholder="Your Ollama API base URL"
+                  placeholder="你的 Ollama API Base URL"
                 />
               </InputVertical>
             </Tabs.Content>
@@ -128,7 +128,7 @@ function OllamaModalInternals({
               <InputVertical
                 withLabel="custom_config.OLLAMA_API_KEY"
                 title="API Key"
-                subDescription="Your Ollama Cloud API key."
+                subDescription="你的 Ollama Cloud API Key。"
               >
                 <PasswordInputTypeInField
                   name="custom_config.OLLAMA_API_KEY"
@@ -203,7 +203,7 @@ export default function OllamaModal({
           tab === Tab.TAB_CLOUD
             ? {
                 custom_config: Yup.object({
-                  OLLAMA_API_KEY: Yup.string().required("API Key is required"),
+                  OLLAMA_API_KEY: Yup.string().required("API Key 为必填项"),
                 }),
               }
             : undefined,
@@ -253,8 +253,8 @@ export default function OllamaModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? "服务商已更新！"
+                  : "服务商已启用！"
               );
             }
           },

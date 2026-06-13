@@ -5,17 +5,15 @@ export default function CloudError() {
   return (
     <ErrorPageLayout>
       <Text as="p" headingH2>
-        Maintenance in Progress
+        系统维护中
       </Text>
 
       <Text as="p" text03>
-        Onyx is currently in a maintenance window. Please check back in a couple
-        of minutes.
+        Glomi AI 正在进行维护，请几分钟后再回来查看。
       </Text>
 
       <Text as="p" text03>
-        We apologize for any inconvenience this may cause and appreciate your
-        patience.
+        给你带来不便我们很抱歉，感谢你的耐心等待。
       </Text>
     </ErrorPageLayout>
   );

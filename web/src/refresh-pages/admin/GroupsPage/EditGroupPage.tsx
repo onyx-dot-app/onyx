@@ -62,7 +62,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     Tier.ENTERPRISE
   );
   const tokenLimitsDisabledTooltip = markdown(
-    "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only."
+    "Token 速率限制仅在 [Glomi AI 企业版](/admin/billing) 中可用。"
   );
 
   // Fetch the group data — poll every 5s while syncing so the UI updates
@@ -211,7 +211,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
     const trimmed = groupName.trim();
     if (!trimmed) {
-      toast.error("Group name is required");
+      toast.error("请输入用户组名称");
       return;
     }
 
@@ -222,7 +222,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     const freshGroup = freshGroups.find((g: UserGroup) => g.id === groupId);
     if (freshGroup && !freshGroup.is_up_to_date) {
       toast.error(
-        "This group is currently syncing. Please wait a moment and try again."
+        "此用户组正在同步中。请稍等片刻后重试。"
       );
       return;
     }
@@ -263,10 +263,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
       mutate(SWR_KEYS.adminUserGroups);
       mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
-      toast.success(`Group "${trimmed}" updated`);
+      toast.success(`用户组“${trimmed}”已更新`);
       router.push("/admin/groups");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update group");
+      toast.error(e instanceof Error ? e.message : "更新用户组失败");
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);
@@ -278,10 +278,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     try {
       await deleteGroup(groupId);
       mutate(SWR_KEYS.adminUserGroups);
-      toast.success(`Group "${group?.name}" deleted`);
+      toast.success(`用户组“${group?.name}”已删除`);
       router.push("/admin/groups");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete group");
+      toast.error(e instanceof Error ? e.message : "删除用户组失败");
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);
@@ -294,14 +294,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgUsers}
-          title="Group Not Found"
+          title="未找到用户组"
           divider
         />
         <SettingsLayouts.Body>
           <IllustrationContent
             illustration={SvgNoResult}
-            title="Group not found"
-            description="This group doesn't exist or may have been deleted."
+            title="未找到用户组"
+            description="此用户组不存在，或可能已被删除。"
           />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -314,18 +314,18 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         prominence="secondary"
         onClick={() => router.push("/admin/groups")}
       >
-        Cancel
+        取消
       </Button>
       <Button
         onClick={handleSave}
         disabled={!groupName.trim() || isSubmitting || isSyncing}
         tooltip={
           isSyncing
-            ? "Document embeddings are being updated due to recent changes to this group."
+            ? "由于此用户组最近发生变更，文档向量正在更新。"
             : undefined
         }
       >
-        {isSubmitting ? "Saving..." : isSyncing ? "Syncing..." : "Save Changes"}
+        {isSubmitting ? "正在保存..." : isSyncing ? "同步中..." : "保存更改"}
       </Button>
     </Section>
   );
@@ -335,7 +335,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgUsers}
-          title="Edit Group"
+          title="编辑用户组"
           divider
           rightChildren={headerActions}
         />
@@ -345,7 +345,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
           {error && (
             <Text as="p" secondaryBody text03>
-              Failed to load group data.
+              加载用户组数据失败。
             </Text>
           )}
 
@@ -359,10 +359,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 justifyContent="start"
               >
                 <Text mainUiBody text04>
-                  Group Name
+                  用户组名称
                 </Text>
                 <InputTypeIn
-                  placeholder="Name your group"
+                  placeholder="为用户组命名"
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
                 />
@@ -389,8 +389,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder={
                       isAddingMembers
-                        ? "Search users and accounts..."
-                        : "Search members..."
+                        ? "搜索用户和账号..."
+                        : "搜索成员..."
                     }
                     searchIcon
                   />
@@ -399,7 +399,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                       prominence="secondary"
                       onClick={() => setIsAddingMembers(false)}
                     >
-                      Done
+                      完成
                     </Button>
                   ) : (
                     <Button
@@ -407,7 +407,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                       icon={SvgPlusCircle}
                       onClick={() => setIsAddingMembers(true)}
                     >
-                      Add
+                      添加
                     </Button>
                   )}
                 </Section>
@@ -427,8 +427,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     emptyState={
                       <IllustrationContent
                         illustration={SvgNoResult}
-                        title="No users found"
-                        description="No users match your search."
+                        title="未找到用户"
+                        description="没有用户与你的搜索匹配。"
                       />
                     }
                   />
@@ -443,8 +443,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     emptyState={
                       <IllustrationContent
                         illustration={SvgNoResult}
-                        title="No members"
-                        description="Add members to this group."
+                        title="暂无成员"
+                        description="向此用户组添加成员。"
                       />
                     }
                   />
@@ -470,8 +470,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               {/* Delete This Group */}
               <Card>
                 <InputHorizontal
-                  title="Delete This Group"
-                  description="Members will lose access to any resources shared with this group."
+                  title="删除此用户组"
+                  description="成员将失去对此用户组共享资源的访问权限。"
                   center
                 >
                   <Button
@@ -480,7 +480,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     icon={SvgTrash}
                     onClick={() => setShowDeleteModal(true)}
                   >
-                    Delete Group
+                    删除用户组
                   </Button>
                 </InputHorizontal>
               </Card>
@@ -492,7 +492,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       {showDeleteModal && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete Group"
+          title="删除用户组"
           onClose={() => setShowDeleteModal(false)}
           submit={
             <Button
@@ -500,17 +500,16 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               onClick={handleDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? "正在删除..." : "删除"}
             </Button>
           }
         >
           <Text as="p" text03>
-            Members of group{" "}
+            用户组{" "}
             <Text as="span" text05>
               {group?.name}
             </Text>{" "}
-            will lose access to any resources shared with this group, unless
-            they have been granted access directly. Deletion cannot be undone.
+            的成员将失去对此用户组共享资源的访问权限，除非他们已被直接授予访问权限。删除后无法撤销。
           </Text>
         </ConfirmationModalLayout>
       )}

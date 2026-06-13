@@ -9,15 +9,15 @@ import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { useMemo } from "react";
-import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
 import { useTranslations } from "next-intl";
+import { GlomiLogoMark, GlomiLogotype } from "@/refresh-components/GlomiLogo";
 
 export interface LogoProps {
   folded?: boolean;
   size?: number;
   className?: string;
-  // Always render the real Onyx logo, ignoring enterprise white-label settings
-  // (custom logo / application name). Used by Onyx-branded surfaces like Craft.
+  // Compatibility prop name from the upstream UI. In Glomi AI it renders the
+  // first-party Glomi AI wordmark, ignoring enterprise white-label settings.
   onyxBranded?: boolean;
 }
 
@@ -46,9 +46,9 @@ export default function Logo({
 
   if (onyxBranded) {
     return folded ? (
-      <SvgOnyxLogo size={resolvedSize} className={cn("shrink-0", className)} />
+      <GlomiLogoMark size={resolvedSize} className={className} />
     ) : (
-      <SvgOnyxLogoTyped size={resolvedSize} className={className} />
+      <GlomiLogotype size={resolvedSize} className={className} />
     );
   }
 
@@ -68,7 +68,7 @@ export default function Logo({
       />
     </div>
   ) : (
-    <SvgOnyxLogo size={resolvedSize} className={cn("shrink-0", className)} />
+    <GlomiLogoMark size={resolvedSize} className={className} />
   );
 
   const renderNameAndPoweredBy = (opts: {
@@ -115,8 +115,8 @@ export default function Logo({
   return applicationName ? (
     renderNameAndPoweredBy({ includeLogo: true, includeName: true })
   ) : folded ? (
-    <SvgOnyxLogo size={resolvedSize} className={cn("shrink-0", className)} />
+    <GlomiLogoMark size={resolvedSize} className={className} />
   ) : (
-    <SvgOnyxLogoTyped size={resolvedSize} className={className} />
+    <GlomiLogotype size={resolvedSize} className={className} />
   );
 }

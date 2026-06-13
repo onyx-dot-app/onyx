@@ -180,7 +180,7 @@ function FetchedFilePreview({
           padding={2}
         >
           <Text font="secondary-body" color="text-03">
-            Loading file...
+            正在加载文件...
           </Text>
         </Section>
       );
@@ -188,7 +188,7 @@ function FetchedFilePreview({
     return (
       <div className="p-4">
         <Text font="secondary-body" color="text-03">
-          Loading file...
+          正在加载文件...
         </Text>
       </div>
     );
@@ -205,7 +205,7 @@ function FetchedFilePreview({
         >
           <SvgFileText size={48} className="stroke-text-02" />
           <Text font="heading-h3" color="text-03">
-            Error loading file
+            加载文件出错
           </Text>
           <Text font="secondary-body" color="text-02">
             {error.message}
@@ -216,7 +216,7 @@ function FetchedFilePreview({
     return (
       <div className="p-4">
         <Text font="secondary-body" color="text-02">
-          {`Error: ${error.message}`}
+          {`错误：${error.message}`}
         </Text>
       </div>
     );
@@ -232,7 +232,7 @@ function FetchedFilePreview({
           padding={2}
         >
           <Text font="secondary-body" color="text-03">
-            No content
+            暂无内容
           </Text>
         </Section>
       );
@@ -240,7 +240,7 @@ function FetchedFilePreview({
     return (
       <div className="p-4">
         <Text font="secondary-body" color="text-03">
-          No content
+          暂无内容
         </Text>
       </div>
     );
@@ -257,7 +257,7 @@ function FetchedFilePreview({
         >
           <SvgFileText size={48} className="stroke-text-02" />
           <Text font="heading-h3" color="text-03">
-            Cannot preview file
+            无法预览文件
           </Text>
           <div className="text-center max-w-md">
             <Text font="secondary-body" color="text-02">

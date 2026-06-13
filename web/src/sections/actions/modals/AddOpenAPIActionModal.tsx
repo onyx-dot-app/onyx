@@ -50,7 +50,7 @@ interface OpenAPIActionFormValues {
 }
 
 const validationSchema = Yup.object().shape({
-  definition: Yup.string().required("OpenAPI schema definition is required"),
+  definition: Yup.string().required("请输入 OpenAPI schema 定义"),
 });
 
 function parseJsonWithTrailingCommas(jsonString: string) {
@@ -104,7 +104,7 @@ function FormContent({
       setFieldValue("definition", formatted);
       setFieldError("definition", "");
     } catch {
-      setFieldError("definition", "Invalid JSON format");
+      setFieldError("definition", "JSON 格式无效");
     }
   }, [values.definition, setFieldValue, setFieldError]);
 
@@ -142,7 +142,7 @@ function FormContent({
         }
       } catch {
         setMethodSpecs(null);
-        setFieldError("definition", "Invalid JSON format");
+        setFieldError("definition", "JSON 格式无效");
       }
     },
     []
@@ -153,17 +153,17 @@ function FormContent({
     [validateDefinition]
   );
 
-  const modalTitle = isEditMode ? "Edit OpenAPI action" : "Add OpenAPI action";
+  const modalTitle = isEditMode ? "编辑 OpenAPI 动作" : "添加 OpenAPI 动作";
   const modalDescription = isEditMode
-    ? "Update the OpenAPI schema for this action."
-    : "Add OpenAPI schema to add custom actions.";
+    ? "更新此动作的 OpenAPI schema。"
+    : "添加 OpenAPI schema 以创建自定义动作。";
   const primaryButtonLabel = isSubmitting
     ? isEditMode
-      ? "Saving..."
-      : "Adding..."
+      ? "正在保存..."
+      : "正在添加..."
     : isEditMode
-      ? "Save Changes"
-      : "Add Action";
+      ? "保存更改"
+      : "添加动作";
 
   const hasOAuthConfig = Boolean(existingTool?.oauth_config_id);
   const hasCustomHeaders =
@@ -179,13 +179,13 @@ function FormContent({
     if (hasOAuthConfig) {
       return existingTool.oauth_config_name
         ? `OAuth connected via ${existingTool.oauth_config_name}`
-        : "OAuth authentication configured";
+        : "已配置 OAuth 认证";
     }
     if (hasCustomHeaders) {
-      return "Custom authentication headers configured";
+      return "已配置自定义认证 Header";
     }
     if (hasPassthroughAuth) {
-      return "Passthrough authentication enabled";
+      return "已启用透传认证";
     }
     return "";
   }, [existingTool, hasOAuthConfig, hasCustomHeaders, hasPassthroughAuth]);
@@ -236,13 +236,12 @@ function FormContent({
       <Modal.Body>
         <InputVertical
           withLabel="definition"
-          title="OpenAPI Schema Definition"
+          title="OpenAPI Schema 定义"
           subDescription={markdown(
-            `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. ` +
-              `You can use the placeholders \`CHAT_SESSION_ID\`, \`MESSAGE_ID\`, \`USER_ID\`, and \`USER_EMAIL\` ` +
-              `anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the ` +
-              `current request's values at call time. ` +
-              `Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
+            `指定一个 OpenAPI schema，用来定义此动作可调用的 API。` +
+              `你可以在 schema 的任意位置使用占位符 \`CHAT_SESSION_ID\`、\`MESSAGE_ID\`、\`USER_ID\` 和 \`USER_EMAIL\` ` +
+              `（例如服务 URL、路径、参数默认值），调用时会替换为当前请求的值。` +
+              `了解更多：[OpenAPI 动作](${DOCS_ADMINS_PATH}/actions/openapi)。`
           )}
         >
           <Hoverable.Root group="definitionField" width="full">
@@ -258,13 +257,13 @@ function FormContent({
                         prominence="tertiary"
                         size="sm"
                         getCopyText={() => values.definition}
-                        tooltip="Copy definition"
+                        tooltip="复制定义"
                       />
                       <Button
                         prominence="tertiary"
                         size="sm"
                         icon={SvgBracketCurly}
-                        tooltip="Format definition"
+                        tooltip="格式化定义"
                         onClick={handleFormat}
                       />
                     </div>
@@ -274,7 +273,7 @@ function FormContent({
               <InputTextAreaField
                 name="definition"
                 rows={14}
-                placeholder="Enter your OpenAPI schema here"
+                placeholder="在此输入 OpenAPI schema"
                 className="font-main-ui-mono"
               />
             </div>
@@ -296,7 +295,7 @@ function FormContent({
               <InfoBlock
                 icon={SvgAlertCircle}
                 title={url || ""}
-                description="URL found in the schema. Only connect to servers you trust."
+                description="在 schema 中发现 URL。只连接你信任的服务。"
               />
             )}
             <Divider paddingParallel="fit" paddingPerpendicular="fit" />
@@ -305,7 +304,7 @@ function FormContent({
                 <ToolItem
                   key={`${method.method}-${method.path}-${method.name}`}
                   name={method.name}
-                  description={method.summary || "No summary provided"}
+                  description={method.summary || "未提供摘要"}
                   variant="openapi"
                   openApiMetadata={{
                     method: method.method,
@@ -318,9 +317,9 @@ function FormContent({
         ) : (
           <EmptyMessageCard
             sizePreset="main-ui"
-            title="No Actions Found"
+            title="未找到动作"
             icon={SvgActions}
-            description="Provide OpenAPI schema to preview actions here."
+            description="提供 OpenAPI schema 后即可在此预览动作。"
           />
         )}
 
@@ -341,8 +340,8 @@ function FormContent({
                 <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
                 <Text>
                   {existingTool?.enabled
-                    ? "Authenticated & Enabled"
-                    : "Authentication configured"}
+                    ? "已认证并启用"
+                    : "已配置认证"}
                 </Text>
               </Section>
               {authenticationDescription && (
@@ -361,7 +360,7 @@ function FormContent({
                 icon={SvgUnplug}
                 prominence="tertiary"
                 type="button"
-                tooltip="Disable action"
+                tooltip="停用动作"
                 onClick={() => {
                   if (!existingTool || !onDisconnectTool) {
                     return;
@@ -375,7 +374,7 @@ function FormContent({
                 type="button"
                 onClick={handleEditAuthenticationClick}
               >
-                Edit Configs
+                编辑配置
               </Button>
             </Section>
           </Section>
@@ -389,7 +388,7 @@ function FormContent({
           type="button"
           onClick={handleClose}
         >
-          Cancel
+          取消
         </Button>
         <Button disabled={isSubmitting || !dirty} type="submit">
           {primaryButtonLabel}
@@ -439,7 +438,7 @@ export default function AddOpenAPIActionModal({
       parsedDefinition = parseJsonWithTrailingCommas(values.definition);
     } catch (error) {
       console.error("Error parsing OpenAPI definition:", error);
-      toast.error("Invalid JSON format in OpenAPI schema definition");
+      toast.error("OpenAPI schema 定义中的 JSON 格式无效");
       return;
     }
 
@@ -475,7 +474,7 @@ export default function AddOpenAPIActionModal({
         if (response.error) {
           toast.error(response.error);
         } else {
-          toast.success("OpenAPI action updated successfully");
+          toast.success("OpenAPI 动作已更新");
           handleClose();
           if (response.data && onUpdate) {
             onUpdate(response.data);
@@ -483,7 +482,7 @@ export default function AddOpenAPIActionModal({
         }
       } catch (error) {
         console.error("Error updating OpenAPI action:", error);
-        toast.error("Failed to update OpenAPI action");
+        toast.error("更新 OpenAPI 动作失败");
       }
       return;
     }
@@ -500,7 +499,7 @@ export default function AddOpenAPIActionModal({
       if (response.error) {
         toast.error(response.error);
       } else {
-        toast.success("OpenAPI action created successfully");
+        toast.success("OpenAPI 动作已创建");
         handleClose();
         if (response.data && onSuccess) {
           onSuccess(response.data);
@@ -508,7 +507,7 @@ export default function AddOpenAPIActionModal({
       }
     } catch (error) {
       console.error("Error creating OpenAPI action:", error);
-      toast.error("Failed to create OpenAPI action");
+      toast.error("创建 OpenAPI 动作失败");
     }
   };
 

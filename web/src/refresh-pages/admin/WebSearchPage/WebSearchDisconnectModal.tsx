@@ -56,7 +56,7 @@ export function WebSearchDisconnectModal({
       onClose?.();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : "发生未知错误。";
       toast.error(message);
     } finally {
       await Promise.allSettled([
@@ -105,7 +105,7 @@ export function WebSearchDisconnectModal({
             </Text>
             {!hasAnotherProvider && (
               <Text color="text-03">
-                Onyx will fall back to the built-in web crawler.
+                Glomi AI 将回退使用内置网页抓取器。
               </Text>
             )}
           </>

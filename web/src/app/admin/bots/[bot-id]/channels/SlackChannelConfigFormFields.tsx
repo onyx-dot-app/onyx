@@ -151,7 +151,7 @@ export function SlackChannelConfigFormFields({
         )
       );
       toast.warning(
-        "We removed one or more document sets from your selection because they are no longer valid. Please review and update your configuration."
+        "已从你的选择中移除一个或多个不再有效的文档集。请检查并更新配置。"
       );
     }
   }, [unselectableSets, values.document_sets, setFieldValue]);
@@ -180,22 +180,20 @@ export function SlackChannelConfigFormFields({
         {isDefault && (
           <>
             <Badge variant="agent" className="bg-blue-100 text-blue-800">
-              Default Configuration
+              默认配置
             </Badge>
             <p className="mt-2 text-sm">
-              This default configuration will apply to all channels and direct
-              messages (DMs) in your Slack workspace.
+              此默认配置会应用到 Slack 工作区中的所有频道和私信（DM）。
             </p>
             <div className="mt-4 p-4 bg-background rounded-md border border-neutral-300">
               <CheckboxField
                 name="disabled"
-                label="Disable Default Configuration"
+                label="禁用默认配置"
                 labelClassName="text-text"
               />
               <p className="mt-2 text-sm italic">
-                Warning: Disabling the default configuration means OnyxBot
-                won&apos;t respond in Slack channels unless they are explicitly
-                configured. Additionally, OnyxBot will not respond to DMs.
+                警告：禁用默认配置后，除非单独配置频道，否则 Glomi Bot
+                不会在 Slack 频道中回复。此外，Glomi Bot 也不会回复私信。
               </p>
             </div>
           </>
@@ -204,14 +202,14 @@ export function SlackChannelConfigFormFields({
           <>
             <TextFormField
               name="channel_name"
-              label="Slack Channel Name"
-              placeholder="Enter channel name (e.g., general, support)"
-              subtext="Enter the name of the Slack channel (without the # symbol)"
+              label="Slack 频道名称"
+              placeholder="输入频道名称（例如 general、support）"
+              subtext="输入 Slack 频道名称（不包含 # 符号）"
             />
           </>
         )}
         <div className="space-y-2 mt-4">
-          <Label>Knowledge Source</Label>
+          <Label>知识来源</Label>
           <RadioGroup
             className="flex flex-col gap-y-4"
             value={values.knowledge_source}
@@ -222,28 +220,28 @@ export function SlackChannelConfigFormFields({
             <RadioGroupItemField
               value="all_public"
               id="all_public"
-              label="All Public Knowledge"
-              sublabel="Let OnyxBot respond based on information from all public connectors"
+              label="全部公开知识"
+              sublabel="让 Glomi Bot 基于所有公开连接器中的信息回答"
             />
             {selectableSets.length + unselectableSets.length > 0 && (
               <RadioGroupItemField
                 value="document_sets"
                 id="document_sets"
-                label="Specific Document Sets"
-                sublabel="Control which documents to use for answering questions"
+                label="指定文档集"
+                sublabel="控制回答问题时可使用的文档"
               />
             )}
             <RadioGroupItemField
               value="assistant"
               id="assistant"
-              label="Search Agent"
-              sublabel="Control both the documents and the prompt to use for answering questions"
+              label="搜索智能体"
+              sublabel="同时控制回答问题时使用的文档和提示词"
             />
             <RadioGroupItemField
               value="non_search_agent"
               id="non_search_agent"
-              label="Non-Search Agent"
-              sublabel="Chat with an agent that does not use documents"
+              label="非搜索智能体"
+              sublabel="与不使用文档的智能体对话"
             />
           </RadioGroup>
         </div>
@@ -252,13 +250,12 @@ export function SlackChannelConfigFormFields({
             <div className="mt-4">
               <SubLabel>
                 <>
-                  Select the document sets OnyxBot will use while answering
-                  questions in Slack.
+                  选择 Glomi Bot 在 Slack 中回答问题时使用的文档集。
                   <br />
                   {unselectableSets.length > 0 ? (
                     <span>
-                      Some incompatible document sets are{" "}
-                      {viewUnselectableSets ? "visible" : "hidden"}.{" "}
+                      部分不兼容的文档集当前
+                      {viewUnselectableSets ? "已显示" : "已隐藏"}。{" "}
                       <button
                         type="button"
                         onClick={() =>
@@ -269,9 +266,9 @@ export function SlackChannelConfigFormFields({
                         className="text-sm text-action-link-05"
                       >
                         {viewUnselectableSets
-                          ? "Hide un-selectable "
-                          : "View all "}
-                        document sets
+                          ? "隐藏不可选择的"
+                          : "查看全部"}
+                        文档集
                       </button>
                     </span>
                   ) : (
@@ -309,8 +306,7 @@ export function SlackChannelConfigFormFields({
                     {viewUnselectableSets && unselectableSets.length > 0 && (
                       <div className="mt-4">
                         <p className="text-sm text-text-dark/80">
-                          These document sets cannot be attached as they have
-                          auto-synced docs:
+                          以下文档集包含自动同步文档，无法附加：
                         </p>
                         <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
                           {unselectableSets.map((documentSet) => (
@@ -318,7 +314,7 @@ export function SlackChannelConfigFormFields({
                               key={documentSet.id}
                               documentSet={documentSet}
                               disabled
-                              disabledTooltip="Unable to use this document set because it contains a connector with auto-sync permissions. OnyxBot's responses in this channel are visible to all Slack users, so mirroring the asker's permissions could inadvertently expose private information."
+                              disabledTooltip="无法使用此文档集，因为它包含启用了自动同步权限的连接器。Glomi Bot 在此频道中的回答对所有 Slack 用户可见，镜像提问者权限可能会意外暴露私密信息。"
                               isSelected={false}
                             />
                           ))}
@@ -339,15 +335,12 @@ export function SlackChannelConfigFormFields({
           <div className="mt-4">
             <SubLabel>
               <>
-                Select the search-enabled agent OnyxBot will use while answering
-                questions in Slack.
+                选择 Glomi Bot 在 Slack 中回答问题时使用的搜索智能体。
                 {syncEnabledAgents.length > 0 && (
                   <>
                     <br />
                     <span className="text-sm text-text-dark/80">
-                      Note: Some of your agents have auto-synced connectors in
-                      their document sets. You cannot select these agents as
-                      they will not be able to answer questions in Slack.{" "}
+                      注意：部分智能体的文档集中包含自动同步连接器，因此无法选择；这些智能体无法在 Slack 中回答问题。{" "}
                       <button
                         type="button"
                         onClick={() =>
@@ -358,9 +351,9 @@ export function SlackChannelConfigFormFields({
                         className="text-sm text-action-link-05"
                       >
                         {viewSyncEnabledAgents
-                          ? "Hide un-selectable "
-                          : "View all "}
-                        agents
+                          ? "隐藏不可选择的"
+                          : "查看全部"}
+                        智能体
                       </button>
                     </span>
                   </>
@@ -369,7 +362,7 @@ export function SlackChannelConfigFormFields({
             </SubLabel>
 
             <InputComboBox
-              placeholder="Search for an agent..."
+              placeholder="搜索智能体..."
               value={String(values.persona_id ?? "")}
               onValueChange={(val) =>
                 setFieldValue("persona_id", val ? Number(val) : null)
@@ -380,7 +373,7 @@ export function SlackChannelConfigFormFields({
             {viewSyncEnabledAgents && syncEnabledAgents.length > 0 && (
               <div className="mt-4">
                 <p className="text-sm text-text-dark/80">
-                  Un-selectable agents:
+                  不可选择的智能体：
                 </p>
                 <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
                   {syncEnabledAgents.map((persona: MinimalAgent) => (
@@ -405,15 +398,12 @@ export function SlackChannelConfigFormFields({
           <div className="mt-4">
             <SubLabel>
               <>
-                Select the non-search agent OnyxBot will use while answering
-                questions in Slack.
+                选择 Glomi Bot 在 Slack 中回答问题时使用的非搜索智能体。
                 {syncEnabledAgents.length > 0 && (
                   <>
                     <br />
                     <span className="text-sm text-text-dark/80">
-                      Note: Some of your agents have auto-synced connectors in
-                      their document sets. You cannot select these agents as
-                      they will not be able to answer questions in Slack.{" "}
+                      注意：部分智能体的文档集中包含自动同步连接器，因此无法选择；这些智能体无法在 Slack 中回答问题。{" "}
                       <button
                         type="button"
                         onClick={() =>
@@ -424,9 +414,9 @@ export function SlackChannelConfigFormFields({
                         className="text-sm text-action-link-05"
                       >
                         {viewSyncEnabledAgents
-                          ? "Hide un-selectable "
-                          : "View all "}
-                        agents
+                          ? "隐藏不可选择的"
+                          : "查看全部"}
+                        智能体
                       </button>
                     </span>
                   </>
@@ -435,7 +425,7 @@ export function SlackChannelConfigFormFields({
             </SubLabel>
 
             <InputComboBox
-              placeholder="Search for an agent..."
+              placeholder="搜索智能体..."
               value={String(values.persona_id ?? "")}
               onValueChange={(val) =>
                 setFieldValue("persona_id", val ? Number(val) : null)
@@ -451,25 +441,25 @@ export function SlackChannelConfigFormFields({
         {values.knowledge_source !== "non_search_agent" && (
           <AccordionItem value="search-options">
             <AccordionTrigger className="text-text">
-              Search Configuration
+              搜索配置
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-4 pb-3">
                 <div className="w-64">
                   <SelectorFormField
                     name="response_type"
-                    label="Answer Type"
-                    tooltip="Controls the format of OnyxBot's responses."
+                    label="回答类型"
+                    tooltip="控制 Glomi Bot 回答的格式。"
                     options={[
-                      { name: "Standard", value: "citations" },
-                      { name: "Detailed", value: "quotes" },
+                      { name: "标准", value: "citations" },
+                      { name: "详细", value: "quotes" },
                     ]}
                   />
                 </div>
                 <CheckboxField
                   name="answer_validity_check_enabled"
-                  label="Only respond if citations found"
-                  tooltip="If set, will only answer questions where the model successfully produces citations"
+                  label="仅在找到引用时回复"
+                  tooltip="启用后，仅当模型成功生成引用时才回答问题"
                 />
               </div>
             </AccordionContent>
@@ -477,13 +467,13 @@ export function SlackChannelConfigFormFields({
         )}
 
         <AccordionItem className="mt-4" value="general-options">
-          <AccordionTrigger>General Configuration</AccordionTrigger>
+          <AccordionTrigger>通用配置</AccordionTrigger>
           <AccordionContent className="overflow-visible">
             <div className="space-y-4">
               <CheckboxField
                 name="show_continue_in_web_ui"
-                label="Show Continue in Web UI button"
-                tooltip="If set, will show a button at the bottom of the response that allows the user to continue the conversation in the Onyx Web UI"
+                label="显示“在网页端继续”按钮"
+                tooltip="启用后，会在回答底部显示按钮，允许用户在 Glomi AI 网页端继续对话"
               />
 
               <CheckboxField
@@ -494,66 +484,59 @@ export function SlackChannelConfigFormFields({
                     setFieldValue("follow_up_tags", []);
                   }
                 }}
-                label={'Give a "Still need help?" button'}
-                tooltip={`OnyxBot's response will include a button at the bottom
-                      of the response that asks the user if they still need help.`}
+                label={'提供“仍需帮助？”按钮'}
+                tooltip="启用后，Glomi Bot 的回答底部会包含一个按钮，询问用户是否仍需帮助。"
               />
               {values.still_need_help_enabled && (
-                <CollapsibleSection prompt="Configure Still Need Help Button">
+                <CollapsibleSection prompt="配置“仍需帮助？”按钮">
                   <TextArrayField
                     name="follow_up_tags"
-                    label="(Optional) Users / Groups to Tag"
+                    label="（可选）要标记的用户 / 用户组"
                     values={values}
                     subtext={
                       <div>
-                        The Slack users / groups we should tag if the user
-                        clicks the &quot;Still need help?&quot; button. If no
-                        emails are provided, we will not tag anyone and will
-                        just react with a 🆘 emoji to the original message.
+                        用户点击“仍需帮助？”按钮时需要标记的 Slack 用户 / 用户组。
+                        如果未提供邮箱，我们不会标记任何人，只会用 🆘 表情回应原消息。
                       </div>
                     }
-                    placeholder="User email or user group name..."
+                    placeholder="用户邮箱或用户组名称..."
                   />
                 </CollapsibleSection>
               )}
 
               <CheckboxField
                 name="questionmark_prefilter_enabled"
-                label="Only respond to questions"
-                tooltip="If set, OnyxBot will only respond to messages that contain a question mark"
+                label="仅回复问题"
+                tooltip="启用后，Glomi Bot 只会回复包含问号的消息"
               />
               <CheckboxField
                 name="respond_tag_only"
-                label="Respond to @OnyxBot Only"
-                tooltip="If set, OnyxBot will only respond when directly tagged"
+                label="仅在 @Glomi Bot 时回复"
+                tooltip="启用后，Glomi Bot 只会在被直接提及时回复"
               />
               <CheckboxField
                 name="respond_to_bots"
-                label="Respond to Bot messages"
-                tooltip="If not set, OnyxBot will always ignore messages from Bots"
+                label="回复机器人消息"
+                tooltip="未启用时，Glomi Bot 会始终忽略来自机器人的消息"
               />
               <CheckboxField
                 name="is_ephemeral"
-                label="Respond to user in a private (ephemeral) message"
-                tooltip="If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also
-                chose 'Search' Agent above, selecting this option will make documents that are private to the user
-                available for their queries."
+                label="用私密（临时）消息回复用户"
+                tooltip="启用后，Glomi Bot 只会通过私密（临时）消息回复该用户。如果上方选择了“搜索智能体”，启用此项会让该用户有权访问的私有文档也可用于查询。"
               />
 
               <TextArrayField
                 name="respond_member_group_list"
-                label="(Optional) Respond to Certain Users / Groups"
+                label="（可选）仅回复特定用户 / 用户组"
                 subtext={
-                  "If specified, only these users / groups can invoke " +
-                  "OnyxBot in this channel, and responses are visible only " +
-                  "to them."
+                  "指定后，只有这些用户 / 用户组可以在此频道中调用 Glomi Bot，且回答仅对他们可见。"
                 }
                 values={values}
-                placeholder="User email or user group name..."
+                placeholder="用户邮箱或用户组名称..."
                 disabled={values.is_ephemeral}
                 tooltip={
                   values.is_ephemeral
-                    ? "Disabled while 'Respond to user in a private (ephemeral) message' is on — ephemeral responses target a single user only."
+                    ? "启用“用私密（临时）消息回复用户”时不可用，因为临时回复只面向单个用户。"
                     : undefined
                 }
               />
@@ -577,21 +560,16 @@ export function SlackChannelConfigFormFields({
             tooltip={
               <div className="space-y-2">
                 <Label className="text-text mb-2 font-semibold">
-                  Privacy Alert
+                  隐私提醒
                 </Label>
                 <p className="text-sm text-text-darker mb-4">
-                  Please note that if the private (ephemeral) response is *not
-                  selected*, only public documents within the selected document
-                  sets will be accessible for user queries. If the private
-                  (ephemeral) response *is selected*, user quries can also
-                  leverage documents that the user has already been granted
-                  access to. Note that users will be able to share the response
-                  with others in the channel, so please ensure that this is
-                  aligned with your company sharing policies.
+                  请注意：如果未选择私密（临时）回复，用户查询只能访问所选文档集中的公开文档。
+                  如果选择了私密（临时）回复，用户查询也可以使用该用户已获授权访问的文档。
+                  用户仍可将回答分享给频道中的其他人，请确保这符合你公司的共享政策。
                 </p>
                 <div className="space-y-2">
                   <h4 className="text-sm text-text font-medium">
-                    Relevant Connectors:
+                    相关连接器：
                   </h4>
                   <div className="max-h-40 overflow-y-auto border-t border-text-subtle flex-col gap-y-2">
                     {memoizedPrivateConnectors.map((ccpairinfo: any) => (
@@ -621,9 +599,9 @@ export function SlackChannelConfigFormFields({
             </div>
           </Tooltip>
         )}
-        <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
+        <Button type="submit">{isUpdate ? "更新" : "创建"}</Button>
         <Button prominence="secondary" onClick={() => router.back()}>
-          Cancel
+          取消
         </Button>
       </div>
     </>

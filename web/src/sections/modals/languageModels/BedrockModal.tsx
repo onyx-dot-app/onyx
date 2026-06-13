@@ -133,11 +133,11 @@ function BedrockModalInternals({
         <Section gap={1}>
           <InputVertical
             withLabel={FIELD_AWS_REGION_NAME}
-            title="AWS Region"
-            subDescription="Region where your Amazon Bedrock models are hosted."
+            title="AWS 区域"
+            subDescription="托管 Amazon Bedrock 模型的区域。"
           >
             <InputSelectField name={FIELD_AWS_REGION_NAME}>
-              <InputSelect.Trigger placeholder="Select a region" />
+              <InputSelect.Trigger placeholder="选择区域" />
               <InputSelect.Content>
                 {AWS_REGION_OPTIONS.map((option) => (
                   <InputSelect.Item key={option.value} value={option.value}>
@@ -150,29 +150,29 @@ function BedrockModalInternals({
 
           <InputVertical
             withLabel={FIELD_BEDROCK_AUTH_METHOD}
-            title="Authentication Method"
-            subDescription="Choose how Onyx should authenticate with Bedrock."
+            title="认证方式"
+            subDescription="选择 Glomi AI 如何与 Bedrock 进行认证。"
           >
             <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
               <InputSelect.Trigger />
               <InputSelect.Content>
                 <InputSelect.Item
                   value={AUTH_METHOD_IAM}
-                  description="Recommended for AWS environments"
+                  description="推荐用于 AWS 环境"
                 >
-                  Environment IAM Role
+                  环境 IAM 角色
                 </InputSelect.Item>
                 <InputSelect.Item
                   value={AUTH_METHOD_ACCESS_KEY}
-                  description="For non-AWS environments"
+                  description="用于非 AWS 环境"
                 >
                   Access Key
                 </InputSelect.Item>
                 <InputSelect.Item
                   value={AUTH_METHOD_LONG_TERM_API_KEY}
-                  description="For non-AWS environments"
+                  description="用于非 AWS 环境"
                 >
-                  Long-term API Key
+                  长期 API Key
                 </InputSelect.Item>
               </InputSelect.Content>
             </InputSelectField>
@@ -209,7 +209,7 @@ function BedrockModalInternals({
         <InputPadder>
           <MessageCard
             variant="info"
-            title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."
+            title="Glomi AI 将使用当前运行环境绑定的 IAM 角色进行认证。"
           />
         </InputPadder>
       )}
@@ -219,11 +219,11 @@ function BedrockModalInternals({
           <Section gap={0.5}>
             <InputVertical
               withLabel={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-              title="Long-term API Key"
+              title="长期 API Key"
             >
               <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-                placeholder="Your long-term API key"
+                placeholder="你的长期 API Key"
               />
             </InputVertical>
           </Section>
@@ -291,7 +291,7 @@ export default function BedrockModal({
   const validationSchema = buildValidationSchema(isOnboarding, {
     extra: {
       custom_config: Yup.object({
-        AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
+        AWS_REGION_NAME: Yup.string().required("请选择 AWS 区域"),
       }),
     },
   });
@@ -335,8 +335,8 @@ export default function BedrockModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? "服务商已更新！"
+                  : "服务商已启用！"
               );
             }
           },

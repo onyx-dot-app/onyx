@@ -4,7 +4,7 @@ import { markdown } from "@opal/utils";
 import { useEffect, useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { SvgOnyxLogo } from "@opal/logos";
+import { GlomiLogoMark } from "@/refresh-components/GlomiLogo";
 import Modal from "@/refresh-components/Modal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import InputComboBoxField from "@/refresh-components/form/InputComboBoxField";
@@ -95,10 +95,10 @@ export function VoiceProviderSetupModal({
   }, [providerType]);
 
   const validationSchema = Yup.object().shape({
-    api_key: Yup.string().required("API key is required"),
+    api_key: Yup.string().required("请输入 API Key"),
     target_uri:
       providerType === "azure"
-        ? Yup.string().required("Target URI is required")
+        ? Yup.string().required("请输入目标 URI")
         : Yup.string(),
     stt_model: Yup.string(),
     tts_model: Yup.string(),
@@ -134,7 +134,7 @@ export function VoiceProviderSetupModal({
           toast.error(
             typeof data?.detail === "string"
               ? data.detail
-              : "Connection test failed"
+              : "连接测试失败"
           );
           setSubmitting(false);
           return;
@@ -166,11 +166,11 @@ export function VoiceProviderSetupModal({
         toast.error(
           typeof data?.detail === "string"
             ? data.detail
-            : "Failed to save provider"
+            : "保存服务商失败"
         );
       }
     } catch {
-      toast.error("Failed to save provider");
+      toast.error("保存服务商失败");
     } finally {
       setSubmitting(false);
     }
@@ -190,22 +190,22 @@ export function VoiceProviderSetupModal({
               <Modal.Header
                 icon={detail.icon}
                 moreIcon1={SvgArrowExchange}
-                moreIcon2={SvgOnyxLogo}
+                moreIcon2={GlomiLogoMark}
                 title={
                   isEditing
-                    ? `Configure ${detail.label}`
-                    : `Set up ${detail.label}`
+                    ? `配置 ${detail.label}`
+                    : `设置 ${detail.label}`
                 }
-                description={`Connect to ${detail.label} and set up your voice models.`}
+                description={`连接 ${detail.label} 并设置语音模型。`}
                 onClose={onClose}
               />
               <Modal.Body>
                 <Section gap={1} alignItems="stretch">
                   {providerType === "azure" && (
                     <InputVertical
-                      title="Target URI"
+                      title="目标 URI"
                       subDescription={markdown(
-                        "Paste the endpoint shown in [Azure Portal (Keys and Endpoint)](https://portal.azure.com/). Onyx extracts the speech region from this URL. Examples: `https://westus.api.cognitive.microsoft.com/` or `https://westus.tts.speech.microsoft.com/`."
+                        "Paste the endpoint shown in [Azure Portal (Keys and Endpoint)](https://portal.azure.com/). Glomi AI extracts the speech region from this URL. Examples: `https://westus.api.cognitive.microsoft.com/` or `https://westus.tts.speech.microsoft.com/`."
                       )}
                       withLabel="target_uri"
                     >
@@ -219,7 +219,7 @@ export function VoiceProviderSetupModal({
                   <InputVertical
                     title="API Key"
                     subDescription={markdown(
-                      `Paste your [API key](${detail.apiKeyUrl}) from ${detail.label} to access your models.`
+                      `粘贴来自 ${detail.label} 的 [API Key](${detail.apiKeyUrl}) 来访问模型。`
                     )}
                     withLabel="api_key"
                   >
@@ -248,8 +248,8 @@ export function VoiceProviderSetupModal({
                     <>
                       {(detail.ttsModels?.length ?? 0) > 1 && (
                         <InputVertical
-                          title="Default Model"
-                          subDescription="This model will be used by Onyx by default for text-to-speech."
+                          title="默认模型"
+                          subDescription="Glomi AI 默认会使用此模型进行文本转语音。"
                           withLabel="tts_model"
                         >
                           <InputSelectField name="tts_model">
@@ -266,11 +266,11 @@ export function VoiceProviderSetupModal({
                       )}
 
                       <InputVertical
-                        title="Voice"
+                        title="声音"
                         subDescription={markdown(
-                          `This voice will be used for spoken responses. See full list of supported languages and voices at [${
+                          `此声音将用于语音回复。你可以在 [${
                             detail.voiceDocsUrl?.label ?? detail.label
-                          }](${detail.voiceDocsUrl?.url ?? detail.docsUrl}).`
+                          }](${detail.voiceDocsUrl?.url ?? detail.docsUrl}) 查看支持的语言和声音列表。`
                         )}
                         withLabel="default_voice"
                       >
@@ -279,8 +279,8 @@ export function VoiceProviderSetupModal({
                           options={voiceOptions}
                           placeholder={
                             isLoadingVoices
-                              ? "Loading voices..."
-                              : "Select a voice or enter voice ID"
+                              ? "正在加载声音..."
+                              : "选择声音或输入声音 ID"
                           }
                           disabled={isLoadingVoices}
                           strict={false}
@@ -292,14 +292,14 @@ export function VoiceProviderSetupModal({
               </Modal.Body>
               <Modal.Footer>
                 <Button prominence="secondary" onClick={onClose}>
-                  Cancel
+                  取消
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting || !isValid || !dirty}
                   icon={isSubmitting ? SvgSimpleLoader : undefined}
                 >
-                  {isEditing ? "Update" : "Connect"}
+                  {isEditing ? "更新" : "连接"}
                 </Button>
               </Modal.Footer>
             </Form>
@@ -341,15 +341,15 @@ export function VoiceDisconnectModal({
         throw new Error(
           typeof body?.detail === "string"
             ? body.detail
-            : "Failed to disconnect provider."
+            : "断开服务商失败。"
         );
       }
-      toast.success(`${disconnectTarget.providerLabel} disconnected`);
+      toast.success(`${disconnectTarget.providerLabel} 已断开`);
       onSuccess();
       onClose?.();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Unexpected error occurred."
+        err instanceof Error ? err.message : "发生未知错误。"
       );
     } finally {
       setIsSubmitting(false);
@@ -359,27 +359,27 @@ export function VoiceDisconnectModal({
   return (
     <ConfirmationModalLayout
       icon={SvgUnplug}
-      title={`Disconnect ${disconnectTarget.providerLabel}`}
-      description="This will remove the stored credentials for this provider."
+      title={`断开 ${disconnectTarget.providerLabel}`}
+      description="这会移除此服务商已保存的凭据。"
       submit={
         <Button
           variant="danger"
           onClick={() => void handleDisconnect()}
           disabled={isSubmitting}
         >
-          Disconnect
+          断开连接
         </Button>
       }
     >
       <Section alignItems="start" gap={0.5}>
         <Text color="text-03">
           {markdown(
-            `**${disconnectTarget.providerLabel}** models will no longer be used for speech-to-text or text-to-speech, and it will no longer be your default. Session history will be preserved.`
+            `**${disconnectTarget.providerLabel}** 模型将不再用于语音转文本或文本转语音，也不会再作为默认服务商。会话历史会保留。`
           )}
         </Text>
         {!hasAlternatives && (
           <Text color="text-03">
-            Connect another provider to continue using voice features.
+            请连接另一个服务商以继续使用语音功能。
           </Text>
         )}
       </Section>

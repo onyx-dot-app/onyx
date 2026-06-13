@@ -78,7 +78,7 @@ const BaseInputBar = memo(
         onSubmit,
         isRunning,
         disabled = false,
-        placeholder = "Describe your task...",
+        placeholder = "描述你的任务...",
         noBottomRounding = false,
         pasteTilesEnabled = false,
         sandboxInitializing = false,
@@ -312,7 +312,7 @@ const BaseInputBar = memo(
                   scrollbarColor: "var(--border-02) transparent",
                 }}
                 role="textbox"
-                aria-label="Message input"
+                aria-label="消息输入框"
                 aria-multiline={true}
                 aria-disabled={disabled}
                 aria-placeholder={placeholder}
@@ -331,7 +331,7 @@ const BaseInputBar = memo(
                 {pasteExpandHintVisible ? (
                   <div className="flex items-center gap-1 select-none">
                     <Text font="secondary-body" color="text-02">
-                      Paste again to expand
+                      再次粘贴以展开
                     </Text>
                   </div>
                 ) : (
@@ -341,7 +341,7 @@ const BaseInputBar = memo(
                     <div className="flex items-center gap-1 select-none">
                       <Keycap>↑</Keycap>
                       <Text font="secondary-body" color="text-02">
-                        to edit queued messages
+                        编辑排队消息
                       </Text>
                     </div>
                   )
@@ -365,8 +365,8 @@ const BaseInputBar = memo(
                     className="border-[1.5px] border-border-02"
                     disabled={!interruptible || isInterrupting}
                     onClick={handleInterrupt}
-                    tooltip="Stop · esc"
-                    aria-label="Stop generating"
+                    tooltip="停止 · esc"
+                    aria-label="停止生成"
                   />
                 </div>
                 <IconButton
@@ -375,12 +375,12 @@ const BaseInputBar = memo(
                   disabled={!canSubmit}
                   tooltip={
                     sandboxInitializing
-                      ? "Initializing sandbox..."
+                      ? "正在初始化沙盒..."
                       : isRunning
-                        ? "Queue message"
-                        : "Send"
+                        ? "加入队列"
+                        : "发送"
                   }
-                  aria-label={isRunning ? "Queue message" : "Send"}
+                  aria-label={isRunning ? "加入队列" : "发送"}
                   iconClassName={
                     sandboxInitializing ? "animate-spin" : undefined
                   }

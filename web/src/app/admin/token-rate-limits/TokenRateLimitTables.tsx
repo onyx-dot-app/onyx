@@ -76,7 +76,7 @@ export const TokenRateLimitTable = ({
           </>
         )}
         {!hideHeading && <Spacer rem={2} />}
-        <Text as="p">No token rate limits set!</Text>
+        <Text as="p">尚未设置 Token 速率限制！</Text>
         {!hideHeading && <Spacer rem={2} />}
       </div>
     );
@@ -99,11 +99,11 @@ export const TokenRateLimitTable = ({
       >
         <TableHeader>
           <TableRow>
-            <TableHead>Enabled</TableHead>
-            {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
-            <TableHead>Time Window (Hours)</TableHead>
-            <TableHead>Token Budget (Thousands)</TableHead>
-            {isAdmin && <TableHead>Delete</TableHead>}
+            <TableHead>已启用</TableHead>
+            {shouldRenderGroupName() && <TableHead>用户组名称</TableHead>}
+            <TableHead>时间窗口（小时）</TableHead>
+            <TableHead>Token 预算（千）</TableHead>
+            {isAdmin && <TableHead>删除</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -135,7 +135,7 @@ export const TokenRateLimitTable = ({
                           }
                         />
                         <p className="ml-2">
-                          {tokenRateLimit.enabled ? "Enabled" : "Disabled"}
+                          {tokenRateLimit.enabled ? "已启用" : "已禁用"}
                         </p>
                       </div>
                     </div>
@@ -148,11 +148,10 @@ export const TokenRateLimitTable = ({
                 )}
                 <TableCell>
                   {tokenRateLimit.period_hours +
-                    " hour" +
-                    (tokenRateLimit.period_hours > 1 ? "s" : "")}
+                    " 小时"}
                 </TableCell>
                 <TableCell>
-                  {tokenRateLimit.token_budget + " thousand tokens"}
+                  {tokenRateLimit.token_budget + " 千 token"}
                 </TableCell>
                 {isAdmin && (
                   <TableCell>
@@ -197,7 +196,7 @@ export const GenericTokenRateLimitTable = ({
   }
 
   if (!isLoading && error) {
-    return <Text as="p">Failed to load token rate limits</Text>;
+    return <Text as="p">加载 Token 速率限制失败</Text>;
   }
 
   let processedData = data;

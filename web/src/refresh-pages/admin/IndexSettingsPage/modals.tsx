@@ -4,7 +4,7 @@ import { Formik, useFormikContext } from "formik";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
-import { SvgOnyxLogo } from "@opal/logos";
+import { GlomiLogoMark } from "@/refresh-components/GlomiLogo";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
 import { toast } from "@/hooks/useToast";
@@ -49,16 +49,16 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
         <Modal.Header
           icon={provider.icon}
           moreIcon1={SvgArrowExchange}
-          moreIcon2={SvgOnyxLogo}
+          moreIcon2={GlomiLogoMark}
           title={
             isEditing
-              ? `Manage ${provider.displayName}`
-              : `Set up ${provider.displayName}`
+              ? `管理 ${provider.displayName}`
+              : `设置 ${provider.displayName}`
           }
           description={
             isEditing
-              ? `Manage ${provider.displayName} provider and model details.`
-              : `Connect to ${provider.displayName} and set up your ${provider.displayName} embedding models.`
+              ? `管理 ${provider.displayName} 服务商和模型详情。`
+              : `连接 ${provider.displayName} 并设置 ${provider.displayName} 嵌入模型。`
           }
           onClose={onClose}
         />
@@ -67,14 +67,14 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={onClose}>
-            Cancel
+            取消
           </Button>
           <Button
             disabled={!isValid || !dirty || isSubmitting}
             onClick={submitForm}
             icon={isSubmitting ? SvgSimpleLoader : undefined}
           >
-            {isEditing ? "Update" : "Connect"}
+            {isEditing ? "更新" : "连接"}
           </Button>
         </Modal.Footer>
       </Modal.Content>
@@ -119,7 +119,7 @@ async function testAndSaveProviderCredentials({
     return true;
   } catch (error: unknown) {
     toast.error(
-      error instanceof Error ? error.message : "An unknown error occurred"
+      error instanceof Error ? error.message : "发生未知错误"
     );
     return false;
   }
@@ -166,7 +166,7 @@ function StandardProviderModal({
   const schema = Yup.object({
     apiKey: isEditing
       ? Yup.string().trim()
-      : Yup.string().trim().required("API key is required"),
+      : Yup.string().trim().required("请输入 API Key"),
   });
 
   const initialValues: StandardFormValues = { apiKey: maskedApiKey };
@@ -209,10 +209,10 @@ function GoogleProviderModal({
     apiKey: isEditing
       ? Yup.string()
       : Yup.string()
-          .required("Service account JSON is required")
+          .required("请输入服务账号 JSON")
           .test(
             "service-account-json",
-            "Must be a valid Google service account JSON file",
+            "必须是有效的 Google 服务账号 JSON 文件",
             (value) => {
               if (!value) return false;
               try {
@@ -281,13 +281,13 @@ function AzureProviderModal({
   const schema = Yup.object({
     apiUrl: Yup.string()
       .trim()
-      .required("Target URL is required")
-      .url("Must be a valid URL"),
+      .required("请输入目标 URL")
+      .url("必须是有效 URL"),
     apiKey: isEditing
       ? Yup.string().trim()
-      : Yup.string().trim().required("API key is required"),
-    apiVersion: Yup.string().trim().required("API version is required"),
-    deploymentName: Yup.string().trim().required("Deployment name is required"),
+      : Yup.string().trim().required("请输入 API Key"),
+    apiVersion: Yup.string().trim().required("请输入 API 版本"),
+    deploymentName: Yup.string().trim().required("请输入部署名称"),
     ...modelSpecSchemaShape,
   });
 
@@ -332,24 +332,24 @@ function AzureProviderModal({
     >
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
-          title="Target URL"
+          title="目标 URL"
           placeholder="https://your_resource_name.openai.azure.com/openai/v1/embeddings"
         />
         <ApiKeyField provider={provider} />
         <TextField
           name="apiVersion"
-          title="API Version"
-          placeholder="e.g., 2023-05-15"
-          subDescription="The Azure OpenAI API version your deployment targets."
+          title="API 版本"
+          placeholder="例如：2023-05-15"
+          subDescription="此部署所使用的 Azure OpenAI API 版本。"
         />
         <TextField
           name="deploymentName"
-          title="Deployment Name"
+          title="部署名称"
           placeholder="my-embedding-deployment"
-          subDescription="The deployment name you configured for this embedding model in Azure."
+          subDescription="你在 Azure 中为此嵌入模型配置的部署名称。"
         />
 
-        <ModelSpecFields modelNameSubDescription="A label for this model in Onyx. Azure routes requests by deployment name, so this only needs to be a unique identifier." />
+        <ModelSpecFields modelNameSubDescription="此模型在 Glomi AI 中的标签。Azure 会按部署名称路由请求，因此这里仅需填写唯一标识。" />
       </ModalShell>
     </Formik>
   );
@@ -380,11 +380,11 @@ function LiteLLMProviderModal({
   const schema = Yup.object({
     apiUrl: Yup.string()
       .trim()
-      .required("API base URL is required")
-      .url("Must be a valid URL"),
+      .required("请输入 API Base URL")
+      .url("必须是有效 URL"),
     apiKey: isEditing
       ? Yup.string().trim()
-      : Yup.string().trim().required("API key is required"),
+      : Yup.string().trim().required("请输入 API Key"),
     ...modelSpecSchemaShape,
   });
 
@@ -428,13 +428,13 @@ function LiteLLMProviderModal({
         <ApiUrlField
           title="API Base URL"
           placeholder="https://..."
-          subDescription={`Paste your ${provider.displayName}-compatible endpoint URL.`}
+          subDescription={`粘贴兼容 ${provider.displayName} 的端点 URL。`}
         />
 
         <ApiKeyField provider={provider} />
 
         <ModelSpecFields
-          modelNameSubDescription={`Onyx will connect to this model on your ${provider.displayName} proxy.`}
+          modelNameSubDescription={`Glomi AI 将连接到你 ${provider.displayName} 代理上的这个模型。`}
         />
       </ModalShell>
     </Formik>

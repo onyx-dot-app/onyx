@@ -27,7 +27,7 @@ const ForgotPasswordPage: React.FC = () => {
     <AuthFlowContainer>
       <div className="flex flex-col w-full justify-center">
         <div className="flex">
-          <Title className="mb-2 mx-auto font-bold">Forgot Password</Title>
+          <Title className="mb-2 mx-auto font-bold">忘记密码</Title>
         </div>
         {isWorking && <Spinner />}
         <Formik
@@ -41,14 +41,12 @@ const ForgotPasswordPage: React.FC = () => {
             setIsWorking(true);
             try {
               await forgotPassword(values.email);
-              toast.success(
-                "Password reset email sent. Please check your inbox."
-              );
+              toast.success("密码重置邮件已发送，请检查你的收件箱。");
             } catch (error) {
               const errorMessage =
                 error instanceof Error
                   ? error.message
-                  : "An error occurred. Please try again.";
+                  : "发生错误，请稍后重试。";
               toast.error(errorMessage);
             } finally {
               setIsWorking(false);
@@ -59,14 +57,14 @@ const ForgotPasswordPage: React.FC = () => {
             <Form className="w-full flex flex-col items-stretch mt-2">
               <TextFormField
                 name="email"
-                label="Email"
+                label="邮箱"
                 type="email"
                 placeholder="email@yourcompany.com"
               />
 
               <div className="flex">
                 <Button disabled={isSubmitting} type="submit" width="full">
-                  Reset Password
+                  重置密码
                 </Button>
               </div>
             </Form>
@@ -75,7 +73,7 @@ const ForgotPasswordPage: React.FC = () => {
         <Spacer rem={1} />
         <div className="flex">
           <div className="mx-auto">
-            <Text as="p">{markdown("[Back to Login](/auth/login)")}</Text>
+            <Text as="p">{markdown("[返回登录](/auth/login)")}</Text>
           </div>
         </div>
       </div>

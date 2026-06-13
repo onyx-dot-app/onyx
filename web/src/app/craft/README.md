@@ -2,7 +2,7 @@
     <a href="https://www.onyx.app/?utm_source=onyx_repo&utm_medium=github&utm_campaign=readme"> <img width="50%" src="https://github.com/onyx-dot-app/onyx/blob/logo/OnyxLogoCropped.jpg?raw=true" /></a>
 </h2>
 
-<h1 align="center">Onyx Craft</h1>
+<h1 align="center">Glomi 创作</h1>
 
 <p align="center">
   <strong>Build apps, documents, and presentations from your company knowledge</strong>
@@ -29,7 +29,7 @@
 
 ## Overview
 
-Onyx Craft is an AI coding agent that creates web applications, documents, presentations, and more using your company's indexed knowledge. Users describe what they want in natural language, and the agent builds artifacts in an isolated sandbox environment with access to documents from connected sources like Linear, Slack, Google Drive, Confluence, and more.
+Glomi 创作 is an AI coding agent that creates web applications, documents, presentations, and more using your company's indexed knowledge. Users describe what they want in natural language, and the agent builds artifacts in an isolated sandbox environment with access to documents from connected sources like Linear, Slack, Google Drive, Confluence, and more.
 
 For detailed documentation, visit [our docs](https://docs.onyx.app/overview/core_features/craft).
 
@@ -45,11 +45,11 @@ For detailed documentation, visit [our docs](https://docs.onyx.app/overview/core
 
 ### Requirements
 
-- Onyx deployment with an LLM provider configured (Anthropic, OpenAI, etc.)
+- Glomi AI deployment with an LLM provider configured (Anthropic, OpenAI, etc.)
 
 ### New Installations
 
-You can install Onyx Craft using our [quickstart script](https://docs.onyx.app/deployment/getting_started/quickstart):
+You can install Glomi 创作 using our [quickstart script](https://docs.onyx.app/deployment/getting_started/quickstart):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/docker_compose/install.sh > install.sh \

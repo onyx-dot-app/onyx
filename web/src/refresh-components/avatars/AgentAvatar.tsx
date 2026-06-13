@@ -2,11 +2,11 @@
 
 import { MinimalAgent } from "@/lib/agents/types";
 import { buildAgentAvatarUrl } from "@/lib/agents/utils";
-import { SvgOnyxLogo } from "@opal/logos";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { DEFAULT_AVATAR_SIZE_PX, DEFAULT_AGENT_ID } from "@/lib/constants";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 import Image from "next/image";
+import { APP_NAME } from "@/lib/brand";
 
 export interface AgentAvatarProps {
   agent: MinimalAgent;
@@ -35,7 +35,13 @@ export default function AgentAvatar({
         />
       </div>
     ) : (
-      <SvgOnyxLogo size={size} className="shrink-0" />
+      <div
+        className="shrink-0 rounded-full bg-theme-primary-05 text-text-inverted-05 flex items-center justify-center font-bold"
+        style={{ height: size, width: size, fontSize: Math.max(12, size * 0.5) }}
+        aria-label={APP_NAME}
+      >
+        G
+      </div>
     );
   }
 

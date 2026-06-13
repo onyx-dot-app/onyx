@@ -19,6 +19,7 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
+import { APP_NAME } from "@/lib/brand";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
@@ -72,9 +73,9 @@ export default function NRFChrome() {
 
   const customFooterContent =
     settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
-    `[Onyx ${
+    `[${APP_NAME} ${
       settings?.webVersion || "dev"
-    }](https://www.onyx.app/) - Open Source AI Platform`;
+    }](https://glomi.ai/) - 你的 AI 工作平台`;
 
   const showModeToggle =
     businessTier &&
@@ -104,7 +105,7 @@ export default function NRFChrome() {
                     effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                   }
                 >
-                  {effectiveMode === "search" ? "Search" : "Chat"}
+                  {effectiveMode === "search" ? "搜索" : "聊天"}
                 </OpenButton>
               </Popover.Trigger>
               <Popover.Content align="start" width="lg">
@@ -112,24 +113,24 @@ export default function NRFChrome() {
                   <LineItem
                     icon={SvgSearchMenu}
                     selected={effectiveMode === "search"}
-                    description="Quick search for documents"
+                    description="快速搜索文档"
                     onClick={noProp(() => {
                       setAppMode("search");
                       setModePopoverOpen(false);
                     })}
                   >
-                    Search
+                    搜索
                   </LineItem>
                   <LineItem
                     icon={SvgBubbleText}
                     selected={effectiveMode === "chat"}
-                    description="Conversation and research"
+                    description="对话和研究"
                     onClick={noProp(() => {
                       setAppMode("chat");
                       setModePopoverOpen(false);
                     })}
                   >
-                    Chat
+                    聊天
                   </LineItem>
                 </Popover.Menu>
               </Popover.Content>

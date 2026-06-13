@@ -74,20 +74,20 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
   propertyValue: Yup.number()
-    .typeError("Property value must be a valid number")
-    .integer("Property value must be an integer")
-    .min(1, "Property value must be greater than or equal to 1 minute")
-    .required("Property value is required"),
+    .typeError("属性值必须是有效数字")
+    .integer("属性值必须是整数")
+    .min(1, "属性值必须大于或等于 1 分钟")
+    .required("属性值为必填项"),
 });
 
 const PruneFrequencySchema = Yup.object().shape({
   propertyValue: Yup.number()
-    .typeError("Property value must be a valid number")
+    .typeError("属性值必须是有效数字")
     .min(
       0.083,
-      "Property value must be greater than or equal to 0.083 hours (5 minutes)"
+      "属性值必须大于或等于 0.083 小时（5 分钟）"
     )
-    .required("Property value is required"),
+    .required("属性值为必填项"),
 });
 
 const ITEMS_PER_PAGE = 8;
@@ -176,7 +176,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
     deleteCCPair(ccPair.connector.id, ccPair.credential.id).catch((error) => {
       toast.error(
-        "Failed to schedule deletion of connector - " + error.message
+        "安排删除连接器失败 - " + error.message
       );
     });
     finishConnectorDeletion();
@@ -222,16 +222,16 @@ function Main({ ccPairId }: { ccPairId: number }) {
       if (result.success) {
         toast.success(
           `${
-            fromBeginning ? "Complete re-indexing" : "Indexing update"
-          } started successfully`
+            fromBeginning ? "完整重新索引" : "索引更新"
+          }已成功启动`
         );
       } else {
-        toast.error(result.message || "Failed to start indexing");
+        toast.error(result.message || "启动索引失败");
       }
     } catch (error) {
       console.error("Failed to trigger indexing:", error);
       toast.error(
-        "An unexpected error occurred while trying to start indexing"
+        "尝试启动索引时发生意外错误"
       );
     } finally {
       setShowIsResolvingKickoffLoader(false);
@@ -271,9 +271,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
         throw new Error(await response.text());
       }
       mutate(buildCCPairInfoUrl(ccPairId));
-      toast.success("Connector name updated successfully");
+      toast.success("连接器名称已更新");
     } catch (error) {
-      toast.error("Failed to update connector name");
+      toast.error("更新连接器名称失败");
     }
   };
 
@@ -292,7 +292,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     const parsedRefreshFreqMinutes = parseInt(propertyValue, 10);
 
     if (isNaN(parsedRefreshFreqMinutes)) {
-      toast.error("Invalid refresh frequency: must be an integer");
+      toast.error("刷新频率无效：必须是整数");
       return;
     }
 
@@ -309,9 +309,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
         throw new Error(await response.text());
       }
       mutate(buildCCPairInfoUrl(ccPairId));
-      toast.success("Connector refresh frequency updated successfully");
+      toast.success("连接器刷新频率已更新");
     } catch (error) {
-      toast.error("Failed to update connector refresh frequency");
+      toast.error("更新连接器刷新频率失败");
     }
   };
 
@@ -322,7 +322,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     const parsedFreqHours = parseFloat(propertyValue);
 
     if (isNaN(parsedFreqHours)) {
-      toast.error("Invalid pruning frequency: must be a valid number");
+      toast.error("清理频率无效：必须是有效数字");
       return;
     }
 
@@ -339,9 +339,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
         throw new Error(await response.text());
       }
       mutate(buildCCPairInfoUrl(ccPairId));
-      toast.success("Connector pruning frequency updated successfully");
+      toast.success("连接器清理频率已更新");
     } catch (error) {
-      toast.error("Failed to update connector pruning frequency");
+      toast.error("更新连接器清理频率失败");
     }
   };
 
@@ -352,11 +352,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
   if (!ccPair || (!hasLoadedOnce && ccPairError)) {
     return (
       <ErrorCallout
-        errorTitle={`Failed to fetch info on Connector with ID ${ccPairId}`}
+        errorTitle={`获取 ID 为 ${ccPairId} 的连接器信息失败`}
         errorMsg={
           ccPairError?.info?.detail ||
           ccPairError?.toString() ||
-          "Unknown error"
+          "未知错误"
         }
       />
     );
@@ -379,9 +379,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {showDeleteConnectorConfirmModal && (
         <ConfirmEntityModal
           danger
-          entityType="connector"
+          entityType="连接器"
           entityName={ccPair.name}
-          additionalDetails="Deleting this connector schedules a deletion job that removes its indexed documents and deletes it for every user."
+          additionalDetails="删除此连接器会安排一个删除任务，移除其已索引文档，并为所有用户删除该连接器。"
           onClose={() => {
             setShowDeleteConnectorConfirmModal(false);
           }}
@@ -391,8 +391,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {editingRefreshFrequency && (
         <EditPropertyModal
-          propertyTitle="Refresh Frequency"
-          propertyDetails="How often the connector should refresh (in minutes)"
+          propertyTitle="刷新频率"
+          propertyDetails="连接器刷新间隔（分钟）"
           propertyName="refresh_frequency"
           propertyValue={String(Math.round((refreshFreq || 0) / 60))}
           validationSchema={RefreshFrequencySchema}
@@ -403,8 +403,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {editingPruningFrequency && (
         <EditPropertyModal
-          propertyTitle="Pruning Frequency"
-          propertyDetails="How often the connector should be pruned (in hours)"
+          propertyTitle="清理频率"
+          propertyDetails="连接器清理间隔（小时）"
           propertyName="pruning_frequency"
           propertyValue={String(
             ((pruneFreq || 0) / 3600).toFixed(3).replace(/\.?0+$/, "")
@@ -433,12 +433,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
             try {
               const result = await resolveAllErrorsForCCPair(ccPairId);
               if (result.total_error_ids === 0) {
-                toast.success("No unresolved errors to retry.");
+                toast.success("没有未解决的错误需要重试。");
               } else {
                 toast.success(
-                  `Targeted reindex submitted for ${result.total_error_ids} ${
-                    result.total_error_ids === 1 ? "document" : "documents"
-                  }. Errors will clear from the list as documents finish reindexing.`
+                  `已为 ${result.total_error_ids} 个文档提交定向重新索引。文档重新索引完成后，错误会从列表中清除。`
                 );
               }
               mutate(
@@ -448,7 +446,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               );
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
-              toast.error(`Targeted reindex failed: ${message}`);
+              toast.error(`定向重新索引失败：${message}`);
             } finally {
               setShowIsResolvingKickoffLoader(false);
             }
@@ -486,7 +484,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button prominence="secondary" icon={SvgSettings}>
-                  Manage
+                  管理
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -508,17 +506,17 @@ function Main({ ccPairId }: { ccPairId: number }) {
                   className="flex items-center gap-x-2 cursor-pointer px-3 py-2"
                   tooltip={
                     ccPair.indexing
-                      ? "Cannot re-index while indexing is already in progress"
+                      ? "索引正在进行时不能重新索引"
                       : ccPair.status === ConnectorCredentialPairStatus.PAUSED
-                        ? "Resume the connector before re-indexing"
+                        ? "请先恢复连接器，再重新索引"
                         : ccPair.status ===
                             ConnectorCredentialPairStatus.INVALID
-                          ? "Fix the connector configuration before re-indexing"
+                          ? "请先修复连接器配置，再重新索引"
                           : undefined
                   }
                 >
                   <RefreshCwIcon className="h-4 w-4" />
-                  <span>Re-Index</span>
+                  <span>重新索引</span>
                 </DropdownMenuItemWithTooltip>
                 {!isDeleting && (
                   <DropdownMenuItemWithTooltip
@@ -532,7 +530,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                     disabled={isStatusUpdating}
                     className="flex items-center gap-x-2 cursor-pointer px-3 py-2"
                     tooltip={
-                      isStatusUpdating ? "Status update in progress" : undefined
+                      isStatusUpdating ? "状态正在更新" : undefined
                     }
                   >
                     {statusIsNotCurrentlyActive(ccPair.status) ? (
@@ -542,8 +540,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
                     )}
                     <span>
                       {statusIsNotCurrentlyActive(ccPair.status)
-                        ? "Resume"
-                        : "Pause"}
+                        ? "恢复"
+                        : "暂停"}
                     </span>
                   </DropdownMenuItemWithTooltip>
                 )}
@@ -556,12 +554,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
                     className="flex items-center gap-x-2 cursor-pointer px-3 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                     tooltip={
                       !statusIsNotCurrentlyActive(ccPair.status)
-                        ? "Pause the connector before deleting"
+                        ? "删除前请先暂停连接器"
                         : undefined
                     }
                   >
                     <Trash2Icon className="h-4 w-4" />
-                    <span>Delete</span>
+                    <span>删除</span>
                   </DropdownMenuItemWithTooltip>
                 )}
               </DropdownMenuContent>
@@ -582,9 +580,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
         <div className="mt-6">
-          <Callout type="warning" title="Invalid Connector State">
-            This connector is in an invalid state. Please update your
-            credentials or create a new connector before re-indexing.
+          <Callout type="warning" title="连接器状态无效">
+            此连接器处于无效状态。请先更新凭据或创建新的连接器，再重新索引。
           </Callout>
         </div>
       )}
@@ -593,23 +590,23 @@ function Main({ ccPairId }: { ccPairId: number }) {
         <Alert className="border-alert bg-yellow-50 dark:bg-yellow-800 my-2 mt-6">
           <AlertCircle className="h-4 w-4 text-yellow-700 dark:text-yellow-500" />
           <AlertTitle className="text-yellow-950 dark:text-yellow-200 font-semibold">
-            Some documents failed to index
+            部分文档索引失败
           </AlertTitle>
           <AlertDescription className="text-yellow-900 dark:text-yellow-300">
             {isResolvingErrors ? (
               <span>
                 <span className="text-sm text-yellow-700 dark:text-yellow-400 da animate-pulse">
-                  Resolving failures
+                  正在解决失败项
                 </span>
               </span>
             ) : (
               <>
-                We ran into some issues while processing some documents.{" "}
+                处理部分文档时遇到了一些问题。{" "}
                 <b
                   className="text-link cursor-pointer dark:text-blue-300"
                   onClick={() => setShowIndexAttemptErrors(true)}
                 >
-                  View details.
+                  查看详情。
                 </b>
               </>
             )}
@@ -618,13 +615,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
       )}
 
       <Title className="mb-2 mt-6" size="md">
-        Indexing
+        索引
       </Title>
 
       <Card className="px-8 py-12">
         <div className="flex">
           <div className="w-[200px]">
-            <div className="text-sm font-medium mb-1">Status</div>
+            <div className="text-sm font-medium mb-1">状态</div>
             <CCPairStatus
               ccPairStatus={ccPair.status}
               inRepeatedErrorState={ccPair.in_repeated_error_state}
@@ -633,7 +630,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           </div>
 
           <div className="w-[200px]">
-            <div className="text-sm font-medium mb-1">Documents Indexed</div>
+            <div className="text-sm font-medium mb-1">已索引文档</div>
             <div className="text-sm text-text-default flex items-center gap-x-1">
               {ccPair.num_docs_indexed.toLocaleString()}
               {ccPair.status ===
@@ -641,14 +638,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 ccPair.overall_indexing_speed !== null &&
                 ccPair.num_docs_indexed > 0 && (
                   <div className="ml-0.5 text-xs font-medium">
-                    ({ccPair.overall_indexing_speed.toFixed(1)} docs / min)
+                    ({ccPair.overall_indexing_speed.toFixed(1)} 文档 / 分钟)
                   </div>
                 )}
             </div>
           </div>
 
           <div className="w-[200px]">
-            <div className="text-sm font-medium mb-1">Last Indexed</div>
+            <div className="text-sm font-medium mb-1">最近索引</div>
             <div className="text-sm text-text-default">
               {timeAgo(ccPair?.last_indexed) ?? "-"}
             </div>
@@ -659,7 +656,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               <div className="w-[200px]">
                 {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
                 <Text as="p" className="text-sm font-medium mb-1">
-                  Permission Syncing
+                  权限同步
                 </Text>
                 {ccPair.permission_syncing ||
                 ccPair.last_permission_sync_attempt_status ? (
@@ -675,7 +672,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               <div className="w-[200px]">
                 {/* TODO: Remove className and switch to text03 once Text is fully integrated across this page */}
                 <Text as="p" className="text-sm font-medium mb-1">
-                  Last Synced
+                  最近同步
                 </Text>
                 <Text as="p" className="text-sm text-text-default">
                   {ccPair.last_permission_sync_attempt_finished
@@ -692,7 +689,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         ccPair.is_editable_for_current_user && (
           <>
             <Title size="md" className="mt-10 mb-2">
-              Credential
+              凭据
             </Title>
 
             <div className="mt-2">
@@ -709,7 +706,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         Object.keys(ccPair.connector.connector_specific_config).length > 0 && (
           <>
             <Title size="md" className="mt-10 mb-2">
-              Connector Configuration
+              连接器配置
             </Title>
 
             <Card className="px-8 py-4">
@@ -738,7 +735,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <AdvancedOptionsToggle
             showAdvancedOptions={showAdvancedOptions}
             setShowAdvancedOptions={setShowAdvancedOptions}
-            title="Advanced"
+            title="高级"
           />
         </div>
         {showAdvancedOptions && (
@@ -746,7 +743,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             {(pruneFreq || indexingStart || refreshFreq) && (
               <>
                 <Title size="md" className="mt-3 mb-2">
-                  Advanced Configuration
+                  高级配置
                 </Title>
                 <Card className="px-8 py-4">
                   <div>
@@ -776,7 +773,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               ) : (
                 <>
                   <Title size="md" className="mt-6 mb-2">
-                    Indexing Attempts
+                    索引尝试
                   </Title>
                   <IndexAttemptsTable
                     ccPair={ccPair}

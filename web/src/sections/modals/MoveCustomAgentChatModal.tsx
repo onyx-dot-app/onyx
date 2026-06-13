@@ -20,17 +20,16 @@ export default function MoveCustomAgentChatModal({
   return (
     <ConfirmationModalLayout
       icon={SvgAlertCircle}
-      title="Move Custom Agent Chat"
+      title="移动自定义智能体聊天"
       onClose={onCancel}
       submit={
-        <Button onClick={() => onConfirm(doNotShowAgain)}>Confirm Move</Button>
+        <Button onClick={() => onConfirm(doNotShowAgain)}>确认移动</Button>
       }
     >
       <div className="flex flex-col gap-4">
         <Text as="p" text03>
-          This chat uses a <b>custom agent</b> and moving it to a <b>project</b>{" "}
-          will not override the agent&apos;s prompt or knowledge configurations.
-          This should only be used for organization purposes.
+          此聊天使用了<b>自定义智能体</b>。将它移动到<b>项目</b>不会覆盖该智能体的提示词或知识配置，
+          仅用于整理归类。
         </Text>
         <div className="flex items-center gap-1">
           <Checkbox
@@ -42,7 +41,7 @@ export default function MoveCustomAgentChatModal({
             htmlFor="move-custom-agent-do-not-show"
             className="text-text-03 text-sm"
           >
-            Do not show this again
+            不再显示
           </label>
         </div>
       </div>

@@ -93,7 +93,7 @@ function DisconnectConfirmModal({
           <div className="flex flex-col gap-2">
             <Text font="main-ui-body" color="text-03">
               {markdown(
-                `Onyx will stop calling this endpoint for hook ***${hook.name}***. In-flight requests will continue to run. The external endpoint may still retain data previously sent to it. You can reconnect this hook later if needed.`
+                `Glomi AI 将停止为 hook ***${hook.name}*** 调用此端点。正在执行的请求会继续完成，外部端点可能仍会保留此前发送的数据。你之后仍可重新连接此 hook。`
               )}
             </Text>
             <Text font="main-ui-body" color="text-03">
@@ -579,7 +579,7 @@ export default function HooksPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Extend Onyx pipelines by registering external API endpoints as callbacks at predefined hook points."
+          description="Extend Glomi AI pipelines by registering external API endpoints as callbacks at predefined hook points."
           divider
         />
         <SettingsLayouts.Body>

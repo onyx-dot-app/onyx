@@ -97,15 +97,15 @@ export default function CreateCustomAppModal({
   // Headers and org credentials are optional; name + at least one upstream
   // pattern are required. A bundle is required only on create (optional on edit).
   const disabledCreateReason = (() => {
-    if (isSaving) return "Save is already in progress.";
+    if (isSaving) return "正在保存。";
     if (name.trim().length === 0) {
-      return "Enter a name before creating this custom app.";
+      return "创建自定义应用前请输入名称。";
     }
     if (upstreamPatterns.length === 0) {
-      return "Add at least one upstream URL pattern. Type a pattern and press Enter.";
+      return "请至少添加一个上游 URL pattern。输入 pattern 后按 Enter。";
     }
     if (!isEdit && file === null) {
-      return "Upload a bundle .zip file before creating this custom app.";
+      return "创建自定义应用前请上传 bundle .zip 文件。";
     }
     return null;
   })();
@@ -113,11 +113,11 @@ export default function CreateCustomAppModal({
     <Button onClick={save} disabled={disabledCreateReason !== null}>
       {isSaving
         ? isEdit
-          ? "Saving…"
-          : "Creating…"
+          ? "正在保存..."
+          : "正在创建..."
         : isEdit
-          ? "Save"
-          : "Create"}
+          ? "保存"
+          : "创建"}
     </Button>
   );
 
@@ -164,7 +164,7 @@ export default function CreateCustomAppModal({
       const detail = e instanceof Error ? e.message : String(e);
       setError(
         bundleSaved
-          ? `The new bundle was saved, but updating the other fields failed — retry to finish: ${detail}`
+          ? `新的 bundle 已保存，但更新其他字段失败。请重试以完成：${detail}`
           : detail
       );
     } finally {
@@ -176,38 +176,38 @@ export default function CreateCustomAppModal({
     <Modal open={open} onOpenChange={(o) => !o && onClose()}>
       <Modal.Content width="lg" height="lg">
         <Modal.Header
-          title={existingApp ? `Edit ${existingApp.name}` : "Create custom app"}
+          title={existingApp ? `编辑 ${existingApp.name}` : "创建自定义应用"}
           description={
             isEdit
-              ? "Update this custom app's configuration, and optionally upload a new bundle to replace its files."
-              : "Define a custom external app: upload its skill bundle and configure how the egress proxy authenticates outbound requests."
+              ? "更新此自定义应用的配置，也可以上传新的 bundle 替换其文件。"
+              : "定义自定义外部应用：上传技能 bundle，并配置出口代理如何认证外发请求。"
           }
         />
         <Modal.Body>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">Name</Text>
+              <Text font="main-ui-action">名称</Text>
               <InputTypeIn
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="My Custom App"
+                placeholder="我的自定义应用"
               />
             </div>
 
             <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">Description</Text>
+              <Text font="main-ui-action">描述</Text>
               <InputTypeIn
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional — defaults to the bundle's SKILL.md description"
+                placeholder="可选，默认使用 bundle 中 SKILL.md 的描述"
               />
             </div>
 
             <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">Upstream URL patterns</Text>
+              <Text font="main-ui-action">上游 URL patterns</Text>
               <Text font="secondary-body" color="text-03">
                 {
-                  "Outbound URLs the proxy may inject credentials into. Use * to match any characters (e.g. https://api.example.com/* covers every path on that host). The host must be literal — no wildcards before the first slash. Type a pattern and press Enter."
+                  "代理可以注入凭据的外发 URL。使用 * 匹配任意字符（例如 https://api.example.com/* 覆盖该主机上的所有路径）。主机必须是字面值，第一个斜杠前不能使用通配符。输入 pattern 后按 Enter。"
                 }
               </Text>
               <ListFieldInput
@@ -218,9 +218,9 @@ export default function CreateCustomAppModal({
             </div>
 
             <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">Header credential pattern</Text>
+              <Text font="main-ui-action">Header 凭据 pattern</Text>
               <Text font="secondary-body" color="text-03">
-                {`Optional — headers injected into outbound requests. Use {placeholder} for values the user (or org below) supplies, e.g. "Bearer {api_key}". Leave empty to allowlist the upstream patterns without injecting credentials.`}
+                {`可选，注入外发请求的 Header。使用 {placeholder} 表示用户（或下方组织）提供的值，例如 "Bearer {api_key}"。留空则只允许上游 pattern，不注入凭据。`}
               </Text>
               <InputKeyValue
                 keyTitle="Header"
@@ -230,36 +230,35 @@ export default function CreateCustomAppModal({
                 items={headers}
                 onChange={setHeaders}
                 mode="line"
-                addButtonLabel="Add header"
+                addButtonLabel="添加 Header"
               />
             </div>
 
             <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">Organization credentials</Text>
+              <Text font="main-ui-action">组织凭据</Text>
               <Text font="secondary-body" color="text-03">
-                Optional — values your org pre-fills for every user. Leave empty
-                for apps where each user supplies their own credentials.
+                可选，你的组织为每位用户预填的值。若应用由每位用户自行提供凭据，请留空。
               </Text>
               <InputKeyValue
-                keyTitle="Credential key"
+                keyTitle="凭据 Key"
                 valueTitle="Value"
                 keyPlaceholder="api_key"
                 valuePlaceholder="sk-…"
                 items={orgCredentials}
                 onChange={setOrgCredentials}
                 mode="line"
-                addButtonLabel="Add credential"
+                addButtonLabel="添加凭据"
               />
             </div>
 
             <div className="flex flex-col gap-1">
               <Text font="main-ui-action">
-                {isEdit ? "Replace bundle (.zip)" : "Bundle (.zip)"}
+                {isEdit ? "替换 bundle（.zip）" : "Bundle（.zip）"}
               </Text>
               <Text font="secondary-body" color="text-03">
                 {isEdit
-                  ? "Optional — upload a new zip to replace the current bundle. Leave empty to keep it. The slug stays the same."
-                  : "A zip containing SKILL.md plus any other files. The filename becomes the app slug."}
+                  ? "可选，上传新的 zip 替换当前 bundle。留空则保留当前 bundle，slug 保持不变。"
+                  : "包含 SKILL.md 及其他文件的 zip。文件名会成为应用 slug。"}
               </Text>
               <div className="flex items-center gap-2">
                 <input
@@ -275,17 +274,17 @@ export default function CreateCustomAppModal({
                   onClick={() => fileInputRef.current?.click()}
                 >
                   {file
-                    ? "Change file"
+                    ? "更换文件"
                     : isEdit
-                      ? "Choose new zip"
-                      : "Choose zip"}
+                      ? "选择新的 zip"
+                      : "选择 zip"}
                 </Button>
                 <Text font="main-ui-body" color="text-03">
                   {file
                     ? file.name
                     : isEdit
-                      ? "Keeping current bundle"
-                      : "No file selected"}
+                      ? "保留当前 bundle"
+                      : "未选择文件"}
                 </Text>
               </div>
             </div>
@@ -293,7 +292,7 @@ export default function CreateCustomAppModal({
             {error && (
               <MessageCard
                 variant="error"
-                title="Couldn't save"
+                title="保存失败"
                 description={error}
               />
             )}
@@ -306,7 +305,7 @@ export default function CreateCustomAppModal({
               onClick={onClose}
               disabled={isSaving}
             >
-              Cancel
+              取消
             </Button>
             {disabledCreateReason ? (
               <Tooltip tooltip={disabledCreateReason}>

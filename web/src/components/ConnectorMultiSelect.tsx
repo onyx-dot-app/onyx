@@ -28,7 +28,7 @@ export const ConnectorMultiSelect = ({
   selectedIds,
   onChange,
   disabled = false,
-  placeholder = "Search connectors...",
+  placeholder = "搜索连接器...",
   showError = false,
 }: ConnectorMultiSelectProps) => {
   const [open, setOpen] = useState(false);
@@ -103,7 +103,7 @@ export const ConnectorMultiSelect = ({
   };
 
   const effectivePlaceholder = allConnectorsSelected
-    ? "All connectors selected"
+    ? "已选择全部连接器"
     : placeholder;
 
   const isInputDisabled = disabled;
@@ -117,8 +117,7 @@ export const ConnectorMultiSelect = ({
       )}
 
       <Text as="p" mainUiMuted text03>
-        All documents indexed by the selected connectors will be part of this
-        document set.
+        所选连接器已索引的全部文档都会纳入此文档集。
       </Text>
       <div className="relative">
         <InputTypeIn
@@ -147,18 +146,17 @@ export const ConnectorMultiSelect = ({
             {allConnectorsSelected ? (
               <div className="py-4 px-3">
                 <Text as="p" text03 className="text-center text-xs">
-                  All available connectors have been selected. Remove connectors
-                  below to add different ones.
+                  已选择全部可用连接器。移除下方连接器后可添加其他连接器。
                 </Text>
               </div>
             ) : filteredUnselectedConnectors.length === 0 ? (
               <div className="py-4 px-3">
                 <Text as="p" text03 className="text-center text-xs">
                   {searchQuery
-                    ? "No matching connectors found"
+                    ? "未找到匹配的连接器"
                     : connectors.length === 0
-                      ? "No private connectors available. Create a private connector first."
-                      : "No more connectors available"}
+                      ? "暂无可用的私有连接器，请先创建一个私有连接器。"
+                      : "没有更多可用连接器"}
                 </Text>
               </div>
             ) : (
@@ -209,8 +207,8 @@ export const ConnectorMultiSelect = ({
                   prominence="tertiary"
                   size="sm"
                   type="button"
-                  aria-label="Remove connector"
-                  tooltip="Remove connector"
+                  aria-label="移除连接器"
+                  tooltip="移除连接器"
                   onClick={() => removeConnector(connector.cc_pair_id)}
                   icon={SvgX}
                 />
@@ -220,7 +218,7 @@ export const ConnectorMultiSelect = ({
         </div>
       ) : (
         <div className="mt-3 p-3 border border-dashed border-border-02 rounded-12 bg-background-neutral-01 text-text-03 text-xs">
-          No connectors selected. Search and select connectors above.
+          尚未选择连接器。请在上方搜索并选择连接器。
         </div>
       )}
 

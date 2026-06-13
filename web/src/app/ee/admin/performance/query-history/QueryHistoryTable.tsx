@@ -76,7 +76,7 @@ function QueryHistoryTableRow({
         <FeedbackBadge feedback={chatSessionMinimal.feedback_type} />
       </TableCell>
       <TableCell>{chatSessionMinimal.user_email || "-"}</TableCell>
-      <TableCell>{chatSessionMinimal.assistant_name || "Unknown"}</TableCell>
+      <TableCell>{chatSessionMinimal.assistant_name || "未知"}</TableCell>
       <TableCell>
         {timestampToReadableDate(chatSessionMinimal.time_created)}
       </TableCell>
@@ -103,7 +103,7 @@ function SelectFeedbackType({
   return (
     <Section alignItems="start" gap={0.25}>
       <Text as="p" className="font-medium">
-        Feedback Type
+        反馈类型
       </Text>
       <InputSelect
         value={value}
@@ -113,16 +113,16 @@ function SelectFeedbackType({
 
         <InputSelect.Content>
           <InputSelect.Item value="all" icon={SvgMinusCircle}>
-            Any
+            任意
           </InputSelect.Item>
           <InputSelect.Item value="like" icon={SvgThumbsUp}>
-            Like
+            喜欢
           </InputSelect.Item>
           <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
-            Dislike
+            不喜欢
           </InputSelect.Item>
           <InputSelect.Item value="mixed" icon={SvgMinus}>
-            Mixed
+            混合
           </InputSelect.Item>
         </InputSelect.Content>
       </InputSelect>
@@ -131,11 +131,11 @@ function SelectFeedbackType({
 }
 
 function ExportBadge({ status }: { status: TaskStatus }) {
-  if (status === "SUCCESS") return <Badge variant="success">Success</Badge>;
+  if (status === "SUCCESS") return <Badge variant="success">成功</Badge>;
   else if (status === "FAILURE")
-    return <Badge variant="destructive">Failure</Badge>;
+    return <Badge variant="destructive">失败</Badge>;
   else if (status === "PENDING" || status === "STARTED")
-    return <Badge variant="in_progress">Pending</Badge>;
+    return <Badge variant="in_progress">等待中</Badge>;
   else return <></>;
 }
 
@@ -179,18 +179,18 @@ function PreviousQueryHistoryExportsModal({
       <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgFileText}
-          title="Previous Query History Exports"
+          title="历史查询记录导出"
           onClose={() => setShowModal(false)}
         />
         <Modal.Body>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Generated At</TableHead>
-                <TableHead>Start Range</TableHead>
-                <TableHead>End Range</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Download</TableHead>
+                <TableHead>生成时间</TableHead>
+                <TableHead>开始范围</TableHead>
+                <TableHead>结束范围</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>下载</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -213,7 +213,7 @@ function PreviousQueryHistoryExportsModal({
                       disabled={task.status !== "SUCCESS"}
                       tooltip={
                         task.status !== "SUCCESS"
-                          ? "Export is not yet ready"
+                          ? "导出尚未准备好"
                           : undefined
                       }
                       href={
@@ -290,7 +290,7 @@ export function QueryHistoryTable() {
   if (error) {
     return (
       <ErrorCallout
-        errorTitle="Error fetching query history"
+        errorTitle="获取查询历史失败"
         errorMsg={error?.message}
       />
     );
@@ -333,12 +333,12 @@ export function QueryHistoryTable() {
           <Table className="mt-5">
             <TableHeader>
               <TableRow>
-                <TableHead>First User Message</TableHead>
-                <TableHead>First AI Response</TableHead>
-                <TableHead>Feedback</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Persona</TableHead>
-                <TableHead>Date</TableHead>
+                <TableHead>首条用户消息</TableHead>
+                <TableHead>首条 AI 回复</TableHead>
+                <TableHead>反馈</TableHead>
+                <TableHead>用户</TableHead>
+                <TableHead>智能体</TableHead>
+                <TableHead>日期</TableHead>
               </TableRow>
             </TableHeader>
             {isLoading ? (

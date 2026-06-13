@@ -45,7 +45,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
               <IconButton
                 tertiary
                 icon={SvgFilterPlus}
-                tooltip="Add Filter"
+                tooltip="添加筛选"
                 toolTipPosition="left"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -69,15 +69,15 @@ function ScimCard() {
     <Card gap={0.5} padding={0.75}>
       <ContentAction
         icon={SvgUserSync}
-        title="SCIM Sync"
-        description="Users are synced from your identity provider."
+        title="SCIM 同步"
+        description="用户会从你的身份提供商同步。"
         sizePreset="main-ui"
         variant="section"
         padding="fit"
         rightChildren={
           <Link href={ADMIN_ROUTES.SCIM.path}>
             <Button prominence="tertiary" rightIcon={SvgArrowUpRight} size="sm">
-              Manage
+              管理
             </Button>
           </Link>
         }
@@ -121,18 +121,18 @@ export default function UsersSummary({
       <Section flexDirection="row" gap={0}>
         <StatCell
           value={activeUsers}
-          label="active users"
+          label="活跃用户"
           onFilter={onFilterActive}
         />
         <StatCell
           value={pendingInvites}
-          label="pending invites"
+          label="待处理邀请"
           onFilter={onFilterInvites}
         />
         {showRequests && (
           <StatCell
             value={requests}
-            label="requests to join"
+            label="加入请求"
             onFilter={onFilterRequests}
           />
         )}

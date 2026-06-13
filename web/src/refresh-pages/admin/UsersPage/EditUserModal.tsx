@@ -155,11 +155,11 @@ export default function EditUserModal({
       }
 
       onMutate();
-      toast.success("User updated");
+      toast.success("用户已更新");
       onClose();
     } catch (err) {
       onMutate(); // refresh to show partially-applied state
-      toast.error(err instanceof Error ? err.message : "An error occurred");
+      toast.error(err instanceof Error ? err.message : "发生错误");
     } finally {
       setIsSubmitting(false);
     }
@@ -179,7 +179,7 @@ export default function EditUserModal({
       <Modal.Content width="sm" ref={contentRef}>
         <Modal.Header
           icon={SvgUsers}
-          title="Edit User's Groups & Roles"
+          title="编辑用户组和角色"
           description={
             user.personal_name
               ? `${user.personal_name} (${user.email})`
@@ -206,7 +206,7 @@ export default function EditUserModal({
                     <InputTypeIn
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Search groups to join..."
+                      placeholder="搜索要加入的用户组..."
                       searchIcon
                     />
                   </div>
@@ -217,15 +217,15 @@ export default function EditUserModal({
                   container={contentEl}
                 >
                   {groupsLoading ? (
-                    <LineItem skeleton description="Loading groups...">
-                      Loading...
+                    <LineItem skeleton description="正在加载用户组...">
+                      正在加载...
                     </LineItem>
                   ) : dropdownGroups.length === 0 ? (
                     <LineItem
                       skeleton
-                      description="Try a different search term."
+                      description="请尝试其他搜索词。"
                     >
-                      No groups found
+                      未找到用户组
                     </LineItem>
                   ) : (
                     <ShadowDiv
@@ -238,9 +238,7 @@ export default function EditUserModal({
                           <LineItem
                             key={group.id}
                             icon={isMember ? SvgCheck : SvgUsers}
-                            description={`${group.users.length} ${
-                              group.users.length === 1 ? "user" : "users"
-                            }`}
+                            description={`${group.users.length} 个用户`}
                             selected={isMember}
                             emphasized={isMember}
                             onClick={() => toggleGroup(group.id)}
@@ -263,9 +261,9 @@ export default function EditUserModal({
                     icon={SvgUsers}
                     skeleton
                     interactive={false}
-                    description={`${displayName} is not in any groups.`}
+                    description={`${displayName} 尚未加入任何用户组。`}
                   >
-                    No groups found
+                    未找到用户组
                   </LineItem>
                 ) : (
                   joinedGroups.map((group) => (
@@ -276,11 +274,9 @@ export default function EditUserModal({
                       <LineItem
                         key={group.id}
                         icon={SvgUsers}
-                        description={`${group.users.length} ${
-                          group.users.length === 1 ? "user" : "users"
-                        }`}
+                        description={`${group.users.length} 个用户`}
                         rightChildren={
-                          <Tooltip tooltip="Remove from group" side="left">
+                          <Tooltip tooltip="从用户组移除" side="left">
                             <SvgLogOut height={16} width={16} />
                           </Tooltip>
                         }
@@ -298,8 +294,8 @@ export default function EditUserModal({
                 <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
                 <ContentAction
-                  title="User Role"
-                  description="This controls their general permissions."
+                  title="用户角色"
+                  description="用于控制该用户的常规权限。"
                   sizePreset="main-ui"
                   variant="section"
                   padding="fit"
@@ -342,10 +338,10 @@ export default function EditUserModal({
             prominence="secondary"
             onClick={isSubmitting ? undefined : onClose}
           >
-            Cancel
+            取消
           </Button>
           <Button disabled={isSubmitting || !hasChanges} onClick={handleSave}>
-            Save Changes
+            保存更改
           </Button>
         </Modal.Footer>
       </Modal.Content>

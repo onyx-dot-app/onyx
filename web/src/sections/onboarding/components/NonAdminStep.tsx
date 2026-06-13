@@ -46,7 +46,7 @@ export default function NonAdminStep() {
         // refreshUser() is called in handleDismissConfirmation instead.
       })
       .catch((error) => {
-        toast.error("Failed to save name. Please try again.");
+        toast.error("保存姓名失败，请重试。");
         console.error(error);
       });
   };
@@ -70,7 +70,7 @@ export default function NonAdminStep() {
                 {...props}
               />
             )}
-            title="You're all set!"
+            title="已设置完成！"
             sizePreset="main-ui"
             variant="body"
             color="muted"
@@ -95,8 +95,8 @@ export default function NonAdminStep() {
         >
           <ContentAction
             icon={SvgUser}
-            title="What should Onyx call you?"
-            description="We will display this name in the app."
+            title="Glomi AI 应该怎么称呼你？"
+            description="我们会在应用中显示这个名称。"
             sizePreset="main-ui"
             variant="section"
             padding="fit"
@@ -104,7 +104,7 @@ export default function NonAdminStep() {
               <div className="flex items-center justify-end gap-2">
                 <InputTypeIn
                   ref={inputRef}
-                  placeholder="Your name"
+                  placeholder="你的名称"
                   value={name || ""}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setName(e.target.value)
@@ -117,7 +117,7 @@ export default function NonAdminStep() {
                   }}
                 />
                 <Button disabled={name === ""} onClick={handleSave}>
-                  Save
+                  保存
                 </Button>
               </div>
             }
@@ -127,7 +127,7 @@ export default function NonAdminStep() {
         <Hoverable.Root group="nonAdminName" width="full">
           <div
             className={containerClasses}
-            aria-label="Edit display name"
+            aria-label="编辑显示名称"
             role="button"
             tabIndex={0}
             onClick={() => {
@@ -153,7 +153,7 @@ export default function NonAdminStep() {
             <div className="p-1 flex items-center gap-1">
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
-                <IconButton internal icon={SvgEdit} tooltip="Edit" />
+                <IconButton internal icon={SvgEdit} tooltip="编辑" />
               </Hoverable.Item>
               <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
             </div>

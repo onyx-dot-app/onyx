@@ -52,7 +52,7 @@ interface HookFormModalProps {
 const MAX_TIMEOUT_SECONDS = 600;
 
 const SOFT_DESCRIPTION =
-  "If the endpoint returns an error, Onyx logs it and continues the pipeline as normal, ignoring the hook result.";
+  "If the endpoint returns an error, Glomi AI logs it and continues the pipeline as normal, ignoring the hook result.";
 
 function buildInitialValues(
   hook: HookResponse | undefined,
@@ -113,7 +113,7 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
       withLabel="timeout_seconds"
       title="Timeout"
       suffix="(seconds)"
-      subDescription={`Maximum time Onyx will wait for the endpoint to respond before applying the fail strategy. Must be greater than 0 and at most ${MAX_TIMEOUT_SECONDS} seconds.`}
+      subDescription={`Maximum time Glomi AI will wait for the endpoint to respond before applying the fail strategy. Must be greater than 0 and at most ${MAX_TIMEOUT_SECONDS} seconds.`}
     >
       <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono [&_input]:[appearance:textfield]! [&_input::-webkit-outer-spin-button]:appearance-none! [&_input::-webkit-inner-spin-button]:appearance-none! w-full">
         <InputTypeInField
@@ -358,7 +358,7 @@ export default function HookFormModal({
                   <InputVertical
                     withLabel="api_key"
                     title="API Key"
-                    subDescription="Onyx will use this key to authenticate with your API endpoint."
+                    subDescription="Glomi AI 将使用此密钥与你的 API 端点进行认证。"
                   >
                     <PasswordInputTypeInField
                       name="api_key"

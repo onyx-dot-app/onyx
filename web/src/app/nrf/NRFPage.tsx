@@ -86,8 +86,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
       toast.error(
         lastFailedFiles.length === 1
-          ? `File failed and was removed: ${names}`
-          : `Files failed and were removed: ${names}`
+          ? `文件处理失败并已移除：${names}`
+          : `文件处理失败并已移除：${names}`
       );
       clearLastFailedFiles();
     }
@@ -234,7 +234,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     setSettingsOpen((prev) => !prev);
   };
 
-  // If user toggles the "Use Onyx" switch to off, prompt a modal
+  // If user toggles the Glomi AI new-tab switch to off, prompt a modal
   const handleUseOnyxToggle = (checked: boolean) => {
     if (!checked) {
       setShowTurnOffModal(true);
@@ -304,7 +304,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       const additionalContext =
         tabReadingEnabled && currentTabUrl
-          ? `The user is currently viewing: ${currentTabUrl}. Use the open_url tool to read this page and use its content as additional context for your response.`
+          ? `用户当前正在查看：${currentTabUrl}。请使用 open_url 工具读取此页面，并将其内容作为回答的额外上下文。`
           : undefined;
 
       // If we already have messages (chat session started), always use chat mode
@@ -360,7 +360,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      toast.error("No previously-submitted user message found.");
+      toast.error("未找到之前提交的用户消息。");
       return;
     }
 
@@ -447,7 +447,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             prominence="secondary"
             icon={SvgMenu}
             onClick={toggleSettings}
-            tooltip="Open settings"
+            tooltip="打开设置"
           />
         </div>
       )}
@@ -610,8 +610,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             <Modal.Content width="sm">
               <Modal.Header
                 icon={SvgAlertTriangle}
-                title="Turn off Onyx new tab page?"
-                description="You'll see your browser's default new tab page instead. You can turn it back on anytime in your Onyx settings."
+                title="关闭 Glomi AI 新标签页？"
+                description="关闭后会显示浏览器默认新标签页。你可以随时在 Glomi AI 设置里重新开启。"
                 onClose={() => setShowTurnOffModal(false)}
               />
               <Modal.Footer>
@@ -619,10 +619,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   prominence="secondary"
                   onClick={() => setShowTurnOffModal(false)}
                 >
-                  Cancel
+                  取消
                 </Button>
                 <Button variant="danger" onClick={confirmTurnOff}>
-                  Turn off
+                  关闭
                 </Button>
               </Modal.Footer>
             </Modal.Content>
@@ -633,7 +633,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {!user && (
         <Modal open onOpenChange={() => {}}>
           <Modal.Content width="sm" height="sm">
-            <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
+            <Modal.Header icon={SvgUser} title="欢迎使用 Glomi AI" />
             <Modal.Body>
               {authTypeMetadata.authType === AuthType.BASIC ? (
                 <LoginPage
@@ -654,7 +654,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       }
                     }}
                   >
-                    Log in
+                    登录
                   </Button>
                 </div>
               )}
@@ -671,7 +671,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             window.location.href = "/admin/configuration/language-models";
           }}
         >
-          Set up an LLM.
+          设置 LLM。
         </Button>
       )}
     </div>

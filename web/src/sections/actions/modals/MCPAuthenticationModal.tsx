@@ -74,7 +74,7 @@ const GOOGLE_TOKEN_ENDPOINT_HINT = "https://oauth2.googleapis.com/token";
 const validationSchema = Yup.object().shape({
   transport: Yup.string()
     .oneOf([MCPTransportType.STREAMABLE_HTTP, MCPTransportType.SSE])
-    .required("Transport is required"),
+    .required("请选择传输方式"),
   auth_type: Yup.string()
     .oneOf([
       MCPAuthenticationType.NONE,
@@ -82,7 +82,7 @@ const validationSchema = Yup.object().shape({
       MCPAuthenticationType.OAUTH,
       MCPAuthenticationType.PT_OAUTH,
     ])
-    .required("Authentication type is required"),
+    .required("请选择认证方式"),
   auth_performer: Yup.string().when("auth_type", {
     is: (auth_type: string) => auth_type !== MCPAuthenticationType.NONE,
     then: (schema) =>
@@ -91,14 +91,14 @@ const validationSchema = Yup.object().shape({
           MCPAuthenticationPerformer.ADMIN,
           MCPAuthenticationPerformer.PER_USER,
         ])
-        .required("Authentication performer is required"),
+        .required("请选择认证执行方"),
     otherwise: (schema) => schema.notRequired(),
   }),
   api_token: Yup.string().when(["auth_type", "auth_performer"], {
     is: (auth_type: string, auth_performer: string) =>
       auth_type === MCPAuthenticationType.API_TOKEN &&
       auth_performer === MCPAuthenticationPerformer.ADMIN,
-    then: (schema) => schema.required("API token is required"),
+    then: (schema) => schema.required("请输入 API Token"),
     otherwise: (schema) => schema.notRequired(),
   }),
   oauth_client_id: Yup.string().when("auth_type", {
@@ -119,7 +119,7 @@ const validationSchema = Yup.object().shape({
         providerMode === MCPOAuthProviderMode.KNOWN_PROVIDER,
       then: (schema) =>
         schema.required(
-          "Authorization endpoint is required in known-provider mode"
+          "已知提供商模式需要填写授权端点"
         ),
       otherwise: (schema) => schema.notRequired(),
     }
@@ -131,7 +131,7 @@ const validationSchema = Yup.object().shape({
         authType === MCPAuthenticationType.OAUTH &&
         providerMode === MCPOAuthProviderMode.KNOWN_PROVIDER,
       then: (schema) =>
-        schema.required("Token endpoint is required in known-provider mode"),
+        schema.required("已知提供商模式需要填写 Token 端点"),
       otherwise: (schema) => schema.notRequired(),
     }
   ),
@@ -151,7 +151,7 @@ export default function MCPAuthenticationModal({
   // Open the Advanced (known-provider) section by default when configured.
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // Check if OAuth is enabled for the Onyx instance
+  // Check if OAuth is enabled for the Glomi AI instance
   const authType = useAuthType();
   const isOAuthEnabled =
     authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
@@ -325,7 +325,7 @@ export default function MCPAuthenticationModal({
       try {
         const parsed = JSON.parse(values.oauth_additional_auth_params);
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          throw new Error("Additional auth params must be a JSON object");
+          throw new Error("附加认证参数必须是 JSON 对象");
         }
         parsedAdditionalAuthParams = Object.fromEntries(
           Object.entries(parsed).map(([key, value]) => [key, String(value)])
@@ -333,8 +333,8 @@ export default function MCPAuthenticationModal({
       } catch (error) {
         throw new Error(
           error instanceof Error
-            ? `Invalid additional auth params JSON: ${error.message}`
-            : "Invalid additional auth params JSON"
+            ? `附加认证参数 JSON 无效：${error.message}`
+            : "附加认证参数 JSON 无效"
         );
       }
     }
@@ -406,7 +406,7 @@ export default function MCPAuthenticationModal({
         await upsertMCPServer(serverData);
 
       if (serverError || !serverResult) {
-        throw new Error(serverError || "Failed to save server configuration");
+        throw new Error(serverError || "保存服务端配置失败");
       }
 
       // Step 2: Update status to AWAITING_AUTH after successful config save
@@ -440,7 +440,7 @@ export default function MCPAuthenticationModal({
           // Refresh server list so latest status is visible after auth failure
           await mutateMcpServers();
           toggle(false);
-          throw new Error("Failed to initiate OAuth: " + error.detail);
+          throw new Error("启动 OAuth 失败：" + error.detail);
         }
 
         const { oauth_url } = await oauthResponse.json();
@@ -462,7 +462,7 @@ export default function MCPAuthenticationModal({
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to save authentication configuration"
+          : "保存认证配置失败"
       );
     } finally {
       setIsSubmitting(false);
@@ -476,10 +476,10 @@ export default function MCPAuthenticationModal({
           icon={SvgArrowExchange}
           title={
             mcpServer
-              ? markdown(`Authenticate *${mcpServer.name}*`)
-              : "Authenticate MCP Server"
+              ? markdown(`认证 *${mcpServer.name}*`)
+              : "认证 MCP 服务"
           }
-          description="Authenticate your connection to start using the MCP server."
+          description="完成连接认证后即可开始使用 MCP 服务。"
         />
 
         <Formik<MCPAuthFormValues>
@@ -520,7 +520,7 @@ export default function MCPAuthenticationModal({
                             : "idle"
                       }
                     >
-                      <FormField.Label>Authentication Method</FormField.Label>
+                      <FormField.Label>认证方式</FormField.Label>
                       <FormField.Control asChild>
                         <InputSelect
                           value={values.auth_type}
@@ -555,35 +555,35 @@ export default function MCPAuthenticationModal({
                           }}
                         >
                           <InputSelect.Trigger
-                            placeholder="Select method"
+                            placeholder="选择方式"
                             data-testid="mcp-auth-method-select"
                           />
                           <InputSelect.Content>
                             <InputSelect.Item
                               value={MCPAuthenticationType.OAUTH}
-                              description="Each user need to authenticate via OAuth with their own credentials."
+                              description="每位用户都需要使用自己的凭据通过 OAuth 认证。"
                             >
                               OAuth
                             </InputSelect.Item>
                             {isOAuthEnabled && (
                               <InputSelect.Item
                                 value={MCPAuthenticationType.PT_OAUTH}
-                                description="Forward the user's OAuth access token used to authenticate Onyx."
+                                description="转发用户用于认证 Glomi AI 的 OAuth 访问令牌。"
                               >
-                                OAuth Pass-through
+                                OAuth 透传
                               </InputSelect.Item>
                             )}
                             <InputSelect.Item
                               value={MCPAuthenticationType.API_TOKEN}
-                              description="Use per-user individual API key or organization-wide shared API key."
+                              description="使用每位用户独立的 API Key，或组织级共享 API Key。"
                             >
                               API Key
                             </InputSelect.Item>
                             <InputSelect.Item
                               value={MCPAuthenticationType.NONE}
-                              description="Not Recommended"
+                              description="不推荐"
                             >
-                              None
+                              无
                             </InputSelect.Item>
                           </InputSelect.Content>
                         </InputSelect>
@@ -659,14 +659,13 @@ export default function MCPAuthenticationModal({
                       {/* Info Text */}
                       <div className="flex flex-col gap-2">
                         <Text as="p" text03 secondaryBody>
-                          Client ID and secret are optional if the server
-                          connection supports Dynamic Client Registration (DCR).
+                          如果服务端连接支持动态客户端注册（DCR），Client ID 和
+                          Secret 可以不填。
                         </Text>
                         <Text as="p" text03 secondaryBody>
-                          If your server does not support DCR, you need register
-                          your Onyx instance with the server provider to obtain
-                          these credentials first. Make sure to grant Onyx
-                          necessary scopes/permissions for your actions.
+                          如果你的服务端不支持 DCR，需要先在服务提供方注册当前
+                          Glomi AI 实例并获取这些凭据。请确保为 Glomi AI 授予动作所需的
+                          scope 和权限。
                         </Text>
                         {/* Redirect URI */}
                         <div className="flex items-center gap-1 w-full">
@@ -676,7 +675,7 @@ export default function MCPAuthenticationModal({
                             secondaryBody
                             className="whitespace-nowrap"
                           >
-                            Use{" "}
+                            使用{" "}
                             <span className="font-secondary-action">
                               redirect URI
                             </span>
@@ -691,7 +690,7 @@ export default function MCPAuthenticationModal({
                           </Text>
                           <CopyButton
                             getCopyText={() => redirectUri}
-                            tooltip="Copy redirect URI"
+                            tooltip="复制 redirect URI"
                             prominence="tertiary"
                             size="sm"
                           />
@@ -703,8 +702,8 @@ export default function MCPAuthenticationModal({
                         onOpenChange={setAdvancedOpen}
                       >
                         <SimpleCollapsible.Header
-                          title="Advanced"
-                          description="Configure a known OAuth provider with explicit authorization and token endpoints instead of automatic discovery."
+                          title="高级"
+                          description="配置已知 OAuth 提供商，明确指定授权端点和 Token 端点，而不是自动发现。"
                         />
                         <SimpleCollapsible.Content>
                           <Section alignItems="stretch" height="auto">
@@ -719,7 +718,7 @@ export default function MCPAuthenticationModal({
                                     : "idle"
                               }
                             >
-                              <FormField.Label>Provider Mode</FormField.Label>
+                              <FormField.Label>提供商模式</FormField.Label>
                               <FormField.Control asChild>
                                 <InputSelect
                                   value={values.oauth_provider_mode}
@@ -727,23 +726,23 @@ export default function MCPAuthenticationModal({
                                     setFieldValue("oauth_provider_mode", value);
                                   }}
                                 >
-                                  <InputSelect.Trigger placeholder="Select mode" />
+                                  <InputSelect.Trigger placeholder="选择模式" />
                                   <InputSelect.Content>
                                     <InputSelect.Item
                                       value={
                                         MCPOAuthProviderMode.AUTO_DISCOVERY
                                       }
-                                      description="Use MCP SDK challenge/discovery flow (default)."
+                                      description="使用 MCP SDK 的 challenge / discovery 流程（默认）。"
                                     >
-                                      Auto Discovery
+                                      自动发现
                                     </InputSelect.Item>
                                     <InputSelect.Item
                                       value={
                                         MCPOAuthProviderMode.KNOWN_PROVIDER
                                       }
-                                      description="Use configured authorization/token endpoints."
+                                      description="使用已配置的授权 / Token 端点。"
                                     >
-                                      Known Provider
+                                      已知提供商
                                     </InputSelect.Item>
                                   </InputSelect.Content>
                                 </InputSelect>
@@ -765,7 +764,7 @@ export default function MCPAuthenticationModal({
                                   }
                                 >
                                   <FormField.Label>
-                                    Authorization Endpoint
+                                    授权端点
                                   </FormField.Label>
                                   <FormField.Control asChild>
                                     <InputTypeIn
@@ -799,7 +798,7 @@ export default function MCPAuthenticationModal({
                                   }
                                 >
                                   <FormField.Label>
-                                    Token Endpoint
+                                    Token 端点
                                   </FormField.Label>
                                   <FormField.Control asChild>
                                     <InputTypeIn
@@ -818,7 +817,7 @@ export default function MCPAuthenticationModal({
 
                                 <FormField name="oauth_scopes_override">
                                   <FormField.Label optional>
-                                    Scopes Override (comma-separated)
+                                    Scope 覆盖（逗号分隔）
                                   </FormField.Label>
                                   <FormField.Control asChild>
                                     <InputTypeIn
@@ -832,7 +831,7 @@ export default function MCPAuthenticationModal({
 
                                 <FormField name="oauth_additional_auth_params">
                                   <FormField.Label optional>
-                                    Additional Auth Params (JSON)
+                                    附加认证参数（JSON）
                                   </FormField.Label>
                                   <FormField.Control asChild>
                                     <InputTypeIn
@@ -847,10 +846,8 @@ export default function MCPAuthenticationModal({
                                 </FormField>
 
                                 <Text as="p" text03 secondaryBody>
-                                  Known-provider mode requires endpoint
-                                  configuration. Google reference endpoints:
-                                  authorization{" "}
-                                  {GOOGLE_AUTHORIZATION_ENDPOINT_HINT} and token{" "}
+                                  已知提供商模式需要配置端点。Google 参考端点：授权{" "}
+                                  {GOOGLE_AUTHORIZATION_ENDPOINT_HINT}，Token{" "}
                                   {GOOGLE_TOKEN_ENDPOINT_HINT}.
                                 </Text>
                               </>
@@ -879,10 +876,10 @@ export default function MCPAuthenticationModal({
                       >
                         <Tabs.List>
                           <Tabs.Trigger value="per-user">
-                            Individual Key (Per User)
+                            个人 Key（按用户）
                           </Tabs.Trigger>
                           <Tabs.Trigger value="admin">
-                            Shared Key (Admin)
+                            共享 Key（管理员）
                           </Tabs.Trigger>
                         </Tabs.List>
 
@@ -913,13 +910,11 @@ export default function MCPAuthenticationModal({
                                   name="api_token"
                                   value={values.api_token}
                                   onChange={handleChange}
-                                  placeholder="Shared API key for your organization"
+                                  placeholder="组织共享 API Key"
                                 />
                               </FormField.Control>
                               <FormField.Description>
-                                Do not use your personal API key. Make sure this
-                                key is appropriate to share with everyone in
-                                your organization.
+                                不要使用个人 API Key。请确认此 Key 适合与组织内所有人共享。
                               </FormField.Description>
                               <FormField.Message
                                 messages={{
@@ -934,14 +929,14 @@ export default function MCPAuthenticationModal({
                   )}
                   {values.auth_type === MCPAuthenticationType.NONE && (
                     <MessageCard
-                      title="No authentication for this MCP server"
-                      description="No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection."
+                      title="此 MCP 服务不使用认证"
+                      description="此连接不会使用任何认证。请确认你信任该服务，并理解你需要对通过此连接执行的操作负责。"
                     />
                   )}
                   {values.auth_type === MCPAuthenticationType.PT_OAUTH && (
                     <MessageCard
-                      title="Use pass-through for services with shared identity provider."
-                      description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
+                      title="对共享身份提供商的服务使用透传认证"
+                      description="Glomi AI 会把用户的 OAuth 访问令牌作为 Authorization 请求头直接转发给服务端。请确认该服务端支持同一身份提供商的认证。"
                     />
                   )}
                 </Modal.Body>
@@ -952,14 +947,14 @@ export default function MCPAuthenticationModal({
                     type="button"
                     onClick={() => toggle(false)}
                   >
-                    Cancel
+                    取消
                   </Button>
                   <Button
                     disabled={!isValid || isSubmitting}
                     type="submit"
                     data-testid="mcp-auth-connect-button"
                   >
-                    {isSubmitting ? "Connecting..." : "Connect"}
+                    {isSubmitting ? "正在连接..." : "连接"}
                   </Button>
                 </Modal.Footer>
               </Form>

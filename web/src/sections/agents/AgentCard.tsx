@@ -37,12 +37,15 @@ import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
+import { APP_NAME } from "@/lib/brand";
+import { useTranslations } from "next-intl";
 
 export interface AgentCardProps {
   agent: MinimalAgent;
 }
 
 export default function AgentCard({ agent }: AgentCardProps) {
+  const t = useTranslations("appShell.agents");
   const route = useAppRouter();
   const router = useRouter();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
@@ -149,7 +152,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       onClick={noProp(() =>
                         router.push(`/ee/agents/stats/${agent.id}` as Route)
                       )}
-                      tooltip="View Agent Stats"
+                      tooltip={t("viewStats")}
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
@@ -161,7 +164,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       onClick={noProp(() =>
                         router.push(`/app/agents/edit/${agent.id}` as Route)
                       )}
-                      tooltip="Edit Agent"
+                      tooltip={t("editAgent")}
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
@@ -171,7 +174,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       icon={SvgShare}
                       tertiary
                       onClick={noProp(() => shareAgentModal.toggle(true))}
-                      tooltip="Share Agent"
+                      tooltip={t("shareAgent")}
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
@@ -180,7 +183,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
                     icon={pinned ? SvgPinned : SvgPin}
                     tertiary
                     onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
-                    tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
+                    tooltip={
+                      pinned ? t("unpinFromSidebar") : t("pinToSidebar")
+                    }
                     className={cn(
                       !pinned && "hidden group-hover/AgentCard:flex"
                     )}
@@ -196,7 +201,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
             <div className="flex flex-col gap-1 py-1 px-2">
               <Content
                 icon={SvgUser}
-                title={agent.owner?.email || "Onyx"}
+                title={agent.owner?.email || APP_NAME}
                 sizePreset="secondary"
                 variant="body"
                 color="muted"
@@ -205,10 +210,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 icon={SvgActions}
                 title={
                   agent.tools.length > 0
-                    ? `${agent.tools.length} Action${
-                        agent.tools.length > 1 ? "s" : ""
-                      }`
-                    : "No Actions"
+                    ? t("actionCount", { count: agent.tools.length })
+                    : t("noActions")
                 }
                 sizePreset="secondary"
                 variant="body"
@@ -223,7 +226,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 rightIcon={SvgBubbleText}
                 onClick={noProp(handleStartChat)}
               >
-                Start Chat
+                {t("startChat")}
               </Button>
             </div>
           </div>

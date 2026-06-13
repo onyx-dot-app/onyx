@@ -255,12 +255,12 @@ export default function MCPActionCard({
           icon={isToolsRefreshing ? SvgSimpleLoader : SvgRefreshCw}
           prominence="internal"
           onClick={handleRefreshTools}
-          tooltip="Refresh tools"
-          aria-label="Refresh tools"
+          tooltip="刷新工具"
+          aria-label="刷新工具"
         />
         {lastRefreshedText && (
           <Text as="p" text03 mainUiBody className="whitespace-nowrap">
-            Tools last refreshed {lastRefreshedText}
+            工具上次刷新于 {lastRefreshedText}
           </Text>
         )}
       </div>
@@ -290,7 +290,7 @@ export default function MCPActionCard({
         onSearchQueryChange={setSearchQuery}
         onFold={handleFold}
         className={className}
-        ariaLabel={`${title} MCP server card`}
+        ariaLabel={`${title} MCP 服务卡片`}
       >
         <ToolsList
           isFetching={
@@ -306,8 +306,8 @@ export default function MCPActionCard({
           }}
           isEmpty={filteredTools.length === 0}
           searchQuery={searchQuery}
-          emptyMessage="No tools available"
-          emptySearchMessage="No tools found"
+          emptyMessage="暂无可用工具"
+          emptySearchMessage="未找到工具"
           leftAction={leftAction}
         >
           {filteredTools.map((tool) => (
@@ -332,7 +332,7 @@ export default function MCPActionCard({
           icon={({ className }) => (
             <SvgTrash className={cn(className, "stroke-action-danger-05")} />
           )}
-          title="Delete MCP server"
+          title="删除 MCP 服务"
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -344,21 +344,20 @@ export default function MCPActionCard({
                   deleteModal.toggle(false);
                 } catch (error) {
                   // Keep modal open if deletion fails; caller should surface error feedback.
-                  console.error("Failed to delete MCP server", error);
+                  console.error("删除 MCP 服务失败", error);
                 }
               }}
             >
-              Delete
+              删除
             </Button>
           }
         >
           <div className="flex flex-col gap-4">
             <Text as="p" text03>
-              All tools connected to <b>{title}</b> will be removed. Deletion is
-              irreversible.
+              与 <b>{title}</b> 连接的所有工具都会被移除。删除后无法恢复。
             </Text>
             <Text as="p" text03>
-              Are you sure you want to delete this MCP server?
+              确定要删除此 MCP 服务吗？
             </Text>
           </div>
         </Modal>

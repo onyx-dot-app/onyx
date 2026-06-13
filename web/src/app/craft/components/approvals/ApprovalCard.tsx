@@ -44,9 +44,9 @@ interface ApprovalCardProps {
 // per-action breakdown (with descriptions) is always shown in the body.
 function approvalHeadline(approval: ApprovalView): string {
   if (approval.actions.length === 1) {
-    return `${approval.actions[0]!.display_name} in ${approval.app_name}`;
+    return `${approval.app_name} 中的 ${approval.actions[0]!.display_name}`;
   }
-  return `${approval.actions.length} actions in ${approval.app_name}`;
+  return `${approval.app_name} 中的 ${approval.actions.length} 个操作`;
 }
 
 function ActionList({ actions }: { actions: ApprovalAction[] }) {
@@ -103,7 +103,7 @@ export default function ApprovalCard({
   const decided = decision !== null;
   const approved = decision === "APPROVED";
   const headline = approvalHeadline(approval);
-  const headerText = decided ? headline : `Approval required: ${headline}`;
+  const headerText = decided ? headline : `需要批准：${headline}`;
 
   async function submitDecision(
     next: ApprovalSubmitDecision,
@@ -137,7 +137,7 @@ export default function ApprovalCard({
       if (mountedRef.current) {
         setDecision(null);
         setErrorMessage(
-          e instanceof Error ? e.message : "Failed to submit decision"
+          e instanceof Error ? e.message : "提交决定失败"
         );
         // Expand so the error message + the payload the user tried to
         // approve are both visible. Avoids the "click Approve in a
@@ -202,14 +202,14 @@ export default function ApprovalCard({
                 )}
               >
                 <Text font="main-ui-action" color="inherit" nowrap>
-                  {approved ? "Approved" : "Rejected"}
+                  {approved ? "已批准" : "已拒绝"}
                 </Text>
               </div>
             ) : null}
             <CollapsibleTrigger asChild>
               <button
                 data-approval-trigger
-                aria-label={isOpen ? "Hide details" : "Show details"}
+                aria-label={isOpen ? "隐藏详情" : "显示详情"}
                 className="p-1.5"
               >
                 <SvgChevronDown
@@ -232,12 +232,12 @@ export default function ApprovalCard({
                     postApprovalDecision(approval.approval_id, "APPROVED")
                   )
                 }
-                aria-label="Approve this action once"
+                aria-label="批准此操作一次"
               >
-                Approve once
+                批准一次
               </Button>
               <Tooltip
-                tooltip="Approve matching actions for this session"
+                tooltip="批准此会话中的匹配操作"
                 delayDuration={200}
               >
                 <Button
@@ -251,9 +251,9 @@ export default function ApprovalCard({
                       0
                     )
                   }
-                  aria-label="Approve matching actions for this session"
+                  aria-label="批准此会话中的匹配操作"
                 >
-                  Approve for session
+                  本会话批准
                 </Button>
               </Tooltip>
               <Button
@@ -265,9 +265,9 @@ export default function ApprovalCard({
                     postApprovalDecision(approval.approval_id, "REJECTED")
                   )
                 }
-                aria-label="Reject this action"
+                aria-label="拒绝此操作"
               >
-                Reject
+                拒绝
               </Button>
             </div>
           )}

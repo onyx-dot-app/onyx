@@ -10,7 +10,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SettingsLayouts } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import { Button, InputTypeIn, Tabs } from "@opal/components";
-import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
+import { SvgPlus, SvgSparkle } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 
@@ -91,19 +91,19 @@ export default function AgentsNavigationPage() {
   return (
     <SettingsLayouts.Root
       data-testid="AgentsPage/container"
-      aria-label="Agents Page"
+      aria-label="智能体页面"
     >
       <SettingsLayouts.Header
-        icon={SvgOnyxOctagon}
-        title="Agents"
-        description="Customize AI behavior and knowledge for you and your team's use cases."
+        icon={SvgSparkle}
+        title="智能体"
+        description="为你和团队的使用场景定制 AI 行为与知识。"
         rightChildren={
           <Button
             href="/app/agents/create"
             icon={SvgPlus}
             aria-label="AgentsPage/new-agent-button"
           >
-            New Agent
+            新建智能体
           </Button>
         }
       >
@@ -112,7 +112,7 @@ export default function AgentsNavigationPage() {
             <div className="flex-2">
               <InputTypeIn
                 ref={searchInputRef}
-                placeholder="Search agents..."
+                placeholder="搜索智能体..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 searchIcon
@@ -124,8 +124,8 @@ export default function AgentsNavigationPage() {
                 onValueChange={(value) => setActiveTab(value as "all" | "your")}
               >
                 <Tabs.List>
-                  <Tabs.Trigger value="all">All Agents</Tabs.Trigger>
-                  <Tabs.Trigger value="your">Your Agents</Tabs.Trigger>
+                  <Tabs.Trigger value="all">全部智能体</Tabs.Trigger>
+                  <Tabs.Trigger value="your">我的智能体</Tabs.Trigger>
                 </Tabs.List>
               </Tabs>
             </div>
@@ -142,19 +142,19 @@ export default function AgentsNavigationPage() {
             className="w-full h-full flex flex-col items-center justify-center py-12"
             text03
           >
-            No Agents found
+            未找到智能体
           </Text>
         ) : (
           <>
             <AgentsSection
-              title="Featured Agents"
-              description="Curated by your team"
+              title="精选智能体"
+              description="由你的团队精选"
               agents={featuredAgents}
             />
-            <AgentsSection title="All Agents" agents={allAgents} />
+            <AgentsSection title="全部智能体" agents={allAgents} />
             <TextSeparator
               count={agentCount}
-              text={agentCount === 1 ? "Agent" : "Agents"}
+              text="个智能体"
             />
           </>
         )}

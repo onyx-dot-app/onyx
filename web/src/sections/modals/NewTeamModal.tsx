@@ -59,7 +59,7 @@ export default function NewTeamModal() {
     try {
       const response = await fetch("/api/tenants/existing-team-by-domain");
       if (!response.ok) {
-        throw new Error(`Failed to fetch team info: ${response.status}`);
+        throw new Error(`获取团队信息失败：${response.status}`);
       }
       const responseJson = await response.json();
       if (!responseJson) {
@@ -72,7 +72,7 @@ export default function NewTeamModal() {
       setExistingTenant(data);
     } catch (error) {
       console.error("Failed to fetch tenant info:", error);
-      setError("Could not retrieve team information. Please try again later.");
+      setError("无法获取团队信息。请稍后重试。");
     } finally {
       setIsLoading(false);
     }
@@ -96,15 +96,15 @@ export default function NewTeamModal() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          errorData.detail || errorData.message || "Failed to request invite"
+          errorData.detail || errorData.message || "请求邀请失败"
         );
       }
 
       setHasRequestedInvite(true);
-      toast.success("Your invite request has been sent to the team admin.");
+      toast.success("你的邀请请求已发送给团队管理员。");
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to request an invite";
+        error instanceof Error ? error.message : "请求邀请失败";
       setError(message);
       toast.error(message);
     } finally {
@@ -141,12 +141,12 @@ export default function NewTeamModal() {
             {hasRequestedInvite ? (
               <>
                 <SvgCheckCircle className="mr-2 h-5 w-5 stroke-text-05" />
-                Join Request Sent
+                加入请求已发送
               </>
             ) : (
               <>
                 <SvgOrganization className="mr-2 h-5 w-5 stroke-text-04" />
-                We found an existing team for {appDomain}
+                我们找到了 {appDomain} 的现有团队
               </>
             )}
           </Dialog.Title>
@@ -154,7 +154,7 @@ export default function NewTeamModal() {
           {isLoading ? (
             <div className="py-8 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-border-05 mx-auto mb-4"></div>
-              <p>Loading team information...</p>
+              <p>正在加载团队信息...</p>
             </div>
           ) : error ? (
             <div className="space-y-4">
@@ -165,16 +165,14 @@ export default function NewTeamModal() {
                   width="full"
                   rightIcon={SvgArrowRight}
                 >
-                  Continue with new team
+                  继续使用新团队
                 </Button>
               </div>
             </div>
           ) : hasRequestedInvite ? (
             <div className="space-y-4">
               <p className="text-text-04">
-                Your join request has been sent. You can explore as your own
-                team while waiting for an admin of {appDomain} to approve your
-                request.
+                你的加入请求已发送。在等待 {appDomain} 的管理员批准时，你可以先以自己的团队继续探索。
               </p>
               <div className="flex w-full pt-2">
                 <Button
@@ -182,14 +180,14 @@ export default function NewTeamModal() {
                   width="full"
                   rightIcon={SvgArrowRight}
                 >
-                  Try Onyx while waiting
+                  等待期间试用 Glomi AI
                 </Button>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
               <p className="text-text-03 text-sm mb-2">
-                Your join request can be approved by any admin of {appDomain}.
+                {appDomain} 的任一管理员都可以批准你的加入请求。
               </p>
               <div className="flex flex-col items-center justify-center gap-4 mt-4">
                 <Button
@@ -199,8 +197,8 @@ export default function NewTeamModal() {
                   icon={isSubmitting ? SvgSimpleLoader : SvgArrowUp}
                 >
                   {isSubmitting
-                    ? "Sending request..."
-                    : "Request to join your team"}
+                    ? "正在发送请求..."
+                    : "请求加入你的团队"}
                 </Button>
               </div>
               <Button
@@ -209,7 +207,7 @@ export default function NewTeamModal() {
                 icon={SvgPlus}
                 prominence="secondary"
               >
-                Continue with new team
+                继续使用新团队
               </Button>
             </div>
           )}
