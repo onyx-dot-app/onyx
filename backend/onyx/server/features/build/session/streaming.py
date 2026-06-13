@@ -570,7 +570,8 @@ def persist_sandbox_event(
         return
 
     if isinstance(sandbox_event, ToolCallStart):
-        # Stream-only; persistence happens on `completed` progress.
+        # Stream-only; persistence happens on terminal (`completed`/`failed`)
+        # progress.
         return
 
     if isinstance(sandbox_event, ToolCallProgress):
