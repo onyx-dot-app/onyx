@@ -126,11 +126,11 @@ def test_retrieve_all_slim_docs(mock_post: MagicMock) -> None:
         "values": [
             {
                 "issueKey": "JSM-1",
-                "createdDate": {"epochMillis": 1600000000000},  # within range
+                "updatedDate": {"epochMillis": 1600000000000},  # within range
             },
             {
                 "issueKey": "JSM-2",
-                "createdDate": {
+                "updatedDate": {
                     "epochMillis": 1800000000000
                 },  # after end (end is 1700000000)
             },
@@ -193,7 +193,7 @@ def test_retrieve_docs(mock_get: MagicMock, mock_heartbeat: MagicMock) -> None:
             resp.json.return_value = {
                 "summary": "Fix login issue",
                 "description": "User cannot login",
-                "createdDate": {"epochMillis": 1600000000000},
+                "updatedDate": {"epochMillis": 1600000000000},
                 "currentStatus": {"status": "In Progress"},
                 "requestType": {"name": "Incident"},
             }
@@ -285,7 +285,7 @@ def test_load_from_checkpoint(mock_post: MagicMock, mock_get: MagicMock) -> None
     mock_post_resp = MagicMock(spec=Response)
     mock_post_resp.json.return_value = {
         "values": [
-            {"issueKey": "JSM-1", "createdDate": {"epochMillis": 1600000000000}}
+            {"issueKey": "JSM-1", "updatedDate": {"epochMillis": 1600000000000}}
         ],
         "isLastPage": True,
     }
@@ -304,7 +304,7 @@ def test_load_from_checkpoint(mock_post: MagicMock, mock_get: MagicMock) -> None
             resp.json.return_value = {
                 "summary": "Fix login issue",
                 "description": "User cannot login",
-                "createdDate": {"epochMillis": 1600000000000},
+                "updatedDate": {"epochMillis": 1600000000000},
                 "currentStatus": {"status": "In Progress"},
                 "requestType": {"name": "Incident"},
                 "serviceDeskId": "10",
