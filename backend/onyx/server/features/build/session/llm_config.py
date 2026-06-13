@@ -8,6 +8,8 @@ restart.
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.consumer_model_catalog import CRAFT_CONSUMER_MODEL_PROFILE_ID
+from onyx.llm.consumer_model_catalog import get_consumer_model_profile
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_default_model_for_provider,
 )
@@ -40,6 +42,30 @@ def _config_from_provider(
     )
 
 
+def _visible_model_names(provider: LLMProviderView) -> set[str]:
+    return {
+        model.name
+        for model in provider.model_configurations
+        if model.is_visible
+    }
+
+
+def _consumer_craft_default_config(
+    providers: list[LLMProviderView],
+) -> LLMProviderConfig | None:
+    profile = get_consumer_model_profile(CRAFT_CONSUMER_MODEL_PROFILE_ID)
+    for provider in providers:
+        if provider.name != profile.provider_name:
+            continue
+        if provider.provider != profile.provider_type:
+            continue
+        if profile.model_name not in _visible_model_names(provider):
+            continue
+        return _config_from_provider(provider, profile.model_name)
+
+    return None
+
+
 def select_default_llm_config(
     providers: list[LLMProviderView],
     requested_provider_type: str | None,
@@ -67,6 +93,10 @@ def select_default_llm_config(
             "Requested provider type %s not accessible, falling back",
             requested_provider_type,
         )
+
+    consumer_default = _consumer_craft_default_config(providers)
+    if consumer_default is not None:
+        return consumer_default
 
     for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES:
         for provider in providers:

@@ -398,6 +398,25 @@ class TestGetLlmConfigFallback:
             "claude-opus-4-8",
         )
 
+    def test_consumer_coding_profile_wins_when_qwen_provider_is_available(
+        self,
+    ) -> None:
+        provider = _provider(
+            name="Qwen",
+            provider="openai_compatible",
+            models=[_model("qwen-plus"), _model("qwen3-coder-plus")],
+            api_key="k-qwen",
+            api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        )
+        with self._patch_providers([provider]):
+            config = self._manager().build_llm_configs(self._user(), None, None)[0]
+        assert (config.provider, config.model_name) == (
+            "openai_compatible",
+            "qwen3-coder-plus",
+        )
+        assert config.api_key == "k-qwen"
+        assert config.api_base == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
 
 class TestProvisionSandboxForwardsAllLlmConfigs:
     """``sandbox_lifecycle.provision_sandbox`` must forward the full

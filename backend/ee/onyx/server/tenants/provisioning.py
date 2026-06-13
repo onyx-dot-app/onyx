@@ -33,6 +33,7 @@ from onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
 from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.consumer_llm import seed_consumer_default_llm_provider
 from onyx.db.external_app import create_external_app
 from onyx.db.external_app import get_built_in_external_app
 from onyx.db.external_app import set_external_app_organization_credentials
@@ -488,6 +489,11 @@ def configure_default_api_keys(db_session: Session) -> None:
             "Skipping OpenRouter default provider configuration "
             "(OPENROUTER_DEFAULT_API_KEY unset or AUTO_PROVISION_DEFAULT_LLM_PROVIDERS=false)"
         )
+
+    try:
+        seed_consumer_default_llm_provider(db_session)
+    except Exception:
+        logger.exception("Failed to configure consumer default LLM provider")
 
     # Configure Cohere embedding provider
     if COHERE_DEFAULT_API_KEY:

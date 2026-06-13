@@ -34,7 +34,7 @@ import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
-import ModelSelector from "@/refresh-components/popovers/ModelSelector";
+import ConsumerModelProfileSelector from "@/refresh-components/popovers/ConsumerModelProfileSelector";
 import { useAgentController } from "@/lib/agents/hooks";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
@@ -911,13 +911,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         ) &&
                         liveAgent &&
                         !llmManager.isLoadingProviders && (
-                          <ModelSelector
-                            llmManager={llmManager}
-                            selectedModels={multiModel.selectedModels}
-                            onAdd={multiModel.addModel}
-                            onRemove={multiModel.removeModel}
-                            onReplace={multiModel.replaceModel}
-                          />
+                          <ConsumerModelProfileSelector />
                         )}
                     </Section>
                     <Spacer rem={1.5} />
@@ -988,13 +982,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         liveAgent &&
                         !llmManager.isLoadingProviders && (
                           <div className="pb-1">
-                            <ModelSelector
-                              llmManager={llmManager}
-                              selectedModels={multiModel.selectedModels}
-                              onAdd={multiModel.addModel}
-                              onRemove={multiModel.removeModel}
-                              onReplace={multiModel.replaceModel}
-                            />
+                            <ConsumerModelProfileSelector />
                           </div>
                         )}
                       <AppInputBar

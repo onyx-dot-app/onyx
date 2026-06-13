@@ -96,6 +96,9 @@ from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingPayload
 from onyx.hooks.points.query_processing import QueryProcessingResponse
+from onyx.llm.consumer_model_catalog import get_consumer_model_profile
+from onyx.llm.consumer_model_catalog import profile_to_llm_override
+from onyx.llm.consumer_model_catalog import resolve_single_model_profile_id
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
@@ -564,6 +567,22 @@ def _resolve_query_processing_hook_result(
     return hook_result.query.strip()
 
 
+def _resolve_single_model_llm_override(
+    user: User,
+    explicit_override: LLMOverride | None,
+    is_deep_research: bool,
+) -> LLMOverride | None:
+    if explicit_override is not None and not is_deep_research:
+        return explicit_override
+
+    profile_id = resolve_single_model_profile_id(
+        user_default_model=user.default_model,
+        is_deep_research=is_deep_research,
+    )
+    profile = get_consumer_model_profile(profile_id)
+    return profile_to_llm_override(profile)
+
+
 def build_chat_turn(
     new_msg_req: SendMessageRequest,
     user: User,
@@ -662,7 +681,13 @@ def build_chat_turn(
     selected_overrides: list[LLMOverride | None] = (
         list(llm_overrides or [])
         if is_multi
-        else [new_msg_req.llm_override or chat_session.llm_override]
+        else [
+            _resolve_single_model_llm_override(
+                user=user,
+                explicit_override=new_msg_req.llm_override or chat_session.llm_override,
+                is_deep_research=new_msg_req.deep_research,
+            )
+        ]
     )
     for override in selected_overrides:
         llm = get_llm_for_persona(

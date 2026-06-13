@@ -11,6 +11,8 @@ from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider
+from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
+from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_models
 from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.llm import fetch_user_group_ids
@@ -18,6 +20,7 @@ from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.consumer_model_catalog import get_consumer_model_profile
 from onyx.llm.interfaces import LLM
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
@@ -84,6 +87,34 @@ def _build_model_kwargs(
     return model_kwargs
 
 
+def _provider_has_model(provider: LLMProviderModel, model_name: str) -> bool:
+    return any(
+        model_configuration.name == model_name
+        for model_configuration in provider.model_configurations
+    )
+
+
+def _resolve_provider_type_override(
+    provider_type: str,
+    model_version_override: str | None,
+    db_session: Session,
+) -> tuple[LLMProviderModel, str] | None:
+    if not model_version_override:
+        return None
+
+    providers = fetch_existing_llm_providers(
+        db_session=db_session,
+        flow_type_filter=[LLMModelFlowType.CHAT],
+    )
+    for provider in providers:
+        if provider.provider != provider_type:
+            continue
+        if _provider_has_model(provider, model_version_override):
+            return provider, model_version_override
+
+    return None
+
+
 def _resolve_provider_and_model(
     persona: Persona,
     provider_name_override: str | None,
@@ -98,7 +129,9 @@ def _resolve_provider_and_model(
     if provider_name_override:
         provider_model = fetch_existing_llm_provider(provider_name_override, db_session)
         if not provider_model:
-            return None
+            return _resolve_provider_type_override(
+                provider_name_override, model_version_override, db_session
+            )
         if model_version_override:
             model_name: str | None = model_version_override
         elif persona.default_model_configuration_id:
@@ -126,6 +159,46 @@ def _resolve_provider_and_model(
     if not provider_model or not model_name:
         return None
     return provider_model, model_name
+
+
+def get_llm_for_consumer_model_profile(
+    profile_id: str,
+    timeout: int | None = None,
+    additional_headers: dict[str, str] | None = None,
+) -> LLM | None:
+    profile = get_consumer_model_profile(profile_id)
+    with get_session_with_current_tenant() as db_session:
+        provider_model = fetch_existing_llm_provider_by_name_and_type(
+            name=profile.provider_name,
+            provider_type=profile.provider_type,
+            db_session=db_session,
+        )
+        if provider_model is None:
+            logger.warning(
+                "Consumer LLM profile %s provider %s/%s is not configured",
+                profile.id,
+                profile.provider_name,
+                profile.provider_type,
+            )
+            return None
+        if not _provider_has_model(provider_model, profile.model_name):
+            logger.warning(
+                "Consumer LLM profile %s model %s is not configured on provider %s",
+                profile.id,
+                profile.model_name,
+                profile.provider_name,
+            )
+            return None
+
+        llm_provider = LLMProviderView.from_model(provider_model)
+
+    return llm_from_provider(
+        model_name=profile.model_name,
+        llm_provider=llm_provider,
+        timeout=timeout,
+        temperature=profile.temperature,
+        additional_headers=additional_headers,
+    )
 
 
 def get_llm_for_persona(

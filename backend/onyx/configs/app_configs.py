@@ -1485,6 +1485,23 @@ COHERE_DEFAULT_API_KEY = os.environ.get("COHERE_DEFAULT_API_KEY")
 VERTEXAI_DEFAULT_CREDENTIALS = os.environ.get("VERTEXAI_DEFAULT_CREDENTIALS")
 VERTEXAI_DEFAULT_LOCATION = os.environ.get("VERTEXAI_DEFAULT_LOCATION", "global")
 OPENROUTER_DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_API_KEY")
+CONSUMER_DEFAULT_LLM_ENABLED = (
+    os.environ.get("CONSUMER_DEFAULT_LLM_ENABLED", "false").lower() == "true"
+)
+CONSUMER_DEFAULT_LLM_PROVIDER_NAME = os.environ.get(
+    "CONSUMER_DEFAULT_LLM_PROVIDER_NAME", "Qwen"
+)
+CONSUMER_DEFAULT_LLM_PROVIDER_TYPE = os.environ.get(
+    "CONSUMER_DEFAULT_LLM_PROVIDER_TYPE", "openai_compatible"
+)
+CONSUMER_DEFAULT_LLM_API_BASE = os.environ.get(
+    "CONSUMER_DEFAULT_LLM_API_BASE",
+    "https://dashscope.aliyuncs.com/compatible-mode/v1",
+)
+CONSUMER_DEFAULT_LLM_API_KEY = os.environ.get("CONSUMER_DEFAULT_LLM_API_KEY")
+CONSUMER_DEFAULT_LLM_DEFAULT_PROFILE = os.environ.get(
+    "CONSUMER_DEFAULT_LLM_DEFAULT_PROFILE", "balanced"
+)
 # Whether tenant provisioning auto-creates LLMProvider rows seeded with the
 # *_DEFAULT_API_KEY env vars above. Defaults to True so self-hosted
 # deployments keep the existing behavior. Cloud sets this to False to

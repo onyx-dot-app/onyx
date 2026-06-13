@@ -20,6 +20,7 @@ from onyx.db.connector import create_initial_default_connector
 from onyx.db.connector_credential_pair import associate_default_cc_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import resync_cc_pair
+from onyx.db.consumer_llm import seed_consumer_default_llm_provider
 from onyx.db.credentials import create_initial_public_credential
 from onyx.db.document import check_docs_exist
 from onyx.db.enums import EmbeddingPrecision
@@ -274,6 +275,11 @@ def setup_postgres(db_session: Session) -> None:
         update_default_provider(
             provider_id=new_llm_provider.id, model_name=llm_model, db_session=db_session
         )
+
+    try:
+        seed_consumer_default_llm_provider(db_session)
+    except Exception:
+        logger.exception("Failed to seed consumer default LLM provider during setup")
 
 
 def update_default_multipass_indexing(db_session: Session) -> None:
