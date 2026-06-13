@@ -16,7 +16,4 @@ export {
   type SidebarProviderProps,
   type SidebarStateContextType,
 } from "@/components/sidebar/SidebarProvider";
-export type {
-  SidebarVariant,
-  SidebarTabState,
-} from "@/components/sidebar/interfaces";
+export type { SidebarVariant } from "@/components/sidebar/interfaces";

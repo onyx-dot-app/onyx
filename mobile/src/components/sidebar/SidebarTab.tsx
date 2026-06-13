@@ -91,7 +91,7 @@ function SidebarTab({
   const colors = resolveColors(variant, selected, disabled);
 
   function handlePress() {
-    if (disabled) return;
+    // `disabled` Pressable already blocks onPress, so no guard needed here.
     onPress?.();
     if (href != null) router.navigate(href);
   }
