@@ -31,6 +31,7 @@ def test_orchestrator_prompts_contain_cycle_evaluation_rules() -> None:
     assert "Deep research orchestration" in rendered
     assert "information gaps remain" in rendered
     assert "Deep research orchestration" in reasoning_rendered
+    assert "information gaps remain" in reasoning_rendered
 
 
 def test_final_report_prompt_contains_chinese_report_structure() -> None:
