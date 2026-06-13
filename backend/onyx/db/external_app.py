@@ -116,13 +116,15 @@ def validate_auth_template(
 def resolve_masked_credentials(
     incoming: dict[str, str],
     existing: SensitiveValue[dict[str, Any]] | None,
+    *,
+    context: str = "stored credentials while restoring masked values",
 ) -> dict[str, str]:
     """Restore real secret values when the caller submits masked placeholders."""
     existing_values = (
         decrypt_credentials_or_empty(
             existing,
             apply_mask=False,
-            context="stored credentials while restoring masked values",
+            context=context,
         )
         if existing is not None
         else {}
@@ -406,7 +408,9 @@ def update_external_app(
         # Admin responses mask org credentials; restore any masked value the form
         # echoed back so an unchanged secret isn't overwritten with its mask.
         app.organization_credentials = resolve_masked_credentials(  # ty: ignore[invalid-assignment]
-            organization_credentials, app.organization_credentials
+            organization_credentials,
+            app.organization_credentials,
+            context=f"organization credentials for external app {app.id}",
         )
 
     if is_set(action_policies):
