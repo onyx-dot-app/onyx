@@ -4,7 +4,12 @@ from onyx.evals.glomi_search_research_benchmark import BenchmarkProfile
 
 
 def test_benchmark_has_phase_one_size() -> None:
-    assert len(BENCHMARK_CASES) >= 20
+    assert len(BENCHMARK_CASES) == 20
+
+
+def test_benchmark_case_ids_are_unique() -> None:
+    ids = [case.id for case in BENCHMARK_CASES]
+    assert len(ids) == len(set(ids))
 
 
 def test_benchmark_covers_chat_and_deep_profiles() -> None:
