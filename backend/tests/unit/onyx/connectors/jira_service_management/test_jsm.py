@@ -323,3 +323,27 @@ def test_load_from_checkpoint(mock_post: MagicMock, mock_get: MagicMock) -> None
     assert isinstance(docs[0], Document)
     assert docs[0].id == "JSM-1"
     assert docs[0].metadata["service_desk_id"] == "10"
+
+
+@patch("requests.get")
+def test_fetch_request_comments_filtering(mock_get: MagicMock) -> None:
+    connector = JiraServiceManagementConnector(
+        jira_url="https://test.atlassian.net",
+        jira_user_email="test@example.com",
+        jira_api_token="test-token",
+    )
+
+    mock_resp = MagicMock(spec=Response)
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "values": [
+            {"body": "Hello public comment", "public": True},
+            {"body": "Hello private comment", "public": False},
+            {"body": "Hello default public comment"},
+        ],
+        "isLastPage": True,
+    }
+    mock_get.return_value = mock_resp
+
+    comments = connector._fetch_request_comments("JSM-1")
+    assert comments == ["Hello public comment", "Hello default public comment"]

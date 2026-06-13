@@ -192,6 +192,9 @@ class JiraServiceManagementConnector(
 
                 values = data.get("values", [])
                 for comment in values:
+                    # Filter for customer-visible public comments only (identified by cubic)
+                    if not comment.get("public", True):
+                        continue
                     body = comment.get("body", "")
                     if body:
                         comments.append(body)
