@@ -1,10 +1,17 @@
 # ruff: noqa: E501, W605 start
+from onyx.prompts.search_strategy import CHAT_SEARCH_STRATEGY_GUIDANCE
+from onyx.prompts.search_strategy import EVIDENCE_EVALUATION_GUIDANCE
+from onyx.prompts.search_strategy import OPEN_URL_EVIDENCE_GUIDANCE
+from onyx.prompts.search_strategy import QUERY_PORTFOLIO_GUIDANCE
+from onyx.prompts.search_strategy import SOURCE_ROUTING_GUIDANCE
+
 # If there are any tools, this section is included, the sections below are for the available tools
 TOOL_SECTION_HEADER = "\n# Tools\n\n"
 
 
 # This section is included if there are search type tools, currently internal_search and web_search
-TOOL_DESCRIPTION_SEARCH_GUIDANCE = """
+TOOL_DESCRIPTION_SEARCH_GUIDANCE = (
+    """
 For questions that can be answered from existing knowledge, answer the user directly without using any tools. \
 If you suspect your knowledge is outdated or for topics where things are rapidly changing, use search tools to get more context. \
 For statements that may be describing or referring to a document, run a search for the document. \
@@ -16,7 +23,10 @@ When searching for information, if the initial results cannot fully answer the u
 Do not repeat the same or very similar queries if it already has been run in the chat history.
 
 If it is unclear which tool to use, consider using multiple in parallel to be efficient with time.
-""".lstrip()
+"""
+    + "\n"
+    + CHAT_SEARCH_STRATEGY_GUIDANCE
+).lstrip()
 
 
 INTERNAL_SEARCH_GUIDANCE = """
@@ -30,26 +40,38 @@ Never provide more than 3 queries at once to `internal_search`.
 """.lstrip()
 
 
-WEB_SEARCH_GUIDANCE = """
+WEB_SEARCH_GUIDANCE = (
+    """
 ## web_search
 Use the `web_search` tool to access up-to-date information from the web. Some examples of when to use `web_search` include:
 - Freshness: when the answer might be enhanced by up-to-date information on a topic. Very important for topics that are changing or evolving.
 - Accuracy: if the cost of outdated/inaccurate information is high.
 - Niche Information: when detailed info is not widely known or understood (but is likely found on the internet).{site_colon_disabled}
-""".lstrip()
+"""
+    + "\n"
+    + QUERY_PORTFOLIO_GUIDANCE
+    + "\n"
+    + SOURCE_ROUTING_GUIDANCE
+    + "\n"
+    + EVIDENCE_EVALUATION_GUIDANCE
+).lstrip()
 
 WEB_SEARCH_SITE_DISABLED_GUIDANCE = """
 Do not use the "site:" operator in your web search queries.
 """.lstrip()
 
 
-OPEN_URLS_GUIDANCE = """
+OPEN_URLS_GUIDANCE = (
+    """
 ## open_url
 Use the `open_url` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your web searches or user specified URLs. \
 You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources. \
 Do not open URLs that are image files like .png, .jpg, etc.
 You should almost always use open_url after a web_search call. Use this tool when a user asks about a specific provided URL.
-""".lstrip()
+"""
+    + "\n"
+    + OPEN_URL_EVIDENCE_GUIDANCE
+).lstrip()
 
 PYTHON_TOOL_GUIDANCE = """
 ## python
