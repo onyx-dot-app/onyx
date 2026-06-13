@@ -71,6 +71,9 @@
 | **E10** | C 端前台重塑 | 🔵 商业化期 | 在现有 web 上做消费级 UI:首页/发现/历史/分享/品牌视觉 |
 | **E11** | 国内云部署运维 | 🔵 上线期 | 阿里云/腾讯云,托管 OpenSearch/PG/Redis/OSS,Craft 的 k8s,监控 |
 | **E12** | 国内连接器 | ⚪ 生态·最后 | 飞书/钉钉/语雀/企业微信 |
+| **E13** | 超级编排层（Orchestrator / MoA） | 🟡 王牌期 P2（增强） | 把主对话从"单 agent + 工具"升级为"主控**自动路由意图** + **派子 agent**"。基于现成原语：`CodingAgentTool`（子 agent 即工具）、`dr_loop`（orchestrator 模板）、`Emitter/Packet`（子 agent 进度流式展示）。目标：自动判断意图（聊天/研究/建站）、并行派子 agent、汇总（Mixture-of-Agents） |
+
+> **架构洞察（为什么 E13 是"增强"而非"重写"）**：在 Onyx 里「**子 agent = 一个内部跑 agent loop 的工具**」。主对话（`chat/llm_loop.py`）已是"单 agent + 工具自动编排",且 `CodingAgentTool` 就是把内部 agent loop 包成工具的现成范式;深度研究（`dr_loop.py`）已是"orchestrator 规划 → 派 research 子 agent → 汇总"的完整实现,只是靠请求上的 `deep_research` 开关触发（`process_message.py:1223`），不是主控自动决定。**原语齐备（子 agent 即工具 + orchestrator 模板 + 流式协议），E13 差的只是上面那层"自动路由 + 多子 agent 编排"。**
 
 ---
 
@@ -86,9 +89,10 @@
   3. 主观信号:用户**愿意再用 / 愿意推荐**（留存与口碑意愿）。
 - **退出条件**：验证通过 → 进 Phase B;不通过 → 调整产品方向（而不是继续投商业化）。
 
-### Phase B —— 亮王牌（Craft）
-- **内容**：E5 Craft C 端化 + E6 生成物分享。沙箱国内化（镜像/网络/k8s）。
-- **交付物**：能**生成并分享**站点 / PPT / 数据 / 海报 的版本——对标 Genspark 的核心差异化。
+### Phase B —— 亮王牌（Craft + 超级编排）
+- **内容**：E5 Craft C 端化 + E6 生成物分享 + **E13 超级编排层**。沙箱国内化（镜像/网络/k8s）。
+- **交付物**：能**生成并分享**站点 / PPT / 数据 / 海报,且主控能**自动路由 + 调度子 agent**（聊天/研究/建站无感切换）——对标 Genspark 的核心差异化。
+- **次序提示**：先 E5/E6 把 Craft 变成"可派的子 agent",再上 E13 让主控自动编排;验证期（Phase A）用现有"对话 + 深度研究开关"已足够像 Genspark,不必提前做 E13。
 
 ### Phase C —— 商业化与上线（验证可行后再启动）
 - **内容**：E7 鉴权（微信/手机）→ E8 计费 → **E9 合规（内容安全先行）** → E10 前台重塑 → E11 国内云部署 → E12 连接器。
