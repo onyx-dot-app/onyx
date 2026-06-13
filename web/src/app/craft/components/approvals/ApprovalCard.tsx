@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSWRConfig } from "swr";
 
-import { Button, Text } from "@opal/components";
+import { Button, Text, Tooltip } from "@opal/components";
 import { cn } from "@opal/utils";
 import {
   SvgAlertCircle,
@@ -19,6 +19,7 @@ import {
 import {
   ApprovalConflictError,
   postApprovalDecision,
+  postApprovalSessionGrant,
 } from "@/app/craft/services/apiServices";
 import {
   ApprovalAction,
@@ -69,8 +70,8 @@ function ActionList({ actions }: { actions: ApprovalAction[] }) {
 }
 
 /**
- * One row per pending approval. Approve/Reject sit in the header so the
- * user can decide without expanding; the body shows the per-action
+ * One row per pending approval. The header names the action, the action row
+ * lets the user decide without expanding, and the body shows the per-action
  * breakdown (when multi) and the payload.
  */
 export default function ApprovalCard({
@@ -98,28 +99,38 @@ export default function ApprovalCard({
     };
   }, []);
 
-  const headline = approvalHeadline(approval);
   const swrKey = SWR_KEYS.buildSessionLiveApprovals(approval.session_id);
-
   const decided = decision !== null;
   const approved = decision === "APPROVED";
+  const headline = approvalHeadline(approval);
+  const headerText = decided ? headline : `Approval required: ${headline}`;
 
-  async function decide(next: ApprovalSubmitDecision) {
+  async function submitDecision(
+    next: ApprovalSubmitDecision,
+    request: () => Promise<unknown>,
+    refetchDelayMs = SETTLE_HOLD_MS
+  ) {
     setSubmitting(true);
     setErrorMessage(null);
     setDecision(next);
     try {
-      await postApprovalDecision(approval.approval_id, next);
-      settleTimer.current = setTimeout(() => {
+      await request();
+      if (refetchDelayMs === 0) {
         void mutate(swrKey);
-      }, SETTLE_HOLD_MS);
-    } catch (e) {
-      // 409 = already resolved (by someone else, or expired by the
-      // proxy). Same UX as a successful submit: hold the settle, then refetch.
-      if (e instanceof ApprovalConflictError) {
+      } else {
         settleTimer.current = setTimeout(() => {
           void mutate(swrKey);
-        }, SETTLE_HOLD_MS);
+        }, refetchDelayMs);
+      }
+    } catch (e) {
+      // 409 = already resolved (by someone else, or expired by the
+      // proxy). Refetch immediately so optimistic copy cannot imply this
+      // specific decision was accepted.
+      if (e instanceof ApprovalConflictError) {
+        if (mountedRef.current) {
+          setDecision(null);
+        }
+        void mutate(swrKey);
         return;
       }
       console.error("Failed to submit approval decision:", e);
@@ -179,7 +190,7 @@ export default function ApprovalCard({
                   <SvgLoader className="size-4 shrink-0 stroke-status-info-05 animate-spin" />
                 )}
                 <Text font="main-ui-muted" color="text-04" nowrap>
-                  {headline}
+                  {headerText}
                 </Text>
               </button>
             </CollapsibleTrigger>
@@ -194,26 +205,7 @@ export default function ApprovalCard({
                   {approved ? "Approved" : "Rejected"}
                 </Text>
               </div>
-            ) : (
-              <>
-                <Button
-                  prominence="primary"
-                  size="sm"
-                  disabled={submitting}
-                  onClick={() => decide("APPROVED")}
-                >
-                  Approve
-                </Button>
-                <Button
-                  prominence="secondary"
-                  size="sm"
-                  disabled={submitting}
-                  onClick={() => decide("REJECTED")}
-                >
-                  Reject
-                </Button>
-              </>
-            )}
+            ) : null}
             <CollapsibleTrigger asChild>
               <button
                 data-approval-trigger
@@ -229,6 +221,56 @@ export default function ApprovalCard({
               </button>
             </CollapsibleTrigger>
           </div>
+          {!decided && (
+            <div className="flex flex-wrap items-center justify-end gap-1 px-3 pb-2">
+              <Button
+                prominence="primary"
+                size="sm"
+                disabled={submitting}
+                onClick={() =>
+                  void submitDecision("APPROVED", () =>
+                    postApprovalDecision(approval.approval_id, "APPROVED")
+                  )
+                }
+                aria-label="Approve this action once"
+              >
+                Approve once
+              </Button>
+              <Tooltip
+                tooltip="Approve matching actions for this session"
+                delayDuration={200}
+              >
+                <Button
+                  prominence="secondary"
+                  size="sm"
+                  disabled={submitting}
+                  onClick={() =>
+                    void submitDecision(
+                      "APPROVED",
+                      () => postApprovalSessionGrant(approval.approval_id),
+                      0
+                    )
+                  }
+                  aria-label="Approve matching actions for this session"
+                >
+                  Approve for session
+                </Button>
+              </Tooltip>
+              <Button
+                prominence="secondary"
+                size="sm"
+                disabled={submitting}
+                onClick={() =>
+                  void submitDecision("REJECTED", () =>
+                    postApprovalDecision(approval.approval_id, "REJECTED")
+                  )
+                }
+                aria-label="Reject this action"
+              >
+                Reject
+              </Button>
+            </div>
+          )}
           <CollapsibleContent>
             <div className="p-2 flex flex-col gap-3">
               <ActionList actions={approval.actions} />

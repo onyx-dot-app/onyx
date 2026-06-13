@@ -50,6 +50,12 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: web
 
+      # Opal's CSS build inlines @onyx-ai/shared's generated design tokens, so
+      # shared must be built first. The published opal is then self-contained.
+      - name: Build shared (design tokens)
+        run: bun run build
+        working-directory: web/lib/shared
+
       - name: Build opal
         run: bun run build
 

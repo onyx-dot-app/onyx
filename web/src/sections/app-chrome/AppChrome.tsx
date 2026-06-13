@@ -1,7 +1,14 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { RootLayout } from "@opal/layouts";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+  type ReactNode,
+} from "react";
+import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import { ensureHrefProtocol, INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
@@ -15,11 +22,11 @@ import IconButton from "@/refresh-components/buttons/IconButton";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useChatSessions from "@/hooks/useChatSessions";
 import {
-  handleMoveOperation,
   shouldShowMoveModal,
   showErrorNotification,
-} from "@/sections/sidebar/sidebarUtils";
-import { LOCAL_STORAGE_KEYS } from "@/sections/sidebar/constants";
+} from "@/lib/sidebar/utils";
+import { handleMoveOperation } from "@/lib/sidebar/svc";
+import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import { deleteChatSession } from "@/app/app/services/lib";
 import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
@@ -29,7 +36,7 @@ import { Popover, PopoverMenu } from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { Button, LineItemButton, OpenButton } from "@opal/components";
-import { useSidebarState } from "@/layouts/sidebar-layouts";
+import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
@@ -278,16 +285,7 @@ function HeaderInner({
         </ConfirmationModalLayout>
       )}
 
-      <div
-        className={cn(
-          "w-full flex flex-row flex-wrap justify-center items-center px-4",
-          // # Note (@raunakab):
-          //
-          // We add an additional top margin to align this header with the `LogoSection` inside of the App-Sidebar.
-          // For more information, check out `SidebarWrapper.tsx`.
-          "mt-2"
-        )}
-      >
+      <div className="w-full flex flex-row flex-wrap justify-center items-center px-4">
         {/*
           Left:
           - (mobile) sidebar toggle
@@ -491,12 +489,15 @@ interface AppChromeProps {
 }
 
 export default function AppChrome({ children }: AppChromeProps) {
+  const [rightPanel, setRightPanel] = useState<ReactNode>(null);
+
   const appFocus = useAppFocus();
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();
   const { isSafari } = useBrowserInfo();
   const isLightMode = resolvedTheme === "light";
-  const showBackground = hasBackground && !appFocus.isProject();
+  const showBackground =
+    hasBackground && (appFocus.isChat() || appFocus.isNewSession());
 
   const horizontalBlurMask = `linear-gradient(
     to right,
@@ -537,65 +538,73 @@ export default function AppChrome({ children }: AppChromeProps) {
   }, []);
 
   return (
-    <RootLayout.App
-      data-main-container
-      className={cn(
-        "@container relative isolate",
-        showBackground && "bg-cover bg-center bg-fixed"
-      )}
-      style={
-        showBackground
-          ? { backgroundImage: `url(${appBackgroundUrl})` }
-          : undefined
-      }
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-    >
-      {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
-          z-[-1] keeps overlays below the normal-flow header/content/footer. */}
-      {showBackground && !isLightMode && (
-        <div
-          className="absolute z-[-1] inset-0 pointer-events-none"
-          style={{
-            background: `
-              linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
-              linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
-            `,
-          }}
-        />
-      )}
-      {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
-      {showBackground && appFocus.isChat() && (
-        <>
-          <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
-          {isSafari ? (
-            <div
-              className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
-              style={{
-                backgroundImage: `url(${appBackgroundUrl})`,
-                filter: "blur(16px)",
-                maskImage: horizontalBlurMask,
-                WebkitMaskImage: horizontalBlurMask,
-              }}
-            />
-          ) : (
-            <div
-              className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
-              style={{
-                maskImage: horizontalBlurMask,
-                WebkitMaskImage: horizontalBlurMask,
-              }}
-            />
-          )}
-        </>
-      )}
-      <RootLayout.Header>
-        <Header />
-      </RootLayout.Header>
-      <RootLayout.MainContent>{children}</RootLayout.MainContent>
-      <RootLayout.Footer>
-        <Footer />
-      </RootLayout.Footer>
-    </RootLayout.App>
+    <RootLayoutRightPanelSlotContext.Provider value={setRightPanel}>
+      <RootLayout.App
+        data-main-container
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+      >
+        <div className="flex flex-row flex-1 min-h-0">
+          <div
+            className={cn(
+              "@container relative isolate flex-1 flex flex-col min-h-0",
+              showBackground && "bg-cover bg-center bg-fixed"
+            )}
+            style={
+              showBackground
+                ? { backgroundImage: `url(${appBackgroundUrl})` }
+                : undefined
+            }
+          >
+            {/* Effect 1 — Vignette overlay for custom backgrounds (disabled in light mode).
+              z-[-1] keeps overlays below the normal-flow header/content/footer. */}
+            {showBackground && !isLightMode && (
+              <div
+                className="absolute z-[-1] inset-0 pointer-events-none"
+                style={{
+                  background: `
+                  linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 4rem),
+                  linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 4rem)
+                `,
+                }}
+              />
+            )}
+            {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
+            {showBackground && appFocus.isChat() && (
+              <>
+                <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
+                {isSafari ? (
+                  <div
+                    className="absolute z-[-1] inset-0 bg-cover bg-center bg-fixed pointer-events-none"
+                    style={{
+                      backgroundImage: `url(${appBackgroundUrl})`,
+                      filter: "blur(16px)",
+                      maskImage: horizontalBlurMask,
+                      WebkitMaskImage: horizontalBlurMask,
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="absolute z-[-1] inset-0 backdrop-blur-md transition-all duration-600 pointer-events-none"
+                    style={{
+                      maskImage: horizontalBlurMask,
+                      WebkitMaskImage: horizontalBlurMask,
+                    }}
+                  />
+                )}
+              </>
+            )}
+            <RootLayout.Header>
+              <Header />
+            </RootLayout.Header>
+            <RootLayout.MainContent>{children}</RootLayout.MainContent>
+            <RootLayout.Footer>
+              <Footer />
+            </RootLayout.Footer>
+          </div>
+          {rightPanel}
+        </div>
+      </RootLayout.App>
+    </RootLayoutRightPanelSlotContext.Provider>
   );
 }

@@ -21,10 +21,12 @@ The sandbox system provides isolated execution environments where OpenCode agent
 
 1. **Kubernetes Mode** (`SANDBOX_BACKEND=kubernetes`) — default
    - Sandboxes run as Kubernetes pods, one per user
+   - Each pod has one app container (`sandbox`) plus one native restartable init sidecar (`sidecar`) for push/snapshot control-plane work
    - api_server talks to the Kubernetes API for pod lifecycle and `kubectl exec`
-   - Automatic snapshots to S3 via a sidecar container with IRSA credentials
+   - Automatic snapshots stream through the in-pod sidecar to the api_server-owned `FileStore`
    - Auto-cleanup of idle sandboxes
    - Production-ready with resource isolation, security context, and NetworkPolicies
+   - Requires Kubernetes `>= 1.33` for native restartable init sidecar containers
    - Used by Onyx's Helm chart / cloud deployment
    - For local-cluster development, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md).
 
@@ -45,7 +47,7 @@ The Docker backend is intentionally the closest single-VM analogue of the Kubern
 | Sandbox pod (`sandbox-<id>`)          | Sandbox container (`sandbox-<id8>`)                         |
 | Pod `emptyDir` workspace volume       | Named volume mounted at `/workspace/sessions`               |
 | `kubectl exec` for setup + file ops   | `docker exec` over the Docker Engine API                    |
-| Sidecar container for snapshots/IRSA  | api_server tar-streams via `docker exec` → `FileStore`      |
+| Sidecar snapshot daemon, no storage credentials | api_server tar-streams via `docker exec` → `FileStore` |
 | `Service` + DNS for Next.js preview   | Container IP on `onyx_craft_sandbox` bridge, proxied        |
 | `NetworkPolicy` for egress isolation  | Dedicated bridge network + host `DOCKER-USER` iptables rule |
 | Per-pod resource requests/limits      | `SANDBOX_DOCKER_CPU_LIMIT` / `SANDBOX_DOCKER_MEMORY_LIMIT`  |
@@ -97,7 +99,7 @@ docker build -t onyxdotapp/sandbox:latest .
 **How it works:**
 
 - **Sandbox image**: Bakes in the web template (`/workspace/templates/outputs`) and a pre-built Python venv (`/workspace/.venv`) from `initial-requirements.txt`
-- **Init container** (Kubernetes only): Syncs knowledge files from S3
+- **Native init sidecar daemon** (Kubernetes only): Starts before the sandbox app container, stays running for the pod lifetime, and packages/restores session snapshots on the pod-local filesystem
 - **Sandbox startup**: Runs `bun install --frozen-lockfile` (hardlinks from the image's pre-warmed Bun cache) + `bun run dev`
 
 ## OpenCode Configuration
@@ -153,6 +155,11 @@ OPENCODE_DISABLED_TOOLS=question           # Comma-separated list, default: ques
 
 ### Kubernetes Settings
 
+Kubernetes Craft sandboxes require Kubernetes `>= 1.33` because sandbox pods
+use native restartable init sidecar containers (`initContainers[*].restartPolicy:
+Always`). Helm installs with `ENABLE_CRAFT=true` and `SANDBOX_BACKEND=kubernetes`
+fail during render/install on older clusters.
+
 ```bash
 # Kubernetes namespace
 SANDBOX_NAMESPACE=onyx-sandboxes          # Default: onyx-sandboxes
@@ -160,11 +167,12 @@ SANDBOX_NAMESPACE=onyx-sandboxes          # Default: onyx-sandboxes
 # Container image
 SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:latest
 
-# S3 bucket for snapshots and files
-SANDBOX_S3_BUCKET=onyx-sandbox-files      # Default: onyx-sandbox-files
+# Snapshots use the normal Onyx FileStore configuration
+FILE_STORE_BACKEND=s3|gcs|postgres
+S3_FILE_STORE_BUCKET_NAME=onyx-file-store # when FILE_STORE_BACKEND=s3
 
 # Service account
-SANDBOX_SERVICE_ACCOUNT_NAME=sandbox-file-sync  # Has S3 access via IRSA for snapshots
+SANDBOX_SERVICE_ACCOUNT_NAME=sandbox      # No storage credentials required
 ```
 
 ### Docker Settings
@@ -235,8 +243,8 @@ uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandb
 **Solutions**:
 
 - Check pod logs: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id}`
-- Verify init container completed: `kubectl describe pod -n onyx-sandboxes sandbox-{sandbox-id}`
-- Check S3 bucket access: Ensure init container service account has IRSA configured
+- Check sidecar logs: `kubectl logs -n onyx-sandboxes sandbox-{sandbox-id} -c sidecar`
+- Verify the sandbox proxy host/CA configuration and ServiceAccount exist in the sandbox namespace
 
 ### Next.js Server Won't Start
 
@@ -253,7 +261,7 @@ uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandb
 ### Sandbox Isolation
 
 - **Kubernetes pods** run with restricted security context (non-root, no privilege escalation)
-- **Init containers** have S3 access for file sync, but main sandbox container does NOT
+- **Sandbox app containers and sidecar init containers** do not receive FileStore, S3, or MinIO credentials
 - **Network policies** can restrict sandbox egress traffic
 - **Resource limits** prevent resource exhaustion
 - **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`)
@@ -264,7 +272,7 @@ uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandb
 
 - LLM API keys are passed as environment variables (not stored in sandbox)
 - User file access is read-only via symlinks
-- Snapshots are isolated per tenant in S3
+- Snapshots are stored through the normal Onyx `FileStore` and isolated by tenant-scoped snapshot paths
 
 ## Development
 
@@ -312,7 +320,7 @@ This template provides a modern development environment without the complexity o
 
 The Python venv (built into the sandbox image at `/workspace/.venv`) includes packages from `image/initial-requirements.txt`:
 
-- Data processing: pandas, numpy, polars
+- Data processing: pandas, numpy, matplotlib
 - HTTP clients: requests, httpx
 - Utilities: python-dotenv, pydantic
 

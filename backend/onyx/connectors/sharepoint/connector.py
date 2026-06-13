@@ -83,6 +83,7 @@ from onyx.file_processing.image_utils import make_image_callback
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.url import SSRFException
 from onyx.utils.url import validate_outbound_http_url
@@ -313,23 +314,19 @@ def _graph_error_code(response: requests.Response | None) -> str:
 
 
 def _backoff_seconds(attempt: int, retry_after: str | None) -> float:
-    """Honor a numeric Retry-After header when the server provides one,
-    otherwise fall back to capped exponential backoff with equal jitter.
+    """Honor a server-provided Retry-After header (numeric seconds or HTTP-date)
+    when present, otherwise fall back to capped exponential backoff with equal
+    jitter.
 
     Base sequence is 5s, 10s, 20s, capped at 30s. The actual sleep is drawn
     from ``[base/2, base]`` so that many documents failing at the same instant
     (e.g. during a Graph throttling window) don't all retry on the same tick
     and re-create the thundering herd. Server-provided Retry-After values are
     used verbatim — those are an explicit instruction, not a guess.
-
-    The HTTP-date form of Retry-After is rare from SharePoint / Graph in
-    practice and falls through to the jittered exponential backoff.
     """
-    if retry_after:
-        try:
-            return float(retry_after)
-        except ValueError:
-            pass
+    parsed = parse_retry_after_seconds(retry_after)
+    if parsed is not None:
+        return parsed
     base = min(30, (2**attempt) * 5)
     return base / 2 + random.uniform(0, base / 2)
 
@@ -1874,8 +1871,13 @@ class SharepointConnector(
                 )
                 if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
                     if attempt < GRAPH_API_MAX_RETRIES:
-                        retry_after = int(
-                            response.headers.get("Retry-After", str(2**attempt))
+                        parsed_retry_after = parse_retry_after_seconds(
+                            response.headers.get("Retry-After")
+                        )
+                        retry_after = (
+                            parsed_retry_after
+                            if parsed_retry_after is not None
+                            else float(2**attempt)
                         )
                         wait = min(retry_after, 60)
                         logger.warning(

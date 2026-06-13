@@ -12,7 +12,6 @@
 @import "./css/line-item.css" layer(base);
 @import "./css/square-button.css" layer(base);
 @import "./css/z-index.css" layer(base);
-
 @config '../../tailwind.config.js';
 
 /*
@@ -170,10 +169,29 @@
     scrollbar-width: none;
   }
 }
+
 @layer base {
   * {
     scrollbar-width: auto;
   }
+}
+
+/* DBG */
+
+@utility dbg-red {
+  /* DEBUGGING UTILITIES
+  If you ever want to highlight a component for debugging purposes, just type in `className="dbg-red ..."`, and a red box should appear around it.
+  This helps with placing things properly on the screen and seeing how they look during active development.
+  */
+  border: 1px solid red;
+}
+
+@utility dbg-blue {
+  border: 1px solid blue;
+}
+
+@utility dbg-green {
+  border: 1px solid green;
 }
 
 /* TEXTAREA */

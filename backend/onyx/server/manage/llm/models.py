@@ -73,21 +73,31 @@ class LLMProviderDescriptor(BaseModel):
         llm_provider_model: "LLMProviderModel",
     ) -> "LLMProviderDescriptor":
         from onyx.llm.well_known_providers.llm_provider_options import (
+            fetch_default_model_for_provider,
+        )
+        from onyx.llm.well_known_providers.llm_provider_options import (
             get_provider_display_name,
         )
 
         provider = llm_provider_model.provider
+
+        model_configurations = filter_model_configurations(
+            llm_provider_model.model_configurations,
+            provider,
+            use_stored_display_name=llm_provider_model.custom_config is not None,
+        )
+        default_model = fetch_default_model_for_provider(provider)
+        for model_configuration in model_configurations:
+            model_configuration.is_recommended_default = (
+                model_configuration.name == default_model
+            )
 
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
-            model_configurations=filter_model_configurations(
-                llm_provider_model.model_configurations,
-                provider,
-                use_stored_display_name=llm_provider_model.custom_config is not None,
-            ),
+            model_configurations=model_configurations,
         )
 
 
@@ -204,6 +214,8 @@ class ModelConfigurationView(BaseModel):
     max_input_tokens: int | None = None
     supports_image_input: bool
     supports_reasoning: bool = False
+    # True when this is the provider's recommended default model.
+    is_recommended_default: bool = False
     display_name: str | None = None
     custom_display_name: str | None = None
     provider_display_name: str | None = None

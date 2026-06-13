@@ -2,11 +2,10 @@
 
 These tests exercise the real Kubernetes snapshot/restore flow:
 - Pods are provisioned via ``KubernetesSandboxManager``.
-- Snapshots are uploaded to the SANDBOX_S3_BUCKET via AWS CLI inside the pod
-  (NOT via the FileStore abstraction — the K8s backend bypasses it for
-  bandwidth reasons; see ``create_snapshot`` docstring).
-- Verification downloads the resulting tarball via boto3 against the same
-  bucket and inspects its members locally with ``tmp_path``.
+- Snapshots are streamed from the pod sidecar to the API server, then persisted
+  through the normal Onyx FileStore.
+- Verification downloads the resulting tarball via FileStore and inspects its
+  members locally with ``tmp_path``.
 
 The file-level ``pytestmark`` gates the entire module to the K8s CI lane.
 Per project memory: never run these locally — they touch the real cluster.
@@ -15,25 +14,24 @@ Per project memory: never run these locally — they touch the real cluster.
 from __future__ import annotations
 
 import io
-import os
+import shutil
 import tarfile
 from pathlib import Path
-from typing import Any
 from uuid import UUID
+from uuid import uuid4
 
-import boto3
 import pytest
-from botocore.config import Config
 from kubernetes import client
-from kubernetes.client.rest import ApiException
 
+from onyx.configs.constants import FileOrigin
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_S3_BUCKET
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
+from onyx.server.features.build.sandbox.snapshot_manager import SNAPSHOT_FILE_TYPE
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
 from tests.external_dependency_unit.craft.conftest import pod_exec
@@ -50,7 +48,7 @@ pytestmark = pytest.mark.skipif(
 #
 # Generic K8s helpers (``pod_exec``, ``wait_for_pod_deletion``, ``k8s_client``
 # fixture) live in conftest.py per Part V.1. What remains here is
-# snapshot/S3 plumbing plus the live-pod fixture that wires them up.
+# snapshot/FileStore plumbing plus the live-pod fixture that wires them up.
 # ---------------------------------------------------------------------------
 
 
@@ -71,7 +69,6 @@ def _populate_session_workspace(
         "outputs/web/page.tsx": "// hello from outputs\n",
         "outputs/data/manifest.json": '{"v": 1}\n',
         "attachments/notes.txt": "user uploaded notes\n",
-        ".opencode-data/session.json": '{"id": "deadbeef"}\n',
     }
 
     script_lines = ["set -e", f"cd {session_path}"]
@@ -100,50 +97,33 @@ def _populate_session_workspace(
     return payload
 
 
-def _s3_client() -> Any:
-    """Return a boto3 S3 client configured for the sandbox bucket.
-
-    The K8s manager bypasses the FileStore for snapshots and uses AWS CLI
-    in-pod, so the test verifies via boto3 directly against the same bucket.
-
-    In CI the in-pod sidecar talks to MinIO via the cluster-internal DNS
-    name (``AWS_ENDPOINT_URL`` env), but the test process runs on the host
-    and must use the host-accessible endpoint exposed by docker-compose
-    (``S3_ENDPOINT_URL``). Construct the client explicitly so it doesn't
-    inherit the in-cluster endpoint from ``AWS_ENDPOINT_URL``.
-
-    Path-style addressing is required for MinIO (mirrors ``file_store.py``).
-    """
-    endpoint_url = os.environ.get("S3_ENDPOINT_URL")
-    access_key = os.environ.get("S3_AWS_ACCESS_KEY_ID")
-    secret_key = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
-    region = os.environ.get("AWS_REGION") or "us-east-1"
-    return boto3.client(
-        "s3",
-        endpoint_url=endpoint_url,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        region_name=region,
-        config=Config(s3={"addressing_style": "path"}),
-    )
-
-
 def _download_snapshot(storage_path: str, dest: Path) -> None:
-    """Download a snapshot blob from SANDBOX_S3_BUCKET to ``dest``."""
-    _s3_client().download_file(SANDBOX_S3_BUCKET, storage_path, str(dest))
+    """Download a snapshot blob from FileStore to ``dest``."""
+    file_io = get_default_file_store().read_file(storage_path, use_tempfile=True)
+    try:
+        with dest.open("wb") as out_file:
+            shutil.copyfileobj(file_io, out_file)
+    finally:
+        file_io.close()
 
 
 def _delete_snapshot(storage_path: str) -> None:
     try:
-        _s3_client().delete_object(Bucket=SANDBOX_S3_BUCKET, Key=storage_path)
+        get_default_file_store().delete_file(storage_path, error_on_missing=False)
     except Exception:
         pass
 
 
 def _put_snapshot_bytes(storage_path: str, body: bytes) -> None:
-    """Upload arbitrary bytes to the snapshot bucket (used to forge corrupt
+    """Upload arbitrary bytes to FileStore (used to forge corrupt
     or traversal-laden tarballs that real callers can't produce)."""
-    _s3_client().put_object(Bucket=SANDBOX_S3_BUCKET, Key=storage_path, Body=body)
+    get_default_file_store().save_file(
+        content=io.BytesIO(body),
+        display_name=Path(storage_path).name,
+        file_origin=FileOrigin.SANDBOX_SNAPSHOT,
+        file_type=SNAPSHOT_FILE_TYPE,
+        file_id=storage_path,
+    )
 
 
 def _list_archive_members(tar_path: Path) -> list[str]:
@@ -155,7 +135,7 @@ def _list_archive_members(tar_path: Path) -> list[str]:
 # Fixtures: k8s_manager, pool_session, and live_pod are provided by conftest.py.
 # Tests use ``pool_session`` to share the module pod; ``live_pod`` is
 # reserved for the termination test and the traversal-defence test (where
-# isolation matters if the defence ever regresses). Snapshot S3 cleanup
+# isolation matters if the defence ever regresses). Snapshot FileStore cleanup
 # is not handled by either fixture — snapshot keys include the per-test
 # session_id so they don't collide.
 # ---------------------------------------------------------------------------
@@ -166,7 +146,7 @@ def _list_archive_members(tar_path: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def test_snapshot_includes_outputs_and_attachments_and_opencode_data(
+def test_snapshot_includes_outputs_and_attachments_only(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
@@ -191,14 +171,13 @@ def test_snapshot_includes_outputs_and_attachments_and_opencode_data(
     assert any(m == "attachments" or m.startswith("attachments/") for m in members), (
         f"Expected attachments/ tree. Members: {members}"
     )
-    assert any(
+    assert not any(
         m == ".opencode-data" or m.startswith(".opencode-data/") for m in members
-    ), f"Expected .opencode-data/ tree. Members: {members}"
+    ), f".opencode-data/ must not appear in session snapshot. Members: {members}"
 
     # The specific seed files should round-trip.
     assert any(m.endswith("outputs/web/page.tsx") for m in members)
     assert any(m.endswith("attachments/notes.txt") for m in members)
-    assert any(m.endswith(".opencode-data/session.json") for m in members)
 
 
 def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
@@ -259,7 +238,7 @@ def test_restore_from_snapshot_recreates_workspace(
         pod_name,
         SANDBOX_NAMESPACE,
         f"cd /workspace/sessions/{session_id} && "
-        f"find outputs attachments .opencode-data -type f | sort | "
+        f"find outputs attachments -type f | sort | "
         f"xargs sha256sum",
     )
 
@@ -295,7 +274,7 @@ def test_restore_from_snapshot_recreates_workspace(
         pod_name,
         SANDBOX_NAMESPACE,
         f"cd /workspace/sessions/{session_id} && "
-        f"find outputs attachments .opencode-data -type f | sort | "
+        f"find outputs attachments -type f | sort | "
         f"xargs sha256sum",
     )
     assert pre_hashes.strip() == post_hashes.strip(), (
@@ -392,7 +371,7 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
     # Wipe the workspace so we can verify the fresh-setup path.
     k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
 
-    # No snapshot exists in S3 — the caller (sessions_api) handles the
+    # No snapshot exists — the caller (sessions_api) handles the
     # "no snapshot" path by calling ``setup_session_workspace`` rather than
     # ``restore_snapshot``. This test pins that contract: setup_session_workspace
     # must not raise and must produce a fresh outputs/ tree.
@@ -414,50 +393,45 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
     assert "AGENTS.md" in listing
 
 
-def test_snapshot_failure_does_not_block_pod_termination(
+def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
     live_pod: tuple[UUID, UUID, str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sandbox_id, session_id, pod_name = live_pod
+    sandbox_id, _session_id, pod_name = live_pod
+    marker_path = "/workspace/opencode-data/cache/history-roundtrip.txt"
 
-    _populate_session_workspace(k8s_client, pod_name, session_id)
-
-    # The K8s backend uses AWS CLI inside the pod (bypassing FileStore),
-    # so the equivalent of "monkeypatch save_file to raise" is to break
-    # ``create_snapshot`` directly. The orchestration contract (see
-    # ``cleanup_idle_sandboxes_task``) is: snapshot failure is caught and
-    # termination still proceeds.
-    def _boom(*_args: Any, **_kwargs: Any) -> None:
-        raise RuntimeError("simulated S3 outage")
-
-    monkeypatch.setattr(
-        KubernetesSandboxManager,
-        "create_snapshot",
-        _boom,
+    pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "mkdir -p /workspace/opencode-data/cache && "
+        f"printf '%s' 'restored-opencode-history' > {marker_path}",
     )
 
-    # Mimic the orchestration block from cleanup_idle_sandboxes_task in a
-    # narrow form: try snapshot, swallow on failure, then terminate.
-    snapshot_failed = False
-    try:
-        k8s_manager.create_snapshot(sandbox_id, session_id, TEST_TENANT_ID)
-    except Exception:
-        snapshot_failed = True
+    assert k8s_manager.create_opencode_history_snapshot(
+        sandbox_id,
+        TEST_TENANT_ID,
+    )
 
-    assert snapshot_failed, "monkeypatched create_snapshot should have raised"
-
-    # Termination should still succeed.
     k8s_manager.terminate(sandbox_id)
     wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
 
-    # Pod is gone.
-    try:
-        pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
-        assert pod.metadata.deletion_timestamp is not None
-    except ApiException as e:
-        assert e.status == 404
+    k8s_manager.provision(
+        sandbox_id=sandbox_id,
+        user_id=uuid4(),
+        tenant_id=TEST_TENANT_ID,
+        llm_config=default_llm_config(),
+        onyx_pat="test-onyx-pat",
+    )
+
+    restored = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"cat {marker_path}",
+    )
+    assert restored == "restored-opencode-history"
 
 
 def test_restore_uses_data_filter_to_block_traversal(
@@ -469,21 +443,14 @@ def test_restore_uses_data_filter_to_block_traversal(
     """Forge a tarball with a ``../escape.txt`` entry and verify the restore
     cannot write outside the session workspace.
 
-    Defence-in-depth here is provided by **GNU tar inside the pod**, not by
-    Python's ``tarfile.extractall(filter="data")``. The K8s backend pipes
-    ``s5cmd cat | tar -xzf - -C /workspace/sessions/<session_id>``; GNU
-    tar strips leading ``../`` components when extracting (refusing to
-    write above the ``-C`` directory) and the ``-C`` flag pins the
-    extraction root. The local sandbox backend uses Python's
-    ``tarfile.extractall(filter="data")`` instead — same observable
-    outcome, different mechanism. (The test name retains its historical
-    "data_filter" wording for stability; the actual K8s defence is
-    in-pod GNU tar.)
+    Defence-in-depth here is provided by the in-pod sidecar before extracting:
+    it validates snapshot members, rejects links/special files/traversal, and
+    only materializes entries under the snapshot-owned session roots. (The test
+    name retains its historical "data_filter" wording for stability.)
 
-    The test tolerates two outcomes: restore raises (tar rejected the
-    entry), or restore succeeds with the traversal entry confined. Either
-    way the would-be ``escape.txt`` must NOT exist above the session
-    directory afterwards.
+    The new sidecar contract is stricter than the old GNU tar path:
+    traversal must be rejected before extraction, not silently normalized
+    or skipped.
     """
     sandbox_id, session_id, pod_name = live_pod
 
@@ -495,7 +462,7 @@ def test_restore_uses_data_filter_to_block_traversal(
     k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
 
     # Build a tarball locally with one well-behaved entry plus one traversal
-    # entry. We use the local tmp_path to assemble it, then upload via S3.
+    # entry. We use the local tmp_path to assemble it, then upload via FileStore.
     archive_local = tmp_path / "traversal.tar.gz"
     with tarfile.open(archive_local, "w:gz") as tar:
         # Well-behaved entry — should land inside the session dir.
@@ -512,15 +479,10 @@ def test_restore_uses_data_filter_to_block_traversal(
         tar.addfile(evil_info, fileobj=io.BytesIO(evil_payload))
 
     storage_path = f"{TEST_TENANT_ID}/snapshots/{session_id}/traversal.tar.gz"
-    _s3_client().upload_file(str(archive_local), SANDBOX_S3_BUCKET, storage_path)
+    _put_snapshot_bytes(storage_path, archive_local.read_bytes())
 
-    # Attempt to restore. We tolerate either outcome:
-    # (a) restore raises because tar rejected the traversal entry, or
-    # (b) restore succeeds but the traversal entry was confined.
-    # Either way, ``/workspace/escape.txt`` (one level above the session)
-    # must NOT exist after the operation.
-    restore_raised = False
-    try:
+    # Attempt to restore. Traversal must be rejected before extraction.
+    with pytest.raises(Exception) as excinfo:
         k8s_manager.restore_snapshot(
             sandbox_id=sandbox_id,
             session_id=session_id,
@@ -530,8 +492,11 @@ def test_restore_uses_data_filter_to_block_traversal(
             llm_config=default_llm_config(),
             skills_section="No skills available.",
         )
-    except Exception:
-        restore_raised = True
+
+    err_text = str(excinfo.value).lower()
+    assert any(
+        token in err_text for token in ("traversal", "escape", "invalid snapshot")
+    ), f"Restore should clearly reject traversal. Got: {excinfo.value}"
 
     # The session's parent dir must not have gained an ``escape.txt``.
     sessions_root_listing = pod_exec(
@@ -553,19 +518,24 @@ def test_restore_uses_data_filter_to_block_traversal(
         "[ -e /workspace/escape.txt ] && echo PRESENT || echo MISSING",
     )
     assert "MISSING" in escape_probe, (
-        f"/workspace/escape.txt should not exist post-restore. "
-        f"Probe: {escape_probe}. restore_raised={restore_raised}"
+        f"/workspace/escape.txt should not exist post-restore. Probe: {escape_probe}."
+    )
+
+    # The good member in the same archive should not have been extracted
+    # before rejecting the traversal member.
+    good_probe = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"[ -e /workspace/sessions/{session_id}/outputs/good.txt ] "
+        "&& echo PRESENT || echo MISSING",
+    )
+    assert "MISSING" in good_probe, (
+        "Traversal archive should be rejected before partial extraction. "
+        f"Probe: {good_probe}."
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "known: no checksum validation on snapshot tarballs; a partial-write "
-        "during S3 outage produces a corrupt blob and restore fails opaquely "
-        "(generic tarfile error rather than a clear corruption signal). "
-    ),
-)
 def test_snapshot_corruption_detected_on_restore(
     k8s_manager: KubernetesSandboxManager,
     pool_session: tuple[UUID, UUID, str],
@@ -578,9 +548,9 @@ def test_snapshot_corruption_detected_on_restore(
     _put_snapshot_bytes(storage_path, corrupt_bytes)
 
     # Restore should raise a SnapshotCorruption-class error (or at minimum
-    # an error whose message identifies the blob as corrupt). Today it
-    # raises a generic RuntimeError wrapping a tarfile / aws-cli failure,
-    # which this xfail absorbs until checksum validation lands.
+    # an error whose message identifies the blob as corrupt). The API-side
+    # upload checksum covers transit to the sidecar; tar validation covers
+    # corrupt archive contents.
     with pytest.raises(Exception) as excinfo:
         k8s_manager.restore_snapshot(
             sandbox_id=sandbox_id,

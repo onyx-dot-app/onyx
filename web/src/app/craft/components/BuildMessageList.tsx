@@ -2,14 +2,19 @@
 
 import { useEffect, useMemo } from "react";
 import { cn } from "@opal/utils";
+import { CopyButton } from "@opal/components";
+import { Hoverable } from "@opal/core";
+import { SvgAlertCircle } from "@opal/icons";
+import { AnimatePresence, motion } from "motion/react";
 import Logo from "@/refresh-components/Logo";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
 import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
-import UserMessage from "@/app/craft/components/UserMessage";
+import HumanMessage from "@/app/app/message/HumanMessage";
 import { BuildMessage } from "@/app/craft/types/streamingTypes";
 import {
   StreamItem,
@@ -79,29 +84,29 @@ export default function BuildMessageList({
   const lastMessage = messages[messages.length - 1];
   const lastMessageIsUser = lastMessage?.type === "user";
   const showStreamingArea =
-    hasStreamItems || (isStreaming && lastMessageIsUser);
+    hasStreamItems ||
+    (isStreaming && (lastMessageIsUser || messages.length === 0));
 
   const renderStreamItems = (
     rawItems: StreamItem[],
-    opts: { isCurrentStream: boolean; extractLatestTodo: boolean }
+    opts: {
+      isCurrentStream: boolean;
+      extractLatestTodo: boolean;
+    }
   ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
     // Render items in stream order (tools, text, thinking interleaved).
     //
     // Filtering rules that apply first:
     // - Only the LATEST todo_list is kept (either pinned via extractLatestTodo
     //   or rendered inline at its original position).
-    // - Thinking is ephemeral: the card shows only while the model is actively
-    //   thinking and disappears once that block settles.
+    // - Thinking remains as a collapsed transcript row so users have a durable
+    //   signal that the model spent time reasoning without opening by default.
     let latestTodoIdx = -1;
     rawItems.forEach((it, idx) => {
       if (it.type === "todo_list") latestTodoIdx = idx;
     });
 
     const items = rawItems.filter((it, idx) => {
-      // Drop settled thinking entirely — it's only shown live, in progress.
-      if (it.type === "thinking" && !it.isStreaming) {
-        return false;
-      }
       // Collapse to one todo_list per turn.
       if (it.type === "todo_list" && idx !== latestTodoIdx) {
         return false;
@@ -179,12 +184,21 @@ export default function BuildMessageList({
           );
         case "thinking":
           return (
-            <div key={item.id} className={cn(topMargin)}>
+            <motion.div
+              key={item.id}
+              className={cn(topMargin)}
+              initial={
+                opts.isCurrentStream ? { opacity: 0, y: -4, height: 0 } : false
+              }
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -6, height: 0, marginTop: 0 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            >
               <ThinkingCard
                 content={item.content}
                 isStreaming={item.isStreaming}
               />
-            </div>
+            </motion.div>
           );
         case "todo_list":
           return (
@@ -193,6 +207,20 @@ export default function BuildMessageList({
                 todoList={item.todoList}
                 defaultOpen={item.todoList.isOpen}
               />
+            </div>
+          );
+        case "error":
+          return (
+            <div
+              key={item.id}
+              className={cn(
+                topMargin,
+                "flex items-start gap-2 rounded-08 border border-status-error-02 bg-status-error-00 px-3 py-2 text-sm text-status-error-05"
+              )}
+              role="alert"
+            >
+              <SvgAlertCircle className="mt-0.5 size-4 shrink-0 stroke-status-error-05" />
+              <span className="min-w-0 break-words">{item.content}</span>
             </div>
           );
         default:
@@ -217,31 +245,53 @@ export default function BuildMessageList({
             extractLatestTodo: true,
           })
         : null;
+    const visibleSavedRender =
+      savedRender && (savedRender.pinnedTodo || savedRender.nodes.length > 0)
+        ? savedRender
+        : null;
 
     return (
-      <div key={message.id} className="flex items-start gap-3 py-4">
-        <div className="shrink-0 h-9 flex items-center">
-          <Logo onyxBranded folded size={24} />
-        </div>
-        <div className="flex-1 flex flex-col gap-2 min-w-0">
-          {savedRender ? (
-            <>
-              {savedRender.pinnedTodo && (
-                <div>
-                  <TodoListCard
-                    todoList={savedRender.pinnedTodo}
-                    defaultOpen={savedRender.pinnedTodo.isOpen}
+      <Hoverable.Root key={message.id} group="craftAgentMessage" width="full">
+        <div className="flex items-start gap-3 py-4">
+          <div className="shrink-0 h-9 flex items-center">
+            <Logo onyxBranded folded size={24} />
+          </div>
+          <div className="flex-1 flex flex-col gap-2 min-w-0">
+            {visibleSavedRender ? (
+              <>
+                {visibleSavedRender.pinnedTodo && (
+                  <div>
+                    <TodoListCard
+                      todoList={visibleSavedRender.pinnedTodo}
+                      defaultOpen={visibleSavedRender.pinnedTodo.isOpen}
+                    />
+                  </div>
+                )}
+                {visibleSavedRender.nodes}
+              </>
+            ) : (
+              <TextChunk content={message.content} />
+            )}
+            {message.content.trim() && (
+              <Hoverable.Item
+                group="craftAgentMessage"
+                variant="appear-on-hover"
+              >
+                <div className="flex flex-row -ml-1">
+                  <CopyButton
+                    getCopyText={() =>
+                      convertMarkdownTablesToTsv(message.content)
+                    }
+                    prominence="tertiary"
+                    data-testid="CraftAgentMessage/copy-button"
                   />
                 </div>
-              )}
-              {savedRender.nodes}
-            </>
-          ) : (
-            <TextChunk content={message.content} />
-          )}
-          {trailing}
+              </Hoverable.Item>
+            )}
+            {trailing}
+          </div>
         </div>
-      </div>
+      </Hoverable.Root>
     );
   };
 
@@ -268,7 +318,11 @@ export default function BuildMessageList({
       <div className="w-full max-w-[720px] rounded-16 p-4">
         {messages.map((message, idx) => {
           if (message.type === "user") {
-            return <UserMessage key={message.id} content={message.content} />;
+            return (
+              <div key={message.id} className="py-4">
+                <HumanMessage content={message.content} nodeId={idx} />
+              </div>
+            );
           }
           if (message.type === "assistant") {
             // Anchor the trailing slot (e.g. approval cards) under the
@@ -303,7 +357,9 @@ export default function BuildMessageList({
                   <BlinkingBar />
                 </div>
               ) : (
-                streamRender?.nodes
+                <AnimatePresence initial={false}>
+                  {streamRender?.nodes}
+                </AnimatePresence>
               )}
               {trailingAssistantSlot}
             </div>

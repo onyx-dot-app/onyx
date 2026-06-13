@@ -141,19 +141,73 @@ class BuildSessionManager:
         session_id: UUID,
         content: str,
     ) -> Iterator[dict[str, Any]]:
-        # send-message lives under /build/sessions/{id}/send-message but is
-        # registered on the messages_router which mounts at /build (the
-        # router itself declares the /sessions/... prefix).
+        turn = BuildSessionManager.start_turn(user, session_id, content)
+        yield from BuildSessionManager.stream_turn_events(
+            user,
+            session_id,
+            UUID(turn["turn_id"]),
+        )
+
+    @staticmethod
+    def start_turn(
+        user: DATestUser,
+        session_id: UUID,
+        content: str,
+        *,
+        client_request_id: str | None = None,
+    ) -> dict[str, Any]:
         url = _build_url("sessions", str(session_id), "send-message")
-        with client.stream(
-            "POST",
+        body: dict[str, Any] = {"content": content}
+        if client_request_id is not None:
+            body["client_request_id"] = client_request_id
+        response = client.post(
             url,
-            json={"content": content},
+            json=body,
+            headers=user.headers,
+            cookies=user.cookies,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
+    def get_active_turn(
+        user: DATestUser,
+        session_id: UUID,
+    ) -> dict[str, Any] | None:
+        response = client.get(
+            _build_url("sessions", str(session_id), "turns", "active"),
+            headers=user.headers,
+            cookies=user.cookies,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
+    def stream_turn_events(
+        user: DATestUser,
+        session_id: UUID,
+        turn_id: UUID,
+    ) -> Iterator[dict[str, Any]]:
+        with client.stream(
+            "GET",
+            _build_url("sessions", str(session_id), "turns", str(turn_id), "events"),
             headers=user.headers,
             cookies=user.cookies,
         ) as response:
+            if response.status_code in (404, 409):
+                return
             response.raise_for_status()
             yield from _parse_sse_lines(response)
+
+    @staticmethod
+    def list_messages(user: DATestUser, session_id: UUID) -> list[dict[str, Any]]:
+        response = client.get(
+            _build_url("sessions", str(session_id), "messages"),
+            headers=user.headers,
+            cookies=user.cookies,
+        )
+        response.raise_for_status()
+        return response.json()["messages"]
 
     @staticmethod
     def upload_file(

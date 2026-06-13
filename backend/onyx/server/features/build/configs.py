@@ -54,27 +54,25 @@ SANDBOX_CONTAINER_IMAGE = os.environ.get(
     "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.52"
 )
 
-# Path structure: s3://{bucket}/{tenant_id}/snapshots/{session_id}/{snapshot_id}.tar.gz
-#                 s3://{bucket}/{tenant_id}/knowledge/{user_id}/
-#                 s3://{bucket}/{tenant_id}/uploads/{session_id}/
-SANDBOX_S3_BUCKET = os.environ.get("SANDBOX_S3_BUCKET", "onyx-sandbox-files")
+# Set to "Always" in environments that pin a mutable tag (e.g. :dev) so nodes
+# re-pull on every pod start; immutable version pins can use the node cache.
+SANDBOX_IMAGE_PULL_POLICY = os.environ.get("SANDBOX_IMAGE_PULL_POLICY", "IfNotPresent")
 
-# Needs IRSA for S3 snapshot access.
-SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get(
-    "SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox-file-sync"
-)
+SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get("SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox")
 
 ENABLE_CRAFT = os.environ.get("ENABLE_CRAFT", "false").lower() == "true"
 
-# Keep in sync with BUILD_MODE_PROVIDERS in
-# web/src/app/craft/onboarding/constants.ts; enforced by
-# test_build_mode_provider_types_sync.py.
+SANDBOX_PUSH_PRIVATE_KEY = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY", "")
+
+
+# Provider types Craft supports. The recommended models per type come from the
+# shared recommended-models config (served via /build/recommended-models).
 BUILD_MODE_ALLOWED_PROVIDER_TYPES = ["anthropic", "openai", "openrouter"]
-BUILD_MODE_RECOMMENDED_MODEL_BY_TYPE = {
-    "anthropic": "claude-opus-4-8",
-    "openai": "gpt-5.5",
-    "openrouter": "minimax/minimax-m3",
-}
+
+# apiKey sentinel for a supported provider the org hasn't configured. We register
+# every supported provider so a cross-provider override never hits "model not
+# found"; an unconfigured one fails closed instead (proxy 403 / upstream 401).
+BUILD_MODE_NOT_CONFIGURED_API_KEY = "onyx-provider-not-configured"
 
 # Dev/debug-only: exposes an SSE endpoint that tails the sandbox pod's
 # opencode-serve container logs. Never enable in prod — the logs include LLM I/O
@@ -87,15 +85,6 @@ ENABLE_OPENCODE_DEBUGGING = (
 # Must be set when SANDBOX_BACKEND=kubernetes (no default — varies per
 # deployment).
 SANDBOX_API_SERVER_URL = os.environ.get("SANDBOX_API_SERVER_URL", "")
-
-# Defaults match production sizing. CI overrides these in kind clusters where
-# the runner only has 4 vCPU and we provision 4+ sandbox pods concurrently; the
-# k8s scheduler honors requests, so production defaults would block all but one
-# pod from being scheduled at the same time.
-SANDBOX_POD_CPU_REQUEST = os.environ.get("SANDBOX_POD_CPU_REQUEST", "1000m")
-SANDBOX_POD_MEMORY_REQUEST = os.environ.get("SANDBOX_POD_MEMORY_REQUEST", "2Gi")
-SANDBOX_POD_CPU_LIMIT = os.environ.get("SANDBOX_POD_CPU_LIMIT", "2000m")
-SANDBOX_POD_MEMORY_LIMIT = os.environ.get("SANDBOX_POD_MEMORY_LIMIT", "10Gi")
 
 # ==============================================================================
 # Sandbox egress proxy

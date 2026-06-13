@@ -14,7 +14,10 @@
  * - Normal event: all three null → main transcript, unchanged.
  */
 
-import type { ParsedToolCallProgress } from "./packetTypes";
+import type {
+  ParsedToolCallProgress,
+  ParsedToolCallStart,
+} from "./packetTypes";
 import type { ToolCallState } from "../types/displayTypes";
 
 export type SubagentEventClass =
@@ -66,6 +69,26 @@ export function toolCallStateFromProgress(
   };
 }
 
+export function toolCallStateFromStart(
+  parsed: ParsedToolCallStart
+): ToolCallState {
+  return {
+    id: parsed.toolCallId,
+    kind: parsed.kind,
+    title: parsed.title,
+    description: parsed.description,
+    command: parsed.command,
+    status: "pending",
+    rawOutput: "",
+    toolName: parsed.toolName,
+    subagentType: parsed.subagentType ?? undefined,
+    skillName: parsed.skillName ?? undefined,
+    isNewFile: true,
+    oldContent: "",
+    newContent: "",
+  };
+}
+
 /**
  * Clean a raw task-output string for display in the subagent panel.
  *
@@ -99,9 +122,24 @@ export function cleanTaskOutput(raw: string | null): string | null {
 
 /** Derive a short subagent display name from a parsed parent `task` packet. */
 export function subagentNameFromTask(parsed: ParsedToolCallProgress): string {
-  const firstLine = (parsed.command || "").split("\n")[0]?.trim() ?? "";
+  const displayDescription = parsed.description
+    .replace(/^Spawning subagent:\s*/, "")
+    .trim();
+  const firstLine =
+    (displayDescription || parsed.command).split("\n")[0]?.trim() ?? "";
   if (firstLine) {
     return firstLine.length > 40 ? `${firstLine.slice(0, 40)}…` : firstLine;
   }
   return parsed.subagentType ?? "subagent";
+}
+
+export function subagentNameFromToolCall(toolCall: ToolCallState): string {
+  const firstLine = (toolCall.command || toolCall.description || "")
+    .replace(/^Spawning subagent:\s*/, "")
+    .split("\n")[0]
+    ?.trim();
+  if (firstLine) {
+    return firstLine.length > 40 ? `${firstLine.slice(0, 40)}…` : firstLine;
+  }
+  return toolCall.subagentType ?? "subagent";
 }

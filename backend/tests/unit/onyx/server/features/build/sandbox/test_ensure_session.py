@@ -26,6 +26,7 @@ import json
 from typing import Any
 
 import httpx
+import pytest
 
 from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
 from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeServeClient
@@ -154,38 +155,6 @@ def test_ensure_session_raises_on_5xx_lookup() -> None:
     raise AssertionError("expected HTTPStatusError for 500 lookup")
 
 
-def test_ensure_session_callback_contract_triggers_on_id_mismatch() -> None:
-    """Simulates the ``_send_message_via_serve`` contract: caller invokes
-    ensure_session, then compares input vs. result; if they differ, fires
-    the persistence callback. Locks the "id mismatch → callback fires"
-    invariant at the unit level so the session-manager DB write path is
-    guaranteed reachable from any future caller."""
-
-    def handler(req: httpx.Request) -> httpx.Response:
-        if req.method == "GET" and req.url.path == f"/session/{_STALE_ID}":
-            return httpx.Response(404)
-        if req.method == "POST" and req.url.path == "/session":
-            return httpx.Response(200, json={"id": _FRESH_ID})
-        raise AssertionError(f"unexpected {req.method} {req.url.path}")
-
-    transport = _RecordingTransport(handler)
-    client = _make_client(transport)
-
-    persisted_ids: list[str] = []
-
-    def on_resolved(new_id: str) -> None:
-        persisted_ids.append(new_id)
-
-    # Mirror _send_message_via_serve's logic.
-    resolved = client.ensure_session(_STALE_ID, directory=_CWD)
-    if resolved != _STALE_ID:
-        on_resolved(resolved)
-
-    assert persisted_ids == [_FRESH_ID], (
-        "callback must fire exactly once with the new id when stale"
-    )
-
-
 def test_ensure_session_passes_directory_as_query_string() -> None:
     """opencode-serve scopes Instance (and the session store) per
     ``?directory=`` query param — the body field is silently ignored
@@ -219,28 +188,43 @@ def test_ensure_session_passes_directory_as_query_string() -> None:
     assert "directory" not in body
 
 
-def test_ensure_session_callback_does_not_fire_on_valid_id() -> None:
-    """Counterpart to the above: when the persisted id is still valid,
-    the callback MUST NOT fire — otherwise we'd do a redundant DB write
-    on every turn after the first."""
-
+@pytest.mark.parametrize("status_code", [200, 204, 404])
+def test_delete_session_treats_success_and_missing_as_deleted(
+    status_code: int,
+) -> None:
     def handler(req: httpx.Request) -> httpx.Response:
-        if req.method == "GET" and req.url.path == f"/session/{_STALE_ID}":
-            return httpx.Response(200, json={"id": _STALE_ID})
+        if req.method == "DELETE" and req.url.path == f"/session/{_STALE_ID}":
+            return httpx.Response(status_code)
         raise AssertionError(f"unexpected {req.method} {req.url.path}")
 
     transport = _RecordingTransport(handler)
     client = _make_client(transport)
 
-    persisted_ids: list[str] = []
+    assert client.delete_session(_STALE_ID, directory=_CWD) is True
 
-    def on_resolved(new_id: str) -> None:
-        persisted_ids.append(new_id)
+    assert len(transport.requests) == 1
+    req = transport.requests[0]
+    assert req.method == "DELETE"
+    assert req.url.params.get("directory") == _CWD
 
-    resolved = client.ensure_session(_STALE_ID, directory=_CWD)
-    if resolved != _STALE_ID:
-        on_resolved(resolved)
 
-    assert persisted_ids == [], (
-        "callback must NOT fire on the happy path (persisted id still valid)"
-    )
+def test_delete_session_returns_false_on_http_failure() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "DELETE" and req.url.path == f"/session/{_STALE_ID}":
+            return httpx.Response(500, text="nope")
+        raise AssertionError(f"unexpected {req.method} {req.url.path}")
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    assert client.delete_session(_STALE_ID, directory=_CWD) is False
+
+
+def test_delete_session_returns_false_on_transport_error() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("offline", request=req)
+
+    transport = _RecordingTransport(handler)
+    client = _make_client(transport)
+
+    assert client.delete_session(_STALE_ID, directory=_CWD) is False

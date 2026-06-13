@@ -235,7 +235,16 @@ git tag cli/v0.1.0
 git push origin cli/v0.1.0
 ```
 
-The workflow builds wheels for: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64, windows/arm64.
+The workflow builds wheels for:
+
+- linux/amd64 manylinux
+- linux/amd64 musllinux
+- linux/arm64 manylinux
+- linux/arm64 musllinux
+- darwin/amd64
+- darwin/arm64
+- windows/amd64
+- windows/arm64
 
 ### Manual release
 
@@ -247,6 +256,11 @@ uv build --wheel
 
 # Cross-compile for a different platform
 GOOS=linux GOARCH=amd64 uv build --wheel
+
+# Build a musllinux-tagged Linux wheel for Alpine/musl environments
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+  ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_x86_64 \
+  uv build --wheel
 
 # Upload to PyPI
 uv publish

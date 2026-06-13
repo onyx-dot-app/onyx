@@ -9,7 +9,6 @@ from celery import Celery
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
-from retry import retry
 from sqlalchemy import select
 
 from onyx.access.access import build_access_for_user_files
@@ -58,6 +57,7 @@ from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.variable_functionality import global_version
 
 
@@ -148,7 +148,7 @@ def enqueue_user_file_project_sync_task(
     return True
 
 
-@retry(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
+@retry_builder(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
 def _visit_chunks(
     *,
     http_client: httpx.Client,

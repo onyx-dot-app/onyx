@@ -153,7 +153,6 @@ def proxy_kwargs() -> ContainerCreateKwargs:
         opencode_password=_OPENCODE_PASSWORD,
         opencode_config_json=_OPENCODE_CONFIG_JSON,
         sandbox_proxy_host="sandbox-proxy",
-        sandbox_proxy_port=8080,
         proxy_ca_volume_name="sandbox_proxy_ca",
     )
 
@@ -463,7 +462,7 @@ def test_proxy_kwargs_env_contains_proxy_and_ca_keys(
 ) -> None:
     """
     Env must wire HTTPS_PROXY + the SDK CA envs + firewall-init.sh's own
-    contract vars (bootstrap mode + CA paths).
+    contract vars.
     """
     env = proxy_kwargs["environment"]
     # The legacy 4-key core is preserved; ONYX_PAT is the proxy placeholder in
@@ -560,6 +559,8 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
         "AWS_CA_BUNDLE",
         "CURL_CA_BUNDLE",
         "GIT_SSL_CAINFO",
+        "GH_TOKEN",
+        "GH_NO_UPDATE_NOTIFIER",
     }
 
 
@@ -576,22 +577,9 @@ def test_no_proxy_kwargs_keep_legacy_command(kwargs: ContainerCreateKwargs) -> N
     assert kwargs["command"] == ["/workspace/entrypoint.sh"]
 
 
-@pytest.mark.parametrize(
-    "port, ca_volume",
-    [
-        (None, "sandbox_proxy_ca"),
-        (8080, None),
-    ],
-)
-def test_proxy_kwargs_requires_port_and_ca_volume(
-    port: int | None, ca_volume: str | None
-) -> None:
-    """
-    All-or-nothing: setting the proxy host without BOTH port and CA volume is a
-    misconfiguration and must raise loudly. Cover each missing piece separately
-    so a short-circuiting guard can't pass.
-    """
-    with pytest.raises(ValueError, match="Proxy posture requires all three"):
+def test_proxy_kwargs_requires_ca_volume() -> None:
+    """Proxy posture needs the CA volume when the proxy host is set."""
+    with pytest.raises(ValueError, match="Proxy posture requires both"):
         build_container_create_kwargs(
             sandbox_id=SANDBOX_ID,
             user_id=USER_ID,
@@ -606,6 +594,5 @@ def test_proxy_kwargs_requires_port_and_ca_volume(
             opencode_password=_OPENCODE_PASSWORD,
             opencode_config_json=_OPENCODE_CONFIG_JSON,
             sandbox_proxy_host="sandbox-proxy",
-            sandbox_proxy_port=port,
-            proxy_ca_volume_name=ca_volume,
+            proxy_ca_volume_name=None,
         )

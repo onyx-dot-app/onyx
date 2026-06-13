@@ -6,9 +6,10 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from onyx.configs.app_configs import OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED
-from onyx.configs.app_configs import OPEN_URL_VALIDATE_SSRF
 from onyx.file_processing.html_utils import ParsedHTML
 from onyx.file_processing.html_utils import web_html_cleanup
+from onyx.server.security.models import outbound_allow_private_network
+from onyx.server.security.store import get_security_settings
 from onyx.tools.tool_implementations.open_url.models import WebContent
 from onyx.tools.tool_implementations.open_url.models import WebContentProvider
 from onyx.utils.logger import setup_logger
@@ -171,18 +172,32 @@ class OnyxWebCrawler(WebContentProvider):
         max_pdf_size_bytes: int | None = None,
         max_html_size_bytes: int | None = None,
         playwright_fallback_enabled: bool = OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED,
-        validate_ssrf: bool = OPEN_URL_VALIDATE_SSRF,
+        validate_ssrf: bool | None = None,
     ) -> None:
         self._read_timeout_seconds = timeout_seconds
         self._connect_timeout_seconds = connect_timeout_seconds
         self._max_pdf_size_bytes = max_pdf_size_bytes
         self._max_html_size_bytes = max_html_size_bytes
         self._playwright_fallback_enabled = playwright_fallback_enabled
-        self._validate_ssrf = validate_ssrf
+        # None => resolve from the admin SSRF Protection setting per fetch (see
+        # _should_validate_ssrf); a non-None caller value pins it.
+        self._validate_ssrf_override = validate_ssrf
         self._headers = {
             "User-Agent": user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         }
+
+    def _should_validate_ssrf(self) -> bool:
+        """Whether to enforce SSRF validation for this fetch. Resolved per
+        request (like the MCP transport guard) so an admin SSRF Protection
+        change takes effect on an already-constructed crawler. Validated on
+        every level except DISABLED; the open_url path keeps its loopback floor
+        even when disabled (it is LLM-controlled)."""
+        if self._validate_ssrf_override is not None:
+            return self._validate_ssrf_override
+        return not outbound_allow_private_network(
+            get_security_settings().ssrf_protection_level
+        )
 
     def contents(self, urls: Sequence[str]) -> list[WebContent]:
         if not urls:
@@ -210,7 +225,7 @@ class OnyxWebCrawler(WebContentProvider):
                 url,
                 headers=self._headers,
                 timeout=(self._connect_timeout_seconds, self._read_timeout_seconds),
-                allow_private_network=not self._validate_ssrf,
+                allow_private_network=not self._should_validate_ssrf(),
             )
         except SSRFException as exc:
             logger.error(
@@ -335,7 +350,7 @@ class OnyxWebCrawler(WebContentProvider):
               back to its own status-based failure reason.
         """
         rendered: RenderedPage | None = fetch_rendered_html(
-            url, allow_private_network=not self._validate_ssrf
+            url, allow_private_network=not self._should_validate_ssrf()
         )
         if rendered is None:
             return None

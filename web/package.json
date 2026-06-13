@@ -3,7 +3,8 @@
   "version": "1.0.0-dev",
   "private": true,
   "workspaces": [
-    "lib/opal"
+    "lib/opal",
+    "lib/shared"
   ],
   "scripts": {
     "dev": "next dev",
@@ -36,6 +37,7 @@
     "@headlessui/react": "^2.2.0",
     "@headlessui/tailwindcss": "^0.2.1",
     "@onyx-ai/opal": "file:./lib/opal",
+    "@onyx-ai/shared": "file:./lib/shared",
     "@phosphor-icons/react": "^2.0.8",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-avatar": "^1.1.10",
@@ -55,7 +57,6 @@
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@sentry/nextjs": "^10.54.0",
-    "@sentry/tracing": "^7.120.3",
     "@stripe/stripe-js": "^4.6.0",
     "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.0",
@@ -65,6 +66,7 @@
     "copy-to-clipboard": "^3.3.3",
     "date-fns": "^3.6.0",
     "docx-preview": "^0.3.7",
+    "dompurify": "3.4.8",
     "favicon-fetch": "^1.0.0",
     "formik": "^2.2.9",
     "highlight.js": "^11.11.1",

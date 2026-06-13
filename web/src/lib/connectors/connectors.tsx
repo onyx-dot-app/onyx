@@ -1097,6 +1097,25 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         optional: true,
       },
       {
+        type: "list",
+        query: "Enter channels to exclude:",
+        label: "Channels to Exclude",
+        name: "exclude_channels",
+        description: `Specify 0 or more channels to exclude. Exclusions are applied after the "Channels" filter above, so a channel matched by both is excluded. If no channels are specified, nothing is excluded.`,
+        optional: true,
+        // Slack Channels can only be lowercase
+        transform: (values) => values.map((value) => value.toLowerCase()),
+      },
+      {
+        type: "checkbox",
+        query: "Enable exclude channel regex?",
+        label: "Enable Exclude Channel Regex",
+        name: "exclude_channel_regex_enabled",
+        description: `If enabled, we will treat the "channels to exclude" specified above as regular expressions. A channel will be excluded if its name fully matches any of the specified regular expressions.
+For example, specifying .*-alerts as a "channel to exclude" will cause the connector to skip any channels ending in "-alerts".`,
+        optional: true,
+      },
+      {
         type: "checkbox",
         query: "Include bot messages?",
         label: "Include Bot Messages",
@@ -1661,6 +1680,32 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [],
     advanced_values: [],
   },
+  braintrust: {
+    description: "Configure Braintrust connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Braintrust project name to index:",
+        label: "Project Name",
+        name: "project_name",
+        optional: true,
+        description:
+          "Only index prompts, datasets, and experiments from this project. Leave empty to index the whole organization.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        query: "Enter the experiment row lookback window in days:",
+        label: "Experiment Row Lookback (days)",
+        name: "experiment_row_lookback_days",
+        optional: true,
+        default: 30,
+        description:
+          "Only index per-row results for experiments created within this many days. Experiment summaries are always indexed. Set to 0 to index rows for all experiments.",
+      },
+    ],
+  },
   egnyte: {
     description: "Configure Egnyte connector",
     values: [
@@ -2029,6 +2074,8 @@ export interface SlackConfig {
   workspace: string;
   channels?: string[];
   channel_regex_enabled?: boolean;
+  exclude_channels?: string[];
+  exclude_channel_regex_enabled?: boolean;
   include_bot_messages?: boolean;
 }
 

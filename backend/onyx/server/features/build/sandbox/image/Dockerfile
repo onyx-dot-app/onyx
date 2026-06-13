@@ -9,13 +9,38 @@
 # rate limits.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# bun + s5cmd binary sources. Pinned via the registry prefix in their own stages
-# because buildx rejects variable expansion directly in `COPY --from=` -- the
-# ARG is only expandable in a FROM.
+# bun binary source. Pinned via the registry prefix in its own stage because
+# buildx rejects variable expansion directly in `COPY --from=` — the ARG is
+# only expandable in a FROM.
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
-FROM ${BASE_IMAGE_REGISTRY}/peakcom/s5cmd:v2.3.0@sha256:2ff939e2ee3c76adcadd78dbfc3e2569b18a3743ed9dcfccb1ec589af7fb9903 AS s5cmd_source
 
-FROM ${BASE_IMAGE_REGISTRY}/library/node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0
+# Node.js source. The final image is Python-based, but the sandbox still needs
+# Node/npm/npx for MCP commands and skill-runtime packages.
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:45fbb3ca3b6c7e6646cd2889d0ac7bf314bb180036da792221fc2f48fe4d43fb AS node_source
+ARG NPM_VERSION=11.17.0
+RUN npm install -g "npm@${NPM_VERSION}" && \
+    npm cache clean --force && \
+    rm -rf /root/.npm
+
+# GitHub CLI (gh): downloaded + checksum-verified in its own stage (arch-matched
+# via buildx's TARGETARCH) so only the binary lands in the final image.
+FROM node_source AS gh_source
+ARG GH_CLI_VERSION=2.94.0
+ARG TARGETARCH
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    arch="${TARGETARCH:-amd64}"; \
+    tarball="gh_${GH_CLI_VERSION}_linux_${arch}.tar.gz"; \
+    base="https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}"; \
+    cd /tmp; \
+    curl -fsSL -o "${tarball}" "${base}/${tarball}"; \
+    curl -fsSL -o checksums.txt "${base}/gh_${GH_CLI_VERSION}_checksums.txt"; \
+    grep " ${tarball}\$" checksums.txt | sha256sum -c -; \
+    tar -xzf "${tarball}"; \
+    install -m 0755 "gh_${GH_CLI_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh
+
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:f82c96458eedc847b233e582eb31336f4954b39cae020b6dcf5b3ed0e5cbcd74
 
 # Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
 # poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed by
@@ -26,24 +51,25 @@ ARG OPENCODE_VERSION=1.15.7
 
 # firewall-init.sh needs: iptables (egress lockdown), ca-certificates (trust
 # store), gosu (legacy, not currently invoked). setpriv ships with util-linux in
-# the node:20-slim base.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-venv \
+# the python:3.13-slim base.
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     curl \
     git \
     procps \
     unzip \
-    gcc \
-    libc6-dev \
     iptables \
     gosu \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=node_source /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_source /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
+    ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
+
 RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libreoffice-core \
     libreoffice-common \
     libreoffice-impress \
@@ -80,12 +106,12 @@ RUN chown -R sandbox:sandbox /workspace/templates
 COPY initial-requirements.txt /tmp/initial-requirements.txt
 RUN python3 -m venv /workspace/.venv && \
     /workspace/.venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /workspace/.venv/bin/pip install --no-cache-dir -r /tmp/initial-requirements.txt && \
+    /workspace/.venv/bin/pip install --no-cache-dir --only-binary=:all: -r /tmp/initial-requirements.txt && \
     rm -rf /tmp/initial-requirements.txt /root/.cache/pip && \
     chown -R sandbox:sandbox /workspace/.venv
 
 ENV PATH="/workspace/.venv/bin:${PATH}"
-ENV PYTHONPATH="/workspace:${PYTHONPATH}"
+ENV PYTHONPATH="/workspace"
 
 RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     npm install -g pptxgenjs && \
@@ -93,13 +119,21 @@ RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     rm -rf /root/.npm; \
     fi
 
-# bun + s5cmd copied from the binary-source stages defined at the top of this file.
+# bun copied from the binary-source stage defined at the top of this file.
 COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
-COPY --from=s5cmd_source /s5cmd /usr/local/bin/s5cmd
+COPY --from=gh_source /usr/local/bin/gh /usr/local/bin/gh
+
+# Default gh config for the sandbox user: HTTPS git remotes (the proxy is
+# HTTP/HTTPS only, so SSH is unreachable) and no interactive prompts.
+RUN mkdir -p /home/sandbox/.config/gh \
+    && printf 'git_protocol: https\nprompt: disabled\n' \
+    > /home/sandbox/.config/gh/config.yml \
+    && chown -R sandbox:sandbox /home/sandbox/.config
 
 USER sandbox
-RUN curl -fsSL https://opencode.ai/install \
-    | bash -s -- --version "${OPENCODE_VERSION}" --no-modify-path
+RUN curl -fsSL -o /tmp/opencode-install.sh https://opencode.ai/install && \
+    bash /tmp/opencode-install.sh --version "${OPENCODE_VERSION}" --no-modify-path && \
+    rm /tmp/opencode-install.sh
 # Pre-warm Bun's tarball cache so per-session installs hit a local store.
 RUN cd /workspace/templates/outputs/web && \
     bun install --frozen-lockfile && \

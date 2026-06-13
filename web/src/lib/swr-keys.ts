@@ -19,6 +19,7 @@ export const SWR_KEYS = {
   enterpriseSettings: "/api/enterprise-settings",
   customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
   authType: "/api/auth/type",
+  adminSecuritySettings: "/api/admin/security",
 
   // ── Agents / Personas ─────────────────────────────────────────────────────
   personas: "/api/persona",
@@ -76,6 +77,7 @@ export const SWR_KEYS = {
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
   chatSessions: "/api/chat/get-user-chat-sessions",
+  chatSearch: "/api/chat/search",
 
   // ── Projects & Files ──────────────────────────────────────────────────────
   userProjects: "/api/user/projects",
@@ -83,6 +85,14 @@ export const SWR_KEYS = {
   userPats: "/api/user/pats",
   userPatScopes: "/api/user/pats/scopes",
   notifications: "/api/notifications",
+  notificationsSummary: "/api/notifications/summary",
+  notificationsPage: (pageNum: number, pageSize: number) => {
+    const params = new URLSearchParams({
+      page_num: pageNum.toString(),
+      page_size: pageSize.toString(),
+    });
+    return `/api/notifications?${params.toString()}`;
+  },
 
   // ── Users ─────────────────────────────────────────────────────────────────
   acceptedUsers: "/api/manage/users/accepted/all",

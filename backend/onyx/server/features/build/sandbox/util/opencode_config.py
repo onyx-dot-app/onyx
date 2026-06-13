@@ -1,9 +1,10 @@
 """opencode.json builders.
 
 opencode-serve loads config once at startup and does not hot-reload
-(sst/opencode#22213). The K8s + serve path pre-loads every configured
-provider so per-prompt model overrides can cross providers without a
-pod restart; the docker path keeps single-provider per-session config.
+(sst/opencode#22213), so both the K8s and docker paths pre-load every
+supported provider — real key (or proxy placeholder) when configured, dummy
+key otherwise — letting per-prompt model overrides cross providers without a
+restart.
 """
 
 from typing import Any
@@ -23,7 +24,7 @@ def _model_options(provider: str, model_name: str) -> dict[str, Any]:
         if model_name in _ADAPTIVE_THINKING_MODELS or model_name.startswith(
             tuple(f"{m}-" for m in _ADAPTIVE_THINKING_MODELS)
         ):
-            return {"thinking": {"type": "adaptive"}}
+            return {"thinking": {"type": "adaptive", "display": "summarized"}}
         return {"thinking": {"type": "enabled", "budgetTokens": 16000}}
     if provider == "google":
         return {"thinking_budget": 16000, "thinking_level": "high"}

@@ -21,7 +21,7 @@ import { InputChipStrip } from "@/sections/input/InputChipStrip";
 import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
 import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
 import UserLibraryModal from "@/app/craft/components/UserLibraryModal";
-import { useDoubleEscapeInterrupt } from "@/hooks/useDoubleEscapeInterrupt";
+import { useEscapeInterrupt } from "@/hooks/useEscapeInterrupt";
 import useSlashPicker from "@/hooks/useSlashPicker";
 import {
   useUploadFilesContext,
@@ -139,7 +139,7 @@ const CraftInputBar = memo(
         if (interruptible && !isInterrupting) onInterrupt?.();
       }, [interruptible, isInterrupting, onInterrupt]);
 
-      const { armed } = useDoubleEscapeInterrupt({
+      useEscapeInterrupt({
         enabled:
           interruptible && !isInterrupting && !slashPicker.open && !entryInfo,
         onInterrupt: handleInterrupt,
@@ -221,9 +221,7 @@ const CraftInputBar = memo(
             disabled={disabled}
             tooltip="Add files or skills"
           />
-          {interruptible && (
-            <InterruptHint armed={armed} interrupting={isInterrupting} />
-          )}
+          {interruptible && <InterruptHint interrupting={isInterrupting} />}
         </>
       );
 
@@ -250,7 +248,6 @@ const CraftInputBar = memo(
             pasteTilesEnabled
             sandboxInitializing={sandboxInitializing}
             submitBlocked={hasUploadingFiles}
-            stopArmed={armed}
             queuedMessages={queuedMessages}
             onQueueMessage={onQueueMessage}
             onRemoveQueuedMessage={onRemoveQueuedMessage}

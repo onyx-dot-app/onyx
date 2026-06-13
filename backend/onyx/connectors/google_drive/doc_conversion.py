@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.section_utils import cap_sections_text
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
 )
@@ -778,6 +779,13 @@ def _convert_drive_item_to_document(
         # If we still don't have any sections, skip this file
         if not sections:
             logger.warning("No content extracted from %s. Skipping.", file.get("name"))
+            return None
+
+        sections = cap_sections_text(sections, file.get("name"))
+        if not sections:
+            logger.warning(
+                "No content within text cap for %s. Skipping.", file.get("name")
+            )
             return None
 
         doc_id = onyx_document_id_from_drive_file(file)

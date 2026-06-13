@@ -1,37 +1,28 @@
-"""Streaming persistence and stream error semantics tests (ext-dep).
+"""Streaming persistence tests (ext-dep).
 
-The first half covers what ``_persist_sandbox_event`` actually writes to the DB
+These cover what ``persist_sandbox_event`` actually writes to the DB
 (assistant/thought rows, tool-call gating, plan upsert, turn indexing, finalize
-semantics).
-
-The second half covers the user-observable error packets the streaming endpoint
-emits when the upstream agent / sandbox misbehaves.
-
-Tests drive ``SessionManager.send_message`` end-to-end against Postgres with a
-stubbed ``SandboxManager`` so every assertion is on observable DB state /
-yielded SSE text.
+semantics). Tests drive the same shared helpers used by the background
+interactive-turn runner against Postgres with a stubbed ``SandboxManager``.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from collections.abc import Generator
 from typing import Any
-from uuid import UUID
-from uuid import uuid4
 
-import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
-from onyx.db.enums import SandboxStatus
+from onyx.db.models import BuildMessage
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import upsert_agent_plan
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
@@ -96,9 +87,50 @@ def _prompt_response() -> PromptResponse:
     return PromptResponse(stop_reason="end_turn")
 
 
-def _drain(gen: Generator[str, None, None]) -> list[str]:
-    """Consume a streaming generator into a list of SSE frames."""
-    return list(gen)
+def _drive_persisted_turn(
+    *,
+    db_session: Session,
+    mgr: SessionManager,
+    build_session: BuildSession,
+    user: User,
+    content: str,
+) -> None:
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    assert sandbox is not None
+
+    turn_index = (
+        db_session.query(BuildMessage)
+        .filter(
+            BuildMessage.session_id == build_session.id,
+            BuildMessage.type == MessageType.USER,
+        )
+        .count()
+    )
+    create_message(
+        session_id=build_session.id,
+        message_type=MessageType.USER,
+        turn_index=turn_index,
+        message_metadata={
+            "type": "user_message",
+            "content": {"type": "text", "text": content},
+        },
+        db_session=db_session,
+    )
+
+    state = BuildStreamingState(turn_index=turn_index)
+    try:
+        for sandbox_event in mgr.yield_sandbox_events(
+            sandbox.id,
+            build_session.id,
+            content,
+            should_interrupt=lambda: False,
+        ):
+            if isinstance(sandbox_event, SSEKeepalive):
+                continue
+            mgr.persist_sandbox_event(build_session.id, state, sandbox_event)
+    finally:
+        mgr.finalize_persist(build_session.id, state)
+    db_session.commit()
 
 
 # =============================================================================
@@ -205,7 +237,7 @@ class TestStreamingPersistence:
         assert messages[3].type == MessageType.ASSISTANT
         assert messages[3].message_metadata["content"]["text"] == "Done with tool."
 
-    def test_agent_thought_chunks_persist_as_single_thought_row(
+    def test_agent_thought_chunks_persist_as_single_collapsed_row(
         self,
         db_session: Session,
         test_user: User,
@@ -215,7 +247,7 @@ class TestStreamingPersistence:
         stub_sandbox_manager: StubSandboxManager,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
-        """3 thought chunks → 1 ``agent_thought`` row with concatenated text."""
+        """3 thought chunks stream live, then persist as one ``agent_thought`` row."""
         sandbox(user=test_user)
         stub_sandbox_manager.send_message_events = [
             _thought_chunk("Hmm, "),
@@ -223,9 +255,13 @@ class TestStreamingPersistence:
             _thought_chunk("think."),
             _prompt_response(),
         ]
-        mgr = session_manager_with_stub
-
-        _drain(mgr.send_message(build_session.id, test_user.id, "hi"))
+        _drive_persisted_turn(
+            db_session=db_session,
+            mgr=session_manager_with_stub,
+            build_session=build_session,
+            user=test_user,
+            content="hi",
+        )
 
         messages = get_session_messages(build_session.id, db_session)
         thoughts = [
@@ -307,9 +343,13 @@ class TestStreamingPersistence:
             _tool_call_start("tc-1", "Bash"),
             _prompt_response(),
         ]
-        mgr = session_manager_with_stub
-
-        _drain(mgr.send_message(build_session.id, test_user.id, "run a command"))
+        _drive_persisted_turn(
+            db_session=db_session,
+            mgr=session_manager_with_stub,
+            build_session=build_session,
+            user=test_user,
+            content="run a command",
+        )
 
         messages = get_session_messages(build_session.id, db_session)
         types = [(m.message_metadata or {}).get("type") for m in messages]
@@ -332,9 +372,13 @@ class TestStreamingPersistence:
             _tool_call_progress("tc-1", "Bash", status="completed"),
             _prompt_response(),
         ]
-        mgr = session_manager_with_stub
-
-        _drain(mgr.send_message(build_session.id, test_user.id, "run it"))
+        _drive_persisted_turn(
+            db_session=db_session,
+            mgr=session_manager_with_stub,
+            build_session=build_session,
+            user=test_user,
+            content="run it",
+        )
 
         messages = get_session_messages(build_session.id, db_session)
         tool_rows = [
@@ -362,9 +406,13 @@ class TestStreamingPersistence:
             _tool_call_progress("tc-1", "Bash", status="in_progress"),
             _prompt_response(),
         ]
-        mgr = session_manager_with_stub
-
-        _drain(mgr.send_message(build_session.id, test_user.id, "run it"))
+        _drive_persisted_turn(
+            db_session=db_session,
+            mgr=session_manager_with_stub,
+            build_session=build_session,
+            user=test_user,
+            content="run it",
+        )
 
         messages = get_session_messages(build_session.id, db_session)
         tool_rows = [
@@ -392,9 +440,13 @@ class TestStreamingPersistence:
             _tool_call_progress("tw-1", "TodoWrite", status="completed"),
             _prompt_response(),
         ]
-        mgr = session_manager_with_stub
-
-        _drain(mgr.send_message(build_session.id, test_user.id, "plan it"))
+        _drive_persisted_turn(
+            db_session=db_session,
+            mgr=session_manager_with_stub,
+            build_session=build_session,
+            user=test_user,
+            content="plan it",
+        )
 
         messages = get_session_messages(build_session.id, db_session)
         todo_rows = [
@@ -516,9 +568,13 @@ class TestStreamingPersistence:
             ),
             _prompt_response(),
         ]
-        mgr = session_manager_with_stub
-
-        _drain(mgr.send_message(build_session.id, test_user.id, "run subagent"))
+        _drive_persisted_turn(
+            db_session=db_session,
+            mgr=session_manager_with_stub,
+            build_session=build_session,
+            user=test_user,
+            content="run subagent",
+        )
 
         messages = get_session_messages(build_session.id, db_session)
         # Tool call row
@@ -558,10 +614,14 @@ class TestStreamingPersistence:
             _text_chunk("ok"),
             _prompt_response(),
         ]
-        mgr = session_manager_with_stub
-
         for prompt in ("first", "second", "third"):
-            _drain(mgr.send_message(build_session.id, test_user.id, prompt))
+            _drive_persisted_turn(
+                db_session=db_session,
+                mgr=session_manager_with_stub,
+                build_session=build_session,
+                user=test_user,
+                content=prompt,
+            )
 
         messages = get_session_messages(build_session.id, db_session)
         # 3 user + 3 assistant agent_message rows.
@@ -596,9 +656,13 @@ class TestStreamingPersistence:
             _text_chunk("part two."),
             _prompt_response(),
         ]
-        mgr = session_manager_with_stub
-
-        _drain(mgr.send_message(build_session.id, test_user.id, "go"))
+        _drive_persisted_turn(
+            db_session=db_session,
+            mgr=session_manager_with_stub,
+            build_session=build_session,
+            user=test_user,
+            content="go",
+        )
 
         messages = get_session_messages(build_session.id, db_session)
         agent_msgs = [
@@ -610,261 +674,3 @@ class TestStreamingPersistence:
         assert (
             agent_msgs[0].message_metadata["content"]["text"] == "part one. part two."
         )
-
-    def test_finalize_on_client_disconnect_preserves_partial_text(
-        self,
-        db_session: Session,
-        test_user: User,
-        build_session: BuildSession,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """Stream gets ``GeneratorExit`` → partial text persisted to DB.
-
-        Regression for SHA ``1594-1602`` finalize fix.
-        """
-        sandbox(user=test_user)
-        stub_sandbox_manager.send_message_events = [
-            _text_chunk("partial "),
-            _text_chunk("text"),
-            _prompt_response(),
-        ]
-        mgr = session_manager_with_stub
-
-        gen = mgr.send_message(build_session.id, test_user.id, "go")
-        # Consume just enough frames to receive both chunks; we read 4 frames
-        # (user-message persistence happens before iteration, then 2 chunk
-        # frames are yielded). Closing the generator triggers GeneratorExit
-        # inside ``_stream_cli_agent_response`` which must finalize chunks.
-        consumed: list[str] = []
-        for i, frame in enumerate(gen):
-            consumed.append(frame)
-            if i >= 1:
-                break
-        gen.close()
-
-        messages = get_session_messages(build_session.id, db_session)
-        agent_msgs = [
-            m
-            for m in messages
-            if (m.message_metadata or {}).get("type") == "agent_message"
-        ]
-        assert len(agent_msgs) == 1
-        # The exact accumulated text depends on how many chunks were processed
-        # before GeneratorExit; the regression contract is that *some* text
-        # is persisted rather than dropped.
-        text = agent_msgs[0].message_metadata["content"]["text"]
-        assert text  # non-empty
-        assert text in ("partial ", "partial text")
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "known: except branches in _stream_cli_agent_response don't call "
-            "_finalize_persist. User-visible streamed text disappears on page "
-            "refresh after an error."
-        ),
-    )
-    def test_finalize_on_exception_preserves_partial_text(
-        self,
-        db_session: Session,
-        test_user: User,
-        build_session: BuildSession,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """Accumulated chunks must be flushed to DB before the ErrorPacket is yielded.
-
-        Asserts the *correct* behavior. The current implementation does NOT
-        call ``_finalize_persist`` on the ``except`` branches, so this test
-        will fail today until the ~5 LOC fix lands (see plan Part VIII).
-        Strict-xfail absorbs the failure; the fixer removes the mark.
-        """
-        sandbox(user=test_user)
-
-        def _yield_then_raise(
-            sandbox_id: UUID,  # noqa: ARG001
-            session_id: UUID,  # noqa: ARG001
-            message: str,  # noqa: ARG001
-            **_kwargs: Any,  # absorb serve-transport kwargs (opencode_session_id, etc.)
-        ) -> Generator[Any, None, None]:
-            yield _text_chunk("buffered ")
-            yield _text_chunk("partial")
-            raise RuntimeError("agent crashed mid-stream")
-
-        # Bypass the not-configured guard by replacing send_message wholesale.
-        stub_sandbox_manager.send_message = _yield_then_raise  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-        mgr = session_manager_with_stub
-
-        frames = _drain(mgr.send_message(build_session.id, test_user.id, "go"))
-        # An ErrorPacket frame is expected at end of stream.
-        assert any("agent crashed mid-stream" in f for f in frames)
-
-        messages = get_session_messages(build_session.id, db_session)
-        agent_msgs = [
-            m
-            for m in messages
-            if (m.message_metadata or {}).get("type") == "agent_message"
-        ]
-        # Correct behavior: buffered chunks flushed before the error packet.
-        # Current implementation drops them — strict xfail catches the XPASS
-        # once the bug is fixed.
-        assert len(agent_msgs) == 1
-        assert agent_msgs[0].message_metadata["content"]["text"] == "buffered partial"
-
-
-# =============================================================================
-# Stream error semantics (DB-bound, observable)
-# =============================================================================
-
-
-class TestStreamErrorSemantics:
-    """DB-bound tests for user-visible ErrorPacket emission."""
-
-    def test_sandbox_not_running_emits_error_packet_and_closes(
-        self,
-        db_session: Session,  # noqa: ARG002
-        test_user: User,
-        build_session: BuildSession,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """Sandbox status SLEEPING → ErrorPacket('Sandbox is not running…') → stream ends."""
-        sandbox(user=test_user, status=SandboxStatus.SLEEPING)
-        # No send_message_events configured: the stub would raise if reached.
-        mgr = session_manager_with_stub
-
-        frames = _drain(mgr.send_message(build_session.id, test_user.id, "anything"))
-
-        assert len(frames) == 1
-        assert "Sandbox is not running" in frames[0]
-        # Stub.send_message must never have been invoked.
-        assert stub_sandbox_manager.send_message_count == 0
-
-    def test_session_not_found_emits_error_packet(
-        self,
-        db_session: Session,  # noqa: ARG002
-        test_user: User,
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """Wrong user's session id → ErrorPacket('Session not found')."""
-        bogus_session_id = uuid4()
-        mgr = session_manager_with_stub
-
-        frames = _drain(mgr.send_message(bogus_session_id, test_user.id, "hi"))
-
-        assert len(frames) == 1
-        assert "Session not found" in frames[0]
-        assert stub_sandbox_manager.send_message_count == 0
-
-    def test_agent_exception_during_stream_emits_error_packet(
-        self,
-        db_session: Session,  # noqa: ARG002
-        test_user: User,
-        build_session: BuildSession,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """Stub backend raises mid-stream → ErrorPacket carries the message."""
-        sandbox(user=test_user)
-
-        def _boom(
-            sandbox_id: UUID,  # noqa: ARG001
-            session_id: UUID,  # noqa: ARG001
-            message: str,  # noqa: ARG001
-            **_kwargs: Any,  # absorb serve-transport kwargs (opencode_session_id, etc.)
-        ) -> Generator[Any, None, None]:
-            yield _text_chunk("starting")
-            raise RuntimeError("upstream model crashed")
-
-        stub_sandbox_manager.send_message = _boom  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-        mgr = session_manager_with_stub
-
-        frames = _drain(mgr.send_message(build_session.id, test_user.id, "go"))
-
-        assert any("upstream model crashed" in f for f in frames)
-        # The final frame is the ErrorPacket.
-        assert "upstream model crashed" in frames[-1]
-
-    def test_turn_timeout_emits_error_packet(
-        self,
-        db_session: Session,  # noqa: ARG002
-        test_user: User,
-        build_session: BuildSession,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        monkeypatch: pytest.MonkeyPatch,
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """Stub raises a TimeoutError-shaped exception → ErrorPacket carries the message.
-
-        The serve transport surfaces ``SANDBOX_TURN_TIMEOUT_SECONDS`` overruns
-        as ``TimeoutError`` raised from inside the send_message generator. The
-        stream loop's broad ``except Exception`` catches it and emits an
-        ErrorPacket containing the message — observable contract for the
-        front-end.
-        """
-        sandbox(user=test_user)
-
-        def _timeout(
-            sandbox_id: UUID,  # noqa: ARG001
-            session_id: UUID,  # noqa: ARG001
-            message: str,  # noqa: ARG001
-            **_kwargs: Any,  # absorb serve-transport kwargs (opencode_session_id, etc.)
-        ) -> Generator[Any, None, None]:
-            if False:
-                yield  # pragma: no cover - generator marker
-            raise TimeoutError("sandbox turn timed out after 1.0s")
-
-        stub_sandbox_manager.send_message = _timeout  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
-        monkeypatch.setenv("SANDBOX_TURN_TIMEOUT_SECONDS", "1.0")
-        mgr = session_manager_with_stub
-
-        frames = _drain(mgr.send_message(build_session.id, test_user.id, "slow op"))
-
-        assert any("timed out" in f.lower() for f in frames)
-
-    def test_keepalive_emitted_on_idle_intervals(
-        self,
-        db_session: Session,  # noqa: ARG002
-        test_user: User,
-        build_session: BuildSession,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        monkeypatch: pytest.MonkeyPatch,
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        """``SSEKeepalive`` markers from the sandbox client → ``: keepalive`` SSE frames.
-
-        The serve transport emits ``SSEKeepalive`` after
-        ``SSE_KEEPALIVE_INTERVAL`` seconds of idle. The stream loop
-        converts each one into a ``: keepalive\\n\\n`` SSE comment.
-        """
-        sandbox(user=test_user)
-        # Override the env for parity with the prod keepalive path; the
-        # stub feeds the markers directly without sleeping.
-        monkeypatch.setenv("SSE_KEEPALIVE_INTERVAL", "0.01")
-        stub_sandbox_manager.send_message_events = [
-            SSEKeepalive(),
-            _text_chunk("ok"),
-            SSEKeepalive(),
-            _prompt_response(),
-        ]
-        mgr = session_manager_with_stub
-
-        frames = _drain(mgr.send_message(build_session.id, test_user.id, "go"))
-
-        keepalive_frames = [f for f in frames if f.startswith(": keepalive")]
-        assert len(keepalive_frames) == 2

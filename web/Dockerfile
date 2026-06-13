@@ -23,13 +23,15 @@ COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=bun_source /usr/local/bin/bunx /usr/local/bin/bunx
 WORKDIR /app
 
-# Copy package files + the full opal workspace source so that opal's `prepare`
-# lifecycle hook (which runs during `bun install` for workspace packages) can build
+# Copy package files + the full opal AND shared workspace sources so their `prepare`
+# lifecycle hooks (which run during `bun install` for workspace packages) can build
 # `dist/` artifacts before Next.js resolves package exports. opal's tsconfig
 # extends web's `tsconfig.json`, so that file must also be present at install
-# time for the DTS build to succeed.
+# time for the DTS build to succeed. (`lib/shared` uses a standalone tsconfig and
+# builds its design tokens + types via Style Dictionary + tsc in its own `prepare`.)
 COPY package.json bun.lock tsconfig.json ./
 COPY lib/opal/ ./lib/opal/
+COPY lib/shared/ ./lib/shared/
 
 # Install dependencies. opal's `prepare` script builds dist/ as part of install.
 RUN bun install --frozen-lockfile
@@ -67,6 +69,9 @@ ENV NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}
 
 ARG NEXT_PUBLIC_CLOUD_ENABLED
 ENV NEXT_PUBLIC_CLOUD_ENABLED=${NEXT_PUBLIC_CLOUD_ENABLED}
+
+# WEB_FRAME_PROTECTION_ENABLED is read at runtime (web/src/proxy.ts), not at
+# build — it's set on the runner stage, not here.
 
 ARG NEXT_PUBLIC_SENTRY_DSN
 ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
@@ -153,6 +158,12 @@ ENV NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST}
 
 ARG NEXT_PUBLIC_CLOUD_ENABLED
 ENV NEXT_PUBLIC_CLOUD_ENABLED=${NEXT_PUBLIC_CLOUD_ENABLED}
+
+# frame-ancestors clickjacking protection, read at runtime by web/src/proxy.ts.
+# The build arg only seeds the image default (cloud builds pass false); the
+# container environment can override it without a rebuild.
+ARG WEB_FRAME_PROTECTION_ENABLED
+ENV WEB_FRAME_PROTECTION_ENABLED=${WEB_FRAME_PROTECTION_ENABLED}
 
 ARG NEXT_PUBLIC_SENTRY_DSN
 ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}

@@ -13,7 +13,8 @@ image/
 ├── opencode-plugins/       # Per-session egress tagging plugin (baked in)
 ├── templates/
 │   └── outputs/            # Web app scaffold template (Next.js)
-├── initial-requirements.txt # Python packages pre-installed in sandbox
+├── initial-requirements.in  # Curated Python packages pre-installed in sandbox
+├── initial-requirements.txt # Fully pinned Python lock for sandbox
 └── README.md               # This file
 ```
 
@@ -21,6 +22,25 @@ Built-in skill sources are **not** here — they live in `backend/onyx/skills/bu
 and are pushed into sandboxes at session setup, never baked into the image.
 
 ## Building the Image
+
+### Via CI (preferred)
+
+Push the `sandbox-dev` git tag to have `.github/workflows/sandbox-deployment.yml`
+build multi-arch and push `onyxdotapp/sandbox:dev`:
+
+```bash
+git tag -f sandbox-dev && git push -f origin sandbox-dev
+```
+
+Dev builds never cut a `vX.Y.Z` version or move `:latest`. The nightly tag
+still cuts an auto-versioned `vX.Y.Z` + `latest` when the image context changed.
+Only `sandbox-dev` is supported, to keep Docker Hub free of one-off tags.
+
+Environments that pin `SANDBOX_CONTAINER_IMAGE` to `:dev` must also set
+`SANDBOX_IMAGE_PULL_POLICY=Always` (default `IfNotPresent`) so re-pushed dev
+builds are picked up by new pods. See `docs/craft/image-architecture.md`.
+
+### Building locally
 
 The sandbox image must be built for **amd64** architecture since our Kubernetes cluster runs on x86_64 nodes.
 
@@ -84,12 +104,12 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## What's Baked Into the Image
 
-- **Base**: `node:20-slim` (Debian-based)
+- **Base**: `python:3.13-slim` (Debian-based) with Node.js 24 copied from `node:24-trixie-slim`
 - **Templates**: `/workspace/templates/outputs/` — Next.js web app scaffold
 - **Python venv**: `/workspace/.venv/` with packages from `initial-requirements.txt`
 - **OpenCode CLI**: Installed in `/home/sandbox/.opencode/bin/`
 - **onyx-cli**: `/usr/local/bin/onyx-cli` — Onyx CLI for search
-- **AWS CLI**: For S3 snapshot operations
+- **Snapshot sidecar daemon**: Packages and restores session files; durable storage is handled by the api_server through the Onyx FileStore
 
 Skills are **not** baked in — the API server pushes them to `/workspace/managed/skills/` at session setup.
 
@@ -100,6 +120,7 @@ When a session is created, the following structure is set up in the pod:
 ```
 /workspace/
 ├── managed/skills/         # Pushed at session-setup time (built-ins + customs)
+├── opencode-data/          # Sandbox-global opencode data in Kubernetes
 ├── templates/              # Baked into image
 └── sessions/
     └── $session_id/

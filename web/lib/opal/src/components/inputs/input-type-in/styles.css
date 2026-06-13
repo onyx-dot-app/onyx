@@ -1,0 +1,24 @@
+@reference "#reference.css";
+
+/* --------------------------------------------------------------------------
+   Inner input element
+   -------------------------------------------------------------------------- */
+
+.opal-input-field {
+  @apply w-full h-6 bg-transparent p-0.5 focus:outline-hidden;
+  font: inherit;
+}
+
+.opal-input[data-variant="primary"] .opal-input-field,
+.opal-input[data-variant="internal"] .opal-input-field,
+.opal-input[data-variant="error"] .opal-input-field {
+  @apply text-text-04;
+}
+
+.opal-input[data-variant="disabled"] .opal-input-field {
+  @apply text-text-02;
+}
+
+.opal-input-field::placeholder {
+  @apply font-main-ui-muted text-text-02;
+}

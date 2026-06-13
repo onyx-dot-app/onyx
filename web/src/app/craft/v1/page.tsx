@@ -9,6 +9,7 @@ import {
 import { getSessionIdFromSearchParams } from "@/app/craft/services/searchParams";
 import BuildChatPanel from "@/app/craft/components/ChatPanel";
 import BuildOutputPanel from "@/app/craft/components/OutputPanel";
+import VideoBackground from "@/app/craft/components/video-background/VideoBackground";
 
 /**
  * Build V1 Page - Entry point for builds
@@ -30,11 +31,15 @@ export default function BuildV1Page() {
     // overflow-clip, not overflow-hidden: a hidden box is still programmatically
     // scrollable, which would shove the chat column off-screen.
     <div className="relative flex-1 h-full overflow-clip">
-      {/* Chat panel - always full width for background */}
-      <BuildChatPanel existingSessionId={sessionId} />
+      <VideoBackground />
 
-      {/* Output panel - slides in from the right edge, full viewport height */}
-      <BuildOutputPanel onClose={toggleOutputPanel} isOpen={outputPanelOpen} />
+      <div className="relative z-10 w-full h-full">
+        <BuildChatPanel existingSessionId={sessionId} />
+        <BuildOutputPanel
+          onClose={toggleOutputPanel}
+          isOpen={outputPanelOpen}
+        />
+      </div>
     </div>
   );
 }

@@ -14,7 +14,8 @@ Coverage targets:
 - Wall-clock timeout posts abort + yields Error
 - ``GeneratorExit`` (browser disconnect) posts abort and re-raises
 - Permission-ask events trigger out-of-band POST (auto-allow)
-- ``stream_ready`` timeout when the bus never connects
+- ``stream_ready`` waits through transient reconnect windows before prompting
+- ``stream_ready`` timeout when the bus never reconnects
 """
 
 from __future__ import annotations
@@ -58,10 +59,11 @@ class _RecordingTransport(httpx.MockTransport):
 
 
 @pytest.fixture
-def bus() -> Generator[PodEventBus, None, None]:
+def bus(monkeypatch: pytest.MonkeyPatch) -> Generator[PodEventBus, None, None]:
     """Bus with no real reader — tests push events directly into subscriber
     queues via ``bus._dispatch`` after ``stream_ready`` is forced set."""
     b = PodEventBus(base_url="http://test.invalid:4096", auth=None)
+    monkeypatch.setattr(b, "_ensure_reader_started", lambda: None)
     # The bus would normally set stream_ready inside its reader after
     # connecting. Force-set it here so send_message doesn't time out
     # waiting for a connection that's never going to happen in unit tests.
@@ -137,6 +139,17 @@ def _wait_for(predicate: Any, *, timeout: float = 3.0) -> bool:
     return False
 
 
+def _prompt_async_posted(transport: _RecordingTransport) -> bool:
+    return any(
+        request.url.path.endswith("/prompt_async") for request in transport.requests
+    )
+
+
+def _dispatch_session_idle(bus: PodEventBus, *, scoped: bool = True) -> None:
+    properties = {"sessionID": _SESSION} if scoped else {}
+    bus._dispatch({"type": "session.idle", "properties": properties})
+
+
 # ---------------------------------------------------------------------------
 # Happy path
 # ---------------------------------------------------------------------------
@@ -147,6 +160,7 @@ def test_send_message_yields_text_and_terminator(bus: PodEventBus) -> None:
     client = _make_client(bus, transport)
     events, t = _run_send_message(client)
     try:
+        assert _wait_for(lambda: _prompt_async_posted(transport))
         # Set up: an assistant message arrives, then a text part with a delta,
         # then completion.
         bus._dispatch(
@@ -205,6 +219,7 @@ def test_send_message_yields_text_and_terminator(bus: PodEventBus) -> None:
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -221,6 +236,7 @@ def test_send_message_routes_reasoning_to_thought_chunks(bus: PodEventBus) -> No
     client = _make_client(bus, transport)
     events, t = _run_send_message(client)
     try:
+        assert _wait_for(lambda: _prompt_async_posted(transport))
         # Reasoning part arrives first to register its type, then a delta on
         # the same partID — translator emits AgentThoughtChunk for reasoning.
         bus._dispatch(
@@ -265,7 +281,7 @@ def test_send_message_routes_reasoning_to_thought_chunks(bus: PodEventBus) -> No
                 },
             }
         )
-        # terminator
+        # Completion metadata arrives before the session-level terminator.
         bus._dispatch(
             {
                 "type": "message.updated",
@@ -280,6 +296,7 @@ def test_send_message_routes_reasoning_to_thought_chunks(bus: PodEventBus) -> No
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -314,7 +331,8 @@ def test_send_message_threads_model_override_into_prompt_async(
         client, model_provider="anthropic", model_id="claude-opus-4-7"
     )
     try:
-        # Immediately terminate via a completed message.updated.
+        assert _wait_for(lambda: len(posted_bodies) == 1)
+        # Completion metadata arrives before the session-level terminator.
         bus._dispatch(
             {
                 "type": "message.updated",
@@ -329,6 +347,7 @@ def test_send_message_threads_model_override_into_prompt_async(
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -356,6 +375,7 @@ def test_send_message_omits_model_when_override_missing(bus: PodEventBus) -> Non
     client = _make_client(bus, transport)
     events, t = _run_send_message(client)
     try:
+        assert _wait_for(lambda: len(posted_bodies) == 1)
         bus._dispatch(
             {
                 "type": "message.updated",
@@ -370,6 +390,7 @@ def test_send_message_omits_model_when_override_missing(bus: PodEventBus) -> Non
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -394,6 +415,7 @@ def test_send_message_omits_model_when_only_one_arg_supplied(
     client = _make_client(bus, transport)
     events, t = _run_send_message(client, model_provider="anthropic", model_id=None)
     try:
+        assert _wait_for(lambda: len(posted_bodies) == 1)
         bus._dispatch(
             {
                 "type": "message.updated",
@@ -408,6 +430,7 @@ def test_send_message_omits_model_when_only_one_arg_supplied(
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -458,20 +481,54 @@ def test_send_message_yields_error_on_prompt_async_connection_error(
     assert "prompt_async failed" in events[0].message
 
 
-def test_send_message_errors_when_stream_ready_never_set(bus: PodEventBus) -> None:
-    """If the bus never connects (stream_ready stays cleared), send_message
-    surfaces an Error after ``connect_timeout`` rather than blocking
-    indefinitely on prompt_async."""
+def test_send_message_waits_for_event_bus_reconnect_before_prompt_async(
+    bus: PodEventBus,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the shared /event stream is reconnecting, the turn should wait
+    instead of posting prompt_async and missing the first packets."""
+    monkeypatch.setattr(bus, "_ensure_reader_started", lambda: None)
     bus.stream_ready.clear()
-    transport = httpx.MockTransport(_ok_response)
-    client = _make_client(bus, transport, connect_timeout=0.2)
+
+    transport = _RecordingTransport(_ok_response)
+    client = _make_client(bus, transport, connect_timeout=0.05)
+    events, t = _run_send_message(client, timeout=3.0)
+    try:
+        time.sleep(0.1)
+        assert not any(
+            request.url.path.endswith("/prompt_async") for request in transport.requests
+        )
+
+        bus.stream_ready.set()
+        assert _wait_for(lambda: _prompt_async_posted(transport))
+
+        _dispatch_session_idle(bus)
+        assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
+    finally:
+        t.join(timeout=3.0)
+
+
+def test_send_message_errors_when_stream_ready_never_set(
+    bus: PodEventBus,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the bus never connects (stream_ready stays cleared), send_message
+    surfaces an Error after the turn budget rather than blocking indefinitely
+    on prompt_async."""
+    monkeypatch.setattr(bus, "_ensure_reader_started", lambda: None)
+    bus.stream_ready.clear()
+    transport = _RecordingTransport(_ok_response)
+    client = _make_client(bus, transport, connect_timeout=0.01)
     events = list(
-        client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=2.0)
+        client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=0.2)
     )
     assert len(events) == 1
     assert isinstance(events[0], Error)
     assert events[0].code == -3
     assert "did not become ready" in events[0].message
+    assert not any(
+        request.url.path.endswith("/prompt_async") for request in transport.requests
+    )
 
 
 def test_send_message_errors_when_bus_closes_before_terminator(
@@ -493,6 +550,52 @@ def test_send_message_errors_when_bus_closes_before_terminator(
     errs = [e for e in events if isinstance(e, Error)]
     assert errs
     assert "event bus closed" in errs[0].message
+
+
+def test_send_message_surfaces_unscoped_session_error_as_terminal(
+    bus: PodEventBus,
+) -> None:
+    """Unscoped opencode session.error must end the turn immediately.
+
+    Without bus fanout this event is dropped. Without treating Error as a
+    local terminator, the Error is yielded but the generator keeps waiting for
+    timeout and the UI sees keepalives after the real failure.
+    """
+    transport = httpx.MockTransport(_ok_response)
+    client = _make_client(bus, transport)
+    events, t = _run_send_message(client, timeout=5.0)
+    try:
+        bus._dispatch(
+            {
+                "type": "session.error",
+                "properties": {
+                    "error": {"data": {"message": "upstream connection reset"}}
+                },
+            }
+        )
+        assert _wait_for(lambda: not t.is_alive(), timeout=1.0)
+    finally:
+        t.join(timeout=3.0)
+
+    errs = [e for e in events if isinstance(e, Error)]
+    assert len(errs) == 1
+    assert "upstream connection reset" in errs[0].message
+    assert not any(isinstance(e, PromptResponse) for e in events)
+
+
+def test_send_message_ends_on_unscoped_session_idle(bus: PodEventBus) -> None:
+    """Unscoped session.idle is still a valid directory-scoped turn terminator."""
+    transport = httpx.MockTransport(_ok_response)
+    client = _make_client(bus, transport)
+    events, t = _run_send_message(client, timeout=5.0)
+    try:
+        _dispatch_session_idle(bus, scoped=False)
+        assert _wait_for(lambda: not t.is_alive(), timeout=1.0)
+    finally:
+        t.join(timeout=3.0)
+
+    assert any(isinstance(e, PromptResponse) for e in events)
+    assert not any(isinstance(e, Error) for e in events)
 
 
 def test_send_message_wall_clock_timeout_aborts(bus: PodEventBus) -> None:
@@ -531,33 +634,46 @@ def test_send_message_aborts_on_generator_exit(bus: PodEventBus) -> None:
             aborts.append(request.url.path)
         return httpx.Response(204)
 
-    transport = httpx.MockTransport(handler)
+    transport = _RecordingTransport(handler)
     client = _make_client(bus, transport)
 
-    # Pre-load a non-terminator event into the subscriber queue BEFORE
-    # iterating, so the first ``next()`` returns quickly. We have to
-    # subscribe via the bus path the client uses, so let the client do
-    # its own subscribe; we just dispatch into the bus, which will route
-    # to that subscription.
     gen = client.send_message(_SESSION, "hi", directory=_DIRECTORY, timeout=5.0)
-    bus._dispatch(
-        {
-            "type": "message.updated",
-            "properties": {
-                "sessionID": _SESSION,
-                "info": {
-                    "id": "msg1",
+
+    def dispatch_first_chunk() -> None:
+        assert _wait_for(lambda: _prompt_async_posted(transport))
+        bus._dispatch(
+            {
+                "type": "message.updated",
+                "properties": {
                     "sessionID": _SESSION,
-                    "role": "assistant",
-                    "time": {"completed": None},
+                    "info": {
+                        "id": "msg1",
+                        "sessionID": _SESSION,
+                        "role": "assistant",
+                        "time": {"completed": None},
+                    },
                 },
-            },
-        }
-    )
-    # First yield drains the event we just dispatched. We don't care what
-    # the value is — only that the generator has executed past the POST
-    # and into the consume loop.
-    next(gen, None)
+            }
+        )
+        bus._dispatch(
+            {
+                "type": "message.part.updated",
+                "properties": {
+                    "sessionID": _SESSION,
+                    "part": {
+                        "id": "p1",
+                        "messageID": "msg1",
+                        "sessionID": _SESSION,
+                        "type": "text",
+                        "text": "partial",
+                        "state": {"status": "active"},
+                    },
+                },
+            }
+        )
+
+    threading.Thread(target=dispatch_first_chunk, daemon=True).start()
+    assert isinstance(next(gen), AgentMessageChunk)
     # Close mid-stream: this raises GeneratorExit inside send_message's
     # try/except, which posts /abort and re-raises.
     gen.close()
@@ -587,10 +703,11 @@ def test_send_message_auto_allows_permission_asks(bus: PodEventBus) -> None:
             )
         return httpx.Response(204)
 
-    transport = httpx.MockTransport(handler)
+    transport = _RecordingTransport(handler)
     client = _make_client(bus, transport)
     events, t = _run_send_message(client, timeout=3.0)
     try:
+        assert _wait_for(lambda: _prompt_async_posted(transport))
         bus._dispatch(
             {
                 "type": "permission.asked",
@@ -616,6 +733,7 @@ def test_send_message_auto_allows_permission_asks(bus: PodEventBus) -> None:
                 },
             }
         )
+        _dispatch_session_idle(bus)
         assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
     finally:
         t.join(timeout=3.0)
@@ -640,20 +758,7 @@ def test_send_message_unsubscribes_on_clean_exit(bus: PodEventBus) -> None:
     list(
         _gen_to_completion(
             client,
-            terminator=lambda: bus._dispatch(
-                {
-                    "type": "message.updated",
-                    "properties": {
-                        "sessionID": _SESSION,
-                        "info": {
-                            "id": "msg1",
-                            "sessionID": _SESSION,
-                            "role": "assistant",
-                            "time": {"completed": 1},
-                        },
-                    },
-                }
-            ),
+            terminator=lambda: _dispatch_session_idle(bus),
         )
     )
     # After clean exit, no subscription should remain.

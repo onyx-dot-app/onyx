@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import Error
@@ -137,6 +138,32 @@ def test_reasoning_delta_yields_agent_thought_chunk() -> None:
     )
     assert len(out) == 1
     assert isinstance(out[0], AgentThoughtChunk)
+
+
+def test_empty_reasoning_delta_is_ignored() -> None:
+    """Anthropic can emit an empty reasoning delta when adaptive thinking
+    display is omitted. Empty thought packets should not be surfaced to Craft."""
+    s = _assistant_state()
+    s.part_types["p1"] = "reasoning"
+
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.delta",
+                "properties": {
+                    "sessionID": SESS,
+                    "messageID": "msg_assistant",
+                    "partID": "p1",
+                    "field": "text",
+                    "delta": "",
+                },
+            },
+            s,
+        )
+    )
+
+    assert out == []
+    assert "p1" not in s.local_text
 
 
 def test_reasoning_part_type_recorded_from_part_updated() -> None:
@@ -1261,6 +1288,43 @@ def _child_parent_resolver(sess_id: str) -> str | None:
     return PARENT if sess_id == CHILD else None
 
 
+def test_session_created_emits_subagent_started_for_parent() -> None:
+    s = _parent_state()
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "session.created",
+                "properties": {
+                    "info": {"id": CHILD, "parentID": PARENT},
+                },
+            },
+            s,
+        )
+    )
+
+    assert len(out) == 1
+    assert isinstance(out[0], SubagentStartedPacket)
+    assert out[0].subagent_session_id == CHILD
+    assert out[0].parent_session_id == PARENT
+
+
+def test_session_created_for_other_parent_is_ignored() -> None:
+    s = _parent_state()
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "session.created",
+                "properties": {
+                    "info": {"id": CHILD, "parentID": "ses_OTHER"},
+                },
+            },
+            s,
+        )
+    )
+
+    assert out == []
+
+
 def test_child_tool_event_forwarded_and_tagged() -> None:
     """A completed tool event from a descendant subagent session is forwarded
     and tagged with sessionId + parentSessionId routing metadata."""
@@ -1284,6 +1348,204 @@ def test_child_tool_event_forwarded_and_tagged() -> None:
         assert meta["parentSessionId"] == PARENT
         # Existing toolName tag is preserved (merge, not overwrite).
         assert meta["toolName"] == "bash"
+
+
+def test_child_text_delta_forwarded_and_tagged() -> None:
+    """Visible child text should stream into the subagent transcript rather
+    than being dropped while the parent task is still running."""
+    s = _parent_state()
+
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.delta",
+                "properties": {
+                    "sessionID": CHILD,
+                    "messageID": "msg_child",
+                    "partID": "p_child_text",
+                    "field": "text",
+                    "delta": "child response",
+                },
+            },
+            s,
+            parent_resolver=_child_parent_resolver,
+            fetch_message_by_session=lambda session_id, message_id: {
+                "info": {
+                    "id": message_id,
+                    "sessionID": session_id,
+                    "role": "assistant",
+                },
+                "parts": [{"id": "p_child_text", "type": "text"}],
+            },
+        )
+    )
+
+    assert len(out) == 1
+    assert isinstance(out[0], AgentMessageChunk)
+    assert out[0].content.text == "child response"  # type: ignore[union-attr]
+    meta = out[0].field_meta
+    assert meta is not None
+    assert meta["sessionId"] == CHILD
+    assert meta["parentSessionId"] == PARENT
+
+
+def test_child_reasoning_part_forwarded_and_tagged() -> None:
+    s = _parent_state()
+
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.updated",
+                "properties": {
+                    "sessionID": CHILD,
+                    "part": {
+                        "id": "p_child_reasoning",
+                        "messageID": "msg_child",
+                        "type": "reasoning",
+                        "text": "child thinking",
+                    },
+                },
+            },
+            s,
+            parent_resolver=_child_parent_resolver,
+            fetch_message_by_session=lambda session_id, message_id: {
+                "info": {
+                    "id": message_id,
+                    "sessionID": session_id,
+                    "role": "assistant",
+                },
+                "parts": [{"id": "p_child_reasoning", "type": "reasoning"}],
+            },
+        )
+    )
+
+    assert len(out) == 1
+    assert isinstance(out[0], AgentThoughtChunk)
+    assert out[0].content.text == "child thinking"  # type: ignore[union-attr]
+    meta = out[0].field_meta
+    assert meta is not None
+    assert meta["sessionId"] == CHILD
+    assert meta["parentSessionId"] == PARENT
+
+
+def test_child_reasoning_delta_forwarded_and_tagged() -> None:
+    s = _parent_state()
+
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.delta",
+                "properties": {
+                    "sessionID": CHILD,
+                    "messageID": "msg_child",
+                    "partID": "p_child_reasoning",
+                    "field": "text",
+                    "delta": "child thinking",
+                },
+            },
+            s,
+            parent_resolver=_child_parent_resolver,
+            fetch_message_by_session=lambda session_id, message_id: {
+                "info": {
+                    "id": message_id,
+                    "sessionID": session_id,
+                    "role": "assistant",
+                },
+                "parts": [{"id": "p_child_reasoning", "type": "reasoning"}],
+            },
+        )
+    )
+
+    assert len(out) == 1
+    assert isinstance(out[0], AgentThoughtChunk)
+    assert out[0].content.text == "child thinking"  # type: ignore[union-attr]
+    meta = out[0].field_meta
+    assert meta is not None
+    assert meta["sessionId"] == CHILD
+    assert meta["parentSessionId"] == PARENT
+
+
+def test_child_finish_does_not_leak_into_parent_terminator() -> None:
+    s = _parent_state()
+
+    _drain(
+        translate_opencode_event(
+            {
+                "type": "message.updated",
+                "properties": {
+                    "sessionID": CHILD,
+                    "info": {
+                        "id": "msg_child",
+                        "sessionID": CHILD,
+                        "role": "assistant",
+                        "finish": "max_tokens",
+                    },
+                },
+            },
+            s,
+            parent_resolver=_child_parent_resolver,
+        )
+    )
+    out = _drain(
+        translate_opencode_event(
+            {"type": "session.idle", "properties": {"sessionID": PARENT}}, s
+        )
+    )
+
+    assert len(out) == 1
+    assert isinstance(out[0], PromptResponse)
+    assert out[0].stop_reason == "end_turn"
+
+
+def test_child_part_type_does_not_collide_with_parent_part_id() -> None:
+    s = _parent_state()
+
+    child_out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.delta",
+                "properties": {
+                    "sessionID": CHILD,
+                    "messageID": "msg_child",
+                    "partID": "shared_part",
+                    "field": "text",
+                    "delta": "child thinking",
+                },
+            },
+            s,
+            parent_resolver=_child_parent_resolver,
+            fetch_message_by_session=lambda session_id, message_id: {
+                "info": {
+                    "id": message_id,
+                    "sessionID": session_id,
+                    "role": "assistant",
+                },
+                "parts": [{"id": "shared_part", "type": "reasoning"}],
+            },
+        )
+    )
+    assert isinstance(child_out[0], AgentThoughtChunk)
+
+    s.assistant_message_ids.add("msg_parent")
+    parent_out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.delta",
+                "properties": {
+                    "sessionID": PARENT,
+                    "messageID": "msg_parent",
+                    "partID": "shared_part",
+                    "field": "text",
+                    "delta": "parent visible text",
+                },
+            },
+            s,
+        )
+    )
+
+    assert len(parent_out) == 1
+    assert isinstance(parent_out[0], AgentMessageChunk)
+    assert parent_out[0].content.text == "parent visible text"  # type: ignore[union-attr]
 
 
 def test_child_tool_event_dropped_when_not_descendant() -> None:

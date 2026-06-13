@@ -173,8 +173,16 @@ class TestIdempotentProvision:
 
 
 class TestHealthCheckFailureRecovery:
-    def test_health_check_failure_marks_terminated_and_reprovisions(
+    @pytest.mark.parametrize(
+        "history_snapshot_fails",
+        [
+            pytest.param(False, id="history-snapshot-succeeds"),
+            pytest.param(True, id="history-snapshot-fails"),
+        ],
+    )
+    def test_health_check_failure_snapshots_history_best_effort_then_reprovisions(
         self,
+        history_snapshot_fails: bool,
         db_session: Session,
         test_user: User,
         sandbox: Callable[..., Sandbox],
@@ -202,6 +210,28 @@ class TestHealthCheckFailureRecovery:
         session_id = idle_session.id
 
         stub_sandbox_manager.health_check_returns = False
+        stub_sandbox_manager.supports_opencode_history_persistence = True
+        if history_snapshot_fails:
+
+            def _boom(
+                sandbox_id: object,
+                tenant_id: object,
+                timeout_seconds: float = 300.0,
+            ) -> bool:
+                stub_sandbox_manager.create_opencode_history_snapshot_payloads.append(
+                    {
+                        "sandbox_id": sandbox_id,
+                        "tenant_id": tenant_id,
+                        "timeout_seconds": timeout_seconds,
+                    }
+                )
+                raise RuntimeError("history snapshot failed")
+
+            monkeypatch.setattr(
+                stub_sandbox_manager, "create_opencode_history_snapshot", _boom
+            )
+        else:
+            stub_sandbox_manager.create_opencode_history_snapshot_returns = True
         stub_sandbox_manager.terminate_silent = True
         stub_sandbox_manager.provision_returns = SandboxInfo(
             sandbox_id=row.id,
@@ -233,6 +263,11 @@ class TestHealthCheckFailureRecovery:
         # cycle (TERMINATED -> PROVISIONING -> RUNNING).
         assert refreshed is not None
         assert refreshed.status == SandboxStatus.RUNNING
+        assert {
+            "sandbox_id": row.id,
+            "tenant_id": TEST_TENANT_ID,
+            "timeout_seconds": 30.0,
+        } in stub_sandbox_manager.create_opencode_history_snapshot_payloads
 
 
 class TestRestoreFailureRecovery:

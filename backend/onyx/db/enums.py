@@ -303,6 +303,7 @@ class ApprovalDecidedVia(str, PyEnum):
     # NULL on legacy rows and proxy-written EXPIRED claims.
     USER = "USER"
     PRE_APPROVAL = "PRE_APPROVAL"
+    SESSION_GRANT = "SESSION_GRANT"
 
 
 class ScheduledTaskStatus(str, PyEnum):
@@ -360,7 +361,7 @@ class ScheduledTaskSkipReason(str, PyEnum):
 class SandboxStatus(str, PyEnum):
     PROVISIONING = "provisioning"
     RUNNING = "running"
-    SLEEPING = "sleeping"  # Pod terminated, snapshots saved to S3
+    SLEEPING = "sleeping"  # Pod terminated, snapshots saved to FileStore
     TERMINATED = "terminated"
     FAILED = "failed"
 

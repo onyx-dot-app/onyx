@@ -39,6 +39,7 @@ import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
 import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const usePublicCredentials = () => {
@@ -490,7 +491,8 @@ export function getDefaultLlmDescriptor(
 
 export function getValidLlmDescriptorForProviders(
   modelName: string | null | undefined,
-  llmProviders: LLMProviderDescriptor[] | undefined | null
+  llmProviders: LLMProviderDescriptor[] | undefined | null,
+  defaultText?: DefaultModel | null
 ): LlmDescriptor {
   // Return early if providers haven't loaded yet (undefined/null)
   // Empty arrays are valid (user has no provider access for this assistant)
@@ -556,9 +558,12 @@ export function getValidLlmDescriptorForProviders(
     }
   }
 
-  // Model not found in available providers - fall back to default model
+  // Model not found in available providers - fall back to the admin-configured
+  // global default before resorting to the first provider with visible models.
+  // Without this, a stale personal default (e.g. its provider was deleted)
+  // would silently land on an arbitrary provider instead of the global default.
   return (
-    getDefaultLlmDescriptor(llmProviders) ?? {
+    getDefaultLlmDescriptor(llmProviders, defaultText) ?? {
       name: "",
       provider: "",
       modelName: "",
@@ -641,7 +646,11 @@ export function useLlmManager(
   function getValidLlmDescriptor(
     modelName: string | null | undefined
   ): LlmDescriptor {
-    return getValidLlmDescriptorForProviders(modelName, llmProviders);
+    return getValidLlmDescriptorForProviders(
+      modelName,
+      llmProviders,
+      defaultText
+    );
   }
 
   // Compute the resolved LLM synchronously so it's never one render behind.
@@ -666,12 +675,14 @@ export function useLlmManager(
     } else if (currentChatSession?.current_alternate_model) {
       resolved = getValidLlmDescriptorForProviders(
         currentChatSession.current_alternate_model,
-        llmProviders
+        llmProviders,
+        defaultText
       );
     } else if (user?.preferences?.default_model) {
       resolved = getValidLlmDescriptorForProviders(
         user.preferences.default_model,
-        llmProviders
+        llmProviders,
+        defaultText
       );
     } else {
       resolved =
@@ -833,20 +844,20 @@ export function useLlmManager(
 }
 
 export function useAuthType(): AuthType | null {
-  const { data, error } = useSWR<{ auth_type: AuthType }>(
-    SWR_KEYS.authType,
-    errorHandlingFetcher
-  );
+  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
+  // camelCase-mapped shape — a raw fetcher here would poison the cache for
+  // every other consumer of the key.
+  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
 
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
     return AuthType.CLOUD;
   }
 
-  if (error || !data) {
+  if (error || isLoading) {
     return null;
   }
 
-  return data.auth_type;
+  return authTypeMetadata.authType;
 }
 
 /*

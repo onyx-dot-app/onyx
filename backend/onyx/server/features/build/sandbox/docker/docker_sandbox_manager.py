@@ -16,7 +16,7 @@ Snapshots
 Docker V1 streams tar bytes through api_server-owned ``FileStore`` rather than
 handing storage credentials to the agent container. ``create_snapshot`` runs
 ``tar`` inside the sandbox via docker exec, pipes the bytes through
-``SnapshotManager.create_snapshot_from_stream``; ``restore_snapshot`` runs the
+``SnapshotManager.persist_snapshot_from_stream``; ``restore_snapshot`` runs the
 reverse path via ``stream_stdin_to_container``.
 
 Security model
@@ -119,13 +119,13 @@ from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
 from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
 from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
-from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
+from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
 )
@@ -133,7 +133,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
     generate_agent_instructions,
 )
 from onyx.server.features.build.sandbox.util.opencode_config import (
-    build_opencode_config,
+    build_multi_provider_opencode_config,
 )
 from onyx.utils.logger import setup_logger
 
@@ -192,7 +192,22 @@ fi
 set -e
 cd {session_path}/outputs/web
 {install_check}
-export WEBAPP_ASSET_PREFIX="/api/build/sessions/$(basename {session_path})/webapp"
+export ONYX_WEBAPP_BASE_PATH="/api/build/sessions/$(basename {session_path})/webapp"
+if grep -q "WEBAPP_ASSET_PREFIX" next.config.ts 2>/dev/null; then
+    cat > next.config.ts <<'EOF'
+import type {{ NextConfig }} from "next";
+
+const webappBasePath = process.env.ONYX_WEBAPP_BASE_PATH || undefined;
+
+const nextConfig: NextConfig = {{
+  ...(webappBasePath
+    ? {{ basePath: webappBasePath, assetPrefix: webappBasePath }}
+    : {{}}),
+}};
+
+export default nextConfig;
+EOF
+fi
 echo "Starting Next.js dev server on port {nextjs_port}..."
 nohup bun run dev -- -H 0.0.0.0 -p {nextjs_port} > {session_path}/nextjs.log 2>&1 &
 NEXTJS_PID=$!
@@ -209,6 +224,30 @@ def _sandbox_container_name(sandbox_id: str | UUID) -> str:
 def _sandbox_volume_name(sandbox_id: str | UUID) -> str:
     """Per-sandbox named volume holding ``/workspace/sessions``."""
     return f"{SANDBOX_DOCKER_VOLUME_PREFIX}{str(sandbox_id)[:8]}"
+
+
+def _container_llm_configs(
+    all_llm_configs: list[LLMProviderConfig] | None,
+    llm_config: LLMProviderConfig,
+    *,
+    proxy_enabled: bool,
+) -> list[LLMProviderConfig]:
+    """Provider configs to bake into the container's opencode.json.
+
+    The Docker analog of K8s ``_placeholder_llm_configs``: when the egress proxy
+    is enabled, real keys are swapped for the placeholder (the proxy injects the
+    live key on the wire); ``api_key=None`` providers (e.g. Ollama) are left
+    untouched so the placeholder never reaches the LLM.
+    """
+    configs = all_llm_configs or [llm_config]
+    if not proxy_enabled:
+        return configs
+    return [
+        c.model_copy(update={"api_key": SANDBOX_PROXY_INJECTED_PLACEHOLDER})
+        if c.api_key
+        else c
+        for c in configs
+    ]
 
 
 def _sanitize_relative_path(path: str) -> str:
@@ -318,21 +357,20 @@ _NO_PROXY_LIST = "127.0.0.1,localhost"
 def _proxy_env_vars(
     *,
     sandbox_proxy_host: str,
-    sandbox_proxy_port: int,
 ) -> dict[str, str]:
     """Proxy-enabled env additions for the sandbox container.
 
     Mirrors ``kubernetes_sandbox_manager._proxy_main_container_env_vars`` but
     layered on the docker env dict instead of a list of V1EnvVars. Includes the
-    firewall-init.sh contract vars (``SANDBOX_PROXY_*``,
-    ``CA_BUNDLE_SRC``/``DST``) since the script runs as the container's
-    entrypoint wrapper and reads them from its own environment.
+    firewall-init.sh contract vars since the script runs as the container's
+    entrypoint wrapper and reads them from its own environment. Proxy ports come
+    from build config and are injected as internal env, not caller arguments.
     """
-    proxy_url = f"http://{sandbox_proxy_host}:{sandbox_proxy_port}"
+    proxy_url = f"http://{sandbox_proxy_host}:{SANDBOX_PROXY_PORT}"
     return {
         # firewall-init.sh contract.
         "SANDBOX_PROXY_HOST": sandbox_proxy_host,
-        "SANDBOX_PROXY_PORT": str(sandbox_proxy_port),
+        "SANDBOX_PROXY_PORT": str(SANDBOX_PROXY_PORT),
         "SANDBOX_PROXY_BOOTSTRAP_MODE": "entrypoint",
         "SANDBOX_PROXY_CA_BUNDLE_SRC": f"{_PROXY_CA_SOURCE_DIR}/ca.crt",
         "SANDBOX_PROXY_CA_BUNDLE_DST": _PROXY_CA_BUNDLE_FILE,
@@ -350,6 +388,8 @@ def _proxy_env_vars(
         "AWS_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
         "CURL_CA_BUNDLE": _PROXY_CA_BUNDLE_FILE,
         "GIT_SSL_CAINFO": _PROXY_CA_BUNDLE_FILE,
+        "GH_TOKEN": SANDBOX_PROXY_INJECTED_PLACEHOLDER,
+        "GH_NO_UPDATE_NOTIFIER": "1",
     }
 
 
@@ -406,7 +446,6 @@ def build_container_create_kwargs(
     opencode_config_json: str,
     compose_project: str | None = None,
     sandbox_proxy_host: str | None = None,
-    sandbox_proxy_port: int | None = None,
     proxy_ca_volume_name: str | None = None,
 ) -> ContainerCreateKwargs:
     """Builds the kwargs dict for ``DockerClient.containers.create``.
@@ -432,8 +471,9 @@ def build_container_create_kwargs(
     ``--include-craft``):
 
     - Env layered with ``HTTPS_PROXY`` / SDK CA vars + the ``firewall-init.sh``
-      contract vars (``SANDBOX_PROXY_BOOTSTRAP_MODE= entrypoint``,
-      ``CA_BUNDLE_SRC``/``DST``). The legacy 4-key core is preserved; proxy keys
+      contract vars (``SANDBOX_PROXY_HOST``, ``SANDBOX_PROXY_PORT``,
+      ``SANDBOX_PROXY_BOOTSTRAP_MODE=entrypoint``, ``CA_BUNDLE_SRC``/``DST``).
+      The legacy 4-key core is preserved; proxy keys
       are layered on top.
     - ``ONYX_PAT`` and the opencode ``api_key`` are replaced with
       ``SANDBOX_PROXY_INJECTED_PLACEHOLDER``; the proxy reads the real values
@@ -498,16 +538,15 @@ def build_container_create_kwargs(
     }
 
     if sandbox_proxy_host:
-        # All-or-nothing: port + ca volume must be supplied when host is.
-        if sandbox_proxy_port is None or not proxy_ca_volume_name:
+        # All-or-nothing: ca volume must be supplied when host is.
+        if not proxy_ca_volume_name:
             raise ValueError(
-                "sandbox_proxy_host is set but sandbox_proxy_port or proxy_ca_volume_name is "
-                "missing; Proxy posture requires all three."
+                "sandbox_proxy_host is set but proxy_ca_volume_name is missing; "
+                "Proxy posture requires both."
             )
         env.update(
             _proxy_env_vars(
                 sandbox_proxy_host=sandbox_proxy_host,
-                sandbox_proxy_port=sandbox_proxy_port,
             )
         )
         volumes[proxy_ca_volume_name] = {
@@ -699,18 +738,6 @@ class DockerSandboxManager(SandboxManager):
                 "SANDBOX_API_SERVER_URL must be set for Docker sandbox provisioning."
             )
 
-        if all_llm_configs is not None and len(all_llm_configs) > 1:
-            # Docker is single-provider today: per-prompt agent_provider
-            # overrides will fail at opencode-serve with "provider not
-            # registered". Warn now so operators see it before the first turn.
-            logger.warning(
-                "DockerSandboxManager.provision received %d LLM configs but only the primary "
-                "provider %r is bootstrapped; per-prompt provider overrides will fail until Docker "
-                "grows multi-provider support.",
-                len(all_llm_configs),
-                llm_config.provider,
-            )
-
         logger.info(
             "Provisioning Docker sandbox %s for user %s, tenant %s.",
             sandbox_id,
@@ -742,19 +769,14 @@ class DockerSandboxManager(SandboxManager):
             container_onyx_pat = (
                 SANDBOX_PROXY_INJECTED_PLACEHOLDER if SANDBOX_PROXY_HOST else onyx_pat
             )
-            # api_key=None (e.g. Ollama) -> skip; The resolver has nothing to
-            # swap and the placeholder would reach the LLM verbatim.
-            container_llm_api_key = (
-                SANDBOX_PROXY_INJECTED_PLACEHOLDER
-                if SANDBOX_PROXY_HOST and llm_config.api_key
-                else llm_config.api_key
+            provider_configs = _container_llm_configs(
+                all_llm_configs, llm_config, proxy_enabled=bool(SANDBOX_PROXY_HOST)
             )
             opencode_config_json = json.dumps(
-                build_opencode_config(
-                    provider=llm_config.provider,
-                    model_name=llm_config.model_name,
-                    api_key=container_llm_api_key,
-                    api_base=llm_config.api_base,
+                build_multi_provider_opencode_config(
+                    providers=provider_configs,
+                    default_provider=llm_config.provider,
+                    default_model=llm_config.model_name,
                     disabled_tools=OPENCODE_DISABLED_TOOLS,
                     plugins=session_tag_plugins,
                 )
@@ -840,7 +862,6 @@ class DockerSandboxManager(SandboxManager):
             opencode_config_json=opencode_config_json,
             compose_project=self._compose_project,
             sandbox_proxy_host=proxy_host,
-            sandbox_proxy_port=SANDBOX_PROXY_PORT if proxy_host else None,
             proxy_ca_volume_name=(SANDBOX_PROXY_CA_VOLUME_NAME if proxy_host else None),
         )
         try:
@@ -918,17 +939,8 @@ class DockerSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
-        snapshot_path: str | None = None,
         user_name: str | None = None,
     ) -> None:
-        if snapshot_path:
-            logger.warning(
-                "setup_session_workspace called with snapshot_path=%s; use restore_snapshot "
-                "for snapshot restores. Session %s will be set up with the fresh template instead.",
-                snapshot_path,
-                session_id,
-            )
-
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._render_agents_md(
@@ -978,7 +990,14 @@ echo "Session workspace setup complete"
             "Setting up session workspace %s in sandbox %s.", session_id, sandbox_id
         )
         try:
-            run_in_container(container, ["/bin/sh", "-c", setup_script])
+            # user="1000:1000": container's User spec is "0:0" (proxy init needs
+            # root for iptables), so docker exec defaults to root. Without
+            # CAP_DAC_OVERRIDE (cap_drop=ALL), root cannot write to
+            # /workspace/sessions which is owned by sandbox=1000. Exec as
+            # sandbox so the script's mkdir/cp on the session workspace succeed.
+            run_in_container(
+                container, ["/bin/sh", "-c", setup_script], user="1000:1000"
+            )
         except ExecError as e:
             raise RuntimeError(
                 f"Failed to setup session workspace {session_id}: {e}"
@@ -1110,8 +1129,7 @@ echo "Session cleanup complete"
             (
                 f"cd {session_path} && tar -czf - "
                 f"$([ -d outputs ] && echo outputs) "
-                f"$([ -d attachments ] && echo attachments) "
-                f"$([ -d .opencode-data ] && echo .opencode-data)"
+                f"$([ -d attachments ] && echo attachments)"
             ),
         ]
 
@@ -1122,7 +1140,7 @@ echo "Session cleanup complete"
             # ``SnapshotManager``/``FileStore`` actually use, but does not
             # subclass ``typing.IO[bytes]`` formally.
             _, storage_path, size_bytes = (
-                self._snapshot_manager.create_snapshot_from_stream(
+                self._snapshot_manager.persist_snapshot_from_stream(
                     stream=adapter,  # ty: ignore[invalid-argument-type]
                     sandbox_id=str(sandbox_id),
                     tenant_id=tenant_id,
@@ -1694,7 +1712,7 @@ echo WRITE_OK"""
 class _GeneratorReader:
     """Adapts a ``Generator[bytes, ...]`` into a ``read(n)``-based reader.
 
-    ``SnapshotManager.create_snapshot_from_stream`` (and ``shutil.copyfileobj``
+    ``SnapshotManager.persist_snapshot_from_stream`` (and ``shutil.copyfileobj``
     under it) only need ``read(n)``. We buffer leftover bytes so the producer's
     chunk size doesn't constrain the consumer's.
     """

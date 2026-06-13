@@ -11,6 +11,8 @@ import uuid
 import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
+from contextlib import AbstractContextManager
+from contextlib import nullcontext
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
@@ -32,9 +34,6 @@ from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.api.models import DirectoryListing
-from onyx.server.features.build.api.models import FileSystemEntry
-from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.configs import MAX_TOTAL_UPLOAD_SIZE_BYTES
 from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
@@ -48,15 +47,17 @@ from onyx.server.features.build.db.build_session import get_empty_session_for_us
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.build_session import update_session_activity
-from onyx.server.features.build.db.build_session import update_session_agent_selection
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
-from onyx.server.features.build.sandbox.base import get_sandbox_manager
-from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
+from onyx.server.features.build.rate_limit import get_user_rate_limit_status
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.sandbox.models import FileSet
+from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session import sandbox_lifecycle as _sandbox
 from onyx.server.features.build.session import streaming as _streaming
@@ -72,6 +73,7 @@ from onyx.skills.push import build_user_skills_payload
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -211,6 +213,33 @@ class SessionManager:
             logger.warning(
                 "Failed to push user library to sandbox %s", sandbox_id, exc_info=True
             )
+
+    def _prewarm_opencode_session(
+        self, sandbox_id: UUID, session: BuildSession
+    ) -> None:
+        """Mint and persist the opencode-serve session before the first prompt.
+
+        The caller owns the surrounding transaction. This keeps the empty Craft
+        session's frontend-ready state aligned with the agent runtime being
+        ready to accept the first user message.
+        """
+        opencode_session_id = self._sandbox_manager.ensure_opencode_session(
+            sandbox_id=sandbox_id,
+            session_id=session.id,
+            opencode_session_id=session.opencode_session_id,
+        )
+        if opencode_session_id is None:
+            raise RuntimeError(
+                f"Failed to prewarm opencode session for build session {session.id}"
+            )
+        if session.opencode_session_id != opencode_session_id:
+            logger.info(
+                "Prewarmed opencode session %s for build session %s",
+                opencode_session_id,
+                session.id,
+            )
+            session.opencode_session_id = opencode_session_id
+            self._db_session.flush()
 
     def ensure_sandbox_running(
         self,
@@ -362,11 +391,11 @@ class SessionManager:
             llm_config=llm_config,
             nextjs_port=nextjs_port,
             skills_section=skills_section,
-            snapshot_path=None,  # TODO: Support restoring from snapshot
             user_name=user_name,
         )
         self._hydrate_skills(sandbox.id, user, files=skills_files)
         self._hydrate_user_library(sandbox.id, user_id)
+        self._prewarm_opencode_session(sandbox.id, build_session)
 
         logger.info(
             "Successfully created session %s with workspace in sandbox %s",
@@ -429,6 +458,7 @@ class SessionManager:
                     else:
                         self._hydrate_skills(sandbox.id, user)
                     self._hydrate_user_library(sandbox.id, user_id)
+                    self._prewarm_opencode_session(sandbox.id, existing)
                     logger.info(
                         "Returning existing empty session %s for user %s",
                         existing.id,
@@ -454,9 +484,10 @@ class SessionManager:
                     "missing" if not sandbox else sandbox.status,
                 )
 
-            # Delete the stale empty session - create_session__no_commit will
-            # handle sandbox recovery/re-provisioning
-            delete_build_session__no_commit(existing.id, user_id, self._db_session)
+            # Delete through the normal session path. Opencode history is
+            # sandbox-global implementation data, so this removes the Onyx
+            # session row without trying to prune opencode's internal store.
+            self.delete_session(existing.id, user_id)
 
         return self.create_session__no_commit(
             user_id=user_id,
@@ -484,33 +515,12 @@ class SessionManager:
             logger.info("No empty session found for user %s", user_id)
             return False
 
-        session_id = empty_session.id
-
-        # Get user's sandbox to clean up session workspace
-        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-        if sandbox and sandbox.status.is_active():
-            try:
-                self._sandbox_manager.cleanup_session_workspace(
-                    sandbox_id=sandbox.id,
-                    session_id=session_id,
-                    nextjs_port=empty_session.nextjs_port,
-                )
-                logger.info(
-                    "Cleaned up session workspace %s in sandbox %s",
-                    session_id,
-                    sandbox.id,
-                )
-            except Exception as e:
-                # Log but don't fail - session can still be deleted
-                logger.warning(
-                    "Failed to cleanup session workspace %s: %s", session_id, e
-                )
-
-        # Delete session (cascade deletes artifacts)
-        delete_build_session__no_commit(session_id, user_id, self._db_session)
-        logger.info("Deleted empty session %s for user %s", session_id, user_id)
-
-        return True
+        deleted = self.delete_session(empty_session.id, user_id)
+        if deleted:
+            logger.info(
+                "Deleted empty session %s for user %s", empty_session.id, user_id
+            )
+        return deleted
 
     def get_session(
         self,
@@ -619,42 +629,82 @@ class SessionManager:
 
         # Get user's sandbox to clean up session workspace
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        prompt_slot_cm: AbstractContextManager[bool]
         if sandbox and sandbox.status.is_active():
-            # Clean up session workspace (but don't terminate sandbox)
-            try:
-                self._sandbox_manager.cleanup_session_workspace(
-                    sandbox_id=sandbox.id,
-                    session_id=session_id,
-                    nextjs_port=session.nextjs_port,
-                )
-                logger.info(
-                    "Cleaned up session workspace %s in sandbox %s",
-                    session_id,
-                    sandbox.id,
-                )
-            except Exception as e:
-                # Log but don't fail - session can still be deleted even if
-                # workspace cleanup fails (e.g., if pod is already terminated)
-                logger.warning(
-                    "Failed to cleanup session workspace %s: %s", session_id, e
+            prompt_slot_cm = self._sandbox_manager.prompt_slot(sandbox.id, session_id)
+        else:
+            prompt_slot_cm = nullcontext(True)
+
+        with prompt_slot_cm as acquired_prompt_slot:
+            if not acquired_prompt_slot:
+                raise OnyxError(
+                    OnyxErrorCode.CONFLICT,
+                    "This session is busy with an active turn. Try again when it finishes.",
                 )
 
-        # Delete snapshot files from S3 before removing DB records
-        snapshots = get_snapshots_for_session(self._db_session, session_id)
-        if snapshots:
-            snapshot_manager = SnapshotManager(get_default_file_store())
-            for snapshot in snapshots:
+            if sandbox and sandbox.status.is_active():
+                if session.opencode_session_id:
+                    try:
+                        deleted_from_opencode = (
+                            self._sandbox_manager.delete_opencode_session(
+                                sandbox.id,
+                                session_id,
+                                session.opencode_session_id,
+                            )
+                        )
+                        if not deleted_from_opencode:
+                            logger.warning(
+                                "Best-effort opencode session delete returned false "
+                                "for build session %s opencode session %s",
+                                session_id,
+                                session.opencode_session_id,
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            "Best-effort opencode session delete failed for "
+                            "build session %s opencode session %s: %s",
+                            session_id,
+                            session.opencode_session_id,
+                            e,
+                        )
+
+                # Clean up session workspace (but don't terminate sandbox)
                 try:
-                    snapshot_manager.delete_snapshot(snapshot.storage_path)
+                    self._sandbox_manager.cleanup_session_workspace(
+                        sandbox_id=sandbox.id,
+                        session_id=session_id,
+                        nextjs_port=session.nextjs_port,
+                    )
+                    logger.info(
+                        "Cleaned up session workspace %s in sandbox %s",
+                        session_id,
+                        sandbox.id,
+                    )
                 except Exception as e:
+                    # Log but don't fail - session can still be deleted even if
+                    # workspace cleanup fails (e.g., if pod is already terminated)
                     logger.warning(
-                        "Failed to delete snapshot file %s: %s",
-                        snapshot.storage_path,
-                        e,
+                        "Failed to cleanup session workspace %s: %s", session_id, e
                     )
 
-        # Delete session (uses flush, caller commits)
-        return delete_build_session__no_commit(session_id, user_id, self._db_session)
+            # Delete snapshot files from FileStore before removing DB records
+            snapshots = get_snapshots_for_session(self._db_session, session_id)
+            if snapshots:
+                snapshot_manager = SnapshotManager(get_default_file_store())
+                for snapshot in snapshots:
+                    try:
+                        snapshot_manager.delete_snapshot(snapshot.storage_path)
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to delete snapshot file %s: %s",
+                            snapshot.storage_path,
+                            e,
+                        )
+
+            # Delete session (uses flush, caller commits)
+            return delete_build_session__no_commit(
+                session_id, user_id, self._db_session
+            )
 
     # =========================================================================
     # Message Operations
@@ -679,43 +729,6 @@ class SessionManager:
         if session is None:
             return None
         return get_session_messages(session_id, self._db_session)
-
-    def send_message(
-        self,
-        session_id: UUID,
-        user_id: UUID,
-        content: str,
-        agent_provider: str | None = None,
-        agent_model: str | None = None,
-    ) -> Generator[str, None, None]:
-        """
-        Send a message to the CLI agent and stream the response as SSE events.
-
-        Validates session, saves user message, streams agent response,
-        and saves assistant response to database.
-
-        Args:
-            session_id: The session UUID
-            user_id: The user ID
-            content: The message content
-            agent_provider: Optional per-message model provider override
-            agent_model: Optional per-message model name override
-
-        Yields:
-            SSE formatted event strings
-        """
-        # Persist the per-message model override; the turn reads it off the session row.
-        if agent_provider and agent_model:
-            update_session_agent_selection(
-                session_id, agent_provider, agent_model, self._db_session
-            )
-        yield from _streaming.stream_cli_agent_turn(
-            self._db_session,
-            self._sandbox_manager,
-            session_id,
-            content,
-            user_id,
-        )
 
     def send_subagent_message(
         self,
@@ -742,9 +755,9 @@ class SessionManager:
         Sets the interrupt fence and returns. The active stream's consume loop
         polls the fence (~1/s) and self-terminates — aborting opencode and
         emitting its own ``PromptResponse`` rather than waiting on a
-        ``session.idle`` that may never arrive after an abort. Setting a flag
-        (vs. a direct abort) is also what survives the first-turn race, where
-        the opencode session id isn't minted until inside the stream.
+        ``session.idle`` that may never arrive after an abort. A flag-based
+        approach (vs. a direct abort) is safe to call at any point in the turn
+        lifecycle, including before the stream has started consuming events.
         """
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
@@ -759,6 +772,7 @@ class SessionManager:
         user_id: UUID,
         *,
         keepalive_seconds: float = 15.0,
+        include_approval_announces: bool = True,
     ) -> Generator[str, None, None]:
         """Attach to an existing opencode session and stream translated ACP SSE.
 
@@ -785,24 +799,39 @@ class SessionManager:
                 "Session live stream is not ready yet.",
             )
 
-        for acp_event in self._sandbox_manager.subscribe_to_opencode_session(
+        raw_events = self._sandbox_manager.subscribe_to_opencode_session(
             sandbox.id,
             opencode_session_id,
             directory=f"/workspace/sessions/{session_id}",
             keepalive_seconds=keepalive_seconds,
-        ):
+        )
+        if include_approval_announces:
+            raw_events = self.merge_events_with_announces(
+                raw_events,
+                session_id=session_id,
+                tenant_id=get_current_tenant_id(),
+            )
+
+        for acp_event in raw_events:
             yield _streaming.event_to_sse(acp_event)
 
     # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
     #
-    # `_yield_sandbox_events` is a thin wrapper around the sandbox manager that drives
+    # `yield_sandbox_events` is a thin wrapper around the sandbox manager that drives
     # the agent to completion and yields raw sandbox events. It does NO database
     # writes, no SSE formatting — making it composable: the SSE endpoint wraps
-    # it with `_persist_sandbox_event` + an SSE formatter, and the headless
-    # scheduled-tasks executor reuses `_persist_sandbox_event` directly so the
+    # it with `persist_sandbox_event` + an SSE formatter, and the headless
+    # scheduled-tasks executor reuses `persist_sandbox_event` directly so the
     # persisted transcript is identical to an interactive run.
 
-    def _yield_sandbox_events(
+    def prompt_slot(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> AbstractContextManager[bool]:
+        return self._sandbox_manager.prompt_slot(sandbox_id, session_id)
+
+    def yield_sandbox_events(
         self,
         sandbox_id: UUID,
         session_id: UUID,
@@ -826,7 +855,20 @@ class SessionManager:
             should_interrupt=should_interrupt,
         )
 
-    def _persist_sandbox_event(
+    def merge_events_with_announces(
+        self,
+        event_iter: Generator[Any, None, None],
+        *,
+        session_id: UUID,
+        tenant_id: str,
+    ) -> Generator[Any, None, None]:
+        yield from _streaming.merge_events_with_announces(
+            event_iter,
+            session_id=session_id,
+            tenant_id=tenant_id,
+        )
+
+    def persist_sandbox_event(
         self,
         session_id: UUID,
         state: BuildStreamingState,
@@ -837,7 +879,7 @@ class SessionManager:
             self._db_session, session_id, state, sandbox_event, routing_meta
         )
 
-    def _finalize_persist(
+    def finalize_persist(
         self,
         session_id: UUID,
         state: BuildStreamingState,
@@ -1330,7 +1372,7 @@ class SessionManager:
             return DirectoryListing(path=path, entries=[])
 
         # Filter hidden files and directories
-        entries: list[FileSystemEntry] = [
+        entries: list[FilesystemEntry] = [
             entry
             for entry in raw_entries
             if entry.name not in HIDDEN_PATTERNS and not entry.name.startswith(".")
@@ -1479,23 +1521,54 @@ class SessionManager:
         if sandbox is None:
             return False
 
+        tenant_id = get_current_tenant_id()
+        history_snapshot_manager = (
+            SnapshotManager(get_default_file_store())
+            if self._sandbox_manager.supports_opencode_history_persistence
+            else None
+        )
         if sandbox.status == SandboxStatus.TERMINATED:
             logger.info("Sandbox %s already terminated", sandbox.id)
+            if history_snapshot_manager is not None:
+                try:
+                    history_snapshot_manager.delete_opencode_history_snapshot(
+                        tenant_id, str(sandbox.id)
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to delete opencode history for already-terminated "
+                        "sandbox %s; ignoring: %s",
+                        sandbox.id,
+                        e,
+                    )
             return True
+
+        if history_snapshot_manager is not None:
+            try:
+                history_snapshot_manager.delete_opencode_history_snapshot(
+                    tenant_id, str(sandbox.id)
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to delete opencode history for sandbox %s: %s",
+                    sandbox.id,
+                    e,
+                )
+                raise RuntimeError(
+                    f"Failed to delete opencode history snapshot: {e}"
+                ) from e
 
         try:
             # Terminate the sandbox (this cleans up all resources)
             self._sandbox_manager.terminate(sandbox.id)
             logger.info("Terminated sandbox %s for user %s", sandbox.id, user_id)
 
-            # Update status in database
             update_sandbox_status__no_commit(
                 self._db_session, sandbox.id, SandboxStatus.TERMINATED
             )
             self._db_session.flush()
-
-            return True
-
         except Exception as e:
             logger.error("Failed to terminate sandbox %s: %s", sandbox.id, e)
             raise RuntimeError(f"Failed to terminate sandbox: {e}") from e
+
+        return True

@@ -4,6 +4,7 @@ import pytest
 
 import onyx.auth.users as users
 from onyx.auth.users import verify_auth_setting
+from onyx.auth.users import verify_user_auth_secret
 from onyx.configs.constants import AuthType
 
 
@@ -52,3 +53,45 @@ def test_verify_auth_setting_valid_auth_types(
 
     mock_logger.warning.assert_not_called()
     mock_logger.notice.assert_called_once_with("Using Auth Type: %s", auth_type.value)
+
+
+def test_verify_user_auth_secret_rejects_empty_secret_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty USER_AUTH_SECRET must abort startup outside dev/test modes."""
+    monkeypatch.setattr(users, "USER_AUTH_SECRET", "")
+    monkeypatch.setattr(users, "DEV_MODE", False)
+    monkeypatch.setattr(users, "INTEGRATION_TESTS_MODE", False)
+
+    with pytest.raises(ValueError, match="USER_AUTH_SECRET"):
+        verify_user_auth_secret()
+
+
+@pytest.mark.parametrize("flag", ["DEV_MODE", "INTEGRATION_TESTS_MODE"])
+def test_verify_user_auth_secret_warns_in_dev_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    flag: str,
+) -> None:
+    """DEV_MODE / INTEGRATION_TESTS_MODE downgrade the empty-secret failure to a warning."""
+    mock_logger = MagicMock()
+    monkeypatch.setattr(users, "logger", mock_logger)
+    monkeypatch.setattr(users, "USER_AUTH_SECRET", "")
+    monkeypatch.setattr(users, "DEV_MODE", flag == "DEV_MODE")
+    monkeypatch.setattr(
+        users, "INTEGRATION_TESTS_MODE", flag == "INTEGRATION_TESTS_MODE"
+    )
+
+    verify_user_auth_secret()
+
+    mock_logger.warning.assert_called_once()
+
+
+def test_verify_user_auth_secret_accepts_configured_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A configured secret passes even when no dev/test mode is set."""
+    monkeypatch.setattr(users, "USER_AUTH_SECRET", "a-real-secret")
+    monkeypatch.setattr(users, "DEV_MODE", False)
+    monkeypatch.setattr(users, "INTEGRATION_TESTS_MODE", False)
+
+    verify_user_auth_secret()

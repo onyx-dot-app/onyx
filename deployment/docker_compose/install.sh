@@ -198,7 +198,7 @@ fetch_latest_release_tag() {
 # Craft sandbox backend for an image tag. The docker backend exists only in
 # v4.0.6+; older pinned tags get "kubernetes" (rolling tags track newest).
 sandbox_backend_for_tag() {
-    local ver="${1#craft-}"; ver="${ver#v}"; ver="${ver%%-*}"
+    local ver="${1#v}"; ver="${ver%%-*}"
     printf '%s' "$ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo docker; return; }
     local major="${ver%%.*}" rest="${ver#*.}"
     local minor="${rest%%.*}" patch="${rest#*.}"
@@ -992,27 +992,21 @@ if [ -f "$ENV_FILE" ]; then
     echo ""
 
     if [ "$REPLY" = "update" ]; then
-        if [ "$INCLUDE_CRAFT" = true ]; then
-            # --include-craft requires the craft-tagged backend image (Node.js
-            # + opencode CLI are only built into that image), so the tag is
-            # forced rather than prompted for.
-            VERSION="craft-edge"
-            print_info "Update selected. Using craft-edge (required by --include-craft)."
-        else
-            print_info "Update selected. Which tag would you like to deploy?"
-            echo ""
-            echo "• Press Enter for ${DEFAULT_IMAGE_TAG} (recommended)"
-            echo "• Type a specific tag (e.g., v0.1.0)"
-            echo ""
-            prompt_or_default "Enter tag [default: ${DEFAULT_IMAGE_TAG}]: " "${DEFAULT_IMAGE_TAG}"
-            VERSION="$REPLY"
-            echo ""
+        # Craft uses the regular backend image (ENABLE_CRAFT is a runtime flag),
+        # so the tag is prompted for normally even with --include-craft.
+        print_info "Update selected. Which tag would you like to deploy?"
+        echo ""
+        echo "• Press Enter for ${DEFAULT_IMAGE_TAG} (recommended)"
+        echo "• Type a specific tag (e.g., v0.1.0)"
+        echo ""
+        prompt_or_default "Enter tag [default: ${DEFAULT_IMAGE_TAG}]: " "${DEFAULT_IMAGE_TAG}"
+        VERSION="$REPLY"
+        echo ""
 
-            if [ "$VERSION" = "edge" ]; then
-                print_info "Selected: edge (latest nightly)"
-            else
-                print_info "Selected: $VERSION"
-            fi
+        if [ "$VERSION" = "edge" ]; then
+            print_info "Selected: edge (latest nightly)"
+        else
+            print_info "Selected: $VERSION"
         fi
 
         # Update .env file with new version
@@ -1031,12 +1025,18 @@ if [ -f "$ENV_FILE" ]; then
         print_success "Will restart with current settings"
     fi
 
-    # Keep SANDBOX_BACKEND aligned with the effective image tag (the one just
-    # chosen, or the pinned IMAGE_TAG already in .env on a plain restart).
+    # Honor --include-craft on existing installs regardless of update/restart:
+    # enable Craft at runtime and align SANDBOX_BACKEND with the effective tag
+    # (the one just chosen, or the pinned IMAGE_TAG already in .env on a restart).
     if [ "$INCLUDE_CRAFT" = true ]; then
+        if grep -q "^#* *ENABLE_CRAFT=" "$ENV_FILE"; then
+            sed -i.bak 's/^#* *ENABLE_CRAFT=.*/ENABLE_CRAFT=true/' "$ENV_FILE"
+        else
+            echo "ENABLE_CRAFT=true" >> "$ENV_FILE"
+        fi
         EFFECTIVE_TAG="${VERSION:-$(grep -E '^IMAGE_TAG=' "$ENV_FILE" | head -1 | cut -d= -f2-)}"
         set_sandbox_backend_for_tag "$EFFECTIVE_TAG"
-        print_success "Craft sandbox backend set to $SANDBOX_BACKEND_VALUE (image tag: ${EFFECTIVE_TAG})"
+        print_success "Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=$SANDBOX_BACKEND_VALUE, image tag: ${EFFECTIVE_TAG})"
     fi
 
     # Ensure COMPOSE_PROFILES is cleared when running in lite mode on an
@@ -1049,26 +1049,21 @@ else
     print_info "No existing .env file found. Setting up new deployment..."
     echo ""
 
-    # Ask for version (skipped when --include-craft forces the craft-tagged
-    # backend image, which is the only image that ships Node.js + opencode CLI).
-    if [ "$INCLUDE_CRAFT" = true ]; then
-        VERSION="craft-edge"
-        print_info "Using craft-edge (required by --include-craft)."
-    else
-        print_info "Which tag would you like to deploy?"
-        echo ""
-        echo "• Press Enter for ${DEFAULT_IMAGE_TAG} (recommended)"
-        echo "• Type a specific tag (e.g., v0.1.0)"
-        echo ""
-        prompt_or_default "Enter tag [default: ${DEFAULT_IMAGE_TAG}]: " "${DEFAULT_IMAGE_TAG}"
-        VERSION="$REPLY"
-        echo ""
+    # Craft uses the regular backend image (ENABLE_CRAFT is a runtime flag), so
+    # the tag is prompted for normally even with --include-craft.
+    print_info "Which tag would you like to deploy?"
+    echo ""
+    echo "• Press Enter for ${DEFAULT_IMAGE_TAG} (recommended)"
+    echo "• Type a specific tag (e.g., v0.1.0)"
+    echo ""
+    prompt_or_default "Enter tag [default: ${DEFAULT_IMAGE_TAG}]: " "${DEFAULT_IMAGE_TAG}"
+    VERSION="$REPLY"
+    echo ""
 
-        if [ "$VERSION" = "edge" ]; then
-            print_info "Selected: edge (latest nightly)"
-        else
-            print_info "Selected: $VERSION"
-        fi
+    if [ "$VERSION" = "edge" ]; then
+        print_info "Selected: edge (latest nightly)"
+    else
+        print_info "Selected: $VERSION"
     fi
 
     # Ask for authentication schema
@@ -1110,11 +1105,14 @@ else
     sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
     print_success "IMAGE_TAG set to $VERSION"
 
-    # In lite mode, clear COMPOSE_PROFILES so profiled services (MinIO, etc.)
-    # stay disabled — the template ships with s3-filestore enabled by default.
+    # In lite mode, MinIO never starts (COMPOSE_PROFILES cleared) and the
+    # onyx-lite overlay forces FILE_STORE_BACKEND=postgres at runtime; set it in
+    # .env too so the file isn't misleadingly left on s3 (the MinIO/S3 creds
+    # generated below are then unused, but stay ready if s3-filestore is enabled).
     if [[ "$LITE_MODE" = true ]]; then
         sed -i.bak 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Cleared COMPOSE_PROFILES for lite mode"
+        sed -i.bak 's/^FILE_STORE_BACKEND=.*/FILE_STORE_BACKEND=postgres/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Cleared COMPOSE_PROFILES and set FILE_STORE_BACKEND=postgres for lite mode"
     fi
 
     # Configure basic authentication (default)
@@ -1130,6 +1128,15 @@ else
     # Generate a secure USER_AUTH_SECRET
     USER_AUTH_SECRET=$(openssl rand -hex 32)
     sed -i.bak "s/^USER_AUTH_SECRET=.*/USER_AUTH_SECRET=\"$USER_AUTH_SECRET\"/" "$ENV_FILE" 2>/dev/null || true
+
+    # Random MinIO/S3 credentials instead of the minioadmin default. The app uses
+    # MinIO's root creds, so the same pair goes to both the server and app vars.
+    MINIO_ACCESS_KEY=$(openssl rand -hex 16)
+    MINIO_SECRET_KEY=$(openssl rand -hex 32)
+    sed -i.bak "s/^MINIO_ROOT_USER=.*/MINIO_ROOT_USER=$MINIO_ACCESS_KEY/" "$ENV_FILE" 2>/dev/null || true
+    sed -i.bak "s/^MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=$MINIO_SECRET_KEY/" "$ENV_FILE" 2>/dev/null || true
+    sed -i.bak "s/^S3_AWS_ACCESS_KEY_ID=.*/S3_AWS_ACCESS_KEY_ID=$MINIO_ACCESS_KEY/" "$ENV_FILE" 2>/dev/null || true
+    sed -i.bak "s/^S3_AWS_SECRET_ACCESS_KEY=.*/S3_AWS_SECRET_ACCESS_KEY=$MINIO_SECRET_KEY/" "$ENV_FILE" 2>/dev/null || true
 
     # Configure Craft based on --include-craft.
     # By default, env.template has Craft commented out (disabled).
@@ -1271,15 +1278,11 @@ print_success "Using port $AVAILABLE_PORT for nginx"
 # Read IMAGE_TAG from .env file and remove any quotes or whitespace.
 CURRENT_IMAGE_TAG=$(grep "^IMAGE_TAG=" "$ENV_FILE" | head -1 | cut -d'=' -f2 | tr -d ' "'"'"'')
 
-if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ] || [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
+if [ "$CURRENT_IMAGE_TAG" = "edge" ] || [ "$CURRENT_IMAGE_TAG" = "latest" ]; then
     USE_LATEST=true
     # Floating tags track main, so configs should come from main.
     CONFIG_REF="main"
-    if [[ "$CURRENT_IMAGE_TAG" == craft-* ]]; then
-        print_info "Using craft tag '$CURRENT_IMAGE_TAG' - will force pull and recreate containers"
-    else
-        print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
-    fi
+    print_info "Using '$CURRENT_IMAGE_TAG' tag - will force pull and recreate containers"
 else
     USE_LATEST=false
     # Pinned release tags use their own ref so configs match the images.

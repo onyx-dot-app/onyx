@@ -4,7 +4,6 @@ from typing import Any
 from typing import Optional
 from typing import TypeVar
 
-from retry import retry
 from slack_sdk import WebClient
 
 from onyx.auth.users import get_anonymous_user
@@ -37,6 +36,7 @@ from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.utils.logger import OnyxLoggingAdapter
+from onyx.utils.retry_wrapper import retry_builder
 
 srl = SlackRateLimiter()
 
@@ -234,7 +234,7 @@ def handle_regular_answer(
             "No message timestamp to respond to in `handle_message`. This should never happen."
         )
 
-    @retry(
+    @retry_builder(
         tries=num_retries,
         delay=0.25,
         backoff=2,
@@ -260,8 +260,6 @@ def handle_regular_answer(
         return answer
 
     try:
-        # By leaving time_cutoff and favor_recent as None, and setting enable_auto_detect_filters
-        # it allows the slack flow to extract out filters from the user query
         filters = BaseFilters(
             source_type=None,
             document_set=document_set_names,

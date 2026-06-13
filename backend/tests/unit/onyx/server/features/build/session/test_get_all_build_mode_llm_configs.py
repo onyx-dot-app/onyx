@@ -9,6 +9,7 @@ pre-registered when the pod was created.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import cast
@@ -16,18 +17,40 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
+from onyx.server.features.build.configs import BUILD_MODE_NOT_CONFIGURED_API_KEY
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.llm_config import get_all_build_mode_llm_configs
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationView
+
+# The recommended default model per provider type is sourced from the shared
+# recommended-models config (GitHub-or-bundled) at runtime. Stub it here so
+# these unit tests are deterministic and don't hit the network.
+_TEST_RECOMMENDED_BY_TYPE = {
+    "anthropic": "claude-opus-4-8",
+    "openai": "gpt-5.5",
+    "openrouter": "minimax/minimax-m3",
+}
+
+
+@pytest.fixture(autouse=True)
+def _stub_recommended_default() -> Iterator[None]:
+    with patch(
+        "onyx.server.features.build.session.llm_config."
+        "fetch_default_model_for_provider",
+        side_effect=lambda provider_name: _TEST_RECOMMENDED_BY_TYPE.get(provider_name),
+    ):
+        yield
 
 
 def _model(name: str, is_visible: bool = True) -> ModelConfigurationView:
@@ -69,12 +92,35 @@ def _run(rows: list[LLMProviderView]) -> list[LLMProviderConfig]:
     return get_all_build_mode_llm_configs(rows, _OPENAI_DEFAULT)
 
 
-class TestGetAllBuildModeLlmConfigs:
-    def test_default_only_when_no_build_mode_rows(self) -> None:
-        configs = _run([])
-        assert configs == [_OPENAI_DEFAULT]
+def _by_provider(
+    configs: list[LLMProviderConfig],
+) -> dict[str, LLMProviderConfig]:
+    return {c.provider: c for c in configs}
 
-    def test_includes_build_mode_provider_with_visible_model(self) -> None:
+
+class TestGetAllBuildModeLlmConfigs:
+    """The config list is the set baked into ``OPENCODE_CONFIG_CONTENT``.
+
+    Every supported provider type is ALWAYS present so a per-prompt cross-
+    provider override can never hit "model not found"; types the org hasn't
+    configured are registered with the dummy key
+    (``BUILD_MODE_NOT_CONFIGURED_API_KEY``) and fail closed on use.
+    """
+
+    def test_all_supported_types_present_when_no_build_mode_rows(self) -> None:
+        configs = _run([])
+        # Default (real openai) first, then dummy entries for the other
+        # supported types.
+        assert configs[0] == _OPENAI_DEFAULT
+        by = _by_provider(configs)
+        assert set(by) == set(BUILD_MODE_ALLOWED_PROVIDER_TYPES)
+        for ptype in BUILD_MODE_ALLOWED_PROVIDER_TYPES:
+            if ptype == "openai":
+                continue
+            assert by[ptype].api_key == BUILD_MODE_NOT_CONFIGURED_API_KEY
+            assert by[ptype].model_name == _TEST_RECOMMENDED_BY_TYPE[ptype]
+
+    def test_configured_provider_uses_real_key_unconfigured_uses_dummy(self) -> None:
         configs = _run(
             [
                 _provider(
@@ -85,13 +131,20 @@ class TestGetAllBuildModeLlmConfigs:
                 )
             ]
         )
-        assert [(c.provider, c.model_name) for c in configs] == [
-            ("openai", "gpt-4o"),
-            ("anthropic", "claude-opus-4-8"),
-        ]
-        assert configs[1].api_key == "k-anthropic"
+        by = _by_provider(configs)
+        # All supported types registered.
+        assert set(by) == set(BUILD_MODE_ALLOWED_PROVIDER_TYPES)
+        # Configured anthropic carries its real key + recommended model.
+        assert by["anthropic"].api_key == "k-anthropic"
+        assert by["anthropic"].model_name == "claude-opus-4-8"
+        # openrouter is unconfigured -> dummy key.
+        assert by["openrouter"].api_key == BUILD_MODE_NOT_CONFIGURED_API_KEY
 
-    def test_skips_build_mode_provider_with_no_visible_models(self) -> None:
+    def test_unconfigured_type_with_hidden_models_still_registered_as_dummy(
+        self,
+    ) -> None:
+        # A provider with no *visible* model isn't usable as a real config, so it
+        # is backfilled as a dummy entry like any other unconfigured type.
         configs = _run(
             [
                 _provider(
@@ -101,19 +154,10 @@ class TestGetAllBuildModeLlmConfigs:
                 )
             ]
         )
-        assert configs == [_OPENAI_DEFAULT]
-
-    def test_skips_build_mode_provider_with_empty_model_list(self) -> None:
-        configs = _run(
-            [
-                _provider(
-                    name="Anthropic",
-                    provider="anthropic",
-                    models=[],
-                )
-            ]
-        )
-        assert configs == [_OPENAI_DEFAULT]
+        by = _by_provider(configs)
+        assert set(by) == set(BUILD_MODE_ALLOWED_PROVIDER_TYPES)
+        assert by["anthropic"].api_key == BUILD_MODE_NOT_CONFIGURED_API_KEY
+        assert by["anthropic"].model_name == _TEST_RECOMMENDED_BY_TYPE["anthropic"]
 
     def test_prefers_recommended_model_over_first_visible(self) -> None:
         # Anthropic's recommended model wins even though it isn't first in the list.
@@ -127,40 +171,31 @@ class TestGetAllBuildModeLlmConfigs:
                         _model("claude-opus-4-8"),
                         _model("claude-sonnet-4-6"),
                     ],
+                    api_key="k-anthropic",
                 )
             ]
         )
-        assert configs[1].model_name == "claude-opus-4-8"
+        assert _by_provider(configs)["anthropic"].model_name == "claude-opus-4-8"
 
-    def test_uses_first_visible_for_type_without_recommended(self) -> None:
-        # A provider type with no recommended-model entry falls back to first visible.
+    def test_extra_configured_type_kept_alongside_dummy_backfill(self) -> None:
+        # A configured provider whose type isn't in the supported list is still
+        # included (real key), AND the supported types are all backfilled.
         configs = _run(
             [
                 _provider(
                     name="Google",
                     provider="google",
                     models=[_model("gemini-2.5-pro"), _model("gemini-2.5-flash")],
+                    api_key="k-google",
                 )
             ]
         )
-        assert configs[1].model_name == "gemini-2.5-pro"
-
-    def test_skips_hidden_models_when_picking_first(self) -> None:
-        # A provider type without a recommended-model entry falls back to the
-        # first *visible* model, skipping hidden ones.
-        configs = _run(
-            [
-                _provider(
-                    name="Google",
-                    provider="google",
-                    models=[
-                        _model("gemini-hidden", is_visible=False),
-                        _model("gemini-2.5-pro"),
-                    ],
-                )
-            ]
-        )
-        assert configs[1].model_name == "gemini-2.5-pro"
+        by = _by_provider(configs)
+        assert by["google"].api_key == "k-google"
+        assert by["google"].model_name == "gemini-2.5-pro"
+        # Every supported type is present too.
+        assert set(BUILD_MODE_ALLOWED_PROVIDER_TYPES).issubset(set(by))
+        assert by["anthropic"].api_key == BUILD_MODE_NOT_CONFIGURED_API_KEY
 
     def test_dedupes_when_default_provider_also_in_build_mode_rows(self) -> None:
         """If the default's provider type is also tagged as build-mode, we
@@ -175,9 +210,12 @@ class TestGetAllBuildModeLlmConfigs:
                 )
             ]
         )
-        assert configs == [_OPENAI_DEFAULT]
+        by = _by_provider(configs)
         # The default's api_key wins; we never overwrite with the build-mode row's.
-        assert configs[0].api_key == "k-openai"
+        assert by["openai"] == _OPENAI_DEFAULT
+        assert by["openai"].api_key == "k-openai"
+        # openai appears exactly once.
+        assert [c.provider for c in configs].count("openai") == 1
 
     def test_multiple_distinct_build_mode_providers(self) -> None:
         configs = _run(
@@ -186,19 +224,22 @@ class TestGetAllBuildModeLlmConfigs:
                     name="Anthropic",
                     provider="anthropic",
                     models=[_model("claude-opus-4-8")],
+                    api_key="k-anthropic",
                 ),
                 _provider(
-                    name="Google",
-                    provider="google",
-                    models=[_model("gemini-2.5-pro")],
+                    name="OpenRouter",
+                    provider="openrouter",
+                    models=[_model("minimax/minimax-m3")],
+                    api_key="k-openrouter",
                 ),
             ]
         )
-        assert [(c.provider, c.model_name) for c in configs] == [
-            ("openai", "gpt-4o"),
-            ("anthropic", "claude-opus-4-8"),
-            ("google", "gemini-2.5-pro"),
-        ]
+        by = _by_provider(configs)
+        # All real, no dummy entries needed.
+        assert by["openai"].api_key == "k-openai"
+        assert by["anthropic"].api_key == "k-anthropic"
+        assert by["openrouter"].api_key == "k-openrouter"
+        assert BUILD_MODE_NOT_CONFIGURED_API_KEY not in {c.api_key for c in configs}
 
     def test_default_provider_preserved_first(self) -> None:
         """Default always stays at index 0 regardless of fetched-row order."""
@@ -208,10 +249,27 @@ class TestGetAllBuildModeLlmConfigs:
                     name="Anthropic",
                     provider="anthropic",
                     models=[_model("claude-opus-4-7")],
+                    api_key="k-anthropic",
                 )
             ]
         )
         assert configs[0] == _OPENAI_DEFAULT
+
+    def test_no_duplicate_provider_blocks(self) -> None:
+        # opencode.json uses one block per providerID; the result must never
+        # contain a type twice (else build_multi_provider_opencode_config raises).
+        configs = _run(
+            [
+                _provider(
+                    name="Anthropic",
+                    provider="anthropic",
+                    models=[_model("claude-opus-4-8")],
+                    api_key="k-anthropic",
+                )
+            ]
+        )
+        provider_types = [c.provider for c in configs]
+        assert len(provider_types) == len(set(provider_types))
 
 
 class TestGetLlmConfigFallback:

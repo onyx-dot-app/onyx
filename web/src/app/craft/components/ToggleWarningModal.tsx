@@ -2,16 +2,17 @@
 
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
-import { RECOMMENDED_CRAFT_MODEL_LABEL } from "@/app/craft/onboarding/constants";
 
 interface ToggleWarningModalProps {
   open: boolean;
+  recommendedModelLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 export function ToggleWarningModal({
   open,
+  recommendedModelLabel,
   onConfirm,
   onCancel,
 }: ToggleWarningModalProps) {
@@ -42,7 +43,7 @@ export function ToggleWarningModal({
           <div className="flex justify-center text-center">
             <Text font="main-ui-body" color="text-04">
               {markdown(
-                `We recommend using **${RECOMMENDED_CRAFT_MODEL_LABEL}** for Crafting.\nOther models may have reduced capabilities for code creation,\ndata analysis, and artifact creation.`
+                `We recommend using **${recommendedModelLabel}** for Crafting.\nOther models may have reduced capabilities for code creation,\ndata analysis, and artifact creation.`
               )}
             </Text>
           </div>

@@ -2,6 +2,7 @@ import {
   ApiSessionResponse,
   ApiDetailedSessionResponse,
   ApiMessageResponse,
+  ApiInteractiveTurnResponse,
   ApiArtifactResponse,
   ApiUsageLimitsResponse,
   ApiWebappInfoResponse,
@@ -304,6 +305,7 @@ export async function fetchMessages(
   return data.messages.map((m: ApiMessageResponse) => ({
     id: m.id,
     type: m.type,
+    turn_index: m.turn_index,
     // Content is stored in message_metadata, not as a separate field
     content: m.content || extractContentFromMetadata(m.message_metadata),
     message_metadata: m.message_metadata,
@@ -325,16 +327,13 @@ export class RateLimitError extends Error {
   }
 }
 
-/**
- * Send a message and return the streaming response.
- * The caller is responsible for processing the SSE stream.
- */
-export async function sendMessageStream(
+export async function createTurn(
   sessionId: string,
   content: string,
+  clientRequestId: string,
   signal?: AbortSignal,
   model?: { provider: string; modelName: string } | null
-): Promise<Response> {
+): Promise<ApiInteractiveTurnResponse> {
   const res = await fetch(
     `${BUILD_API_BASE}/sessions/${sessionId}/send-message`,
     {
@@ -342,6 +341,7 @@ export async function sendMessageStream(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         content,
+        client_request_id: clientRequestId,
         ...(model ? { provider: model.provider, model: model.modelName } : {}),
       }),
       signal,
@@ -349,11 +349,44 @@ export async function sendMessageStream(
   );
 
   if (!res.ok) {
-    // Handle rate limit errors specifically so UI can show upsell modal
     if (res.status === 429) {
       throw new RateLimitError();
     }
-    throw new Error(`Failed to send message: ${res.status}`);
+    throw new Error(await errorDetail(res, "Failed to create turn"));
+  }
+
+  return res.json();
+}
+
+export async function fetchActiveTurn(
+  sessionId: string
+): Promise<ApiInteractiveTurnResponse | null> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/turns/active`
+  );
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch active turn: ${res.status}`);
+  }
+
+  return (await res.json()) as ApiInteractiveTurnResponse | null;
+}
+
+export async function fetchTurnEventStream(
+  sessionId: string,
+  turnId: string,
+  signal?: AbortSignal
+): Promise<Response | null> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/turns/${turnId}/events`,
+    { headers: { Accept: "text/event-stream" }, signal }
+  );
+
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 409) {
+      return null;
+    }
+    throw new Error(`Failed to stream turn: ${res.status}`);
   }
 
   return res;
@@ -361,7 +394,7 @@ export async function sendMessageStream(
 
 /**
  * Interrupt the in-flight agent turn for a session. The backend interrupts the
- * sandbox turn; the open /send-message stream then terminates normally.
+ * sandbox turn; any attached live stream then terminates normally.
  */
 export async function interruptMessageStream(sessionId: string): Promise<void> {
   const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/interrupt`, {
@@ -379,7 +412,7 @@ export async function fetchScheduledRunEventStream(
 ): Promise<Response> {
   const res = await fetch(
     `${BUILD_API_BASE}/sessions/${sessionId}/scheduled-run-events`,
-    { signal }
+    { headers: { Accept: "text/event-stream" }, signal }
   );
 
   if (res.status === 409) {
@@ -774,6 +807,29 @@ export async function postApprovalDecision(
     const errorData = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to post approval decision: ${res.status}`
+    );
+  }
+  return res.json();
+}
+
+export async function postApprovalSessionGrant(
+  approvalId: string
+): Promise<ApprovalView> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/approvals/${approvalId}/session-grant`,
+    {
+      method: "POST",
+    }
+  );
+
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new ApprovalConflictError(body.detail ?? "decision conflict");
+  }
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || `Failed to approve for session: ${res.status}`
     );
   }
   return res.json();

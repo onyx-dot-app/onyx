@@ -16,7 +16,7 @@ type Story = StoryObj<typeof Keycap>;
 /** Resting keycap used in inline keyboard hints. */
 export const Default: Story = {};
 
-/** "Armed" state — a hot danger fill (e.g. the first Esc of the double-Esc interrupt). */
+/** Filled state — a hot danger fill for active shortcut hints. */
 export const Filled: Story = {
   args: {
     filled: true,
