@@ -18,9 +18,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.configs import (
-    SANDBOX_PERIODIC_SNAPSHOT_INTERVAL_SECONDS,
-)
 from onyx.server.features.build.db.build_session import clear_nextjs_ports_for_user
 from onyx.server.features.build.db.build_session import (
     mark_user_sessions_idle__no_commit,
@@ -36,6 +33,11 @@ from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 
 # 100 minutes - snapshotting can take time
 TIMEOUT_SECONDS = 6000
+
+# Background snapshots ride the idle timeout: a session is re-snapshotted when
+# its latest snapshot is older than idle_timeout/4 (15 min at the default 1h),
+# so the data-loss bound scales with the pace of sandboxes going to sleep.
+SNAPSHOT_INTERVAL_DIVISOR = 4
 
 
 def _prune_prior_session_snapshots(
@@ -78,10 +80,10 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     """Sweep RUNNING sandboxes: background-snapshot sessions, sleep idle ones.
 
     Background snapshots bound data loss from ungraceful pod death (kubelet
-    eviction, node loss, spot reclaim) to
-    ~SANDBOX_PERIODIC_SNAPSHOT_INTERVAL_SECONDS: sessions whose latest
-    snapshot is fresher than the interval are skipped without touching the
-    pod (except at reap — the pod is about to die, so always snapshot).
+    eviction, node loss, spot reclaim) to ~idle_timeout/SNAPSHOT_INTERVAL_DIVISOR:
+    sessions whose latest snapshot is fresher than that interval are skipped
+    without touching the pod (except at reap — the pod is about to die, so
+    always snapshot).
     Reap stays fail-closed: snapshot failure on a reachable pod keeps the
     sandbox RUNNING for retry next sweep.
     """
@@ -114,7 +116,7 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
             now = datetime.datetime.now(datetime.timezone.utc)
             snapshot_cutoff = now - datetime.timedelta(
-                seconds=SANDBOX_PERIODIC_SNAPSHOT_INTERVAL_SECONDS
+                seconds=SANDBOX_IDLE_TIMEOUT_SECONDS // SNAPSHOT_INTERVAL_DIVISOR
             )
 
             for sandbox in running_sandboxes:

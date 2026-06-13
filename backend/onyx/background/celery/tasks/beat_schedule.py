@@ -181,10 +181,10 @@ beat_task_templates: list[dict] = [
     {
         "name": "cleanup-idle-sandboxes",
         "task": OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
-        # Ticks are cheap (the age gate skips fresh-snapshotted sessions);
-        # the cloud beat multiplier (x8) makes this ~40 min effective = the
-        # data-loss bound.
-        "schedule": timedelta(minutes=5),
+        # Ticks are cheap (DB-only when nothing is stale); snapshot pacing is
+        # gated inside the task at idle_timeout/4, so cloud's x8 multiplier
+        # (~8 min effective) still lands under the ~15 min data-loss bound.
+        "schedule": timedelta(minutes=1),
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,

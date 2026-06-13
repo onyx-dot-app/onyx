@@ -210,7 +210,10 @@ def test_stale_session_defeats_prefilter(
     fresh = _make_session(db_session, user)
     stale = _make_session(db_session, user)
     _add_snapshot(db_session, fresh.id, age_seconds=10)
-    interval = tasks_module.SANDBOX_PERIODIC_SNAPSHOT_INTERVAL_SECONDS
+    interval = (
+        tasks_module.SANDBOX_IDLE_TIMEOUT_SECONDS
+        // tasks_module.SNAPSHOT_INTERVAL_DIVISOR
+    )
     _add_snapshot(db_session, stale.id, age_seconds=interval * 2)
 
     stubbed_sweep.list_session_workspaces_returns = [fresh.id, stale.id]
@@ -240,7 +243,10 @@ def test_stale_snapshot_resnapshotted_and_priors_pruned(
     sandbox = make_sandbox(db_session, user)
     session_row = _make_session(db_session, user)
 
-    interval = tasks_module.SANDBOX_PERIODIC_SNAPSHOT_INTERVAL_SECONDS
+    interval = (
+        tasks_module.SANDBOX_IDLE_TIMEOUT_SECONDS
+        // tasks_module.SNAPSHOT_INTERVAL_DIVISOR
+    )
     prior = _add_snapshot(db_session, session_row.id, age_seconds=interval * 2)
     prior_path = prior.storage_path
 
