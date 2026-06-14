@@ -1714,7 +1714,8 @@ class GoogleDriveConnector(
                 continue
 
             files_batch.append(retrieved_file)
-            # Flush in bounded sub-batches so peak memory is independent of drive size.
+            # Flush in bounded sub-batches so resident converted documents stay
+            # capped (pending metadata is bounded by one checkpoint's fetch).
             if len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
                 yield from self._convert_files_sub_batch(
                     files_batch,
@@ -1732,8 +1733,6 @@ class GoogleDriveConnector(
                 pending_by_folder,
                 force_flush=True,
             )
-
-        checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
 
     def _convert_files_sub_batch(
         self,
@@ -1782,6 +1781,14 @@ class GoogleDriveConnector(
         for node in new_ancestors:
             ready_files.extend(pending_by_folder.pop(node.raw_node_id, []))
         if force_flush and pending_by_folder:
+            rooted = sum(len(waiters) for waiters in pending_by_folder.values())
+            # Surfaces hierarchy degradation: these files' folders never resolved,
+            # so they index under the source root instead of their real parent.
+            logger.warning(
+                "Rooting %s files under %s folders whose ancestor never resolved",
+                rooted,
+                len(pending_by_folder),
+            )
             for waiters in pending_by_folder.values():
                 ready_files.extend(waiters)
             pending_by_folder.clear()
