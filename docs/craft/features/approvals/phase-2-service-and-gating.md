@@ -364,7 +364,7 @@ two DB columns. This keeps the endpoint cheap to poll/refetch and
 eliminates the cross-replica staleness window a presence key would
 introduce.
 
-Register the router on `backend/onyx/server/features/build/api/api.py`.
+Register the router on `backend/onyx/server/features/build/api.py`.
 No `response_model`. Raise `OnyxError` only.
 
 **Approvals are not BuildMessages.** The chat does not augment the
@@ -393,7 +393,7 @@ inline alongside ACP events. Worst-case announce-to-FE latency is the
 1s BLPOP timeout.
 
 `ApprovalRequestedPacket` carries only `approval_id` and `session_id`
-(see `server/features/build/api/packets.py`); the FE refetches the row
+(see `server/features/build/packets.py`); the FE refetches the row
 via the `/live` endpoint to render the card. Keeping the packet small
 means Postgres stays the single source of truth for card contents and
 the FE never has to reconcile two shapes.

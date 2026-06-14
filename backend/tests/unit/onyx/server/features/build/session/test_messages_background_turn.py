@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.api import messages_api
-from onyx.server.features.build.api.models import MessageRequest
+from onyx.server.features.build.session import messages as messages_api
+from onyx.server.features.build.session.models import MessageRequest
 from tests.unit.onyx.server.features.build.fakes import FakeCache
 
 

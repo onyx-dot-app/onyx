@@ -31,19 +31,6 @@ from onyx.db.scheduled_task import get_scheduled_run_context
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.api.models import ArtifactResponse
-from onyx.server.features.build.api.models import DetailedSessionResponse
-from onyx.server.features.build.api.models import PptxPreviewResponse
-from onyx.server.features.build.api.models import PreProvisionedCheckResponse
-from onyx.server.features.build.api.models import SessionCreateRequest
-from onyx.server.features.build.api.models import SessionListResponse
-from onyx.server.features.build.api.models import SessionNameGenerateResponse
-from onyx.server.features.build.api.models import SessionResponse
-from onyx.server.features.build.api.models import SessionUpdateRequest
-from onyx.server.features.build.api.models import SetSessionSharingRequest
-from onyx.server.features.build.api.models import SetSessionSharingResponse
-from onyx.server.features.build.api.models import UploadResponse
-from onyx.server.features.build.api.models import WebappInfo
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.db.build_session import set_build_session_sharing_scope
@@ -52,10 +39,23 @@ from onyx.server.features.build.db.sandbox import get_latest_snapshot_for_sessio
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
+from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.models import ArtifactResponse
+from onyx.server.features.build.session.models import DetailedSessionResponse
+from onyx.server.features.build.session.models import PptxPreviewResponse
+from onyx.server.features.build.session.models import PreProvisionedCheckResponse
+from onyx.server.features.build.session.models import SessionCreateRequest
+from onyx.server.features.build.session.models import SessionListResponse
+from onyx.server.features.build.session.models import SessionNameGenerateResponse
+from onyx.server.features.build.session.models import SessionResponse
+from onyx.server.features.build.session.models import SessionUpdateRequest
+from onyx.server.features.build.session.models import SetSessionSharingRequest
+from onyx.server.features.build.session.models import SetSessionSharingResponse
+from onyx.server.features.build.session.models import WebappInfo
 from onyx.server.features.build.session.sandbox_lifecycle import (
     snapshot_opencode_history_before_recovery,
 )
