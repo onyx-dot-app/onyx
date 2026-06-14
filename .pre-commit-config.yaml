@@ -280,7 +280,11 @@ repos:
 
       - id: mobile-format
         name: mobile format
-        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bunx prettier --write "${@#mobile/}"' _
+        # pass_filenames: false so this runs as a single invocation (like the
+        # mobile lint/typecheck hooks above). Passing filenames makes pre-commit
+        # split them into multiple batches that each re-run `bun install`, which
+        # race on bun's cache (EEXIST locally / FileNotFound on CI).
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bun run format'
         language: system
-        files: ^mobile/
-        types_or: [javascript, jsx, ts, tsx, json, css]
+        pass_filenames: false
+        files: ^mobile/.*\.(ts|tsx|js|jsx|json|css)$
