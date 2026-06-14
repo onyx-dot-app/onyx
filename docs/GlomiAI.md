@@ -60,7 +60,7 @@
 | # | Epic | 期次 | 说明 |
 |---|---|---|---|
 | **E1** | i18n + 品牌替换 | 🟢 验证期·进行中 | 已有 spec+plan。复用现有 web,中文优先 |
-| **E2** | 国产模型接入（平台默认 Provider + C 端模型档位） | 🟢 验证期·进行中 | 第一阶段改为平台自动 seed Qwen OpenAI-compatible provider，并给 C 端用户暴露“快速/均衡/深度/编程/多模态”档位；普通聊天尊重用户档位，深度研究/Craft/标题生成可由服务端自动切到合适 profile；API key/base URL/provider 参数仍归平台控制，用户不进入 Admin LLM 配置页 |
+| **E2** | 国产模型接入（平台默认 OpenAI-compatible Provider） | 🟢 验证期·进行中 | 第一阶段收敛为平台自动 seed 一个 OpenAI-compatible 主模型到 Onyx 原生 LLMProvider 架构；用户注册后即可用，不进入 Admin LLM 配置页，也不选择模型档位；平台只配置 API base URL、API key、主模型名 |
 | **E3** | 超级对话调优 | 🟢 验证期 | 默认 Persona 的中文 system prompt、轻量搜索触发、工具使用策略、回答体验打磨 |
 | **E4** | 深度研究中文化 | 🟢 验证期 | 与 E3 共享“中文 Agent 搜索与研究能力层”：问题拆解、query portfolio、来源路由、证据评估、中文报告成稿 |
 | **E5** | Craft C 端化 | 🟡 王牌期 P2 | 去 `subscription_check`、沙箱镜像/网络国内化（k8s）、消费级生成入口 + 模板 |
@@ -82,7 +82,7 @@
 ## 6. 分期路线
 
 ### Phase A —— 核心能力验证（当前唯一重心）
-- **内容**：E1 i18n + E2 国产模型接入（平台默认 Qwen provider + C 端模型档位）+ E3/E4 中文 Agent 搜索与研究能力层（普通对话轻量搜索 + 深度研究中文报告）。
+- **内容**：E1 i18n + E2 国产模型接入（平台默认 OpenAI-compatible 主模型自动初始化）+ E3/E4 中文 Agent 搜索与研究能力层（普通对话轻量搜索 + 深度研究中文报告）。
 - **鉴权/支付**：**验证期不做**。用 `AUTH_TYPE=basic` / 单用户 / 内测白名单即可,不碰微信登录、不碰支付。
 - **交付物**：一个**中文、接国产模型、对话 + 深度研究可用**的内测版（本地或小范围内测）。
 - **验证成功标准**：
@@ -106,7 +106,7 @@
 
 | 决策 | 现状 | 倾向/建议 |
 |---|---|---|
-| **对话模型** | ✅ 已定 | 验证期优先平台统一配置 Qwen OpenAI-compatible endpoint，并通过模型档位控制成本/体验；C 端不暴露 API key/base URL/参数配置。规模化/合规再议自部署开源模型 |
+| **对话模型** | ✅ 已定 | 验证期优先平台统一配置一个 OpenAI-compatible 主模型；C 端不暴露 API key/base URL/参数配置，也不提供模型档位。规模化/合规后再考虑多模型策略或自部署开源模型 |
 | **embedding 检索模型** | forward note | 仅当做「文档/知识库 RAG」时才需换中文 embedding（BGE / Qwen-embedding / 云端中文）。纯深度研究（走 web 搜索）验证期不依赖,先不管 |
 | **商业模式** | 未定 | 订阅 / 积分按量 / 免费+增值,Phase C 前定 |
 | **定价与套餐** | 未定 | 随商业模式定 |
@@ -119,7 +119,7 @@
 
 - 本蓝图 = **顶层**;每个 Epic 各自走独立的 `spec → plan → 实现`。
 - 已落地：**E1**（i18n + UI 资源替换）的 spec 与 plan。
-- **下一步建议**：E1 已落，E2 正在打通“注册即有平台默认 Qwen 模型 + C 端档位选择”。接着以 `docs/superpowers/specs/2026-06-13-agent-search-and-research-strategy-design.md` 为 E3/E4 联合 spec，先做普通对话与深度研究共享的中文搜索策略、证据上下文和中文 benchmark。
+- **下一步建议**：E1 已落，E2 纠偏为“注册即有平台默认 OpenAI-compatible 主模型”，以 `docs/superpowers/specs/2026-06-14-platform-default-openai-compatible-llm-design.md` 为实施依据；E3/E4 继续以 `docs/superpowers/specs/2026-06-13-agent-search-and-research-strategy-design.md` 为联合 spec，先做普通对话与深度研究共享的中文搜索策略、证据上下文和中文 benchmark。
 
 ---
 

@@ -3,7 +3,10 @@
 - **日期**：2026-06-13
 - **产品**：Glomi AI
 - **背景**：基于 Onyx fork，目标转向 C 端消费级 Agent
-- **状态**：设计稿，供后续实施计划使用
+- **状态**：已被替代，不再作为实施依据
+- **替代文档**：`2026-06-14-platform-default-openai-compatible-llm-design.md`
+
+> 2026-06-14 纠偏：本设计中的“C 端模型档位 / model catalog / user model preference”超出了当前验证期需要。新的 E2 方向是平台自动 seed 一个 OpenAI-compatible 主模型到 Onyx 原生 LLMProvider 架构，用户不选择模型档位。
 
 ---
 

@@ -2,6 +2,9 @@
 
 ## 2026-06-14
 
+- E2 产品方向纠偏：用户明确不需要“C 端模型档位 / model catalog / user preference”，而是要“每个账户/tenant 注册即有平台默认 LLM Provider”，先只支持 OpenAI-compatible 主模型。
+- 新增替代设计文档 `docs/superpowers/specs/2026-06-14-platform-default-openai-compatible-llm-design.md`：配置收敛为 `CONSUMER_DEFAULT_LLM_API_BASE`、`CONSUMER_DEFAULT_LLM_API_KEY`、`CONSUMER_DEFAULT_LLM_MODEL_NAME`，provider type 固定 `openai_compatible`，运行时回归 Onyx 原生默认模型链路。
+- 将旧设计 `docs/superpowers/specs/2026-06-13-consumer-llm-provider-design.md` 标记为已被替代；同步更新 `docs/GlomiAI.md`，E2/Phase A/对话模型决策不再提 C 端模型档位。
 - 修复启动错误：`/model-catalog` 是 private route，但 `get_model_catalog` 缺少用户依赖，导致 `check_router_auth` 在 uvicorn 启动时抛出 `RuntimeError: Did not find user dependency in private route`。
 - 变动：为 `backend/onyx/server/manage/consumer_models_api.py:get_model_catalog` 增加 `require_permission(Permission.BASIC_ACCESS)` 依赖，并新增 route auth contract 单测，确保 consumer model router 以后新增接口也会被 `check_router_auth` 捕获。
 - 验证：新增单测先复现同样的 `/model-catalog` auth failure；修复后 `test_consumer_models_api.py` 通过 `5 passed`，并在 `PYTHONUTF8=1` 下构建 `onyx.main.get_application()` 通过 `app-ok`。
