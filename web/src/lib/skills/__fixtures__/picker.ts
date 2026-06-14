@@ -50,6 +50,7 @@ export function appFixture(
     credential_keys: ["token"],
     credential_values: over.authenticated === false ? {} : { token: "***" },
     authenticated: true,
+    auth_flow: over.app_type === "CUSTOM" ? "manual" : "oauth",
     ...over,
   };
 }
