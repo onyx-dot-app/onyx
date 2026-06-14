@@ -1689,16 +1689,24 @@ class GoogleDriveConnector(
                 continue
             if retrieved_file.error is not None:
                 failure_stage = retrieved_file.completion_stage.value
-                failure_message = f"retrieval failure during stage: {failure_stage},"
-                failure_message += f"user: {retrieved_file.user_email},"
-                failure_message += f"parent drive/folder: {retrieved_file.parent_id},"
-                failure_message += f"error: {retrieved_file.error}"
-                logger.error(failure_message)
+                logger.error(
+                    "retrieval failure during stage: %s,user: %s,"
+                    "parent drive/folder: %s,error: %s",
+                    failure_stage,
+                    retrieved_file.user_email,
+                    retrieved_file.parent_id,
+                    retrieved_file.error,
+                )
                 yield ConnectorFailure(
                     failed_entity=EntityFailure(
                         entity_id=retrieved_file.drive_file.get("id", failure_stage),
                     ),
-                    failure_message=failure_message,
+                    failure_message=(
+                        f"retrieval failure during stage: {failure_stage},"
+                        f"user: {retrieved_file.user_email},"
+                        f"parent drive/folder: {retrieved_file.parent_id},"
+                        f"error: {retrieved_file.error}"
+                    ),
                     exception=retrieved_file.error,
                 )
                 continue
