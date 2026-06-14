@@ -721,6 +721,16 @@ export const connectorConfigs: Record<
                 description:
                   "The key of a specific project to index (e.g., 'PROJ').",
               },
+              {
+                type: "checkbox",
+                query: "Is this a Jira Service Management project?",
+                label: "Use Jira Service Management",
+                name: "jira_service_management",
+                optional: true,
+                default: false,
+                description:
+                  "Use this with a Project Key to validate the project as a Jira Service Management service project. Permission sync is not supported for this mode.",
+              },
             ],
           },
           {
@@ -2030,6 +2040,7 @@ export interface JiraConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+  jira_service_management?: boolean;
 }
 
 export interface SalesforceConfig {
