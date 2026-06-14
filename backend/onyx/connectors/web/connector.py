@@ -32,6 +32,9 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
+from onyx.connectors.web.image_extraction import add_images_to_pdf_document
+from onyx.connectors.web.image_extraction import add_images_to_web_document
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.server.security.models import web_connector_ssrf_enforced
@@ -459,6 +462,8 @@ class WebConnector(LoadConnector, SlimConnector):
                 or initial_url,
                 metadata=metadata,
             )
+            if get_image_extraction_and_analysis_enabled():
+                result.doc = add_images_to_pdf_document(result.doc, response.content, initial_url)
 
             return result
 
@@ -616,6 +621,11 @@ class WebConnector(LoadConnector, SlimConnector):
                 semantic_identifier=parsed_html.title or initial_url,
                 metadata={},
             )
+
+            if get_image_extraction_and_analysis_enabled():
+                result.doc = add_images_to_web_document(
+                    result.doc, content, initial_url
+                )
         finally:
             page.close()
 
