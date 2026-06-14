@@ -754,6 +754,67 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Configure which Jira Service Management project to index. All tickets from the specified project will be indexed.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query: "Enter the Jira Service Management project key:",
+        label: "JSM Project Key",
+        name: "jsm_project_key",
+        optional: false,
+        description:
+          "The key of the JSM project to index (e.g., 'HELP', 'SUPPORT'). You can find this in the project URL or settings.",
+      },
+      {
+        type: "checkbox",
+        query: "Using scoped token?",
+        label: "Using scoped token",
+        name: "scoped_token",
+        optional: true,
+        default: false,
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to blacklist from comments:",
+        label: "Comment Email Blacklist",
+        name: "comment_email_blacklist",
+        description:
+          "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
+        optional: true,
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter JSM issue types to include (leave empty for all):",
+        label: "JSM Issue Types",
+        name: "jsm_issue_types",
+        description:
+          "Filter by specific JSM issue types. Common types include: Incident, Service Request, Problem, Change. Leave empty to index all issue types in the project.",
+        optional: true,
+      },
+      {
+        type: "list",
+        query: "Enter labels to skip:",
+        label: "Labels to Skip",
+        name: "labels_to_skip",
+        description:
+          "Skip tickets with these labels. Useful for skipping sensitive tickets.",
+        optional: true,
+      },
+    ],
+  },
   salesforce: {
     description: "Configure Salesforce connector",
     values: [
@@ -2030,6 +2091,15 @@ export interface JiraConfig {
   project_key?: string;
   comment_email_blacklist?: string[];
   jql_query?: string;
+}
+
+export interface JiraServiceManagementConfig {
+  jira_base_url: string;
+  jsm_project_key: string;
+  scoped_token?: boolean;
+  comment_email_blacklist?: string[];
+  jsm_issue_types?: string[];
+  labels_to_skip?: string[];
 }
 
 export interface SalesforceConfig {
