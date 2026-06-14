@@ -17,6 +17,7 @@ function model(
     max_input_tokens: null,
     supports_image_input: false,
     supports_reasoning: false,
+    effectiveDisplayName: name,
   };
 }
 

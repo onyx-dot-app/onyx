@@ -19,8 +19,6 @@ import {
   InputTypeIn,
   LinkButton,
   MessageCard,
-  OpenButton,
-  Popover,
   SelectCard,
   Spacer,
   Switch,
@@ -85,12 +83,10 @@ import {
   useCurrentSearchSettings,
   useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
-import { useLlmDefaults } from "@/hooks/useLanguageModels";
+import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import useFilter from "@/hooks/useFilter";
-import ModelListContent from "@/refresh-components/popovers/ModelListContent";
-import type { LLMOption } from "@/refresh-components/popovers/interfaces";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import type { RichStr } from "@opal/types";
-import { getModelIcon } from "@/lib/languageModels";
 import { ProviderCredentialsModal } from "@/refresh-pages/admin/IndexSettingsPage/modals";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
@@ -165,137 +161,6 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
         </LinkButton>
       )}
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Contextual RAG LLM picker
-// ---------------------------------------------------------------------------
-
-interface LlmPickerProps {
-  modelConfigurationId?: number | null;
-  modelName?: string | null;
-  providerName?: string | null;
-  onChange: (next: {
-    modelConfigurationId: number | null;
-    modelName: string;
-    providerName: string | null;
-  }) => void;
-  disabled?: boolean;
-  /**
-   * When true, restricts the popover to vision-capable models (those with
-   * `supports_image_input === true`). Used by the Captioning LLM picker;
-   * leave unset for any-model use cases like Contextual Retrieval.
-   */
-  requiresImageInput?: boolean;
-}
-
-/**
- * Single-select LLM picker bound to external state, unlike `LLMPopover`
- * which is wired to `LlmManager.currentLlm` and would mutate the user's
- * default chat model on select. Reuses the same popover primitives
- * (`Popover`, `OpenButton`, `ModelListContent`) for visual parity.
- *
- * Supports two selection modes:
- * - By ID: pass `modelConfigurationId` — preferred when the FK integer is
- *   available (e.g. contextual RAG, where the backend now stores the integer).
- * - By name: pass `modelName` + `providerName` — used for the captioning LLM
- *   which is keyed by the global vision default rather than a stored FK.
- *
- * `onChange` always emits all three fields so callers can destructure what
- * they need.
- */
-function LlmPicker({
-  modelConfigurationId,
-  modelName,
-  providerName,
-  onChange,
-  disabled,
-  requiresImageInput,
-}: LlmPickerProps) {
-  const [open, setOpen] = useState(false);
-  const { llmProviders, isLoading } = useLlmDefaults();
-
-  const isSelected = useCallback(
-    (option: LLMOption) => {
-      if (modelConfigurationId != null) {
-        return option.modelConfigurationId === modelConfigurationId;
-      }
-      return option.modelName === modelName && option.name === providerName;
-    },
-    [modelConfigurationId, modelName, providerName]
-  );
-
-  const handleSelect = useCallback(
-    (option: LLMOption) => {
-      onChange({
-        modelConfigurationId: option.modelConfigurationId ?? null,
-        modelName: option.modelName,
-        providerName: option.name ?? null,
-      });
-      setOpen(false);
-    },
-    [onChange]
-  );
-
-  const { displayName, providerType } = useMemo(() => {
-    if (!llmProviders) {
-      return { displayName: null as string | null, providerType: null };
-    }
-    if (modelConfigurationId != null) {
-      for (const p of llmProviders) {
-        const cfg = p.model_configurations.find(
-          (m) => m.id === modelConfigurationId
-        );
-        if (cfg) {
-          return {
-            displayName: cfg.display_name || cfg.name,
-            providerType: p.provider,
-          };
-        }
-      }
-      return { displayName: null, providerType: null };
-    }
-    if (!modelName || !providerName) {
-      return { displayName: null, providerType: null };
-    }
-    for (const p of llmProviders) {
-      if (p.name !== providerName) continue;
-      const cfg = p.model_configurations.find((m) => m.name === modelName);
-      if (cfg) {
-        return {
-          displayName: cfg.display_name || cfg.name,
-          providerType: p.provider,
-        };
-      }
-    }
-    return { displayName: modelName, providerType: null };
-  }, [llmProviders, modelConfigurationId, modelName, providerName]);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild disabled={disabled}>
-        <OpenButton
-          disabled={disabled}
-          icon={
-            providerType
-              ? getModelIcon(providerType, modelName ?? "")
-              : undefined
-          }
-        >
-          {displayName ?? "Select a model"}
-        </OpenButton>
-      </Popover.Trigger>
-      <Popover.Content side="top" align="end" width="xl">
-        <ModelListContent
-          llmProviders={llmProviders}
-          isLoading={isLoading}
-          onSelect={handleSelect}
-          isSelected={isSelected}
-          requiresImageInput={requiresImageInput}
-        />
-      </Popover.Content>
-    </Popover>
   );
 }
 
@@ -876,6 +741,19 @@ export default function IndexSettingsPage() {
     },
     [llmProviders]
   );
+
+  // Resolve defaultVision (name-based) to a model_configuration_id for ModelSelector
+  const captioningModelConfigId = useMemo(() => {
+    if (!defaultVision?.modelName || !llmProviders) return null;
+    for (const p of llmProviders) {
+      if (p.name !== defaultVision.providerName) continue;
+      const mc = p.model_configurations.find(
+        (m) => m.name === defaultVision.modelName
+      );
+      if (mc?.id != null) return mc.id;
+    }
+    return null;
+  }, [llmProviders, defaultVision]);
 
   const initialFormValues: IndexSettingsFormValues = useMemo(
     () => ({
@@ -1584,17 +1462,17 @@ export default function IndexSettingsPage() {
                               disabled={!values.enable_contextual_rag}
                               withLabel
                             >
-                              <LlmPicker
-                                modelConfigurationId={
+                              <ModelSelector
+                                value={
                                   values.contextual_rag_model_configuration_id
                                 }
                                 disabled={!values.enable_contextual_rag}
-                                onChange={({ modelConfigurationId }) => {
+                                onChange={(opt) =>
                                   void setFieldValue(
                                     "contextual_rag_model_configuration_id",
-                                    modelConfigurationId
-                                  );
-                                }}
+                                    opt.modelConfigurationId ?? null
+                                  )
+                                }
                               />
                             </InputHorizontal>
                           </Disabled>
@@ -1657,14 +1535,16 @@ export default function IndexSettingsPage() {
                               disabled={!imageProcessingEnabled}
                               withLabel
                             >
-                              <LlmPicker
-                                modelName={defaultVision?.modelName ?? null}
-                                providerName={
-                                  defaultVision?.providerName ?? null
-                                }
+                              <ModelSelector
+                                value={captioningModelConfigId}
                                 disabled={!imageProcessingEnabled}
-                                onChange={handleCaptioningModelChange}
                                 requiresImageInput
+                                onChange={(opt) =>
+                                  void handleCaptioningModelChange({
+                                    modelName: opt.modelName,
+                                    providerName: opt.name,
+                                  })
+                                }
                               />
                             </InputHorizontal>
                           </Disabled>

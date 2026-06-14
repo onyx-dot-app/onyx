@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
-import { useAdminLLMProviders } from "@/hooks/useLanguageModels";
+import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import {
@@ -25,7 +25,7 @@ import {
   deleteLlmProvider,
   setDefaultLlmModel,
 } from "@/lib/languageModels/svc";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
@@ -298,6 +298,19 @@ export default function LanguageModelsPage() {
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
 
+  // Resolve the current default to a model_configuration_id for ModelSelector
+  const defaultModelConfigId = useMemo(() => {
+    if (!defaultText || !existingLlmProviders) return null;
+    const provider = existingLlmProviders.find(
+      (p) => p.id === defaultText.provider_id
+    );
+    return (
+      provider?.model_configurations.find(
+        (m) => m.name === defaultText.model_name
+      )?.id ?? null
+    );
+  }, [defaultText, existingLlmProviders]);
+
   if (!existingLlmProviders) {
     return <ThreeDotsLoader />;
   }
@@ -355,33 +368,21 @@ export default function LanguageModelsPage() {
               center
               withLabel
             >
-              <InputSelect
-                value={currentDefaultValue}
-                onValueChange={handleDefaultModelChange}
-              >
-                <InputSelect.Trigger placeholder="Select a default model" />
-                <InputSelect.Content>
-                  {providersWithVisibleModels.map(
-                    ({ provider, visibleModels }) => (
-                      <InputSelect.Group key={provider.id}>
-                        <InputSelect.Label>
-                          {providerDisplayName(provider)}
-                        </InputSelect.Label>
-                        {visibleModels.map((model) => (
-                          <InputSelect.Item
-                            key={`${provider.id}:${model.name}`}
-                            value={`${provider.id}:${model.name}`}
-                          >
-                            {model.custom_display_name ||
-                              model.display_name ||
-                              model.name}
-                          </InputSelect.Item>
-                        ))}
-                      </InputSelect.Group>
-                    )
-                  )}
-                </InputSelect.Content>
-              </InputSelect>
+              <ModelSelector
+                value={defaultModelConfigId}
+                onChange={(opt) => {
+                  const provider = existingLlmProviders?.find(
+                    (p) =>
+                      p.provider === opt.provider &&
+                      (p.name === opt.name || (!p.name && !opt.name))
+                  );
+                  if (provider) {
+                    void handleDefaultModelChange(
+                      `${provider.id}:${opt.modelName}`
+                    );
+                  }
+                }}
+              />
             </InputHorizontal>
           </Card>
         ) : (

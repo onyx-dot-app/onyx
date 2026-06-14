@@ -4,10 +4,10 @@ import { useState, useCallback, useMemo } from "react";
 import {
   MAX_MODELS,
   SelectedModel,
-} from "@/refresh-components/popovers/ModelSelector";
+} from "@/sections/model-selector/MultiModelSelector";
 import { LLMOverride } from "@/app/app/services/lib";
 import { LlmManager } from "@/lib/hooks";
-import { buildLlmOptions } from "@/refresh-components/popovers/llmUtils";
+import { buildLlmOptions } from "@/lib/languageModels/options";
 
 export interface UseMultiModelChatReturn {
   /** Currently selected models for multi-model comparison. */

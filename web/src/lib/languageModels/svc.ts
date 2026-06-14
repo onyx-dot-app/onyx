@@ -161,6 +161,7 @@ export const fetchBedrockModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -215,6 +216,7 @@ export const fetchOllamaModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -276,6 +278,7 @@ export const fetchOpenRouterModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -335,6 +338,7 @@ export const fetchLMStudioModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: modelData.supports_reasoning,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -393,6 +397,7 @@ export const fetchBifrostModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: modelData.supports_reasoning,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -451,6 +456,7 @@ export const fetchOpenAICompatibleModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: modelData.supports_reasoning,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -510,6 +516,7 @@ export const fetchLiteLLMProxyModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: modelData.supports_reasoning,
+      effectiveDisplayName: modelData.model_name,
     }));
 
     return { models };
