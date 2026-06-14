@@ -398,11 +398,11 @@ class TestGetLlmConfigFallback:
             "claude-opus-4-8",
         )
 
-    def test_consumer_coding_profile_wins_when_qwen_provider_is_available(
+    def test_openai_compatible_provider_uses_existing_default_selection(
         self,
     ) -> None:
         provider = _provider(
-            name="Qwen",
+            name="Glomi Default",
             provider="openai_compatible",
             models=[_model("qwen-plus"), _model("qwen3-coder-plus")],
             api_key="k-qwen",
@@ -412,7 +412,7 @@ class TestGetLlmConfigFallback:
             config = self._manager().build_llm_configs(self._user(), None, None)[0]
         assert (config.provider, config.model_name) == (
             "openai_compatible",
-            "qwen3-coder-plus",
+            "qwen-plus",
         )
         assert config.api_key == "k-qwen"
         assert config.api_base == "https://dashscope.aliyuncs.com/compatible-mode/v1"

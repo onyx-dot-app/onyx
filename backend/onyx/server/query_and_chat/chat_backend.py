@@ -68,9 +68,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.consumer_model_catalog import TITLE_CONSUMER_MODEL_PROFILE_ID
 from onyx.llm.factory import get_default_llm
-from onyx.llm.factory import get_llm_for_consumer_model_profile
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
@@ -430,12 +428,7 @@ def rename_chat_session(
         return RenameChatSessionResponse(new_name=name)
 
     additional_headers = extract_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS)
-    llm = get_llm_for_consumer_model_profile(
-        TITLE_CONSUMER_MODEL_PROFILE_ID,
-        additional_headers=additional_headers,
-    ) or get_default_llm(
-        additional_headers=additional_headers
-    )
+    llm = get_default_llm(additional_headers=additional_headers)
 
     # Read-phase short session: usage check + history fetch. Closed before the
     # LLM call so the underlying pool connection is fully released for the

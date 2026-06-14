@@ -8,8 +8,7 @@ restart.
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.consumer_model_catalog import CRAFT_CONSUMER_MODEL_PROFILE_ID
-from onyx.llm.consumer_model_catalog import get_consumer_model_profile
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_default_model_for_provider,
 )
@@ -42,30 +41,6 @@ def _config_from_provider(
     )
 
 
-def _visible_model_names(provider: LLMProviderView) -> set[str]:
-    return {
-        model.name
-        for model in provider.model_configurations
-        if model.is_visible
-    }
-
-
-def _consumer_craft_default_config(
-    providers: list[LLMProviderView],
-) -> LLMProviderConfig | None:
-    profile = get_consumer_model_profile(CRAFT_CONSUMER_MODEL_PROFILE_ID)
-    for provider in providers:
-        if provider.name != profile.provider_name:
-            continue
-        if provider.provider != profile.provider_type:
-            continue
-        if profile.model_name not in _visible_model_names(provider):
-            continue
-        return _config_from_provider(provider, profile.model_name)
-
-    return None
-
-
 def select_default_llm_config(
     providers: list[LLMProviderView],
     requested_provider_type: str | None,
@@ -81,6 +56,8 @@ def select_default_llm_config(
        ``is_visible`` models.
     2. Otherwise: highest-priority supported provider with its recommended
        model.
+    3. Otherwise: a configured OpenAI-compatible provider with its first
+       visible model. This dynamic provider type has no dummy backfill.
 
     Raises:
         OnyxError: No accessible supported provider is configured.
@@ -94,10 +71,6 @@ def select_default_llm_config(
             requested_provider_type,
         )
 
-    consumer_default = _consumer_craft_default_config(providers)
-    if consumer_default is not None:
-        return consumer_default
-
     for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES:
         for provider in providers:
             if provider.provider != provider_type:
@@ -106,6 +79,14 @@ def select_default_llm_config(
             if model_name is None:
                 continue
             return _config_from_provider(provider, model_name)
+
+    for provider in providers:
+        if provider.provider != LlmProviderNames.OPENAI_COMPATIBLE:
+            continue
+        model_name = _recommended_model(provider)
+        if model_name is None:
+            continue
+        return _config_from_provider(provider, model_name)
 
     raise OnyxError(
         OnyxErrorCode.INVALID_INPUT,
