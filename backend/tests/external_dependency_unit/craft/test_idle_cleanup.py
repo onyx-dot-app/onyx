@@ -15,6 +15,7 @@ import logging
 from collections.abc import Generator
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import OnyxRedisLocks
@@ -68,6 +69,21 @@ def short_idle_threshold(monkeypatch: pytest.MonkeyPatch) -> int:
     threshold = 60
     monkeypatch.setattr(tasks_module, "SANDBOX_IDLE_TIMEOUT_SECONDS", threshold)
     return threshold
+
+
+@pytest.fixture(autouse=True)
+def _quiesce_leaked_sandboxes(db_session: Session) -> None:
+    """Terminate RUNNING sandboxes leaked by earlier tests.
+
+    The sweep covers ALL RUNNING sandboxes globally, so rows committed by
+    other tests in this directory would otherwise leak into our assertions.
+    """
+    db_session.execute(
+        update(Sandbox)
+        .where(Sandbox.status == SandboxStatus.RUNNING)
+        .values(status=SandboxStatus.TERMINATED)
+    )
+    db_session.commit()
 
 
 @pytest.fixture(autouse=True)
@@ -178,6 +194,10 @@ def test_active_sandbox_within_threshold_not_touched(
     # Heartbeat half the threshold ago -> not idle.
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold // 2)
 
+    # Non-idle sandboxes still get the background-snapshot sweep; an empty
+    # workspace listing makes it a no-op so we can assert "not touched".
+    stubbed_cleanup.list_session_workspaces_returns = []
+
     cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
 
     db_session.expire_all()
@@ -198,7 +218,7 @@ def test_null_heartbeat_sandbox_past_created_at_included(
     """NULL heartbeat + ``created_at`` past threshold -> swept.
 
     Regression net for SHA ``eba89fa635`` — the OR-branch in
-    ``get_idle_sandboxes`` that handles legacy rows / edge cases.
+    the idle check that handles legacy rows / edge cases.
     """
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
