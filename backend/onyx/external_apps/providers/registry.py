@@ -3,10 +3,6 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.models import ActionPolicyView
-from onyx.external_apps.models import BuiltInExternalAppDescriptor
-from onyx.external_apps.models import EndpointDescriptor
-from onyx.external_apps.models import OrgCredentialFieldDescriptor
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.base import ExternalAppProvider
 from onyx.external_apps.providers.base import OnyxManagedExtApp
@@ -14,8 +10,13 @@ from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 from onyx.external_apps.providers.google_drive import GoogleDriveProvider
+from onyx.external_apps.providers.hubspot import HubspotProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.slack import SlackProvider
+from onyx.server.features.build.api.models import ActionPolicyView
+from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
+from onyx.server.features.build.api.models import EndpointDescriptor
+from onyx.server.features.build.api.models import OrgCredentialFieldDescriptor
 
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     SlackProvider,
@@ -24,6 +25,7 @@ _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     GmailProvider,
     LinearProvider,
     GitHubProvider,
+    HubspotProvider,
 ]
 
 
