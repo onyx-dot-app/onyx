@@ -1,5 +1,12 @@
 # 所有相关的变动都需要记录在summary.md中，包括坑，经验，变动等等；关于产品相关的文档在docs/GlomiAI.md，有产品相关变动了需要同步更新这个文件
 
+## 2026-06-14
+
+- 修复启动错误：`/model-catalog` 是 private route，但 `get_model_catalog` 缺少用户依赖，导致 `check_router_auth` 在 uvicorn 启动时抛出 `RuntimeError: Did not find user dependency in private route`。
+- 变动：为 `backend/onyx/server/manage/consumer_models_api.py:get_model_catalog` 增加 `require_permission(Permission.BASIC_ACCESS)` 依赖，并新增 route auth contract 单测，确保 consumer model router 以后新增接口也会被 `check_router_auth` 捕获。
+- 验证：新增单测先复现同样的 `/model-catalog` auth failure；修复后 `test_consumer_models_api.py` 通过 `5 passed`，并在 `PYTHONUTF8=1` 下构建 `onyx.main.get_application()` 通过 `app-ok`。
+- 经验与坑：Windows 下直接构建 app 时可能因默认 GBK 读取 `webapp_offline.html` 出现 `UnicodeDecodeError`，验证时需要设置 `PYTHONUTF8=1`；直接 one-liner import `ee.onyx.main` 会触发 EE fallback 循环导入，不适合作为这个 auth 修复的验证入口。
+
 ## 2026-06-13
 
 - 新增设计文档 `docs/superpowers/specs/2026-06-13-consumer-llm-provider-design.md`，记录 C 端默认 LLM Provider / Qwen OpenAI-compatible 自动初始化 / 普通用户模型档位选择的架构方案。

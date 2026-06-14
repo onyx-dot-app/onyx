@@ -30,7 +30,9 @@ class ConsumerModelPreferenceResponse(BaseModel):
 
 
 @router.get("/model-catalog")
-def get_model_catalog() -> ConsumerModelCatalogResponse:
+def get_model_catalog(
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> ConsumerModelCatalogResponse:
     if not CONSUMER_DEFAULT_LLM_ENABLED or not CONSUMER_DEFAULT_LLM_API_KEY:
         raise OnyxError(
             OnyxErrorCode.SERVICE_UNAVAILABLE,

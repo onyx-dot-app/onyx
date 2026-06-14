@@ -2,12 +2,15 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from fastapi import FastAPI
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.auth_check import check_router_auth
 from onyx.server.manage.consumer_models_api import ConsumerModelPreferenceRequest
 from onyx.server.manage.consumer_models_api import get_model_catalog
 from onyx.server.manage.consumer_models_api import get_user_model_preference
+from onyx.server.manage.consumer_models_api import router
 from onyx.server.manage.consumer_models_api import update_user_model_preference
 
 
@@ -28,6 +31,13 @@ def test_get_model_catalog_returns_sanitized_profiles(monkeypatch) -> None:
     assert serialized["profiles"]
     assert "api_key" not in str(serialized)
     assert "api_base" not in str(serialized)
+
+
+def test_consumer_model_routes_have_required_auth_dependencies() -> None:
+    app = FastAPI()
+    app.include_router(router)
+
+    check_router_auth(app)
 
 
 def test_get_model_catalog_reports_service_unavailable_when_key_missing(
