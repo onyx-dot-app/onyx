@@ -1,0 +1,73 @@
+---
+name: hubspot
+description: Read and manage HubSpot CRM contacts, companies, and deals on the connected user's behalf via a light REST wrapper.
+---
+
+# HubSpot
+
+Call the HubSpot CRM as the connected user via the bundled helper. **You are
+already authenticated** — the egress proxy injects the user's HubSpot token on
+the wire, so never pass credentials yourself.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/hubspot/hubspot_api.py <command> [args]
+
+`<object>` is one of `contacts`, `companies`, or `deals`. Read commands
+auto-paginate and prune empty fields. `create` and `update` are the only
+writes. Use `--raw` to skip empty-field pruning; `python hubspot_api.py
+<command> -h` shows its flags.
+
+### List objects
+
+```
+python hubspot_api.py list contacts [--limit N] [--properties firstname,lastname,email]
+```
+
+### Fetch one object by id
+
+```
+python hubspot_api.py get deals 123456 [--properties dealname,amount]
+```
+
+### Search (free text)
+
+```
+python hubspot_api.py search companies "acme" [--limit N]
+```
+
+### Owners
+
+```
+python hubspot_api.py owners [--limit N]
+```
+
+### Create an object (write)
+
+```
+python hubspot_api.py create contacts --set email=jane@acme.co --set firstname=Jane
+```
+
+### Update an object (write)
+
+```
+python hubspot_api.py update deals 123456 --set dealstage=closedwon
+```
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "<object>": [...], "count":
+N, "truncated": bool}` (`truncated` means more results existed past `--limit`).
+HTTP failures return `{"ok": false, "status": <code>, "error": "<message>"}`
+and exit non-zero — surface the error rather than retrying blindly.
+
+## Notes
+
+- Properties default to a useful subset per object; pass `--properties` (a
+  comma-separated list) to fetch others.
+- `--set key=value` is repeatable; keys are HubSpot internal property names
+  (e.g. `email`, `firstname`, `dealname`, `amount`).
+- `call` lets you hit any CRM endpoint: `call <METHOD> <path> [json_body]`.
+  Pass user input as the JSON body, not by string-formatting into the path.
