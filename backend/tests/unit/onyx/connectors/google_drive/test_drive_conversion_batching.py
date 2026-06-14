@@ -208,7 +208,33 @@ def test_defers_documents_until_ancestor_available() -> None:
             )
         )
 
-    assert call_sizes == [2]
+    assert call_sizes == [1, 1]
     assert isinstance(out[0], HierarchyNode)
     assert len(out) == 3
-    assert converted_ids == [["file_0", "file_1"]]
+    assert converted_ids == [["file_0"], ["file_1"]]
+
+
+def test_force_flush_chunks_pending_files() -> None:
+    connector = _make_connector()
+    n_files = _BATCH * 2 + 2  # ensures pending > batch when force-flushed
+    call_sizes: list[int] = []
+
+    with (
+        patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_BATCH_SIZE", _BATCH),
+        patch.object(connector, "_get_new_ancestors_for_files", return_value=[]),
+        patch(
+            f"{_CONN_MODULE}.run_functions_tuples_in_parallel",
+            side_effect=_parallel_stub(call_sizes),
+        ),
+    ):
+        out = list(
+            connector._convert_retrieved_files_to_documents(
+                iter([_make_file(i, parent_id="folder") for i in range(n_files)]),
+                _make_checkpoint(),
+                include_permissions=False,
+            )
+        )
+
+    # Pending files are flushed in sub-batches that respect the cap.
+    assert call_sizes == [_BATCH, _BATCH, 2]
+    assert len(out) == n_files

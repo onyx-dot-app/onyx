@@ -1781,23 +1781,24 @@ class GoogleDriveConnector(
         if not ready_files:
             return
 
-        func_with_args = [
-            (
-                self._convert_retrieved_file_to_document,
-                (retrieved_file, permission_sync_context),
+        for start in range(0, len(ready_files), DRIVE_CONVERSION_BATCH_SIZE):
+            chunk = ready_files[start : start + DRIVE_CONVERSION_BATCH_SIZE]
+            func_with_args = [
+                (
+                    self._convert_retrieved_file_to_document,
+                    (retrieved_file, permission_sync_context),
+                )
+                for retrieved_file in chunk
+            ]
+            raw_results = cast(
+                list[Document | ConnectorFailure | None],
+                run_functions_tuples_in_parallel(func_with_args, max_workers=8),
             )
-            for retrieved_file in ready_files
-        ]
-        raw_results = cast(
-            list[Document | ConnectorFailure | None],
-            run_functions_tuples_in_parallel(func_with_args, max_workers=8),
-        )
-
-        results: list[Document | ConnectorFailure] = [
-            r for r in raw_results if r is not None
-        ]
-        logger.debug("batch has %s docs or failures", len(results))
-        yield from results
+            results: list[Document | ConnectorFailure] = [
+                r for r in raw_results if r is not None
+            ]
+            logger.debug("sub-batch has %s docs or failures", len(results))
+            yield from results
 
     def _convert_retrieved_file_to_document(
         self,
