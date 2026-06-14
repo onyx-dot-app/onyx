@@ -274,6 +274,11 @@ export interface DrupalWikiCredentialJson {
   drupal_wiki_api_token: string;
 }
 
+export interface JiraServiceManagementCredentialJson {
+  jira_user_email: string | null;
+  jira_api_token: string;
+}
+
 export interface ImapCredentialJson {
   imap_username: string;
   imap_password: string;
@@ -462,6 +467,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
   drupal_wiki: {
     drupal_wiki_api_token: "",
   } as DrupalWikiCredentialJson,
+  jira_service_management: {
+    jira_user_email: null,
+    jira_api_token: "",
+  } as JiraServiceManagementCredentialJson,
   xenforo: null,
   google_sites: null,
   file: null,
