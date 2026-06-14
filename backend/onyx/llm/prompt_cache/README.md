@@ -113,6 +113,32 @@ processed_prompt, _ = process_with_prompt_cache(
   export ENABLE_PROMPT_CACHING=false  # Disable caching
   ```
 
+- `PROMPT_CACHE_CHAT_HISTORY`: Enable prompt caching of the **chat history** (the
+  prior conversation turns) on chat requests (default: `false`).
+  ```bash
+  export PROMPT_CACHE_CHAT_HISTORY=true  # Cache the conversation history too
+  ```
+
+  This flag is **separate from `ENABLE_PROMPT_CACHING`** and controls a different
+  thing. `ENABLE_PROMPT_CACHING` is the framework-level toggle; even with it on (the
+  default), the chat flow only marks the conversation history as cacheable when
+  `PROMPT_CACHE_CHAT_HISTORY=true`. It is defined in
+  `onyx/configs/app_configs.py` and consumed in `onyx/chat/llm_step.py`, where it
+  gates the detection of the last cacheable history message. When it is `false`
+  (the default), no `cache_control` breakpoint is placed on the chat history, so an
+  Anthropic-backed deployment will keep reporting `cache_creation_input_tokens=0`
+  and `cache_read_input_tokens=0` for the history portion even with
+  `ENABLE_PROMPT_CACHING=true`.
+
+  Enabling it is most impactful for deployments with a large, stable system prompt
+  plus retrieved (RAG) context, where the history is the bulk of the input tokens
+  on follow-up turns. To verify it is working, check the LLM usage on a follow-up
+  message in the same chat session: `cache_creation_input_tokens` should be
+  non-zero on the first request (cache write) and `cache_read_input_tokens`
+  non-zero on the next (cache hit). See the Anthropic section above for the
+  provider-side behavior (`cache_control={"type": "ephemeral"}`, 5-minute default
+  TTL, up to 4 cache breakpoints).
+
 ## Architecture
 
 ### Core Components
