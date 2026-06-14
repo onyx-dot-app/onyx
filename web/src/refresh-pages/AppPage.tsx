@@ -34,7 +34,6 @@ import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
-import ConsumerModelProfileSelector from "@/refresh-components/popovers/ConsumerModelProfileSelector";
 import { useAgentController } from "@/lib/agents/hooks";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
@@ -905,14 +904,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         agent={liveAgent}
                         isDefaultAgent={isDefaultAgent}
                       />
-                      {!isSearch &&
-                        !(
-                          state.phase === "idle" && state.appMode === "search"
-                        ) &&
-                        liveAgent &&
-                        !llmManager.isLoadingProviders && (
-                          <ConsumerModelProfileSelector />
-                        )}
                     </Section>
                     <Spacer rem={1.5} />
                   </Fade>
@@ -978,13 +969,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
-                      {appFocus.isChat() &&
-                        liveAgent &&
-                        !llmManager.isLoadingProviders && (
-                          <div className="pb-1">
-                            <ConsumerModelProfileSelector />
-                          </div>
-                        )}
                       <AppInputBar
                         ref={chatInputBarRef}
                         deepResearchEnabled={

@@ -46,7 +46,6 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
-import ConsumerModelProfileSelector from "@/refresh-components/popovers/ConsumerModelProfileSelector";
 import { Section } from "@/layouts/general-layouts";
 
 const SearchUI = paidTierGated(EESearchUI);
@@ -500,9 +499,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   className="max-w-(--app-page-main-content-width)"
                 >
                   <WelcomeMessage isDefaultAgent />
-                  {liveAgent && !llmManager.isLoadingProviders && (
-                    <ConsumerModelProfileSelector />
-                  )}
                 </Section>
                 <Spacer rem={1.5} />
               </div>
@@ -516,11 +512,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 !isSidePanel && "max-w-(--app-page-main-content-width)"
               )}
             >
-              {hasMessages && liveAgent && !llmManager.isLoadingProviders && (
-                <div className="pb-1">
-                  <ConsumerModelProfileSelector />
-                </div>
-              )}
               <AppInputBar
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}

@@ -41,8 +41,6 @@ export const SWR_KEYS = {
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
   llmContextualCost: "/api/admin/llm/provider-contextual-cost",
-  consumerModelCatalog: "/api/model-catalog",
-  consumerModelPreference: "/api/user/model-preference",
 
   // ── Image Generation ──────────────────────────────────────────────────────
   imageGenConfig: "/api/admin/image-generation/config",
