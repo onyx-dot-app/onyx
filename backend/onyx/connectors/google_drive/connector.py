@@ -1681,6 +1681,7 @@ class GoogleDriveConnector(
         )
 
         files_batch: list[RetrievedDriveFile] = []
+        pending_files: list[RetrievedDriveFile] = []
         for retrieved_file in drive_files_iter:
             if self.exclude_domain_link_only and has_link_only_permission(
                 retrieved_file.drive_file
@@ -1706,13 +1707,20 @@ class GoogleDriveConnector(
             # Flush in bounded sub-batches so peak memory is independent of drive size.
             if len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
                 yield from self._convert_files_sub_batch(
-                    files_batch, checkpoint, permission_sync_context
+                    files_batch,
+                    checkpoint,
+                    permission_sync_context,
+                    pending_files,
                 )
                 files_batch = []
 
-        if files_batch:
+        if files_batch or pending_files:
             yield from self._convert_files_sub_batch(
-                files_batch, checkpoint, permission_sync_context
+                files_batch,
+                checkpoint,
+                permission_sync_context,
+                pending_files,
+                force_flush=True,
             )
 
         checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
@@ -1722,13 +1730,23 @@ class GoogleDriveConnector(
         files_batch: list[RetrievedDriveFile],
         checkpoint: GoogleDriveCheckpoint,
         permission_sync_context: PermissionSyncContext | None,
+        pending_files: list[RetrievedDriveFile],
+        force_flush: bool = False,
     ) -> Iterator[Document | ConnectorFailure | HierarchyNode]:
         """Resolve ancestors and convert one bounded group of files, yielding the
-        new hierarchy nodes ahead of that group's documents. Each file's ancestors
-        resolve within its own sub-batch, so the node-before-document ordering
-        holds; the checkpoint's seen-node set dedupes ancestors across sub-batches."""
+        new hierarchy nodes ahead of that group's documents. Files whose parent
+        hierarchy nodes are still unresolved are deferred into ``pending_files``
+        so we never emit a document before its ancestor becomes available.
+        Remaining deferred files are force-flushed once the stream ends."""
+        batch: list[RetrievedDriveFile] = []
+        if pending_files:
+            batch.extend(pending_files)
+        batch.extend(files_batch)
+        if not batch:
+            return
+
         new_ancestors = self._get_new_ancestors_for_files(
-            files=files_batch,
+            files=batch,
             seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
             fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
             failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
@@ -1739,12 +1757,36 @@ class GoogleDriveConnector(
             logger.debug("Yielding %s new hierarchy nodes", len(new_ancestors))
             yield from new_ancestors
 
+        ready_files: list[RetrievedDriveFile] = []
+        still_pending: list[RetrievedDriveFile] = []
+        for retrieved_file in batch:
+            parent_id = _get_parent_id_from_file(retrieved_file.drive_file)
+            if (
+                parent_id
+                and parent_id not in checkpoint.seen_hierarchy_node_raw_ids
+                and not force_flush
+            ):
+                still_pending.append(retrieved_file)
+                continue
+            ready_files.append(retrieved_file)
+
+        pending_files.clear()
+        pending_files.extend(still_pending)
+        if still_pending:
+            logger.debug(
+                "Deferring %s files until their ancestor hierarchy nodes resolve",
+                len(still_pending),
+            )
+
+        if not ready_files:
+            return
+
         func_with_args = [
             (
                 self._convert_retrieved_file_to_document,
                 (retrieved_file, permission_sync_context),
             )
-            for retrieved_file in files_batch
+            for retrieved_file in ready_files
         ]
         raw_results = cast(
             list[Document | ConnectorFailure | None],

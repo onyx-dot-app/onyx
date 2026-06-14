@@ -15,6 +15,7 @@ from onyx.connectors.google_drive.models import RetrievedDriveFile
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
+from onyx.utils.threadpool_concurrency import ThreadSafeSet
 
 _BATCH = 10
 _CONN_MODULE = "onyx.connectors.google_drive.connector"
@@ -39,20 +40,39 @@ def _make_checkpoint() -> GoogleDriveCheckpoint:
     )
 
 
-def _make_file(idx: int) -> RetrievedDriveFile:
+def _make_file(idx: int, parent_id: str | None = None) -> RetrievedDriveFile:
     rf = MagicMock(spec=RetrievedDriveFile)
     rf.error = None
-    rf.drive_file = {"id": f"file_{idx}", "name": f"file_{idx}"}
+    rf.completion_stage = DriveRetrievalStage.DONE
+    rf.user_email = f"user{idx}@example.com"
+    rf.parent_id = parent_id
+    drive_file: dict[str, object] = {"id": f"file_{idx}", "name": f"file_{idx}"}
+    if parent_id is not None:
+        drive_file["parents"] = [parent_id]
+    rf.drive_file = drive_file
     return rf
 
 
-def _parallel_stub(calls: list[int]) -> Callable[..., list]:
+def _parallel_stub(
+    calls: list[int], captured_ids: list[list[str]] | None = None
+) -> Callable[..., list]:
     """Replacement for run_functions_tuples_in_parallel that records each call's
     size and returns one stub Document per file without running real conversion."""
 
     def _run(func_with_args: list, **_kwargs: object) -> list:
         calls.append(len(func_with_args))
-        return [MagicMock(spec=Document) for _ in func_with_args]
+        docs: list[Document] = []
+        ids_for_call: list[str] = []
+        for _func, args in func_with_args:
+            retrieved_file: RetrievedDriveFile = args[0]
+            doc = MagicMock(spec=Document)
+            file_id = str(retrieved_file.drive_file["id"])
+            doc.id = file_id
+            ids_for_call.append(file_id)
+            docs.append(doc)
+        if captured_ids is not None:
+            captured_ids.append(ids_for_call)
+        return docs
 
     return _run
 
@@ -145,3 +165,50 @@ def test_hierarchy_nodes_precede_documents_in_each_sub_batch() -> None:
     # One node + ten docs per sub-batch, node first each time.
     kinds = ["node" if isinstance(x, HierarchyNode) else "doc" for x in out]
     assert kinds == (["node"] + ["doc"] * _BATCH) * 2
+
+
+def test_defers_documents_until_ancestor_available() -> None:
+    connector = _make_connector()
+    call_sizes: list[int] = []
+    parent_id = "folder_1"
+    converted_ids: list[list[str]] = []
+    called = False
+
+    def _fake_ancestors(*_args: object, **kwargs: object) -> list[HierarchyNode]:
+        # First invocation: ancestors unavailable; second invocation resolves the folder.
+        nonlocal called
+        if not called:
+            called = True
+            return []
+        seen_hierarchy_node_raw_ids = kwargs["seen_hierarchy_node_raw_ids"]
+        assert isinstance(seen_hierarchy_node_raw_ids, ThreadSafeSet)
+        seen_hierarchy_node_raw_ids.add(parent_id)
+        return [MagicMock(spec=HierarchyNode)]
+
+    with (
+        patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_BATCH_SIZE", 1),
+        patch.object(
+            connector, "_get_new_ancestors_for_files", side_effect=_fake_ancestors
+        ),
+        patch(
+            f"{_CONN_MODULE}.run_functions_tuples_in_parallel",
+            side_effect=_parallel_stub(call_sizes, converted_ids),
+        ),
+    ):
+        out = list(
+            connector._convert_retrieved_files_to_documents(
+                iter(
+                    [
+                        _make_file(0, parent_id=parent_id),
+                        _make_file(1, parent_id=parent_id),
+                    ]
+                ),
+                _make_checkpoint(),
+                include_permissions=False,
+            )
+        )
+
+    assert call_sizes == [2]
+    assert isinstance(out[0], HierarchyNode)
+    assert len(out) == 3
+    assert converted_ids == [["file_0", "file_1"]]
