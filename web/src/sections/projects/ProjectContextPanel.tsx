@@ -125,7 +125,7 @@ export default function ProjectContextPanel({
         />
       </projectFilesModal.Provider>
 
-      <div className="w-(--app-page-main-content-width) mx-auto flex flex-col gap-6">
+      <div className="w-(--app-page-main-content-width) mx-auto flex flex-col gap-6 pb-6">
         <Content
           icon={SvgFolderOpen}
           title={projectName}
@@ -164,7 +164,7 @@ export default function ProjectContextPanel({
         />
 
         <div
-          className="flex flex-col gap-2"
+          className="flex flex-col gap-2 pb-2"
           {...getRootProps({ onClick: (e) => e.stopPropagation() })}
         >
           <ContentAction
@@ -281,13 +281,7 @@ export default function ProjectContextPanel({
               </Text>
             </div>
           )}
-
-          {/* Empty div to add an additional layer of gapping */}
-          <div />
         </div>
-
-        {/* Empty div to add an additional layer of gapping */}
-        <div />
       </div>
     </>
   );
