@@ -322,6 +322,7 @@ class SlackChannelConfigCreationRequest(BaseModel):
     # XXX this is going away soon
     standard_answer_categories: list[int] = Field(default_factory=list)
     disabled: bool = False
+    disable_ai_feedback: bool = False
 
     @field_validator("answer_filters", mode="before")
     @classmethod

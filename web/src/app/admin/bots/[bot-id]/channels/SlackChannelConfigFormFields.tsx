@@ -487,6 +487,12 @@ export function SlackChannelConfigFormFields({
               />
 
               <CheckboxField
+                name="disable_ai_feedback"
+                label="Hide Helpful / Not Helpful buttons"
+                tooltip="If set, OnyxBot responses in this channel will not include the 👍 Helpful / 👎 Not helpful feedback buttons."
+              />
+
+              <CheckboxField
                 name="still_need_help_enabled"
                 onChange={(checked: boolean) => {
                   setFieldValue("still_need_help_enabled", checked);

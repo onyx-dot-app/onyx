@@ -68,6 +68,7 @@ class ActionValuesEphemeralMessageChannelConfig(BaseModel):
     )
     follow_up_tags: list[str] | None
     show_continue_in_web_ui: bool
+    disable_ai_feedback: bool = False
 
 
 class ActionValuesEphemeralMessage(BaseModel):

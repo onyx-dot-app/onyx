@@ -285,7 +285,7 @@ def handle_publish_ephemeral_message_button(
             message_info=slack_message_info,
             channel_conf=channel_conf,
             feedback_reminder_id=feedback_reminder_id,
-            skip_ai_feedback=False,
+            skip_ai_feedback=bool(channel_conf and channel_conf.disable_ai_feedback),
             offer_ephemeral_publication=False,
             skip_restated_question=True,
         )
@@ -314,7 +314,7 @@ def handle_publish_ephemeral_message_button(
             message_info=slack_message_info,
             channel_conf=channel_conf,
             feedback_reminder_id=feedback_reminder_id,
-            skip_ai_feedback=False,
+            skip_ai_feedback=bool(channel_conf and channel_conf.disable_ai_feedback),
             offer_ephemeral_publication=False,
             skip_restated_question=True,
         )
