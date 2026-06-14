@@ -16,6 +16,9 @@ from onyx.tools.tool_implementations.web_search.clients.exa_client import ExaCli
 from onyx.tools.tool_implementations.web_search.clients.google_pse_client import (
     GooglePSEClient,
 )
+from onyx.tools.tool_implementations.web_search.clients.ollama_client import (
+    OllamaClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.searxng_client import (
     SearXNGClient,
 )
@@ -104,6 +107,17 @@ def build_search_provider_from_config(
         )
     if provider_type == WebSearchProviderType.SERPER:
         return SerperClient(api_key=api_key, num_results=num_results)
+    if provider_type == WebSearchProviderType.OLLAMA:
+        return OllamaClient(
+            api_key=api_key,
+            num_results=num_results,
+            timeout_seconds=_parse_positive_int_config(
+                raw_value=config.get("timeout_seconds"),
+                default=15,
+                provider_name="Ollama",
+                config_key="timeout_seconds",
+            ),
+        )
     if provider_type == WebSearchProviderType.GOOGLE_PSE:
         search_engine_id = (
             config.get("search_engine_id")
