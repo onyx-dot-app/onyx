@@ -1479,13 +1479,22 @@ def get_lm_studio_available_models(
         max_context_length = item.get("max_context_length")
         capabilities = item.get("capabilities") or {}
 
+        # LM Studio ≥0.3.x changed `reasoning` from a plain bool to a structured
+        # dict: {"allowed_options": ["off","on"], "default": "on"}.  Normalise both
+        # shapes so Pydantic's strict `bool` field doesn't raise a validation error.
+        reasoning_cap = capabilities.get("reasoning", False)
+        if isinstance(reasoning_cap, dict):
+            reasoning_from_api = reasoning_cap.get("default") == "on"
+        else:
+            reasoning_from_api = bool(reasoning_cap)
+
         results.append(
             LMStudioFinalModelResponse(
                 name=model_key,
                 display_name=display_name,
                 max_input_tokens=max_context_length,
                 supports_image_input=capabilities.get("vision", False),
-                supports_reasoning=capabilities.get("reasoning", False)
+                supports_reasoning=reasoning_from_api
                 or is_reasoning_model(model_key, display_name),
             )
         )
