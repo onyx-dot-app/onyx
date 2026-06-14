@@ -99,7 +99,11 @@ logger = setup_logger()
 
 BATCHES_PER_CHECKPOINT = 1
 
-DRIVE_BATCH_SIZE = 80
+# Files converted -> documents per sub-batch before yielding, bounding peak memory
+# independent of drive size. A capped document holds up to
+# CONNECTOR_MAX_EXTRACTED_TEXT_CHARS (~10 MB), so 50 keeps a resident sub-batch
+# near ~500 MB — well under the indexing worker memory limit.
+DRIVE_CONVERSION_BATCH_SIZE = 50
 
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
@@ -1682,24 +1686,47 @@ class GoogleDriveConnector(
                 retrieved_file.drive_file
             ):
                 continue
-            if retrieved_file.error is None:
-                files_batch.append(retrieved_file)
+            if retrieved_file.error is not None:
+                failure_stage = retrieved_file.completion_stage.value
+                failure_message = f"retrieval failure during stage: {failure_stage},"
+                failure_message += f"user: {retrieved_file.user_email},"
+                failure_message += f"parent drive/folder: {retrieved_file.parent_id},"
+                failure_message += f"error: {retrieved_file.error}"
+                logger.error(failure_message)
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=retrieved_file.drive_file.get("id", failure_stage),
+                    ),
+                    failure_message=failure_message,
+                    exception=retrieved_file.error,
+                )
                 continue
 
-            failure_stage = retrieved_file.completion_stage.value
-            failure_message = f"retrieval failure during stage: {failure_stage},"
-            failure_message += f"user: {retrieved_file.user_email},"
-            failure_message += f"parent drive/folder: {retrieved_file.parent_id},"
-            failure_message += f"error: {retrieved_file.error}"
-            logger.error(failure_message)
-            yield ConnectorFailure(
-                failed_entity=EntityFailure(
-                    entity_id=retrieved_file.drive_file.get("id", failure_stage),
-                ),
-                failure_message=failure_message,
-                exception=retrieved_file.error,
+            files_batch.append(retrieved_file)
+            # Flush in bounded sub-batches so peak memory is independent of drive size.
+            if len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
+                yield from self._convert_files_sub_batch(
+                    files_batch, checkpoint, permission_sync_context
+                )
+                files_batch = []
+
+        if files_batch:
+            yield from self._convert_files_sub_batch(
+                files_batch, checkpoint, permission_sync_context
             )
 
+        checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
+
+    def _convert_files_sub_batch(
+        self,
+        files_batch: list[RetrievedDriveFile],
+        checkpoint: GoogleDriveCheckpoint,
+        permission_sync_context: PermissionSyncContext | None,
+    ) -> Iterator[Document | ConnectorFailure | HierarchyNode]:
+        """Resolve ancestors and convert one bounded group of files, yielding the
+        new hierarchy nodes ahead of that group's documents. Each file's ancestors
+        resolve within its own sub-batch, so the node-before-document ordering
+        holds; the checkpoint's seen-node set dedupes ancestors across sub-batches."""
         new_ancestors = self._get_new_ancestors_for_files(
             files=files_batch,
             seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
@@ -1729,8 +1756,6 @@ class GoogleDriveConnector(
         ]
         logger.debug("batch has %s docs or failures", len(results))
         yield from results
-
-        checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
 
     def _convert_retrieved_file_to_document(
         self,
