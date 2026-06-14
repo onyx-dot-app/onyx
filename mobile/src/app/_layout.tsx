@@ -11,10 +11,12 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { vars } from "nativewind";
 import { varsLight, varsDark } from "@onyx-ai/shared/native";
+import { PortalHost } from "@rn-primitives/portal";
 
 import { persister, persistMaxAge, queryClient } from "@/query/client";
 import { bindAppStateFocus } from "@/query/focus";
 import { bindOnlineManager } from "@/query/online";
+import { SidebarProvider } from "@/components/sidebar";
 
 // Show the native Onyx splash until the first frame is ready, then reveal the app.
 SplashScreen.preventAutoHideAsync();
@@ -56,8 +58,15 @@ export default function RootLayout() {
           client={queryClient}
           persistOptions={{ persister, maxAge: persistMaxAge }}
         >
-          <StatusBar style="auto" />
-          <Stack screenOptions={{ headerShown: false }} />
+          {/* SidebarProvider owns the shared open/closed (folded) state so any screen
+              can open the sidebar and the portalled overlay can read it. PortalHost is
+              the last child of the themed root, so the overlay renders above all screens
+              while still inheriting the vars() theme + safe-area insets. */}
+          <SidebarProvider>
+            <StatusBar style="auto" />
+            <Stack screenOptions={{ headerShown: false }} />
+            <PortalHost />
+          </SidebarProvider>
         </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
