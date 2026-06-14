@@ -105,12 +105,6 @@ BATCHES_PER_CHECKPOINT = 1
 # near ~500 MB — well under the indexing worker memory limit.
 DRIVE_CONVERSION_BATCH_SIZE = 50
 
-# Upper bound on files held back waiting for their ancestor hierarchy node to
-# resolve (a parent folder only a not-yet-processed user can reach). Past this,
-# the oldest waiters are converted anyway and fall back to the source root, so
-# the deferral queue can't grow with drive size.
-MAX_PENDING_HIERARCHY_FILES = DRIVE_CONVERSION_BATCH_SIZE * 10
-
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
 OAUTH_PAGES_PER_CHECKPOINT = 2
@@ -1687,7 +1681,11 @@ class GoogleDriveConnector(
         )
 
         files_batch: list[RetrievedDriveFile] = []
-        pending_files: list[RetrievedDriveFile] = []
+        # Files whose immediate parent folder node has not been emitted yet,
+        # keyed on that folder's raw id. Each is released the moment the folder is
+        # emitted (O(1)); whatever never resolves by stream end falls back to the
+        # source root. Holds only lightweight file metadata, never converted docs.
+        pending_by_folder: dict[str, list[RetrievedDriveFile]] = {}
         for retrieved_file in drive_files_iter:
             if self.exclude_domain_link_only and has_link_only_permission(
                 retrieved_file.drive_file
@@ -1724,16 +1722,16 @@ class GoogleDriveConnector(
                     files_batch,
                     checkpoint,
                     permission_sync_context,
-                    pending_files,
+                    pending_by_folder,
                 )
                 files_batch = []
 
-        if files_batch or pending_files:
+        if files_batch or pending_by_folder:
             yield from self._convert_files_sub_batch(
                 files_batch,
                 checkpoint,
                 permission_sync_context,
-                pending_files,
+                pending_by_folder,
                 force_flush=True,
             )
 
@@ -1744,61 +1742,53 @@ class GoogleDriveConnector(
         files_batch: list[RetrievedDriveFile],
         checkpoint: GoogleDriveCheckpoint,
         permission_sync_context: PermissionSyncContext | None,
-        pending_files: list[RetrievedDriveFile],
+        pending_by_folder: dict[str, list[RetrievedDriveFile]],
         force_flush: bool = False,
     ) -> Iterator[Document | ConnectorFailure | HierarchyNode]:
-        """Resolve ancestors and convert one bounded group of files, yielding the
-        new hierarchy nodes ahead of that group's documents. Files whose parent
-        hierarchy nodes are still unresolved are deferred into ``pending_files``
-        so we never emit a document before its ancestor becomes available.
-        Remaining deferred files are force-flushed once the stream ends."""
-        batch: list[RetrievedDriveFile] = []
-        if pending_files:
-            batch.extend(pending_files)
-        batch.extend(files_batch)
-        if not batch:
-            return
+        """Resolve ancestors for this sub-batch's NEW files and convert the files
+        whose parent hierarchy node is now available, nodes first.
 
-        new_ancestors = self._get_new_ancestors_for_files(
-            files=batch,
-            seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
-            fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
-            failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
-            permission_sync_context=permission_sync_context,
-            add_prefix=True,
+        A file whose immediate parent folder has not been emitted yet (a folder
+        only a not-yet-processed user can reach) is parked in ``pending_by_folder``
+        under that folder id, so its document is never emitted before its ancestor
+        node. It is released the moment that folder's node is emitted by some other
+        file's walk, so the per-sub-batch cost is independent of the queue size.
+        ``force_flush`` drains everything still parked — those folders never
+        resolved, so the files fall back to the source root."""
+        new_ancestors = (
+            self._get_new_ancestors_for_files(
+                files=files_batch,
+                seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
+                fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+                failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
+                permission_sync_context=permission_sync_context,
+                add_prefix=True,
+            )
+            if files_batch
+            else []
         )
         if new_ancestors:
             logger.debug("Yielding %s new hierarchy nodes", len(new_ancestors))
             yield from new_ancestors
 
-        ready_files: list[RetrievedDriveFile] = []
-        still_pending: list[RetrievedDriveFile] = []
-        for retrieved_file in batch:
+        newly_ready: list[RetrievedDriveFile] = []
+        for retrieved_file in files_batch:
             parent_id = _get_parent_id_from_file(retrieved_file.drive_file)
-            if (
-                parent_id
-                and parent_id not in checkpoint.seen_hierarchy_node_raw_ids
-                and not force_flush
-            ):
-                still_pending.append(retrieved_file)
-                continue
-            ready_files.append(retrieved_file)
+            if not parent_id or parent_id in checkpoint.seen_hierarchy_node_raw_ids:
+                newly_ready.append(retrieved_file)
+            else:
+                pending_by_folder.setdefault(parent_id, []).append(retrieved_file)
 
-        # Cap the deferral queue so it can't grow with drive size: convert the
-        # oldest waiters now (they fall back to the source root, the same outcome
-        # as a genuinely inaccessible folder).
-        if len(still_pending) > MAX_PENDING_HIERARCHY_FILES:
-            overflow = len(still_pending) - MAX_PENDING_HIERARCHY_FILES
-            ready_files.extend(still_pending[:overflow])
-            still_pending = still_pending[overflow:]
-
-        pending_files.clear()
-        pending_files.extend(still_pending)
-        if still_pending:
-            logger.debug(
-                "Deferring %s files until their ancestor hierarchy nodes resolve",
-                len(still_pending),
-            )
+        # Release parked files whose folder node was just emitted (they came
+        # earlier in the stream), then this sub-batch's own ready files.
+        ready_files: list[RetrievedDriveFile] = []
+        for node in new_ancestors:
+            ready_files.extend(pending_by_folder.pop(node.raw_node_id, []))
+        if force_flush and pending_by_folder:
+            for waiters in pending_by_folder.values():
+                ready_files.extend(waiters)
+            pending_by_folder.clear()
+        ready_files.extend(newly_ready)
 
         if not ready_files:
             return

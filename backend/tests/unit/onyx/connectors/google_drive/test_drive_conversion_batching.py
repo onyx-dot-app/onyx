@@ -5,6 +5,7 @@ flat regardless of drive size."""
 
 from collections.abc import Callable
 from collections.abc import Iterator
+from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -140,7 +141,7 @@ def test_hierarchy_nodes_precede_documents_in_each_sub_batch() -> None:
     n_files = _BATCH * 2  # two full sub-batches
 
     def _one_node_per_batch(**_kwargs: object) -> list[HierarchyNode]:
-        return [MagicMock(spec=HierarchyNode)]
+        return [MagicMock(spec=HierarchyNode, raw_node_id="node")]
 
     with (
         patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_BATCH_SIZE", _BATCH),
@@ -183,7 +184,7 @@ def test_defers_documents_until_ancestor_available() -> None:
         seen_hierarchy_node_raw_ids = kwargs["seen_hierarchy_node_raw_ids"]
         assert isinstance(seen_hierarchy_node_raw_ids, ThreadSafeSet)
         seen_hierarchy_node_raw_ids.add(parent_id)
-        return [MagicMock(spec=HierarchyNode)]
+        return [MagicMock(spec=HierarchyNode, raw_node_id=parent_id)]
 
     with (
         patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_BATCH_SIZE", 1),
@@ -235,23 +236,33 @@ def test_force_flush_chunks_pending_files() -> None:
             )
         )
 
-    # Pending files are flushed in sub-batches that respect the cap.
+    # Folders that never resolve are drained at stream end in capped chunks.
     assert call_sizes == [_BATCH, _BATCH, 2]
     assert len(out) == n_files
 
 
-def test_pending_queue_is_capped() -> None:
+def test_deferred_files_wait_for_their_folder_then_all_resolve() -> None:
     connector = _make_connector()
-    n_files = 100
+    n_files = 300  # large enough to rule out any fixed-size deferral cap
+    folder = "shared_folder"
     call_sizes: list[int] = []
 
-    # Every file defers (its parent never enters `seen`). The pending cap must
-    # force the oldest waiters through mid-stream so the queue cannot grow with
-    # drive size — instead of buffering all 100 into a single final flush.
+    # The folder node is emitted only when the LAST file is walked, so all 300
+    # files defer first. None may be force-converted early; every one must wait
+    # and then resolve once the folder appears (its node ahead of every doc).
+    def _fake_ancestors(*_args: object, **kwargs: object) -> list[HierarchyNode]:
+        files = cast("list[RetrievedDriveFile]", kwargs["files"])
+        seen = cast("ThreadSafeSet[str]", kwargs["seen_hierarchy_node_raw_ids"])
+        if any(f.drive_file["id"] == f"file_{n_files - 1}" for f in files):
+            seen.add(folder)
+            return [MagicMock(spec=HierarchyNode, raw_node_id=folder)]
+        return []
+
     with (
         patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_BATCH_SIZE", 10),
-        patch(f"{_CONN_MODULE}.MAX_PENDING_HIERARCHY_FILES", 20),
-        patch.object(connector, "_get_new_ancestors_for_files", return_value=[]),
+        patch.object(
+            connector, "_get_new_ancestors_for_files", side_effect=_fake_ancestors
+        ),
         patch(
             f"{_CONN_MODULE}.run_functions_tuples_in_parallel",
             side_effect=_parallel_stub(call_sizes),
@@ -259,12 +270,16 @@ def test_pending_queue_is_capped() -> None:
     ):
         out = list(
             connector._convert_retrieved_files_to_documents(
-                iter([_make_file(i, parent_id="folder") for i in range(n_files)]),
+                iter([_make_file(i, parent_id=folder) for i in range(n_files)]),
                 _make_checkpoint(),
                 include_permissions=False,
             )
         )
 
-    assert len(out) == n_files  # nothing dropped
-    assert all(size <= 10 for size in call_sizes)  # every chunk respects the cap
+    nodes = [x for x in out if isinstance(x, HierarchyNode)]
+    docs = [x for x in out if not isinstance(x, HierarchyNode)]
+    assert len(docs) == n_files  # nothing dropped or orphaned by a cap
+    assert len(nodes) == 1
+    assert isinstance(out[0], HierarchyNode)  # folder node precedes every document
+    assert all(size <= 10 for size in call_sizes)  # conversion stays chunked
     assert len(call_sizes) > 1  # overflow converted mid-stream, not one final flush
