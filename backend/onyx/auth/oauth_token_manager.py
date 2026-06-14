@@ -11,10 +11,14 @@ from onyx.db.models import OAuthConfig
 from onyx.db.models import OAuthUserToken
 from onyx.db.oauth_config import get_user_oauth_token
 from onyx.db.oauth_config import upsert_user_oauth_token
+from onyx.external_apps.providers.base import token_response_error
+from onyx.external_apps.providers.base import TokenRefreshTerminalError
+from onyx.external_apps.providers.base import TokenRefreshTransientError
 from onyx.server.security.models import outbound_ssrf_params
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
+from onyx.utils.url import SSRFException
 from onyx.utils.url import validate_outbound_http_url
 
 
@@ -121,6 +125,57 @@ def exchange_oauth_code_for_token(
     return token_data
 
 
+# RFC 6749 §5.2: a dead grant means reconnect is required; any other failure is
+# retryable. Reuses the external_apps refresh classification so all OAuth refreshers
+# (tool, external-app, MCP) agree on terminal-vs-transient.
+_TERMINAL_REFRESH_ERRORS = frozenset({"invalid_grant"})
+
+
+def exchange_refresh_token(
+    params: OAuthFlowParams,
+    refresh_token: str,
+) -> dict[str, Any]:
+    """Exchange a refresh token for a fresh access token, computing `expires_at` and
+    carrying the incoming `refresh_token` forward when the provider doesn't rotate it.
+
+    Raises `TokenRefreshTerminalError` on a dead grant (reconnect required) and
+    `TokenRefreshTransientError` on a retryable failure (network / 5xx / non-JSON)."""
+    data: dict[str, str] = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": params.client_id,
+    }
+    if params.client_secret:
+        data["client_secret"] = params.client_secret
+
+    try:
+        validate_oauth_endpoint_url(params.token_url)
+        response = requests.post(
+            params.token_url, data=data, headers={"Accept": "application/json"}
+        )
+    except (requests.RequestException, SSRFException, ValueError) as exc:
+        raise TokenRefreshTransientError(f"refresh request failed: {exc}") from exc
+
+    try:
+        token_data = response.json()
+    except ValueError as exc:
+        raise TokenRefreshTransientError(
+            f"non-JSON token response (status={response.status_code})"
+        ) from exc
+
+    error = token_response_error(response, token_data)
+    if error is not None:
+        if error in _TERMINAL_REFRESH_ERRORS:
+            raise TokenRefreshTerminalError(error)
+        raise TokenRefreshTransientError(error)
+
+    if "expires_in" in token_data:
+        token_data["expires_at"] = int(time.time()) + token_data["expires_in"]
+    if "refresh_token" not in token_data:
+        token_data["refresh_token"] = refresh_token
+    return token_data
+
+
 class OAuthTokenManager:
     """Manages OAuth token retrieval, refresh, and validation"""
 
@@ -172,33 +227,9 @@ class OAuthTokenManager:
 
         token_data = self._unwrap_token_data(user_token.token_data)
 
-        data: dict[str, str] = {
-            "grant_type": "refresh_token",
-            "refresh_token": token_data["refresh_token"],
-            "client_id": self._unwrap_sensitive_str(self.oauth_config.client_id),
-            "client_secret": self._unwrap_sensitive_str(
-                self.oauth_config.client_secret
-            ),
-        }
-        validate_oauth_endpoint_url(self.oauth_config.token_url)
-        response = requests.post(
-            self.oauth_config.token_url,
-            data=data,
-            headers={"Accept": "application/json"},
+        new_token_data = exchange_refresh_token(
+            self._flow_params(self.oauth_config), token_data["refresh_token"]
         )
-        response.raise_for_status()
-
-        new_token_data = response.json()
-
-        # Calculate expires_at if expires_in is present
-        if "expires_in" in new_token_data:
-            new_token_data["expires_at"] = (
-                int(time.time()) + new_token_data["expires_in"]
-            )
-
-        # Preserve refresh_token if not returned (some providers don't return it)
-        if "refresh_token" not in new_token_data and "refresh_token" in token_data:
-            new_token_data["refresh_token"] = token_data["refresh_token"]
 
         # Update token in DB
         upsert_user_oauth_token(
