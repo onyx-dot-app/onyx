@@ -1,8 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from onyx.db.consumer_llm import ConsumerDefaultLLMConfig
 from onyx.db.consumer_llm import build_consumer_llm_provider_request
+from onyx.db.consumer_llm import ConsumerDefaultLLMConfig
 from onyx.db.consumer_llm import seed_consumer_default_llm_provider
 
 

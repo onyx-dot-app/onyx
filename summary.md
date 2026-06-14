@@ -6,6 +6,11 @@
 - 新增替代设计文档 `docs/superpowers/specs/2026-06-14-platform-default-openai-compatible-llm-design.md`：配置收敛为 `CONSUMER_DEFAULT_LLM_API_BASE`、`CONSUMER_DEFAULT_LLM_API_KEY`、`CONSUMER_DEFAULT_LLM_MODEL_NAME`，provider type 固定 `openai_compatible`，运行时回归 Onyx 原生默认模型链路。
 - 将旧设计 `docs/superpowers/specs/2026-06-13-consumer-llm-provider-design.md` 标记为已被替代；同步更新 `docs/GlomiAI.md`，E2/Phase A/对话模型决策不再提 C 端模型档位。
 - 新增实施计划 `docs/superpowers/plans/2026-06-14-platform-default-openai-compatible-llm.md`，拆分为单主模型 seed、运行时撤 profile override、删除 model catalog/API/UI、更新 env/docs 与验证四个任务。
+- 实现 E2 纠偏：移除 C 端模型档位 catalog / preference API / 前端 selector，保留平台默认 OpenAI-compatible 主模型自动 seed。
+- 配置收敛为 `CONSUMER_DEFAULT_LLM_API_BASE`、`CONSUMER_DEFAULT_LLM_API_KEY`、`CONSUMER_DEFAULT_LLM_MODEL_NAME`；provider type 固定为 `openai_compatible`，provider name 内部固定为 `Glomi Default`。
+- 运行时回归 Onyx 原生默认模型链路：普通聊天、深度研究、标题生成不再强制 consumer profile；Craft 去掉 coding profile 特例，改为在原有 provider 优先级后支持已配置的 `openai_compatible` provider fallback。
+- 本地 `.vscode/.env` 已更新为 `CONSUMER_DEFAULT_LLM_MODEL_NAME=qwen-plus`；该文件被 `.gitignore` 忽略，不进入提交。
+- 验证记录：focused backend tests `31 passed in 2.76s`；app startup `app-ok`；frontend `npm run types:check` 通过；touched Python 文件 `ruff check` 通过；旧 `model-catalog` / `model-preference` / `ConsumerModelProfileSelector` / `consumer_model_catalog` 残留搜索无命中。
 - 修复启动错误：`/model-catalog` 是 private route，但 `get_model_catalog` 缺少用户依赖，导致 `check_router_auth` 在 uvicorn 启动时抛出 `RuntimeError: Did not find user dependency in private route`。
 - 变动：为 `backend/onyx/server/manage/consumer_models_api.py:get_model_catalog` 增加 `require_permission(Permission.BASIC_ACCESS)` 依赖，并新增 route auth contract 单测，确保 consumer model router 以后新增接口也会被 `check_router_auth` 捕获。
 - 验证：新增单测先复现同样的 `/model-catalog` auth failure；修复后 `test_consumer_models_api.py` 通过 `5 passed`，并在 `PYTHONUTF8=1` 下构建 `onyx.main.get_application()` 通过 `app-ok`。
