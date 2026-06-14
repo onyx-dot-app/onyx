@@ -1,24 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AUTO_PROVISION_DEFAULT_LLM_PROVIDERS
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_API_BASE
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_API_KEY
-from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_DEFAULT_PROFILE
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_ENABLED
+from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_MODEL_NAME
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_PROVIDER_NAME
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_PROVIDER_TYPE
 from onyx.db.llm import fetch_default_llm_model
-from onyx.db.llm import fetch_default_vision_model
 from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
 from onyx.db.llm import update_default_provider
-from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
-from onyx.llm.consumer_model_catalog import CONSUMER_MODEL_PROFILES
-from onyx.llm.consumer_model_catalog import get_consumer_model_profile
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.utils.logger import setup_logger
@@ -26,14 +23,21 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+class _ExistingModelConfiguration(Protocol):
+    name: str
+    is_visible: bool
+    max_input_tokens: int | None
+    supports_image_input: bool | None
+    display_name: str | None
+    custom_display_name: str | None
+
+
 @dataclass(frozen=True)
 class ConsumerDefaultLLMConfig:
     enabled: bool
-    provider_name: str
-    provider_type: str
-    api_base: str
+    api_base: str | None
     api_key: str | None
-    default_profile_id: str
+    model_name: str | None
     auto_provision_enabled: bool
 
 
@@ -46,21 +50,35 @@ class ConsumerDefaultLLMSeedResult:
 def get_consumer_default_llm_config() -> ConsumerDefaultLLMConfig:
     return ConsumerDefaultLLMConfig(
         enabled=CONSUMER_DEFAULT_LLM_ENABLED,
-        provider_name=CONSUMER_DEFAULT_LLM_PROVIDER_NAME,
-        provider_type=CONSUMER_DEFAULT_LLM_PROVIDER_TYPE,
         api_base=CONSUMER_DEFAULT_LLM_API_BASE,
         api_key=CONSUMER_DEFAULT_LLM_API_KEY,
-        default_profile_id=CONSUMER_DEFAULT_LLM_DEFAULT_PROFILE,
+        model_name=CONSUMER_DEFAULT_LLM_MODEL_NAME,
         auto_provision_enabled=AUTO_PROVISION_DEFAULT_LLM_PROVIDERS,
+    )
+
+
+def _model_config_from_existing(
+    model_configuration: _ExistingModelConfiguration,
+) -> ModelConfigurationUpsertRequest:
+    return ModelConfigurationUpsertRequest(
+        name=model_configuration.name,
+        is_visible=model_configuration.is_visible,
+        max_input_tokens=model_configuration.max_input_tokens,
+        supports_image_input=model_configuration.supports_image_input,
+        display_name=model_configuration.display_name,
+        custom_display_name=model_configuration.custom_display_name,
     )
 
 
 def build_consumer_llm_provider_request(
     config: ConsumerDefaultLLMConfig,
 ) -> LLMProviderUpsertRequest:
+    if not config.model_name:
+        raise ValueError("model_name is required to build provider request")
+
     return LLMProviderUpsertRequest(
-        name=config.provider_name,
-        provider=config.provider_type,
+        name=CONSUMER_DEFAULT_LLM_PROVIDER_NAME,
+        provider=CONSUMER_DEFAULT_LLM_PROVIDER_TYPE,
         api_key=config.api_key,
         api_base=config.api_base,
         api_key_changed=True,
@@ -68,14 +86,25 @@ def build_consumer_llm_provider_request(
         is_auto_mode=False,
         model_configurations=[
             ModelConfigurationUpsertRequest(
-                name=profile.model_name,
+                name=config.model_name,
                 is_visible=True,
                 max_input_tokens=None,
-                supports_image_input=profile.supports_image,
-                display_name=profile.display_name,
             )
-            for profile in CONSUMER_MODEL_PROFILES
         ],
+    )
+
+
+def _should_update_default_model(
+    current_default: object | None,
+    provider_id: int,
+    model_name: str,
+) -> bool:
+    if current_default is None:
+        return True
+
+    return (
+        getattr(current_default, "llm_provider_id", None) == provider_id
+        and getattr(current_default, "name", None) != model_name
     )
 
 
@@ -103,43 +132,39 @@ def seed_consumer_default_llm_provider(
         )
         return ConsumerDefaultLLMSeedResult(seeded=False, reason="missing_api_key")
 
-    request = build_consumer_llm_provider_request(config)
-    catalog_model_names = {
-        model_config.name for model_config in request.model_configurations
-    }
+    if not config.api_base:
+        logger.warning(
+            "Skipping consumer default LLM provider seed: "
+            "CONSUMER_DEFAULT_LLM_API_BASE is unset"
+        )
+        return ConsumerDefaultLLMSeedResult(seeded=False, reason="missing_api_base")
 
+    if not config.model_name:
+        logger.warning(
+            "Skipping consumer default LLM provider seed: "
+            "CONSUMER_DEFAULT_LLM_MODEL_NAME is unset"
+        )
+        return ConsumerDefaultLLMSeedResult(seeded=False, reason="missing_model_name")
+
+    request = build_consumer_llm_provider_request(config)
     existing_provider = fetch_existing_llm_provider_by_name_and_type(
-        name=config.provider_name,
-        provider_type=config.provider_type,
+        name=CONSUMER_DEFAULT_LLM_PROVIDER_NAME,
+        provider_type=CONSUMER_DEFAULT_LLM_PROVIDER_TYPE,
         db_session=db_session,
     )
     if existing_provider:
         request.id = existing_provider.id
+        requested_names = {model.name for model in request.model_configurations}
         for existing_model_config in existing_provider.model_configurations:
-            if existing_model_config.name in catalog_model_names:
+            if existing_model_config.name in requested_names:
                 continue
             request.model_configurations.append(
-                ModelConfigurationUpsertRequest(
-                    name=existing_model_config.name,
-                    is_visible=False,
-                    max_input_tokens=existing_model_config.max_input_tokens,
-                    supports_image_input=existing_model_config.supports_image_input,
-                    display_name=existing_model_config.display_name,
-                    custom_display_name=existing_model_config.custom_display_name,
-                )
+                _model_config_from_existing(existing_model_config)
             )
 
     provider = upsert_llm_provider(request, db_session)
-
-    default_profile = get_consumer_model_profile(config.default_profile_id)
-    if fetch_default_llm_model(db_session) is None:
-        update_default_provider(provider.id, default_profile.model_name, db_session)
-
-    vision_profile = next(
-        (profile for profile in CONSUMER_MODEL_PROFILES if profile.supports_image),
-        None,
-    )
-    if vision_profile and fetch_default_vision_model(db_session) is None:
-        update_default_vision_provider(provider.id, vision_profile.model_name, db_session)
+    current_default = fetch_default_llm_model(db_session)
+    if _should_update_default_model(current_default, provider.id, config.model_name):
+        update_default_provider(provider.id, config.model_name, db_session)
 
     return ConsumerDefaultLLMSeedResult(seeded=True, reason="seeded")

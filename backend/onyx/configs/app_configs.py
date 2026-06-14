@@ -1488,20 +1488,14 @@ OPENROUTER_DEFAULT_API_KEY = os.environ.get("OPENROUTER_DEFAULT_API_KEY")
 CONSUMER_DEFAULT_LLM_ENABLED = (
     os.environ.get("CONSUMER_DEFAULT_LLM_ENABLED", "false").lower() == "true"
 )
-CONSUMER_DEFAULT_LLM_PROVIDER_NAME = os.environ.get(
-    "CONSUMER_DEFAULT_LLM_PROVIDER_NAME", "Qwen"
-)
-CONSUMER_DEFAULT_LLM_PROVIDER_TYPE = os.environ.get(
-    "CONSUMER_DEFAULT_LLM_PROVIDER_TYPE", "openai_compatible"
-)
-CONSUMER_DEFAULT_LLM_API_BASE = os.environ.get(
-    "CONSUMER_DEFAULT_LLM_API_BASE",
-    "https://dashscope.aliyuncs.com/compatible-mode/v1",
-)
+CONSUMER_DEFAULT_LLM_PROVIDER_NAME = "Glomi Default"
+CONSUMER_DEFAULT_LLM_PROVIDER_TYPE = "openai_compatible"
+CONSUMER_DEFAULT_LLM_API_BASE = os.environ.get("CONSUMER_DEFAULT_LLM_API_BASE")
 CONSUMER_DEFAULT_LLM_API_KEY = os.environ.get("CONSUMER_DEFAULT_LLM_API_KEY")
-CONSUMER_DEFAULT_LLM_DEFAULT_PROFILE = os.environ.get(
-    "CONSUMER_DEFAULT_LLM_DEFAULT_PROFILE", "balanced"
-)
+CONSUMER_DEFAULT_LLM_MODEL_NAME = os.environ.get("CONSUMER_DEFAULT_LLM_MODEL_NAME")
+# Deprecated compatibility for the old consumer model catalog while this branch
+# removes that product surface in later tasks.
+CONSUMER_DEFAULT_LLM_DEFAULT_PROFILE = "balanced"
 # Whether tenant provisioning auto-creates LLMProvider rows seeded with the
 # *_DEFAULT_API_KEY env vars above. Defaults to True so self-hosted
 # deployments keep the existing behavior. Cloud sets this to False to
