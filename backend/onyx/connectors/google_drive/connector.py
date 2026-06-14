@@ -86,6 +86,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import parallel_yield
@@ -1771,6 +1772,13 @@ class GoogleDriveConnector(
             logger.debug("Yielding %s new hierarchy nodes", len(new_ancestors))
             yield from new_ancestors
 
+        # A folder enters `seen` only by being emitted as a node (see
+        # _get_new_ancestors_for_files: the first walk to reach it adds it to
+        # `seen` AND to the emitted list in the same step). So `parent_id in seen`
+        # here means the node was already emitted in an earlier sub-batch, and a
+        # file parked under a not-yet-seen folder is guaranteed to be released the
+        # first time that folder is emitted (below) — there is no "seen but never
+        # emitted" state that could strand a file.
         newly_ready: list[RetrievedDriveFile] = []
         for retrieved_file in files_batch:
             parent_id = _get_parent_id_from_file(retrieved_file.drive_file)
@@ -1790,11 +1798,9 @@ class GoogleDriveConnector(
             pending_by_folder.clear()
         ready_files.extend(newly_ready)
 
-        if not ready_files:
-            return
-
-        for start in range(0, len(ready_files), DRIVE_CONVERSION_BATCH_SIZE):
-            chunk = ready_files[start : start + DRIVE_CONVERSION_BATCH_SIZE]
+        # Convert in capped chunks so the heavy converted documents never
+        # accumulate beyond one chunk, regardless of how many files resolved.
+        for chunk in batch_generator(ready_files, DRIVE_CONVERSION_BATCH_SIZE):
             func_with_args = [
                 (
                     self._convert_retrieved_file_to_document,

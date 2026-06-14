@@ -1,7 +1,8 @@
 """GoogleDriveConnector converts retrieved files to documents in bounded
-sub-batches. The connector must hold only a sub-batch of files and their
-converted documents at a time — not the whole drive — so peak memory stays
-flat regardless of drive size."""
+sub-batches: the heavy converted documents are materialized at most one
+DRIVE_CONVERSION_BATCH_SIZE chunk at a time regardless of drive size, while
+hierarchy-deferred files wait (as lightweight metadata) for their ancestor
+node and are then converted in those same bounded chunks."""
 
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -282,4 +283,37 @@ def test_deferred_files_wait_for_their_folder_then_all_resolve() -> None:
     assert len(nodes) == 1
     assert isinstance(out[0], HierarchyNode)  # folder node precedes every document
     assert all(size <= 10 for size in call_sizes)  # conversion stays chunked
-    assert len(call_sizes) > 1  # overflow converted mid-stream, not one final flush
+    assert len(call_sizes) > 1  # even the all-at-once release converts in chunks
+
+
+def test_skipped_conversions_are_dropped_not_counted() -> None:
+    connector = _make_connector()
+    n_files = 6
+
+    # Conversion returns None for skipped files (e.g. empty/unsupported); those
+    # must be dropped, not emitted — the batching must not assume 1 doc per file.
+    def _skip_evens(func_with_args: list, **_kwargs: object) -> list:
+        out: list[object] = []
+        for _func, args in func_with_args:
+            rf: RetrievedDriveFile = args[0]
+            idx = int(str(rf.drive_file["id"]).removeprefix("file_"))
+            out.append(None if idx % 2 == 0 else MagicMock(spec=Document))
+        return out
+
+    with (
+        patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_BATCH_SIZE", _BATCH),
+        patch.object(connector, "_get_new_ancestors_for_files", return_value=[]),
+        patch(
+            f"{_CONN_MODULE}.run_functions_tuples_in_parallel",
+            side_effect=_skip_evens,
+        ),
+    ):
+        out = list(
+            connector._convert_retrieved_files_to_documents(
+                iter([_make_file(i) for i in range(n_files)]),
+                _make_checkpoint(),
+                include_permissions=False,
+            )
+        )
+
+    assert len(out) == n_files // 2  # only odd-indexed files produced a document
