@@ -105,6 +105,12 @@ BATCHES_PER_CHECKPOINT = 1
 # near ~500 MB — well under the indexing worker memory limit.
 DRIVE_CONVERSION_BATCH_SIZE = 50
 
+# Upper bound on files held back waiting for their ancestor hierarchy node to
+# resolve (a parent folder only a not-yet-processed user can reach). Past this,
+# the oldest waiters are converted anyway and fall back to the source root, so
+# the deferral queue can't grow with drive size.
+MAX_PENDING_HIERARCHY_FILES = DRIVE_CONVERSION_BATCH_SIZE * 10
+
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
 OAUTH_PAGES_PER_CHECKPOINT = 2
@@ -1690,8 +1696,8 @@ class GoogleDriveConnector(
             if retrieved_file.error is not None:
                 failure_stage = retrieved_file.completion_stage.value
                 logger.error(
-                    "retrieval failure during stage: %s,user: %s,"
-                    "parent drive/folder: %s,error: %s",
+                    "retrieval failure during stage: %s, user: %s, "
+                    "parent drive/folder: %s, error: %s",
                     failure_stage,
                     retrieved_file.user_email,
                     retrieved_file.parent_id,
@@ -1702,9 +1708,9 @@ class GoogleDriveConnector(
                         entity_id=retrieved_file.drive_file.get("id", failure_stage),
                     ),
                     failure_message=(
-                        f"retrieval failure during stage: {failure_stage},"
-                        f"user: {retrieved_file.user_email},"
-                        f"parent drive/folder: {retrieved_file.parent_id},"
+                        f"retrieval failure during stage: {failure_stage}, "
+                        f"user: {retrieved_file.user_email}, "
+                        f"parent drive/folder: {retrieved_file.parent_id}, "
                         f"error: {retrieved_file.error}"
                     ),
                     exception=retrieved_file.error,
@@ -1777,6 +1783,14 @@ class GoogleDriveConnector(
                 still_pending.append(retrieved_file)
                 continue
             ready_files.append(retrieved_file)
+
+        # Cap the deferral queue so it can't grow with drive size: convert the
+        # oldest waiters now (they fall back to the source root, the same outcome
+        # as a genuinely inaccessible folder).
+        if len(still_pending) > MAX_PENDING_HIERARCHY_FILES:
+            overflow = len(still_pending) - MAX_PENDING_HIERARCHY_FILES
+            ready_files.extend(still_pending[:overflow])
+            still_pending = still_pending[overflow:]
 
         pending_files.clear()
         pending_files.extend(still_pending)

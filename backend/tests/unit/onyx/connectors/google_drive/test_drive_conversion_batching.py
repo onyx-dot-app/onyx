@@ -238,3 +238,33 @@ def test_force_flush_chunks_pending_files() -> None:
     # Pending files are flushed in sub-batches that respect the cap.
     assert call_sizes == [_BATCH, _BATCH, 2]
     assert len(out) == n_files
+
+
+def test_pending_queue_is_capped() -> None:
+    connector = _make_connector()
+    n_files = 100
+    call_sizes: list[int] = []
+
+    # Every file defers (its parent never enters `seen`). The pending cap must
+    # force the oldest waiters through mid-stream so the queue cannot grow with
+    # drive size — instead of buffering all 100 into a single final flush.
+    with (
+        patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_BATCH_SIZE", 10),
+        patch(f"{_CONN_MODULE}.MAX_PENDING_HIERARCHY_FILES", 20),
+        patch.object(connector, "_get_new_ancestors_for_files", return_value=[]),
+        patch(
+            f"{_CONN_MODULE}.run_functions_tuples_in_parallel",
+            side_effect=_parallel_stub(call_sizes),
+        ),
+    ):
+        out = list(
+            connector._convert_retrieved_files_to_documents(
+                iter([_make_file(i, parent_id="folder") for i in range(n_files)]),
+                _make_checkpoint(),
+                include_permissions=False,
+            )
+        )
+
+    assert len(out) == n_files  # nothing dropped
+    assert all(size <= 10 for size in call_sizes)  # every chunk respects the cap
+    assert len(call_sizes) > 1  # overflow converted mid-stream, not one final flush
