@@ -19,7 +19,7 @@ from onyx.server.features.build.interactive_turns.state import create_interactiv
 from onyx.server.features.build.interactive_turns.state import finish_turn
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCEEDED
-from tests.unit.onyx.server.features.build.fakes import FakeCache
+from tests.unit.fakes import FakeCache
 
 
 class _FakeStreamingResponse:
