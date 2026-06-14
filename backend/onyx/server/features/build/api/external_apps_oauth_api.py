@@ -14,6 +14,7 @@ from onyx.auth.permissions import require_permission
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.external_app import decrypt_credentials_or_empty
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.models import ExternalApp
@@ -44,7 +45,11 @@ _REDIS_STATE_TTL_SECONDS = 600
 
 
 def _oauth_client_credentials(app: ExternalApp) -> tuple[str, str]:
-    org_credentials = app.organization_credentials.get_value(apply_mask=False)
+    org_credentials = decrypt_credentials_or_empty(
+        app.organization_credentials,
+        apply_mask=False,
+        context=f"organization credentials for external app {app.id}",
+    )
     client_id = org_credentials.get("client_id")
     client_secret = org_credentials.get("client_secret")
     if not client_id or not client_secret:

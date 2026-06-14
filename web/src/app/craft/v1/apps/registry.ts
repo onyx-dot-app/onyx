@@ -91,6 +91,9 @@ export interface ExternalAppAdminResponse {
   // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
   // admin may only enable/disable + set policies (the UI hides the rest).
   is_onyx_managed: boolean;
+  // True when a stored credential blob can no longer be decrypted (e.g. the
+  // server's encryption key changed); re-entering credentials overwrites it.
+  credential_error: boolean;
 }
 
 export interface ExternalAppUserResponse {
@@ -102,6 +105,9 @@ export interface ExternalAppUserResponse {
   credential_keys: string[];
   credential_values: Record<string, string>;
   authenticated: boolean;
+  // True when a stored credential blob can no longer be decrypted (e.g. the
+  // server's encryption key changed); re-entering credentials overwrites it.
+  credential_error: boolean;
 }
 
 export function findAppForType(

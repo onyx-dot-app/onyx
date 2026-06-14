@@ -9,7 +9,12 @@ import useOnMount from "@/hooks/useOnMount";
 import { cn } from "@opal/utils";
 import { Button, Card, InputTypeIn, Text } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
-import { SvgCheckCircle, SvgPlug, SvgSettings } from "@opal/icons";
+import {
+  SvgAlertTriangle,
+  SvgCheckCircle,
+  SvgPlug,
+  SvgSettings,
+} from "@opal/icons";
 import {
   ExternalAppUserResponse,
   getAppTypeLogo,
@@ -260,6 +265,15 @@ function ProviderConnectCard({
               <Text font="secondary-body" color="text-03">
                 {userApp.description}
               </Text>
+              {userApp.credential_error && (
+                <div className="flex items-center gap-1.5">
+                  <SvgAlertTriangle className="w-4 h-4 shrink-0 text-status-warning-05" />
+                  <Text font="secondary-body" color="text-03">
+                    Stored credentials can&apos;t be read — connect again to fix
+                    this app.
+                  </Text>
+                </div>
+              )}
               <Button disabled={isStarting} onClick={connect}>
                 {isStarting ? "Redirecting…" : "Connect"}
               </Button>

@@ -29,6 +29,40 @@ logger = setup_logger()
 _PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
+def try_decrypt_credentials(
+    credentials: SensitiveValue[dict[str, Any]],
+    *,
+    apply_mask: bool,
+    context: str,
+) -> dict[str, Any] | None:
+    """Stored credential blobs become undecryptable when ENCRYPTION_KEY_SECRET
+    changes. Returns None on decrypt failure so callers can distinguish a broken
+    blob from "nothing stored". ValueError covers UnicodeDecodeError and
+    json.JSONDecodeError.
+    """
+    try:
+        return credentials.get_value(apply_mask=apply_mask)
+    except ValueError:
+        logger.warning("Could not decrypt %s; treating as empty.", context)
+        return None
+
+
+def decrypt_credentials_or_empty(
+    credentials: SensitiveValue[dict[str, Any]],
+    *,
+    apply_mask: bool,
+    context: str,
+) -> dict[str, Any]:
+    """Decrypt-failure-tolerant read: degrade to "nothing stored" — the app
+    shows as unauthenticated and re-entering credentials overwrites the bad
+    row — instead of failing the caller.
+    """
+    decrypted = try_decrypt_credentials(
+        credentials, apply_mask=apply_mask, context=context
+    )
+    return decrypted if decrypted is not None else {}
+
+
 def _placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
     placeholders: set[str] = set()
     for value in auth_template.values():
@@ -82,10 +116,18 @@ def validate_auth_template(
 def resolve_masked_credentials(
     incoming: dict[str, str],
     existing: SensitiveValue[dict[str, Any]] | None,
+    *,
+    context: str = "stored credentials while restoring masked values",
 ) -> dict[str, str]:
     """Restore real secret values when the caller submits masked placeholders."""
     existing_values = (
-        existing.get_value(apply_mask=False) if existing is not None else {}
+        decrypt_credentials_or_empty(
+            existing,
+            apply_mask=False,
+            context=context,
+        )
+        if existing is not None
+        else {}
     )
     resolved: dict[str, str] = {}
     for key, value in incoming.items():
@@ -110,13 +152,22 @@ def is_user_authenticated_for_app(
     ``auth_template`` requires that the org hasn't pre-filled. Apps with no
     user-required keys need no credential row."""
     required = required_user_credential_keys(
-        app.auth_template, app.organization_credentials.get_value(apply_mask=False)
+        app.auth_template,
+        decrypt_credentials_or_empty(
+            app.organization_credentials,
+            apply_mask=False,
+            context=f"organization credentials for external app {app.id}",
+        ),
     )
     if not required:
         return True
     if user_cred is None:
         return False
-    stored = user_cred.user_credentials.get_value(apply_mask=False)
+    stored = decrypt_credentials_or_empty(
+        user_cred.user_credentials,
+        apply_mask=False,
+        context=f"user credentials for external app {app.id}",
+    )
     return all(k in stored for k in required)
 
 
@@ -357,7 +408,9 @@ def update_external_app(
         # Admin responses mask org credentials; restore any masked value the form
         # echoed back so an unchanged secret isn't overwritten with its mask.
         app.organization_credentials = resolve_masked_credentials(  # ty: ignore[invalid-assignment]
-            organization_credentials, app.organization_credentials
+            organization_credentials,
+            app.organization_credentials,
+            context=f"organization credentials for external app {app.id}",
         )
 
     if is_set(action_policies):

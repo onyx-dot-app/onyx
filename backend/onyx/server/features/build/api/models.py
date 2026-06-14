@@ -388,6 +388,9 @@ class ExternalAppAdminResponse(BaseModel):
     # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;
     # admin may only enable/disable + set policies. UI hides the rest.
     is_onyx_managed: bool = False
+    # True when a stored credential blob can no longer be decrypted (e.g. the
+    # ENCRYPTION_KEY_SECRET changed); re-entering credentials overwrites it.
+    credential_error: bool = False
 
 
 class UpsertUserCredentialsRequest(BaseModel):
@@ -420,6 +423,9 @@ class ExternalAppUserResponse(BaseModel):
     credential_keys: list[str]
     credential_values: dict[str, Any]
     authenticated: bool
+    # True when a stored credential blob can no longer be decrypted (e.g. the
+    # ENCRYPTION_KEY_SECRET changed); re-entering credentials overwrites it.
+    credential_error: bool = False
 
 
 class OAuthStartResponse(BaseModel):
