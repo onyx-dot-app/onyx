@@ -87,6 +87,11 @@ export interface JiraServerCredentialJson {
   jira_api_token: string;
 }
 
+// JSM uses the same credential shape as Jira (email + API token for Cloud,
+// or API token only for Jira Server / Data Center)
+export type JiraServiceManagementCredentialJson = JiraCredentialJson;
+export type JiraServiceManagementServerCredentialJson = JiraServerCredentialJson;
+
 export interface ProductboardCredentialJson {
   productboard_access_token: string;
 }
@@ -313,6 +318,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     jira_user_email: null,
     jira_api_token: "",
   } as JiraCredentialJson,
+  jira_service_management: {
+    jira_user_email: null,
+    jira_api_token: "",
+  } as JiraServiceManagementCredentialJson,
   productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
   slab: { slab_bot_token: "" } as SlabCredentialJson,
   coda: { coda_bearer_token: "" } as CodaCredentialJson,
