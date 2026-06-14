@@ -76,6 +76,15 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
 
+# Controls whether the user's basic identity (name, email, role) is injected into the
+# LLM system prompt. When True, this identifying information is omitted from the prompt
+# sent to the (potentially external) LLM provider, which is useful for privacy/compliance
+# sensitive deployments. Other user context (team info, preferences, memories) is
+# unaffected. Defaults to False to preserve existing behavior.
+DISABLE_USER_IDENTITY_IN_PROMPT = (
+    os.environ.get("DISABLE_USER_IDENTITY_IN_PROMPT", "").lower() == "true"
+)
+
 # Disables vector DB (Vespa/OpenSearch) entirely. When True, connectors and RAG search
 # are disabled but core chat, tools, user file uploads, and Projects still work.
 DISABLE_VECTOR_DB = os.environ.get("DISABLE_VECTOR_DB", "").lower() == "true"
