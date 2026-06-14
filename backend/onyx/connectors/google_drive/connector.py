@@ -1749,13 +1749,17 @@ class GoogleDriveConnector(
         """Resolve ancestors for this sub-batch's NEW files and convert the files
         whose parent hierarchy node is now available, nodes first.
 
-        A file whose immediate parent folder has not been emitted yet (a folder
-        only a not-yet-processed user can reach) is parked in ``pending_by_folder``
-        under that folder id, so its document is never emitted before its ancestor
-        node. It is released the moment that folder's node is emitted by some other
-        file's walk, so the per-sub-batch cost is independent of the queue size.
-        ``force_flush`` drains everything still parked — those folders never
-        resolved, so the files fall back to the source root."""
+        Ancestor resolution fetches each parent folder by id (with the file's user
+        AND admin), so a file's parent is normally emitted within the file's own
+        sub-batch and the file is never parked. Parking is the exception: the
+        parent is reachable by neither the file's user nor admin, only by another
+        user whose file lands in a later sub-batch. Such a file parks in
+        ``pending_by_folder`` under that folder id so its document is never emitted
+        before its ancestor node, and is released the moment that folder's node is
+        emitted by the other user's walk. ``force_flush`` drains everything still
+        parked — those folders are reachable by nobody in this checkpoint, so the
+        files fall back to the source root (the same outcome as on the pre-batching
+        single-pass path)."""
         new_ancestors = (
             self._get_new_ancestors_for_files(
                 files=files_batch,
