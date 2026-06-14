@@ -134,6 +134,23 @@ def test_jira_normalization(url: str, expected: str) -> None:
     "url,expected",
     [
         (
+            "https://example.atlassian.net/jira/browse/PROJ-123?query=param#section",
+            "https://example.atlassian.net/jira/browse/PROJ-123",
+        ),
+    ],
+)
+def test_jira_service_management_normalization(url: str, expected: str) -> None:
+    """Test Jira Service Management URL normalization (uses default normalizer)."""
+    assert (
+        normalize_url(url, source_type=DocumentSource.JIRA_SERVICE_MANAGEMENT)
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        (
             "https://github.com/owner/repo/blob/main/file.py?query=param#section",
             "https://github.com/owner/repo/blob/main/file.py",
         ),

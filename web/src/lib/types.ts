@@ -551,6 +551,7 @@ export enum ValidSources {
   Outline = "outline",
   Confluence = "confluence",
   Jira = "jira",
+  JiraServiceManagement = "jira_service_management",
   Productboard = "productboard",
   Slab = "slab",
   Coda = "coda",
@@ -615,6 +616,7 @@ export const federatedSourceToRegularSource = (
 export const validAutoSyncSources = [
   ValidSources.Confluence,
   ValidSources.Jira,
+  ValidSources.JiraServiceManagement,
   ValidSources.GoogleDrive,
   ValidSources.Gmail,
   ValidSources.Slack,
