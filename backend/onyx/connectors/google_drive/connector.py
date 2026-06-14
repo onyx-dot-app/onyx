@@ -100,10 +100,8 @@ logger = setup_logger()
 
 BATCHES_PER_CHECKPOINT = 1
 
-# Files converted -> documents per sub-batch before yielding, bounding peak memory
-# independent of drive size. A capped document holds up to
-# CONNECTOR_MAX_EXTRACTED_TEXT_CHARS (~10 MB), so 50 keeps a resident sub-batch
-# near ~500 MB — well under the indexing worker memory limit.
+# Documents converted per sub-batch. At up to CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
+# (~10 MB) each, 50 caps resident docs near ~500 MB regardless of drive size.
 DRIVE_CONVERSION_BATCH_SIZE = 50
 
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
@@ -1682,10 +1680,9 @@ class GoogleDriveConnector(
         )
 
         files_batch: list[RetrievedDriveFile] = []
-        # Files whose immediate parent folder node has not been emitted yet,
-        # keyed on that folder's raw id. Each is released the moment the folder is
-        # emitted (O(1)); whatever never resolves by stream end falls back to the
-        # source root. Holds only lightweight file metadata, never converted docs.
+        # Files awaiting their parent folder's node, keyed by folder raw id
+        # (lightweight metadata, never documents). Released when the node is
+        # emitted; whatever never resolves falls back to the source root.
         pending_by_folder: dict[str, list[RetrievedDriveFile]] = {}
         for retrieved_file in drive_files_iter:
             if self.exclude_domain_link_only and has_link_only_permission(
@@ -1746,20 +1743,12 @@ class GoogleDriveConnector(
         pending_by_folder: dict[str, list[RetrievedDriveFile]],
         force_flush: bool = False,
     ) -> Iterator[Document | ConnectorFailure | HierarchyNode]:
-        """Resolve ancestors for this sub-batch's NEW files and convert the files
-        whose parent hierarchy node is now available, nodes first.
-
-        Ancestor resolution fetches each parent folder by id (with the file's user
-        AND admin), so a file's parent is normally emitted within the file's own
-        sub-batch and the file is never parked. Parking is the exception: the
-        parent is reachable by neither the file's user nor admin, only by another
-        user whose file lands in a later sub-batch. Such a file parks in
-        ``pending_by_folder`` under that folder id so its document is never emitted
-        before its ancestor node, and is released the moment that folder's node is
-        emitted by the other user's walk. ``force_flush`` drains everything still
-        parked — those folders are reachable by nobody in this checkpoint, so the
-        files fall back to the source root (the same outcome as on the pre-batching
-        single-pass path)."""
+        """Emit this sub-batch's new ancestor nodes, then convert the files whose
+        parent node is now in `seen`. Resolution fetches each parent folder by id
+        (file's user + admin), so a parent normally resolves in the file's own
+        sub-batch; parking is only the cross-user case — a folder reachable solely
+        by a later sub-batch's user — held in `pending_by_folder` until its node is
+        emitted. `force_flush` roots whatever never resolves."""
         new_ancestors = (
             self._get_new_ancestors_for_files(
                 files=files_batch,
@@ -1776,13 +1765,9 @@ class GoogleDriveConnector(
             logger.debug("Yielding %s new hierarchy nodes", len(new_ancestors))
             yield from new_ancestors
 
-        # A folder enters `seen` only by being emitted as a node (see
-        # _get_new_ancestors_for_files: the first walk to reach it adds it to
-        # `seen` AND to the emitted list in the same step). So `parent_id in seen`
-        # here means the node was already emitted in an earlier sub-batch, and a
-        # file parked under a not-yet-seen folder is guaranteed to be released the
-        # first time that folder is emitted (below) — there is no "seen but never
-        # emitted" state that could strand a file.
+        # A folder enters `seen` only when its node is emitted (atomically, in
+        # _get_new_ancestors_for_files), so a parked file is always released the
+        # first time its folder appears below — no "seen but unemitted" stranding.
         newly_ready: list[RetrievedDriveFile] = []
         for retrieved_file in files_batch:
             parent_id = _get_parent_id_from_file(retrieved_file.drive_file)
@@ -1802,8 +1787,7 @@ class GoogleDriveConnector(
             pending_by_folder.clear()
         ready_files.extend(newly_ready)
 
-        # Convert in capped chunks so the heavy converted documents never
-        # accumulate beyond one chunk, regardless of how many files resolved.
+        # Chunk so resident documents never exceed one chunk, however many resolved.
         for chunk in batch_generator(ready_files, DRIVE_CONVERSION_BATCH_SIZE):
             func_with_args = [
                 (

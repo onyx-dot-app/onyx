@@ -1,8 +1,6 @@
-"""GoogleDriveConnector converts retrieved files to documents in bounded
-sub-batches: the heavy converted documents are materialized at most one
-DRIVE_CONVERSION_BATCH_SIZE chunk at a time regardless of drive size, while
-hierarchy-deferred files wait (as lightweight metadata) for their ancestor
-node and are then converted in those same bounded chunks."""
+"""Regression coverage for the Drive connector's bounded sub-batch conversion:
+documents materialize at most one DRIVE_CONVERSION_BATCH_SIZE chunk at a time,
+and hierarchy-deferred files wait for their ancestor node before converting."""
 
 from collections.abc import Callable
 from collections.abc import Iterator
