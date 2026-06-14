@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 
 from mcp.client.auth import OAuthClientProvider
@@ -79,7 +80,12 @@ class MCPTool(Tool[None]):
         self._tool_definition = tool_definition
         self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
-        self._llm_name = f"mcp:{mcp_server.name}:{tool_name}"
+        # Use a unique, LLM-safe name (must match [a-zA-Z0-9_-]+) to avoid
+        # "Tool names must be unique" errors when multiple MCP servers expose
+        # tools with the same name.  The numeric server ID guarantees
+        # uniqueness; the original _name is kept for MCP protocol calls.
+        safe_tool_name: str = re.sub(r"[^a-zA-Z0-9_-]", "_", tool_name)
+        self._llm_name = f"mcp_{mcp_server.id}_{safe_tool_name}"
 
     @property
     def id(self) -> int:
@@ -87,7 +93,7 @@ class MCPTool(Tool[None]):
 
     @property
     def name(self) -> str:
-        return self._name
+        return self._llm_name
 
     @property
     def description(self) -> str:
@@ -107,7 +113,7 @@ class MCPTool(Tool[None]):
         return {
             "type": "function",
             "function": {
-                "name": self._name,
+                "name": self._llm_name,
                 "description": self._description,
                 "parameters": _normalize_parameters_schema(self._tool_definition),
             },
