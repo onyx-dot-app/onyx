@@ -25,7 +25,7 @@ interface LLMOption {
 export interface LLMSelectorProps {
   name?: string;
   userSettings?: boolean;
-  llmProviders: LLMProviderDescriptor[];
+  llmProviders: LLMProviderDescriptor[] | undefined;
   defaultText?: DefaultModel | null;
   currentLlm: string | null;
   onSelect: (value: string | null) => void;
@@ -49,6 +49,8 @@ export default function LLMSelector({
   );
 
   const llmOptions = useMemo(() => {
+    if (!llmProviders) return [];
+
     const seenKeys = new Set<string>();
     const options: LLMOption[] = [];
 
@@ -149,7 +151,7 @@ export default function LLMSelector({
   }, [llmOptions]);
 
   const defaultProvider = defaultText
-    ? llmProviders.find((p) => p.id === defaultText.provider_id)
+    ? llmProviders?.find((p) => p.id === defaultText.provider_id)
     : undefined;
 
   const defaultModelName = defaultText?.model_name;
