@@ -173,6 +173,20 @@ repos:
         pass_filenames: false
         files: ^web/(package\.json|bun\.lock|lib/opal/package\.json)$
 
+      # `bun install` won't rebuild an already-linked file: dep's gitignored `dist`, so
+      # token / opal-CSS changes from a pull leave opal/dist/root.css stale → the web dev
+      # server serves old radius/spacing/colors (a "boxy" UI). Regenerate it explicitly.
+      # `bun install --frozen-lockfile` first guards the clean-tree case (this hook's file
+      # set is disjoint from bun-install's, so it can fire before node_modules exists).
+      - id: opal-css-rebuild
+        name: rebuild opal token CSS
+        description: "Rebuild opal dist CSS after checkout/pull/rebase so dev gets fresh design tokens"
+        language: system
+        entry: bash -c 'cd web && bun install --frozen-lockfile && bun run --cwd lib/shared build:tokens && node lib/opal/scripts/bundle-css.mjs'
+        pass_filenames: false
+        files: ^web/lib/(opal/src/.*\.css|opal/scripts/bundle-css\.mjs|shared/(tokens/.*\.json|style-dictionary\.config\.mjs))$
+        stages: [post-checkout, post-merge, post-rewrite]
+
       - id: root-bun-install
         name: root bun install
         description: "Automatically run 'bun install' at the repo root after a checkout, pull or rebase"
