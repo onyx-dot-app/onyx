@@ -182,7 +182,7 @@ repos:
         name: rebuild opal token CSS
         description: "Rebuild opal dist CSS after checkout/pull/rebase so dev gets fresh design tokens"
         language: system
-        entry: bash -c 'cd web && bun install --frozen-lockfile && bun run --cwd lib/shared build:tokens && node lib/opal/scripts/bundle-css.mjs'
+        entry: bash -c 'cd web && bun install --frozen-lockfile && bun run --cwd lib/shared build:tokens && bun lib/opal/scripts/bundle-css.mjs'
         pass_filenames: false
         files: ^web/lib/(opal/src/.*\.css|opal/scripts/bundle-css\.mjs|shared/(tokens/.*\.json|style-dictionary\.config\.mjs))$
         stages: [post-checkout, post-merge, post-rewrite]
