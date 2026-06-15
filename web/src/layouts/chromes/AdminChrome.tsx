@@ -65,7 +65,7 @@ export default function AdminChrome({ children }: AdminChromeProps) {
       <RootLayout.App data-main-container>
         {isMobile && !hasCustomSidebar && (
           <RootLayout.Header>
-            <div className="h-13 flex items-center px-2">
+            <div className="h-(--chrome-header-height) flex items-center px-2">
               <Button
                 prominence="internal"
                 icon={SvgSidebar}
