@@ -26,6 +26,7 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import { cn } from "@opal/utils";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -188,6 +189,23 @@ const AgentMessage = React.memo(function AgentMessage({
   );
 
   const authErrors = useAuthErrors(rawPackets);
+
+  // Accumulate MCP auth errors at session scope so the input-bar ActionsPopover
+  // can surface re-auth across messages. The per-message card below is unaffected.
+  const addCurrentMcpServerNeedingReauth = useChatSessionStore(
+    (state) => state.addCurrentMcpServerNeedingReauth
+  );
+  const agentTools = effectiveChatState.agent.tools;
+  useEffect(() => {
+    for (const { toolId, toolName } of authErrors) {
+      const tool = agentTools.find((candidate) =>
+        toolId != null ? candidate.id === toolId : candidate.name === toolName
+      );
+      if (tool?.mcp_server_id != null) {
+        addCurrentMcpServerNeedingReauth(tool.mcp_server_id);
+      }
+    }
+  }, [authErrors, agentTools, addCurrentMcpServerNeedingReauth]);
 
   // Message switching logic
   const {
