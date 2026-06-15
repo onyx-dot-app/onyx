@@ -161,6 +161,38 @@ def _run_web_search(
     provider_view, provider = _get_active_search_provider(db_session)
 
     results: list[LlmWebSearchResult] = []
+    max_results = request.max_results or 10
+    if provider.supports_batch_queries:
+        try:
+            search_results = provider.search_batch(
+                request.queries,
+                mode=request.mode,
+                max_results=max_results,
+            )
+        except OnyxError:
+            raise
+        except Exception as exc:
+            logger.exception("Web search provider failed for batch query")
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "Web search provider failed to execute query.",
+            ) from exc
+
+        filtered_results = filter_web_search_results_with_no_title_or_snippet(
+            list(search_results)
+        )
+        for search_result in filtered_results[:max_results]:
+            results.append(
+                LlmWebSearchResult(
+                    document_citation_number=DOCUMENT_CITATION_NUMBER_EMPTY_VALUE,
+                    url=search_result.link,
+                    title=search_result.title,
+                    snippet=search_result.snippet or "",
+                    unique_identifier_to_strip_away=search_result.link,
+                )
+            )
+        return provider_view.provider_type, results
+
     for query in request.queries:
         try:
             search_results = provider.search(query)
@@ -176,7 +208,7 @@ def _run_web_search(
         filtered_results = filter_web_search_results_with_no_title_or_snippet(
             list(search_results)
         )
-        trimmed_results = list(filtered_results)[: request.max_results]
+        trimmed_results = list(filtered_results)[:max_results]
         for search_result in trimmed_results:
             results.append(
                 LlmWebSearchResult(

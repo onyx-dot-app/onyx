@@ -12,6 +12,7 @@ import {
   constructCurrentSearchState,
   INITIAL_QUERIES_TO_SHOW,
   QUERIES_PER_EXPANSION,
+  SearchDebugState,
 } from "./searchStateUtils";
 import Text from "@/refresh-components/texts/Text";
 
@@ -21,6 +22,112 @@ const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
   sourceType: ValidSources.Web,
   icon: SvgSearch,
 });
+
+function formatDebugSummary(debug: SearchDebugState): string {
+  const parts = [
+    debug.providerName || debug.providerType,
+    debug.mode,
+    debug.channel ? `channel ${debug.channel}` : null,
+    `${debug.durationMs} ms`,
+    `${debug.resultCount} results`,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function SearchDebugDrawer({ debug }: { debug: SearchDebugState }) {
+  const failedEntries = Object.entries(debug.failedQueries);
+
+  return (
+    <details className="mt-2 rounded-md border border-border-02 bg-background-neutral-02 px-3 py-2">
+      <summary className="cursor-pointer list-none">
+        <div className="flex flex-col gap-0.5">
+          <Text as="p" text03 mainUiAction>
+            Search debug
+          </Text>
+          <Text as="p" text04 mainUiMuted>
+            {formatDebugSummary(debug)}
+          </Text>
+        </div>
+      </summary>
+
+      <div className="mt-3 flex flex-col gap-3">
+        {debug.queries.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <Text as="p" text04 mainUiAction>
+              Queries
+            </Text>
+            <div className="flex flex-col gap-1">
+              {debug.queries.map((query, index) => (
+                <Text
+                  key={`${query}-${index}`}
+                  as="p"
+                  text04
+                  mainUiMuted
+                  className="break-words"
+                >
+                  {query}
+                </Text>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {debug.results.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <Text as="p" text04 mainUiAction>
+              Results
+            </Text>
+            <div className="flex flex-col gap-1">
+              {debug.results.slice(0, 8).map((result, index) => (
+                <Text
+                  key={`${result.url}-${index}`}
+                  as="p"
+                  text04
+                  mainUiMuted
+                  className="break-words"
+                >
+                  {result.title ? `${result.title} — ${result.url}` : result.url}
+                </Text>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {failedEntries.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <Text as="p" text04 mainUiAction>
+              Failed queries
+            </Text>
+            <div className="flex flex-col gap-1">
+              {failedEntries.map(([query, error]) => (
+                <Text
+                  key={query}
+                  as="p"
+                  text04
+                  mainUiMuted
+                  className="break-words"
+                >
+                  {query}: {error}
+                </Text>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {debug.error && (
+          <div className="flex flex-col gap-1">
+            <Text as="p" text04 mainUiAction>
+              Error
+            </Text>
+            <Text as="p" text04 mainUiMuted className="break-words">
+              {debug.error}
+            </Text>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
 
 /**
  * WebSearchToolRenderer - Renders web search tool execution steps
@@ -42,7 +149,7 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   children,
 }) => {
   const searchState = constructCurrentSearchState(packets);
-  const { queries } = searchState;
+  const { queries, debug } = searchState;
 
   const isHighlight = renderType === RenderType.HIGHLIGHT;
   const isInline = renderType === RenderType.INLINE;
@@ -120,16 +227,19 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
       icon: SvgGlobe,
       status: "Searching the web",
       content: (
-        <SearchChipList
-          items={queries}
-          initialCount={INITIAL_QUERIES_TO_SHOW}
-          expansionCount={QUERIES_PER_EXPANSION}
-          getKey={(_, index) => index}
-          toSourceInfo={queryToSourceInfo}
-          emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
-          showDetailsCard={false}
-          isQuery={true}
-        />
+        <div className="flex flex-col">
+          <SearchChipList
+            items={queries}
+            initialCount={INITIAL_QUERIES_TO_SHOW}
+            expansionCount={QUERIES_PER_EXPANSION}
+            getKey={(_, index) => index}
+            toSourceInfo={queryToSourceInfo}
+            emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
+            showDetailsCard={false}
+            isQuery={true}
+          />
+          {debug && <SearchDebugDrawer debug={debug} />}
+        </div>
       ),
       supportsCollapsible: false,
       timelineLayout: "timeline",

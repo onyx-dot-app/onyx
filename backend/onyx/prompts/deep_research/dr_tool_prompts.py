@@ -2,7 +2,6 @@ from onyx.prompts.search_strategy import OPEN_URL_EVIDENCE_GUIDANCE
 from onyx.prompts.search_strategy import QUERY_PORTFOLIO_GUIDANCE
 from onyx.prompts.search_strategy import SOURCE_ROUTING_GUIDANCE
 
-
 GENERATE_PLAN_TOOL_NAME = "generate_plan"
 
 
@@ -25,7 +24,7 @@ WEB_SEARCH_TOOL_DESCRIPTION = (
 ## web_search
 Use the `web_search` tool to get search results from the web. You should use this tool to get context for your research. These should be optimized for search engines like Google. \
 Use concise and specific queries and avoid merging multiple queries into one. You can call web_search with multiple queries at once (3 max) but generally only do this when there is a clear opportunity for parallel searching. \
-If you use multiple queries, ensure that the queries are related in topic but not similar such that the results would be redundant.
+If you use multiple queries, ensure that the queries are related in topic but not similar such that the results would be redundant. Use mode=deep for research web_search calls; if mode is omitted, the backend defaults research-agent web_search to deep.
 """
     + "\n"
     + QUERY_PORTFOLIO_GUIDANCE

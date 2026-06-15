@@ -14,6 +14,9 @@ def test_web_search_guidance_contains_query_portfolio_and_source_routing() -> No
     assert "query portfolio" in rendered
     assert "Source routing" in rendered
     assert "Evidence evaluation" in rendered
+    assert "mode=lite" in rendered
+    assert "mode=medium" in rendered
+    assert "mode=deep" in rendered
 
 
 def test_open_url_guidance_contains_evidence_reading_rules() -> None:

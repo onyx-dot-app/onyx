@@ -25,6 +25,7 @@ class StreamingType(Enum):
     SEARCH_TOOL_START = "search_tool_start"
     SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
     SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
+    SEARCH_TOOL_DEBUG_DELTA = "search_tool_debug_delta"
     OPEN_URL_START = "open_url_start"
     OPEN_URL_URLS = "open_url_urls"
     OPEN_URL_DOCUMENTS = "open_url_documents"
@@ -187,6 +188,29 @@ class SearchToolDocumentsDelta(BaseObj):
     # This cannot be the SavedSearchDoc as this is yielded by the SearchTool directly
     # which does not save documents to the DB.
     documents: list[SearchDoc]
+
+
+class SearchToolDebugResult(BaseModel):
+    title: str
+    url: str
+    snippet: str = ""
+
+
+class SearchToolDebugDelta(BaseObj):
+    type: Literal["search_tool_debug_delta"] = (
+        StreamingType.SEARCH_TOOL_DEBUG_DELTA.value
+    )
+
+    provider_type: str
+    provider_name: str | None = None
+    mode: str
+    channel: str | None = None
+    queries: list[str]
+    duration_ms: int
+    result_count: int
+    results: list[SearchToolDebugResult] = []
+    failed_queries: dict[str, str] = {}
+    error: str | None = None
 
 
 # OpenURL tool packets - 3-stage sequence
@@ -435,6 +459,7 @@ PacketObj = Union[
     SearchToolStart,
     SearchToolQueriesDelta,
     SearchToolDocumentsDelta,
+    SearchToolDebugDelta,
     ImageGenerationToolStart,
     ImageGenerationToolHeartbeat,
     ImageGenerationFinal,

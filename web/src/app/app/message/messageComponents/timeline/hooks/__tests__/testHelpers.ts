@@ -122,6 +122,31 @@ export function createSearchToolDocumentsPacket(
   });
 }
 
+export function createSearchToolDebugPacket(
+  placement: Partial<Placement> = {},
+  overrides: Record<string, unknown> = {}
+): Packet {
+  return createPacket(PacketType.SEARCH_TOOL_DEBUG_DELTA, placement, {
+    provider_type: "glomi",
+    provider_name: "Glomi Search",
+    mode: "deep",
+    channel: "tavily",
+    queries: ["q1", "q2"],
+    duration_ms: 42,
+    result_count: 1,
+    results: [
+      {
+        title: "Result",
+        url: "https://example.com/result",
+        snippet: "Snippet",
+      },
+    ],
+    failed_queries: {},
+    error: null,
+    ...overrides,
+  });
+}
+
 // Fetch Tool helpers
 export function createFetchToolStartPacket(
   placement: Partial<Placement> = {}

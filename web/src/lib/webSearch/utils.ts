@@ -25,6 +25,11 @@ export const SEARCH_PROVIDER_DETAILS: Record<
   WebSearchProviderType,
   SearchProviderDetail
 > = {
+  glomi: {
+    label: "Glomi Search",
+    subtitle: "Glomi Search Gateway",
+    helper: "Connect to Glomi Search Gateway to set up web search.",
+  },
   exa: {
     label: "Exa",
     subtitle: "Exa.ai",
@@ -99,6 +104,13 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
   WebSearchProviderType,
   SearchProviderCapabilities
 > = {
+  glomi: {
+    requiresApiKey: true,
+    requiredConfigKeys: ["base_url"],
+    storedConfigAliases: {
+      base_url: ["base_url", "api_base_url"],
+    },
+  },
   exa: { requiresApiKey: true, requiredConfigKeys: [] },
   serper: { requiresApiKey: true, requiredConfigKeys: [] },
   brave: { requiresApiKey: true, requiredConfigKeys: [] },
@@ -379,6 +391,13 @@ export function getSearchConfigField(
       subDescription: markdown(
         "Paste the base URL of your [SearXNG instance](https://docs.searxng.org/admin/installation.html)."
       ),
+    };
+  }
+  if (providerType === "glomi") {
+    return {
+      title: "Gateway Base URL",
+      placeholder: "https://search-gateway.example.com",
+      subDescription: "Your Glomi Search Gateway base URL.",
     };
   }
   return undefined;

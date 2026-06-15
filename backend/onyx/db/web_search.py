@@ -43,6 +43,19 @@ def fetch_web_search_provider_by_name(
     return db_session.scalars(stmt).first()
 
 
+def fetch_web_search_provider_by_name_and_type(
+    *,
+    name: str,
+    provider_type: WebSearchProviderType,
+    db_session: Session,
+) -> InternetSearchProvider | None:
+    stmt = select(InternetSearchProvider).where(
+        InternetSearchProvider.name.ilike(name),
+        InternetSearchProvider.provider_type == provider_type.value,
+    )
+    return db_session.scalars(stmt).first()
+
+
 def fetch_web_search_provider_by_type(
     provider_type: WebSearchProviderType, db_session: Session
 ) -> InternetSearchProvider | None:

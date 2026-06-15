@@ -61,8 +61,8 @@
 |---|---|---|---|
 | **E1** | i18n + 品牌替换 | 🟢 验证期·进行中 | 已有 spec+plan。复用现有 web,中文优先 |
 | **E2** | 国产模型接入（平台默认 OpenAI-compatible Provider） | 🟢 验证期·进行中 | 第一阶段收敛为平台自动 seed 一个 OpenAI-compatible 主模型到 Onyx 原生 LLMProvider 架构；用户注册后即可用，不进入 Admin LLM 配置页，也不选择模型档位；平台只配置 API base URL、API key、主模型名 |
-| **E3** | 超级对话调优 | 🟢 验证期 | 默认 Persona 的中文 system prompt、工具使用策略、回答体验打磨；搜索由 Agent 在 `web_search` 调用中选择 `lite` / `deep`，而不是用户手动选择 |
-| **E4** | 深度研究中文化 | 🟢 验证期 | 与 E3 共享“中文 Agent 搜索与研究能力层”：问题拆解、query portfolio、来源路由、证据评估、中文报告成稿；默认搜索 provider 接入 Glomi Search Gateway |
+| **E3** | 超级对话调优 | 🟢 验证期 | 默认 Persona 的中文 system prompt、工具使用策略、回答体验打磨；搜索由 Agent 在 `web_search` 调用中选择 `lite` / `medium` / `deep`，而不是用户手动选择 |
+| **E4** | 深度研究中文化 | 🟢 验证期 | 与 E3 共享“中文 Agent 搜索与研究能力层”：问题拆解、query portfolio、来源路由、证据评估、中文报告成稿；默认搜索 provider 第一期接入 Glomi Search Gateway |
 | **E5** | Craft C 端化 | 🟡 王牌期 P2 | 去 `subscription_check`、沙箱镜像/网络国内化（k8s）、消费级生成入口 + 模板 |
 | **E6** | 生成物分享（Sparkpage 式） | 🟡 王牌期 P2 | 生成结果公开分享页,获客/传播 |
 | **E7** | 鉴权重建 | 🔵 商业化期·延后 | 剥离 `ee` 鉴权,微信扫码（网站应用 OAuth）+ 手机号验证码 |
@@ -75,14 +75,14 @@
 
 > **架构洞察（为什么 E13 是"增强"而非"重写"）**：在 Onyx 里「**子 agent = 一个内部跑 agent loop 的工具**」。主对话（`chat/llm_loop.py`）已是"单 agent + 工具自动编排",且 `CodingAgentTool` 就是把内部 agent loop 包成工具的现成范式;深度研究（`dr_loop.py`）已是"orchestrator 规划 → 派 research 子 agent → 汇总"的完整实现,只是靠请求上的 `deep_research` 开关触发（`process_message.py:1223`），不是主控自动决定。**原语齐备（子 agent 即工具 + orchestrator 模板 + 流式协议），E13 差的只是上面那层"自动路由 + 多子 agent 编排"。**
 
-> **E3/E4 联合决策**：超级对话调优和深度研究中文化不应拆成两套搜索逻辑。两者共享一层“中文 Agent 搜索与研究能力”：判断何时搜索、如何拆问题、生成什么 query、搜什么来源、串行还是并行、如何评估证据、如何把证据打包给 LLM。普通对话不再固定等于轻量搜索，Agent 在 `web_search` 工具调用里自行选择 `mode=lite` 或 `mode=deep`；完整 Deep Research 仍是独立研究工作流。本期不做关键词规则匹配，也不增加前置 LLM router。默认搜索 provider 接入 Glomi Search Gateway，第一期 Gateway 内部可走 Tavily，后续支持多来源聚合。
+> **E3/E4 联合决策**：超级对话调优和深度研究中文化不应拆成两套搜索逻辑。两者共享一层“中文 Agent 搜索与研究能力”：判断何时搜索、如何拆问题、生成什么 query、搜什么来源、串行还是并行、如何评估证据、如何把证据打包给 LLM。普通对话不再固定等于轻量搜索，Agent 在 `web_search` 工具调用里自行选择 `mode=lite`、`mode=medium` 或 `mode=deep`；完整 Deep Research 仍是独立研究工作流。本期不做关键词规则匹配，也不增加前置 LLM router。默认搜索 provider 接入 Glomi Search Gateway，第一期 Gateway 内部可走 Tavily，后续支持多来源聚合。当前仓库已补一个本地 FastAPI Gateway，便于用 Tavily API key 跑通内测链路；其中 `medium` 模式覆盖一次性研究型检索，`deep` 模式覆盖更高召回检索，两者都使用 bounded query fan-out 和 Tavily raw-content snippet fallback。`open_url` 仍优先真实抓页，但在抓取失败时可把最近 web_search 的 URL snippet 作为明确标注的 fallback evidence 返回；这仍不替代完整 Deep Research 子 agent 编排。Gateway 内部已拆成公共 service + adapter registry + capability policy，后续接 Brave / 国内搜索 / 自研源时新增 adapter，不改 Onyx 工具契约。Search Debug Drawer 作为开发/管理员排障能力，帮助观察 provider、mode、channel、queries、URL、耗时和失败原因，不作为普通用户配置入口。
 
 ---
 
 ## 6. 分期路线
 
 ### Phase A —— 核心能力验证（当前唯一重心）
-- **内容**：E1 i18n + E2 国产模型接入（平台默认 OpenAI-compatible 主模型自动初始化）+ E3/E4 中文 Agent 搜索与研究能力层（平台默认 Glomi Search Gateway + Agent 自动选择 Lite/Deep 搜索 + 深度研究中文报告）。
+- **内容**：E1 i18n + E2 国产模型接入（平台默认 OpenAI-compatible 主模型自动初始化）+ E3/E4 中文 Agent 搜索与研究能力层（平台默认 Glomi Search Gateway + Agent 自动选择 Lite/Medium/Deep 搜索 + 深度研究中文报告）。
 - **鉴权/支付**：**验证期不做**。用 `AUTH_TYPE=basic` / 单用户 / 内测白名单即可,不碰微信登录、不碰支付。
 - **交付物**：一个**中文、接国产模型、对话 + 深度研究可用**的内测版（本地或小范围内测）。
 - **验证成功标准**：
@@ -107,7 +107,7 @@
 | 决策 | 现状 | 倾向/建议 |
 |---|---|---|
 | **对话模型** | ✅ 已定 | 验证期优先平台统一配置一个 OpenAI-compatible 主模型；C 端不暴露 API key/base URL/参数配置，也不提供模型档位。规模化/合规后再考虑多模型策略或自部署开源模型 |
-| **默认搜索服务** | ✅ 已定 | Onyx 侧自动 seed `Glomi Search / glomi` provider，配置只暴露 Gateway base URL、API key、可选 channel；Agent 在 `web_search` 工具调用中选择 `lite` / `deep`，不做代码规则匹配，不增加前置 LLM router |
+| **默认搜索服务** | ✅ 已定 | Onyx 侧自动 seed `Glomi Search / glomi` provider，配置只暴露 Gateway base URL、API key、可选 channel；仓库内提供本地 `onyx.search_gateway.server`，第一期把 `channel=tavily` 转成 Tavily 搜索；Agent 在 `web_search` 工具调用中选择 `lite` / `medium` / `deep`，不做代码规则匹配，不增加前置 LLM router；Gateway 的 `medium` / `deep` 会做限量 query fan-out、Tavily advanced search、raw-content snippet fallback；`open_url` 抓取失败时可使用最近 web_search snippet 作为标注过的 fallback evidence；Gateway 内部用 adapter capability matrix 支持未来 Tavily / Brave / 国内搜索 / 自研源切换 |
 | **embedding 检索模型** | forward note | 仅当做「文档/知识库 RAG」时才需换中文 embedding（BGE / Qwen-embedding / 云端中文）。纯深度研究（走 web 搜索）验证期不依赖,先不管 |
 | **商业模式** | 未定 | 订阅 / 积分按量 / 免费+增值,Phase C 前定 |
 | **定价与套餐** | 未定 | 随商业模式定 |
@@ -120,7 +120,7 @@
 
 - 本蓝图 = **顶层**;每个 Epic 各自走独立的 `spec → plan → 实现`。
 - 已落地：**E1**（i18n + UI 资源替换）的 spec 与 plan。
-- **下一步建议**：E1 已落，E2 纠偏为“注册即有平台默认 OpenAI-compatible 主模型”，以 `docs/superpowers/specs/2026-06-14-platform-default-openai-compatible-llm-design.md` 为实施依据；E3/E4 继续以 `docs/superpowers/specs/2026-06-13-agent-search-and-research-strategy-design.md` 为搜索方法论基础，并以 `docs/superpowers/specs/2026-06-15-platform-default-glomi-search-gateway-design.md` 落地平台默认 Glomi Search Gateway 与 Agent 自动 Lite/Deep 搜索模式。
+- **下一步建议**：E1 已落，E2 纠偏为“注册即有平台默认 OpenAI-compatible 主模型”，以 `docs/superpowers/specs/2026-06-14-platform-default-openai-compatible-llm-design.md` 为实施依据；E3/E4 继续以 `docs/superpowers/specs/2026-06-13-agent-search-and-research-strategy-design.md` 为搜索方法论基础，平台默认 Glomi Search Gateway 与 Agent 自动 Lite/Medium/Deep 搜索模式已按 `docs/superpowers/specs/2026-06-15-platform-default-glomi-search-gateway-design.md` 进入一期实现，本地 Gateway 与 open_url snippet fallback 已可用，后续重点是解决本地 Tavily TLS 连通性后做端到端中文搜索/研究 benchmark。
 
 ---
 

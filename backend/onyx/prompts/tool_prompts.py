@@ -47,6 +47,7 @@ Use the `web_search` tool to access up-to-date information from the web. Some ex
 - Freshness: when the answer might be enhanced by up-to-date information on a topic. Very important for topics that are changing or evolving.
 - Accuracy: if the cost of outdated/inaccurate information is high.
 - Niche Information: when detailed info is not widely known or understood (but is likely found on the internet).{site_colon_disabled}
+When calling web_search, include a `mode` argument. Use mode=lite for fast, focused searches that answer a simple freshness or fact-check need such as weather, price, schedule, or a single current fact. Use mode=medium for one-shot research on a framework, project, product, company, tool, or moderately complex topic where a few source angles are enough. Use mode=deep for higher-recall research where source diversity, primary evidence, comparison, risk, or uncertainty matters.
 """
     + "\n"
     + QUERY_PORTFOLIO_GUIDANCE

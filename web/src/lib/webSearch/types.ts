@@ -3,6 +3,7 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 // ── Provider type literals ────────────────────────────────────────────────────
 
 export type WebSearchProviderType =
+  | "glomi"
   | "google_pse"
   | "serper"
   | "exa"

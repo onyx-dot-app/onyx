@@ -4,6 +4,7 @@ import {
   SearchToolStart,
   SearchToolQueriesDelta,
   SearchToolDocumentsDelta,
+  SearchToolDebugDelta,
   SectionEnd,
 } from "@/app/app/services/streamingModels";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -29,10 +30,30 @@ export const RESULTS_PER_EXPANSION = 10;
 export interface SearchState {
   queries: string[];
   results: OnyxDocument[];
+  debug?: SearchDebugState;
   isSearching: boolean;
   hasResults: boolean;
   isComplete: boolean;
   isInternetSearch: boolean;
+}
+
+export interface SearchDebugResultState {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+export interface SearchDebugState {
+  providerType: string;
+  providerName?: string | null;
+  mode: string;
+  channel?: string | null;
+  queries: string[];
+  durationMs: number;
+  resultCount: number;
+  results: SearchDebugResultState[];
+  failedQueries: Record<string, string>;
+  error?: string | null;
 }
 
 /** Constructs the current search state from search tool packets. */
@@ -54,6 +75,12 @@ export const constructCurrentSearchState = (
       (packet) => packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
     )
     .map((packet) => packet.obj as SearchToolDocumentsDelta);
+
+  const debugDeltas = packets
+    .filter((packet) => packet.obj.type === PacketType.SEARCH_TOOL_DEBUG_DELTA)
+    .map((packet) => packet.obj as SearchToolDebugDelta);
+  const debugDelta =
+    debugDeltas.length > 0 ? debugDeltas[debugDeltas.length - 1] : undefined;
 
   const searchEnd = packets.find(
     (packet) =>
@@ -85,10 +112,25 @@ export const constructCurrentSearchState = (
   const hasResults = results.length > 0;
   const isComplete = Boolean(searchStart && searchEnd);
   const isInternetSearch = searchStart?.is_internet_search || false;
+  const debug: SearchDebugState | undefined = debugDelta
+    ? {
+        providerType: debugDelta.provider_type,
+        providerName: debugDelta.provider_name,
+        mode: debugDelta.mode,
+        channel: debugDelta.channel,
+        queries: debugDelta.queries ?? [],
+        durationMs: debugDelta.duration_ms,
+        resultCount: debugDelta.result_count,
+        results: debugDelta.results ?? [],
+        failedQueries: debugDelta.failed_queries ?? {},
+        error: debugDelta.error,
+      }
+    : undefined;
 
   return {
     queries,
     results,
+    debug,
     isSearching,
     hasResults,
     isComplete,

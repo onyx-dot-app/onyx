@@ -107,6 +107,72 @@ class TestMergeToolCalls:
         assert result[0].tool_name == "web_search"
         assert result[0].tool_args["queries"] == ["web1", "web2", "web3"]
 
+    def test_multiple_web_search_tool_calls_merged_preserves_deep_mode(
+        self,
+    ) -> None:
+        """Merged WebSearchTool calls use deep if any merged call requested deep."""
+        calls = [
+            _make_tool_call(
+                tool_name="web_search",
+                tool_args={"queries": ["web1"], "mode": "lite"},
+                tool_call_id="call_1",
+            ),
+            _make_tool_call(
+                tool_name="web_search",
+                tool_args={"queries": ["web2"], "mode": "deep"},
+                tool_call_id="call_2",
+            ),
+        ]
+        result = _merge_tool_calls(calls)
+
+        assert len(result) == 1
+        assert result[0].tool_args["queries"] == ["web1", "web2"]
+        assert result[0].tool_args["mode"] == "deep"
+
+    def test_multiple_web_search_tool_calls_merged_preserves_medium_mode(
+        self,
+    ) -> None:
+        """Merged WebSearchTool calls use medium if no call requested deep."""
+        calls = [
+            _make_tool_call(
+                tool_name="web_search",
+                tool_args={"queries": ["web1"], "mode": "lite"},
+                tool_call_id="call_1",
+            ),
+            _make_tool_call(
+                tool_name="web_search",
+                tool_args={"queries": ["web2"], "mode": "medium"},
+                tool_call_id="call_2",
+            ),
+        ]
+        result = _merge_tool_calls(calls)
+
+        assert len(result) == 1
+        assert result[0].tool_args["queries"] == ["web1", "web2"]
+        assert result[0].tool_args["mode"] == "medium"
+
+    def test_multiple_web_search_tool_calls_merged_deep_wins_over_medium(
+        self,
+    ) -> None:
+        """Merged WebSearchTool calls use deep if any merged call requested deep."""
+        calls = [
+            _make_tool_call(
+                tool_name="web_search",
+                tool_args={"queries": ["web1"], "mode": "medium"},
+                tool_call_id="call_1",
+            ),
+            _make_tool_call(
+                tool_name="web_search",
+                tool_args={"queries": ["web2"], "mode": "deep"},
+                tool_call_id="call_2",
+            ),
+        ]
+        result = _merge_tool_calls(calls)
+
+        assert len(result) == 1
+        assert result[0].tool_args["queries"] == ["web1", "web2"]
+        assert result[0].tool_args["mode"] == "deep"
+
     def test_multiple_open_url_tool_calls_merged(self) -> None:
         """Multiple OpenURLTool calls have their urls merged."""
         calls = [

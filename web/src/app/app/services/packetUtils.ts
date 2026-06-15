@@ -14,6 +14,7 @@ export function isToolPacket(
     PacketType.SEARCH_TOOL_START,
     PacketType.SEARCH_TOOL_QUERIES_DELTA,
     PacketType.SEARCH_TOOL_DOCUMENTS_DELTA,
+    PacketType.SEARCH_TOOL_DEBUG_DELTA,
     PacketType.PYTHON_TOOL_START,
     PacketType.PYTHON_TOOL_DELTA,
     PacketType.TOOL_CALL_ARGUMENT_DELTA,
@@ -73,7 +74,8 @@ export function isSearchToolPacket(packet: Packet): boolean {
   return (
     packet.obj.type === PacketType.SEARCH_TOOL_START ||
     packet.obj.type === PacketType.SEARCH_TOOL_QUERIES_DELTA ||
-    packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
+    packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA ||
+    packet.obj.type === PacketType.SEARCH_TOOL_DEBUG_DELTA
   );
 }
 

@@ -23,6 +23,12 @@ class ProviderType(Enum):
     EXA = "exa"
 
 
+class WebSearchMode(str, Enum):
+    LITE = "lite"
+    MEDIUM = "medium"
+    DEEP = "deep"
+
+
 class WebSearchResult(BaseModel):
     title: str
     link: str
@@ -44,9 +50,28 @@ class WebSearchProvider:
         """
         return True
 
+    @property
+    def supports_batch_queries(self) -> bool:
+        return False
+
     @abstractmethod
     def search(self, query: str) -> Sequence[WebSearchResult]:
         pass
+
+    def search_batch(
+        self,
+        queries: Sequence[str],
+        *,
+        mode: WebSearchMode = WebSearchMode.LITE,
+        max_results: int | None = None,
+    ) -> Sequence[WebSearchResult]:
+        _ = mode
+        results: list[WebSearchResult] = []
+        for query in queries:
+            results.extend(self.search(query))
+        if max_results is not None:
+            return results[:max_results]
+        return results
 
     @abstractmethod
     def test_connection(self) -> dict[str, str]:

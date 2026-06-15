@@ -13,6 +13,9 @@ from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
 from onyx.tools.tool_implementations.web_search.clients.brave_client import BraveClient
 from onyx.tools.tool_implementations.web_search.clients.exa_client import ExaClient
+from onyx.tools.tool_implementations.web_search.clients.glomi_search_client import (
+    GlomiSearchClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.google_pse_client import (
     GooglePSEClient,
 )
@@ -119,6 +122,22 @@ def build_search_provider_from_config(
             search_engine_id=search_engine_id,
             num_results=num_results,
             timeout_seconds=int(config.get("timeout_seconds") or 10),
+        )
+    if provider_type == WebSearchProviderType.GLOMI:
+        base_url = config.get("base_url")
+        if not base_url:
+            raise ValueError("Glomi Search provider requires base_url in config.")
+        return GlomiSearchClient(
+            api_key=api_key,
+            base_url=base_url,
+            channel=config.get("channel"),
+            num_results=num_results,
+            timeout_seconds=_parse_positive_int_config(
+                raw_value=config.get("timeout_seconds"),
+                default=15,
+                provider_name="Glomi Search",
+                config_key="timeout_seconds",
+            ),
         )
 
     raise ValueError(f"Unknown provider type: {provider_type.value}")

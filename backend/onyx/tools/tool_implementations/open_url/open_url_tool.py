@@ -39,11 +39,15 @@ from onyx.tools.tool_implementations.open_url.url_normalization import normalize
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
+from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.tools.tool_implementations.web_search.providers import (
     get_default_content_provider,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
     inference_section_from_internet_page_scrape,
+)
+from onyx.tools.tool_implementations.web_search.utils import (
+    inference_section_from_internet_search_result,
 )
 from onyx.tools.tool_implementations.web_search.utils import MAX_CHARS_PER_URL
 from onyx.utils.logger import setup_logger
@@ -68,6 +72,11 @@ MAX_CHARS_ACROSS_URLS = 10 * MAX_CHARS_PER_URL
 # This is for truncation purposes, if a document is small (unless it goes into truncation flow),
 # it still gets included normally.
 MIN_CONTENT_CHARS = 200
+
+SEARCH_SNIPPET_FALLBACK_PREFIX = (
+    "open_url could not fetch this page. The following is a recent web_search "
+    "snippet fallback, not full page content:\n\n"
+)
 
 
 class IndexedDocumentRequest(BaseModel):
@@ -163,6 +172,94 @@ def _url_lookup_variants(url: str) -> set[str]:
     else:
         variants.add(f"{normalized}/")
     return {variant for variant in variants if variant}
+
+
+def _web_url_lookup_variants(url: str) -> set[str]:
+    variants = {url}
+    normalized = normalize_web_content_url(url)
+    if normalized:
+        variants.add(normalized)
+        if normalized.endswith("/"):
+            variants.add(normalized.rstrip("/"))
+        else:
+            variants.add(f"{normalized}/")
+    return {variant for variant in variants if variant}
+
+
+def _section_source_links(sections: list[InferenceSection]) -> set[str]:
+    links: set[str] = set()
+    for section in sections:
+        for link in section.center_chunk.source_links.values():
+            links.update(_web_url_lookup_variants(link))
+    return links
+
+
+def _find_snippet_for_url(
+    url: str,
+    url_snippet_map: dict[str, str],
+) -> tuple[str, str] | None:
+    for variant in _web_url_lookup_variants(url):
+        snippet = url_snippet_map.get(variant)
+        if snippet and snippet.strip():
+            return variant, snippet.strip()
+    return None
+
+
+def _build_search_snippet_fallback_sections(
+    *,
+    urls: list[str],
+    existing_sections: list[InferenceSection],
+    failed_web_fetches: list[FailedFetch],
+    url_snippet_map: dict[str, str],
+) -> tuple[list[InferenceSection], list[FailedFetch]]:
+    if not failed_web_fetches or not url_snippet_map:
+        return [], failed_web_fetches
+
+    requested_variants = {
+        variant for url in urls for variant in _web_url_lookup_variants(url)
+    }
+    existing_links = _section_source_links(existing_sections)
+    fallback_sections: list[InferenceSection] = []
+    resolved_failure_urls: set[str] = set()
+    used_fallback_links: set[str] = set()
+
+    for failure in failed_web_fetches:
+        if not failure.url:
+            continue
+        failure_variants = _web_url_lookup_variants(failure.url)
+        if not requested_variants.intersection(failure_variants):
+            continue
+        if existing_links.intersection(failure_variants):
+            continue
+
+        snippet_match = _find_snippet_for_url(failure.url, url_snippet_map)
+        if snippet_match is None:
+            continue
+
+        fallback_link, snippet = snippet_match
+        if fallback_link in used_fallback_links:
+            resolved_failure_urls.add(failure.url)
+            continue
+
+        used_fallback_links.add(fallback_link)
+        resolved_failure_urls.add(failure.url)
+        fallback_sections.append(
+            inference_section_from_internet_search_result(
+                WebSearchResult(
+                    title=f"Search snippet fallback for {fallback_link}",
+                    link=fallback_link,
+                    snippet=SEARCH_SNIPPET_FALLBACK_PREFIX + snippet,
+                )
+            )
+        )
+
+    if not resolved_failure_urls:
+        return fallback_sections, failed_web_fetches
+
+    unresolved_failures = [
+        failure for failure in failed_web_fetches if failure.url not in resolved_failure_urls
+    ]
+    return fallback_sections, unresolved_failures
 
 
 def _lookup_document_ids_by_link(
@@ -634,6 +731,15 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
                 urls,
                 failed_web_fetches,
             )
+            fallback_sections, failed_web_fetches = (
+                _build_search_snippet_fallback_sections(
+                    urls=urls,
+                    existing_sections=inference_sections,
+                    failed_web_fetches=failed_web_fetches,
+                    url_snippet_map=override_kwargs.url_snippet_map,
+                )
+            )
+            inference_sections.extend(fallback_sections)
 
         if not inference_sections:
             failure_msg = _build_failure_message(

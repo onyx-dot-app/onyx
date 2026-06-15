@@ -9,6 +9,7 @@ def test_deep_research_web_tool_description_contains_query_strategy() -> None:
     assert "query portfolio" in WEB_SEARCH_TOOL_DESCRIPTION
     assert "Chinese" in WEB_SEARCH_TOOL_DESCRIPTION
     assert "Source routing" in WEB_SEARCH_TOOL_DESCRIPTION
+    assert "mode=deep" in WEB_SEARCH_TOOL_DESCRIPTION
 
 
 def test_deep_research_open_url_description_contains_evidence_reading() -> None:

@@ -33,6 +33,7 @@ from onyx.tools.tool_implementations.memory.memory_tool import MemoryToolOverrid
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.models import WebSearchMode
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tracing.framework.create import function_span
 from onyx.tracing.framework.spans import SpanError
@@ -44,6 +45,12 @@ logger = setup_logger()
 QUERIES_FIELD = "queries"
 URLS_FIELD = "urls"
 GENERIC_TOOL_ERROR_MESSAGE = "Tool failed with error: {error}"
+WEB_SEARCH_MODE_FIELD = "mode"
+WEB_SEARCH_MODE_PRIORITY = {
+    WebSearchMode.LITE.value: 0,
+    WebSearchMode.MEDIUM.value: 1,
+    WebSearchMode.DEEP.value: 2,
+}
 
 # 10 minute timeout for tool execution to prevent indefinite hangs
 TOOL_EXECUTION_TIMEOUT_SECONDS = 10 * 60
@@ -95,6 +102,10 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
             # Create a merged tool call using the first call's ID and merging the field
             merged_args = calls[0].tool_args.copy()
             merged_args[merge_field] = all_values
+            if tool_name == WebSearchTool.NAME:
+                merged_mode = _highest_web_search_mode(calls)
+                if merged_mode is not None:
+                    merged_args[WEB_SEARCH_MODE_FIELD] = merged_mode
 
             merged_call = ToolCallKickoff(
                 tool_call_id=calls[0].tool_call_id,  # Use first call's ID
@@ -109,6 +120,19 @@ def _merge_tool_calls(tool_calls: list[ToolCallKickoff]) -> list[ToolCallKickoff
             merged_calls.extend(calls)
 
     return merged_calls
+
+
+def _highest_web_search_mode(calls: list[ToolCallKickoff]) -> str | None:
+    highest_mode: str | None = None
+    highest_priority = -1
+    for call in calls:
+        mode = str(call.tool_args.get(WEB_SEARCH_MODE_FIELD, "")).lower()
+        priority = WEB_SEARCH_MODE_PRIORITY.get(mode)
+        if priority is None or priority <= highest_priority:
+            continue
+        highest_mode = mode
+        highest_priority = priority
+    return highest_mode
 
 
 def _safe_run_single_tool(
@@ -246,6 +270,7 @@ def run_tool_calls(
     # When False, don't pass memory context to search tools for query expansion
     # (but still pass it to the memory tool for persistence)
     inject_memories_in_prompt: bool = True,
+    web_search_default_mode: WebSearchMode = WebSearchMode.LITE,
 ) -> ParallelToolCallResponse:
     """Run (optionally merged) tool calls in parallel and update citation mappings.
 
@@ -379,6 +404,7 @@ def run_tool_calls(
         elif isinstance(tool, WebSearchTool):
             override_kwargs = WebSearchToolOverrideKwargs(
                 starting_citation_num=starting_citation_num,
+                default_mode=web_search_default_mode,
             )
             # Increment citation number for next search tool to avoid conflicts
             starting_citation_num += 100

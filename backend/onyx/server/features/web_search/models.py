@@ -4,6 +4,7 @@ from pydantic import field_validator
 
 from onyx.tools.models import LlmOpenUrlResult
 from onyx.tools.models import LlmWebSearchResult
+from onyx.tools.tool_implementations.web_search.models import WebSearchMode
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 
@@ -19,6 +20,10 @@ class WebSearchToolRequest(BaseModel):
         description=(
             "Optional cap on number of results to return per query. Defaults to 10."
         ),
+    )
+    mode: WebSearchMode = Field(
+        default=WebSearchMode.LITE,
+        description="Search strength to request from the configured provider.",
     )
 
     @field_validator("queries")

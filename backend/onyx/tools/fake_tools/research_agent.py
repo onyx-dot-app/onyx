@@ -65,6 +65,7 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.web_search.models import WebSearchMode
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.tool_runner import run_tool_calls
@@ -466,6 +467,7 @@ def run_research_agent_call(
                                 for search_doc in tool_call.search_docs
                             ]
                         ),
+                        web_search_default_mode=WebSearchMode.DEEP,
                     )
                     tool_responses = parallel_tool_call_results.tool_responses
                     citation_mapping = (

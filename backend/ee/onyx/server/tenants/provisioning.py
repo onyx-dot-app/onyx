@@ -31,12 +31,13 @@ from onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
 from onyx.configs.app_configs import OPENROUTER_DEFAULT_API_KEY
 from onyx.configs.app_configs import VERTEXAI_DEFAULT_CREDENTIALS
 from onyx.configs.app_configs import VERTEXAI_DEFAULT_LOCATION
+from onyx.db.consumer_llm import seed_consumer_default_llm_provider
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.consumer_llm import seed_consumer_default_llm_provider
 from onyx.db.external_app import create_external_app
 from onyx.db.external_app import get_built_in_external_app
 from onyx.db.external_app import set_external_app_organization_credentials
+from onyx.db.glomi_search import seed_glomi_default_web_search_provider
 from onyx.db.image_generation import create_default_image_gen_config_from_api_key
 from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
 from onyx.db.llm import fetch_existing_llm_provider_by_type_nameless
@@ -494,6 +495,11 @@ def configure_default_api_keys(db_session: Session) -> None:
         seed_consumer_default_llm_provider(db_session)
     except Exception:
         logger.exception("Failed to configure consumer default LLM provider")
+
+    try:
+        seed_glomi_default_web_search_provider(db_session)
+    except Exception:
+        logger.exception("Failed to configure Glomi Search provider")
 
     # Configure Cohere embedding provider
     if COHERE_DEFAULT_API_KEY:

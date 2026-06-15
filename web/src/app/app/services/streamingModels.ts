@@ -19,6 +19,7 @@ export enum PacketType {
   SEARCH_TOOL_START = "search_tool_start",
   SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta",
   SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta",
+  SEARCH_TOOL_DEBUG_DELTA = "search_tool_debug_delta",
   IMAGE_GENERATION_TOOL_START = "image_generation_start",
   IMAGE_GENERATION_TOOL_DELTA = "image_generation_final",
   PYTHON_TOOL_START = "python_tool_start",
@@ -134,6 +135,26 @@ export interface SearchToolQueriesDelta extends BaseObj {
 export interface SearchToolDocumentsDelta extends BaseObj {
   type: "search_tool_documents_delta";
   documents: OnyxDocument[];
+}
+
+export interface SearchToolDebugResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+export interface SearchToolDebugDelta extends BaseObj {
+  type: "search_tool_debug_delta";
+  provider_type: string;
+  provider_name?: string | null;
+  mode: "lite" | "medium" | "deep" | string;
+  channel?: string | null;
+  queries: string[];
+  duration_ms: number;
+  result_count: number;
+  results: SearchToolDebugResult[];
+  failed_queries: Record<string, string>;
+  error?: string | null;
 }
 
 export type ImageShape = "square" | "landscape" | "portrait";
@@ -354,6 +375,7 @@ export type SearchToolObj =
   | SearchToolStart
   | SearchToolQueriesDelta
   | SearchToolDocumentsDelta
+  | SearchToolDebugDelta
   | SectionEnd
   | PacketError;
 export type ImageGenerationToolObj =

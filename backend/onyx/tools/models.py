@@ -25,6 +25,7 @@ from onyx.server.query_and_chat.streaming_models import CustomToolErrorInfo
 from onyx.server.query_and_chat.streaming_models import GeneratedImage
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.tools.tool_implementations.web_search.models import WebSearchMode
 
 TOOL_CALL_MSG_FUNC_NAME = "function_name"
 TOOL_CALL_MSG_ARGUMENTS = "arguments"
@@ -158,6 +159,7 @@ class DynamicSchemaInfo(BaseModel):
 class WebSearchToolOverrideKwargs(BaseModel):
     # To know what citation number to start at for constructing the string to the LLM
     starting_citation_num: int
+    default_mode: WebSearchMode = WebSearchMode.LITE
 
 
 class OpenURLToolOverrideKwargs(BaseModel):

@@ -1,6 +1,9 @@
 import pytest
 
 from onyx.tools.tool_implementations.web_search.clients.brave_client import BraveClient
+from onyx.tools.tool_implementations.web_search.clients.glomi_search_client import (
+    GlomiSearchClient,
+)
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
 )
@@ -17,6 +20,7 @@ def test_provider_requires_api_key() -> None:
     assert provider_requires_api_key(WebSearchProviderType.SERPER) is True
     assert provider_requires_api_key(WebSearchProviderType.GOOGLE_PSE) is True
     assert provider_requires_api_key(WebSearchProviderType.SEARXNG) is False
+    assert provider_requires_api_key(WebSearchProviderType.GLOMI) is True
 
 
 def test_build_searxng_provider_without_api_key() -> None:
@@ -87,6 +91,32 @@ def test_build_brave_provider_rejects_invalid_timeout() -> None:
             provider_type=WebSearchProviderType.BRAVE,
             api_key="test-api-key",
             config={"timeout_seconds": "not-an-int"},
+        )
+
+
+def test_build_glomi_provider_with_gateway_config() -> None:
+    provider = build_search_provider_from_config(
+        provider_type=WebSearchProviderType.GLOMI,
+        api_key="gateway-key",
+        config={
+            "base_url": "https://search.example.test",
+            "channel": "tavily",
+            "timeout_seconds": "15",
+        },
+    )
+
+    assert isinstance(provider, GlomiSearchClient)
+    assert provider._base_url == "https://search.example.test"  # noqa: SLF001
+    assert provider._channel == "tavily"  # noqa: SLF001
+    assert provider._timeout_seconds == 15  # noqa: SLF001
+
+
+def test_build_glomi_provider_requires_base_url() -> None:
+    with pytest.raises(ValueError, match="base_url"):
+        build_search_provider_from_config(
+            provider_type=WebSearchProviderType.GLOMI,
+            api_key="gateway-key",
+            config={},
         )
 
 

@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -11,6 +12,8 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import SearchToolDebugDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolDebugResult
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
@@ -22,6 +25,7 @@ from onyx.tools.tool_implementations.utils import (
     convert_inference_sections_to_llm_string,
 )
 from onyx.tools.tool_implementations.web_search.models import DEFAULT_MAX_RESULTS
+from onyx.tools.tool_implementations.web_search.models import WebSearchMode
 from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
@@ -42,6 +46,15 @@ from shared_configs.enums import WebSearchProviderType
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+MODE_FIELD = "mode"
+
+
+def _get_safe_channel(config: Any) -> str | None:
+    if isinstance(config, dict):
+        channel = config.get("channel")
+        if isinstance(channel, str) and channel.strip():
+            return channel.strip()
+    return None
 
 
 def _sanitize_query(query: str) -> str:
@@ -80,6 +93,30 @@ def _normalize_queries_input(raw: Any) -> list[str]:
     return result
 
 
+def _normalize_mode_input(raw: Any, default_mode: WebSearchMode) -> WebSearchMode:
+    if raw is None:
+        return default_mode
+    if isinstance(raw, WebSearchMode):
+        return raw
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        try:
+            return WebSearchMode(normalized)
+        except ValueError as exc:
+            raise ToolCallException(
+                message=f"Invalid web search mode: {raw}",
+                llm_facing_message=(
+                    "Invalid web_search mode. Use one of: 'lite', 'medium', or 'deep'."
+                ),
+            ) from exc
+    raise ToolCallException(
+        message=f"Invalid web search mode type: {type(raw).__name__}",
+        llm_facing_message=(
+            "Invalid web_search mode. Use 'lite', 'medium', or 'deep'."
+        ),
+    )
+
+
 class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
     NAME = "web_search"
     DESCRIPTION = "Search the web for information."
@@ -95,12 +132,17 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             if provider_model is None:
                 raise RuntimeError("No web search provider configured.")
             provider_type = WebSearchProviderType(provider_model.provider_type)
+            provider_name = provider_model.name
             api_key = (
                 provider_model.api_key.get_value(apply_mask=False)
                 if provider_model.api_key
                 else None
             )
             config = provider_model.config
+
+        self._provider_type = provider_type
+        self._provider_name = provider_name
+        self._provider_channel = _get_safe_channel(config)
 
         if provider_requires_api_key(provider_type) and api_key is None:
             raise RuntimeError(
@@ -158,8 +200,18 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                             "items": {"type": "string"},
                             "description": "One or more queries to look up on the web. Must contain only printable characters",
                         },
+                        MODE_FIELD: {
+                            "type": "string",
+                            "enum": [mode.value for mode in WebSearchMode],
+                            "description": (
+                                "Search strength. Use 'lite' for fast, concise freshness checks. "
+                                "Use 'medium' for one-shot research on frameworks, projects, products, "
+                                "or moderately complex topics. Use 'deep' for higher-recall research, "
+                                "fact checking, comparisons, risk, or when source diversity and primary evidence matter."
+                            ),
+                        },
                     },
-                    "required": [QUERIES_FIELD],
+                    "required": [QUERIES_FIELD, MODE_FIELD],
                 },
             },
         }
@@ -195,6 +247,65 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             logger.warning("Web search query '%s' failed: %s", query, error_msg)
             return (None, error_msg)
 
+    def _safe_execute_batch_search(
+        self,
+        queries: list[str],
+        provider: Any,
+        mode: WebSearchMode,
+    ) -> tuple[list[WebSearchResult] | None, str | None]:
+        try:
+            raw_results = list(
+                provider.search_batch(
+                    queries,
+                    mode=mode,
+                    max_results=DEFAULT_MAX_RESULTS,
+                )
+            )
+            filtered_results = filter_web_search_results_with_no_title_or_snippet(
+                raw_results
+            )
+            return (filtered_results[:DEFAULT_MAX_RESULTS], None)
+        except Exception as e:
+            error_msg = str(e)
+            logger.warning("Batch web search failed: %s", error_msg)
+            return (None, error_msg)
+
+    def _emit_debug_delta(
+        self,
+        *,
+        placement: Placement,
+        mode: WebSearchMode,
+        queries: list[str],
+        duration_ms: int,
+        results: list[WebSearchResult],
+        failed_queries: dict[str, str],
+        error: str | None,
+    ) -> None:
+        self.emitter.emit(
+            Packet(
+                placement=placement,
+                obj=SearchToolDebugDelta(
+                    provider_type=self._provider_type.value,
+                    provider_name=self._provider_name,
+                    mode=mode.value,
+                    channel=self._provider_channel,
+                    queries=queries,
+                    duration_ms=duration_ms,
+                    result_count=len(results),
+                    results=[
+                        SearchToolDebugResult(
+                            title=result.title,
+                            url=result.link,
+                            snippet=result.snippet,
+                        )
+                        for result in results
+                    ],
+                    failed_queries=failed_queries,
+                    error=error,
+                ),
+            )
+        )
+
     def run(
         self,
         placement: Placement,
@@ -222,6 +333,10 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                     "whitespace-only). Please provide a real search query."
                 ),
             )
+        mode = _normalize_mode_input(
+            llm_kwargs.get(MODE_FIELD),
+            override_kwargs.default_mode,
+        )
 
         # Emit queries
         self.emitter.emit(
@@ -231,27 +346,54 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             )
         )
 
-        # Perform searches in parallel with error capture
-        functions_with_args = [
-            (self._safe_execute_single_search, (query, self._provider))
-            for query in queries
-        ]
-        search_results_with_errors: list[
-            tuple[list[WebSearchResult] | None, str | None]
-        ] = run_functions_tuples_in_parallel(
-            functions_with_args,
-            allow_failures=False,  # Our wrapper handles errors internally
-        )
+        search_started_at = time.monotonic()
 
-        # Separate successful results from failures
-        valid_results: list[list[WebSearchResult]] = []
-        failed_queries: dict[str, str] = {}
+        if getattr(self._provider, "supports_batch_queries", False) is True:
+            batch_results, batch_error = self._safe_execute_batch_search(
+                queries,
+                self._provider,
+                mode,
+            )
+            if batch_error is not None or batch_results is None:
+                self._emit_debug_delta(
+                    placement=placement,
+                    mode=mode,
+                    queries=queries,
+                    duration_ms=int((time.monotonic() - search_started_at) * 1000),
+                    results=[],
+                    failed_queries={},
+                    error=batch_error,
+                )
+                raise ToolCallException(
+                    message=f"Web search batch failed: {batch_error}",
+                    llm_facing_message=(
+                        f"Web search failed. Provider error: {batch_error}"
+                    ),
+                )
+            valid_results = [batch_results]
+            failed_queries: dict[str, str] = {}
+        else:
+            # Perform searches in parallel with error capture
+            functions_with_args = [
+                (self._safe_execute_single_search, (query, self._provider))
+                for query in queries
+            ]
+            search_results_with_errors: list[
+                tuple[list[WebSearchResult] | None, str | None]
+            ] = run_functions_tuples_in_parallel(
+                functions_with_args,
+                allow_failures=False,  # Our wrapper handles errors internally
+            )
 
-        for query, (results, error) in zip(queries, search_results_with_errors):
-            if error is not None:
-                failed_queries[query] = error
-            elif results is not None:
-                valid_results.append(results)
+            # Separate successful results from failures
+            valid_results = []
+            failed_queries = {}
+
+            for query, (results, error) in zip(queries, search_results_with_errors):
+                if error is not None:
+                    failed_queries[query] = error
+                elif results is not None:
+                    valid_results.append(results)
 
         # Log partial failures but continue if we have at least one success
         if failed_queries and valid_results:
@@ -265,6 +407,15 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
         # If all queries failed, raise ToolCallException with details
         if not valid_results:
             error_details = json.dumps(failed_queries, indent=2)
+            self._emit_debug_delta(
+                placement=placement,
+                mode=mode,
+                queries=queries,
+                duration_ms=int((time.monotonic() - search_started_at) * 1000),
+                results=[],
+                failed_queries=failed_queries,
+                error=error_details,
+            )
             raise ToolCallException(
                 message=f"All web search queries failed: {error_details}",
                 llm_facing_message=(
@@ -298,6 +449,17 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
                 # Stop if no more results to add
                 if not added_any:
                     break
+
+        duration_ms = int((time.monotonic() - search_started_at) * 1000)
+        self._emit_debug_delta(
+            placement=placement,
+            mode=mode,
+            queries=queries,
+            duration_ms=duration_ms,
+            results=all_search_results,
+            failed_queries=failed_queries,
+            error=None,
+        )
 
         # This should be a very rare case and is due to not failing loudly enough in the search provider implementation.
         if not all_search_results:

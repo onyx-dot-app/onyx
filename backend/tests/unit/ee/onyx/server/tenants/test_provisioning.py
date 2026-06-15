@@ -24,7 +24,7 @@ def _patch_recommendations() -> MagicMock:
 def _run_configure(
     *,
     enabled: bool,
-) -> tuple[MagicMock, MagicMock, MagicMock]:
+) -> tuple[MagicMock, MagicMock, MagicMock, MagicMock]:
     """Execute `configure_default_api_keys` with all four cloud key env vars
     set to non-empty placeholders and the auto-provision flag toggled.
 
@@ -59,6 +59,9 @@ def _run_configure(
             f"{_PROVISIONING_MODULE}.seed_consumer_default_llm_provider"
         ) as consumer_seed_mock,
         patch(
+            f"{_PROVISIONING_MODULE}.seed_glomi_default_web_search_provider"
+        ) as glomi_search_seed_mock,
+        patch(
             f"{_PROVISIONING_MODULE}._build_model_configuration_upsert_requests",
             return_value=[],
         ),
@@ -67,22 +70,28 @@ def _run_configure(
         from ee.onyx.server.tenants.provisioning import configure_default_api_keys
 
         configure_default_api_keys(MagicMock())
-        return upsert_mock, image_gen_mock, consumer_seed_mock
+        return upsert_mock, image_gen_mock, consumer_seed_mock, glomi_search_seed_mock
 
 
 def test_auto_provision_enabled_creates_default_providers() -> None:
-    upsert_mock, image_gen_mock, consumer_seed_mock = _run_configure(enabled=True)
+    upsert_mock, image_gen_mock, consumer_seed_mock, glomi_seed_mock = _run_configure(
+        enabled=True
+    )
     # OpenAI + Anthropic + OpenRouter all auto-provisioned.
     assert upsert_mock.call_count == 3
     # Image generation default config is seeded from the OpenAI key.
     assert image_gen_mock.call_count == 1
     assert consumer_seed_mock.call_count == 1
+    assert glomi_seed_mock.call_count == 1
 
 
 def test_auto_provision_disabled_skips_default_providers() -> None:
-    upsert_mock, image_gen_mock, consumer_seed_mock = _run_configure(enabled=False)
+    upsert_mock, image_gen_mock, consumer_seed_mock, glomi_seed_mock = _run_configure(
+        enabled=False
+    )
     # Cloud opt-out: no LLMProvider rows created and no default image-gen
     # config seeded with the cloud OpenAI key.
     assert upsert_mock.call_count == 0
     assert image_gen_mock.call_count == 0
     assert consumer_seed_mock.call_count == 1
+    assert glomi_seed_mock.call_count == 1

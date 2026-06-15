@@ -24,6 +24,7 @@ from onyx.db.consumer_llm import seed_consumer_default_llm_provider
 from onyx.db.credentials import create_initial_public_credential
 from onyx.db.document import check_docs_exist
 from onyx.db.enums import EmbeddingPrecision
+from onyx.db.glomi_search import seed_glomi_default_web_search_provider
 from onyx.db.index_attempt import cancel_indexing_attempts_past_model
 from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import fetch_default_llm_model
@@ -280,6 +281,11 @@ def setup_postgres(db_session: Session) -> None:
         seed_consumer_default_llm_provider(db_session)
     except Exception:
         logger.exception("Failed to seed consumer default LLM provider during setup")
+
+    try:
+        seed_glomi_default_web_search_provider(db_session)
+    except Exception:
+        logger.exception("Failed to seed Glomi Search provider during setup")
 
 
 def update_default_multipass_indexing(db_session: Session) -> None:

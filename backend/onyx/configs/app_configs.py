@@ -1493,6 +1493,14 @@ CONSUMER_DEFAULT_LLM_PROVIDER_TYPE = "openai_compatible"
 CONSUMER_DEFAULT_LLM_API_BASE = os.environ.get("CONSUMER_DEFAULT_LLM_API_BASE")
 CONSUMER_DEFAULT_LLM_API_KEY = os.environ.get("CONSUMER_DEFAULT_LLM_API_KEY")
 CONSUMER_DEFAULT_LLM_MODEL_NAME = os.environ.get("CONSUMER_DEFAULT_LLM_MODEL_NAME")
+GLOMI_DEFAULT_WEB_SEARCH_ENABLED = (
+    os.environ.get("GLOMI_DEFAULT_WEB_SEARCH_ENABLED", "false").lower() == "true"
+)
+GLOMI_DEFAULT_WEB_SEARCH_API_BASE = os.environ.get(
+    "GLOMI_DEFAULT_WEB_SEARCH_API_BASE"
+)
+GLOMI_DEFAULT_WEB_SEARCH_API_KEY = os.environ.get("GLOMI_DEFAULT_WEB_SEARCH_API_KEY")
+GLOMI_DEFAULT_WEB_SEARCH_CHANNEL = os.environ.get("GLOMI_DEFAULT_WEB_SEARCH_CHANNEL")
 # Whether tenant provisioning auto-creates LLMProvider rows seeded with the
 # *_DEFAULT_API_KEY env vars above. Defaults to True so self-hosted
 # deployments keep the existing behavior. Cloud sets this to False to

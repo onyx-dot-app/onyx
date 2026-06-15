@@ -8,6 +8,7 @@
 import {
   Packet,
   PacketType,
+  SearchToolPacket,
   StopReason,
 } from "@/app/app/services/streamingModels";
 import { createInitialState, processPackets } from "./packetProcessor";
@@ -21,12 +22,14 @@ import {
   createSearchToolStartPacket,
   createSearchToolQueriesPacket,
   createSearchToolDocumentsPacket,
+  createSearchToolDebugPacket,
   createFetchToolStartPacket,
   createFetchToolUrlsPacket,
   createFetchToolDocumentsPacket,
   createPythonToolStartPacket,
   createPythonToolDeltaPacket,
 } from "./__tests__/testHelpers";
+import { constructCurrentSearchState } from "../renderers/search/searchStateUtils";
 
 // ============================================================================
 // Tests
@@ -489,6 +492,56 @@ describe("packetProcessor", () => {
       expect(result.toolGroups.length).toBe(1);
       expect(result.groupKeysWithSectionEnd.has("0-0")).toBe(true);
       expect(result.documentMap.has("doc-1")).toBe(true);
+    });
+
+    test("SEARCH_TOOL_DEBUG_DELTA stays in the search tool group", () => {
+      const state = createInitialState(1);
+      const packets = [
+        createSearchToolStartPacket({ turn_index: 0 }, true),
+        createSearchToolQueriesPacket(["test query"], { turn_index: 0 }),
+        createSearchToolDebugPacket({ turn_index: 0 }),
+        createPacket(PacketType.SECTION_END, { turn_index: 0 }),
+      ];
+      const result = processPackets(state, packets);
+
+      expect(result.toolGroups.length).toBe(1);
+      expect(result.toolGroups[0]!.packets).toHaveLength(4);
+      expect(result.toolGroups[0]!.packets[2]!.obj.type).toBe(
+        PacketType.SEARCH_TOOL_DEBUG_DELTA
+      );
+    });
+
+    test("constructCurrentSearchState parses search debug packet", () => {
+      const packets = [
+        createSearchToolStartPacket({ turn_index: 0 }, true),
+        createSearchToolQueriesPacket(["test query"], { turn_index: 0 }),
+        createSearchToolDebugPacket(
+          { turn_index: 0 },
+          {
+            provider_type: "glomi",
+            provider_name: "Glomi Search",
+            mode: "deep",
+            channel: "tavily",
+            duration_ms: 123,
+            result_count: 1,
+            failed_queries: { stale: "timeout" },
+          }
+        ),
+      ] as SearchToolPacket[];
+
+      const searchState = constructCurrentSearchState(packets);
+
+      expect(searchState.debug?.providerType).toBe("glomi");
+      expect(searchState.debug?.providerName).toBe("Glomi Search");
+      expect(searchState.debug?.mode).toBe("deep");
+      expect(searchState.debug?.channel).toBe("tavily");
+      expect(searchState.debug?.queries).toEqual(["q1", "q2"]);
+      expect(searchState.debug?.durationMs).toBe(123);
+      expect(searchState.debug?.resultCount).toBe(1);
+      expect(searchState.debug?.results[0]?.url).toBe(
+        "https://example.com/result"
+      );
+      expect(searchState.debug?.failedQueries).toEqual({ stale: "timeout" });
     });
 
     test("multiple QUERIES_DELTA packets accumulate", () => {
