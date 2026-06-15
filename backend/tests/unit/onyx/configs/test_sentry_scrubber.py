@@ -66,3 +66,11 @@ def test_init_sentry_wires_credential_safe_kwargs() -> None:
     assert kwargs["include_local_variables"] is False
     assert kwargs["send_default_pii"] is False
     assert isinstance(kwargs["event_scrubber"], EventScrubber)
+
+
+def test_build_event_scrubber_is_recursive_and_extends_denylist() -> None:
+    scrubber = build_event_scrubber()
+    # recursive is load-bearing: the stock scrubber only inspects top-level keys,
+    # so a non-recursive one would never reach the nested headers.x-api-key
+    assert scrubber.recursive is True
+    assert "x-api-key" in scrubber.denylist
