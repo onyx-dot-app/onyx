@@ -425,8 +425,10 @@ def create_update_persona(
         select(Persona)
         .where(Persona.id == persona.id)
         .options(
-            selectinload(Persona.user_shares),
-            selectinload(Persona.group_shares),
+            selectinload(Persona.user_shares).selectinload(Persona__User.user),
+            selectinload(Persona.group_shares).selectinload(
+                Persona__UserGroup.user_group
+            ),
             selectinload(Persona.owner_group),
         )
     ).one()
