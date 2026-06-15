@@ -11,7 +11,11 @@ from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import collapse_citations
 from onyx.chat.citation_utils import strip_rendered_citation_links
+from onyx.chat.llm_step import _OLLAMA_HISTORY_MESSAGE_FORMATTER
+from onyx.chat.models import ChatMessageSimple
+from onyx.chat.models import ToolCallSimple
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 
 # ============================================================================
@@ -566,3 +570,34 @@ class TestStripRenderedCitationLinks:
             if isinstance(piece, str)
         )
         assert out.count(link) == 2  # duplicated link == malformed/nested citation
+
+
+class TestOllamaFormatterStripsCitations:
+    """The Ollama assistant formatter's tool-call branch must normalize citations.
+
+    _OllamaHistoryMessageFormatter.format_assistant_message builds content directly
+    from msg.message when the turn carries tool calls, bypassing the default
+    formatter. Without stripping, replayed Ollama turns that mix tool calls with
+    cited answers would still trigger the nested-citation bug.
+    """
+
+    def test_tool_call_branch_strips_rendered_citations(self) -> None:
+        msg = ChatMessageSimple(
+            message="Answer [[1]](https://example.com/doc).",
+            token_count=0,
+            message_type=MessageType.ASSISTANT,
+            tool_calls=[
+                ToolCallSimple(
+                    tool_call_id="call_1",
+                    tool_name="search",
+                    tool_arguments={"query": "weather"},
+                )
+            ],
+        )
+
+        result = _OLLAMA_HISTORY_MESSAGE_FORMATTER.format_assistant_message(msg)
+
+        assert result.content is not None
+        assert "Answer [1]." in result.content
+        assert "[[1]]" not in result.content
+        assert "https://example.com/doc" not in result.content

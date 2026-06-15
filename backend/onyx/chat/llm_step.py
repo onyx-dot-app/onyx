@@ -760,9 +760,15 @@ class _OllamaHistoryMessageFormatter(_HistoryMessageFormatter):
             )
             for tc in msg.tool_calls
         ]
+        # Strip rendered "[[n]](url)" citations back to bare "[n]" markers here too, so
+        # Ollama assistant turns that mix tool calls with cited answers don't trigger the
+        # nested-citation bug (matches _build_structured_assistant_message).
+        normalized_message = (
+            strip_rendered_citation_links(msg.message) if msg.message else None
+        )
         assistant_content = (
-            "\n".join([msg.message, *tool_call_lines])
-            if msg.message
+            "\n".join([normalized_message, *tool_call_lines])
+            if normalized_message
             else "\n".join(tool_call_lines)
         )
         return AssistantMessage(
