@@ -278,142 +278,143 @@ function Header() {
         </ConfirmationModalLayout>
       )}
 
-      {(appFocus.isChat() || appFocus.isNewSession() || isMobile) && (
-        <RootLayout.Header>
-          <div className="w-full flex flex-row flex-wrap justify-center items-center px-4 py-2 h-(--chrome-header-height)">
-            {/*
+      {(appFocus.isChat() || appFocus.isNewSession() || isMobile) &&
+        !appFocus.isSharedChat() && (
+          <RootLayout.Header>
+            <div className="w-full flex flex-row flex-wrap justify-center items-center px-4 py-2 h-(--chrome-header-height)">
+              {/*
           Left:
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-            <div className="flex-1 flex flex-row items-center gap-2">
-              {isMobile && (
-                <Button
-                  prominence="internal"
-                  icon={SvgSidebar}
-                  onClick={() => setFolded(false)}
-                />
-              )}
-              {businessTier &&
-                settings.isSearchModeAvailable &&
-                appFocus.isNewSession() &&
-                state.phase === "idle" && (
-                  <Popover
-                    open={modePopoverOpen}
-                    onOpenChange={setModePopoverOpen}
-                  >
-                    <Popover.Trigger asChild>
-                      <OpenButton
-                        aria-label="Change app mode"
-                        icon={
-                          effectiveMode === "search"
-                            ? SvgSearchMenu
-                            : SvgBubbleText
-                        }
-                      >
-                        {effectiveMode === "search" ? "Search" : "Chat"}
-                      </OpenButton>
-                    </Popover.Trigger>
-                    <Popover.Content align="start" width="lg">
-                      <Popover.Menu>
-                        <LineItemButton
-                          sizePreset="main-ui"
-                          rounding="sm"
-                          icon={SvgSearchMenu}
-                          state={
-                            effectiveMode === "search" ? "selected" : "empty"
-                          }
-                          title="Search"
-                          description="Quick search for documents"
-                          onClick={noProp(() => {
-                            setAppMode("search");
-                            setModePopoverOpen(false);
-                          })}
-                        />
-                        <LineItemButton
-                          sizePreset="main-ui"
-                          rounding="sm"
-                          icon={SvgBubbleText}
-                          state={
-                            effectiveMode === "chat" ? "selected" : "empty"
-                          }
-                          title="Chat"
-                          description="Conversation and research"
-                          onClick={noProp(() => {
-                            setAppMode("chat");
-                            setModePopoverOpen(false);
-                          })}
-                        />
-                      </Popover.Menu>
-                    </Popover.Content>
-                  </Popover>
+              <div className="flex-1 flex flex-row items-center gap-2">
+                {isMobile && (
+                  <Button
+                    prominence="internal"
+                    icon={SvgSidebar}
+                    onClick={() => setFolded(false)}
+                  />
                 )}
-            </div>
+                {businessTier &&
+                  settings.isSearchModeAvailable &&
+                  appFocus.isNewSession() &&
+                  state.phase === "idle" && (
+                    <Popover
+                      open={modePopoverOpen}
+                      onOpenChange={setModePopoverOpen}
+                    >
+                      <Popover.Trigger asChild>
+                        <OpenButton
+                          aria-label="Change app mode"
+                          icon={
+                            effectiveMode === "search"
+                              ? SvgSearchMenu
+                              : SvgBubbleText
+                          }
+                        >
+                          {effectiveMode === "search" ? "Search" : "Chat"}
+                        </OpenButton>
+                      </Popover.Trigger>
+                      <Popover.Content align="start" width="lg">
+                        <Popover.Menu>
+                          <LineItemButton
+                            sizePreset="main-ui"
+                            rounding="sm"
+                            icon={SvgSearchMenu}
+                            state={
+                              effectiveMode === "search" ? "selected" : "empty"
+                            }
+                            title="Search"
+                            description="Quick search for documents"
+                            onClick={noProp(() => {
+                              setAppMode("search");
+                              setModePopoverOpen(false);
+                            })}
+                          />
+                          <LineItemButton
+                            sizePreset="main-ui"
+                            rounding="sm"
+                            icon={SvgBubbleText}
+                            state={
+                              effectiveMode === "chat" ? "selected" : "empty"
+                            }
+                            title="Chat"
+                            description="Conversation and research"
+                            onClick={noProp(() => {
+                              setAppMode("chat");
+                              setModePopoverOpen(false);
+                            })}
+                          />
+                        </Popover.Menu>
+                      </Popover.Content>
+                    </Popover>
+                  )}
+              </div>
 
-            {/*
+              {/*
           Center:
           - custom-header-content
           - Wraps to its own row below left/right on mobile when content is present
         */}
-            <div
-              className={cn(
-                "flex flex-col items-center overflow-hidden",
-                pageWithHeaderContent && customHeaderContent
-                  ? "order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1"
-                  : "flex-1"
-              )}
-            >
-              {pageWithHeaderContent && customHeaderContent && (
-                <span className="text-center w-full">
-                  <Text color="text-03">{customHeaderContent}</Text>
-                </span>
-              )}
-            </div>
+              <div
+                className={cn(
+                  "flex flex-col items-center overflow-hidden",
+                  pageWithHeaderContent && customHeaderContent
+                    ? "order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1"
+                    : "flex-1"
+                )}
+              >
+                {pageWithHeaderContent && customHeaderContent && (
+                  <span className="text-center w-full">
+                    <Text color="text-03">{customHeaderContent}</Text>
+                  </span>
+                )}
+              </div>
 
-            {/*
+              {/*
           Right:
           - share button
           - more-options buttons
         */}
-            <div className="flex flex-1 justify-end items-center">
-              {appFocus.isChat() && currentChatSession && (
-                <FrostedDiv className="flex shrink flex-row items-center">
-                  <Button
-                    icon={SvgShare}
-                    prominence="tertiary"
-                    interaction={showShareModal ? "hover" : "rest"}
-                    responsiveHideText
-                    onClick={() => setShowShareModal(true)}
-                    aria-label="share-chat-button"
-                  >
-                    Share
-                  </Button>
-                  <SimplePopover
-                    trigger={
-                      <Button
-                        icon={SvgMoreHorizontal}
-                        prominence="tertiary"
-                        interaction={popoverOpen ? "hover" : "rest"}
-                      />
-                    }
-                    onOpenChange={(state) => {
-                      setPopoverOpen(state);
-                      if (!state) {
-                        setShowMoveOptions(false);
-                        setSearchTerm("");
+              <div className="flex flex-1 justify-end items-center">
+                {appFocus.isChat() && currentChatSession && (
+                  <FrostedDiv className="flex shrink flex-row items-center">
+                    <Button
+                      icon={SvgShare}
+                      prominence="tertiary"
+                      interaction={showShareModal ? "hover" : "rest"}
+                      responsiveHideText
+                      onClick={() => setShowShareModal(true)}
+                      aria-label="share-chat-button"
+                    >
+                      Share
+                    </Button>
+                    <SimplePopover
+                      trigger={
+                        <Button
+                          icon={SvgMoreHorizontal}
+                          prominence="tertiary"
+                          interaction={popoverOpen ? "hover" : "rest"}
+                        />
                       }
-                    }}
-                    side="bottom"
-                    align="end"
-                  >
-                    <PopoverMenu>{popoverItems}</PopoverMenu>
-                  </SimplePopover>
-                </FrostedDiv>
-              )}
+                      onOpenChange={(state) => {
+                        setPopoverOpen(state);
+                        if (!state) {
+                          setShowMoveOptions(false);
+                          setSearchTerm("");
+                        }
+                      }}
+                      side="bottom"
+                      align="end"
+                    >
+                      <PopoverMenu>{popoverItems}</PopoverMenu>
+                    </SimplePopover>
+                  </FrostedDiv>
+                )}
+              </div>
             </div>
-          </div>
-        </RootLayout.Header>
-      )}
+          </RootLayout.Header>
+        )}
     </>
   );
 }
