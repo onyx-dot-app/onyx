@@ -8,7 +8,7 @@ import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar, SvgSimpleLoader } from "@opal/icons";
-import { useSidebarState } from "@opal/layouts";
+import { RootLayout, useSidebarState } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { isVectorDbRequiredRoute } from "@/lib/admin-routes";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
@@ -43,7 +43,7 @@ export default function AdminChrome({ children }: AdminChromeProps) {
   }
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden">
+    <RootLayout.Root>
       {settings.settings.application_status ===
         ApplicationStatus.PAYMENT_REMINDER && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 bg-status-warning-01 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
@@ -60,31 +60,22 @@ export default function AdminChrome({ children }: AdminChromeProps) {
         </div>
       )}
 
-      {hasCustomSidebar ? (
-        <div className="flex flex-1 flex-col min-w-0 min-h-0">
-          <div className="h-[52px] shrink-0" />
-          <div className="flex-1 overflow-y-auto min-h-0">{content}</div>
-        </div>
-      ) : (
-        <>
-          <AdminSidebar />
-          <div
-            data-main-container
-            className="flex flex-1 flex-col min-w-0 min-h-0"
-          >
-            <div className="h-[52px] flex items-center px-2 shrink-0">
-              {isMobile && (
-                <Button
-                  prominence="internal"
-                  icon={SvgSidebar}
-                  onClick={() => setFolded(false)}
-                />
-              )}
-            </div>
-            <div className="flex-1 overflow-y-auto min-h-0">{content}</div>
+      {!hasCustomSidebar && <AdminSidebar />}
+
+      <RootLayout.App data-main-container>
+        <RootLayout.Header>
+          <div className="h-[52px] flex items-center px-2">
+            {isMobile && !hasCustomSidebar && (
+              <Button
+                prominence="internal"
+                icon={SvgSidebar}
+                onClick={() => setFolded(false)}
+              />
+            )}
           </div>
-        </>
-      )}
-    </div>
+        </RootLayout.Header>
+        <RootLayout.MainContent>{content}</RootLayout.MainContent>
+      </RootLayout.App>
+    </RootLayout.Root>
   );
 }
