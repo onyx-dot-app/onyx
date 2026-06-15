@@ -143,6 +143,8 @@ case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
         if [ -d /workspace/sessions ]; then
             chown -R 1000:1000 /workspace/sessions
             log "fixed /workspace/sessions ownership -> 1000:1000"
+        else
+            log "WARNING: /workspace/sessions not found; session creation will fail"
         fi
 
         log "entrypoint mode: clearing bounding set, dropping to UID 1000, exec'ing: $*"

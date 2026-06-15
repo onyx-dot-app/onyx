@@ -500,15 +500,22 @@ def test_sessions_directory_writable_by_sandbox_user(
 
     # Attempt to create a test directory as UID 1000 (the default user in the
     # container after setpriv drop). This mimics what setup_session_workspace
-    # does when creating a new session.
+    # does when creating a new session. Must use --user 1000:1000 explicitly
+    # because in proxy mode the container runs as root initially.
     test_dir = f"/workspace/sessions/test-{uuid4().hex[:8]}"
-    mkdir_result = _docker_exec(container, ["mkdir", "-p", test_dir])
+    mkdir_result = subprocess.run(
+        ["docker", "exec", "--user", "1000:1000", container, "mkdir", "-p", test_dir],
+        capture_output=True,
+        text=True,
+        timeout=10.0,
+        check=False,
+    )
     assert mkdir_result.returncode == 0, (
         f"mkdir failed as UID 1000: rc={mkdir_result.returncode} "
         f"stderr={mkdir_result.stderr!r}"
     )
 
-    # Clean up
+    # Clean up (as root is fine for removal)
     _docker_exec(container, ["rm", "-rf", test_dir])
 
 
