@@ -4,6 +4,9 @@
 
 - 重新生成顶层 `README.md`：从上游 Onyx 项目介绍切换为 GlomiAI 中文主 README，围绕 C 端消费级超级 Agent 定位、Phase A 核心能力验证、平台默认 OpenAI-compatible LLM、Glomi Search Gateway、Search Debug Drawer、本地开发/验证命令和开发约束重组；保留 Onyx/MIT 来源与正式发布前需复核授权边界的提醒。
 - 完善顶层 `README.md`：新增当前分支状态表，明确 E1/E2/E3/E4、Glomi Search Gateway、adapter 架构、Search Debug Drawer、Craft/E13/商业化模块的已做与待做；补充平台默认 LLM seed、中文搜索/研究方法论、`web_search` lite/medium/deep、Gateway adapter service、Search Debug streaming packet 的逻辑链路说明。
+- 应用 `web/src/assets/brand` 品牌资源：新增透明派生图 `logo-mark.png` 与 `wordmark.png`，`GlomiLogoMark` 从 CSS 字母 G 改为渲染真实 Glomi 图标，登录/注册容器与错误页也改为复用同一品牌组件；默认 favicon 从旧 `onyx.ico` 改为 `/logo.png`，并同步覆盖 `web/public/logo*.png` / `logotype*.png`。
+- 品牌资源经验：用户提供的原始 PNG 是 RGB 白底/棋盘底，不是透明 PNG；直接用于深色/非白背景会露出画布，因此生成只移除边缘背景的透明派生图，保留图标内部白色笔画和橙色光点。
+- 品牌资源补救：按用户反馈改为使用 `brand.png` 派生横向 `wordmark.png`，`GlomiLogotype` 直接渲染该 wordmark，不再用图标+文本拼接；默认助手 `AgentAvatar` 的旧黑圆 G 也改成 `GlomiLogoMark`，已用 `vayneyy@gmail.com` 测试账号登录并在“聊天总结”会话确认无旧 G 节点残留。
 - 新增设计文档 `docs/superpowers/specs/2026-06-15-platform-default-glomi-search-gateway-design.md`：搜索配置方向确认参考 E2 默认 LLM Provider，平台自动 seed `Glomi Search / glomi` 到 Onyx 原生 `InternetSearchProvider` 架构。
 - 关键决策：Onyx 侧只接 Glomi Search Gateway，不直接绑定 Tavily 官方协议；第一期 Gateway 内部默认渠道可走 Tavily，后续 Tavily/Brave/Serper/自研聚合在 Gateway 内演进。
 - 配置收敛：`GLOMI_DEFAULT_WEB_SEARCH_ENABLED`、`GLOMI_DEFAULT_WEB_SEARCH_API_BASE`、`GLOMI_DEFAULT_WEB_SEARCH_API_KEY`、可选 `GLOMI_DEFAULT_WEB_SEARCH_CHANNEL=tavily`；不 seed `InternetContentProvider`，`open_url` 继续走 Onyx 默认 `OnyxWebCrawler`。

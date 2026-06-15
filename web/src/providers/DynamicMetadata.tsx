@@ -23,7 +23,7 @@ export default function DynamicMetadata() {
 
   const favicon = enterpriseSettings?.use_custom_logo
     ? `/api/enterprise-settings/logo?v=${cacheBuster}`
-    : "/onyx.ico";
+    : "/logo.png";
 
   return <link rel="icon" href={favicon} />;
 }

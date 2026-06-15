@@ -59,7 +59,7 @@
 
 | # | Epic | 期次 | 说明 |
 |---|---|---|---|
-| **E1** | i18n + 品牌替换 | 🟢 验证期·进行中 | 已有 spec+plan。复用现有 web,中文优先 |
+| **E1** | i18n + 品牌替换 | 🟢 验证期·进行中 | 已有 spec+plan。复用现有 web,中文优先；当前 `brand.png` / `logo.png` 品牌资源已接入默认 wordmark、Logo mark、favicon、公开 logo/logotype 静态资源和默认助手头像 |
 | **E2** | 国产模型接入（平台默认 OpenAI-compatible Provider） | 🟢 验证期·进行中 | 第一阶段收敛为平台自动 seed 一个 OpenAI-compatible 主模型到 Onyx 原生 LLMProvider 架构；用户注册后即可用，不进入 Admin LLM 配置页，也不选择模型档位；平台只配置 API base URL、API key、主模型名 |
 | **E3** | 超级对话调优 | 🟢 验证期 | 默认 Persona 的中文 system prompt、工具使用策略、回答体验打磨；搜索由 Agent 在 `web_search` 调用中选择 `lite` / `medium` / `deep`，而不是用户手动选择 |
 | **E4** | 深度研究中文化 | 🟢 验证期 | 与 E3 共享“中文 Agent 搜索与研究能力层”：问题拆解、query portfolio、来源路由、证据评估、中文报告成稿；默认搜索 provider 第一期接入 Glomi Search Gateway |
