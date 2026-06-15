@@ -294,57 +294,82 @@ SSL_CERT_REQS_MAP = {
 }
 
 
-_async_redis_connection: aioredis.Redis | None = None
-_async_lock = asyncio.Lock()
+# Async Redis connections are cached PER EVENT LOOP, not globally. redis-py binds
+# a connection's socket and its asyncio Futures to the loop that first used it, so
+# a single client reused across loops raises "got Future attached to a different
+# loop" (e.g. an auth-token lookup running under a loop other than the one that
+# created the client). Keying by the running loop gives each loop its own client;
+# entries for closed loops (e.g. short-lived loops from asyncio.run in tests /
+# sync workers) are pruned so the map can't grow unbounded. The guard is a plain
+# threading.Lock, NOT an asyncio.Lock (which is itself loop-bound); the
+# aioredis.Redis(...) constructor opens no sockets, so building it under a sync
+# lock is safe.
+_async_redis_connections: dict["asyncio.AbstractEventLoop", aioredis.Redis] = {}
+_async_redis_init_lock = threading.Lock()
+
+
+def _build_async_redis_connection() -> aioredis.Redis:
+    connection_kwargs: dict[str, Any] = {
+        "host": REDIS_HOST,
+        "port": REDIS_PORT,
+        "db": REDIS_DB_NUMBER,
+        "password": REDIS_PASSWORD,
+        "max_connections": REDIS_POOL_MAX_CONNECTIONS,
+        "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
+        "socket_keepalive": True,
+        "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
+    }
+
+    if USE_REDIS_IAM_AUTH:
+        configure_redis_iam_auth(connection_kwargs)
+    elif REDIS_SSL:
+        ssl_context = ssl.create_default_context()
+
+        if REDIS_SSL_CA_CERTS:
+            ssl_context.load_verify_locations(REDIS_SSL_CA_CERTS)
+        ssl_context.check_hostname = False
+
+        # Map your string to the proper ssl.CERT_* constant
+        ssl_context.verify_mode = SSL_CERT_REQS_MAP.get(
+            REDIS_SSL_CERT_REQS, ssl.CERT_NONE
+        )
+
+        connection_kwargs["ssl"] = ssl_context
+
+    # Create a new Redis connection (or connection pool) with SSL configuration
+    return aioredis.Redis(**connection_kwargs)
 
 
 async def get_async_redis_connection() -> aioredis.Redis:
     """
-    Provides a shared async Redis connection, using the same configs (host, port, SSL, etc.).
-    Ensures that the connection is created only once (lazily) and reused for all future calls.
+    Provides a shared async Redis connection for the current event loop, using the
+    same configs (host, port, SSL, etc.). The connection is created lazily once per
+    loop and reused for all future calls on that loop.
     """
-    global _async_redis_connection
+    loop = asyncio.get_running_loop()
 
-    # If we haven't yet created an async Redis connection, we need to create one
-    if _async_redis_connection is None:
-        # Acquire the lock to ensure that only one coroutine attempts to create the connection
-        async with _async_lock:
-            # Double-check inside the lock to avoid race conditions
-            if _async_redis_connection is None:
-                # Load env vars or your config variables
+    # Fast path: a connection already exists for this loop.
+    existing = _async_redis_connections.get(loop)
+    if existing is not None:
+        return existing
 
-                connection_kwargs: dict[str, Any] = {
-                    "host": REDIS_HOST,
-                    "port": REDIS_PORT,
-                    "db": REDIS_DB_NUMBER,
-                    "password": REDIS_PASSWORD,
-                    "max_connections": REDIS_POOL_MAX_CONNECTIONS,
-                    "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
-                    "socket_keepalive": True,
-                    "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
-                }
+    with _async_redis_init_lock:
+        # Double-check inside the lock to avoid creating two clients for the loop.
+        existing = _async_redis_connections.get(loop)
+        if existing is not None:
+            return existing
 
-                if USE_REDIS_IAM_AUTH:
-                    configure_redis_iam_auth(connection_kwargs)
-                elif REDIS_SSL:
-                    ssl_context = ssl.create_default_context()
+        # Drop connections whose loop has been closed so the map stays bounded.
+        for dead_loop in [
+            cached_loop
+            for cached_loop in _async_redis_connections
+            if cached_loop.is_closed()
+        ]:
+            _async_redis_connections.pop(dead_loop, None)
 
-                    if REDIS_SSL_CA_CERTS:
-                        ssl_context.load_verify_locations(REDIS_SSL_CA_CERTS)
-                    ssl_context.check_hostname = False
-
-                    # Map your string to the proper ssl.CERT_* constant
-                    ssl_context.verify_mode = SSL_CERT_REQS_MAP.get(
-                        REDIS_SSL_CERT_REQS, ssl.CERT_NONE
-                    )
-
-                    connection_kwargs["ssl"] = ssl_context
-
-                # Create a new Redis connection (or connection pool) with SSL configuration
-                _async_redis_connection = aioredis.Redis(**connection_kwargs)
-
-    # Return the established connection (or pool) for all future operations
-    return _async_redis_connection
+        connection = _build_async_redis_connection()
+        _async_redis_connections[loop] = connection
+        return connection
 
 
 async def retrieve_auth_token_data(token: str) -> dict | None:

@@ -37,7 +37,6 @@ from fastapi import WebSocket
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from fastapi.routing import APIRoute
-from fastapi.security import OAuth2PasswordBearer
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users import BaseUserManager
 from fastapi_users import exceptions
@@ -77,9 +76,6 @@ from sqlalchemy.orm import Session
 from starlette.routing import BaseRoute
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
-from onyx.auth.constants import API_KEY_PREFIX
-from onyx.auth.constants import DEPRECATED_API_KEY_PREFIX
-from onyx.auth.constants import PAT_PREFIX
 from onyx.auth.disposable_email_validator import is_disposable_email
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
@@ -1334,40 +1330,16 @@ cookie_transport = CookieTransport(
     cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
 )
 
-# Onyx API keys (`on_`/`dn_`) and PATs (`onyx_pat_`) also arrive in the
-# Authorization header, but they are resolved by Onyx's own dependencies
-# (`get_hashed_api_key_from_request` / `get_hashed_pat_from_request`), NOT the
-# fastapi-users session strategy. Without this filter the mobile bearer backend
-# would extract those tokens and run the session strategy's `read_token` (a
-# Redis/DB lookup) against every API-key/PAT request — a wasteful (and, against
-# a stale Redis connection, failing) lookup. Returning None for them makes
-# fastapi-users skip the strategy entirely, leaving them to their own handlers.
-_NON_SESSION_BEARER_PREFIXES = (
-    API_KEY_PREFIX,
-    DEPRECATED_API_KEY_PREFIX,
-    PAT_PREFIX,
-)
-
-
-class _SessionOnlyBearerScheme(OAuth2PasswordBearer):
-    """Bearer scheme that only surfaces fastapi-users session tokens."""
-
-    async def __call__(self, request: Request) -> str | None:
-        token = await super().__call__(request)
-        if token is not None and token.startswith(_NON_SESSION_BEARER_PREFIXES):
-            return None
-        return token
-
-
 # Native mobile clients can't use the HttpOnly auth cookie above, so they
 # authenticate with the SAME stateful session token returned/refreshed as a
 # Bearer value (Authorization header) via this transport. `tokenUrl` is only
 # used for OpenAPI docs. The token itself is identical to the web cookie value
 # (see `mobile_auth_backend` below). See docs/mobile-auth/.
+#
+# API keys / PATs also ride in the Authorization header; for those the session
+# strategy's read_token simply finds nothing and the request falls through to
+# Onyx's own API-key/PAT handlers (see `optional_user`).
 bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
-bearer_transport.scheme = _SessionOnlyBearerScheme(
-    tokenUrl="auth/mobile/login", auto_error=False
-)
 
 
 T = TypeVar("T", covariant=True)
@@ -1599,65 +1571,15 @@ elif AUTH_BACKEND == AuthBackend.JWT:
 else:
     raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
 
-
-class _DefensiveReadStrategy(Strategy[User, uuid.UUID]):
-    """Wraps the active session strategy for the mobile bearer backend.
-
-    Unlike the web cookie, the Authorization header is also where Onyx API keys
-    and PATs ride, and a client may send an arbitrary/garbage bearer token. Such
-    a token reaches `read_token` and triggers a backing-store lookup that should
-    simply fail closed (no user) — but a transient store error there (e.g. a
-    stale async Redis connection bound to another event loop) would otherwise
-    surface as a 500 on every such request. Treat any read failure as
-    "unauthenticated" so the request falls through to the API-key/PAT handlers
-    (or a clean 401). Issuance / revocation delegate unchanged, so mobile mints
-    and reads the exact same stateful session token as web; the cookie backend
-    keeps the strict strategy. See docs/mobile-auth/.
-    """
-
-    def __init__(self, inner: Strategy[User, uuid.UUID]) -> None:
-        self._inner = inner
-
-    async def read_token(
-        self, token: Optional[str], user_manager: BaseUserManager[User, uuid.UUID]
-    ) -> Optional[User]:
-        try:
-            return await self._inner.read_token(token, user_manager)
-        except Exception:
-            logger.exception(
-                "Mobile bearer token read failed; treating request as unauthenticated"
-            )
-            return None
-
-    async def write_token(self, user: User) -> str:
-        return await self._inner.write_token(user)
-
-    async def destroy_token(self, token: str, user: User) -> None:
-        await self._inner.destroy_token(token, user)
-
-    async def refresh_token(self, token: Optional[str], user: User) -> str:
-        refresh = getattr(self._inner, "refresh_token", None)
-        if refresh is None:
-            return await self._inner.write_token(user)
-        return await refresh(token, user)
-
-
-def get_mobile_bearer_strategy(
-    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
-) -> _DefensiveReadStrategy:
-    return _DefensiveReadStrategy(strategy)
-
-
-# Second backend for native mobile clients: reuses the active session strategy
-# (so it mints/reads the exact same stateful session token as the cookie
-# backend) wrapped so a failed bearer read fails closed instead of 500-ing, but
-# delivered as a Bearer token. fastapi-users namespaces router names by backend
-# name (`auth:mobile-bearer.*`), so the mobile login/refresh/logout routers
-# never collide with the cookie backend's routes. See docs/mobile-auth/.
+# Second backend for native mobile clients: same strategy (so it mints/reads
+# the exact same stateful session token as the cookie backend), but delivered
+# as a Bearer token. fastapi-users namespaces router names by backend name
+# (`auth:mobile-bearer.*`), so the mobile login/refresh/logout routers never
+# collide with the cookie backend's routes. See docs/mobile-auth/.
 mobile_auth_backend = AuthenticationBackend(
     name="mobile-bearer",
     transport=bearer_transport,
-    get_strategy=get_mobile_bearer_strategy,
+    get_strategy=auth_backend.get_strategy,
 )
 
 
