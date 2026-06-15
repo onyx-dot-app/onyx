@@ -1,4 +1,4 @@
-import Layout from "@/layouts/admin/Layout";
+import Layout from "@/layouts/chromes/AdminChromeLayout";
 
 export interface AdminLayoutProps {
   children: React.ReactNode;
