@@ -14,7 +14,6 @@ import { INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
-import Text from "@/refresh-components/texts/Text";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { useProjectsContext } from "@/providers/ProjectsContext";
@@ -30,10 +29,16 @@ import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
-import { Popover, PopoverMenu, Text as OpalText } from "@opal/components";
+import {
+  Button,
+  LineItemButton,
+  OpenButton,
+  Popover,
+  PopoverMenu,
+  Text,
+} from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
-import { Button, LineItemButton, OpenButton } from "@opal/components";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
@@ -348,9 +353,11 @@ function Header() {
               : "flex-1"
           )}
         >
-          <Text text03 className="text-center w-full">
-            {pageWithHeaderContent && customHeaderContent}
-          </Text>
+          {pageWithHeaderContent && customHeaderContent && (
+            <span className="text-center w-full">
+              <Text color="text-03">{customHeaderContent}</Text>
+            </span>
+          )}
         </div>
 
         {/*
@@ -436,9 +443,9 @@ function Footer() {
         appFocus.isChat() ? "pb-2" : "py-2"
       )}
     >
-      <OpalText font="secondary-action" color="text-03">
+      <Text font="secondary-action" color="text-03">
         {markdown(customFooterContent)}
-      </OpalText>
+      </Text>
     </footer>
   );
 }
