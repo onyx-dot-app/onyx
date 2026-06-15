@@ -98,7 +98,7 @@ class TestGetOllamaAvailableModels:
 
         with patch(
             "onyx.server.manage.llm.api.httpx.get",
-            side_effect=httpx.ConnectError("connection refused"),
+            side_effect=httpx.ConnectError("connection refused", request=MagicMock()),
         ):
             request = OllamaModelsRequest(api_base="http://localhost:11434")
             with pytest.raises(OnyxError) as exc_info:
