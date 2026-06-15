@@ -595,7 +595,9 @@ export default function AppChrome({ children }: AppChromeProps) {
               </>
             )}
             <RootLayout.Header>
-              <Header />
+              <div className="h-[52px] flex items-center">
+                <Header />
+              </div>
             </RootLayout.Header>
             <RootLayout.MainContent>{children}</RootLayout.MainContent>
             <RootLayout.Footer>
