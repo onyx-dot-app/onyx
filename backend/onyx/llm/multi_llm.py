@@ -719,43 +719,37 @@ class LitellmLLM(LLM):
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
 
-            # Hold _env_lock during the litellm call so no call sees another's
-            # injected secret; an empty config injects nothing, just locks.
+            messages = _prompt_to_dicts(prompt)
+
+            # Bedrock's Converse API requires toolConfig when messages
+            # contain toolUse/toolResult content blocks. When no tools are
+            # provided for this request but the history contains tool
+            # content from previous turns, strip it to plain text.
+            is_bedrock = self._model_provider in {
+                LlmProviderNames.BEDROCK,
+                LlmProviderNames.BEDROCK_CONVERSE,
+            }
+            if is_bedrock and not tools and _messages_contain_tool_content(messages):
+                messages = _strip_tool_content_from_messages(messages)
+
+            # Some models (e.g. Mistral) reject a user message
+            # immediately after a tool message. Insert a synthetic
+            # assistant bridge message to satisfy the ordering
+            # constraint. Check both the provider and the deployment/
+            # model name to catch Mistral hosted on Azure.
+            model_or_deployment = (
+                self._deployment_name or self._model_version or ""
+            ).lower()
+            is_mistral_model = is_mistral or "mistral" in model_or_deployment
+            if is_mistral_model:
+                messages = _fix_tool_user_message_ordering(messages)
+
+            # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
+            # reject requests where tool_choice is explicitly null.
+            if tools and tool_choice is not None:
+                optional_kwargs["tool_choice"] = tool_choice
+
             with temporary_env_and_lock(self._custom_config or {}):
-                messages = _prompt_to_dicts(prompt)
-
-                # Bedrock's Converse API requires toolConfig when messages
-                # contain toolUse/toolResult content blocks. When no tools are
-                # provided for this request but the history contains tool
-                # content from previous turns, strip it to plain text.
-                is_bedrock = self._model_provider in {
-                    LlmProviderNames.BEDROCK,
-                    LlmProviderNames.BEDROCK_CONVERSE,
-                }
-                if (
-                    is_bedrock
-                    and not tools
-                    and _messages_contain_tool_content(messages)
-                ):
-                    messages = _strip_tool_content_from_messages(messages)
-
-                # Some models (e.g. Mistral) reject a user message
-                # immediately after a tool message. Insert a synthetic
-                # assistant bridge message to satisfy the ordering
-                # constraint. Check both the provider and the deployment/
-                # model name to catch Mistral hosted on Azure.
-                model_or_deployment = (
-                    self._deployment_name or self._model_version or ""
-                ).lower()
-                is_mistral_model = is_mistral or "mistral" in model_or_deployment
-                if is_mistral_model:
-                    messages = _fix_tool_user_message_ordering(messages)
-
-                # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
-                # reject requests where tool_choice is explicitly null.
-                if tools and tool_choice is not None:
-                    optional_kwargs["tool_choice"] = tool_choice
-
                 response = litellm.completion(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
