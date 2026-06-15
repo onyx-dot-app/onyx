@@ -1,5 +1,14 @@
 # 所有相关的变动都需要记录在summary.md中，包括坑，经验，变动等等；关于产品相关的文档在docs/GlomiAI.md，有产品相关变动了需要同步更新这个文件
 
+## 2026-06-15
+
+- 新增设计文档 `docs/superpowers/specs/2026-06-15-platform-default-glomi-search-gateway-design.md`：搜索配置方向确认参考 E2 默认 LLM Provider，平台自动 seed `Glomi Search / glomi` 到 Onyx 原生 `InternetSearchProvider` 架构。
+- 关键决策：Onyx 侧只接 Glomi Search Gateway，不直接绑定 Tavily 官方协议；第一期 Gateway 内部默认渠道可走 Tavily，后续 Tavily/Brave/Serper/自研聚合在 Gateway 内演进。
+- 配置收敛：`GLOMI_DEFAULT_WEB_SEARCH_ENABLED`、`GLOMI_DEFAULT_WEB_SEARCH_API_BASE`、`GLOMI_DEFAULT_WEB_SEARCH_API_KEY`、可选 `GLOMI_DEFAULT_WEB_SEARCH_CHANNEL=tavily`；不 seed `InternetContentProvider`，`open_url` 继续走 Onyx 默认 `OnyxWebCrawler`。
+- E3/E4 搜索模式修正：Lite / Deep 不由 UI 是否普通聊天或是否打开 Deep Research 决定，也不做后端关键词规则匹配；Agent 在同一次 `web_search` 工具调用中传 `mode=lite|deep`，不额外增加前置 SearchModeRouter LLM 调用。
+- Deep Research 边界：完整 Deep Research 仍是独立研究工作流，本期只让 research agent 默认使用 `web_search(mode=deep)`；未来若要普通主 Agent 自动进入完整研究，应单独设计 `deep_research` 工具或 orchestrator，不塞进 `web_search`。
+- 同步更新 `docs/GlomiAI.md`：Phase A 纳入平台默认 Glomi Search Gateway 与 Agent 自动 Lite/Deep 搜索模式，默认搜索服务决策标记为已定。
+
 ## 2026-06-14
 
 - E2 产品方向纠偏：用户明确不需要“C 端模型档位 / model catalog / user preference”，而是要“每个账户/tenant 注册即有平台默认 LLM Provider”，先只支持 OpenAI-compatible 主模型。
