@@ -39,7 +39,11 @@ export function TransferOwnershipView({
   const [inputValue, setInputValue] = useState("");
 
   useEffect(() => {
-    setInputValue(selectedTarget?.label ?? "");
+    // Only sync the field when a real selection arrives. A null target comes
+    // from the user typing to change the selection, where their input must stand.
+    if (selectedTarget) {
+      setInputValue(selectedTarget.label);
+    }
   }, [selectedTarget]);
 
   const options = useMemo(() => {

@@ -127,12 +127,8 @@ export async function updateAgentSharedStatus(
   isPaidEnterpriseFeaturesEnabled: boolean,
   labelIds?: number[]
 ): Promise<string | null> {
-  if (!isPaidEnterpriseFeaturesEnabled && groupIds.length > 0) {
-    console.error(
-      "updateAgentSharedStatus: groupIds provided but enterprise features are disabled. " +
-        "Group sharing is an EE-only feature. Discarding groupIds."
-    );
-  }
+  const groupSharesDiscarded =
+    !isPaidEnterpriseFeaturesEnabled && groupIds.length > 0;
 
   try {
     const res = await fetch(`/api/persona/${agentId}/share`, {
@@ -145,7 +141,11 @@ export async function updateAgentSharedStatus(
         label_ids: labelIds,
       }),
     });
-    if (res.ok) return null;
+    if (res.ok) {
+      return groupSharesDiscarded
+        ? "Group sharing is an enterprise-only feature; groups were not added."
+        : null;
+    }
     return (
       ((await res.json()) as { detail?: string }).detail ?? "Unknown error"
     );
@@ -173,16 +173,10 @@ export async function updateAgentShares(
   payload: AgentShareUpdatePayload,
   isPaidEnterpriseFeaturesEnabled: boolean
 ): Promise<string | null> {
-  if (
+  const groupSharesDiscarded =
     !isPaidEnterpriseFeaturesEnabled &&
-    payload.group_shares &&
-    payload.group_shares.length > 0
-  ) {
-    console.error(
-      "updateAgentShares: group_shares provided but enterprise features are disabled. " +
-        "Group sharing is an EE-only feature. Discarding group_shares."
-    );
-  }
+    !!payload.group_shares &&
+    payload.group_shares.length > 0;
 
   try {
     const res = await fetch(`/api/persona/${agentId}/share`, {
@@ -198,7 +192,9 @@ export async function updateAgentShares(
     });
 
     if (res.ok) {
-      return null;
+      return groupSharesDiscarded
+        ? "Group sharing is an enterprise-only feature; group shares were not applied."
+        : null;
     }
 
     return await parseErrorDetail(res, "Failed to update agent shares");
