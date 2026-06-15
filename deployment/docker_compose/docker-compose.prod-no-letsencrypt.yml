@@ -107,6 +107,7 @@ services:
       args:
         - NEXT_PUBLIC_DISABLE_LOGOUT=${NEXT_PUBLIC_DISABLE_LOGOUT:-}
         - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
+        - BUN_CONFIG_REGISTRY=${BUN_CONFIG_REGISTRY:-}
     depends_on:
       - api_server
     restart: unless-stopped

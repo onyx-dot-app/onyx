@@ -200,6 +200,7 @@ services:
         # DO NOT TURN ON unless you have EXPLICIT PERMISSION from Onyx.
         - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
         - NODE_OPTIONS=${NODE_OPTIONS:-"--max-old-space-size=4096"}
+        - BUN_CONFIG_REGISTRY=${BUN_CONFIG_REGISTRY:-}
     env_file:
       - path: .env
         required: false

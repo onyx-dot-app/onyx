@@ -34,7 +34,11 @@ COPY lib/opal/ ./lib/opal/
 COPY lib/shared/ ./lib/shared/
 
 # Install dependencies. opal's `prepare` script builds dist/ as part of install.
-RUN bun install --frozen-lockfile
+ARG BUN_CONFIG_REGISTRY
+RUN if [ -n "$BUN_CONFIG_REGISTRY" ]; then \
+        printf '[install]\nregistry = "%s"\n' "$BUN_CONFIG_REGISTRY" > "$HOME/.bunfig.toml"; \
+    fi && \
+    bun install --frozen-lockfile
 
 # pull in remaining source code
 COPY . .
