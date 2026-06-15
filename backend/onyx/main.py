@@ -7,7 +7,6 @@ from contextlib import asynccontextmanager
 from typing import Any
 from typing import cast
 
-import sentry_sdk
 import uvicorn
 from fastapi import APIRouter
 from fastapi import FastAPI
@@ -473,16 +472,12 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         lifespan=lifespan_override or lifespan,
     )
     if SENTRY_DSN:
-        from onyx.configs.sentry import _add_instance_tags
+        from onyx.configs.sentry import init_sentry
 
-        sentry_sdk.init(
-            dsn=SENTRY_DSN,
-            integrations=[StarletteIntegration(), FastApiIntegration()],
+        init_sentry(
             traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
-            release=__version__,
-            before_send=_add_instance_tags,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
         )
-        logger.info("Sentry initialized")
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 

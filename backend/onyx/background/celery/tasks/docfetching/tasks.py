@@ -5,12 +5,10 @@ import traceback
 from time import sleep
 
 import psutil
-import sentry_sdk
 from celery import Celery
 from celery import shared_task
 from celery import Task
 
-from onyx import __version__
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.memory_monitoring import start_memory_observer
@@ -145,15 +143,9 @@ def _docfetching_task(
     # Since connector_indexing_proxy_task spawns a new process using this function as
     # the entrypoint, we init Sentry here.
     if SENTRY_DSN:
-        from onyx.configs.sentry import _add_instance_tags
+        from onyx.configs.sentry import init_sentry
 
-        sentry_sdk.init(
-            dsn=SENTRY_DSN,
-            traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
-            release=__version__,
-            before_send=_add_instance_tags,
-        )
-        logger.info("Sentry initialized")
+        init_sentry(traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE)
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 

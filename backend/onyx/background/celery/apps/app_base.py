@@ -6,7 +6,6 @@ import time
 from typing import Any
 from typing import cast
 
-import sentry_sdk
 from celery import bootsteps  # ty: ignore[unresolved-import]
 from celery import Task
 from celery.app import trace  # ty: ignore[unresolved-import]
@@ -22,7 +21,6 @@ from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from onyx import __version__
 from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatter
 from onyx.background.celery.apps.task_formatters import CeleryTaskJsonFormatter
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
@@ -68,16 +66,12 @@ logger = setup_logger()
 task_logger = get_task_logger(__name__)
 
 if SENTRY_DSN:
-    from onyx.configs.sentry import _add_instance_tags
+    from onyx.configs.sentry import init_sentry
 
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        integrations=[CeleryIntegration()],
+    init_sentry(
         traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
-        release=__version__,
-        before_send=_add_instance_tags,
+        integrations=[CeleryIntegration()],
     )
-    logger.info("Sentry initialized")
 else:
     logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 
