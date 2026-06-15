@@ -2,6 +2,9 @@
 
 ## 2026-06-15
 
+- 满血 Docker Compose 纳入 Glomi Search Gateway：`deployment/docker_compose/docker-compose.yml` 和 `docker-compose.prod.yml` 新增 `search_gateway` 服务，复用 backend 镜像运行 `uvicorn onyx.search_gateway.server:app --host 0.0.0.0 --port 7777`，不暴露公网端口，由 `api_server` 在 compose 内网访问。
+- Docker env 模板补齐 Glomi 默认能力配置：`env.template` / `env.prod.template` 新增 `CONSUMER_DEFAULT_LLM_*` 示例、`GLOMI_DEFAULT_WEB_SEARCH_API_BASE=http://search_gateway:7777`、Gateway bearer token 和 `TAVILY_API_KEY` 占位；README 补充 Docker 内部使用 `search_gateway:7777`，只有本地源码直跑才使用 `localhost:7777`。
+- 新增 compose 回归测试 `backend/tests/unit/deployment/test_glomi_search_gateway_compose.py`，覆盖主 compose/prod compose 都包含内部 `search_gateway`、不暴露 ports、API 依赖 Gateway，以及 env 模板指向 compose 内部 Gateway。验证记录：新增测试 4 passed；`docker compose -f docker-compose.yml config --quiet` 通过；`docker-compose.prod.yml` 在临时空 `.env.nginx` 下 config 通过，只有既有 `USE_IAM_AUTH` 未设置 warning。
 - 新增普通 chat 研究型回答策略设计 `docs/superpowers/specs/2026-06-15-ordinary-chat-research-answer-policy-design.md`：问题根因不是搜索不足，而是普通对话缺少“搜索后如何克制表达”的策略，导致调研/横评类问题容易输出几千到上万字，用户抓不到重点且难以评估质量。
 - 实现 Ordinary Chat Research Answer Policy：在 `backend/onyx/prompts/search_strategy.py` 新增 `CHAT_RESEARCH_ANSWER_GUIDANCE`，并接入 `TOOL_DESCRIPTION_SEARCH_GUIDANCE`。策略明确普通 chat 不使用固定模板，由 Agent 自适应选择回答形态；默认优先综合判断和证据强弱，不逐条搬运搜索材料；`deep search` 只表示证据收集更深，不等于最终回答更长；只有用户明确要求完整报告/详细展开/文档式交付时才输出长篇。
 - 同步更新 `docs/GlomiAI.md`：E3 超级对话调优加入“普通 chat 研究型回答自适应但克制”的产品边界，区分搜索强度和回答长度，Deep Research 长报告预期保持不变。

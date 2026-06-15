@@ -17,6 +17,7 @@ services:
       - cache
       - minio
       - inference_model_server
+      - search_gateway
     restart: unless-stopped
     environment:
       - AUTH_TYPE=${AUTH_TYPE:-oidc}
@@ -134,6 +135,37 @@ services:
     env_file:
       - path: .env
         required: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+
+  search_gateway:
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: >
+      /bin/sh -c "uvicorn onyx.search_gateway.server:app --host 0.0.0.0 --port 7777"
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:7777/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - search_gateway_logs:/var/log/onyx
     logging:
       driver: json-file
       options:
@@ -405,6 +437,7 @@ volumes:
   # for logs that we don't want to lose on container restarts
   api_server_logs:
   background_logs:
+  search_gateway_logs:
   inference_model_server_logs:
   indexing_model_server_logs:
   # mcp_server_logs:

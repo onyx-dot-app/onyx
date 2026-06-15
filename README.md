@@ -339,6 +339,14 @@ http://localhost:3000/api/persona
 
 仓库内提供一个本地 FastAPI Gateway，便于用 Tavily API key 跑通平台默认搜索链路。
 
+完整 Docker Compose 已内置 `search_gateway` 服务，容器内应使用：
+
+```env
+GLOMI_DEFAULT_WEB_SEARCH_API_BASE=http://search_gateway:7777
+```
+
+只有在本地源码直接跑 API / Gateway 时，才使用 `http://localhost:7777`。
+
 ```powershell
 $env:PYTHONUTF8='1'
 $env:GLOMI_SEARCH_GATEWAY_API_KEY='dev-gateway-key'
