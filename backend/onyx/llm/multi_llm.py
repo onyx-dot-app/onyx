@@ -3,7 +3,6 @@ import os
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from contextlib import nullcontext
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -720,13 +719,9 @@ class LitellmLLM(LLM):
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
 
-            # We only need to set environment variables if custom config is set
-            env_ctx = (
-                temporary_env_and_lock(self._custom_config)
-                if self._custom_config
-                else nullcontext()
-            )
-            with env_ctx:
+            # Hold _env_lock during the litellm call so no call sees another's
+            # injected secret; an empty config injects nothing, just locks.
+            with temporary_env_and_lock(self._custom_config or {}):
                 messages = _prompt_to_dicts(prompt)
 
                 # Bedrock's Converse API requires toolConfig when messages
@@ -1009,8 +1004,9 @@ class LitellmLLM(LLM):
 def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
     """
     Temporarily sets the environment variables to the given values.
-    Code path is locked while the environment variables are set.
-    Then cleans up the environment and frees the lock.
+    _env_lock is held while the environment variables are set, so no concurrent
+    LLM call can observe them. Then cleans up the environment and releases the
+    lock.
     """
     with _env_lock:
         logger.debug("Acquired lock in temporary_env_and_lock")
