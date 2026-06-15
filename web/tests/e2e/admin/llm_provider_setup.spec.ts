@@ -453,7 +453,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     const editModal = await openProviderEditModal(page, providerName);
     await editModal
       .locator(`[data-model-name="${modelToEnable}"]`)
-      .locator("button")
+      .getByRole("button")
       .first()
       .click();
 
@@ -521,7 +521,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
     const editModal = await openProviderEditModal(page, providerName);
     await editModal
       .locator(`[data-model-name="${modelToDisable}"]`)
-      .locator("button")
+      .getByRole("button")
       .first()
       .click();
 

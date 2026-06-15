@@ -400,6 +400,8 @@ def test_iptables_rejects_bypass_attempts(
             "-sS",
             "-o",
             "/dev/null",
+            "--noproxy",
+            "*",
             "-6",
             "--max-time",
             "5",
@@ -426,7 +428,7 @@ def test_iptables_rejects_bypass_attempts(
 def test_unlabeled_container_gets_unidentified_sandbox_403() -> None:
     """
     A non-sandbox container on the bridge that hits the proxy must get a 403 + a
-    ``gate.unidentified_sandbox`` warning in the proxy logs. Proves
+    ``identity_unknown_sandbox`` warning in the proxy logs. Proves
     DockerEventsLookup rejects unknown source IPs and the observability hook we
     added in branch 6 still fires.
     """
@@ -463,8 +465,8 @@ def test_unlabeled_container_gets_unidentified_sandbox_403() -> None:
         timeout=10,
         check=False,
     )
-    assert "gate.unidentified_sandbox" in proxy_logs.stderr + proxy_logs.stdout, (
-        f"Proxy did not log gate.unidentified_sandbox warning. Recent "
+    assert "identity_unknown_sandbox" in proxy_logs.stderr + proxy_logs.stdout, (
+        f"Proxy did not log identity_unknown_sandbox warning. Recent "
         f"logs:\n{proxy_logs.stdout[-2000:]}"
     )
 

@@ -16,6 +16,9 @@ Timing knobs are encoded in the model name (litellm passes it through):
     mock-tools1-ttft300             — emit a tool call on the first AUTO-
                                       tool-choice cycle (drives the search
                                       tool path in a normal chat turn)
+    mock-tools3                     — call up to 3 retrieval tools in parallel
+                                      on the AUTO cycle (multi-tool turn);
+                                      capped by how many the persona offers
     mock-agents2                    — spawn 2 parallel research agents per
                                       deep-research orchestrator cycle
 
@@ -36,8 +39,9 @@ deep_research/dr_loop.py):
   else `generate_report`, else the first offered tool.
 - tool_choice AUTO                   → `generate_plan` if offered (DR
   clarification phase — always taken so a load-test DR turn never ends in a
-  clarification question); else, with the `-tools1` knob and no tool result
-  yet, the preferred search tool (normal chat-with-search); else plain text.
+  clarification question); else, with the `-tools<N>` knob and no tool result
+  yet, up to N offered retrieval tools in parallel (normal chat-with-search,
+  or a multi-tool turn for N>1); else plain text.
 
 Tool-call arguments are synthesized from each tool's JSON schema (required
 string props get a snippet of the last user message; arrays of strings get a
@@ -103,7 +107,9 @@ class Knobs:
         self.ttft_s: float = DEFAULT_TTFT_MS / 1000.0
         self.itl_s: float = DEFAULT_ITL_MS / 1000.0
         self.n_tokens: int = DEFAULT_LEN_TOKENS
-        self.tools_on_auto: bool = False
+        # Retrieval tools to call in parallel on an AUTO cycle (0=none,
+        # 1=mock-tools1, 2+=multi-tool); capped by tools the persona offers.
+        self.n_auto_tools: int = 0
         self.n_agents: int = 1
         for name, value in _KNOB_RE.findall(model):
             if name == "ttft":
@@ -113,7 +119,7 @@ class Knobs:
             elif name == "len":
                 self.n_tokens = int(value)
             elif name == "tools":
-                self.tools_on_auto = bool(int(value))
+                self.n_auto_tools = int(value)
             elif name == "agents":
                 self.n_agents = max(1, int(value))
 
@@ -267,11 +273,14 @@ def _pick_tool(request: ChatCompletionRequest, knobs: Knobs) -> list[ToolCall]:
     # DR clarification: always proceed to the plan, never ask to clarify.
     if _GENERATE_PLAN in by_name:
         return [make(by_name[_GENERATE_PLAN])]
-    if knobs.tools_on_auto and not has_tool_result:
-        retrieval_tool = next((n for n in _RETRIEVAL_TOOLS if n in by_name), None)
-        target = by_name.get(retrieval_tool) if retrieval_tool else tools[0]
-        if target is not None:
-            return [make(target)]
+    if knobs.n_auto_tools > 0 and not has_tool_result:
+        # Up to n_auto_tools retrieval tools in parallel; else the first tool.
+        retrieval = [by_name[n] for n in _RETRIEVAL_TOOLS if n in by_name]
+        chosen = retrieval[: knobs.n_auto_tools]
+        if not chosen and tools:
+            chosen = [tools[0]]
+        if chosen:
+            return [make(t) for t in chosen]
     return []
 
 

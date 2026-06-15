@@ -31,6 +31,29 @@ logger = setup_logger()
 _HEALTHCHECK_TIMEOUT_SECONDS = 5.0
 
 
+def snapshot_opencode_history_before_recovery(
+    sandbox_manager: SandboxManager,
+    sandbox_id: UUID,
+    tenant_id: str,
+) -> None:
+    """Best-effort history capture before terminating an unhealthy sandbox."""
+    if not sandbox_manager.supports_opencode_history_persistence:
+        return
+
+    try:
+        sandbox_manager.create_opencode_history_snapshot(
+            sandbox_id,
+            tenant_id,
+            timeout_seconds=30.0,
+        )
+    except Exception:
+        logger.warning(
+            "opencode history snapshot failed during recovery of sandbox %s",
+            sandbox_id,
+            exc_info=True,
+        )
+
+
 class ProvisioningPolicy(str, Enum):
     """How to handle a sandbox already in ``PROVISIONING`` when we arrive.
 
@@ -164,6 +187,7 @@ def ensure_sandbox_ready(
             under FAIL policy.
     """
     sandbox = get_sandbox_by_user_id(db_session, user_id)
+    tenant_id = get_current_tenant_id()
 
     # Resolve PROVISIONING upfront so the rest of the state machine sees a
     # stable status (or knows there isn't one).
@@ -187,6 +211,9 @@ def ensure_sandbox_ready(
             "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
             sandbox.id,
         )
+        snapshot_opencode_history_before_recovery(
+            sandbox_manager, sandbox.id, tenant_id
+        )
         sandbox_manager.terminate(sandbox.id)
         update_sandbox_status__no_commit(
             db_session, sandbox.id, SandboxStatus.TERMINATED
@@ -204,7 +231,6 @@ def ensure_sandbox_ready(
         )
 
     # Everything below provisions a pod, which adds to the per-tenant cap.
-    tenant_id = get_current_tenant_id()
     _enforce_tenant_concurrency_limit(db_session, tenant_id)
 
     if user is None:

@@ -55,10 +55,10 @@ import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/sections/chat/ChatScrollContainer";
-import ProjectContextPanel from "@/app/app/components/projects/ProjectContextPanel";
+import ProjectContextPanel from "@/sections/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { getProjectTokenCount } from "@/app/app/projects/projectsService";
-import ProjectChatSessionList from "@/app/app/components/projects/ProjectChatSessionList";
+import ProjectChatSessionList from "@/sections/projects/ProjectChatSessionList";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";

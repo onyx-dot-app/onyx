@@ -244,3 +244,68 @@ def test_trial_tenant_hits_remove_invited_rate_limit(
         db_session=MagicMock(),
     )
     mock_rate_limit.assert_called_once()
+
+
+# --- seat-lock placement tests (cloud self-deadlock regression) ---
+
+
+@patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
+@patch("onyx.server.manage.users.DEV_MODE", True)
+@patch("onyx.server.manage.users.MULTI_TENANT", True)
+@patch("onyx.server.manage.users.is_tenant_on_trial_fn", return_value=False)
+@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
+@patch("onyx.server.manage.users.get_invited_users", return_value=[])
+@patch("onyx.server.manage.users.get_all_users", return_value=[])
+@patch("onyx.server.manage.users.write_invited_users", return_value=1)
+@patch(
+    "onyx.server.manage.users.fetch_ee_implementation_or_noop",
+    return_value=lambda *_args: None,
+)
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
+def test_cloud_invite_skips_request_session_seat_lock(
+    mock_enforce: MagicMock, *_mocks: MagicMock
+) -> None:
+    """Cloud must not take the seat advisory lock on the request session —
+    enforcement lives in add_users_to_tenant. A second acquisition here
+    self-deadlocks the request (two connections, one tenant lock key)."""
+    bulk_invite_users(emails=["new@example.com"], current_user=MagicMock())
+
+    mock_enforce.assert_not_called()
+
+
+@patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
+@patch("onyx.server.manage.users.MULTI_TENANT", False)
+@patch("onyx.server.manage.users.get_invited_users", return_value=[])
+@patch("onyx.server.manage.users.get_all_users", return_value=[])
+@patch("onyx.server.manage.users.write_invited_users", return_value=1)
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
+def test_self_hosted_invite_still_enforces_seat_limit(
+    mock_enforce: MagicMock, *_mocks: MagicMock
+) -> None:
+    """Self-hosted license seats are still enforced on the request session."""
+    bulk_invite_users(emails=["new@example.com"], current_user=MagicMock())
+
+    mock_enforce.assert_called_once()
+
+
+@patch("onyx.server.manage.users.MULTI_TENANT", True)
+@patch("onyx.server.manage.users.is_tenant_on_trial_fn", return_value=False)
+@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
+@patch("onyx.server.manage.users.get_invited_users", return_value=[])
+@patch("onyx.server.manage.users.get_all_users", return_value=[])
+@patch("onyx.server.manage.users.enforce_seat_limit_locked")
+def test_cloud_seat_decline_propagates_from_add_users(*_mocks: MagicMock) -> None:
+    """A seat/billing decline raised inside add_users_to_tenant must reach
+    the caller as OnyxError — the generic except must not swallow it."""
+
+    def _declining_add_users(*_args: object) -> None:
+        raise OnyxError(OnyxErrorCode.SEAT_LIMIT_EXCEEDED, "card declined")
+
+    with patch(
+        "onyx.server.manage.users.fetch_ee_implementation_or_noop",
+        return_value=_declining_add_users,
+    ):
+        with pytest.raises(OnyxError) as exc_info:
+            bulk_invite_users(emails=["new@example.com"], current_user=MagicMock())
+
+    assert exc_info.value.error_code == OnyxErrorCode.SEAT_LIMIT_EXCEEDED

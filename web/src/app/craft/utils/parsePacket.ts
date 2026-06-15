@@ -115,6 +115,32 @@ function detectSkillName(
   return match?.[2] ?? null;
 }
 
+function detectSkillScript(command: string): string | null {
+  const match = command.match(/\.opencode\/skills\/([\w-]+)\//);
+  if (match?.[1]) return match[1];
+  // The github skill invokes the gh CLI directly rather than a bundled script.
+  // Any gh call in the sandbox authenticates through the github app's proxy
+  // injection, so attributing all of them to the skill is intentional.
+  if (/^gh\s/.test(command)) return "github";
+  return null;
+}
+
+function resolveSkillName(
+  p: Record<string, unknown>,
+  toolName: ToolName,
+  kind: ToolKind,
+  ri: Record<string, unknown> | null,
+  command: string
+): string | null {
+  return (
+    detectSkillName(p, toolName) ??
+    (toolName === "skill" && typeof ri?.name === "string"
+      ? (ri.name as string)
+      : null) ??
+    (kind === "execute" ? detectSkillScript(command) : null)
+  );
+}
+
 // ─── Tool Name Resolution ─────────────────────────────────────────
 
 const NAME_MAP: Record<string, ToolName> = {
@@ -332,9 +358,8 @@ function buildDescription(
       return filePath;
     }
   }
-  // Execute: use backend description
   if (kind === "execute") {
-    return sanitizePathsInText(rawDescription) || "Running command";
+    return sanitizePathsInText(rawDescription);
   }
   // Search: show pattern
   if (
@@ -557,6 +582,7 @@ function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
     ri?.path ??
     "") as string;
   const filePath = rawFilePath ? stripSessionPrefix(rawFilePath) : "";
+  const command = sanitizePathsInText(rawCommand);
   return {
     type: "tool_call_start",
     toolCallId: getToolCallId(p),
@@ -565,7 +591,8 @@ function parseToolCallStart(p: Record<string, unknown>): ParsedToolCallStart {
     isTodo: toolName === "todowrite",
     title: buildTitle(toolName, kind, true),
     description: buildDescription(toolName, kind, filePath, ri, rawDescription),
-    command: sanitizePathsInText(rawCommand),
+    command,
+    skillName: resolveSkillName(p, toolName, kind, ri, command),
     subagentType: (ri?.subagent_type ?? ri?.subagentType ?? null) as
       | string
       | null,
@@ -659,14 +686,7 @@ function parseToolCallProgress(
     | null;
 
   // ── Skill detection ───────────────────────────────────────────
-  // Two shapes: (1) skill-namespaced tool calls with raw names like
-  // "skills.brainstorming" (toolName "unknown"); (2) the dedicated "skill"
-  // tool, whose invoked skill is in rawInput.name (e.g. "company-search").
-  const skillName =
-    detectSkillName(p, toolName) ??
-    (toolName === "skill" && typeof ri?.name === "string"
-      ? (ri.name as string)
-      : null);
+  const skillName = resolveSkillName(p, toolName, kind, ri, command);
   const taskOutput =
     toolName === "task" && status === "completed"
       ? extractTaskOutput(ro)

@@ -6,11 +6,24 @@ from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
 from onyx.connectors.web.connector import WebConnector
 
 BASE_URL = "http://example.com"
+
+
+@pytest.fixture(autouse=True)
+def _skip_web_connector_ssrf_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests crawl example.com and don't exercise SSRF. The default SSRF
+    level is VALIDATE_ALL, at which the web connector does a real DNS lookup per
+    fetch; neutralize the gate so the tests stay hermetic (no network)."""
+    monkeypatch.setattr(
+        "onyx.connectors.web.connector.protected_url_check", lambda _url: None
+    )
+
 
 SINGLE_PAGE_HTML = (
     "<html><body><p>Content that should not appear in slim output</p></body></html>"

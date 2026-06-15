@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // entryKind is the type of chat entry.
@@ -25,7 +25,7 @@ const (
 
 // chatEntry is a single rendered entry in the chat history.
 type chatEntry struct {
-	kind      entryKind
+	kind     entryKind
 	content  string // raw content (for agent: the markdown source)
 	rendered string // pre-rendered output
 }
@@ -471,4 +471,3 @@ func (v *viewport) view(height int) string {
 
 	return strings.Join(contentLines, "\n")
 }
-

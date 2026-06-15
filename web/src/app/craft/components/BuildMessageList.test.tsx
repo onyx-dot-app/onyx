@@ -1,5 +1,6 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { TooltipProvider } from "@radix-ui/react-tooltip";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import type { BuildMessage } from "@/app/craft/types/streamingTypes";
 import type { StreamItem } from "@/app/craft/types/displayTypes";
@@ -51,13 +52,15 @@ function renderList(props: {
   isStreaming?: boolean;
 }) {
   return render(
-    <BuildMessageList
-      messages={props.messages ?? []}
-      streamItems={props.streamItems ?? []}
-      isStreaming={props.isStreaming}
-      autoScrollEnabled={false}
-      scrollContainerRef={scrollRef()}
-    />
+    <TooltipProvider>
+      <BuildMessageList
+        messages={props.messages ?? []}
+        streamItems={props.streamItems ?? []}
+        isStreaming={props.isStreaming}
+        autoScrollEnabled={false}
+        scrollContainerRef={scrollRef()}
+      />
+    </TooltipProvider>
   );
 }
 

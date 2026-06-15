@@ -6,7 +6,6 @@ from typing import cast
 from typing import NoReturn
 
 from pydantic import BaseModel
-from retry import retry
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
@@ -35,6 +34,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -268,7 +268,7 @@ class CanvasConnector(
             )
         return self._course_permissions_cache[course_id]
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_courses(self) -> list[CanvasCourse]:
         """Fetch all courses accessible to the authenticated user."""
         logger.debug("Fetching Canvas courses")
@@ -280,7 +280,7 @@ class CanvasConnector(
             courses.extend(CanvasCourse.from_api(c) for c in page)
         return courses
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_pages(self, course_id: int) -> list[CanvasPage]:
         """Fetch all pages for a given course."""
         logger.debug("Fetching pages for course %s", course_id)
@@ -293,7 +293,7 @@ class CanvasConnector(
             pages.extend(CanvasPage.from_api(p, course_id=course_id) for p in page)
         return pages
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_assignments(self, course_id: int) -> list[CanvasAssignment]:
         """Fetch all assignments for a given course."""
         logger.debug("Fetching assignments for course %s", course_id)
@@ -308,7 +308,7 @@ class CanvasConnector(
             )
         return assignments
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_announcements(self, course_id: int) -> list[CanvasAnnouncement]:
         """Fetch all announcements for a given course."""
         logger.debug("Fetching announcements for course %s", course_id)

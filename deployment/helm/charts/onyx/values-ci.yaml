@@ -17,6 +17,9 @@ configMap:
   SANDBOX_POD_MEMORY_REQUEST: "256Mi"
   SANDBOX_POD_CPU_LIMIT: "2000m"
   SANDBOX_POD_MEMORY_LIMIT: "4Gi"
+  # kind runner disks are small; production default is 5Gi/20Gi.
+  SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST: "512Mi"
+  SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT: "4Gi"
 
 # test_sigterm_drain_unblocks_parked_request deletes "the" proxy pod via an
 # arbitrary `items[0]` from the label selector and expects that pod to be the
@@ -39,9 +42,13 @@ auth:
     values:
       redis_password: "password"
   objectstorage:
+    # CI-only creds. values.yaml ships no defaults (fail closed), so all four keys
+    # must be set here. Never use minioadmin on a real cluster.
     values:
       s3_aws_access_key_id: "minioadmin"
       s3_aws_secret_access_key: "minioadmin"
+      rootUser: "minioadmin"
+      rootPassword: "minioadmin"
   opensearch:
     values:
       opensearch_admin_password: "ci-test-not-used"

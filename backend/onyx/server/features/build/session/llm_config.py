@@ -12,6 +12,7 @@ from onyx.llm.well_known_providers.llm_provider_options import (
     fetch_default_model_for_provider,
 )
 from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
+from onyx.server.features.build.configs import BUILD_MODE_NOT_CONFIGURED_API_KEY
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
@@ -87,13 +88,15 @@ def get_all_build_mode_llm_configs(
     providers: list[LLMProviderView],
     default: LLMProviderConfig,
 ) -> list[LLMProviderConfig]:
-    """``default`` first, then one config per other supported provider type
-    from ``providers``. Used at provision time so every configured provider
-    is pre-registered in opencode.json and per-prompt model overrides can
-    cross providers without a pod restart.
+    """Every supported provider type, ``default`` first — the org's real config
+    when present, else a dummy-key placeholder. Registering all types keeps the
+    opencode.json set independent of the org's configured providers, so a
+    per-prompt cross-provider override never hits "model not found"; an
+    unconfigured provider fails closed via the dummy key.
     """
     configs: list[LLMProviderConfig] = [default]
     seen: set[str] = {default.provider}
+
     for provider in providers:
         if provider.provider in seen:
             continue
@@ -102,4 +105,21 @@ def get_all_build_mode_llm_configs(
             continue
         seen.add(provider.provider)
         configs.append(_config_from_provider(provider, model_name))
+
+    # Backfill supported types the org hasn't configured with a dummy-key entry.
+    for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES:
+        if provider_type in seen:
+            continue
+        model_name = fetch_default_model_for_provider(provider_type)
+        if model_name is None:
+            continue
+        seen.add(provider_type)
+        configs.append(
+            LLMProviderConfig(
+                provider=provider_type,
+                model_name=model_name,
+                api_key=BUILD_MODE_NOT_CONFIGURED_API_KEY,
+                api_base=None,
+            )
+        )
     return configs

@@ -473,8 +473,11 @@ def bulk_invite_users(
     ]
 
     # Must run before the trial counter reservation — a seat-limit
-    # failure must not burn trial quota.
-    if emails_needing_seats:
+    # failure must not burn trial quota. Self-hosted only: the cloud
+    # check runs inside add_users_to_tenant, atomic with the mapping
+    # insert. Locking here too re-acquires the tenant advisory lock on
+    # a second connection and self-deadlocks (#10900).
+    if emails_needing_seats and not MULTI_TENANT:
         enforce_seat_limit_locked(db_session, seats_needed=len(emails_needing_seats))
 
     # Enforce the trial invite cap via the monotonic `tenant_invite_counter`.
@@ -509,7 +512,10 @@ def bulk_invite_users(
             fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.provisioning", "add_users_to_tenant", None
             )(new_invited_emails, tenant_id)
-
+        except OnyxError:
+            # Seat-limit / billing declines from the cloud check must reach
+            # the caller now that this is the only enforcement point.
+            raise
         except Exception as e:
             logger.error("Failed to add users to tenant %s: %s", tenant_id, str(e))
 

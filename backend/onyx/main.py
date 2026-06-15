@@ -7,7 +7,6 @@ from contextlib import asynccontextmanager
 from typing import Any
 from typing import cast
 
-import sentry_sdk
 import uvicorn
 from fastapi import APIRouter
 from fastapi import FastAPI
@@ -32,6 +31,7 @@ from onyx.auth.schemas import UserUpdate
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
+from onyx.auth.users import verify_user_auth_secret
 from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
@@ -360,6 +360,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     # Will throw exception if an issue is found
     verify_auth()
 
+    # Will throw exception if USER_AUTH_SECRET is missing on a real deployment
+    verify_user_auth_secret()
+
     if OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET:
         logger.notice("Both OAuth Client ID and Secret are configured.")
 
@@ -469,16 +472,12 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         lifespan=lifespan_override or lifespan,
     )
     if SENTRY_DSN:
-        from onyx.configs.sentry import _add_instance_tags
+        from onyx.configs.sentry import init_sentry
 
-        sentry_sdk.init(
-            dsn=SENTRY_DSN,
-            integrations=[StarletteIntegration(), FastApiIntegration()],
+        init_sentry(
             traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
-            release=__version__,
-            before_send=_add_instance_tags,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
         )
-        logger.info("Sentry initialized")
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 

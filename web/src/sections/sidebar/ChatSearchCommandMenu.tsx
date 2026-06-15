@@ -264,7 +264,11 @@ export default function ChatSearchCommandMenu({
                             ↵
                           </Text>
                         ) : (
-                          <Text secondaryBody text03>
+                          <Text
+                            secondaryBody
+                            text03
+                            data-testid="command-menu-timestamp"
+                          >
                             {timeAgo(chat.time)}
                           </Text>
                         )
@@ -321,7 +325,11 @@ export default function ChatSearchCommandMenu({
                           ↵
                         </Text>
                       ) : (
-                        <Text secondaryBody text03>
+                        <Text
+                          secondaryBody
+                          text03
+                          data-testid="command-menu-timestamp"
+                        >
                           {timeAgo(project.time)}
                         </Text>
                       )

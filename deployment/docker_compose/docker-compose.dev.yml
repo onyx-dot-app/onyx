@@ -46,6 +46,7 @@ services:
 
   minio:
     # Use different ports to avoid conflicts with model servers.
+    # TODO(security): prefix 127.0.0.1: to bind loopback, not 0.0.0.0 (LAN-exposed).
     ports:
       - "${MINIO_API_HOST_PORT:-9004}:9000"
       - "${MINIO_CONSOLE_HOST_PORT:-9005}:9001"
