@@ -9,14 +9,12 @@ import {
   type ReactNode,
 } from "react";
 import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
-import { cn } from "@opal/utils";
-import { ensureHrefProtocol, INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
+import { cn, markdown } from "@opal/utils";
+import { INTERACTIVE_SELECTOR, noProp } from "@/lib/utils";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import Text from "@/refresh-components/texts/Text";
-import type { Components } from "react-markdown";
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { useProjectsContext } from "@/providers/ProjectsContext";
@@ -32,7 +30,7 @@ import { useRouter } from "next/navigation";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
-import { Popover, PopoverMenu } from "@opal/components";
+import { Popover, PopoverMenu, Text as OpalText } from "@opal/components";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 import SimplePopover from "@/refresh-components/SimplePopover";
 import { Button, LineItemButton, OpenButton } from "@opal/components";
@@ -61,15 +59,6 @@ import { APP_SLOGAN } from "@/lib/constants";
 
 function Header() {
   const appFocus = useAppFocus();
-  if (appFocus.isSharedChat()) return null;
-  return <HeaderInner appFocus={appFocus} />;
-}
-
-function HeaderInner({
-  appFocus,
-}: {
-  appFocus: ReturnType<typeof useAppFocus>;
-}) {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const settings = useSettingsContext();
@@ -416,30 +405,6 @@ function HeaderInner({
 // Footer
 // ---------------------------------------------------------------------------
 
-const footerMarkdownComponents = {
-  p: ({ children }) => (
-    <Text as="p" text03 secondaryAction className="my-0! text-center">
-      {children}
-    </Text>
-  ),
-  a: ({ node, href, className, children, ...rest }) => {
-    const fullHref = ensureHrefProtocol(href);
-    return (
-      <a
-        href={fullHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        {...rest}
-        className={cn(className, "underline underline-offset-2")}
-      >
-        <Text text03 secondaryAction>
-          {children}
-        </Text>
-      </a>
-    );
-  },
-} satisfies Partial<Components>;
-
 function Footer() {
   const settings = useSettingsContext();
   const appFocus = useAppFocus();
@@ -471,11 +436,9 @@ function Footer() {
         appFocus.isChat() ? "pb-2" : "py-2"
       )}
     >
-      <MinimalMarkdown
-        content={customFooterContent}
-        className={cn("max-w-full text-center")}
-        components={footerMarkdownComponents}
-      />
+      <OpalText font="secondary-action" color="text-03">
+        {markdown(customFooterContent)}
+      </OpalText>
     </footer>
   );
 }
