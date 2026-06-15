@@ -419,6 +419,18 @@ def create_update_persona(
         logger.exception("Failed to create persona")
         raise HTTPException(status_code=400, detail=str(e))
 
+    # Eager-load the share relations the snapshot reads so from_model doesn't
+    # lazy-load each one separately after the commit expires the instance.
+    persona = db_session.scalars(
+        select(Persona)
+        .where(Persona.id == persona.id)
+        .options(
+            selectinload(Persona.user_shares),
+            selectinload(Persona.group_shares),
+            selectinload(Persona.owner_group),
+        )
+    ).one()
+
     return FullPersonaSnapshot.from_model(persona)
 
 

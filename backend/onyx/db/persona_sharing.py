@@ -27,12 +27,13 @@ def get_user_group_ids_for_user(db_session: Session, user_id: UUID) -> set[int]:
 
 def persona_ownership_is_vacant(persona: Persona) -> bool:
     """True when no live owner holds the persona: both owner refs are NULL on
-    a non-builtin persona, or the owning user is deactivated. Vacant personas
-    are managed (and transferable) by admins. Requires `persona.user` loaded."""
+    a non-builtin persona, or the owning user is deactivated or gone. Vacant
+    personas are managed (and transferable) by admins. Requires `persona.user`
+    loaded."""
     if persona.builtin_persona:
         return False
     if persona.user_id is not None:
-        return persona.user is not None and not persona.user.is_active
+        return persona.user is None or not persona.user.is_active
     return persona.owner_group_id is None
 
 
