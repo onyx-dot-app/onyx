@@ -1361,7 +1361,7 @@ def upsert_persona(
         user_files = (
             db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
         )
-        if not user_files and user_file_ids:
+        if len(user_files) != len(set(user_file_ids)):
             raise ValueError("user_files not found")
 
         # Editors may only attach files they own (admins bypass)
