@@ -13,11 +13,11 @@ import { Section } from "@/layouts/general-layouts";
 import { isVectorDbRequiredRoute } from "@/lib/admin-routes";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 
-export interface ClientLayoutProps {
+export interface AdminChromeProps {
   children: React.ReactNode;
 }
 
-export default function ClientLayout({ children }: ClientLayoutProps) {
+export default function AdminChrome({ children }: AdminChromeProps) {
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
@@ -61,24 +61,27 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
       )}
 
       {hasCustomSidebar ? (
-        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">{content}</div>
+        <div className="flex flex-1 flex-col min-w-0 min-h-0">
+          <div className="h-[52px] shrink-0" />
+          <div className="flex-1 overflow-y-auto min-h-0">{content}</div>
+        </div>
       ) : (
         <>
           <AdminSidebar />
           <div
             data-main-container
-            className="flex flex-1 flex-col min-w-0 min-h-0 overflow-y-auto"
+            className="flex flex-1 flex-col min-w-0 min-h-0"
           >
-            {isMobile && (
-              <div className="flex items-center px-4 pt-2">
+            <div className="h-[52px] flex items-center px-2 shrink-0">
+              {isMobile && (
                 <Button
                   prominence="internal"
                   icon={SvgSidebar}
                   onClick={() => setFolded(false)}
                 />
-              </div>
-            )}
-            {content}
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto min-h-0">{content}</div>
           </div>
         </>
       )}
