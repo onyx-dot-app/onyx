@@ -449,7 +449,7 @@ def update_persona_shared(
     # Org-wide visibility is an owner/admin decision. EDITOR-level sharees may
     # edit user/group shares but must not flip is_public / public_permission
     # (the same guard update_persona_public_status enforces).
-    is_owner_or_admin = (
+    is_owner_or_admin: bool = (
         user.role == UserRole.ADMIN
         or persona.user_id == user.id
         or (
@@ -462,8 +462,8 @@ def update_persona_shared(
         is_public = None
         public_permission = None
 
-    owner_user_id = persona.user_id
-    owner_group_id = persona.owner_group_id
+    owner_user_id: UUID | None = persona.user_id
+    owner_group_id: int | None = persona.owner_group_id
     if user_ids is not None and owner_user_id is not None:
         user_ids = [uid for uid in user_ids if uid != owner_user_id]
     if user_shares is not None and owner_user_id is not None:
@@ -1378,6 +1378,7 @@ def get_persona_by_id(
     db_session: Session,
     include_deleted: bool = False,
     is_for_edit: bool = True,  # NOTE: assume true for safety
+    user_group_ids: set[int] | None = None,
 ) -> Persona:
     persona_stmt = (
         select(Persona)
@@ -1406,8 +1407,13 @@ def get_persona_by_id(
     or_conditions |= (Persona.user_id == None) & (  # noqa: E711
         Persona.builtin_persona == True  # noqa: E712
     )
-    # Members of the owning group hold owner rights
-    owner_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    # Members of the owning group hold owner rights. Reuse a caller-supplied
+    # set (the share-snapshot path already fetched it) to avoid a second query.
+    owner_group_ids = (
+        user_group_ids
+        if user_group_ids is not None
+        else get_user_group_ids_for_user(db_session, user.id)
+    )
     if owner_group_ids:
         or_conditions |= Persona.owner_group_id.in_(owner_group_ids)
     if not is_for_edit:

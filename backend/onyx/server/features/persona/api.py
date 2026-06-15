@@ -572,11 +572,15 @@ def get_persona(
     user: User = Depends(current_limited_user),
     db_session: Session = Depends(get_session),
 ) -> FullPersonaSnapshot:
+    user_group_ids: set[int] = (
+        get_user_group_ids_for_user(db_session, user.id) if user is not None else set()
+    )
     persona = get_persona_by_id(
         persona_id=persona_id,
         user=user,
         db_session=db_session,
         is_for_edit=False,
+        user_group_ids=user_group_ids,
     )
 
     # Validate and clear the model override if the referenced model is no longer
@@ -592,7 +596,7 @@ def get_persona(
     snapshot = FullPersonaSnapshot.from_model(persona)
     if user is not None:
         snapshot.user_permission = get_persona_access_level(
-            persona, user, get_user_group_ids_for_user(db_session, user.id)
+            persona, user, user_group_ids
         )
     return snapshot
 
