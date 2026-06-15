@@ -15,7 +15,6 @@ import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useChatSessions from "@/hooks/useChatSessions";
 import {
@@ -375,7 +374,7 @@ function Header() {
         */}
           <div className="flex flex-1 justify-end items-center">
             {appFocus.isChat() && currentChatSession && (
-              <FrostedDiv className="flex shrink flex-row items-center">
+              <FrostedDiv className="flex shrink flex-row items-center gap-2">
                 <Button
                   icon={SvgShare}
                   prominence="tertiary"
@@ -388,12 +387,10 @@ function Header() {
                 </Button>
                 <SimplePopover
                   trigger={
-                    /* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */
-                    <IconButton
+                    <Button
                       icon={SvgMoreHorizontal}
-                      className="ml-2"
-                      transient={popoverOpen}
-                      tertiary
+                      prominence="tertiary"
+                      interaction={popoverOpen ? "hover" : "rest"}
                     />
                   }
                   onOpenChange={(state) => {
