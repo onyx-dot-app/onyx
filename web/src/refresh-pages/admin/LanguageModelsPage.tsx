@@ -14,7 +14,7 @@ import {
   Text,
   Card,
 } from "@opal/components";
-import { Hoverable } from "@opal/core";
+import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -31,6 +31,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
 
@@ -422,31 +423,42 @@ export default function LanguageModelsPage() {
           </>
         )}
 
-        {/* ── Add Provider (always visible) ── */}
-        <GeneralLayouts.Section
-          gap={0.75}
-          height="fit"
-          alignItems="stretch"
-          justifyContent="start"
-        >
-          <Content
-            title="Add Provider"
-            description="Onyx supports both popular providers and self-hosted models."
-            sizePreset="main-content"
-            variant="section"
+        {/* ── Cloud disablement notice ── */}
+        {NEXT_PUBLIC_CLOUD_ENABLED && (
+          <MessageCard
+            title="New LLM configuration temporarily unavailable."
+            description="Existing LLM providers can still be used and updated."
+            headerPadding="xs"
           />
+        )}
 
-          <div className="grid grid-cols-2 gap-2">
-            {PROVIDER_DISPLAY_ORDER.map((name) => (
-              <NewProviderCard
-                key={name}
-                providerName={name}
-                isFirstProvider={isFirstProvider}
-              />
-            ))}
-            <NewCustomProviderCard isFirstProvider={isFirstProvider} />
-          </div>
-        </GeneralLayouts.Section>
+        {/* ── Add Provider (always visible) ── */}
+        <Disabled disabled={NEXT_PUBLIC_CLOUD_ENABLED}>
+          <GeneralLayouts.Section
+            gap={0.75}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              title="Add Provider"
+              description="Onyx supports both popular providers and self-hosted models."
+              sizePreset="main-content"
+              variant="section"
+            />
+
+            <div className="grid grid-cols-2 gap-2">
+              {PROVIDER_DISPLAY_ORDER.map((name) => (
+                <NewProviderCard
+                  key={name}
+                  providerName={name}
+                  isFirstProvider={isFirstProvider}
+                />
+              ))}
+              <NewCustomProviderCard isFirstProvider={isFirstProvider} />
+            </div>
+          </GeneralLayouts.Section>
+        </Disabled>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
