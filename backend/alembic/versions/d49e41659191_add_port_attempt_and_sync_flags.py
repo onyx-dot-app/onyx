@@ -4,7 +4,7 @@ Revision ID: d49e41659191
 Revises: 4d545225fd82
 Create Date: 2026-06-02 15:44:59.857241
 
-Reindexing port, phase 1 (additive): port_attempt table +
+Reindexing port, phase 1 (additive): port_attempt table (incl. up_to_doc_id) +
 index_attempt.is_synthetic_seed + document.secondary_only_sync_pending.
 """
 
@@ -38,6 +38,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("last_processed_doc_id", sa.String(), nullable=True),
+        sa.Column("up_to_doc_id", sa.String(), nullable=True),
         sa.Column("docs_ported", sa.Integer(), server_default="0", nullable=False),
         sa.Column("last_progress_time", sa.DateTime(timezone=True), nullable=True),
         sa.Column("error_msg", sa.Text(), nullable=True),
