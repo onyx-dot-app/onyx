@@ -281,7 +281,7 @@ function Header() {
       {(appFocus.isChat() || appFocus.isNewSession() || isMobile) &&
         !appFocus.isSharedChat() && (
           <RootLayout.Header>
-            <div className="w-full flex flex-row flex-wrap justify-center items-center px-4 py-2 h-(--chrome-header-height)">
+            <div className="w-full h-full flex flex-row flex-wrap justify-center items-center px-4 py-2">
               {/*
           Left:
           - (mobile) sidebar toggle

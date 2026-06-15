@@ -59,6 +59,7 @@
 /* Header — pinned top bar inside main content */
 .opal-root-layout__header {
   @apply shrink-0;
+  height: var(--chrome-header-height);
 }
 
 /* Footer — pinned bottom bar inside main content */
