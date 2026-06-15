@@ -67,7 +67,7 @@ export function AddPeoplePicker({
     }
 
     const userSuggestions = users
-      .filter((user) => user.email.toLowerCase().startsWith(trimmedQuery))
+      .filter((user) => user.email.toLowerCase().includes(trimmedQuery))
       .filter((user) => !stagedUserIds.has(user.id))
       .map((user) => ({
         id: user.id,
