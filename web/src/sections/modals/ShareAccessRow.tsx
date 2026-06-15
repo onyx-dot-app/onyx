@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+
 import { Text } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
@@ -71,12 +73,17 @@ export function ShareAccessRow({
   rightChildren,
   trailing,
 }: ShareAccessRowProps) {
-  const LeadingIcon: IconFunctionComponent =
-    avatarInitial || avatarIcon
-      ? function ShareRowAvatarIcon() {
-          return <ShareAvatar initial={avatarInitial} icon={avatarIcon} />;
-        }
-      : icon;
+  // Stable identity: a fresh function each render makes ContentAction remount
+  // the icon subtree instead of updating it.
+  const LeadingIcon: IconFunctionComponent = useMemo(
+    () =>
+      avatarInitial || avatarIcon
+        ? function ShareRowAvatarIcon() {
+            return <ShareAvatar initial={avatarInitial} icon={avatarIcon} />;
+          }
+        : icon,
+    [avatarInitial, avatarIcon, icon]
+  );
 
   // ContentAction can't host a component title — the scope row (dropdown in
   // the title position) keeps a layout-only flex of opal children
