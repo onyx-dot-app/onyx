@@ -280,7 +280,7 @@ function Header() {
 
       {(appFocus.isChat() || appFocus.isNewSession() || isMobile) && (
         <RootLayout.Header>
-          <div className="w-full flex flex-row flex-wrap justify-center items-center py-2 px-4 h-(--chrome-header-height)">
+          <div className="w-full flex flex-row flex-wrap justify-center items-center px-4 py-2 h-(--chrome-header-height)">
             {/*
           Left:
           - (mobile) sidebar toggle
@@ -430,7 +430,7 @@ function Footer() {
     <RootLayout.Footer>
       <div
         className={cn(
-          "relative w-full flex flex-row justify-center items-center gap-2 px-2 mt-auto",
+          "relative w-full flex flex-row justify-center items-center gap-2 px-4 mt-auto",
           // # Note (from @raunakab):
           //
           // The conditional rendering of vertical padding based on the current page is intentional.
