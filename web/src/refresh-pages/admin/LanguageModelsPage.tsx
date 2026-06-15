@@ -14,7 +14,7 @@ import {
   Text,
   Card,
 } from "@opal/components";
-import { Hoverable } from "@opal/core";
+import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -433,30 +433,32 @@ export default function LanguageModelsPage() {
         )}
 
         {/* ── Add Provider (always visible) ── */}
-        <GeneralLayouts.Section
-          gap={0.75}
-          height="fit"
-          alignItems="stretch"
-          justifyContent="start"
-        >
-          <Content
-            title="Add Provider"
-            description="Onyx supports both popular providers and self-hosted models."
-            sizePreset="main-content"
-            variant="section"
-          />
+        <Disabled disabled={NEXT_PUBLIC_CLOUD_ENABLED}>
+          <GeneralLayouts.Section
+            gap={0.75}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              title="Add Provider"
+              description="Onyx supports both popular providers and self-hosted models."
+              sizePreset="main-content"
+              variant="section"
+            />
 
-          <div className="grid grid-cols-2 gap-2">
-            {PROVIDER_DISPLAY_ORDER.map((name) => (
-              <NewProviderCard
-                key={name}
-                providerName={name}
-                isFirstProvider={isFirstProvider}
-              />
-            ))}
-            <NewCustomProviderCard isFirstProvider={isFirstProvider} />
-          </div>
-        </GeneralLayouts.Section>
+            <div className="grid grid-cols-2 gap-2">
+              {PROVIDER_DISPLAY_ORDER.map((name) => (
+                <NewProviderCard
+                  key={name}
+                  providerName={name}
+                  isFirstProvider={isFirstProvider}
+                />
+              ))}
+              <NewCustomProviderCard isFirstProvider={isFirstProvider} />
+            </div>
+          </GeneralLayouts.Section>
+        </Disabled>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
