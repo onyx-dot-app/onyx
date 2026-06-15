@@ -471,6 +471,47 @@ def test_unlabeled_container_gets_unidentified_sandbox_403() -> None:
     )
 
 
+def test_sessions_directory_writable_by_sandbox_user(
+    module_sandbox: tuple[UUID, str],
+) -> None:
+    """
+    The /workspace/sessions volume mount must be writable by UID 1000.
+
+    Regression test: Docker volumes are created with root:root ownership.
+    firewall-init.sh must chown the directory before dropping to UID 1000,
+    otherwise session workspace creation fails with EACCES.
+
+    This test verifies that UID 1000 can create a test directory inside
+    /workspace/sessions, proving the permissions fix in firewall-init.sh
+    works correctly.
+    """
+    _session_id, container = module_sandbox
+
+    # Verify /workspace/sessions exists and is owned by 1000:1000
+    stat_result = _docker_exec(
+        container, ["stat", "-c", "%u:%g", "/workspace/sessions"]
+    )
+    assert stat_result.returncode == 0, (
+        f"/workspace/sessions stat failed: {stat_result.stderr}"
+    )
+    assert stat_result.stdout.strip() == "1000:1000", (
+        f"/workspace/sessions not owned by 1000:1000: {stat_result.stdout.strip()}"
+    )
+
+    # Attempt to create a test directory as UID 1000 (the default user in the
+    # container after setpriv drop). This mimics what setup_session_workspace
+    # does when creating a new session.
+    test_dir = f"/workspace/sessions/test-{uuid4().hex[:8]}"
+    mkdir_result = _docker_exec(container, ["mkdir", "-p", test_dir])
+    assert mkdir_result.returncode == 0, (
+        f"mkdir failed as UID 1000: rc={mkdir_result.returncode} "
+        f"stderr={mkdir_result.stderr!r}"
+    )
+
+    # Clean up
+    _docker_exec(container, ["rm", "-rf", test_dir])
+
+
 # ------------------------------------------------------------------------------
 # Tests 6-7: Gate APPROVE / REJECT flow (analogues of K8s test_approval_gate)
 #

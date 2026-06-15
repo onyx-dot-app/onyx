@@ -135,6 +135,16 @@ case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
         # setpriv (not capsh): capsh's `-- args` form invokes /bin/bash and
         # mangles non-script targets; setpriv execve's directly.
         [[ "$#" -ge 1 ]] || die "entrypoint mode requires the real entrypoint as args"
+
+        # Fix volume mount permissions: Docker volumes are created with default
+        # ownership (root:root). The Dockerfile's chown only affects the image
+        # layer, not mounted volumes. Fix ownership before dropping to UID 1000
+        # so the sandbox user can create sessions.
+        if [ -d /workspace/sessions ]; then
+            chown -R 1000:1000 /workspace/sessions
+            log "fixed /workspace/sessions ownership -> 1000:1000"
+        fi
+
         log "entrypoint mode: clearing bounding set, dropping to UID 1000, exec'ing: $*"
         # HOME/USER must be set explicitly: setpriv switches uid/gid but does
         # not refresh env vars. Inheriting HOME=/root from the root parent
