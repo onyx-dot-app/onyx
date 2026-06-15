@@ -374,7 +374,7 @@ function Header() {
         */}
           <div className="flex flex-1 justify-end items-center">
             {appFocus.isChat() && currentChatSession && (
-              <FrostedDiv className="flex shrink flex-row items-center gap-2">
+              <FrostedDiv className="flex shrink flex-row items-center">
                 <Button
                   icon={SvgShare}
                   prominence="tertiary"
