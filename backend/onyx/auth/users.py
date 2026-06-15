@@ -1599,15 +1599,65 @@ elif AUTH_BACKEND == AuthBackend.JWT:
 else:
     raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
 
-# Second backend for native mobile clients: same strategy (so it mints/reads
-# the exact same stateful session token as the cookie backend), but delivered
-# as a Bearer token. fastapi-users namespaces router names by backend name
-# (`auth:mobile-bearer.*`), so the mobile login/refresh/logout routers never
-# collide with the cookie backend's routes. See docs/mobile-auth/.
+
+class _DefensiveReadStrategy(Strategy[User, uuid.UUID]):
+    """Wraps the active session strategy for the mobile bearer backend.
+
+    Unlike the web cookie, the Authorization header is also where Onyx API keys
+    and PATs ride, and a client may send an arbitrary/garbage bearer token. Such
+    a token reaches `read_token` and triggers a backing-store lookup that should
+    simply fail closed (no user) — but a transient store error there (e.g. a
+    stale async Redis connection bound to another event loop) would otherwise
+    surface as a 500 on every such request. Treat any read failure as
+    "unauthenticated" so the request falls through to the API-key/PAT handlers
+    (or a clean 401). Issuance / revocation delegate unchanged, so mobile mints
+    and reads the exact same stateful session token as web; the cookie backend
+    keeps the strict strategy. See docs/mobile-auth/.
+    """
+
+    def __init__(self, inner: Strategy[User, uuid.UUID]) -> None:
+        self._inner = inner
+
+    async def read_token(
+        self, token: Optional[str], user_manager: BaseUserManager[User, uuid.UUID]
+    ) -> Optional[User]:
+        try:
+            return await self._inner.read_token(token, user_manager)
+        except Exception:
+            logger.exception(
+                "Mobile bearer token read failed; treating request as unauthenticated"
+            )
+            return None
+
+    async def write_token(self, user: User) -> str:
+        return await self._inner.write_token(user)
+
+    async def destroy_token(self, token: str, user: User) -> None:
+        await self._inner.destroy_token(token, user)
+
+    async def refresh_token(self, token: Optional[str], user: User) -> str:
+        refresh = getattr(self._inner, "refresh_token", None)
+        if refresh is None:
+            return await self._inner.write_token(user)
+        return await refresh(token, user)
+
+
+def get_mobile_bearer_strategy(
+    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
+) -> _DefensiveReadStrategy:
+    return _DefensiveReadStrategy(strategy)
+
+
+# Second backend for native mobile clients: reuses the active session strategy
+# (so it mints/reads the exact same stateful session token as the cookie
+# backend) wrapped so a failed bearer read fails closed instead of 500-ing, but
+# delivered as a Bearer token. fastapi-users namespaces router names by backend
+# name (`auth:mobile-bearer.*`), so the mobile login/refresh/logout routers
+# never collide with the cookie backend's routes. See docs/mobile-auth/.
 mobile_auth_backend = AuthenticationBackend(
     name="mobile-bearer",
     transport=bearer_transport,
-    get_strategy=auth_backend.get_strategy,
+    get_strategy=get_mobile_bearer_strategy,
 )
 
 
