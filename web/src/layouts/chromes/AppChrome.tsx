@@ -280,7 +280,7 @@ function Header() {
 
       {(appFocus.isChat() || appFocus.isNewSession() || isMobile) && (
         <RootLayout.Header>
-          <div className="w-full flex flex-row flex-wrap justify-center items-center p-2 h-(--chrome-header-height)">
+          <div className="w-full flex flex-row flex-wrap justify-center items-center py-2 px-4 h-(--chrome-header-height)">
             {/*
           Left:
           - (mobile) sidebar toggle
