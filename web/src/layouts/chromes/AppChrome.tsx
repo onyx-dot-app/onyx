@@ -279,7 +279,7 @@ function Header() {
       )}
 
       <RootLayout.Header>
-        <div className="w-full flex flex-row flex-wrap justify-center items-center p-2 h-[52px]">
+        <div className="w-full flex flex-row flex-wrap justify-center items-center p-2 h-[var(--chrome-header-height)]">
           {/*
           Left:
           - (mobile) sidebar toggle
