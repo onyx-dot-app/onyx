@@ -261,7 +261,7 @@ interface RootLayoutHeaderProps {
 }
 
 function RootLayoutHeader({ children }: RootLayoutHeaderProps) {
-  return <div className="opal-root-layout__header">{children}</div>;
+  return <header className="opal-root-layout__header">{children}</header>;
 }
 
 // ---------------------------------------------------------------------------
@@ -282,12 +282,12 @@ function RootLayoutFooter({
   extraPadding = false,
 }: RootLayoutFooterProps) {
   return (
-    <div
+    <footer
       className="opal-root-layout__footer"
       data-extra-padding={extraPadding || undefined}
     >
       {children}
-    </div>
+    </footer>
   );
 }
 

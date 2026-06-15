@@ -4,11 +4,11 @@ import { requireAdminAuth } from "@/lib/auth/requireAuth";
 import AdminChrome from "@/layouts/chromes/AdminChrome";
 import { AnnouncementBanner } from "@/components/header/AnnouncementBanner";
 
-export interface LayoutProps {
+export interface AdminSSChromeProps {
   children: React.ReactNode;
 }
 
-export default async function Layout({ children }: LayoutProps) {
+export default async function AdminSSChrome({ children }: AdminSSChromeProps) {
   // Check authentication and admin role - data fetching is done client-side via SWR hooks
   const authResult = await requireAdminAuth();
 
