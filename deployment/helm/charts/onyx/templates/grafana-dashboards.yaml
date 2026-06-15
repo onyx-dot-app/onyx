@@ -51,4 +51,17 @@ metadata:
 data:
   onyx-indexing-pruning.json: |
     {{- .Files.Get "dashboards/indexing-pruning.json" | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "onyx.fullname" . }}-api-server-metrics-dashboard
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "Onyx"
+data:
+  onyx-api-server-metrics.json: |
+    {{- .Files.Get "dashboards/api-server-metrics.json" | nindent 4 }}
 {{- end }}
