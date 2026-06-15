@@ -169,7 +169,7 @@ export default function ModelSelectorContent({
         placeholder="Search models..."
       />
 
-      <div ref={scrollContainerRef} className="max-h-80 overflow-y-auto">
+      <div ref={scrollContainerRef} className="max-h-80 w-full overflow-y-auto">
         <PopoverMenu>
           {[
             ...(includeGlobalDefault && !isLoading
