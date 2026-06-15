@@ -1,3 +1,4 @@
+from onyx.prompts.search_strategy import CHAT_RESEARCH_ANSWER_GUIDANCE
 from onyx.prompts.search_strategy import CHAT_SEARCH_STRATEGY_GUIDANCE
 from onyx.prompts.search_strategy import DEEP_RESEARCH_FINAL_REPORT_GUIDANCE
 from onyx.prompts.search_strategy import DEEP_RESEARCH_ORCHESTRATOR_GUIDANCE
@@ -14,6 +15,13 @@ def test_chat_search_strategy_has_required_decision_points() -> None:
     assert "Freshness" in CHAT_SEARCH_STRATEGY_GUIDANCE
     assert "Do not search" in CHAT_SEARCH_STRATEGY_GUIDANCE
     assert "中文" in CHAT_SEARCH_STRATEGY_GUIDANCE
+
+
+def test_chat_research_answer_guidance_preserves_adaptive_shape() -> None:
+    assert "Ordinary chat research answers" in CHAT_RESEARCH_ANSWER_GUIDANCE
+    assert "Do not use a fixed template" in CHAT_RESEARCH_ANSWER_GUIDANCE
+    assert "Choose the answer shape" in CHAT_RESEARCH_ANSWER_GUIDANCE
+    assert "A deep search does not mean a long answer" in CHAT_RESEARCH_ANSWER_GUIDANCE
 
 
 def test_query_portfolio_guidance_mentions_bilingual_and_source_queries() -> None:

@@ -15,6 +15,17 @@ When search is useful, generate a small set of distinct queries instead of repea
 After searching, answer from evidence rather than memory. If evidence is weak, say what is uncertain.
 """.lstrip()
 
+CHAT_RESEARCH_ANSWER_GUIDANCE = """
+## Ordinary chat research answers
+In ordinary chat, research should make the answer easier to judge, not turn every researched question into a full report.
+Do not use a fixed template. Choose the answer shape that best fits the user's intent, such as a concise recommendation, a comparison, a short explanation, a decision memo, or a focused next-step plan.
+Lead with the most useful takeaway unless the user is explicitly asking to explore possibilities first.
+Prefer synthesis over exhaustive enumeration. When many sources were gathered, synthesize the useful judgment instead of listing every source, candidate, or intermediate finding.
+Make the strength of the evidence visible enough for the user to judge quality, including important uncertainty, conflicts, or evidence gaps.
+A deep search does not mean a long answer. Search depth controls evidence gathering; answer length should follow the user's request and the usefulness of the final response.
+Only write a long, report-like answer when the user clearly asks for a complete report, full detail, exhaustive research, or a document-style deliverable.
+""".lstrip()
+
 QUERY_PORTFOLIO_GUIDANCE = """
 ## Query portfolio
 Before using web_search, form a query portfolio instead of one generic query.

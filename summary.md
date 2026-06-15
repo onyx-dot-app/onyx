@@ -2,6 +2,9 @@
 
 ## 2026-06-15
 
+- 新增普通 chat 研究型回答策略设计 `docs/superpowers/specs/2026-06-15-ordinary-chat-research-answer-policy-design.md`：问题根因不是搜索不足，而是普通对话缺少“搜索后如何克制表达”的策略，导致调研/横评类问题容易输出几千到上万字，用户抓不到重点且难以评估质量。
+- 实现 Ordinary Chat Research Answer Policy：在 `backend/onyx/prompts/search_strategy.py` 新增 `CHAT_RESEARCH_ANSWER_GUIDANCE`，并接入 `TOOL_DESCRIPTION_SEARCH_GUIDANCE`。策略明确普通 chat 不使用固定模板，由 Agent 自适应选择回答形态；默认优先综合判断和证据强弱，不逐条搬运搜索材料；`deep search` 只表示证据收集更深，不等于最终回答更长；只有用户明确要求完整报告/详细展开/文档式交付时才输出长篇。
+- 同步更新 `docs/GlomiAI.md`：E3 超级对话调优加入“普通 chat 研究型回答自适应但克制”的产品边界，区分搜索强度和回答长度，Deep Research 长报告预期保持不变。
 - 重新生成顶层 `README.md`：从上游 Onyx 项目介绍切换为 GlomiAI 中文主 README，围绕 C 端消费级超级 Agent 定位、Phase A 核心能力验证、平台默认 OpenAI-compatible LLM、Glomi Search Gateway、Search Debug Drawer、本地开发/验证命令和开发约束重组；保留 Onyx/MIT 来源与正式发布前需复核授权边界的提醒。
 - 完善顶层 `README.md`：新增当前分支状态表，明确 E1/E2/E3/E4、Glomi Search Gateway、adapter 架构、Search Debug Drawer、Craft/E13/商业化模块的已做与待做；补充平台默认 LLM seed、中文搜索/研究方法论、`web_search` lite/medium/deep、Gateway adapter service、Search Debug streaming packet 的逻辑链路说明。
 - 应用 `web/src/assets/brand` 品牌资源：新增透明派生图 `logo-mark.png` 与 `wordmark.png`，`GlomiLogoMark` 从 CSS 字母 G 改为渲染真实 Glomi 图标，登录/注册容器与错误页也改为复用同一品牌组件；默认 favicon 从旧 `onyx.ico` 改为 `/logo.png`，并同步覆盖 `web/public/logo*.png` / `logotype*.png`。

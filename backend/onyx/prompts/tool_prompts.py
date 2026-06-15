@@ -1,4 +1,5 @@
 # ruff: noqa: E501, W605 start
+from onyx.prompts.search_strategy import CHAT_RESEARCH_ANSWER_GUIDANCE
 from onyx.prompts.search_strategy import CHAT_SEARCH_STRATEGY_GUIDANCE
 from onyx.prompts.search_strategy import EVIDENCE_EVALUATION_GUIDANCE
 from onyx.prompts.search_strategy import OPEN_URL_EVIDENCE_GUIDANCE
@@ -26,6 +27,8 @@ If it is unclear which tool to use, consider using multiple in parallel to be ef
 """
     + "\n"
     + CHAT_SEARCH_STRATEGY_GUIDANCE
+    + "\n"
+    + CHAT_RESEARCH_ANSWER_GUIDANCE
 ).lstrip()
 
 
