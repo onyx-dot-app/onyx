@@ -1334,7 +1334,7 @@ def upsert_persona(
             .filter(DocumentSet.id.in_(document_set_ids))
             .all()
         )
-        if not document_sets and document_set_ids:
+        if len(document_sets) != len(set(document_set_ids)):
             raise ValueError("document_sets not found")
 
     # Editors may only ATTACH knowledge they can access themselves; anything
@@ -1394,7 +1394,7 @@ def upsert_persona(
             .filter(HierarchyNode.id.in_(hierarchy_node_ids))
             .all()
         )
-        if not hierarchy_nodes and hierarchy_node_ids:
+        if len(hierarchy_nodes) != len(set(hierarchy_node_ids)):
             raise ValueError("hierarchy_nodes not found")
 
     if hierarchy_node_ids is not None and knowledge_guard_applies and user is not None:
