@@ -285,13 +285,13 @@ function HeaderInner({
         </ConfirmationModalLayout>
       )}
 
-      <div className="w-full flex flex-row flex-wrap justify-center items-center px-4">
+      <div className="w-full flex flex-row flex-wrap justify-center items-center p-2">
         {/*
           Left:
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-        <div className="flex-1 flex flex-row items-center gap-2 h-[3.3rem]">
+        <div className="flex-1 flex flex-row items-center gap-2">
           {isMobile && (
             <Button
               prominence="internal"
@@ -369,7 +369,7 @@ function HeaderInner({
           - share button
           - more-options buttons
         */}
-        <div className="flex flex-1 justify-end items-center h-[3.3rem]">
+        <div className="flex flex-1 justify-end items-center">
           {appFocus.isChat() && currentChatSession && (
             <FrostedDiv className="flex shrink flex-row items-center">
               <Button
