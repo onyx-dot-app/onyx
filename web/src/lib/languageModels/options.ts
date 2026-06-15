@@ -113,10 +113,13 @@ export function groupLlmOptions(
   filteredOptions.forEach((option) => {
     const provider = option.provider.toLowerCase();
     const isAggregator = AGGREGATOR_PROVIDERS.has(provider);
+    const instanceKey = (
+      option.name || option.providerDisplayName
+    ).toLowerCase();
     const groupKey =
       isAggregator && option.vendor
-        ? `${provider}/${option.vendor.toLowerCase()}`
-        : provider;
+        ? `${instanceKey}/${option.vendor.toLowerCase()}`
+        : instanceKey;
 
     if (!groups.has(groupKey)) {
       let displayName: string;
