@@ -1,9 +1,19 @@
-"""Guards the Sentry credential scrubber: a provider API key nested in a
-captured `headers` dict (e.g. litellm's outbound request, where the key lives
-under the hyphenated `x-api-key`) must be redacted, while non-sensitive
-debugging fields are preserved."""
+"""Guards the Sentry credential hardening:
+
+1. ``build_event_scrubber()`` redacts a provider API key nested in a captured
+   ``headers`` dict (e.g. litellm's outbound request, where the key lives under
+   the hyphenated ``x-api-key``) while preserving non-sensitive fields.
+2. ``init_sentry()`` actually wires the credential-safe kwargs into
+   ``sentry_sdk.init`` so a future refactor can't silently drop them.
+"""
+
+from unittest.mock import patch
+
+from sentry_sdk.scrubber import EventScrubber
+from sentry_sdk.utils import AnnotatedValue
 
 from onyx.configs.sentry import build_event_scrubber
+from onyx.configs.sentry import init_sentry
 
 
 def _frame_event(frame_vars: dict) -> dict:
@@ -27,12 +37,14 @@ def test_scrubber_redacts_nested_hyphenated_api_key_header() -> None:
 
     build_event_scrubber().scrub_event(event)
 
-    out = _frame_vars(event)
-    # nested credential under a non-sensitive parent key is gone
-    assert out["headers"]["x-api-key"] != secret
+    headers = _frame_vars(event)["headers"]
+    # key is preserved but swapped for sentry's redaction sentinel (not deleted,
+    # not left as the secret) — pinning the type catches either regression cleanly
+    assert "x-api-key" in headers
+    assert isinstance(headers["x-api-key"], AnnotatedValue)
     # non-sensitive context is retained for debugging
-    assert out["headers"]["content-type"] == "application/json"
-    assert out["model"] == "claude-sonnet-4-6"
+    assert headers["content-type"] == "application/json"
+    assert _frame_vars(event)["model"] == "claude-sonnet-4-6"
 
 
 def test_scrubber_redacts_nested_authorization_header() -> None:
@@ -41,4 +53,16 @@ def test_scrubber_redacts_nested_authorization_header() -> None:
 
     build_event_scrubber().scrub_event(event)
 
-    assert _frame_vars(event)["headers"]["authorization"] != secret
+    headers = _frame_vars(event)["headers"]
+    assert "authorization" in headers
+    assert isinstance(headers["authorization"], AnnotatedValue)
+
+
+def test_init_sentry_wires_credential_safe_kwargs() -> None:
+    with patch("sentry_sdk.init") as mock_init:
+        init_sentry(traces_sample_rate=0.0)
+
+    kwargs = mock_init.call_args.kwargs
+    assert kwargs["include_local_variables"] is False
+    assert kwargs["send_default_pii"] is False
+    assert isinstance(kwargs["event_scrubber"], EventScrubber)
