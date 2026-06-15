@@ -382,6 +382,7 @@ export default function LanguageModelsPage() {
                     );
                   }
                 }}
+                side="bottom"
               />
             </InputHorizontal>
           </Card>

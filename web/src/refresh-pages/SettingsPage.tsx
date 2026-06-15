@@ -1062,6 +1062,7 @@ function ChatPreferencesSettings() {
               }}
               temperatureManager={llmManager}
               includeGlobalDefault
+              side="bottom"
             />
           </InputHorizontal>
 
