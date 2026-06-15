@@ -87,6 +87,47 @@ class TestGetOllamaAvailableModels:
                 [r.name for r in results], key=str.lower
             )
 
+    def test_unreachable_server_returns_400(self) -> None:
+        """An unreachable Ollama URL maps to 400, not a 502 gateway fault.
+
+        Patch ``httpx.get``, not the whole module, so the real ``httpx``
+        exception classes remain usable in the handler's except clauses.
+        """
+        from onyx.error_handling.error_codes import OnyxErrorCode
+        from onyx.server.manage.llm.api import get_ollama_available_models
+
+        with patch(
+            "onyx.server.manage.llm.api.httpx.get",
+            side_effect=httpx.ConnectError("connection refused"),
+        ):
+            request = OllamaModelsRequest(api_base="http://localhost:11434")
+            with pytest.raises(OnyxError) as exc_info:
+                get_ollama_available_models(request, MagicMock(), MagicMock())
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.status_code == 400
+
+    def test_upstream_error_status_returns_502(self) -> None:
+        """An error *response* from Ollama is a genuine upstream fault → 502."""
+        from onyx.error_handling.error_codes import OnyxErrorCode
+        from onyx.server.manage.llm.api import get_ollama_available_models
+
+        error_response = httpx.Response(
+            status_code=500, request=httpx.Request("GET", "http://localhost:11434")
+        )
+        with patch(
+            "onyx.server.manage.llm.api.httpx.get",
+            side_effect=httpx.HTTPStatusError(
+                "server error", request=error_response.request, response=error_response
+            ),
+        ):
+            request = OllamaModelsRequest(api_base="http://localhost:11434")
+            with pytest.raises(OnyxError) as exc_info:
+                get_ollama_available_models(request, MagicMock(), MagicMock())
+
+        assert exc_info.value.error_code == OnyxErrorCode.BAD_GATEWAY
+        assert exc_info.value.status_code == 502
+
     def test_syncs_to_db_when_provider_name_specified(
         self, mock_ollama_tags_response: dict, mock_ollama_show_response: dict
     ) -> None:
