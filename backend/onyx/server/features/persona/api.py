@@ -477,6 +477,9 @@ def share_persona(
     except PermissionError as e:
         logger.exception("Failed to share persona")
         raise HTTPException(status_code=403, detail=str(e))
+    except NotImplementedError as e:
+        logger.exception("Failed to share persona")
+        raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         logger.exception("Failed to share persona")
         raise HTTPException(status_code=400, detail=str(e))
