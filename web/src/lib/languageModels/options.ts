@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "react";
 import type { IconProps } from "@opal/types";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon, getProvider } from "@/lib/languageModels";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 
 // ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ export function buildLlmOptions(
           name: llmProvider.name ?? "",
           provider: llmProvider.provider,
           providerDisplayName:
-            llmProvider.provider_display_name || llmProvider.provider,
+            llmProvider.name || getProvider(llmProvider.provider).productName,
           modelName: mc.name,
           modelConfigurationId: mc.id ?? null,
           displayName: mc.effectiveDisplayName,
