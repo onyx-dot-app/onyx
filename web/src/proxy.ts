@@ -10,8 +10,18 @@ import {
 // Authentication cookie names (matches backend constants)
 const ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
 
-// Protected route prefixes (require authentication)
-const PROTECTED_ROUTES = ["/app", "/admin", "/agents", "/connector"];
+// Protected route prefixes that require a real authenticated session and never
+// permit anonymous access — safe to fast-fail at the edge when no cookie is
+// present.
+//
+// "/app" (the chat surface) is intentionally NOT listed: it permits anonymous
+// access when an admin enables it, which is a runtime (Redis-backed) setting the
+// edge can't see from cookies. In single-tenant self-hosted mode no anonymous
+// cookie is set either — the backend synthesizes the anonymous user from the
+// setting alone. So "/app" is gated server-side by requireAuth() in
+// web/src/app/app/layout.tsx, which reads the setting via /me and serves the
+// anonymous user when it's on or redirects to login when it's off.
+const PROTECTED_ROUTES = ["/admin", "/agents", "/connector"];
 
 // Public route prefixes (no authentication required)
 const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
@@ -79,10 +89,10 @@ export async function proxy(request: NextRequest) {
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)
   const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-    pathname.startsWith(route)
+    pathname.startsWith(route),
   );
   const isPublicRoute = PUBLIC_ROUTES.some((route) =>
-    pathname.startsWith(route)
+    pathname.startsWith(route),
   );
 
   if (isProtectedRoute && !isPublicRoute) {
