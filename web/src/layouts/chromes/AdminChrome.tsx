@@ -75,7 +75,6 @@ export default function AdminChrome({ children }: AdminChromeProps) {
           </div>
         </RootLayout.Header>
         <RootLayout.MainContent>{content}</RootLayout.MainContent>
-        <RootLayout.Footer>{null}</RootLayout.Footer>
       </RootLayout.App>
     </RootLayout.Root>
   );
