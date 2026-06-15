@@ -125,6 +125,8 @@ function SettingsHeader({
         </div>
       )}
 
+      <Spacer rem={3.25} />
+
       <div className="flex flex-col gap-6 px-4">
         <div className="flex w-full justify-between">
           <div aria-label="admin-page-title">

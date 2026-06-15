@@ -12,7 +12,6 @@
 @import "./css/line-item.css" layer(base);
 @import "./css/square-button.css" layer(base);
 @import "./css/z-index.css" layer(base);
-@import "./css/chrome.css" layer(base);
 @config '../../tailwind.config.js';
 
 /*

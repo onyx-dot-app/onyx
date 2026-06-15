@@ -63,17 +63,17 @@ export default function AdminChrome({ children }: AdminChromeProps) {
       {!hasCustomSidebar && <AdminSidebar />}
 
       <RootLayout.App data-main-container>
-        <RootLayout.Header>
-          <div className="h-(--chrome-header-height) flex items-center px-2">
-            {isMobile && !hasCustomSidebar && (
+        {isMobile && !hasCustomSidebar && (
+          <RootLayout.Header>
+            <div className="h-13 flex items-center px-2">
               <Button
                 prominence="internal"
                 icon={SvgSidebar}
                 onClick={() => setFolded(false)}
               />
-            )}
-          </div>
-        </RootLayout.Header>
+            </div>
+          </RootLayout.Header>
+        )}
         <RootLayout.MainContent>{content}</RootLayout.MainContent>
       </RootLayout.App>
     </RootLayout.Root>
