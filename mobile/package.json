@@ -3,6 +3,8 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@expo-google-fonts/dm-mono": "^0.4.2",
+    "@expo-google-fonts/hanken-grotesk": "^0.4.3",
     "@onyx-ai/shared": "file:../web/lib/shared",
     "@react-native-community/netinfo": "12.0.1",
     "@rn-primitives/portal": "^1.4.0",

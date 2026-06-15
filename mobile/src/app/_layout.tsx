@@ -39,10 +39,11 @@ export default function RootLayout() {
     const unbindOnline = bindOnlineManager();
     const unbindFocus = bindAppStateFocus();
 
-    // No async init yet, so hide on the first render.
-    // TODO(Subash-Mohan): once useFonts lands, gate this behind a readiness flag
-    // (return null until ready) so text never flashes in the system font before
-    // custom fonts load.
+    // No async init to await before the first frame. Custom fonts (Hanken Grotesk,
+    // DM Mono, from the @expo-google-fonts/* packages) are embedded into the native
+    // binary at build time via the expo-font config plugin (see app.json), so they're
+    // registered before React mounts — no runtime useFonts / readiness gate is needed
+    // and text never flashes in the system font. Hide the splash on the first render.
     void SplashScreen.hideAsync();
 
     return () => {
