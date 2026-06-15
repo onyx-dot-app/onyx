@@ -160,7 +160,7 @@ Do not use `aws s3 cp` inside the sandbox agent for Docker V1. That would requir
 
 The existing `SnapshotManager` needs stream helpers:
 
-- `create_snapshot_from_stream(stream, sandbox_id, tenant_id, size_hint=None)`
+- `persist_snapshot_from_stream(stream, sandbox_id, tenant_id, size_hint=None)`
 - `restore_snapshot_to_stream(storage_path, write_stream)`
 
 ## Implementation Strategy
@@ -262,7 +262,7 @@ Tests to add/update:
   - assert snapshot failures for one session do not prevent later sessions from being attempted
 - `test_snapshot_manager_streams.py`
   - fake `FileStore`
-  - `create_snapshot_from_stream(...)` saves bytes with `FileOrigin.SANDBOX_SNAPSHOT`
+  - `persist_snapshot_from_stream(...)` saves bytes with `FileOrigin.SANDBOX_SNAPSHOT`
   - `restore_snapshot_to_stream(...)` writes the stored bytes to the provided stream/writer
   - validates storage path, display name, metadata, and size
 - `test_docker_manager_config.py`

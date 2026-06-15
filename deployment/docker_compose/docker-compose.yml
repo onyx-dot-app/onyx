@@ -12,6 +12,7 @@
 # 1. SECURITY HARDENING:
 #    - Remove all port exposures except nginx (80/443)
 #    - Comment out ports for: api_server, relational_db, cache, minio
+#    - Set strong MinIO/S3 credentials (MINIO_ROOT_* + S3_AWS_*), not minioadmin
 #
 # 2. SSL/TLS SETUP:
 #    - Uncomment the certbot service (see below)

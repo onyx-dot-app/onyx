@@ -15,12 +15,13 @@ from __future__ import annotations
 import os
 
 from locust import constant
-from onyx_client.chat_user import _env_float
 from onyx_client.chat_user import OnyxChatUser
+from onyx_client.env import env_float
 
 
 class DeepResearchUser(OnyxChatUser):
     abstract = False
+    weight = 2
 
     scenario_prefix: str = "dr"
     deep_research: bool = True
@@ -28,5 +29,5 @@ class DeepResearchUser(OnyxChatUser):
 
     # DR turns run minutes, not seconds: think longer between turns and
     # tolerate longer inter-chunk silence (heartbeats should still arrive).
-    wait_time = constant(_env_float("ONYX_DR_WAIT_SECONDS", 30.0))
-    stream_read_timeout: float = _env_float("ONYX_DR_STREAM_READ_TIMEOUT", 300.0)
+    wait_time = constant(env_float("ONYX_DR_WAIT_SECONDS", 30.0))
+    stream_read_timeout: float = env_float("ONYX_DR_STREAM_READ_TIMEOUT", 300.0)

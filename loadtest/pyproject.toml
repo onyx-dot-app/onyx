@@ -8,6 +8,8 @@ dependencies = [
     # mock_llm server (also deployed standalone in later phases)
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    # Prometheus exporter for Locust milestone metrics (Phase 4 correlation)
+    "prometheus-client>=0.21",
 ]
 
 [dependency-groups]

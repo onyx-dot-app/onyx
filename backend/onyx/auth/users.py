@@ -89,7 +89,9 @@ from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import EMAIL_CONFIGURED
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
@@ -178,6 +180,34 @@ def verify_auth_setting() -> None:
         )
 
     logger.notice("Using Auth Type: %s", AUTH_TYPE.value)
+
+
+def verify_user_auth_secret() -> None:
+    """Refuse to start a real deployment without a USER_AUTH_SECRET.
+
+    The secret signs password-reset and email-verification tokens, OAuth login
+    state, and captcha cookies. An empty value makes all of them forgeable, so a
+    production deployment must provide one. DEV_MODE / INTEGRATION_TESTS_MODE
+    downgrade this to a warning so local and CI environments keep working.
+
+    This only runs on app startup, not during migrations/scripts.
+    """
+    if USER_AUTH_SECRET.strip():
+        return
+
+    message = (
+        "USER_AUTH_SECRET is empty. It signs password-reset and email-"
+        "verification tokens, OAuth login state, and captcha cookies, so an "
+        "empty value lets attackers forge them. Generate one with "
+        "`openssl rand -hex 32` and set USER_AUTH_SECRET."
+    )
+    if DEV_MODE or INTEGRATION_TESTS_MODE:
+        logger.warning(
+            "%s Allowed because DEV_MODE/INTEGRATION_TESTS_MODE is set.", message
+        )
+        return
+
+    raise ValueError(message)
 
 
 def get_display_email(email: str | None, space_less: bool = False) -> str:

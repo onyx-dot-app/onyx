@@ -400,6 +400,8 @@ def test_iptables_rejects_bypass_attempts(
             "-sS",
             "-o",
             "/dev/null",
+            "--noproxy",
+            "*",
             "-6",
             "--max-time",
             "5",

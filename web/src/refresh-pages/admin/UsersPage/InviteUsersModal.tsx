@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Button } from "@opal/components";
-import { SvgUsers, SvgAlertTriangle } from "@opal/icons";
+import { SvgUsers, SvgAlertTriangle, SvgLoader } from "@opal/icons";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
@@ -186,6 +186,11 @@ export default function InviteUsersModal({
             submit={
               <Button
                 disabled={isSubmitting || chips.every((c) => c.error)}
+                icon={
+                  isSubmitting
+                    ? () => <SvgLoader size={16} className="animate-spin" />
+                    : undefined
+                }
                 onClick={handleInvite}
               >
                 Invite

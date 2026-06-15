@@ -13,13 +13,17 @@ opencode-auth + push-key env, proxy hostAliases IP).
 {{- $memReq := (index $cm "SANDBOX_POD_MEMORY_REQUEST") | default "2Gi" }}
 {{- $cpuLim := (index $cm "SANDBOX_POD_CPU_LIMIT") | default "2000m" }}
 {{- $memLim := (index $cm "SANDBOX_POD_MEMORY_LIMIT") | default "10Gi" }}
+{{/* Without a request, the scheduler ignores sandbox disk usage and the
+kubelet evicts sandbox pods first under node disk pressure. */}}
+{{- $ephReq := (index $cm "SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST") | default "5Gi" }}
+{{- $ephLim := (index $cm "SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT") | default "20Gi" }}
 {{- $nextjsStart := (index $cm "SANDBOX_NEXTJS_PORT_START") | default "3010" | int }}
 {{- $nextjsEnd := (index $cm "SANDBOX_NEXTJS_PORT_END") | default "3100" | int }}
 {{- $opencodePort := (index $cm "OPENCODE_SERVE_PORT") | default "4096" | int }}
-{{/* Keep in sync with PUSH_DAEMON_PORT in kubernetes_sandbox_manager.py. */}}
-{{- $pushDaemonPort := (index $cm "PUSH_DAEMON_PORT") | default "8731" | int }}
-{{- $proxyPort := (index $cm "SANDBOX_PROXY_PORT") | default "8080" }}
-{{- $proxyHost := (index $cm "SANDBOX_PROXY_HOST") | default (printf "%s-sandbox-proxy.%s.svc.cluster.local" (include "onyx.fullname" .) .Release.Namespace) }}
+{{/* Keep in sync with PUSH_DAEMON_PORT in sandbox_daemon/contract.py. */}}
+{{- $pushDaemonPort := include "onyx.sandboxPushDaemonPort" . }}
+{{- $proxyPort := include "onyx.sandboxProxyPort" . }}
+{{- $proxyHost := include "onyx.sandboxProxyHost" . }}
 {{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
 {{- $serverUrl := (index $cm "SANDBOX_API_SERVER_URL") }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
@@ -95,12 +99,14 @@ template:
           {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
         volumeMounts:
           - { name: workspace, mountPath: /workspace/sessions }
+          - { name: opencode-data, mountPath: /workspace/opencode-data }
           - { name: managed, mountPath: /workspace/managed }
           - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
         resources:
           # Snapshot tar/stream runs through this sidecar, so give it headroom.
-          requests: { cpu: "100m", memory: "256Mi" }
-          limits: { cpu: "1", memory: "1Gi" }
+          # Restore buffers the downloaded archive (<=100MB cap) in /tmp.
+          requests: { cpu: "100m", memory: "256Mi", ephemeral-storage: "512Mi" }
+          limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "2Gi" }
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
@@ -111,6 +117,10 @@ template:
           httpGet: { path: /health, port: {{ $pushDaemonPort }} }
           initialDelaySeconds: 5
           periodSeconds: 30
+        startupProbe:
+          httpGet: { path: /ready, port: {{ $pushDaemonPort }} }
+          periodSeconds: 2
+          failureThreshold: 180
         readinessProbe:
           httpGet: { path: /health, port: {{ $pushDaemonPort }} }
           initialDelaySeconds: 1
@@ -131,14 +141,18 @@ template:
           - { name: ONYX_SERVER_URL, value: "{{ $serverUrl }}" }
           - { name: GH_TOKEN, value: "replaced_by_egress_proxy" }
           - { name: GH_NO_UPDATE_NOTIFIER, value: "1" }
+          - { name: OPENCODE_DATA_HOME, value: "/workspace/opencode-data" }
           {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
         volumeMounts:
           - { name: workspace, mountPath: /workspace/sessions }
+          - { name: opencode-data, mountPath: /workspace/opencode-data }
           - { name: managed, mountPath: /workspace/managed, readOnly: true }
           - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
         resources:
-          requests: { cpu: "{{ $cpuReq }}", memory: "{{ $memReq }}" }
-          limits: { cpu: "{{ $cpuLim }}", memory: "{{ $memLim }}" }
+          requests:
+            { cpu: "{{ $cpuReq }}", memory: "{{ $memReq }}", ephemeral-storage: "{{ $ephReq }}" }
+          limits:
+            { cpu: "{{ $cpuLim }}", memory: "{{ $memLim }}", ephemeral-storage: "{{ $ephLim }}" }
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
@@ -148,6 +162,8 @@ template:
     volumes:
       - name: workspace
         emptyDir: { sizeLimit: 50Gi }
+      - name: opencode-data
+        emptyDir: { sizeLimit: 5Gi }
       - name: managed
         emptyDir: { sizeLimit: 5Gi }
       - name: sandbox-ca-source

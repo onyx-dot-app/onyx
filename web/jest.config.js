@@ -74,7 +74,7 @@ const sharedConfig = {
         "hastscript",
         "micromark.*", // All micromark packages
         "decode-named-character-reference",
-        "character-entities",
+        "character-entities.*", // All character-entities packages (incl. -html4, -legacy)
         "devlop",
         "comma-separated-tokens",
         "property-information",
@@ -94,6 +94,7 @@ const sharedConfig = {
         "trim-lines",
         "stringify-entities",
         "estree-.*", // All estree packages
+        "mime",
       ].join("|") +
       ")/)",
   ],

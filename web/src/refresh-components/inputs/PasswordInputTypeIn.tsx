@@ -41,6 +41,14 @@ export interface PasswordInputTypeInProps extends Omit<
    * The input remains editable so users can type a new value.
    */
   isNonRevealable?: boolean;
+  /**
+   * When true, the placeholder is shrunk to the same font-size as the masked
+   * dots while the field is hidden. Use this only with a masked-style
+   * placeholder (all ● glyphs, e.g. the login form) so the empty and filled
+   * states line up. Leave false (the default) for custom text placeholders
+   * (e.g. "AKIA…", "Your long-term API key") so they stay legible.
+   */
+  shrinkPlaceholder?: boolean;
 }
 
 /**
@@ -54,10 +62,11 @@ export interface PasswordInputTypeInProps extends Omit<
  * what lets browsers and password managers recognize the field for autofill /
  * save-password. The browser draws its own mask glyph — a filled dot rendered
  * larger than a literal • bullet (closest to ● U+25CF in Chromium) and much
- * wider than normal text. While masked we shrink the field (and its ●
- * placeholder) to a smaller font-size so the dots are tighter and the empty
- * (placeholder) and filled (masked) states match. Callers that show a
- * masked-style placeholder should use ●.
+ * wider than normal text. While masked we shrink the field's font-size so the
+ * dots are tighter. The placeholder is only shrunk to match when the caller
+ * opts in via `shrinkPlaceholder` (used with a masked-style ● placeholder, e.g.
+ * the login form); custom text placeholders (e.g. "AKIA…", "Your long-term API
+ * key") keep their normal size so they stay legible.
  *
  * Features:
  * - Show/hide toggle button only visible when input has value or is focused
@@ -68,6 +77,7 @@ export interface PasswordInputTypeInProps extends Omit<
 export default function PasswordInputTypeIn({
   ref,
   isNonRevealable = false,
+  shrinkPlaceholder = false,
   value,
   onChange,
   onFocus,
@@ -113,17 +123,19 @@ export default function PasswordInputTypeIn({
     <div
       ref={containerRef}
       // The native mask glyph is much wider than text, so while hidden we shrink
-      // the dots to 0.6rem. We set the size on the input itself (and its ●
-      // placeholder) with !important — beating Opal's `font: inherit` / absolute
-      // placeholder size — rather than on `.opal-input`, which carries Opal's
-      // `transition-all`; keeping the change off that element makes toggling
-      // reveal instant instead of animating. rem (not em) avoids compounding, so
-      // the same value matches on both the placeholder and the mask. Only while
-      // hidden, so revealed text is full-size.
+      // the dots to 0.6rem. We set the size on the input itself with !important —
+      // beating Opal's `font: inherit` — rather than on `.opal-input`, which
+      // carries Opal's `transition-all`; keeping the change off that element
+      // makes toggling reveal instant instead of animating. rem (not em) avoids
+      // compounding. The placeholder carries its own absolute Opal size, so the
+      // input shrink never touches it; we only shrink it (also with !important)
+      // when the caller opts in via `shrinkPlaceholder` (masked-style ●
+      // placeholder), so it matches the dots. Custom text placeholders stay
+      // full-size. Only while hidden, so revealed text is full-size.
       className={cn(
         "contents",
-        isHidden &&
-          "[&_input]:!text-[0.6rem] [&_input::placeholder]:!text-[0.6rem]"
+        isHidden && "[&_input]:!text-[0.6rem]",
+        isHidden && shrinkPlaceholder && "[&_input::placeholder]:!text-[0.6rem]"
       )}
       onFocus={handleContainerFocus}
       onBlur={handleContainerBlur}

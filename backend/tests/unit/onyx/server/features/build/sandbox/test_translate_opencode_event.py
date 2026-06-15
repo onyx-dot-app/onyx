@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from onyx.server.features.build.api.packets import SubagentStartedPacket
+from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import Error

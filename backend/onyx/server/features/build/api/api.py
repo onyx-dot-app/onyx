@@ -36,6 +36,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.enums import SharingScope
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.api.debug_api import router as debug_router
 from onyx.server.features.build.api.external_apps_api import (
     router as external_apps_router,
@@ -44,15 +46,15 @@ from onyx.server.features.build.api.external_apps_oauth_api import (
     router as external_apps_oauth_router,
 )
 from onyx.server.features.build.api.messages_api import router as messages_router
-from onyx.server.features.build.api.models import RateLimitResponse
-from onyx.server.features.build.api.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.api.sessions_api import router as sessions_router
 from onyx.server.features.build.api.turns_api import router as turns_router
 from onyx.server.features.build.api.user_library import router as user_library_router
 from onyx.server.features.build.approvals.api import router as approvals_router
 from onyx.server.features.build.db.build_session import get_webapp_access_async
 from onyx.server.features.build.db.build_session import get_webapp_target_async
-from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.rate_limit import get_user_rate_limit_status
+from onyx.server.features.build.rate_limit import RateLimitResponse
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.scheduled_tasks.api import (
     router as scheduled_tasks_router,
 )
@@ -500,19 +502,13 @@ def reset_sandbox(
     try:
         success = session_manager.terminate_user_sandbox(user.id)
         if not success:
-            raise HTTPException(
-                status_code=404,
-                detail="No sandbox found for user",
-            )
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "No sandbox found for user")
         db_session.commit()
-    except HTTPException:
+    except OnyxError:
         raise
     except Exception as e:
         db_session.rollback()
         logger.error("Failed to reset sandbox for user %s: %s", user.id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to reset sandbox: {e}",
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to reset sandbox: {e}")
 
     return Response(status_code=204)

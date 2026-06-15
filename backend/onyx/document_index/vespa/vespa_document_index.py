@@ -20,7 +20,6 @@ import httpx
 import jinja2
 import requests
 from pydantic import BaseModel
-from retry import retry
 
 from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import RECENCY_BIAS_MULTIPLIER
@@ -81,6 +80,7 @@ from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
@@ -439,7 +439,7 @@ def _enrich_basic_chunk_info(
     return enriched_doc_info
 
 
-@retry(
+@retry_builder(
     tries=3,
     delay=1,
     backoff=2,
@@ -1131,7 +1131,7 @@ class VespaDocumentIndex(DocumentIndex):
         """Runs a batch of KG chunk updates in parallel via the
         ThreadPoolExecutor."""
 
-        @retry(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
+        @retry_builder(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
         def _kg_update_chunk(
             update: KGVespaChunkUpdateRequest, http_client: httpx.Client
         ) -> httpx.Response:

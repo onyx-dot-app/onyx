@@ -47,6 +47,77 @@ describe("parsePacket", () => {
     });
   });
 
+  it("detects skill scripts in bash commands and surfaces the description", () => {
+    const packet = {
+      tool_call_id: "bash-call-1",
+      kind: "execute",
+      status: "in_progress",
+      raw_input: {
+        command: "python .opencode/skills/linear/linear_api.py issue ENG-123",
+        description: "Fetch Linear issue ENG-123",
+      },
+      _meta: { toolName: "bash" },
+    };
+    expect(parsePacket({ type: "tool_call_start", ...packet })).toMatchObject({
+      type: "tool_call_start",
+      toolName: "bash",
+      kind: "execute",
+      skillName: "linear",
+      description: "Fetch Linear issue ENG-123",
+    });
+    expect(
+      parsePacket({ type: "tool_call_progress", ...packet })
+    ).toMatchObject({
+      type: "tool_call_progress",
+      toolName: "bash",
+      kind: "execute",
+      skillName: "linear",
+      description: "Fetch Linear issue ENG-123",
+    });
+  });
+
+  it("detects gh CLI commands as the github skill", () => {
+    const packet = {
+      tool_call_id: "bash-call-3",
+      kind: "execute",
+      status: "completed",
+      raw_input: {
+        command: "gh api user",
+        description: "Get the connected GitHub user",
+      },
+      _meta: { toolName: "bash" },
+    };
+    expect(parsePacket({ type: "tool_call_start", ...packet })).toMatchObject({
+      type: "tool_call_start",
+      skillName: "github",
+      description: "Get the connected GitHub user",
+    });
+    expect(
+      parsePacket({ type: "tool_call_progress", ...packet })
+    ).toMatchObject({
+      type: "tool_call_progress",
+      skillName: "github",
+      description: "Get the connected GitHub user",
+    });
+  });
+
+  it("does not attach a skill to ordinary bash commands", () => {
+    expect(
+      parsePacket({
+        type: "tool_call_progress",
+        tool_call_id: "bash-call-2",
+        kind: "execute",
+        status: "completed",
+        raw_input: { command: "ls -lah src/", description: "list files" },
+        _meta: { toolName: "bash" },
+      })
+    ).toMatchObject({
+      type: "tool_call_progress",
+      skillName: null,
+      description: "list files",
+    });
+  });
+
   it("extracts subagent session ids from completed task output", () => {
     expect(
       parsePacket({

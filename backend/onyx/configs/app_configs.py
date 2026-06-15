@@ -269,12 +269,6 @@ JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
-if AUTH_TYPE == AuthType.BASIC and not USER_AUTH_SECRET:
-    logger.warning(
-        "USER_AUTH_SECRET is not set. This is required for secure password reset "
-        "and email verification tokens. Please set USER_AUTH_SECRET in production."
-    )
-
 # Bearer token guarding the API server's /metrics endpoint. Auth is required by
 # default: scrapers must present this token as `Authorization: Bearer <token>`
 # (the standard Prometheus scrape format). If neither this nor
@@ -726,7 +720,6 @@ WEB_CONNECTOR_IGNORED_ELEMENTS = os.environ.get(
 WEB_CONNECTOR_OAUTH_CLIENT_ID = os.environ.get("WEB_CONNECTOR_OAUTH_CLIENT_ID")
 WEB_CONNECTOR_OAUTH_CLIENT_SECRET = os.environ.get("WEB_CONNECTOR_OAUTH_CLIENT_SECRET")
 WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
-WEB_CONNECTOR_VALIDATE_URLS = os.environ.get("WEB_CONNECTOR_VALIDATE_URLS")
 
 # When the OnyxWebCrawler (open_url tool) hits a 403 / Cloudflare challenge,
 # fall back to a one-shot Playwright (Chromium) render to bypass JS-based
@@ -735,6 +728,12 @@ WEB_CONNECTOR_VALIDATE_URLS = os.environ.get("WEB_CONNECTOR_VALIDATE_URLS")
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
 )
+
+# NOTE: the three SSRF env vars below (OPEN_URL_VALIDATE_SSRF,
+# MCP_SERVER_ALLOW_PRIVATE_NETWORK, MCP_SERVER_ALLOW_LOOPBACK) are no longer read
+# at their call sites. They only seed the default "SSRF Protection" level when no
+# override is saved; admins set the effective behavior on the Security Hardening
+# page.
 
 # Whether the open_url tool enforces SSRF protection (rejecting URLs that
 # resolve to private/internal IPs). Default true to keep multi-tenant SaaS
@@ -850,6 +849,15 @@ CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC = (
 
 GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
+# Cap the total text retained per file across a connector's extracted sections,
+# bounding worker memory when a source can't be size-checked before fetch —
+# e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
+# bypass GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD. Content past the cap is dropped
+# with a warning. 0 disables the cap.
+CONNECTOR_MAX_EXTRACTED_TEXT_CHARS = int(
+    os.environ.get("CONNECTOR_MAX_EXTRACTED_TEXT_CHARS") or 10_000_000
 )
 
 # Default size threshold for Drupal Wiki attachments (10MB)
@@ -1017,6 +1025,23 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Documents exceeding this limit will surface a visible error rather than being silently dropped.
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
+
+# Max RSS (in MB) for a spawned indexing worker process. When exceeded, the
+# docfetching watchdog terminates the worker and fails the attempt with a clear
+# error, pre-empting a kernel OOM kill of the whole pod — which would also kill
+# the attempt heartbeat (surfacing as an opaque "No heartbeat received" failure)
+# and any other tenants' tasks running on the pod. 0 disables the check.
+INDEXING_WORKER_MEMORY_LIMIT_MB = int(
+    os.environ.get("INDEXING_WORKER_MEMORY_LIMIT_MB") or 0
+)
+
+# Enable tracemalloc in spawned indexing workers so the near-limit memory report
+# (see INDEXING_WORKER_MEMORY_LIMIT_MB) includes allocation sites. Adds meaningful
+# per-allocation CPU/memory overhead — enable only while chasing a leak.
+INDEXING_WORKER_TRACEMALLOC = (
+    os.environ.get("INDEXING_WORKER_TRACEMALLOC", "").lower() == "true"
+)
+
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
@@ -1422,6 +1447,32 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 # S3/MinIO Access Keys
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+
+# Well-known MinIO default; deployments left on it expose all stored files.
+DEFAULT_OBJECT_STORAGE_CREDENTIAL = "minioadmin"
+
+
+def _uses_default_object_storage_credentials(
+    s3_endpoint_url: str | None,
+    access_key: str | None,
+    secret_key: str | None,
+) -> bool:
+    # Only for self-hosted MinIO (has an endpoint URL); real AWS S3 has none.
+    if not s3_endpoint_url:
+        return False
+    return DEFAULT_OBJECT_STORAGE_CREDENTIAL in (access_key, secret_key)
+
+
+if _uses_default_object_storage_credentials(
+    S3_ENDPOINT_URL, S3_AWS_ACCESS_KEY_ID, S3_AWS_SECRET_ACCESS_KEY
+):
+    logger.warning(
+        "Object storage is using the well-known default 'minioadmin' credentials. "
+        "Anyone who can reach the MinIO/S3 endpoint can read or modify stored files "
+        "(uploaded documents, file-store objects). Set S3_AWS_ACCESS_KEY_ID / "
+        "S3_AWS_SECRET_ACCESS_KEY (and MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) to "
+        "strong, unique values before deploying to production."
+    )
 
 # Should we force S3 local checksumming
 S3_GENERATE_LOCAL_CHECKSUM = (

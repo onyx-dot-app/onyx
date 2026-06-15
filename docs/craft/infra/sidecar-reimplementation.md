@@ -50,10 +50,10 @@ Create:
 
 1. API server signs and posts `{"session_id": ...}` to
    `/snapshot/create`.
-2. Sidecar validates the signature, tars `outputs/`, `attachments/`, and
-   `.opencode-data/`, and streams `application/gzip` back. Empty workspaces
-   return `204`.
-3. API server hands the stream to `SnapshotManager.create_snapshot_from_stream`.
+2. Sidecar validates the signature, tars `outputs/` and `attachments/`, and
+   streams `application/gzip` back. Empty workspaces return `204`. Opencode
+   history is sandbox-global and uses separate opencode-history endpoints.
+3. API server hands the stream to `SnapshotManager.persist_snapshot_from_stream`.
 4. `SnapshotManager` stores the archive in `get_default_file_store()` with
    `FileOrigin.SANDBOX_SNAPSHOT`.
 

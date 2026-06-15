@@ -13,7 +13,7 @@ spec:
     app.kubernetes.io/component: sandbox-proxy
   ports:
     - name: proxy
-      port: {{ .Values.sandboxProxy.service.proxyPort }}
+      port: {{ include "onyx.sandboxProxyPort" . }}
       targetPort: proxy
       protocol: TCP
 {{- end }}

@@ -1,4 +1,3 @@
-import logging
 import random
 import re
 import string
@@ -10,7 +9,6 @@ from contextlib import contextmanager
 from typing import Any
 from typing import cast
 
-from retry import retry
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models.blocks import Block
@@ -34,6 +32,7 @@ from onyx.onyxbot.slack.constants import FeedbackVisibility
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.onyxbot.slack.models import ThreadMessage
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.text_processing import replace_whitespaces_w_space
@@ -232,11 +231,10 @@ def _build_error_block(error_message: str) -> Block:
     return SectionBlock(text=display_text)
 
 
-@retry(
+@retry_builder(
     tries=ONYX_BOT_NUM_RETRIES,
     delay=0.25,
     backoff=2,
-    logger=cast(logging.Logger, logger),
 )
 def respond_in_thread_or_channel(
     client: WebClient,

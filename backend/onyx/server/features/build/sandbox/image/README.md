@@ -13,7 +13,8 @@ image/
 ├── opencode-plugins/       # Per-session egress tagging plugin (baked in)
 ├── templates/
 │   └── outputs/            # Web app scaffold template (Next.js)
-├── initial-requirements.txt # Python packages pre-installed in sandbox
+├── initial-requirements.in  # Curated Python packages pre-installed in sandbox
+├── initial-requirements.txt # Fully pinned Python lock for sandbox
 └── README.md               # This file
 ```
 
@@ -103,7 +104,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## What's Baked Into the Image
 
-- **Base**: `node:20-slim` (Debian-based)
+- **Base**: `python:3.13-slim` (Debian-based) with Node.js 24 copied from `node:24-trixie-slim`
 - **Templates**: `/workspace/templates/outputs/` — Next.js web app scaffold
 - **Python venv**: `/workspace/.venv/` with packages from `initial-requirements.txt`
 - **OpenCode CLI**: Installed in `/home/sandbox/.opencode/bin/`
@@ -119,6 +120,7 @@ When a session is created, the following structure is set up in the pod:
 ```
 /workspace/
 ├── managed/skills/         # Pushed at session-setup time (built-ins + customs)
+├── opencode-data/          # Sandbox-global opencode data in Kubernetes
 ├── templates/              # Baked into image
 └── sessions/
     └── $session_id/

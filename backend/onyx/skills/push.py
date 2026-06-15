@@ -16,7 +16,7 @@ from onyx.db.skill import list_skills_for_sandbox_injection
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import get_sandbox_user_map
-from onyx.server.features.build.sandbox.base import get_sandbox_manager
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import PushResult
 from onyx.server.features.build.sandbox.util.agent_instructions import (

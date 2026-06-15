@@ -65,9 +65,9 @@ retained only for in-sandbox-container process control.
   long as any `k8s_stream` exists). Both shrink to serving only 3 call sites. A
   later sandbox-container control endpoint could remove them entirely if desired.
 - **Wire-schema location:** request/response models go in
-  `sandbox_daemon/models.py` (the daemon imports `sandbox_daemon.models`; the
+  `sandbox_daemon/contract.py` (the daemon imports `sandbox_daemon.contract`; the
   api-server imports the full
-  `onyx.server.features.build.sandbox.image.sandbox_daemon.models` path). This is
+  `onyx.server.features.build.sandbox.image.sandbox_daemon.contract` path). This is
   the existing shared-contract pattern — both ends stay in sync.
 - **Reuse the existing client plumbing** on the api-server side:
   `_signed_sidecar_headers` + `_sandbox_pod_hosts` (Service FQDN, then pod-IP
@@ -80,7 +80,7 @@ retained only for in-sandbox-container process control.
 
 ## Implementation Strategy
 
-1. **Add typed models** to `sandbox_daemon/models.py` for each new operation
+1. **Add typed models** to `sandbox_daemon/contract.py` for each new operation
    (session setup, cleanup, list-sessions, exists, list-directory, read-file,
    delete-file, write-file, upload-stats, ensure-attachments, regenerate-config,
    pptx-preview). Structured request bodies + JSON responses replace every

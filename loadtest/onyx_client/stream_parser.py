@@ -45,6 +45,10 @@ class StreamSummary:
     saw_stop: bool = False
     error: str | None = None
     milestones_hit: set[str] = field(default_factory=set)
+    # Assistant message id reserved by the backend for this turn (top-level
+    # stream field, not inside `obj`). Multi-turn scenarios chain the next
+    # turn's parent_message_id from it.
+    reserved_assistant_message_id: int | None = None
 
 
 class ChatStreamAnalyzer:
@@ -73,6 +77,12 @@ class ChatStreamAnalyzer:
 
         if not isinstance(data, dict):
             return hit
+
+        # Reserved id rides at the top level of an early packet, alongside
+        # (not inside) obj — capture it before the obj dispatch below.
+        reserved_id = data.get("reserved_assistant_message_id")
+        if isinstance(reserved_id, int):
+            self.summary.reserved_assistant_message_id = reserved_id
 
         if data.get("error"):
             self.summary.error = str(data["error"])

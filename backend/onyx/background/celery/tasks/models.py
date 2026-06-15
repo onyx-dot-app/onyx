@@ -49,6 +49,10 @@ class IndexingWatchdogTerminalStatus(str, Enum):
     # the watchdog terminated the task due to no activity
     TERMINATED_BY_ACTIVITY_TIMEOUT = "terminated_by_activity_timeout"
 
+    # the watchdog terminated the task because the spawned process exceeded the
+    # configured memory limit, pre-empting a kernel OOM kill of the whole pod
+    TERMINATED_BY_MEMORY_LIMIT = "terminated_by_memory_limit"
+
     # the watchdog terminated the task because the IndexAttempt reached a terminal
     # status (failed/canceled/succeeded) outside of the spawned subprocess. We kill
     # the subprocess so it can't keep doing work for an attempt that no longer exists

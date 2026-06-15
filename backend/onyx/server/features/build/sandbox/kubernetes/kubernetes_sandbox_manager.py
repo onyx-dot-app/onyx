@@ -53,13 +53,8 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
-from typing import IO
 from uuid import UUID
 
-import httpx
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.serialization import Encoding
-from cryptography.hazmat.primitives.serialization import PublicFormat
 from kubernetes import client
 from kubernetes import watch
 from kubernetes.client.rest import ApiException
@@ -83,17 +78,47 @@ from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    PUSH_DAEMON_PORT,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_SNAPSHOT_CREATE_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    sidecar_snapshot_restore_path,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SnapshotCreateRequest,
 )
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
+from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
+    get_push_key_pair,
+)
+from onyx.server.features.build.sandbox.kubernetes.sidecar_client import SidecarClient
+from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
+    SidecarRequestError,
+)
+from onyx.server.features.build.sandbox.kubernetes.sidecar_client import (
+    SidecarStatusError,
+)
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT_SANDBOX
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
 from onyx.server.features.build.sandbox.labels import LABEL_SANDBOX_ID
 from onyx.server.features.build.sandbox.labels import LABEL_TENANT_ID
-from onyx.server.features.build.sandbox.manager.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
@@ -102,6 +127,7 @@ from onyx.server.features.build.sandbox.models import RetriableWriteError
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
+from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     ATTACHMENTS_SECTION_CONTENT,
 )
@@ -119,10 +145,6 @@ logger = setup_logger()
 # request. In K8s, HOSTNAME is set to the pod name (e.g., "api-server-dpgg7").
 _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
-# Constants for pod configuration
-# Note: Next.js ports are dynamically allocated from SANDBOX_NEXTJS_PORT_START
-# to SANDBOX_NEXTJS_PORT_END range, with one port per session.
-PUSH_DAEMON_PORT = 8731
 POD_READY_TIMEOUT_SECONDS = 60
 
 # Resource deletion timeout and polling interval
@@ -131,9 +153,6 @@ POD_READY_TIMEOUT_SECONDS = 60
 RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 
-
-_PUSH_PRIVATE_KEY_ENV = "ONYX_SANDBOX_PUSH_PRIVATE_KEY"
-_PUSH_PUBLIC_KEY_ENV = "ONYX_SANDBOX_PUSH_PUBLIC_KEY"
 
 # Proxy CA bundle path; still referenced by _proxy_main_container_env_vars().
 _PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
@@ -196,49 +215,7 @@ def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
     ]
 
 
-_push_private_key: Ed25519PrivateKey | None = None
-_push_public_key_b64: str | None = None
-
-
-def _get_push_key_pair() -> tuple[Ed25519PrivateKey, str]:
-    global _push_private_key, _push_public_key_b64
-    if _push_private_key is not None and _push_public_key_b64 is not None:
-        return _push_private_key, _push_public_key_b64
-
-    raw_b64 = os.environ.get(_PUSH_PRIVATE_KEY_ENV, "")
-    if not raw_b64:
-        raise RuntimeError(f"{_PUSH_PRIVATE_KEY_ENV} is not set")
-    try:
-        seed = base64.b64decode(raw_b64)
-        _push_private_key = Ed25519PrivateKey.from_private_bytes(seed)
-    except (binascii.Error, ValueError) as e:
-        raise RuntimeError(
-            f"{_PUSH_PRIVATE_KEY_ENV} is not a valid base64-encoded "
-            f"32-byte Ed25519 seed: {e}"
-        ) from e
-    pub_bytes = _push_private_key.public_key().public_bytes(
-        Encoding.Raw, PublicFormat.Raw
-    )
-    _push_public_key_b64 = base64.b64encode(pub_bytes).decode()
-    return _push_private_key, _push_public_key_b64
-
-
-def _sign_sidecar_request(path: str, sha256_hex: str) -> tuple[str, str]:
-    """Signs a sidecar request and return (signature_b64, timestamp).
-
-    Signs {timestamp}|{path}|{sha256_hex} with the Ed25519 private key. Used for
-    both push (path=mount_path, sha256_hex=bundle SHA) and snapshot endpoints
-    (path=endpoint_path, sha256_hex=body SHA).
-    """
-    priv_key, _ = _get_push_key_pair()
-    ts = str(int(time.time()))
-    message = f"{ts}|{path}|{sha256_hex}".encode()
-    sig = priv_key.sign(message)
-    return base64.b64encode(sig).decode(), ts
-
-
 _MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MiB
-_SNAPSHOT_CHUNK_SIZE = 8 * 1024 * 1024  # 8 MiB
 
 
 def _build_targz(files: FileSet) -> tuple[bytes, str]:
@@ -260,30 +237,6 @@ def _build_targz(files: FileSet) -> tuple[bytes, str]:
             tar.addfile(info, io.BytesIO(data))
     raw = buf.getvalue()
     return raw, hashlib.sha256(raw).hexdigest()
-
-
-class _IteratorReader:
-    """Adapts an iterator of bytes into a ``read(n)``-based reader."""
-
-    def __init__(self, iterator: Iterator[bytes]) -> None:
-        self._iterator = iterator
-        self._buf = b""
-
-    def read(self, size: int = -1) -> bytes:
-        if size is None or size < 0:
-            data = self._buf + b"".join(self._iterator)
-            self._buf = b""
-            return data
-        while len(self._buf) < size:
-            try:
-                self._buf += next(self._iterator)
-            except StopIteration:
-                break
-        data, self._buf = self._buf[:size], self._buf[size:]
-        return data
-
-    def readable(self) -> bool:
-        return True
 
 
 def _build_nextjs_start_script(
@@ -354,6 +307,8 @@ class KubernetesSandboxManager(SandboxManager):
     This is a singleton class - use get_sandbox_manager() to get the instance.
     """
 
+    supports_opencode_history_persistence = True
+
     _instance: "KubernetesSandboxManager | None" = None
     _lock = threading.Lock()
 
@@ -389,6 +344,7 @@ class KubernetesSandboxManager(SandboxManager):
         self._image = SANDBOX_CONTAINER_IMAGE
         self._service_account = SANDBOX_SERVICE_ACCOUNT_NAME
         self._snapshot_manager = SnapshotManager(get_default_file_store())
+        self._sidecar_client = SidecarClient(hosts=self._sandbox_pod_hosts)
 
         self._init_serve_state()
 
@@ -627,10 +583,13 @@ class KubernetesSandboxManager(SandboxManager):
             ),
         ]
 
-        _, push_public_key_b64 = _get_push_key_pair()
+        _, push_public_key_b64 = get_push_key_pair()
         sidecar_container = self._require_container(spec, _SIDECAR_CONTAINER_NAME)
         sidecar_container.env = list(sidecar_container.env or []) + [
-            client.V1EnvVar(name=_PUSH_PUBLIC_KEY_ENV, value=push_public_key_b64),
+            client.V1EnvVar(
+                name=SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
+                value=push_public_key_b64,
+            ),
         ]
 
     @staticmethod
@@ -706,6 +665,7 @@ class KubernetesSandboxManager(SandboxManager):
                 type="ClusterIP",
                 selector={LABEL_SANDBOX_ID: sandbox_id_str},
                 ports=ports,
+                publish_not_ready_addresses=True,
             ),
         )
 
@@ -1006,7 +966,7 @@ class KubernetesSandboxManager(SandboxManager):
         return False
 
     def _pod_exists_and_healthy(self, pod_name: str) -> bool:
-        """Check if a pod exists and is in a healthy/running state.
+        """Check if a pod exists and the sandbox app container is ready.
 
         Args:
             pod_name: Name of the pod to check
@@ -1031,10 +991,6 @@ class KubernetesSandboxManager(SandboxManager):
                         and self._sandbox_container_is_ready(pod)
                     ):
                         return True
-
-            # Pending is OK too - pod is being created by another request
-            if phase == "Pending":
-                return True
 
             return False
         except ApiException as e:
@@ -1136,6 +1092,8 @@ class KubernetesSandboxManager(SandboxManager):
                 last_heartbeat=None,
             )
 
+        created_pod = False
+
         try:
             # Re-provision: clear tombstone + cached info so subscribes
             # build a fresh bus with the new Secret's password.
@@ -1160,6 +1118,7 @@ class KubernetesSandboxManager(SandboxManager):
 
             # 1. Create Pod (user-level only, no session setup)
             logger.debug("Creating Pod %s", pod_name)
+            startup_restore_required = True
             pod = self._create_sandbox_pod(
                 sandbox_id=str(sandbox_id),
                 tenant_id=tenant_id,
@@ -1169,25 +1128,26 @@ class KubernetesSandboxManager(SandboxManager):
                     namespace=self._namespace,
                     body=pod,
                 )
+                created_pod = True
             except ApiException as e:
                 if e.status == 409:
-                    # Pod was created by another concurrent request
-                    # Check if it's healthy and reuse it
                     logger.warning(
                         "Pod %s already exists (409 conflict, this shouldn't normally happen), checking if it's healthy...",
                         pod_name,
                     )
                     if self._pod_exists_and_healthy(pod_name):
+                        # Another provisioner completed startup restore while this
+                        # request was creating the pod. Reuse the live pod instead
+                        # of sending a redundant restore request.
                         logger.warning(
                             "During provisioning, discovered that pod %s already exists. Reusing",
                             pod_name,
                         )
-                        # Continue to ensure service exists and wait for ready
+                        startup_restore_required = False
                     else:
-                        # Pod exists but is not healthy - this shouldn't happen often
-                        # but could occur if a previous provision failed mid-way
                         logger.warning(
-                            "Pod %s exists but is not healthy, waiting for it to become ready or fail",
+                            "Pod %s exists but is not ready; running startup restore "
+                            "handshake without cleanup ownership",
                             pod_name,
                         )
                 else:
@@ -1196,14 +1156,21 @@ class KubernetesSandboxManager(SandboxManager):
             # 2. Create Service (handles terminating services)
             self._ensure_service_exists(sandbox_id, tenant_id)
 
-            # 3. Wait for pod to be ready
+            # 3. Restore opencode history before the sandbox app container starts.
+            # The restartable init sidecar serves the restore endpoint but its
+            # startup probe stays blocked until restore is complete or explicitly
+            # marked unnecessary, so opencode-serve cannot open an empty DB first.
+            if startup_restore_required:
+                self.restore_opencode_history_snapshot(sandbox_id, tenant_id)
+
+            # 4. Wait for pod to be ready
             logger.info("Waiting for pod %s to become ready...", pod_name)
             if not self._wait_for_pod_ready(pod_name):
                 raise RuntimeError(
                     f"Timeout waiting for sandbox pod {pod_name} to become ready"
                 )
 
-            # 4. Wait for opencode-serve to bind :4096 .
+            # 5. Wait for opencode-serve to bind :4096 .
             if not self._wait_for_opencode_serve_ready(sandbox_id):
                 raise RuntimeError(
                     f"opencode-serve never became ready in sandbox pod {pod_name}"
@@ -1223,8 +1190,8 @@ class KubernetesSandboxManager(SandboxManager):
             )
 
         except Exception as e:
-            # Only cleanup if we're sure the pod is not being used by another request
-            # Check if pod is healthy - if so, don't clean up (another request may own it)
+            # Only clean up resources created by this provision call. If a
+            # concurrent provisioner finished successfully, leave the live pod alone.
             if self._pod_exists_and_healthy(pod_name):
                 logger.warning(
                     "Kubernetes sandbox provisioning failed for sandbox %s: %s, but pod is healthy (likely owned by concurrent request), not cleaning up",
@@ -1238,7 +1205,14 @@ class KubernetesSandboxManager(SandboxManager):
                     e,
                     exc_info=True,
                 )
-                self._cleanup_kubernetes_resources(str(sandbox_id))
+                if created_pod:
+                    self._cleanup_kubernetes_resources(str(sandbox_id))
+                else:
+                    logger.warning(
+                        "Not cleaning up sandbox %s after provisioning failure "
+                        "because this provisioner did not create the pod",
+                        sandbox_id,
+                    )
             raise
 
     def _wait_for_resource_deletion(
@@ -1601,65 +1575,135 @@ echo "Session cleanup complete"
         Captures:
         - sessions/$session_id/outputs/
         - sessions/$session_id/attachments/
-        - sessions/$session_id/.opencode-data/
 
         Returns None if there are no outputs to snapshot.
         """
         body = SnapshotCreateRequest(session_id=session_id).model_dump_json().encode()
-        sha256_hex = hashlib.sha256(body).hexdigest()
 
-        last_exc: httpx.TransportError | None = None
-        timeout = httpx.Timeout(300.0, connect=30.0, read=300.0, write=300.0)
-        for host in self._sandbox_pod_hosts(sandbox_id):
-            headers = self._signed_sidecar_headers(
-                endpoint_path="/snapshot/create",
-                sha256_hex=sha256_hex,
-                content_type="application/json",
+        with self._sidecar_client.request_and_stream_new_snapshot(
+            sandbox_id=sandbox_id,
+            endpoint_path=SIDECAR_SNAPSHOT_CREATE_PATH,
+            body=body,
+            content_type="application/json",
+            operation_label="Snapshot create",
+            timeout_seconds=300.0,
+        ) as snapshot_stream:
+            if snapshot_stream is None:
+                logger.info("No outputs to snapshot for session %s", session_id)
+                return None
+
+            _, storage_path, size_bytes = (
+                self._snapshot_manager.persist_snapshot_from_stream(
+                    stream=snapshot_stream,
+                    sandbox_id=str(sandbox_id),
+                    tenant_id=tenant_id,
+                )
             )
-            url = f"http://{host}:{PUSH_DAEMON_PORT}/snapshot/create"
-            try:
-                with httpx.Client(timeout=timeout) as http_client:
-                    with http_client.stream(
-                        "POST", url, content=body, headers=headers
-                    ) as resp:
-                        if resp.status_code == 204:
-                            logger.info(
-                                "No outputs to snapshot for session %s", session_id
-                            )
-                            return None
-                        if resp.status_code != 200:
-                            detail = resp.read().decode(errors="replace")
-                            raise RuntimeError(
-                                f"Snapshot create failed: {resp.status_code} {detail}"
-                            )
 
-                        adapter = _IteratorReader(
-                            resp.iter_bytes(chunk_size=_SNAPSHOT_CHUNK_SIZE)
-                        )
-                        _, storage_path, size_bytes = (
-                            self._snapshot_manager.create_snapshot_from_stream(
-                                stream=adapter,  # ty: ignore[invalid-argument-type]
-                                sandbox_id=str(sandbox_id),
-                                tenant_id=tenant_id,
-                            )
-                        )
+        logger.info(
+            "Created snapshot for sandbox %s session %s (size=%s bytes).",
+            sandbox_id,
+            session_id,
+            size_bytes,
+        )
+        return SnapshotResult(
+            storage_path=storage_path,
+            size_bytes=size_bytes,
+        )
 
-                        logger.info(
-                            "Created snapshot for sandbox %s session %s (size=%s bytes).",
-                            sandbox_id,
-                            session_id,
-                            size_bytes,
-                        )
-                        return SnapshotResult(
-                            storage_path=storage_path,
-                            size_bytes=size_bytes,
-                        )
-            except httpx.TransportError as e:
-                last_exc = e
-                continue
+    def create_opencode_history_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,
+    ) -> bool:
+        with self._sidecar_client.request_and_stream_new_snapshot(
+            sandbox_id=sandbox_id,
+            endpoint_path=SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
+            body=b"",
+            content_type="application/octet-stream",
+            operation_label="opencode history snapshot",
+            timeout_seconds=timeout_seconds,
+        ) as snapshot_stream:
+            if snapshot_stream is None:
+                logger.info(
+                    "No opencode history to snapshot for sandbox %s", sandbox_id
+                )
+                return False
 
-        raise RuntimeError(
-            f"Snapshot create request failed: {last_exc or 'no sandbox pod host reachable'}"
+            storage_path, size_bytes = (
+                self._snapshot_manager.persist_opencode_snapshot_from_stream(
+                    stream=snapshot_stream,
+                    sandbox_id=str(sandbox_id),
+                    tenant_id=tenant_id,
+                )
+            )
+
+        logger.info(
+            "Created opencode history snapshot for sandbox %s (path=%s size=%s bytes)",
+            sandbox_id,
+            storage_path,
+            size_bytes,
+        )
+        return True
+
+    def restore_opencode_history_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,
+    ) -> bool:
+        if not self._snapshot_manager.has_opencode_history_snapshot(
+            tenant_id, str(sandbox_id)
+        ):
+            logger.info("No opencode history snapshot found for sandbox %s", sandbox_id)
+            self._mark_opencode_history_restored(
+                sandbox_id=sandbox_id,
+                timeout_seconds=timeout_seconds,
+            )
+            return False
+
+        try:
+            with tempfile.NamedTemporaryFile(mode="w+b", suffix=".tar.gz") as tmp_file:
+                storage_path = SnapshotManager.opencode_history_storage_path(
+                    tenant_id, str(sandbox_id)
+                )
+                self._snapshot_manager.restore_snapshot_to_stream(
+                    storage_path,
+                    tmp_file,
+                )
+                tmp_file.flush()
+                tmp_file.file.seek(0)
+                sha256_hex = hashlib.file_digest(
+                    cast(io.BufferedRandom, tmp_file.file), "sha256"
+                ).hexdigest()
+                tmp_file.file.seek(0)
+                self._sidecar_client.post_archive(
+                    sandbox_id=sandbox_id,
+                    endpoint_path=SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
+                    archive_file=tmp_file,
+                    sha256_hex=sha256_hex,
+                    operation_label="opencode history restore",
+                    timeout_seconds=timeout_seconds,
+                )
+            logger.info("Restored opencode history snapshot for sandbox %s", sandbox_id)
+            return True
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to restore opencode history snapshot: {e}"
+            ) from e
+
+    def _mark_opencode_history_restored(
+        self,
+        *,
+        sandbox_id: UUID,
+        timeout_seconds: float = 300.0,
+    ) -> None:
+        self._sidecar_client.post_empty(
+            sandbox_id=sandbox_id,
+            endpoint_path=SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
+            operation_label="opencode history restore marker",
+            timeout_seconds=timeout_seconds,
         )
 
     def session_workspace_exists(
@@ -1808,11 +1852,12 @@ echo "Session cleanup complete"
                     cast(io.BufferedRandom, tmp_file.file), "sha256"
                 ).hexdigest()
                 tmp_file.file.seek(0)
-                self._restore_snapshot_archive_via_sidecar(
+                self._sidecar_client.post_archive(
                     sandbox_id=sandbox_id,
-                    session_id=session_id,
+                    endpoint_path=sidecar_snapshot_restore_path(session_id),
                     archive_file=tmp_file,
                     sha256_hex=sha256_hex,
+                    operation_label="Snapshot restore",
                 )
 
             # Regenerate configuration files that aren't in the snapshot.
@@ -1911,15 +1956,10 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         if not self._sandbox_container_is_ready(pod):
             return False
 
-        for host in self._sandbox_pod_hosts(sandbox_id):
-            url = f"http://{host}:{PUSH_DAEMON_PORT}/health"
-            try:
-                with httpx.Client(timeout=timeout) as http_client:
-                    if http_client.get(url).status_code == 200:
-                        return True
-            except httpx.TransportError:
-                continue
-        return False
+        return self._sidecar_client.is_healthy(
+            sandbox_id=sandbox_id,
+            timeout_seconds=timeout,
+        )
 
     def _load_serve_connection_info(
         self, sandbox_id: UUID
@@ -2676,64 +2716,6 @@ fi
             pass
         return hosts
 
-    def _signed_sidecar_headers(
-        self,
-        *,
-        endpoint_path: str,
-        sha256_hex: str,
-        content_type: str,
-    ) -> dict[str, str]:
-        sig_b64, ts = _sign_sidecar_request(endpoint_path, sha256_hex)
-        return {
-            "Content-Type": content_type,
-            "X-Push-Signature": sig_b64,
-            "X-Push-Timestamp": ts,
-        }
-
-    def _restore_snapshot_archive_via_sidecar(
-        self,
-        *,
-        sandbox_id: UUID,
-        session_id: UUID,
-        archive_file: IO[bytes],
-        sha256_hex: str,
-    ) -> None:
-        endpoint_path = f"/snapshot/restore/{session_id}"
-
-        last_exc: httpx.TransportError | None = None
-        timeout = httpx.Timeout(300.0, connect=30.0, read=300.0, write=300.0)
-        for host in self._sandbox_pod_hosts(sandbox_id):
-            archive_file.seek(0)
-            headers = self._signed_sidecar_headers(
-                endpoint_path=endpoint_path,
-                sha256_hex=sha256_hex,
-                content_type="application/gzip",
-            )
-            headers["X-Bundle-Sha256"] = sha256_hex
-            url = f"http://{host}:{PUSH_DAEMON_PORT}{endpoint_path}"
-            try:
-                with httpx.Client(timeout=timeout) as http_client:
-                    resp = http_client.post(
-                        url,
-                        content=iter(
-                            lambda: archive_file.read(_SNAPSHOT_CHUNK_SIZE), b""
-                        ),
-                        headers=headers,
-                    )
-            except httpx.TransportError as e:
-                last_exc = e
-                continue
-
-            if resp.status_code == 204:
-                return
-            raise RuntimeError(
-                f"Snapshot restore failed: {resp.status_code} {resp.text}"
-            )
-
-        raise RuntimeError(
-            f"Snapshot restore request failed: {last_exc or 'no sandbox pod host reachable'}"
-        )
-
     def write_files_to_sandbox(
         self,
         *,
@@ -2745,33 +2727,19 @@ fi
         pod_name = self._get_pod_name(sandbox_id)
         tar_bytes, sha256_hex = _build_targz(files)
 
-        last_exc: httpx.TransportError | None = None
-        for host in self._sandbox_pod_hosts(sandbox_id):
-            # Sign per attempt; the daemon rejects timestamps older than 60s.
-            sig_b64, ts = _sign_sidecar_request(mount_path, sha256_hex)
-            headers = {
-                "Content-Type": "application/gzip",
-                "X-Bundle-Sha256": sha256_hex,
-                "X-Push-Signature": sig_b64,
-                "X-Push-Timestamp": ts,
-            }
-            url = f"http://{host}:{PUSH_DAEMON_PORT}/push"
-            try:
-                with httpx.Client(timeout=30.0) as http_client:
-                    resp = http_client.post(
-                        url,
-                        params={"mount_path": mount_path},
-                        content=tar_bytes,
-                        headers=headers,
-                    )
-            except httpx.TransportError as e:
-                last_exc = e
-                continue
-            # Reached the daemon; map status, don't try other hosts.
-            if resp.status_code == 200:
-                return
-            err = f"{pod_name}: {resp.status_code} {resp.text}"
-            if resp.status_code >= 500:
-                raise RetriableWriteError(err)
-            raise FatalWriteError(err)
-        raise RetriableWriteError(f"Push to {pod_name} failed: {last_exc}")
+        try:
+            self._sidecar_client.push_archive(
+                sandbox_id=sandbox_id,
+                mount_path=mount_path,
+                archive=tar_bytes,
+                sha256_hex=sha256_hex,
+                operation_label=pod_name,
+                timeout_seconds=30.0,
+            )
+        except SidecarRequestError as e:
+            raise RetriableWriteError(f"Push to {pod_name} failed: {e}") from e
+        except SidecarStatusError as e:
+            err = f"{pod_name}: {e.status_code} {e.body}"
+            if e.status_code >= 500:
+                raise RetriableWriteError(err) from e
+            raise FatalWriteError(err) from e

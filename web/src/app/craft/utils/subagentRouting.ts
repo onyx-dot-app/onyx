@@ -82,6 +82,7 @@ export function toolCallStateFromStart(
     rawOutput: "",
     toolName: parsed.toolName,
     subagentType: parsed.subagentType ?? undefined,
+    skillName: parsed.skillName ?? undefined,
     isNewFile: true,
     oldContent: "",
     newContent: "",

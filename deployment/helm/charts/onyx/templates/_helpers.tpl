@@ -202,6 +202,18 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}
 
+{{- define "onyx.sandboxProxyHost" -}}
+{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s-sandbox-proxy.%s.svc.cluster.local" (include "onyx.fullname" .) .Release.Namespace) -}}
+{{- end }}
+
+{{- define "onyx.sandboxProxyPort" -}}
+8080
+{{- end }}
+
+{{- define "onyx.sandboxPushDaemonPort" -}}
+8731
+{{- end }}
+
 {{/* Sandbox egress-proxy env. Mirrors _proxy_main_container_env_vars(). */}}
 {{- define "onyx.sandboxProxyEnv" -}}
 {{- $proxyUrl := printf "http://sandbox-proxy:%v" .proxyPort }}
@@ -217,14 +229,6 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 - { name: AWS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
 - { name: CURL_CA_BUNDLE, value: "{{ .caBundleFile }}" }
 - { name: GIT_SSL_CAINFO, value: "{{ .caBundleFile }}" }
-{{- end }}
-
-{{/*
-"true" when Craft is enabled and configured to provision Kubernetes sandbox pods.
-*/}}
-{{- define "onyx.craftKubernetesSandboxEnabled" -}}
-{{- $sandboxBackend := toString ((index .Values.configMap "SANDBOX_BACKEND") | default "kubernetes") -}}
-{{- if and (eq (include "onyx.craftEnabled" .) "true") (eq $sandboxBackend "kubernetes") -}}true{{- end -}}
 {{- end }}
 
 {{/*
