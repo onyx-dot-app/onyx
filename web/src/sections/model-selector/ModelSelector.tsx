@@ -50,6 +50,8 @@ export interface ModelSelectorProps {
    * (modelConfigurationId === null), which callers should treat as "clear."
    */
   includeGlobalDefault?: boolean;
+  /** Which side of the trigger the popover prefers to open on. */
+  side?: "top" | "bottom" | "left" | "right";
 }
 
 export default function ModelSelector({
@@ -60,6 +62,7 @@ export default function ModelSelector({
   temperatureManager,
   disabled = false,
   includeGlobalDefault = false,
+  side = "top",
 }: ModelSelectorProps) {
   const currentAgent = useCurrentAgent();
   const { llmProviders, defaultText } = useLLMProviders(currentAgent?.id);
@@ -186,7 +189,7 @@ export default function ModelSelector({
         </Popover.Trigger>
       </div>
 
-      <Popover.Content side="top" align="end" width="xl">
+      <Popover.Content side={side} align="end" width="xl" sticky="partial">
         <ModelSelectorContent
           currentModelName={currentOption?.modelName}
           requiresImageInput={requiresImageInput}

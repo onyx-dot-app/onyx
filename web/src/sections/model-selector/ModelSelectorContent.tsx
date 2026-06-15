@@ -169,110 +169,114 @@ export default function ModelSelectorContent({
         placeholder="Search models..."
       />
 
-      <PopoverMenu scrollContainerRef={scrollContainerRef}>
-        {[
-          ...(includeGlobalDefault && !isLoading
-            ? [
-                <LineItemButton
-                  key="global-default"
-                  selectVariant="select-heavy"
-                  state={
-                    isSelected(GLOBAL_DEFAULT_LLM_OPTION) ? "selected" : "empty"
-                  }
-                  icon={(props) => <div {...(props as any)} />}
-                  title={GLOBAL_DEFAULT_LLM_OPTION.displayName}
-                  description={globalDefaultDisplayName ?? undefined}
-                  onClick={() => onSelect(GLOBAL_DEFAULT_LLM_OPTION)}
-                  rightChildren={
-                    isSelected(GLOBAL_DEFAULT_LLM_OPTION) ? (
-                      <div className="flex h-5 items-center">
-                        <SvgCheck className="text-action-link-05" size={16} />
-                      </div>
-                    ) : null
-                  }
-                  sizePreset="main-ui"
-                  rounding="sm"
-                />,
-              ]
-            : []),
-          null,
-          ...(isLoading
-            ? [
-                <Text key="loading" font="secondary-body" color="text-03">
-                  Loading models...
-                </Text>,
-              ]
-            : groupedOptions.length === 0
+      <div ref={scrollContainerRef} className="max-h-80 overflow-y-auto">
+        <PopoverMenu>
+          {[
+            ...(includeGlobalDefault && !isLoading
               ? [
-                  <Text key="empty" font="secondary-body" color="text-03">
-                    No models found
+                  <LineItemButton
+                    key="global-default"
+                    selectVariant="select-heavy"
+                    state={
+                      isSelected(GLOBAL_DEFAULT_LLM_OPTION)
+                        ? "selected"
+                        : "empty"
+                    }
+                    icon={(props) => <div {...(props as any)} />}
+                    title={GLOBAL_DEFAULT_LLM_OPTION.displayName}
+                    description={globalDefaultDisplayName ?? undefined}
+                    onClick={() => onSelect(GLOBAL_DEFAULT_LLM_OPTION)}
+                    rightChildren={
+                      isSelected(GLOBAL_DEFAULT_LLM_OPTION) ? (
+                        <div className="flex h-5 items-center">
+                          <SvgCheck className="text-action-link-05" size={16} />
+                        </div>
+                      ) : null
+                    }
+                    sizePreset="main-ui"
+                    rounding="sm"
+                  />,
+                ]
+              : []),
+            null,
+            ...(isLoading
+              ? [
+                  <Text key="loading" font="secondary-body" color="text-03">
+                    Loading models...
                   </Text>,
                 ]
-              : groupedOptions.length === 1
+              : groupedOptions.length === 0
                 ? [
-                    <Section key="single-provider" gap={0.25}>
-                      {groupedOptions[0]!.options.map(renderModelItem)}
-                    </Section>,
+                    <Text key="empty" font="secondary-body" color="text-03">
+                      No models found
+                    </Text>,
                   ]
-                : groupedOptions.map((group) => {
-                    const open = isGroupOpen(group.key);
-                    return (
-                      <Collapsible
-                        key={group.key}
-                        open={open}
-                        onOpenChange={() => toggleGroup(group.key)}
-                        className="flex flex-col gap-1"
-                      >
-                        <CollapsibleTrigger asChild>
-                          <Interactive.Stateless prominence="tertiary">
-                            <Interactive.Container
-                              size="fit"
-                              rounding="sm"
-                              width="full"
-                            >
-                              <div className="pl-2 pr-1 py-1 w-full">
-                                <ContentAction
-                                  sizePreset="secondary"
-                                  variant="body"
-                                  color="muted"
-                                  icon={group.Icon}
-                                  title={group.displayName}
-                                  padding="fit"
-                                  rightChildren={
-                                    <Section>
-                                      <Button
-                                        icon={(props) => (
-                                          <SvgChevronRight
-                                            {...props}
-                                            className={cn(
-                                              "transition-all",
-                                              open && "rotate-90",
-                                              props.className
-                                            )}
-                                          />
-                                        )}
-                                        prominence="tertiary"
-                                        size="sm"
-                                      />
-                                    </Section>
-                                  }
-                                  center
-                                />
-                              </div>
-                            </Interactive.Container>
-                          </Interactive.Stateless>
-                        </CollapsibleTrigger>
+                : groupedOptions.length === 1
+                  ? [
+                      <Section key="single-provider" gap={0.25}>
+                        {groupedOptions[0]!.options.map(renderModelItem)}
+                      </Section>,
+                    ]
+                  : groupedOptions.map((group) => {
+                      const open = isGroupOpen(group.key);
+                      return (
+                        <Collapsible
+                          key={group.key}
+                          open={open}
+                          onOpenChange={() => toggleGroup(group.key)}
+                          className="flex flex-col gap-1"
+                        >
+                          <CollapsibleTrigger asChild>
+                            <Interactive.Stateless prominence="tertiary">
+                              <Interactive.Container
+                                size="fit"
+                                rounding="sm"
+                                width="full"
+                              >
+                                <div className="pl-2 pr-1 py-1 w-full">
+                                  <ContentAction
+                                    sizePreset="secondary"
+                                    variant="body"
+                                    color="muted"
+                                    icon={group.Icon}
+                                    title={group.displayName}
+                                    padding="fit"
+                                    rightChildren={
+                                      <Section>
+                                        <Button
+                                          icon={(props) => (
+                                            <SvgChevronRight
+                                              {...props}
+                                              className={cn(
+                                                "transition-all",
+                                                open && "rotate-90",
+                                                props.className
+                                              )}
+                                            />
+                                          )}
+                                          prominence="tertiary"
+                                          size="sm"
+                                        />
+                                      </Section>
+                                    }
+                                    center
+                                  />
+                                </div>
+                              </Interactive.Container>
+                            </Interactive.Stateless>
+                          </CollapsibleTrigger>
 
-                        <CollapsibleContent>
-                          <Section gap={0.25}>
-                            {group.options.map(renderModelItem)}
-                          </Section>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    );
-                  })),
-        ]}
-      </PopoverMenu>
+                          <CollapsibleContent>
+                            <Section gap={0.25}>
+                              {group.options.map(renderModelItem)}
+                            </Section>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    })),
+          ]}
+        </PopoverMenu>
+      </div>
 
       {footer}
     </Section>
