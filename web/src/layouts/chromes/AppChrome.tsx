@@ -56,7 +56,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
-import { APP_SLOGAN } from "@/lib/constants";
+import { useCustomFooterContent } from "@/lib/app/hooks";
 
 // ---------------------------------------------------------------------------
 // Header
@@ -279,131 +279,140 @@ function Header() {
         </ConfirmationModalLayout>
       )}
 
-      <div className="w-full flex flex-row flex-wrap justify-center items-center p-2">
-        {/*
+      <RootLayout.Header>
+        <div className="w-full flex flex-row flex-wrap justify-center items-center p-2 h-[52px]">
+          {/*
           Left:
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-        <div className="flex-1 flex flex-row items-center gap-2">
-          {isMobile && (
-            <Button
-              prominence="internal"
-              icon={SvgSidebar}
-              onClick={() => setFolded(false)}
-            />
-          )}
-          {businessTier &&
-            settings.isSearchModeAvailable &&
-            appFocus.isNewSession() &&
-            state.phase === "idle" && (
-              <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
-                <Popover.Trigger asChild>
-                  <OpenButton
-                    aria-label="Change app mode"
-                    icon={
-                      effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
-                    }
-                  >
-                    {effectiveMode === "search" ? "Search" : "Chat"}
-                  </OpenButton>
-                </Popover.Trigger>
-                <Popover.Content align="start" width="lg">
-                  <Popover.Menu>
-                    <LineItemButton
-                      sizePreset="main-ui"
-                      rounding="sm"
-                      icon={SvgSearchMenu}
-                      state={effectiveMode === "search" ? "selected" : "empty"}
-                      title="Search"
-                      description="Quick search for documents"
-                      onClick={noProp(() => {
-                        setAppMode("search");
-                        setModePopoverOpen(false);
-                      })}
-                    />
-                    <LineItemButton
-                      sizePreset="main-ui"
-                      rounding="sm"
-                      icon={SvgBubbleText}
-                      state={effectiveMode === "chat" ? "selected" : "empty"}
-                      title="Chat"
-                      description="Conversation and research"
-                      onClick={noProp(() => {
-                        setAppMode("chat");
-                        setModePopoverOpen(false);
-                      })}
-                    />
-                  </Popover.Menu>
-                </Popover.Content>
-              </Popover>
+          <div className="flex-1 flex flex-row items-center gap-2">
+            {isMobile && (
+              <Button
+                prominence="internal"
+                icon={SvgSidebar}
+                onClick={() => setFolded(false)}
+              />
             )}
-        </div>
+            {businessTier &&
+              settings.isSearchModeAvailable &&
+              appFocus.isNewSession() &&
+              state.phase === "idle" && (
+                <Popover
+                  open={modePopoverOpen}
+                  onOpenChange={setModePopoverOpen}
+                >
+                  <Popover.Trigger asChild>
+                    <OpenButton
+                      aria-label="Change app mode"
+                      icon={
+                        effectiveMode === "search"
+                          ? SvgSearchMenu
+                          : SvgBubbleText
+                      }
+                    >
+                      {effectiveMode === "search" ? "Search" : "Chat"}
+                    </OpenButton>
+                  </Popover.Trigger>
+                  <Popover.Content align="start" width="lg">
+                    <Popover.Menu>
+                      <LineItemButton
+                        sizePreset="main-ui"
+                        rounding="sm"
+                        icon={SvgSearchMenu}
+                        state={
+                          effectiveMode === "search" ? "selected" : "empty"
+                        }
+                        title="Search"
+                        description="Quick search for documents"
+                        onClick={noProp(() => {
+                          setAppMode("search");
+                          setModePopoverOpen(false);
+                        })}
+                      />
+                      <LineItemButton
+                        sizePreset="main-ui"
+                        rounding="sm"
+                        icon={SvgBubbleText}
+                        state={effectiveMode === "chat" ? "selected" : "empty"}
+                        title="Chat"
+                        description="Conversation and research"
+                        onClick={noProp(() => {
+                          setAppMode("chat");
+                          setModePopoverOpen(false);
+                        })}
+                      />
+                    </Popover.Menu>
+                  </Popover.Content>
+                </Popover>
+              )}
+          </div>
 
-        {/*
+          {/*
           Center:
           - custom-header-content
           - Wraps to its own row below left/right on mobile when content is present
         */}
-        <div
-          className={cn(
-            "flex flex-col items-center overflow-hidden",
-            pageWithHeaderContent && customHeaderContent
-              ? "order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1"
-              : "flex-1"
-          )}
-        >
-          {pageWithHeaderContent && customHeaderContent && (
-            <span className="text-center w-full">
-              <Text color="text-03">{customHeaderContent}</Text>
-            </span>
-          )}
-        </div>
+          <div
+            className={cn(
+              "flex flex-col items-center overflow-hidden",
+              pageWithHeaderContent && customHeaderContent
+                ? "order-last basis-full py-2 sm:py-0 sm:order-0 sm:basis-auto sm:flex-1"
+                : "flex-1"
+            )}
+          >
+            {pageWithHeaderContent && customHeaderContent && (
+              <span className="text-center w-full">
+                <Text color="text-03">{customHeaderContent}</Text>
+              </span>
+            )}
+          </div>
 
-        {/*
+          {/*
           Right:
           - share button
           - more-options buttons
         */}
-        <div className="flex flex-1 justify-end items-center">
-          {appFocus.isChat() && currentChatSession && (
-            <FrostedDiv className="flex shrink flex-row items-center">
-              <Button
-                icon={SvgShare}
-                prominence="tertiary"
-                interaction={showShareModal ? "hover" : "rest"}
-                responsiveHideText
-                onClick={() => setShowShareModal(true)}
-                aria-label="share-chat-button"
-              >
-                Share
-              </Button>
-              <SimplePopover
-                trigger={
-                  /* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */
-                  <IconButton
-                    icon={SvgMoreHorizontal}
-                    className="ml-2"
-                    transient={popoverOpen}
-                    tertiary
-                  />
-                }
-                onOpenChange={(state) => {
-                  setPopoverOpen(state);
-                  if (!state) {
-                    setShowMoveOptions(false);
-                    setSearchTerm("");
+          <div className="flex flex-1 justify-end items-center">
+            {appFocus.isChat() && currentChatSession && (
+              <FrostedDiv className="flex shrink flex-row items-center">
+                <Button
+                  icon={SvgShare}
+                  prominence="tertiary"
+                  interaction={showShareModal ? "hover" : "rest"}
+                  responsiveHideText
+                  onClick={() => setShowShareModal(true)}
+                  aria-label="share-chat-button"
+                >
+                  Share
+                </Button>
+                <SimplePopover
+                  trigger={
+                    /* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */
+                    <IconButton
+                      icon={SvgMoreHorizontal}
+                      className="ml-2"
+                      transient={popoverOpen}
+                      tertiary
+                    />
                   }
-                }}
-                side="bottom"
-                align="end"
-              >
-                <PopoverMenu>{popoverItems}</PopoverMenu>
-              </SimplePopover>
-            </FrostedDiv>
-          )}
+                  onOpenChange={(state) => {
+                    setPopoverOpen(state);
+                    if (!state) {
+                      setShowMoveOptions(false);
+                      setSearchTerm("");
+                    }
+                  }}
+                  side="bottom"
+                  align="end"
+                >
+                  <PopoverMenu>{popoverItems}</PopoverMenu>
+                </SimplePopover>
+              </FrostedDiv>
+            )}
+          </div>
         </div>
-      </div>
+      </RootLayout.Header>
     </>
   );
 }
@@ -413,40 +422,36 @@ function Header() {
 // ---------------------------------------------------------------------------
 
 function Footer() {
-  const settings = useSettingsContext();
   const appFocus = useAppFocus();
-
-  const customFooterContent =
-    settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
-    `[Onyx ${
-      settings?.webVersion || "dev"
-    }](https://www.onyx.app/) - ${APP_SLOGAN}`;
+  const customFooterContent = useCustomFooterContent();
 
   return (
-    <footer
-      className={cn(
-        "relative w-full flex flex-row justify-center items-center gap-2 px-2 mt-auto",
-        // # Note (from @raunakab):
-        //
-        // The conditional rendering of vertical padding based on the current page is intentional.
-        // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
-        // Because the content area in `AppChrome` uses `overflow-auto`, the shadow would be
-        // clipped at the container boundary — causing a visible rendering artefact.
-        //
-        // To fix this, `AppPage.tsx` uses animated spacer divs around `AppInputBar` to
-        // give the shadow breathing room. However, that extra space adds visible gap
-        // between the input and the Footer. To compensate, we remove the Footer's top
-        // padding when `appFocus.isChat()`.
-        //
-        // There is a corresponding note inside `AppInputBar.tsx` and `AppPage.tsx`
-        // explaining this. Please refer to those notes as well.
-        appFocus.isChat() ? "pb-2" : "py-2"
-      )}
-    >
-      <Text font="secondary-action" color="text-03">
-        {markdown(customFooterContent)}
-      </Text>
-    </footer>
+    <RootLayout.Footer>
+      <div
+        className={cn(
+          "relative w-full flex flex-row justify-center items-center gap-2 px-2 mt-auto",
+          // # Note (from @raunakab):
+          //
+          // The conditional rendering of vertical padding based on the current page is intentional.
+          // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
+          // Because the content area in `AppChrome` uses `overflow-auto`, the shadow would be
+          // clipped at the container boundary — causing a visible rendering artefact.
+          //
+          // To fix this, `AppPage.tsx` uses animated spacer divs around `AppInputBar` to
+          // give the shadow breathing room. However, that extra space adds visible gap
+          // between the input and the Footer. To compensate, we remove the Footer's top
+          // padding when `appFocus.isChat()`.
+          //
+          // There is a corresponding note inside `AppInputBar.tsx` and `AppPage.tsx`
+          // explaining this. Please refer to those notes as well.
+          appFocus.isChat() ? "pb-2" : "py-2"
+        )}
+      >
+        <Text font="secondary-action" color="text-03">
+          {markdown(customFooterContent)}
+        </Text>
+      </div>
+    </RootLayout.Footer>
   );
 }
 
@@ -564,15 +569,11 @@ export default function AppChrome({ children }: AppChromeProps) {
                 )}
               </>
             )}
-            <RootLayout.Header>
-              <div className="h-[52px] flex items-center">
-                <Header />
-              </div>
-            </RootLayout.Header>
+
+            {/* Header */}
+            <Header />
             <RootLayout.MainContent>{children}</RootLayout.MainContent>
-            <RootLayout.Footer>
-              <Footer />
-            </RootLayout.Footer>
+            <Footer />
           </div>
           {rightPanel}
         </div>
