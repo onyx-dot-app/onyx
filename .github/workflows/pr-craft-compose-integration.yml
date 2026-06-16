@@ -1,7 +1,8 @@
 # Stands up the full Craft docker-compose stack with the --include-craft overlay
-# once per run and exercises the end-to-end approval-gate flow + the
-# docker-specific posture invariants the K8s lane can't catch by construction
-# (image ENTRYPOINT concat, HOME after setpriv, curl httpoxy on the bridge).
+# once per run and exercises the Docker-backed Craft E2E suite: approval-gate
+# flow, workspace setup, and docker-specific posture invariants the K8s lane
+# can't catch by construction (image ENTRYPOINT concat, HOME after setpriv,
+# curl httpoxy on the bridge).
 #
 # Always triggers on PRs + merge_group so the `craft-compose-required` job below
 # can serve as the single stable required status check in branch protection; the
@@ -229,7 +230,7 @@ jobs:
             -o faulthandler_timeout=90 \
             --tb=short \
             --durations=10 \
-            tests/integration/tests/craft/docker_e2e/test_approval_gate_docker.py \
+            tests/integration/tests/craft/docker_e2e \
             2>&1 | tee ../compose-logs/pytest.log
 
       # Inline tail for fast triage in the GH Actions UI without downloading
