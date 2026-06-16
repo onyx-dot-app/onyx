@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import urlparse
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
 from onyx.configs.constants import MASK_CREDENTIAL_CHAR
@@ -42,6 +43,49 @@ def mask_string(sensitive_str: str) -> str:
         return "••••••••••••"
 
     return f"{sensitive_str[:visible_start]}...{sensitive_str[-visible_end:]}"
+
+
+# Exact env-var keys whose values are non-sensitive and worth seeing in logs
+_UNMASKED_ENV_KEYS = {
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_API_BASE",
+    "OPENAI_BASE_URL",
+    "OPENAI_API_BASE",
+    "AZURE_API_BASE",
+    "AWS_REGION",
+    "AWS_REGION_NAME",
+    "VERTEX_LOCATION",
+}
+
+
+def _sanitize_url_for_logging(value: str) -> str:
+    """Return a URL with any embedded userinfo (user:pass@) stripped.
+
+    Falls back to fully masking if credentials are present, so they never reach
+    the logs even when the host itself is safe to show.
+    """
+    parsed = urlparse(value)
+    if parsed.username or parsed.password:
+        return mask_string(value)
+    netloc = parsed.hostname or ""
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+    return parsed._replace(netloc=netloc).geturl()
+
+
+def mask_env_value_for_logging(key: str, value: str) -> str:
+    """Mask env values, leaving only explicitly-allowlisted keys readable.
+
+    Allowlisted keys (e.g. provider base URLs / regions) are logged so overrides
+    like ANTHROPIC_BASE_URL are visible; if such a value is a URL we still strip
+    any embedded userinfo defensively. Every other key is masked, regardless of
+    what its value looks like.
+    """
+    if key.upper() not in _UNMASKED_ENV_KEYS:
+        return mask_string(value)
+    if value.startswith(("http://", "https://")):
+        return _sanitize_url_for_logging(value)
+    return value
 
 
 def is_masked_credential(value: str) -> bool:
