@@ -425,7 +425,7 @@ export default function LanguageModelsPage() {
           </>
         )}
 
-        {/* ── Cloud disablement notice ── */}
+        {/* ── LLM configuration disablement notice ── */}
         {NEXT_PUBLIC_LANGUAGE_MODEL_CONFIGURATION_DISABLED && (
           <MessageCard
             title="New LLM configuration temporarily unavailable."
