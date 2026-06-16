@@ -1267,8 +1267,9 @@ class TestGetLitellmAvailableModels:
             call_args = mock_get.call_args
             assert call_args[0][0] == "http://localhost:4000/v1/model/info"
 
-    def test_connection_failure_raises_onyx_error(self) -> None:
-        """Test that connection failures are wrapped in OnyxError."""
+    def test_connection_failure_returns_400(self) -> None:
+        """An unreachable proxy is a client misconfig → 400 VALIDATION_ERROR, not 502."""
+        from onyx.error_handling.error_codes import OnyxErrorCode
         from onyx.server.manage.llm.api import get_litellm_available_models
 
         mock_session = MagicMock()
@@ -1282,8 +1283,11 @@ class TestGetLitellmAvailableModels:
                 api_base="http://localhost:4000",
                 api_key="test-key",
             )
-            with pytest.raises(OnyxError, match="Failed to fetch LiteLLM proxy models"):
+            with pytest.raises(OnyxError) as exc_info:
                 get_litellm_available_models(request, MagicMock(), mock_session)
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.status_code == 400
 
     def test_401_raises_authentication_error(self) -> None:
         """Test that a 401 response raises OnyxError with authentication message."""
@@ -1451,8 +1455,9 @@ class TestGetBifrostAvailableModels:
             assert by_name["openai/gpt-4o"] == "GPT-4o"
             assert by_name["some/custom-model"] == "some/custom-model"
 
-    def test_request_failure_is_logged_and_wrapped(self) -> None:
-        """Test that request-layer failures are logged before raising OnyxError."""
+    def test_request_failure_is_logged_and_returns_400(self) -> None:
+        """A request-layer failure is logged and returns 400 (client misconfig)."""
+        from onyx.error_handling.error_codes import OnyxErrorCode
         from onyx.server.manage.llm.api import get_bifrost_available_models
 
         mock_session = MagicMock()
@@ -1466,7 +1471,10 @@ class TestGetBifrostAvailableModels:
             )
 
             request = BifrostModelsRequest(api_base="https://bifrost.example.com")
-            with pytest.raises(OnyxError, match="Failed to fetch Bifrost models"):
+            with pytest.raises(OnyxError) as exc_info:
                 get_bifrost_available_models(request, MagicMock(), mock_session)
 
             mock_warning.assert_called_once()
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.status_code == 400
