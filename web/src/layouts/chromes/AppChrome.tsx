@@ -281,6 +281,7 @@ function Header() {
       {(appFocus.isChat() ||
         appFocus.isNewSession() ||
         appFocus.isAgent() ||
+        appFocus.isProject() ||
         isMobile) &&
         !appFocus.isSharedChat() && (
           <RootLayout.Header>
