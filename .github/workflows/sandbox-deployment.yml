@@ -51,7 +51,10 @@ jobs:
           # changed: skip if its content hash (src-<tree-hash>) is already published.
           if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$GITHUB_REF_NAME" = "sandbox-edge" ]; then
             CONTEXT="backend/onyx/server/features/build/sandbox/image"
-            SRC_TAG="src-$(git rev-parse "HEAD:${CONTEXT}" | cut -c1-16)"
+            # Fingerprint only files Docker builds: exclude README.md (the lone
+            # committed path in this dir's .dockerignore) so docs-only edits don't
+            # cut a spurious version.
+            SRC_TAG="src-$(git ls-tree -r HEAD -- "${CONTEXT}" | grep -v '/README\.md$' | git hash-object --stdin | cut -c1-16)"
             echo "src-tag=${SRC_TAG}" >> "$GITHUB_OUTPUT"
             # Only 200 (exists) / 404 (absent) are conclusive. Fail on anything
             # else (429/5xx/network) so a flaky probe is never misread as
@@ -89,10 +92,14 @@ jobs:
         env:
           SRC_TAG: ${{ steps.check.outputs.src-tag }}
         run: |
-          # Patch-bump off the highest published vX.Y.Z on Docker Hub.
-          LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
+          set -eo pipefail
+          # Patch-bump off the highest published vX.Y.Z. curl -fsS fails loudly on
+          # an HTTP/transport error (rate-limit, 5xx) so a bad response can't parse
+          # to empty and silently reset the version to 0.1.1. grep's no-match (the
+          # legit "no versions yet" bootstrap) is tolerated, not the curl failure.
+          LATEST_TAG=$(curl -fsS "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
             | jq -r '.results[].name' \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } \
             | sort -V \
             | tail -n 1)
 
