@@ -182,3 +182,10 @@
 - 修复：`DockerSandboxManager.write_files_to_sandbox` 调用 `stream_stdin_to_container` 时显式指定 `user="1000:1000"`，确保原子写入 skills/user-library/session 文件时使用 sandbox workspace owner，避免权限漂移。
 - 部署动作：已 rebuild backend 镜像并 recreate `api_server/background/search_gateway/sandbox-proxy`；随后停止并移除旧的 `sandbox-c24ef204`，让下一次创建 Build session 时重新 provision 干净 sandbox，避免复用已卡住/权限状态异常的旧容器。
 - 后端 502 复盘：api_server 本身 healthy，但 recreate api 后 nginx 仍缓存旧 upstream IP（日志 `connect() failed ... upstream: http://172.19.0.12:8080`，新 api IP 为 `172.19.0.11`），导致 `/api/*` 经 nginx 返回 502。已 `--force-recreate --no-deps nginx` 刷新 upstream，`/api/health` 在 3001/8081 均恢复 200。
+
+## 2026-06-16 - Craft long-task stream_read_error mitigation
+
+- 新问题：PPT 生成任务已进入 sandbox 并成功执行到 `mkdir outputs/ppt`，说明 sandbox 初始化/权限问题已解决；失败点变为 OpenCode 调用平台 LLM 时 `upstream_error/stream_read_error`，sandbox 日志显示 `providerID=openai modelID=gpt-5.5`，约 95 秒后上游流断开。
+- 处理策略：Craft 长任务优先切到更适合中文长输出且更稳定的 `qwen3.7-plus`；backend 与 frontend 的 OpenAI-compatible Craft 模型优先级均改为 `qwen3.7-plus -> glm-5.2 -> gpt-5.5 -> deepseek-v4-pro`，并把本地 compose 默认模型从 `gpt-5.5` 改为 `qwen3.7-plus`。
+- 经验：这次不是 nginx/backend/sandbox 初始化不可用，而是 LLM 上游流式响应中断；前端显示为任务中断，后端 `serve_transport` 看到 `GeneratorExit` 是客户端/上游错误后的清理结果。
+- 用户确认当前 `qwen3.7-plus` 路由不通，因此撤回刚才的 Craft 默认切 Qwen 操作：backend/frontend Craft 优先级与 compose 默认模型恢复为 `gpt-5.5`。后续应先排查 `gpt-5.5` 长流中断或选择其它已验证可用模型，不直接切 Qwen。
