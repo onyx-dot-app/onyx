@@ -53,15 +53,22 @@ jobs:
             CONTEXT="backend/onyx/server/features/build/sandbox/image"
             SRC_TAG="src-$(git rev-parse "HEAD:${CONTEXT}" | cut -c1-16)"
             echo "src-tag=${SRC_TAG}" >> "$GITHUB_OUTPUT"
+            # Only 200 (exists) / 404 (absent) are conclusive. Fail on anything
+            # else (429/5xx/network) so a flaky probe is never misread as
+            # "changed" and never cuts a spurious version.
             HTTP=$(curl -sS -o /dev/null -w '%{http_code}' \
               "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags/${SRC_TAG}" || true)
-            if [ "$HTTP" = "200" ]; then
-              echo "Build context unchanged (${SRC_TAG} already published); no new version"
-              echo "sandbox-changed=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "Build context changed (${SRC_TAG} not found, HTTP ${HTTP}); cutting a new version"
-              echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
-            fi
+            case "$HTTP" in
+              200)
+                echo "Build context unchanged (${SRC_TAG} already published); no new version"
+                echo "sandbox-changed=false" >> "$GITHUB_OUTPUT" ;;
+              404)
+                echo "Build context changed (${SRC_TAG} not found); cutting a new version"
+                echo "sandbox-changed=true" >> "$GITHUB_OUTPUT" ;;
+              *)
+                echo "::error::Docker Hub tag probe for ${SRC_TAG} returned ${HTTP}; cannot determine whether it exists. Re-run once the transient error clears."
+                exit 1 ;;
+            esac
             exit 0
           fi
 
