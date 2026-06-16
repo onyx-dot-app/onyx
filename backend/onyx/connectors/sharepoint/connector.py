@@ -3274,6 +3274,7 @@ class SharepointConnector(
             treat_sharing_link_as_public=self.treat_sharing_link_as_public,
         )
 
+    @override
     def reindex(
         self,
         errors: list[ConnectorFailure],
@@ -3293,7 +3294,7 @@ class SharepointConnector(
         # helpers (seen_document_ids / seen_hierarchy_node_raw_ids).
         dedup = self.build_dummy_checkpoint()
         site_drives_cache: dict[str, list[tuple[str, str, str | None]]] = {}
-        # TODO: Resolver.reindex is one-call-per-job and resolves targets
+        # TODO(evan): Resolver.reindex is one-call-per-job and resolves targets
         # sequentially. If the interface grows batch semantics, Graph $batch
         # (20 sub-requests) could cut round trips on the per-item fetches.
 
