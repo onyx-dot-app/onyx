@@ -111,7 +111,6 @@ from onyx.kg.models import KGEntityTypeAttributes
 from onyx.kg.models import KGStage
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
-from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
@@ -4163,17 +4162,6 @@ class SecuritySettings(Base):
     track_external_idp_expiry: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
-    # Stored as the SSRFProtectionLevel value (e.g. "validate_all"); None falls
-    # back to the level derived from the legacy SSRF env vars.
-    ssrf_protection_level: Mapped[SSRFProtectionLevel | None] = mapped_column(
-        Enum(
-            SSRFProtectionLevel,
-            native_enum=False,
-            values_callable=lambda x: [e.value for e in x],
-        ),
-        nullable=True,
-        default=None,
-    )
     mask_credential_prefix: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
@@ -6082,6 +6070,11 @@ class ExternalApp(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    # CUSTOM apps only: a serialized `CustomOAuthConfig` (no secrets). NULL
+    # means static credentials; always NULL for built-ins.
+    oauth_config: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     organization_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
         EncryptedJson(),
         nullable=False,
@@ -6097,6 +6090,14 @@ class ExternalApp(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    __table_args__ = (
+        # Schema-level backstop for the `oauth_config` invariant above.
+        CheckConstraint(
+            "app_type = 'CUSTOM' OR oauth_config IS NULL",
+            name="ck_external_app_oauth_config_custom_only",
+        ),
     )
 
     skill: Mapped["Skill"] = relationship("Skill")

@@ -2,9 +2,7 @@ import base64
 import uuid
 from datetime import datetime
 from datetime import timezone
-from urllib.parse import urlencode
 
-import requests
 from fastapi import APIRouter
 from fastapi import Depends
 from pydantic import BaseModel
@@ -20,12 +18,14 @@ from onyx.db.models import ExternalApp
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.registry import get_provider_or_raise
+from onyx.external_apps.oauth_handler import OAuthFlowHandler
+from onyx.external_apps.oauth_handler import TokenRequestError
+from onyx.external_apps.providers.registry import resolve_oauth_handler
 from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import OAuthCallbackRequest
 from onyx.server.features.build.api.models import OAuthCallbackResponse
+from onyx.server.features.build.api.models import OAuthRedirectUriResponse
 from onyx.server.features.build.api.models import OAuthStartResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -60,16 +60,16 @@ def _frontend_callback_url() -> str:
     return f"{WEB_DOMAIN}{_FRONTEND_CALLBACK_PATH}"
 
 
-def _oauth_provider_or_raise(app: ExternalApp) -> OAuthExternalAppProvider:
-    """Resolve the app's provider and assert it authenticates via OAuth, or
-    400. Only the OAuth subset of built-in providers can drive these routes."""
-    provider = get_provider_or_raise(app)
-    if not isinstance(provider, OAuthExternalAppProvider):
+def _oauth_handler_or_raise(app: ExternalApp) -> OAuthFlowHandler:
+    """The app's OAuth handler (built-in provider or admin-defined custom
+    config), or 400 for a static-credential app."""
+    handler = resolve_oauth_handler(app)
+    if handler is None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"App '{app.skill.name}' does not use an OAuth flow.",
         )
-    return provider
+    return handler
 
 
 class _OAuthStateRecord(BaseModel):
@@ -77,6 +77,15 @@ class _OAuthStateRecord(BaseModel):
 
     user_id: str
     external_app_id: int
+
+
+@router.get("/admin/apps/oauth/redirect-uri")
+def get_oauth_redirect_uri(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> OAuthRedirectUriResponse:
+    """The redirect URI the OAuth routes send, for the admin to register
+    with the provider."""
+    return OAuthRedirectUriResponse(redirect_uri=_frontend_callback_url())
 
 
 @router.get("/apps/{external_app_id}/oauth/start")
@@ -96,7 +105,7 @@ def start_external_app_oauth(
             OnyxErrorCode.INVALID_INPUT,
             "This app is currently disabled by an admin.",
         )
-    provider = _oauth_provider_or_raise(app)
+    handler = _oauth_handler_or_raise(app)
     client_id, _client_secret = _oauth_client_credentials(app)
 
     oauth_uuid = uuid.uuid4()
@@ -111,18 +120,11 @@ def start_external_app_oauth(
         ex=_REDIS_STATE_TTL_SECONDS,
     )
 
-    redirect_uri = _frontend_callback_url()
-    oauth = provider.spec.oauth
-    params: dict[str, str] = {
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        oauth.scope_param: oauth.scope,
-        "state": state,
-        **oauth.extra_authorize_params,
-    }
-    # urlencode so URI-shaped scopes (Google) get `:` and `/`
-    # percent-encoded.
-    authorize_url = f"{oauth.authorize_url}?{urlencode(params)}"
+    authorize_url = handler.build_authorize_url(
+        client_id=client_id,
+        redirect_uri=_frontend_callback_url(),
+        state=state,
+    )
     return OAuthStartResponse(authorize_url=authorize_url)
 
 
@@ -165,72 +167,35 @@ def handle_external_app_oauth_callback(
             f"External app with id {record.external_app_id} no longer exists.",
         )
 
-    provider = _oauth_provider_or_raise(app)
-    oauth = provider.spec.oauth
+    handler = _oauth_handler_or_raise(app)
     # Re-read in case the admin rotated creds between /start and /callback.
     client_id, client_secret = _oauth_client_credentials(app)
 
     try:
-        response = requests.post(
-            oauth.token_url,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-            },
-            data={
-                "grant_type": "authorization_code",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": request.code,
-                "redirect_uri": _frontend_callback_url(),
-            },
-            timeout=30,
+        extracted = handler.exchange_authorization_code(
+            code=request.code,
+            redirect_uri=_frontend_callback_url(),
+            client_id=client_id,
+            client_secret=client_secret,
         )
-    except requests.RequestException as exc:
-        logger.warning(
-            "%s OAuth token exchange network error for app %d: %s",
-            app.skill.name,
-            app.id,
-            exc,
-        )
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"Could not reach {app.skill.name} to complete OAuth.",
-        )
-
-    try:
-        response_data = response.json()
-    except ValueError:
-        logger.warning(
-            "%s OAuth token response was not JSON (status=%d)",
-            app.skill.name,
-            response.status_code,
-        )
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"{app.skill.name} returned a non-JSON response during OAuth.",
-            status_code_override=response.status_code,
-        )
-
-    error = provider.classify_token_response(response, response_data)
-    if error:
+    except TokenRequestError as exc:
+        # Transport failures and provider error codes alike; an unmappable
+        # success response raises OnyxError from extract_credentials directly.
         logger.warning(
             "%s OAuth token exchange failed for user %s, app %d: %s",
             app.skill.name,
             user.id,
             app.id,
-            error,
+            exc,
         )
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            f"{app.skill.name} OAuth failed: {error}",
+            f"{app.skill.name} OAuth failed: {exc}",
         )
 
     # Stamp an absolute `expires_at` now so the lazy-refresh path can later
     # decide staleness without "when was this written" bookkeeping.
-    stored_credentials = stamp_expires_at(
-        provider.extract_credentials(response_data), datetime.now(timezone.utc)
-    )
+    stored_credentials = stamp_expires_at(extracted, datetime.now(timezone.utc))
 
     upsert_external_app_user_credential(
         db_session,

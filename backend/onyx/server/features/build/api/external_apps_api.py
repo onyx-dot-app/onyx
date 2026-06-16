@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
@@ -20,22 +22,26 @@ from onyx.db.external_app import required_user_credential_keys
 from onyx.db.external_app import update_external_app
 from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.external_app import validate_auth_template
+from onyx.db.external_app import validate_oauth_auth_template
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import User
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.utils import none_as_unset
 from onyx.db.utils import UNSET
+from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.models import BuiltInExternalAppDescriptor
+from onyx.external_apps.custom_oauth import CustomOAuthConfig
 from onyx.external_apps.providers.registry import action_policy_views
 from onyx.external_apps.providers.registry import fetch_available_built_in_apps
 from onyx.external_apps.providers.registry import fetch_built_in_app
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.external_apps.providers.registry import resolve_action_overrides
+from onyx.external_apps.providers.registry import resolve_oauth_handler
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
 from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
 from onyx.server.features.build.api.models import ExternalAppAdminResponse
 from onyx.server.features.build.api.models import ExternalAppUserResponse
@@ -54,6 +60,7 @@ router = APIRouter()
 # strings (multipart can't carry native lists/objects).
 _STR_LIST_ADAPTER = TypeAdapter(list[str])
 _STR_DICT_ADAPTER: TypeAdapter[dict[str, str]] = TypeAdapter(dict[str, str])
+_OAUTH_CONFIG_ADAPTER = TypeAdapter(CustomOAuthConfig)
 
 
 def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
@@ -84,6 +91,13 @@ def _to_admin_response(app: ExternalApp) -> ExternalAppAdminResponse:
         enabled=app.skill.enabled,
         actions=action_policy_views(app.app_type, stored),
         is_onyx_managed=managed,
+        # `is not None`, not truthiness: a corrupt falsy value (`{}`) must
+        # raise here, not render as "no OAuth config".
+        oauth_config=(
+            CustomOAuthConfig.model_validate(app.oauth_config)
+            if app.oauth_config is not None
+            else None
+        ),
     )
 
 
@@ -114,6 +128,8 @@ def _to_user_response(
         credential_keys=required_keys,
         credential_values=credential_values,
         authenticated=authenticated,
+        # Same predicate the OAuth routes dispatch on, so the FE can't drift.
+        auth_flow="oauth" if resolve_oauth_handler(app) is not None else "manual",
     )
 
 
@@ -196,6 +212,46 @@ def update_external_app_admin(
         for pattern in request.upstream_url_patterns:
             UrlGlob.parse(pattern)
 
+    # oauth_config: omitted → untouched; explicit null → clear. Non-null is
+    # CUSTOM-only; null on a built-in is a no-op (already NULL, and full-body
+    # clients send it routinely).
+    oauth_config_update: dict[str, Any] | None | UnsetType = UNSET
+    if "oauth_config" in request.model_fields_set:
+        if request.oauth_config is not None and app.app_type != ExternalAppType.CUSTOM:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "oauth_config applies only to custom apps; a built-in app's "
+                "OAuth flow comes from its provider.",
+            )
+        if app.app_type == ExternalAppType.CUSTOM:
+            oauth_config_update = (
+                request.oauth_config.model_dump(mode="json")
+                if request.oauth_config is not None
+                else None
+            )
+
+    # Cross-validate the auth template against the auth method the app will
+    # have *after* this update (only keys matter, so masked org creds are fine).
+    if not managed:
+        will_have_oauth = (
+            request.oauth_config is not None
+            if "oauth_config" in request.model_fields_set
+            else app.oauth_config is not None
+        )
+        if will_have_oauth:
+            validate_oauth_auth_template(
+                (
+                    request.auth_template
+                    if request.auth_template is not None
+                    else app.auth_template
+                ),
+                (
+                    request.organization_credentials
+                    if request.organization_credentials is not None
+                    else app.organization_credentials.get_value(apply_mask=True)
+                ),
+            )
+
     action_policies = resolve_action_overrides(
         app.app_type,
         request.action_policies,
@@ -217,6 +273,7 @@ def update_external_app_admin(
             UNSET if managed else none_as_unset(request.organization_credentials)
         ),
         action_policies=action_policies,
+        oauth_config=oauth_config_update,
     )
     # Push before commit so a push failure rolls back the change.
     push_skill_to_affected_sandboxes(app.skill, db_session)
@@ -232,14 +289,17 @@ def create_custom_external_app(
     auth_template: str = Form(...),
     organization_credentials: str = Form(...),
     enabled: bool = Form(True),
+    oauth_config: str | None = Form(None),
     bundle: UploadFile | None = File(None),
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ExternalAppAdminResponse:
     """Create a CUSTOM (bundle-backed) external app. Multipart; structured fields
     are JSON-encoded form strings, bundle required, blank ``description`` falls
-    back to the bundle's. Field edits use ``PATCH /admin/apps/{id}``, bundle
-    replacement ``PUT /admin/apps/{id}/bundle``.
+    back to the bundle's. ``oauth_config`` (optional) makes the app authenticate
+    users via an admin-defined OAuth 2.0 flow instead of manually-entered
+    credentials. Field edits use ``PATCH /admin/apps/{id}``, bundle replacement
+    ``PUT /admin/apps/{id}/bundle``.
     """
     parsed_patterns = parse_json_form_field(
         upstream_url_patterns, _STR_LIST_ADAPTER, "upstream_url_patterns"
@@ -249,6 +309,11 @@ def create_custom_external_app(
     )
     parsed_org_credentials = parse_json_form_field(
         organization_credentials, _STR_DICT_ADAPTER, "organization_credentials"
+    )
+    parsed_oauth_config = (
+        parse_json_form_field(oauth_config, _OAUTH_CONFIG_ADAPTER, "oauth_config")
+        if oauth_config is not None
+        else None
     )
 
     if not name.strip():
@@ -268,6 +333,8 @@ def create_custom_external_app(
     for pattern in parsed_patterns:
         UrlGlob.parse(pattern)
     validate_auth_template(parsed_auth_template, parsed_org_credentials)
+    if parsed_oauth_config is not None:
+        validate_oauth_auth_template(parsed_auth_template, parsed_org_credentials)
 
     if bundle is None:
         raise OnyxError(
@@ -291,6 +358,11 @@ def create_custom_external_app(
             enabled=enabled,
             is_public=True,
             slug=ingested.slug,
+            oauth_config=(
+                parsed_oauth_config.model_dump(mode="json")
+                if parsed_oauth_config is not None
+                else None
+            ),
         )
         # Push before commit so a failure rolls back the create + orphaned blob.
         push_skill_to_affected_sandboxes(app.skill, db_session)
