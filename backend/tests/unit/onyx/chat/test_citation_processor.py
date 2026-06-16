@@ -2504,3 +2504,104 @@ class TestPossibleCitationPatternReDoS:
                 DynamicCitationProcessor().possible_citation_pattern.search(segment)
                 is None
             ), f"expected {segment!r} to NOT be treated as a possible citation"
+
+
+# ============================================================================
+# Hold Buffer Flush on Stream End Tests
+# ============================================================================
+
+
+class TestHoldBufferFlushOnStreamEnd:
+    """Regression tests for the bug where `self.hold` buffer was not flushed
+    when the stream ends (token=None).
+
+    When stop_stream is configured, tokens that partially match the stop
+    pattern are held in `self.hold`. If the stream ends while `self.hold`
+    is non-empty (i.e. the partial match was a false alarm), those held
+    characters were silently dropped, causing the final characters of
+    the LLM output to be truncated.
+
+    See: https://github.com/onyx-dot-app/onyx/issues/11932
+    """
+
+    def test_hold_flushed_on_stream_end_with_stop_stream(self) -> None:
+        """When stream ends with characters held in `self.hold` due to a
+        partial stop-stream match, they should be emitted, not dropped."""
+        processor = DynamicCitationProcessor(stop_stream="STOP")
+
+        # Feed tokens where "ST" partially matches "STOP" but stream ends
+        # before "OP" arrives — the held "ST" must be flushed.
+        results: list[str | CitationInfo] = []
+        for token in ["Hello ", "ST"]:
+            for result in processor.process_token(token):
+                results.append(result)
+        # End of stream
+        for result in processor.process_token(None):
+            results.append(result)
+
+        output = "".join(r for r in results if isinstance(r, str))
+        assert "Hello " in output
+        assert "ST" in output  # Was previously silently dropped
+
+    def test_hold_and_curr_segment_both_flushed(self) -> None:
+        """Both `self.hold` and `self.curr_segment` should be flushed on
+        stream end."""
+        processor = DynamicCitationProcessor(stop_stream="END")
+
+        results: list[str | CitationInfo] = []
+        # "EN" partially matches stop stream, held in self.hold
+        for token in ["Prefix ", "EN"]:
+            for result in processor.process_token(token):
+                results.append(result)
+        # End of stream — should flush held "EN"
+        for result in processor.process_token(None):
+            results.append(result)
+
+        output = "".join(r for r in results if isinstance(r, str))
+        assert "Prefix " in output
+        assert "EN" in output
+
+    def test_no_truncation_with_citation_near_end(self) -> None:
+        """End-to-end: a well-cited RAG response whose final characters
+        happen to partially match the stop pattern should NOT be truncated."""
+        processor = DynamicCitationProcessor(stop_stream="<STOP>")
+        processor.update_citation_mapping({1: create_test_search_doc(
+            document_id="doc_1", link="https://example.com/doc1"
+        )})
+
+        # Simulate LLM output ending with "re" which starts "<STOP>"… wait,
+        # it doesn't. Let's use a realistic scenario: the last token
+        # partially matches the stop-stream pattern.
+        tokens = ["According to research [", "1", "], always redo it: ", "fa"]
+        # "fa" doesn't match "<STOP>", but let's test with a stop pattern
+        # that "fa" could start matching... actually let's just test the
+        # hold buffer directly with a realistic stop-stream.
+        processor2 = DynamicCitationProcessor(stop_stream="</s>")
+        processor2.update_citation_mapping({1: create_test_search_doc(
+            document_id="doc_1", link="https://example.com/doc1"
+        )})
+
+        # Last token "<" could start the stop pattern "</s>"
+        results: list[str | CitationInfo] = []
+        for token in ["Text [", "1", "] more", "<"]:
+            for result in processor2.process_token(token):
+                results.append(result)
+        for result in processor2.process_token(None):
+            results.append(result)
+
+        output = "".join(r for r in results if isinstance(r, str))
+        # The "<" should appear in output since it wasn't actually "</s>"
+        assert "<" in output
+        assert "more" in output
+
+    def test_hold_cleared_after_flush(self) -> None:
+        """After flushing on stream end, self.hold should be reset to empty."""
+        processor = DynamicCitationProcessor(stop_stream="STOP")
+
+        for token in ["Hello ", "ST"]:
+            for _ in processor.process_token(token):
+                pass
+        for _ in processor.process_token(None):
+            pass
+
+        assert processor.hold == ""

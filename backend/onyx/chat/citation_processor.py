@@ -275,10 +275,12 @@ class DynamicCitationProcessor:
             str: Text chunks to display. Citation format depends on citation_mode.
             CitationInfo: Citation metadata (only when citation_mode=HYPERLINK)
         """
-        # None -> end of stream, flush remaining segment
+        # None -> end of stream, flush remaining segment and held tokens
         if token is None:
-            if self.curr_segment:
-                yield self.curr_segment
+            remaining = self.hold + self.curr_segment
+            if remaining:
+                yield remaining
+            self.hold = ""
             return
 
         # Handle stop stream token
