@@ -636,10 +636,14 @@ class ConfluenceConnector(
                     attachment["title"],
                     page["title"],
                 )
-                # Attachment document id: use the download URL for stable identity
+                # User-facing attachment link: anchor to the browser-friendly
+                # `webui` URL rather than `_links.download`. The download URL is an
+                # Atlassian implementation detail (now a token-only REST endpoint that
+                # no longer carries the filename), whereas the webui URL is the stable,
+                # filename-bearing link we also use as the attachment's document id.
                 try:
                     object_url = build_confluence_document_id(
-                        self.wiki_base, attachment["_links"]["download"], self.is_cloud
+                        self.wiki_base, attachment["_links"]["webui"], self.is_cloud
                     )
                 except Exception as e:
                     logger.warning(
@@ -688,9 +692,9 @@ class ConfluenceConnector(
                         self.wiki_base, page["_links"]["webui"], self.is_cloud
                     )
                     attachment_metadata["parent_page_id"] = page_url
-                    attachment_id = build_confluence_document_id(
-                        self.wiki_base, attachment["_links"]["webui"], self.is_cloud
-                    )
+                    # Same webui-based URL as object_url; the attachment's document id
+                    # and user-facing link are intentionally the same value.
+                    attachment_id = object_url
 
                     primary_owners: list[BasicExpertInfo] | None = None
                     if "version" in attachment and "by" in attachment["version"]:
