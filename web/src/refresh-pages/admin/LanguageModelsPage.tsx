@@ -31,7 +31,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
 
@@ -257,36 +257,39 @@ function NewCustomProviderCard({
   const { icon, productName, companyName, Modal } = getProvider("custom");
 
   return (
-    <SelectCard
-      state="empty"
-      padding="sm"
-      rounding="lg"
-      onClick={() => setIsOpen(true)}
-    >
-      <ContentAction
-        icon={icon}
-        title={productName}
-        description={companyName}
-        sizePreset="main-ui"
-        variant="section"
-        padding="lg"
-        rightChildren={
-          <Button
-            rightIcon={SvgArrowExchange}
-            prominence="tertiary"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsOpen(true);
-            }}
-          >
-            Set Up
-          </Button>
-        }
-      />
+    <>
       {isOpen && (
         <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
       )}
-    </SelectCard>
+
+      <SelectCard
+        state="empty"
+        padding="sm"
+        rounding="lg"
+        onClick={() => setIsOpen(true)}
+      >
+        <ContentAction
+          icon={icon}
+          title={productName}
+          description={companyName}
+          sizePreset="main-ui"
+          variant="section"
+          padding="lg"
+          rightChildren={
+            <Button
+              rightIcon={SvgArrowExchange}
+              prominence="tertiary"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsOpen(true);
+              }}
+            >
+              Set Up
+            </Button>
+          }
+        />
+      </SelectCard>
+    </>
   );
 }
 
@@ -298,6 +301,9 @@ export default function LanguageModelsPage() {
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
+  const isConfigurationDisabled = usePHFeatureFlag(
+    PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
+  );
 
   // Resolve the current default to a model_configuration_id for ModelSelector
   const defaultModelConfigId = useMemo(() => {
@@ -425,8 +431,8 @@ export default function LanguageModelsPage() {
           </>
         )}
 
-        {/* ── Cloud disablement notice ── */}
-        {NEXT_PUBLIC_CLOUD_ENABLED && (
+        {/* ── LLM configuration disablement notice ── */}
+        {isConfigurationDisabled && (
           <MessageCard
             title="New LLM configuration temporarily unavailable."
             description="Existing LLM providers can still be used and updated."
@@ -435,7 +441,7 @@ export default function LanguageModelsPage() {
         )}
 
         {/* ── Add Provider (always visible) ── */}
-        <Disabled disabled={NEXT_PUBLIC_CLOUD_ENABLED}>
+        <Disabled disabled={isConfigurationDisabled}>
           <GeneralLayouts.Section
             gap={0.75}
             height="fit"

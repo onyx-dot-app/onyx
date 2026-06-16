@@ -170,7 +170,7 @@ The existing `SnapshotManager` needs stream helpers:
 - Add `SandboxBackend.DOCKER`.
 - Add Docker config envs.
 - Add `list_session_workspaces(sandbox_id) -> list[UUID]` to `SandboxManager`.
-- Move K8s `_list_session_directories` logic out of `sandbox/tasks/tasks.py` and onto `KubernetesSandboxManager`.
+- Move K8s `_list_session_directories` logic out of `background/celery/tasks/build/tasks.py` and onto `KubernetesSandboxManager`.
 - Add a local implementation that walks the local sandbox directory.
 - Generalize `cleanup_idle_sandboxes_task` so it works for K8s and Docker; local remains cleanup-disabled.
 - Add `SnapshotManager` stream helpers.

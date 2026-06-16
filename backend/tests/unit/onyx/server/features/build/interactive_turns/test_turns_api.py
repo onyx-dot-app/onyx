@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.api import turns_api
+from onyx.server.features.build.interactive_turns import api as turns_api
 from onyx.server.features.build.interactive_turns.state import claim_turn_for_runner
 from onyx.server.features.build.interactive_turns.state import create_interactive_turn
 from onyx.server.features.build.interactive_turns.state import finish_turn

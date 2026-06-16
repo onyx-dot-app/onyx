@@ -48,7 +48,7 @@ import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { PHFeatureFlag, usePHFeatureFlag } from "@/lib/analytics/hooks";
 import {
   shouldShowMoveModal,
   showErrorNotification,
@@ -73,8 +73,7 @@ import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleto
 import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import { usePostHog } from "posthog-js/react";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationType } from "@/lib/notifications/interfaces";
 import { dismissNotification } from "@/lib/notifications/api";
@@ -201,7 +200,6 @@ const AppSidebar = memo(function AppSidebarInner() {
   const { folded } = useSidebarState();
   const router = useRouter();
   const combinedSettings = useSettingsContext();
-  const posthog = usePostHog();
   const { newTenantInfo, invitationInfo } = useModalContext();
   const { setAppMode, reset } = useQueryController();
 
@@ -276,8 +274,9 @@ const AppSidebar = memo(function AppSidebarInner() {
   // Don't show if tenant/invitation modal is open (e.g., "join existing team" modal)
   // Gated by PostHog feature flag: if `craft-animation-disabled` is true (or
   // PostHog is unavailable), skip the auto-show entirely.
-  const isCraftAnimationDisabled =
-    posthog?.isFeatureEnabled(FEATURE_FLAGS.CRAFT_ANIMATION_DISABLED) ?? true;
+  const isCraftAnimationDisabled = usePHFeatureFlag(
+    PHFeatureFlag.CRAFT_ANIMATION_DISABLED
+  );
   const hasTenantModal = !!(newTenantInfo || invitationInfo);
   useEffect(() => {
     if (
@@ -520,7 +519,7 @@ const AppSidebar = memo(function AppSidebarInner() {
         </SidebarTab>
       </div>
     ),
-    [folded, posthog]
+    [folded]
   );
 
   const searchChatsButton = useMemo(

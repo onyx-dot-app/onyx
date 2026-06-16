@@ -1,7 +1,7 @@
 """User library tests.
 
 Integration tests for the user-library HTTP endpoints in
-``onyx.server.features.build.api.user_library``. Each test hits the real
+``onyx.server.features.build.user_library.api``. Each test hits the real
 backend and either asserts the response shape or verifies the resulting
 document row + storage blob via the tree-listing endpoint.
 """

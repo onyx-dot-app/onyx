@@ -15,19 +15,19 @@ from fastapi import Request
 from starlette.responses import StreamingResponse
 
 from onyx.db.enums import SharingScope
-from onyx.server.features.build.api import api
+from onyx.server.features.build import webapp_proxy as api
 
 SESSION_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 BASE = f"/api/build/sessions/{SESSION_ID}/webapp"
 NEXT_TEMPLATE_CONFIG = (
-    Path(api.__file__).resolve().parents[1]
+    Path(api.__file__).resolve().parents[0]
     / "sandbox/image/templates/outputs/web/next.config.ts"
 )
 DOCKER_SANDBOX_MANAGER = (
-    Path(api.__file__).resolve().parents[1] / "sandbox/docker/docker_sandbox_manager.py"
+    Path(api.__file__).resolve().parents[0] / "sandbox/docker/docker_sandbox_manager.py"
 )
 KUBERNETES_SANDBOX_MANAGER = (
-    Path(api.__file__).resolve().parents[1]
+    Path(api.__file__).resolve().parents[0]
     / "sandbox/kubernetes/kubernetes_sandbox_manager.py"
 )
 WEB_NEXT_CONFIG = Path(__file__).resolve().parents[4] / "web/next.config.js"
@@ -46,7 +46,7 @@ class TestNextjsProxyMountContract:
 
         assert "ONYX_WEBAPP_BASE_PATH" in config_source
         assert "assetPrefix" in config_source
-        assert re.search(r"\bbasePath\s*:", config_source)
+        assert re.search(r"\bbasePath\s*[:=]", config_source)
 
     def test_sandbox_start_scripts_export_next_base_path(self) -> None:
         for manager_source in (DOCKER_SANDBOX_MANAGER, KUBERNETES_SANDBOX_MANAGER):

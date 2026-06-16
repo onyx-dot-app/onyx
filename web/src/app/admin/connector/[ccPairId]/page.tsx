@@ -246,8 +246,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
       setHasLoadedOnce(true);
     }
 
+    // Redirect only when the cc-pair is genuinely gone — a real 404 (deleted)
+    // or DELETING state — never on a transient poll error.
     if (
-      (hasLoadedOnce && (ccPairError || !ccPair)) ||
+      (hasLoadedOnce && ccPairError?.status === 404) ||
       (ccPair?.status === ConnectorCredentialPairStatus.DELETING &&
         !ccPair.connector)
     ) {

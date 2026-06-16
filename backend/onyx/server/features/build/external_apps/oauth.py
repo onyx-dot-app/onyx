@@ -24,9 +24,9 @@ from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_provider_or_raise
 from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.api.models import OAuthCallbackRequest
-from onyx.server.features.build.api.models import OAuthCallbackResponse
-from onyx.server.features.build.api.models import OAuthStartResponse
+from onyx.server.features.build.external_apps.models import OAuthCallbackRequest
+from onyx.server.features.build.external_apps.models import OAuthCallbackResponse
+from onyx.server.features.build.external_apps.models import OAuthStartResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

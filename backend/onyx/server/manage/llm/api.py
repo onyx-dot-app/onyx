@@ -1663,13 +1663,14 @@ def _get_openai_compatible_models_response(
             )
     except httpx.RequestError as e:
         logger.warning(
-            "Failed to fetch models from OpenAI-compatible endpoint",
+            "Could not reach OpenAI-compatible models endpoint",
             extra={"source": source_name, "url": url, "error": str(e)},
             exc_info=True,
         )
         raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"Failed to fetch {source_name} models: {e}",
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Could not reach {source_name} at {url}. Check that the URL is "
+            f"correct and reachable from Onyx ({type(e).__name__}).",
         )
     except ValueError as e:
         logger.warning(
