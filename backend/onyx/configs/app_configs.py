@@ -75,7 +75,14 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 
 # Per-user cap on self-managed personal skills. Env-overridable so CI can lower
 # it without uploading the full quota of real bundles to exercise the limit.
-MAX_PERSONAL_SKILLS_PER_USER = int(os.environ.get("MAX_PERSONAL_SKILLS_PER_USER") or 50)
+_raw_max_personal_skills = int(os.environ.get("MAX_PERSONAL_SKILLS_PER_USER") or 50)
+if _raw_max_personal_skills < 0:
+    logger.warning(
+        "MAX_PERSONAL_SKILLS_PER_USER=%d is negative; falling back to 50",
+        _raw_max_personal_skills,
+    )
+    _raw_max_personal_skills = 50
+MAX_PERSONAL_SKILLS_PER_USER = _raw_max_personal_skills
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
