@@ -24,6 +24,13 @@ def test_chat_research_answer_guidance_preserves_adaptive_shape() -> None:
     assert "A deep search does not mean a long answer" in CHAT_RESEARCH_ANSWER_GUIDANCE
 
 
+def test_chat_research_answer_guidance_names_answer_shapes() -> None:
+    assert "direct_answer" in CHAT_RESEARCH_ANSWER_GUIDANCE
+    assert "focused_brief" in CHAT_RESEARCH_ANSWER_GUIDANCE
+    assert "deep_report" in CHAT_RESEARCH_ANSWER_GUIDANCE
+    assert "3-5 key reasons" in CHAT_RESEARCH_ANSWER_GUIDANCE
+
+
 def test_query_portfolio_guidance_mentions_bilingual_and_source_queries() -> None:
     assert "query portfolio" in QUERY_PORTFOLIO_GUIDANCE
     assert "Chinese" in QUERY_PORTFOLIO_GUIDANCE

@@ -23,7 +23,11 @@ Lead with the most useful takeaway unless the user is explicitly asking to explo
 Prefer synthesis over exhaustive enumeration. When many sources were gathered, synthesize the useful judgment instead of listing every source, candidate, or intermediate finding.
 Make the strength of the evidence visible enough for the user to judge quality, including important uncertainty, conflicts, or evidence gaps.
 A deep search does not mean a long answer. Search depth controls evidence gathering; answer length should follow the user's request and the usefulness of the final response.
-Only write a long, report-like answer when the user clearly asks for a complete report, full detail, exhaustive research, or a document-style deliverable.
+Use answer shapes explicitly:
+- direct_answer for simple facts, definitions, direct operations, and low-ambiguity questions. Keep it short.
+- focused_brief by default for ordinary research, comparison, selection, and planning questions. Start with the useful judgment, then provide 3-5 key reasons, evidence strength, conflicts, and next steps when helpful.
+- deep_report only when the user explicitly asks for a report, complete analysis, detailed plan, long-form document, or when the Deep Research workflow is active.
+Only write a long, report-like answer when deep_report applies.
 """.lstrip()
 
 QUERY_PORTFOLIO_GUIDANCE = """
