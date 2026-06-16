@@ -636,14 +636,18 @@ class ConfluenceConnector(
                     attachment["title"],
                     page["title"],
                 )
-                # User-facing attachment link: anchor to the browser-friendly
-                # `webui` URL rather than `_links.download`. The download URL is an
-                # Atlassian implementation detail (now a token-only REST endpoint that
-                # no longer carries the filename), whereas the webui URL is the stable,
-                # filename-bearing link we also use as the attachment's document id.
+                # User-facing attachment link: build the canonical download URL
+                # (`/download/attachments/{page_id}/{filename}`) ourselves. Confluence
+                # Cloud changed `_links.download` to a token-only REST endpoint
+                # (`/rest/api/content/{id}/child/attachment/{att}/download`) that no
+                # longer carries the filename, and `_links.webui` points at the
+                # attachments viewer rather than the file, so we reconstruct the stable,
+                # filename-bearing link instead.
                 try:
                     object_url = build_confluence_document_id(
-                        self.wiki_base, attachment["_links"]["webui"], self.is_cloud
+                        self.wiki_base,
+                        f"/download/attachments/{_get_page_id(page)}/{quote(attachment['title'])}",
+                        self.is_cloud,
                     )
                 except Exception as e:
                     logger.warning(
@@ -692,9 +696,9 @@ class ConfluenceConnector(
                         self.wiki_base, page["_links"]["webui"], self.is_cloud
                     )
                     attachment_metadata["parent_page_id"] = page_url
-                    # Same webui-based URL as object_url; the attachment's document id
-                    # and user-facing link are intentionally the same value.
-                    attachment_id = object_url
+                    attachment_id = build_confluence_document_id(
+                        self.wiki_base, attachment["_links"]["webui"], self.is_cloud
+                    )
 
                     primary_owners: list[BasicExpertInfo] | None = None
                     if "version" in attachment and "by" in attachment["version"]:
