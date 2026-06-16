@@ -58,6 +58,9 @@ class MCPOAuthKeys(str, Enum):
 
     CLIENT_INFO = "client_info"
     TOKENS = "tokens"
+    # Discovered authorization-server `OAuthMetadata` (issuer + endpoints).
+    # Persisted so a per-call provider can refresh against the real token
+    # endpoint instead of the SDK's `<server-origin>/token` fallback.
     METADATA = "metadata"
     # Absolute unix expiry for the stored token. `OAuthToken` only carries the
     # relative `expires_in`, which is meaningless once reloaded from storage.
@@ -82,7 +85,7 @@ class MCPConnectionData(TypedDict):
     # with SQLAlchemy
     client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
     tokens: NotRequired[dict[str, Any]]  # OAuthToken
-    metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
+    metadata: NotRequired[dict[str, Any]]  # discovered OAuthMetadata
     token_expires_at: NotRequired[float]  # absolute unix expiry for `tokens`
 
     # the actual models are defined in mcp.shared.auth
