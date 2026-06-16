@@ -2,7 +2,7 @@
 
 Verifies that a native client can obtain / use / refresh / revoke the existing
 session token as a Bearer (Authorization header) instead of the web cookie,
-and that the web cookie flow is unaffected. See docs/mobile-auth/.
+and that the web cookie flow is unaffected.
 """
 
 import httpx

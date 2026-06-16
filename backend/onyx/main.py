@@ -601,7 +601,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
         # Native mobile clients: same email/password auth, but the session
         # token is issued/refreshed/revoked as a Bearer instead of a cookie.
-        # See docs/mobile-auth/.
         include_auth_router_with_prefix(
             application,
             get_mobile_auth_router(),

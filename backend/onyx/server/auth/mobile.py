@@ -8,8 +8,6 @@ surface.
 V1 (this PR): email/password login, refresh, and logout, mounted from the
 shared fastapi-users machinery against the `mobile-bearer` backend. The Google
 SSO bridge (`/auth/mobile/sso/exchange`) is added in a later PR.
-
-See docs/mobile-auth/.
 """
 
 from fastapi import APIRouter

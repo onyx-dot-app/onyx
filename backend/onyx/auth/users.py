@@ -1334,7 +1334,7 @@ cookie_transport = CookieTransport(
 # authenticate with the SAME stateful session token returned/refreshed as a
 # Bearer value (Authorization header) via this transport. `tokenUrl` is only
 # used for OpenAPI docs. The token itself is identical to the web cookie value
-# (see `mobile_auth_backend` below). See docs/mobile-auth/.
+# (see `mobile_auth_backend` below).
 #
 # API keys / PATs also ride in the Authorization header; for those the session
 # strategy's read_token simply finds nothing and the request falls through to
@@ -1575,7 +1575,7 @@ else:
 # the exact same stateful session token as the cookie backend), but delivered
 # as a Bearer token. fastapi-users namespaces router names by backend name
 # (`auth:mobile-bearer.*`), so the mobile login/refresh/logout routers never
-# collide with the cookie backend's routes. See docs/mobile-auth/.
+# collide with the cookie backend's routes.
 mobile_auth_backend = AuthenticationBackend(
     name="mobile-bearer",
     transport=bearer_transport,
