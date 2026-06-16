@@ -65,6 +65,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewWhoisCommand())
 	cmd.AddCommand(NewTraceCommand())
 	cmd.AddCommand(NewInstallSkillCommand())
+	cmd.AddCommand(NewReleaseCommand())
 
 	return cmd
 }
