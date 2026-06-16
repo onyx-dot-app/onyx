@@ -187,10 +187,8 @@ class MCPTool(Tool[None]):
                 config_dict = self.connection_config.config.get_value(apply_mask=False)
                 headers.update(config_dict.get("headers", {}))
 
-                # Proactively refresh an expired OAuth access token before the call.
-                # The SDK auth provider won't do it reliably (it never restores token
-                # expiry on load), so an expired token would otherwise escalate to a
-                # full re-auth and force a manual reconnect in the Admin Panel.
+                # Proactively refresh the OAuth token; the SDK provider won't
+                # (see oauth_refresh.ensure_fresh_mcp_token).
                 refreshed_headers = self._maybe_refresh_oauth_headers()
                 if refreshed_headers:
                     headers.update(refreshed_headers)

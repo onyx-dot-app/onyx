@@ -389,8 +389,7 @@ class OnyxTokenStorage(TokenStorage):
             config_data["headers"] = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
-            # OAuthToken drops expires_at, so persist absolute expiry separately —
-            # proactive refresh has no other way to tell when this token lapses.
+            # Persist absolute expiry; see MCPOAuthKeys.EXPIRES_AT.
             if tokens.expires_in is not None:
                 config_data[MCPOAuthKeys.EXPIRES_AT.value] = (
                     datetime.datetime.now(datetime.timezone.utc)
@@ -1040,8 +1039,7 @@ async def process_oauth_callback(
         user_config_data["headers"] = {
             "Authorization": f"{oauth_token.token_type} {oauth_token.access_token}"
         }
-        # Persist the refresh inputs (absolute expiry + token endpoint) so proactive
-        # refresh can keep this connection alive without a manual reconnect.
+        # Persist absolute expiry + resolved endpoint for proactive refresh.
         token_expires_at = token_payload.get("expires_at")
         if token_expires_at is not None:
             user_config_data[MCPOAuthKeys.EXPIRES_AT.value] = (

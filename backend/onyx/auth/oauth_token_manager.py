@@ -125,9 +125,7 @@ def exchange_oauth_code_for_token(
     return token_data
 
 
-# RFC 6749 §5.2: a dead grant means reconnect is required; any other failure is
-# retryable. Reuses the external_apps refresh classification so all OAuth refreshers
-# (tool, external-app, MCP) agree on terminal-vs-transient.
+# RFC 6749 §5.2: a dead grant requires reconnect; any other failure is retryable.
 _TERMINAL_REFRESH_ERRORS = frozenset({"invalid_grant"})
 
 
