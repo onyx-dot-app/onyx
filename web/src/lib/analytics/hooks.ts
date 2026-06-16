@@ -29,8 +29,8 @@ import { usePostHog } from "posthog-js/react";
 export enum PHFeatureFlag {
   /** Disables the Onyx Craft (Build Mode) sidebar intro animation. */
   CRAFT_ANIMATION_DISABLED = "craft-animation-disabled",
-  /** Enables adding or modifying LLM providers on the admin Language Models page. */
-  LANGUAGE_MODEL_CONFIGURATION_ENABLED = "language-model-configuration-enabled",
+  /** Disables adding or modifying LLM providers on the admin Language Models page. */
+  LANGUAGE_MODEL_CONFIGURATION_DISABLED = "language-model-configuration-disabled",
 }
 
 /**
@@ -43,7 +43,7 @@ export enum PHFeatureFlag {
  */
 const PHFeatureFlagDefaults: Record<PHFeatureFlag, boolean> = {
   [PHFeatureFlag.CRAFT_ANIMATION_DISABLED]: true,
-  [PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_ENABLED]: true,
+  [PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED]: false,
 };
 
 // ─── Hooks ─────────────────────────────────────────────────────────────────

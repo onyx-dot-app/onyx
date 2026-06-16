@@ -298,8 +298,8 @@ export default function LanguageModelsPage() {
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
-  const isConfigurationEnabled = usePHFeatureFlag(
-    PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_ENABLED
+  const isConfigurationDisabled = usePHFeatureFlag(
+    PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
   );
 
   // Resolve the current default to a model_configuration_id for ModelSelector
@@ -429,7 +429,7 @@ export default function LanguageModelsPage() {
         )}
 
         {/* ── LLM configuration disablement notice ── */}
-        {!isConfigurationEnabled && (
+        {isConfigurationDisabled && (
           <MessageCard
             title="New LLM configuration temporarily unavailable."
             description="Existing LLM providers can still be used and updated."
@@ -438,7 +438,7 @@ export default function LanguageModelsPage() {
         )}
 
         {/* ── Add Provider (always visible) ── */}
-        <Disabled disabled={!isConfigurationEnabled}>
+        <Disabled disabled={isConfigurationDisabled}>
           <GeneralLayouts.Section
             gap={0.75}
             height="fit"
