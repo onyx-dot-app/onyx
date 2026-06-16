@@ -239,6 +239,23 @@ class SiteDescriptor(BaseModel):
     folder_path: str | None
 
 
+class SiteDrive(BaseModel):
+    """A drive (document library) of a site, as listed from Graph."""
+
+    drive_id: str
+    name: str
+    web_url: str | None
+
+
+class ResolvedDriveItem(BaseModel):
+    """The result of mapping a failed item's link back to a fetchable item."""
+
+    driveitem: DriveItemData
+    drive_name: str  # display name (SHARED_DOCUMENTS_MAP-mapped)
+    drive_web_url: str | None
+    site_url: str
+
+
 class CertificateData(BaseModel):
     """Data class for storing certificate information loaded from PFX file."""
 
@@ -3166,14 +3183,15 @@ class SharepointConnector(
     def _list_site_drives(
         self,
         site_url: str,
-        site_drives_cache: dict[str, list[tuple[str, str, str | None]]],
-    ) -> list[tuple[str, str, str | None]]:
-        """List (drive_id, drive_name, drive_web_url) for a site, memoized."""
+        site_drives_cache: dict[str, list[SiteDrive]],
+    ) -> list[SiteDrive]:
+        """List the drives (document libraries) of a site, memoized."""
         if site_url not in site_drives_cache:
             site = self.graph_client.sites.get_by_url(site_url)
             drives = site.drives.get().execute_query()
             site_drives_cache[site_url] = [
-                (cast(str, d.id), d.name or "", d.web_url) for d in drives
+                SiteDrive(drive_id=cast(str, d.id), name=d.name or "", web_url=d.web_url)
+                for d in drives
             ]
         return site_drives_cache[site_url]
 
@@ -3181,8 +3199,8 @@ class SharepointConnector(
         self,
         document_id: str,
         document_link: str,
-        site_drives_cache: dict[str, list[tuple[str, str, str | None]]],
-    ) -> tuple[DriveItemData, str, str | None, str]:
+        site_drives_cache: dict[str, list[SiteDrive]],
+    ) -> ResolvedDriveItem:
         """Resolve a failed drive item's web URL to what's needed to re-fetch it.
 
         The recorded link only reliably yields the *site*: Graph returns the
@@ -3192,29 +3210,26 @@ class SharepointConnector(
         id until one resolves — all under the existing ``Sites.Read.All`` grant.
         ``site_drives_cache`` memoizes the per-site drive listing since targets
         cluster heavily by site. Raises ``ValueError`` if no drive resolves it.
-
-        Returns (driveitem, display_drive_name, drive_web_url, site_url).
         """
         descriptors = self._extract_site_and_drive_info([document_link])
         if not descriptors:
             raise ValueError(f"Could not parse a site from link '{document_link}'")
         site_url = descriptors[0].url
 
-        for drive_id, raw_drive_name, drive_web_url in self._list_site_drives(
-            site_url, site_drives_cache
-        ):
-            item_url = f"{self.graph_api_base}/drives/{drive_id}/items/{document_id}"
+        for drive in self._list_site_drives(site_url, site_drives_cache):
+            item_url = f"{self.graph_api_base}/drives/{drive.drive_id}/items/{document_id}"
             try:
                 item_json = self._graph_api_get_json(item_url)
             except HTTPError as e:
                 if e.response is not None and e.response.status_code == 404:
                     continue
                 raise
-            driveitem = DriveItemData.from_graph_json(item_json)
-            display_drive_name = SHARED_DOCUMENTS_MAP.get(
-                raw_drive_name, raw_drive_name
+            return ResolvedDriveItem(
+                driveitem=DriveItemData.from_graph_json(item_json),
+                drive_name=SHARED_DOCUMENTS_MAP.get(drive.name, drive.name),
+                drive_web_url=drive.web_url,
+                site_url=site_url,
             )
-            return driveitem, display_drive_name, drive_web_url, site_url
 
         raise ValueError(
             f"Item '{document_id}' not found in any library of site '{site_url}'"
@@ -3225,28 +3240,27 @@ class SharepointConnector(
         document_id: str,
         document_link: str,
         dedup: SharepointConnectorCheckpoint,
-        site_drives_cache: dict[str, list[tuple[str, str, str | None]]],
+        site_drives_cache: dict[str, list[SiteDrive]],
         include_permissions: bool,
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
-        driveitem, drive_name, drive_web_url, site_url = (
-            self._resolve_driveitem_by_link(
-                document_id, document_link, site_drives_cache
-            )
+        resolved = self._resolve_driveitem_by_link(
+            document_id, document_link, site_drives_cache
         )
         # Emit the ancestor chain (site -> drive). The crawl yields these outside
         # the per-item loop, so the shared helper only emits folder nodes.
         yield from self._yield_site_hierarchy_node(
-            SiteDescriptor(url=site_url, drive_name=None, folder_path=None), dedup
+            SiteDescriptor(url=resolved.site_url, drive_name=None, folder_path=None),
+            dedup,
         )
-        if drive_web_url:
+        if resolved.drive_web_url:
             yield from self._yield_drive_hierarchy_node(
-                site_url, drive_web_url, drive_name, dedup
+                resolved.site_url, resolved.drive_web_url, resolved.drive_name, dedup
             )
         yield from self._process_drive_item(
-            driveitem,
-            drive_name,
-            drive_web_url,
-            site_url,
+            resolved.driveitem,
+            resolved.drive_name,
+            resolved.drive_web_url,
+            resolved.site_url,
             dedup,
             include_permissions,
             is_targeted_reindex=True,
@@ -3316,7 +3330,7 @@ class SharepointConnector(
         # Throwaway checkpoint used purely as a dedup container for the shared
         # helpers (seen_document_ids / seen_hierarchy_node_raw_ids).
         dedup = self.build_dummy_checkpoint()
-        site_drives_cache: dict[str, list[tuple[str, str, str | None]]] = {}
+        site_drives_cache: dict[str, list[SiteDrive]] = {}
         # TODO(evan): Resolver.reindex is one-call-per-job and resolves targets
         # sequentially. If the interface grows batch semantics, Graph $batch
         # (20 sub-requests) could cut round trips on the per-item fetches.
