@@ -2545,22 +2545,32 @@ class TestHoldBufferFlushOnStreamEnd:
 
     def test_hold_and_curr_segment_both_flushed(self) -> None:
         """Both `self.hold` and `self.curr_segment` should be flushed on
-        stream end, with correct ordering (curr_segment before hold)."""
+        stream end, with correct ordering (curr_segment before hold).
+
+        Scenario: '[' starts a possible citation (held in curr_segment),
+        then 'EN' partially matches stop_stream='END' (held in self.hold).
+        At stream end, both buffers are non-empty and must be flushed
+        in the correct order.
+        """
         processor = DynamicCitationProcessor(stop_stream="END")
 
         results: list[str | CitationInfo] = []
-        # "[" starts a citation -> sits in curr_segment
-        # "EN" partially matches stop stream -> held in self.hold
-        # At stream end, output should be "[EN" (curr_segment first, then hold)
         for token in ["[", "EN"]:
             for result in processor.process_token(token):
                 results.append(result)
+
+        # Verify both buffers are non-empty before stream end
+        assert processor.curr_segment == "[", \
+            f"Expected curr_segment='[', got {processor.curr_segment!r}"
+        assert processor.hold == "EN", \
+            f"Expected hold='EN', got {processor.hold!r}"
+
         # End of stream — should flush curr_segment + hold in order
         for result in processor.process_token(None):
             results.append(result)
 
         output = "".join(r for r in results if isinstance(r, str))
-        assert output == "[EN"
+        assert output == "[EN", f"Expected '[EN', got {output!r}"
 
     def test_no_truncation_with_citation_near_end(self) -> None:
         """End-to-end: a well-cited RAG response whose final characters
