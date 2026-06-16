@@ -2922,6 +2922,76 @@ class ChatMessage(Base):
     )
 
 
+class ChatRun(Base):
+    __tablename__ = "chat_run"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_message_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("chat_message.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    assistant_message_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("chat_message.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    model_provider: Mapped[str | None] = mapped_column(String, nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        Index("ix_chat_run_chat_session_status", "chat_session_id", "status"),
+        Index("ix_chat_run_assistant_message", "assistant_message_id"),
+    )
+
+
+class ChatRunEvent(Base):
+    __tablename__ = "chat_run_event"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_run.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    packet_json: Mapped[dict[str, Any]] = mapped_column(
+        postgresql.JSONB(),
+        nullable=False,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "seq", name="uq_chat_run_event_run_seq"),
+        Index("ix_chat_run_event_run_seq", "run_id", "seq"),
+    )
+
+
 class ToolCall(Base):
     """Represents a Tool Call and Tool Response"""
 
