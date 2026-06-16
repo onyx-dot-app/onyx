@@ -359,7 +359,10 @@ async def get_async_redis_connection() -> aioredis.Redis:
         if existing is not None:
             return existing
 
-        # Drop connections whose loop has been closed so the map stays bounded.
+        # Drop entries for closed loops to keep the map bounded. We can't
+        # aclose() them (their connections are bound to the now-dead loop), so
+        # we drop the reference and let GC reclaim the sockets. Only the
+        # long-lived server loop matters in prod; it never closes.
         for dead_loop in [
             cached_loop
             for cached_loop in _async_redis_connections
