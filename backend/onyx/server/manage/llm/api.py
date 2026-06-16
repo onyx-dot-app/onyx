@@ -1667,8 +1667,6 @@ def _get_openai_compatible_models_response(
             extra={"source": source_name, "url": url, "error": str(e)},
             exc_info=True,
         )
-        # Unreachable user-supplied URL is a client misconfiguration, not a
-        # gateway fault — mirror the Ollama handler and return 400, not 502.
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             f"Could not reach {source_name} at {url}. Check that the URL is "
