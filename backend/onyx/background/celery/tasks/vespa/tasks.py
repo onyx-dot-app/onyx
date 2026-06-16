@@ -34,6 +34,7 @@ from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.document import get_document
 from onyx.db.document import mark_document_as_synced
+from onyx.db.document import mark_document_synced_secondary_pending
 from onyx.db.document_set import delete_document_set
 from onyx.db.document_set import fetch_document_sets
 from onyx.db.document_set import fetch_document_sets_for_document
@@ -50,6 +51,7 @@ from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
+from onyx.document_index.interfaces_new import SecondaryIndexDocumentMissingError
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
@@ -512,16 +514,28 @@ def document_index_metadata_sync_task(
                     hidden=doc.hidden,
                 )
 
+                # PRESENT synced but doc not in FUTURE yet (reindex port): defer
+                # rather than fail. PRESENT write already committed in the pair.
+                secondary_only_missing = False
                 for retry_document_index in retry_document_indices:
-                    # TODO(andrei): Previously there was a comment here saying
-                    # it was ok if a doc did not exist in the document index. I
-                    # don't agree with that claim, so keep an eye on this task
-                    # to see if this raises.
-                    retry_document_index.update([update_request])
+                    try:
+                        # TODO(andrei): Previously there was a comment here saying
+                        # it was ok if a doc did not exist in the document index. I
+                        # don't agree with that claim, so keep an eye on this task
+                        # to see if this raises.
+                        retry_document_index.update([update_request])
+                    except SecondaryIndexDocumentMissingError:
+                        task_logger.debug(
+                            f"doc={document_id} not in secondary index; deferring FUTURE sync."
+                        )
+                        secondary_only_missing = True
 
                 # update db last. Worst case = we crash right before this and
                 # the sync might repeat again later
-                mark_document_as_synced(document_id, db_session)
+                if secondary_only_missing:
+                    mark_document_synced_secondary_pending(document_id, db_session)
+                else:
+                    mark_document_as_synced(document_id, db_session)
 
                 elapsed = time.monotonic() - start
                 task_logger.info(f"doc={document_id} action=sync elapsed={elapsed:.2f}")
