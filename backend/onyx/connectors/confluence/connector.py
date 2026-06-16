@@ -636,13 +636,9 @@ class ConfluenceConnector(
                     attachment["title"],
                     page["title"],
                 )
-                # User-facing attachment link: build the canonical download URL
-                # (`/download/attachments/{page_id}/{filename}`) ourselves. Confluence
-                # Cloud changed `_links.download` to a token-only REST endpoint
-                # (`/rest/api/content/{id}/child/attachment/{att}/download`) that no
-                # longer carries the filename, and `_links.webui` points at the
-                # attachments viewer rather than the file, so we reconstruct the stable,
-                # filename-bearing link instead.
+                # Build the download URL ourselves for a stable, filename-bearing link:
+                # `_links.download` is a token-only REST endpoint on Cloud and
+                # `_links.webui` points at the attachments viewer, not the file.
                 try:
                     object_url = build_confluence_document_id(
                         self.wiki_base,
