@@ -15,6 +15,8 @@ from onyx.oauth.errors import token_response_error
 from onyx.oauth.errors import TokenRefreshError
 from onyx.oauth.errors import TokenRefreshTerminalError
 from onyx.oauth.errors import TokenRefreshTransientError
+from onyx.oauth.exchange import default_refresh_request_body
+from onyx.oauth.exchange import request_oauth_token
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -226,34 +228,13 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
                 "No refresh token stored; the user must reconnect."
             )
 
-        try:
-            response = requests.post(
-                self.spec.oauth.token_url,
-                # Ask for JSON so providers that default to form-encoded
-                # refresh responses (e.g. GitHub) still parse via response.json().
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Accept": "application/json",
-                },
-                data=self.build_refresh_request(
-                    refresh_token, client_id, client_secret
-                ),
-                timeout=self.refresh_http_timeout_seconds,
-            )
-        except requests.RequestException as exc:
-            raise TokenRefreshTransientError(f"network error: {exc}") from exc
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise TokenRefreshTransientError(
-                f"non-JSON token response (status={response.status_code})"
-            ) from exc
-
-        error = self.classify_token_response(response, body)
-        if error is not None:
-            if error in self.terminal_refresh_errors:
-                raise TokenRefreshTerminalError(error)
-            raise TokenRefreshTransientError(error)
+        body = request_oauth_token(
+            self.spec.oauth.token_url,
+            self.build_refresh_request(refresh_token, client_id, client_secret),
+            terminal_errors=self.terminal_refresh_errors,
+            classify_response=self.classify_token_response,
+            timeout_s=self.refresh_http_timeout_seconds,
+        )
 
         try:
             mapped = self.extract_credentials(body)
@@ -277,12 +258,7 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     ) -> dict[str, str]:
         """The refresh POST form body. Override to add provider-specific params
         (scope, resource, audience, …) or change the grant."""
-        return {
-            "grant_type": "refresh_token",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
-        }
+        return default_refresh_request_body(refresh_token, client_id, client_secret)
 
     def classify_token_response(
         self, response: requests.Response, body: dict[str, Any]

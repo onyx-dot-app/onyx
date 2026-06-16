@@ -30,7 +30,7 @@ def _response(status_code: int, body: dict[str, Any]) -> requests.Response:
 
 def _patch_post(monkeypatch: pytest.MonkeyPatch, response: object) -> None:
     monkeypatch.setattr(
-        "onyx.external_apps.providers.base.requests.post",
+        "onyx.oauth.exchange.requests.post",
         lambda *_a, **_k: response,
     )
 
@@ -83,7 +83,7 @@ def test_refresh_missing_refresh_token_is_terminal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     called = MagicMock()
-    monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", called)
+    monkeypatch.setattr("onyx.oauth.exchange.requests.post", called)
     with pytest.raises(TokenRefreshTerminalError):
         GoogleCalendarProvider().refresh_credentials({"access_token": "a"}, "c", "s")
     called.assert_not_called()
@@ -140,7 +140,7 @@ def test_refresh_network_error_is_transient(monkeypatch: pytest.MonkeyPatch) -> 
     def _boom(*_a: Any, **_k: Any) -> None:
         raise requests.RequestException("connection reset")
 
-    monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", _boom)
+    monkeypatch.setattr("onyx.oauth.exchange.requests.post", _boom)
     with pytest.raises(TokenRefreshTransientError):
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
@@ -181,7 +181,7 @@ def _capturing_post(
         captured["data"] = kwargs.get("data")
         return response
 
-    monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", _post)
+    monkeypatch.setattr("onyx.oauth.exchange.requests.post", _post)
     return captured
 
 

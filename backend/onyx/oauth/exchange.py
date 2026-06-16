@@ -7,6 +7,7 @@ preservation) can't drift between tool OAuth, MCP, and Craft external apps.
 """
 
 import time
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlencode
 
@@ -26,13 +27,28 @@ logger = setup_logger()
 
 OAUTH_RESPONSE_TYPE_CODE = "code"
 OAUTH_GRANT_TYPE_AUTHORIZATION_CODE = "authorization_code"
+OAUTH_GRANT_TYPE_REFRESH_TOKEN = "refresh_token"
 OAUTH_PKCE_CHALLENGE_METHOD_S256 = "S256"
+
+# Bounds the wire calls so a slow/hung token endpoint can't pin the caller (e.g.
+# the egress gate or an MCP tool call). Overridable per call.
+DEFAULT_OAUTH_HTTP_TIMEOUT_S = 30.0
+
+# RFC 6749 §5.2: a dead grant means reconnect is required; any other failure is
+# retryable. The shared default so all OAuth refreshers agree on terminal-vs-
+# transient; a provider with different failure semantics passes its own set.
+TERMINAL_REFRESH_ERRORS = frozenset({"invalid_grant"})
+
+# Maps a (response, parsed-body) pair to an OAuth error code, or None on success.
+# Defaults to `token_response_error`; a provider whose failure signalling differs
+# (e.g. GitHub's 200-with-error body) supplies its own.
+ResponseClassifier = Callable[[requests.Response, Any], str | None]
 
 
 class OAuthFlowParams(BaseModel):
     """Stateless inputs for the OAuth 2.0 authorization-code grant, decoupled
-    from any storage model so `OAuthConfig`-backed tool OAuth and MCP
-    known-provider OAuth can share the wire primitives below."""
+    from any storage model so `OAuthConfig`-backed tool OAuth, MCP known-provider
+    OAuth, and Craft external apps can share the wire primitives below."""
 
     authorization_url: str
     token_url: str
@@ -98,6 +114,7 @@ def exchange_oauth_code_for_token(
     redirect_uri: str,
     *,
     code_verifier: str | None = None,
+    timeout_s: float = DEFAULT_OAUTH_HTTP_TIMEOUT_S,
 ) -> dict[str, Any]:
     """Exchange an authorization code for tokens at the token endpoint. Sends
     `code_verifier` when provided (PKCE). Returns the raw provider payload with
@@ -115,7 +132,10 @@ def exchange_oauth_code_for_token(
 
     validate_oauth_endpoint_url(params.token_url)
     response = requests.post(
-        params.token_url, data=data, headers={"Accept": "application/json"}
+        params.token_url,
+        data=data,
+        headers={"Accept": "application/json"},
+        timeout=timeout_s,
     )
     response.raise_for_status()
 
@@ -125,50 +145,86 @@ def exchange_oauth_code_for_token(
     return token_data
 
 
-# RFC 6749 §5.2: a dead grant means reconnect is required; any other failure is
-# retryable. Reuses the external_apps refresh classification so all OAuth refreshers
-# (tool, external-app, MCP) agree on terminal-vs-transient.
-_TERMINAL_REFRESH_ERRORS = frozenset({"invalid_grant"})
+def default_refresh_request_body(
+    refresh_token: str, client_id: str, client_secret: str | None = None
+) -> dict[str, str]:
+    """The standard RFC-6749 §6 refresh POST body. Callers needing extra params
+    (scope, resource, audience, …) build on top of this and pass the result as
+    ``request_body`` to :func:`request_oauth_token`."""
+    data: dict[str, str] = {
+        "grant_type": OAUTH_GRANT_TYPE_REFRESH_TOKEN,
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
+    if client_secret:
+        data["client_secret"] = client_secret
+    return data
 
 
-def exchange_refresh_token(
-    params: OAuthFlowParams,
-    refresh_token: str,
+def request_oauth_token(
+    token_url: str,
+    request_body: dict[str, str],
+    *,
+    terminal_errors: frozenset[str] = TERMINAL_REFRESH_ERRORS,
+    classify_response: ResponseClassifier = token_response_error,
+    timeout_s: float = DEFAULT_OAUTH_HTTP_TIMEOUT_S,
 ) -> dict[str, Any]:
-    """Exchange a refresh token for a fresh access token, computing `expires_at` and
-    carrying the incoming `refresh_token` forward when the provider doesn't rotate it.
+    """POST a grant to the token endpoint (SSRF-guarded) and return the parsed
+    JSON body. The shared wire call beneath both :func:`exchange_refresh_token`
+    and external-app provider refreshes; the seams let a caller diverge without
+    re-implementing the POST: `request_body` is the grant body, `terminal_errors`
+    the dead-grant code set, `classify_response` the response→error-code mapping.
 
     Raises `TokenRefreshTerminalError` on a dead grant (reconnect required) and
     `TokenRefreshTransientError` on a retryable failure (network / 5xx / non-JSON)."""
-    data: dict[str, str] = {
-        "grant_type": "refresh_token",
-        "refresh_token": refresh_token,
-        "client_id": params.client_id,
-    }
-    if params.client_secret:
-        data["client_secret"] = params.client_secret
-
     try:
-        validate_oauth_endpoint_url(params.token_url)
+        validate_oauth_endpoint_url(token_url)
         response = requests.post(
-            params.token_url, data=data, headers={"Accept": "application/json"}
+            token_url,
+            data=request_body,
+            headers={"Accept": "application/json"},
+            timeout=timeout_s,
         )
     except (requests.RequestException, SSRFException, ValueError) as exc:
-        raise TokenRefreshTransientError(f"refresh request failed: {exc}") from exc
+        raise TokenRefreshTransientError(f"token request failed: {exc}") from exc
 
     try:
-        token_data = response.json()
+        body = response.json()
     except ValueError as exc:
         raise TokenRefreshTransientError(
             f"non-JSON token response (status={response.status_code})"
         ) from exc
 
-    error = token_response_error(response, token_data)
+    error = classify_response(response, body)
     if error is not None:
-        if error in _TERMINAL_REFRESH_ERRORS:
+        if error in terminal_errors:
             raise TokenRefreshTerminalError(error)
         raise TokenRefreshTransientError(error)
+    return body
 
+
+def exchange_refresh_token(
+    params: OAuthFlowParams,
+    refresh_token: str,
+    *,
+    timeout_s: float = DEFAULT_OAUTH_HTTP_TIMEOUT_S,
+) -> dict[str, Any]:
+    """Exchange a refresh token for a fresh access token, computing `expires_at` and
+    carrying the incoming `refresh_token` forward when the provider doesn't rotate it.
+
+    The convenience wrapper for callers (tool OAuth, MCP) that persist the raw token
+    payload directly. External-app providers instead call :func:`request_oauth_token`
+    and map the body through their own credential extraction.
+
+    Raises `TokenRefreshTerminalError` on a dead grant (reconnect required) and
+    `TokenRefreshTransientError` on a retryable failure (network / 5xx / non-JSON)."""
+    token_data = request_oauth_token(
+        params.token_url,
+        default_refresh_request_body(
+            refresh_token, params.client_id, params.client_secret
+        ),
+        timeout_s=timeout_s,
+    )
     if "expires_in" in token_data:
         token_data["expires_at"] = int(time.time()) + token_data["expires_in"]
     if "refresh_token" not in token_data:
