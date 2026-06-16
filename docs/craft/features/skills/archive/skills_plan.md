@@ -1082,7 +1082,7 @@ For deletes:
 - [ ] **Remove** the earlier invariant `"Sessions are skill-immutable after start"` from the top of the doc.
 - [ ] **Add** an invariant docstring in `backend/onyx/skills/__init__.py`: `"Skill content and inventory are both live (~1-3 sec typical via event-driven push through the bundle pipeline; lifecycle triggers — session setup, snapshot restore, manual refresh — reconcile the failure tail; OpenCode rescans per turn)."`
 - [ ] Update admin UI mutation modals (§13) to the new copy: "takes effect within a few seconds."
-- [ ] Confirm snapshot tar (`SnapshotManager` / s5cmd flow) does NOT include `/skills/` — it's a separate mount, should be naturally excluded, but verify in `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`.
+- [ ] Confirm snapshot tar (`SnapshotManager` / s5cmd flow) does NOT include `/skills/` — it's a separate mount, should be naturally excluded, but verify in `backend/onyx/server/features/build/sandbox/snapshot_manager.py`.
 - [ ] Confirm `_regenerate_session_config` at `kubernetes_sandbox_manager.py:1736` (re)creates the `.agents/skills` symlink on resume. (AGENTS.md regen there is no longer needed for skill purposes — see §10.)
 - [ ] Integration test `test_live_skill_propagation.py`: start session, upload a new custom, wait for push to propagate (≤5 sec in test), verify the new skill is readable inside `/skills/` AND the agent's `skill` tool lists it on the next turn.
 - [ ] Integration test `test_snapshot_excludes_skills.py`: pause a session, inspect the snapshot tar, confirm `/skills/` is absent. Resume and confirm `.agents/skills` is a symlink to `/skills/`, populated from current admin state.

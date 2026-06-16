@@ -170,7 +170,7 @@ api_server                              sandbox container
 **Existing files to touch:**
 - `backend/onyx/server/features/build/sandbox/base.py` — add `list_session_workspaces(sandbox_id) -> list[UUID]` to the ABC. Implement it on K8s and Local (the local version walks the directory; K8s's logic moves out of `tasks.py` onto the manager). The docker version execs `ls /workspace/sessions/`.
 - `backend/onyx/server/features/build/sandbox/tasks/tasks.py:67-101` — `cleanup_idle_sandboxes_task` no longer special-cases backends. Drop the `if SANDBOX_BACKEND == LOCAL: return` (replaced with: `manager.supports_idle_cleanup()` → bool, default False for local) and the `isinstance(KubernetesSandboxManager)` cast. `_list_session_directories` deleted; calls go through `manager.list_session_workspaces(...)`.
-- `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py` — already takes a `FileStore` and works in tar/upload terms. Add a `persist_snapshot_from_stream(stream, ...)` and `restore_snapshot_to_stream(...)` so docker can hand it raw bytes from `exec_run` rather than a path on disk. Local uses the existing path-based methods unchanged.
+- `backend/onyx/server/features/build/sandbox/snapshot_manager.py` — already takes a `FileStore` and works in tar/upload terms. Add a `persist_snapshot_from_stream(stream, ...)` and `restore_snapshot_to_stream(...)` so docker can hand it raw bytes from `exec_run` rather than a path on disk. Local uses the existing path-based methods unchanged.
 - `backend/onyx/server/features/build/sandbox/README.md` — section on `docker` backend, comparison table of the three backends, explicit warning that `local` is dev-only, and the trust-boundary note about the docker socket.
 
 **Deployment / packaging:**

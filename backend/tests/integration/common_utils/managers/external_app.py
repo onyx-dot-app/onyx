@@ -6,11 +6,13 @@ from uuid import uuid4
 
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
-from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
-from onyx.server.features.build.api.models import ExternalAppAdminResponse
-from onyx.server.features.build.api.models import ExternalAppUserResponse
-from onyx.server.features.build.api.models import UpdateExternalAppRequest
-from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
+from onyx.server.features.build.external_apps.models import (
+    CreateBuiltInExternalAppRequest,
+)
+from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
+from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
+from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
+from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
