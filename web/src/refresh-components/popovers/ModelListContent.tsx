@@ -109,11 +109,18 @@ export default function ModelListContent({
     const selected = isSelected(option);
     const disabled = isDisabled?.(option) ?? false;
 
-    const capabilities: string[] = [];
-    if (option.supportsReasoning) capabilities.push("Reasoning");
-    if (option.supportsImageInput) capabilities.push("Vision");
+    const capabilitySet = new Set<string>();
+    if (option.supportsImageInput) capabilitySet.add("图片");
+    if (option.supportsReasoning) capabilitySet.add("深思");
+    if (option.roles?.includes("research")) capabilitySet.add("研究");
+    if (option.roles?.includes("coding")) capabilitySet.add("代码");
+    const capabilities = Array.from(capabilitySet);
     const description =
-      capabilities.length > 0 ? capabilities.join(", ") : undefined;
+      disabled && !selected
+        ? "已达模型上限"
+        : capabilities.length > 0
+          ? capabilities.join(" / ")
+          : undefined;
 
     return (
       <LineItemButton
@@ -123,7 +130,9 @@ export default function ModelListContent({
         icon={(props) => <div {...(props as any)} />}
         title={option.displayName}
         description={description}
-        onClick={() => onSelect(option)}
+        onClick={() => {
+          if (!disabled) onSelect(option);
+        }}
         rightChildren={
           selected ? (
             <div className="flex h-5 items-center">

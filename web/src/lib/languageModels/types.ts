@@ -16,6 +16,7 @@ export interface ModelConfiguration {
   vendor?: string;
   version?: string;
   region?: string;
+  roles?: string[];
 }
 
 export enum LLMProviderName {
@@ -117,6 +118,25 @@ export interface LLMProviderResponse<T> {
   providers: T[];
   default_text: DefaultModel | null;
   default_vision: DefaultModel | null;
+}
+
+export interface AvailableChatModel {
+  provider_id: number;
+  provider_name: string | null;
+  provider_type: string;
+  provider_display_name: string;
+  model_configuration_id: number | null;
+  model_id: string;
+  display_name: string;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+  roles: string[];
+  is_default: boolean;
+  is_selected: boolean;
+}
+
+export interface AvailableChatModelsResponse {
+  models: AvailableChatModel[];
 }
 
 export type LLMModalVariant = "onboarding" | "llm-configuration";

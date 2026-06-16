@@ -1362,7 +1362,7 @@ export default function useChatController({
 
       if (imageFiles.length > 0 && !llmAcceptsImages) {
         toast.error(
-          "The current model does not support image input. Please select a model with Vision support."
+          "当前模型暂不支持图片。请切换到 GPT-5.5 或 Qwen3.7 Plus。"
         );
         return;
       }

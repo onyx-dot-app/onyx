@@ -38,6 +38,9 @@ import {
 } from "@/app/app/projects/projectsService";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
+import ModelSelector, {
+  SelectedModel,
+} from "@/refresh-components/popovers/ModelSelector";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -102,6 +105,10 @@ export interface AppInputBarProps {
   tabReadingEnabled?: boolean;
   currentTabUrl?: string | null;
   onToggleTabReading?: () => void;
+  selectedModels?: SelectedModel[];
+  onAddModel?: (model: SelectedModel) => void;
+  onRemoveModel?: (index: number) => void;
+  onReplaceModel?: (index: number, model: SelectedModel) => void;
 }
 
 const AppInputBar = React.memo(
@@ -127,6 +134,10 @@ const AppInputBar = React.memo(
     tabReadingEnabled,
     currentTabUrl,
     onToggleTabReading,
+    selectedModels,
+    onAddModel,
+    onRemoveModel,
+    onReplaceModel,
   }: AppInputBarProps) => {
     const t = useTranslations("appShell.input");
     const [isRecording, setIsRecording] = useState(false);
@@ -672,6 +683,20 @@ const AppInputBar = React.memo(
 
         {/* Bottom right controls */}
         <div className="flex flex-row items-center gap-1">
+          {selectedModels &&
+            onAddModel &&
+            onRemoveModel &&
+            onReplaceModel &&
+            llmManager.hasAnyProvider && (
+              <ModelSelector
+                llmManager={llmManager}
+                selectedModels={selectedModels}
+                onAdd={onAddModel}
+                onRemove={onRemoveModel}
+                onReplace={onReplaceModel}
+              />
+            )}
+
           {showMicButton &&
             (sttEnabled ? (
               <MicrophoneButton

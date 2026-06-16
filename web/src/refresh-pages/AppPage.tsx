@@ -993,6 +993,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         availableContextTokens={availableContextTokens}
                         selectedAgent={selectedAgent || liveAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
+                        selectedModels={multiModel.selectedModels}
+                        onAddModel={multiModel.addModel}
+                        onRemoveModel={multiModel.removeModel}
+                        onReplaceModel={multiModel.replaceModel}
                         setPresentingDocument={setPresentingDocument}
                         // Intentionally enabled during name-only onboarding (showOnboarding=false)
                         // since LLM providers are already configured and the user can chat.

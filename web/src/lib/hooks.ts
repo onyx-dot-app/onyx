@@ -38,7 +38,10 @@ import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import {
+  useAvailableChatModels,
+  useLLMProviders,
+} from "@/hooks/useLanguageModels";
 import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -592,11 +595,24 @@ export function useLlmManager(
     defaultText: personaDefaultText,
     isLoading: isLoadingPersonaProviders,
   } = useLLMProviders(personaId);
+  const {
+    llmProviders: chatModelProviders,
+    defaultText: chatDefaultText,
+    isLoading: isLoadingChatModels,
+  } = useAvailableChatModels();
 
   const llmProviders =
-    personaProviders !== undefined ? personaProviders : allUserProviders;
+    chatModelProviders !== undefined
+      ? chatModelProviders
+      : personaProviders !== undefined
+        ? personaProviders
+        : allUserProviders;
   const defaultText =
-    personaProviders !== undefined ? personaDefaultText : allUserDefaultText;
+    chatModelProviders !== undefined
+      ? chatDefaultText
+      : personaProviders !== undefined
+        ? personaDefaultText
+        : allUserDefaultText;
 
   const [userHasManuallyOverriddenLLM, setUserHasManuallyOverriddenLLM] =
     useState(false);
@@ -837,6 +853,7 @@ export function useLlmManager(
     maxTemperature,
     llmProviders,
     isLoadingProviders:
+      isLoadingChatModels ||
       isLoadingAllProviders ||
       (personaId !== undefined && isLoadingPersonaProviders),
     hasAnyProvider,

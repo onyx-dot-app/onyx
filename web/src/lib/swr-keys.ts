@@ -76,6 +76,7 @@ export const SWR_KEYS = {
   embeddingProviders: "/api/admin/embedding/embedding-provider",
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
+  availableChatModels: "/api/chat/available-models",
   chatSessions: "/api/chat/get-user-chat-sessions",
   chatSearch: "/api/chat/search",
 

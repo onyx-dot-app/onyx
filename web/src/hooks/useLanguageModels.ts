@@ -5,12 +5,14 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  AvailableChatModelsResponse,
   LLMProviderDescriptor,
   LLMProviderName,
   LLMProviderResponse,
   LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/lib/languageModels/types";
+import { availableChatModelsToProviderResponse } from "@/lib/languageModels/chatAvailableModels";
 
 /**
  * Fetches configured LLM providers accessible to the current user.
@@ -66,6 +68,31 @@ export function useLLMProviders(personaId?: number) {
     llmProviders: data?.providers,
     defaultText: data?.default_text ?? null,
     defaultVision: data?.default_vision ?? null,
+    isLoading: !error && !data,
+    error,
+    refetch: mutate,
+  };
+}
+
+export function useAvailableChatModels() {
+  const { data, error, mutate } = useSWR<AvailableChatModelsResponse>(
+    SWR_KEYS.availableChatModels,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000,
+    }
+  );
+
+  const providerResponse = useMemo(
+    () => (data ? availableChatModelsToProviderResponse(data) : undefined),
+    [data]
+  );
+
+  return {
+    llmProviders: providerResponse?.providers,
+    defaultText: providerResponse?.default_text ?? null,
+    defaultVision: providerResponse?.default_vision ?? null,
     isLoading: !error && !data,
     error,
     refetch: mutate,

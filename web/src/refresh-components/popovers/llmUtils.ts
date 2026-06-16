@@ -51,6 +51,7 @@ export function buildLlmOptions(
           version: modelConfiguration.version || null,
           supportsReasoning: modelConfiguration.supports_reasoning || false,
           supportsImageInput: modelConfiguration.supports_image_input || false,
+          roles: modelConfiguration.roles || [],
         });
       });
   });
