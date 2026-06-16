@@ -67,130 +67,30 @@ def test_seed_skips_when_api_base_missing() -> None:
     assert result.reason == "missing_api_base"
 
 
-def test_seed_skips_when_model_name_missing() -> None:
+def test_seed_does_not_require_legacy_single_model_name(monkeypatch) -> None:
+    sync_mock = Mock(return_value=SimpleNamespace(synced=True, reason="synced"))
+    monkeypatch.setattr(
+        "onyx.db.glomi_model_catalog.sync_glomi_platform_model_catalog",
+        sync_mock,
+    )
+
     result = seed_consumer_default_llm_provider(Mock(), _config(model_name=""))
 
-    assert result.seeded is False
-    assert result.reason == "missing_model_name"
+    assert result.seeded is True
+    assert result.reason == "synced"
 
 
-def test_seed_upserts_provider_and_sets_default_when_missing(monkeypatch) -> None:
-    upsert_llm_provider = Mock(return_value=SimpleNamespace(id=7))
-    update_default_provider = Mock()
-
+def test_seed_delegates_to_glomi_platform_catalog(monkeypatch) -> None:
+    sync_mock = Mock(return_value=SimpleNamespace(synced=True, reason="synced"))
     monkeypatch.setattr(
-        "onyx.db.consumer_llm.fetch_existing_llm_provider_by_name_and_type",
-        Mock(return_value=None),
-    )
-    monkeypatch.setattr("onyx.db.consumer_llm.upsert_llm_provider", upsert_llm_provider)
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.fetch_default_llm_model", Mock(return_value=None)
-    )
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.update_default_provider", update_default_provider
+        "onyx.db.glomi_model_catalog.sync_glomi_platform_model_catalog",
+        sync_mock,
     )
 
     db_session = Mock()
     result = seed_consumer_default_llm_provider(db_session, _config())
 
-    request = upsert_llm_provider.call_args.args[0]
     assert result.seeded is True
-    assert result.reason == "seeded"
-    assert request.id is None
-    update_default_provider.assert_called_once_with(7, "qwen-plus", db_session)
-
-
-def test_seed_preserves_existing_extra_models(monkeypatch) -> None:
-    existing_provider = SimpleNamespace(
-        id=7,
-        model_configurations=[
-            SimpleNamespace(
-                name="legacy-model",
-                is_visible=True,
-                max_input_tokens=1234,
-                supports_image_input=False,
-                display_name="Legacy Model",
-                custom_display_name=None,
-            )
-        ],
-    )
-    upsert_llm_provider = Mock(return_value=SimpleNamespace(id=7))
-
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.fetch_existing_llm_provider_by_name_and_type",
-        Mock(return_value=existing_provider),
-    )
-    monkeypatch.setattr("onyx.db.consumer_llm.upsert_llm_provider", upsert_llm_provider)
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.fetch_default_llm_model", Mock(return_value=None)
-    )
-    monkeypatch.setattr("onyx.db.consumer_llm.update_default_provider", Mock())
-
-    seed_consumer_default_llm_provider(Mock(), _config())
-
-    request = upsert_llm_provider.call_args.args[0]
-    assert request.id == 7
-    assert {model.name for model in request.model_configurations} == {
-        "qwen-plus",
-        "legacy-model",
-    }
-    legacy = next(
-        model for model in request.model_configurations if model.name == "legacy-model"
-    )
-    assert legacy.is_visible is True
-    assert legacy.max_input_tokens == 1234
-
-
-def test_seed_updates_default_when_current_default_is_same_provider(
-    monkeypatch,
-) -> None:
-    existing_provider = SimpleNamespace(id=7, model_configurations=[])
-    current_default = SimpleNamespace(llm_provider_id=7, name="old-main-model")
-    update_default_provider = Mock()
-
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.fetch_existing_llm_provider_by_name_and_type",
-        Mock(return_value=existing_provider),
-    )
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.upsert_llm_provider",
-        Mock(return_value=SimpleNamespace(id=7)),
-    )
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.fetch_default_llm_model",
-        Mock(return_value=current_default),
-    )
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.update_default_provider", update_default_provider
-    )
-
-    seed_consumer_default_llm_provider(Mock(), _config(model_name="qwen-max"))
-
-    update_default_provider.assert_called_once()
-    assert update_default_provider.call_args.args[1] == "qwen-max"
-
-
-def test_seed_does_not_override_other_provider_default(monkeypatch) -> None:
-    existing_provider = SimpleNamespace(id=7, model_configurations=[])
-    current_default = SimpleNamespace(llm_provider_id=99, name="admin-model")
-    update_default_provider = Mock()
-
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.fetch_existing_llm_provider_by_name_and_type",
-        Mock(return_value=existing_provider),
-    )
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.upsert_llm_provider",
-        Mock(return_value=SimpleNamespace(id=7)),
-    )
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.fetch_default_llm_model",
-        Mock(return_value=current_default),
-    )
-    monkeypatch.setattr(
-        "onyx.db.consumer_llm.update_default_provider", update_default_provider
-    )
-
-    seed_consumer_default_llm_provider(Mock(), _config(model_name="qwen-max"))
-
-    update_default_provider.assert_not_called()
+    assert result.reason == "synced"
+    sync_mock.assert_called_once()
+    assert sync_mock.call_args.args[0] is db_session

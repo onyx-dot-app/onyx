@@ -12,10 +12,6 @@ from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_ENABLED
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_MODEL_NAME
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_PROVIDER_NAME
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_PROVIDER_TYPE
-from onyx.db.llm import fetch_default_llm_model
-from onyx.db.llm import fetch_existing_llm_provider_by_name_and_type
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_llm_provider
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.utils.logger import setup_logger
@@ -112,6 +108,10 @@ def seed_consumer_default_llm_provider(
     db_session: Session,
     config: ConsumerDefaultLLMConfig | None = None,
 ) -> ConsumerDefaultLLMSeedResult:
+    from onyx.db.glomi_model_catalog import GLOMI_PLATFORM_MODELS
+    from onyx.db.glomi_model_catalog import GlomiPlatformModelCatalog
+    from onyx.db.glomi_model_catalog import sync_glomi_platform_model_catalog
+
     config = config or get_consumer_default_llm_config()
     if not config.enabled:
         logger.info("Skipping consumer default LLM provider seed: disabled")
@@ -139,32 +139,16 @@ def seed_consumer_default_llm_provider(
         )
         return ConsumerDefaultLLMSeedResult(seeded=False, reason="missing_api_base")
 
-    if not config.model_name:
-        logger.warning(
-            "Skipping consumer default LLM provider seed: "
-            "CONSUMER_DEFAULT_LLM_MODEL_NAME is unset"
-        )
-        return ConsumerDefaultLLMSeedResult(seeded=False, reason="missing_model_name")
-
-    request = build_consumer_llm_provider_request(config)
-    existing_provider = fetch_existing_llm_provider_by_name_and_type(
-        name=CONSUMER_DEFAULT_LLM_PROVIDER_NAME,
+    catalog = GlomiPlatformModelCatalog(
+        provider_name=CONSUMER_DEFAULT_LLM_PROVIDER_NAME,
         provider_type=CONSUMER_DEFAULT_LLM_PROVIDER_TYPE,
-        db_session=db_session,
+        api_base=config.api_base,
+        api_key=config.api_key,
+        enabled=True,
+        models=GLOMI_PLATFORM_MODELS,
     )
-    if existing_provider:
-        request.id = existing_provider.id
-        requested_names = {model.name for model in request.model_configurations}
-        for existing_model_config in existing_provider.model_configurations:
-            if existing_model_config.name in requested_names:
-                continue
-            request.model_configurations.append(
-                _model_config_from_existing(existing_model_config)
-            )
-
-    provider = upsert_llm_provider(request, db_session)
-    current_default = fetch_default_llm_model(db_session)
-    if _should_update_default_model(current_default, provider.id, config.model_name):
-        update_default_provider(provider.id, config.model_name, db_session)
-
-    return ConsumerDefaultLLMSeedResult(seeded=True, reason="seeded")
+    result = sync_glomi_platform_model_catalog(db_session, catalog)
+    return ConsumerDefaultLLMSeedResult(
+        seeded=result.synced,
+        reason=result.reason,
+    )
