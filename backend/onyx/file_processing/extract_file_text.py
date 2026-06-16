@@ -269,6 +269,29 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     return text
 
 
+def _extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
+    """Extract all text from a PDF via pypdfium2 (PDFium/C).
+
+    PDFium releases the GIL, so a large PDF can't pin a worker or stall the
+    indexing heartbeat the way pypdf's pure-Python extract_text does.
+    """
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(file_bytes, password=password)
+    try:
+        page_texts: list[str] = []
+        for page in pdf:
+            textpage = page.get_textpage()
+            try:
+                page_texts.append(textpage.get_text_range())
+            finally:
+                textpage.close()
+                page.close()
+        return TEXT_SECTION_SEPARATOR.join(page_texts)
+    finally:
+        pdf.close()
+
+
 def read_pdf_file(
     file: IO[Any],
     pdf_pass: str | None = None,
@@ -284,8 +307,11 @@ def read_pdf_file(
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
     try:
-        pdf_reader = PdfReader(file)
+        # Read once: pdfium needs the bytes; pypdf reads the same buffer.
+        file_bytes = file.read()
+        pdf_reader = PdfReader(io.BytesIO(file_bytes))
 
+        decrypt_password: str | None = None
         if pdf_reader.is_encrypted:
             # Try the explicit password first, then fall back to an empty
             # string.  Owner-password-only PDFs (permission restrictions but
@@ -297,6 +323,7 @@ def read_pdf_file(
                 try:
                     if pdf_reader.decrypt(pw) != 0:
                         decrypt_success = True
+                        decrypt_password = pw
                         break
                 except Exception:
                     pass
@@ -318,9 +345,8 @@ def read_pdf_file(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        text = TEXT_SECTION_SEPARATOR.join(
-            page.extract_text() for page in pdf_reader.pages
-        )
+        # pypdfium2 (not pypdf) so a large PDF can't pin the worker — see helper.
+        text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
 
         if extract_images:
             image_cap = MAX_EMBEDDED_IMAGES_PER_FILE
