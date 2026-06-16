@@ -9,17 +9,16 @@
  */
 
 import { usePostHog } from "posthog-js/react";
-import { IS_DEV } from "@/lib/constants";
 
 // ─── Feature Flag Registry ─────────────────────────────────────────────────
 
 /**
  * Centralized PostHog feature flag key registry.
  *
- * Use these constants instead of inline strings so flag usage is greppable
- * and typos are caught at compile time. To add a new flag, append a new
- * entry here, then check it via `usePHFeatureFlag` (preferred) or
- * `posthog?.isFeatureEnabled(...) ?? <default>` directly.
+ * Use these enum members instead of inline strings so flag usage is greppable
+ * and typos are caught at compile time. To add a new flag, append a new member
+ * here and add its default to `PHFeatureFlagDefaults`, then check it via
+ * `usePHFeatureFlag`.
  *
  * These flags are evaluated client-side and intentionally trust the browser:
  * they are appropriate for UI rollouts/experiments where it's fine if a
@@ -27,15 +26,25 @@ import { IS_DEV } from "@/lib/constants";
  * backend behavior should be evaluated server-side and surfaced via the
  * `/api/settings` response instead.
  */
-export const PHFeatureFlags = {
+export enum PHFeatureFlag {
   /** Disables the Onyx Craft (Build Mode) sidebar intro animation. */
-  CRAFT_ANIMATION_DISABLED: "craft-animation-disabled",
+  CRAFT_ANIMATION_DISABLED = "craft-animation-disabled",
   /** Enables adding or modifying LLM providers on the admin Language Models page. */
-  LANGUAGE_MODEL_CONFIGURATION_ENABLED: "language-model-configuration-enabled",
-} as const;
+  LANGUAGE_MODEL_CONFIGURATION_ENABLED = "language-model-configuration-enabled",
+}
 
-export type FeatureFlagKey =
-  (typeof PHFeatureFlags)[keyof typeof PHFeatureFlags];
+/**
+ * Default values returned when PostHog is unavailable (e.g. self-hosted
+ * installs, local dev without a PostHog key, or before flags have loaded).
+ *
+ * Each entry must have a key for every member of `PHFeatureFlag`. The default
+ * should represent the safe, expected behaviour for users who are not targeted
+ * by the flag.
+ */
+const PHFeatureFlagDefaults: Record<PHFeatureFlag, boolean> = {
+  [PHFeatureFlag.CRAFT_ANIMATION_DISABLED]: true,
+  [PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_ENABLED]: true,
+};
 
 // ─── Hooks ─────────────────────────────────────────────────────────────────
 
@@ -46,39 +55,18 @@ export type FeatureFlagKey =
  * case where PostHog isn't initialized — which happens in local dev (no
  * `NEXT_PUBLIC_POSTHOG_KEY` set) and in self-hosted / MIT installs.
  *
- * **Default-value convention**
+ * When PostHog is unavailable or the flag doesn't exist, falls back to the
+ * value declared in `PHFeatureFlagDefaults` for that flag.
  *
- * When `defaultValue` is omitted and PostHog is unavailable, the hook returns
- * `true` in local dev (`NODE_ENV === "development"`) and `false` elsewhere.
- * This mirrors the backend's `NoOpFeatureFlagProvider`, which returns `True`
- * for `ENVIRONMENT == "local"`, so devs can iterate on flagged features
- * without running PostHog locally.
- *
- * Pass an explicit `defaultValue` when the local-dev default isn't
- * appropriate — for example, a flag that should default to `false` even in
- * dev so that the "disabled" code path can be tested without PostHog:
- *
- * @param flagKey - A key from `PHFeatureFlags` (defined above). Using the
- *   registry constant (rather than a raw string) ensures typos are caught at
- *   compile time and usages are greppable.
- * @param defaultValue - Fallback returned when PostHog is unavailable.
- *   Defaults to `true` in local dev, `false` in all other environments.
+ * @param flag - A member of `PHFeatureFlag`. Using the enum (rather than a
+ *   raw string) ensures typos are caught at compile time and usages are
+ *   greppable.
  *
  * @example
- * // Use the local-dev default (true in dev, false in prod):
- * const animationDisabled = usePHFeatureFlag(PHFeatureFlags.CRAFT_ANIMATION_DISABLED);
- *
- * @example
- * // Always default to false regardless of environment:
- * const configDisabled = usePHFeatureFlag(
- *   PHFeatureFlags.LANGUAGE_MODEL_CONFIGURATION_DISABLED,
- *   false,
- * );
+ * const animationDisabled = usePHFeatureFlag(PHFeatureFlag.CRAFT_ANIMATION_DISABLED);
+ * const configEnabled = usePHFeatureFlag(PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_ENABLED);
  */
-export function usePHFeatureFlag(
-  flagKey: FeatureFlagKey,
-  defaultValue: boolean = IS_DEV
-): boolean {
+export function usePHFeatureFlag(flag: PHFeatureFlag): boolean {
   const posthog = usePostHog();
-  return posthog?.isFeatureEnabled(flagKey) ?? defaultValue;
+  return posthog?.isFeatureEnabled(flag) ?? PHFeatureFlagDefaults[flag];
 }
