@@ -2559,7 +2559,7 @@ class SharepointConnector(
         site_url: str,
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool,
-        fail_on_exclusion: bool = False,
+        is_targeted_reindex: bool = False,
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
         """Process a single drive item into a Document (plus ancestor folder
         nodes), or a ConnectorFailure on error.
@@ -2567,13 +2567,20 @@ class SharepointConnector(
         Shared by the normal crawl (Phase 3b) and the targeted-reindex
         ``reindex`` path. ``checkpoint`` is used purely as a dedup container
         (``seen_document_ids`` / ``seen_hierarchy_node_raw_ids``); reindex passes
-        a throwaway checkpoint. When ``fail_on_exclusion`` is True (reindex), a
-        denylist hit yields an informative ConnectorFailure instead of being
-        silently skipped, since the admin explicitly requested the document.
+        a throwaway checkpoint.
+
+        When ``is_targeted_reindex`` is True, the branches that the crawl skips
+        silently (denylist, unsupported type, empty non-PDF/image, non-indexable
+        conversion) instead yield an informative ConnectorFailure: the admin
+        explicitly requested the document, so it must end as a Document or a
+        ConnectorFailure rather than silently reporting as still-failing with the
+        stale original message. The duplicate-skip stays silent in both paths —
+        a duplicate target has already been yielded as a Document in this call,
+        so failing it would wrongly mark a landed doc as failed.
         """
         if self._is_driveitem_excluded(driveitem):
             logger.debug("Excluding by path denylist: %s", driveitem.web_url)
-            if fail_on_exclusion:
+            if is_targeted_reindex:
                 yield _create_document_failure(driveitem, "excluded by path denylist")
             return
 
@@ -2591,6 +2598,11 @@ class SharepointConnector(
                 "Skipping %s as it is not a supported file type",
                 driveitem.web_url,
             )
+            if is_targeted_reindex:
+                yield _create_document_failure(
+                    driveitem,
+                    f"unsupported file type '{driveitem_extension}'",
+                )
             return
 
         should_yield_if_empty = (
@@ -2653,8 +2665,19 @@ class SharepointConnector(
                         "Skipping %s as it is empty and not a PDF or image",
                         driveitem.web_url,
                     )
+                    if is_targeted_reindex:
+                        yield _create_document_failure(
+                            driveitem, "document is empty and not a PDF or image"
+                        )
             elif isinstance(doc_or_failure, ConnectorFailure):
                 yield doc_or_failure
+            elif is_targeted_reindex:
+                # Converter returned None: excluded/malformed content type or
+                # over the size threshold (it logs the specifics).
+                yield _create_document_failure(
+                    driveitem,
+                    "not indexable (excluded content type or over size limit)",
+                )
         except Exception as e:
             logger.warning(
                 "Failed to process driveitem %s: %s",
@@ -3226,7 +3249,7 @@ class SharepointConnector(
             site_url,
             dedup,
             include_permissions,
-            fail_on_exclusion=True,
+            is_targeted_reindex=True,
         )
 
     def _reindex_site_page(
