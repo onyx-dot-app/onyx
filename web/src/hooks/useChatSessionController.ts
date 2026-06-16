@@ -257,8 +257,23 @@ export default function useChatSessionController({
         const controller = new AbortController();
         const resumedParts: PacketType[] = [];
         let sawTerminalPart = false;
+        let packetsSinceFlush = 0;
         setAbortController(chatSession.chat_session_id, controller);
         updateChatState(chatSession.chat_session_id, "streaming");
+
+        const flushResumedTree = () => {
+          const resumedTree = applyResumedPacketsToMessageTree(
+            newMessageMap,
+            activeRun.assistant_message_id,
+            resumedParts
+          );
+          updateSessionMessageTree(chatSession.chat_session_id, resumedTree);
+        };
+
+        const yieldToBrowser = () =>
+          new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 0);
+          });
 
         try {
           for await (const streamPart of resumeChatRun({
@@ -267,6 +282,7 @@ export default function useChatSessionController({
             signal: controller.signal,
           })) {
             resumedParts.push(streamPart);
+            packetsSinceFlush += 1;
             if (
               isStreamingErrorPart(streamPart) ||
               ("obj" in streamPart && streamPart.obj.type === "stop")
@@ -274,12 +290,14 @@ export default function useChatSessionController({
               sawTerminalPart = true;
             }
 
-            const resumedTree = applyResumedPacketsToMessageTree(
-              newMessageMap,
-              activeRun.assistant_message_id,
-              resumedParts
-            );
-            updateSessionMessageTree(chatSession.chat_session_id, resumedTree);
+            if (packetsSinceFlush >= 50 || sawTerminalPart) {
+              packetsSinceFlush = 0;
+              flushResumedTree();
+              await yieldToBrowser();
+            }
+          }
+          if (packetsSinceFlush > 0) {
+            flushResumedTree();
           }
         } catch (error) {
           if (!controller.signal.aborted) {

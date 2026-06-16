@@ -38,7 +38,7 @@ ARG BUN_CONFIG_REGISTRY
 RUN if [ -n "$BUN_CONFIG_REGISTRY" ]; then \
         printf '[install]\nregistry = "%s"\n' "$BUN_CONFIG_REGISTRY" > "$HOME/.bunfig.toml"; \
     fi && \
-    bun install --frozen-lockfile
+    bun install --frozen-lockfile --network-concurrency=4 --no-progress
 
 # pull in remaining source code
 COPY . .
@@ -108,7 +108,7 @@ RUN --mount=type=secret,id=sentry_auth_token \
     if [ -f /run/secrets/sentry_auth_token ]; then \
         export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
     fi && \
-    NODE_OPTIONS="${NODE_OPTIONS}" npx next build
+    NODE_OPTIONS="${NODE_OPTIONS}" npx next build --webpack
 
 # Step 2. Production image, copy all the files and run next
 FROM base AS runner

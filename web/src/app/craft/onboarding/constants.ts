@@ -48,9 +48,28 @@ export function hasSupportedCraftProvider(
   return !!llmProviders?.some((p) => isSupportedProviderType(p.provider));
 }
 
+const OPENAI_COMPATIBLE_CRAFT_MODEL_PRIORITY = [
+  "gpt-5.5",
+  "qwen3.7-plus",
+  "glm-5.2",
+  "deepseek-v4-pro",
+];
+
 // The Craft-recommended model name for a provider's model list (the one the
-// backend flagged), falling back to the first visible model.
-export function craftModelName(models: ModelConfiguration[]): string | null {
+// backend flagged), falling back to the first visible model. OpenAI-compatible
+// providers are dynamic, so prefer Glomi's Craft-capable models over arbitrary
+// provider-discovered first entries like codex-auto-review.
+export function craftModelName(
+  models: ModelConfiguration[],
+  provider?: string
+): string | null {
+  if (provider === "openai_compatible") {
+    for (const modelName of OPENAI_COMPATIBLE_CRAFT_MODEL_PRIORITY) {
+      const match = models.find((m) => m.is_visible && m.name === modelName);
+      if (match) return match.name;
+    }
+  }
+
   return (
     models.find((m) => m.is_recommended_default)?.name ??
     models.find((m) => m.is_visible)?.name ??
@@ -68,7 +87,7 @@ export function getDefaultLlmSelection(
   for (const { key } of CRAFT_PROVIDERS) {
     const match = llmProviders.find((p) => p.provider === key);
     if (match) {
-      const modelName = craftModelName(match.model_configurations);
+      const modelName = craftModelName(match.model_configurations, match.provider);
       if (!modelName) continue;
       return {
         providerName: match.name ?? "",

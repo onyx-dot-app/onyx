@@ -21,12 +21,33 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+_OPENAI_COMPATIBLE_CRAFT_MODEL_PRIORITY = (
+    "gpt-5.5",
+    "qwen3.7-plus",
+    "glm-5.2",
+    "deepseek-v4-pro",
+)
+
+
 def _recommended_model(provider: LLMProviderView) -> str | None:
     """Recommended model for ``provider``: the type's default from the shared
-    config, else the first visible model. ``None`` if no visible model."""
+    config, else the first visible model. ``None`` if no visible model.
+
+    OpenAI-compatible providers are dynamic, so the shared provider defaults do
+    not know the platform's Craft-friendly model names. Prefer the Glomi catalog
+    coding/general models over arbitrary provider-discovered models such as
+    ``codex-auto-review`` that OpenCode may not recognize for this endpoint.
+    """
     visible_models = [m for m in provider.model_configurations if m.is_visible]
     if not visible_models:
         return None
+
+    if provider.provider == LlmProviderNames.OPENAI_COMPATIBLE:
+        visible_names = {m.name for m in visible_models}
+        for model_name in _OPENAI_COMPATIBLE_CRAFT_MODEL_PRIORITY:
+            if model_name in visible_names:
+                return model_name
+
     return fetch_default_model_for_provider(provider.provider) or visible_models[0].name
 
 
@@ -109,6 +130,19 @@ def get_all_build_mode_llm_configs(
     configs: list[LLMProviderConfig] = [default]
     seen: set[str] = {default.provider}
 
+    if default.provider == LlmProviderNames.OPENAI_COMPATIBLE:
+        added_models = {default.model_name}
+        for provider in providers:
+            if provider.provider != default.provider:
+                continue
+            if provider.api_base != default.api_base:
+                continue
+            for model in provider.model_configurations:
+                if not model.is_visible or model.name in added_models:
+                    continue
+                added_models.add(model.name)
+                configs.append(_config_from_provider(provider, model.name))
+
     for provider in providers:
         if provider.provider in seen:
             continue
@@ -117,6 +151,12 @@ def get_all_build_mode_llm_configs(
             continue
         seen.add(provider.provider)
         configs.append(_config_from_provider(provider, model_name))
+
+        if provider.provider == LlmProviderNames.OPENAI_COMPATIBLE:
+            for model in provider.model_configurations:
+                if not model.is_visible or model.name == model_name:
+                    continue
+                configs.append(_config_from_provider(provider, model.name))
 
     # Backfill supported types the org hasn't configured with a dummy-key entry.
     for provider_type in BUILD_MODE_ALLOWED_PROVIDER_TYPES:

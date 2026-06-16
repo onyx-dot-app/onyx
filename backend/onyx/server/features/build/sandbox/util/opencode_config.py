@@ -126,29 +126,41 @@ def _build_provider_block(
     if provider_config.api_base:
         block["api"] = provider_config.api_base
     options = _model_options(provider_config.provider, provider_config.model_name)
+    model_block: dict[str, Any] = {}
     if options:
-        block["models"] = {provider_config.model_name: {"options": options}}
+        model_block["options"] = options
+    # Dynamic OpenAI-compatible endpoints need explicit model declarations;
+    # otherwise OpenCode falls back to its built-in OpenAI catalog and rejects
+    # platform models (or stale discovered names) before the request reaches the
+    # custom API base.
+    if options or provider_config.provider == LlmProviderNames.OPENAI_COMPATIBLE:
+        block["models"] = {provider_config.model_name: model_block}
     return block
 
 
-def _dedupe_for_opencode(
+def _build_provider_blocks(
     providers: list[LLMProviderConfig],
-) -> list[LLMProviderConfig]:
-    """Collapse provider configs that target the same OpenCode provider ID.
+) -> dict[str, dict[str, Any]]:
+    """Merge configs that target the same OpenCode provider ID.
 
-    A configured ``openai`` provider and an ``openai_compatible`` provider both
-    render as OpenCode ``openai``. Preserve caller order so the default config
-    wins when it is placed first by the session setup path.
+    Multiple Onyx configs can render as OpenCode ``openai``: first-party OpenAI
+    plus OpenAI-compatible endpoints, or several model entries for the same
+    OpenAI-compatible endpoint. Preserve first writer credentials/API base so
+    the default config remains authoritative, but union model declarations so
+    per-message overrides can use any visible platform model.
     """
-    seen: set[str] = set()
-    deduped: list[LLMProviderConfig] = []
-    for provider in providers:
-        provider_id = opencode_provider_id(provider.provider)
-        if provider_id in seen:
-            continue
-        seen.add(provider_id)
-        deduped.append(provider)
-    return deduped
+    blocks: dict[str, dict[str, Any]] = {}
+    for provider_config in providers:
+        provider_id = opencode_provider_id(provider_config.provider)
+        next_block = _build_provider_block(provider_config)
+        current = blocks.setdefault(provider_id, {})
+        if "options" not in current and "options" in next_block:
+            current["options"] = next_block["options"]
+        if "api" not in current and "api" in next_block:
+            current["api"] = next_block["api"]
+        if "models" in next_block:
+            current.setdefault("models", {}).update(next_block["models"])
+    return blocks
 
 
 def build_opencode_config(
@@ -199,18 +211,8 @@ def build_multi_provider_opencode_config(
     if not providers:
         raise ValueError("providers must contain at least one entry")
 
-    seen: set[str] = set()
-    duplicates = [
-        p.provider for p in providers if p.provider in seen or seen.add(p.provider)
-    ]  # type: ignore[func-returns-value]
-    if duplicates:
-        raise ValueError(
-            f"duplicate provider entries: {duplicates!r} — opencode.json "
-            "uses one block per providerID; merge them at the call site"
-        )
-
-    providers = _dedupe_for_opencode(providers)
-    provider_names = {opencode_provider_id(p.provider) for p in providers}
+    provider_blocks = _build_provider_blocks(providers)
+    provider_names = set(provider_blocks)
     default_provider_id = opencode_provider_id(default_provider)
     if default_provider_id not in provider_names:
         raise ValueError(
@@ -221,10 +223,7 @@ def build_multi_provider_opencode_config(
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
         "model": f"{default_provider_id}/{default_model}",
-        "provider": {
-            opencode_provider_id(p.provider): _build_provider_block(p)
-            for p in providers
-        },
+        "provider": provider_blocks,
         "enabled_providers": sorted(provider_names),
         "permission": _build_permissions(disabled_tools, dev_mode),
     }

@@ -1641,7 +1641,17 @@ echo WRITE_OK"""
             f"trap - EXIT\n"
         )
         try:
-            stream_stdin_to_container(container, ["/bin/sh", "-c", script], tar_bytes)
+            # Docker execs created from inside the api_server container can run
+            # as the caller UID on some daemon/rootless setups. The sandbox
+            # workspace is owned by the image's sandbox user (1000:1000), so be
+            # explicit here; otherwise mktemp under /workspace/managed can fail
+            # with Permission denied when the exec defaults to uid 1001.
+            stream_stdin_to_container(
+                container,
+                ["/bin/sh", "-c", script],
+                tar_bytes,
+                user="1000:1000",
+            )
         except ExecError as e:
             raise RuntimeError(f"write_files_to_sandbox failed: {e}") from e
 

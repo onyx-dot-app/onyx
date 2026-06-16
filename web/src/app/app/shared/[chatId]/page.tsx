@@ -6,7 +6,7 @@ import SharedChatDisplay from "@/app/app/shared/[chatId]/SharedChatDisplay";
 import { Agent } from "@/lib/agents/types";
 
 // This is used for rendering a persona in the shared chat display
-export function constructMiniFiedPersona(name: string, id: number): Agent {
+function constructMiniFiedPersona(name: string, id: number): Agent {
   return {
     id,
     name,

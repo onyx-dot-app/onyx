@@ -13,6 +13,7 @@ import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
   BuildLlmSelection,
   CRAFT_PROVIDERS,
+  craftModelName,
 } from "@/app/craft/onboarding/constants";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
 import { ToggleWarningModal } from "./ToggleWarningModal";
@@ -94,9 +95,8 @@ export function BuildLLMPopover({
         const models =
           descriptor?.model_configurations ??
           llmProviderOptions?.find((o) => o.name === key)?.known_models;
-        const recModel =
-          models?.find((m) => m.is_recommended_default) ??
-          models?.find((m) => m.is_visible);
+        const recModelName = models ? craftModelName(models, key) : null;
+        const recModel = models?.find((m) => m.name === recModelName);
         if (!recModel) return;
 
         const label = getProvider(key).companyName;

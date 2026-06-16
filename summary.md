@@ -2,6 +2,12 @@
 
 ## 2026-06-16
 
+- 本地 Docker Compose 升级执行：使用 `docker compose -f docker-compose.yml -f docker-compose.craft.yml build api_server web_server` 重建本地 `glomi-onyx-backend:local` / `glomi-onyx-web-server:local`，随后依次强制重建 `api_server`、`background`、`search_gateway`、`sandbox-proxy`、`web_server`；`api_server` 启动时已执行 Alembic `01c63968ff8f -> 2aedcb0ff5fd`，数据库 `alembic_version=2aedcb0ff5fd` 且 `chat_run_event` 表存在，`http://localhost:3001/` 返回 200。
+- Craft 模型继承修复：遇到 `Model not found: openai/codex-auto-review`，根因是 OpenAI-compatible 动态 provider 的自动同步模型列表把 `codex-auto-review` 排在首位，Craft 预创建 sandbox 时没有用户显式选择模型，后端默认落到该模型；同时 OpenCode 对 OpenAI-compatible 自定义 API base 仍会用内置 OpenAI 模型目录校验，未显式声明的平台模型会被拦截。修复为后端对 `openai_compatible` 优先选择 Glomi Craft 模型（`gpt-5.5` 等），并在 `opencode.json` 的 `openai` provider block 显式合并声明同一 API base 下所有可见 OpenAI-compatible 模型，支持后续 per-message 模型 override 到 Qwen/DeepSeek/GLM。已重建后端镜像并重启 `api_server`、`background`、`search_gateway`、`sandbox-proxy`；旧 `sandbox-c24ef204` 已删除并把 sandbox 状态置为 `TERMINATED`，历史 `codex-auto-review` build_session 记录已改回 `gpt-5.5`，避免继续使用旧 `openai/codex-auto-review` 配置。
+- Next 16 构建兼容坑：生产构建会校验 App Router page/route export。修复 `web/src/app/app/shared/[chatId]/page.tsx` 中非页面 API 的 `constructMiniFiedPersona` 命名导出；修复 `web/src/app/mcp/[[...path]]/route.ts` route context 类型，把 `params` 改为必有 `Promise<{ path?: string[] }>`，否则 `next build --webpack` 在类型检查阶段失败。
+- Docker Compose 服务重建坑：强制重建 `api_server` 后容器 IP 会变化，已有 `nginx` 仍可能持有旧 upstream IP，页面表现为静态资源可加载但 `/api/*` 502/“服务端不可用”，nginx 日志显示 `connect() failed (111: Connection refused) upstream: http://旧IP:8080/...`。处理方式是同步重建/重启 `nginx`，本次重启后 `http://localhost:3001/api/health` 返回 ok。
+- Craft provisioning 失败排查：手工修历史 `build_session` 时误把 SQLAlchemy Enum 状态写成小写 `active`，导致接口报 `LookupError: 'active' is not among the defined enum values. Possible values: ACTIVE, IDLE`，前端表现为 `Failed to provision sandbox` / 发送按钮转圈。已把历史记录修回 `ACTIVE`。同时前端 Craft 模型选择器也补齐 OpenAI-compatible 的 Glomi 模型优先级，避免页面默认继续显示 `codex-auto-review`；重建 `web_server` 并重启 `nginx`。
+- Docker web 镜像构建补充：Next 16.2.6 默认 Turbopack 在 Docker `next build` 阶段约 555 秒后可能触发内部超时 `failed to receive message / deadline has elapsed`；构建命令改为显式 `next build --webpack`，保留生产构建能力并避开 Turbopack worker 超时。
 - Craft 远端调试路径确认：本机继续源码启动前端/后端/Search Gateway，Craft 依赖放到远端 Docker Compose；远端已启动 `onyx-sandbox-proxy-1`、`docker-compose.craft.yml`、`onyxdotapp/sandbox:v0.1.52`、`onyx_craft_sandbox` 网络和 `sandbox_proxy_ca` volume。该模式适合小本机开发，避免本地跑 k8s/sandbox 吃满资源。
 - Craft `LLM Provider Required` 根因：Craft 前后端原来只把 `anthropic` / `openai` / `openrouter` 当作 Build 支持 provider，Glomi 平台默认模型目录使用 `openai_compatible`，所以普通 chat 可用但 Craft onboarding 会拦住非管理员/普通用户。
 - Craft OpenAI-compatible 二开：前端 onboarding/model picker 纳入 `openai_compatible`；后端 Build provider 查询允许可访问的 `openai_compatible`；沙箱 OpenCode 边界把 Onyx 的 `openai_compatible` 映射为 OpenCode 识别的 `openai` provider，并保留自定义 `api_base/api_key`，从而可让 GPT-5.5、GLM-5.2、Qwen3.7 Plus 等平台 OpenAI-compatible 模型进入 Craft。
@@ -26,6 +32,9 @@
 
 ## 2026-06-15
 
+- 本地 Docker Compose 启动记录：当前机器已有 Langfuse 占用 `3000/5432/6379/9000`，且 `80` 也已被占用；因此满血 Docker Compose 不叠加 `docker-compose.dev.yml` 暴露依赖端口，只通过 nginx 暴露应用，并在 `deployment/docker_compose/.env` 设置 `HOST_PORT_80=8081`、`HOST_PORT=3001`。
+- Docker web 镜像构建坑：`bun install --frozen-lockfile` 在 Docker build 中使用默认 `--network-concurrency=48` 时多次下载到损坏 tarball，表现为不同包随机 `Integrity check failed for tarball`；本地改为较低的 `--network-concurrency=4 --no-progress` 并把当前 compose `.env` 的 `BUN_CONFIG_REGISTRY` 切到 `https://registry.npmjs.org`，优先保证可重复构建。
+- 本地满血 Docker Compose 已拉起：使用 `docker compose --profile s3-filestore up -d --no-build --wait` 启动 `api_server`、`web_server`、`search_gateway`、`background`、Postgres、Redis、OpenSearch、MinIO、inference/indexing model server、code-interpreter、nginx，最终 `13/13` healthy；验证 `http://localhost:3001` 返回 200、`/api/health` 正常，api 容器内访问 `http://search_gateway:7777/health` 返回 `{"status":"ok","channel":"tavily"}`。
 - 满血 Docker Compose 纳入 Glomi Search Gateway：`deployment/docker_compose/docker-compose.yml` 和 `docker-compose.prod.yml` 新增 `search_gateway` 服务，复用 backend 镜像运行 `uvicorn onyx.search_gateway.server:app --host 0.0.0.0 --port 7777`，不暴露公网端口，由 `api_server` 在 compose 内网访问。
 - Docker env 模板补齐 Glomi 默认能力配置：`env.template` / `env.prod.template` 新增 `CONSUMER_DEFAULT_LLM_*` 示例、`GLOMI_DEFAULT_WEB_SEARCH_API_BASE=http://search_gateway:7777`、Gateway bearer token 和 `TAVILY_API_KEY` 占位；README 补充 Docker 内部使用 `search_gateway:7777`，只有本地源码直跑才使用 `localhost:7777`。
 - 新增 compose 回归测试 `backend/tests/unit/deployment/test_glomi_search_gateway_compose.py`，覆盖主 compose/prod compose 都包含内部 `search_gateway`、不暴露 ports、API 依赖 Gateway，以及 env 模板指向 compose 内部 Gateway。验证记录：新增测试 4 passed；`docker compose -f docker-compose.yml config --quiet` 通过；`docker-compose.prod.yml` 在临时空 `.env.nginx` 下 config 通过，只有既有 `USE_IAM_AUTH` 未设置 warning。
@@ -138,3 +147,37 @@
 - 测试记录：focused prompt/eval tests 通过 `22 passed in 0.08s`；目录级 `backend/tests/unit/onyx/prompts backend/tests/unit/onyx/evals` 通过 `24 passed in 0.43s`。Windows 环境 bare `pytest` 不在 PATH，统一使用 `.venv\Scripts\python.exe -m pytest`。
 - 经验与坑：prompt 常量会被 `.format(...)` 或 f-string 组合，后续新增 `{}` 需特别小心；本期仍不改 `llm_loop` / `dr_loop` runtime，下一步应先用真实 Qwen/DeepSeek/Kimi 跑 benchmark，再决定是否进入结构化 `SearchIntent` / `SearchPlan` / `EvidencePack`。
 - Review 备注：最终代码审查通过，无 Critical/Important 问题；仅发现历史遗留的 deep research tool prompt 中 `open_urls` / `open_url` 名称混用，建议后续单独做 prompt cleanup，不在本期扩大范围。
+
+## 2026-06-16 - Mini host service restart memory pressure investigation
+
+- 现象分析：重启后 Docker 同时拉起 Onyx + Langfuse + sandbox，14GiB 内存机器在启动窗口只剩约 320MiB free；虽然 `available` 约 4GiB、swap 基本未用，瞬时启动峰值和 CPU/IO 抢占足以导致桌面/ssh 卡死。
+- 主要内存占用：Onyx OpenSearch 约 2.7-2.9GiB RSS（compose 配置 `OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g` 且 `AlwaysPreTouch`），Onyx background/supervisord/celery 约 2.2GiB，Langfuse stack 合计约 2.6GiB（web/worker/clickhouse/minio 等）。
+- 已执行止血：停止可选 Langfuse compose stack，并停止当前一次性 `sandbox-c24ef204` 容器；停止后内存从约 10GiB used / 320MiB free 改善到约 9.1GiB used / 2.1GiB free、available 约 5.8GiB。
+- 经验与建议：开发机上 Langfuse 属于可选 tracing/observability，不需要时不要随系统/批量重启一起启动；Onyx core 保留 relational_db/cache/opensearch/api_server/web_server/nginx/background/search/model servers。若仍卡顿，下一步优先考虑禁用 Craft sandbox/code-interpreter 或降低 OpenSearch heap/给容器加 memory limit。
+
+## 2026-06-16 - Disable Langfuse autostart
+
+- 将 `/home/shiyi/langfuse/docker-compose.yml` 中 6 个 Langfuse 服务的 `restart: always` 改为 `restart: "no"`，避免 Docker daemon / 系统重启后自动拉起 Langfuse stack。
+- 同步对现有容器执行 `docker update --restart=no`，已验证 `langfuse-web/worker/postgres/redis/clickhouse/minio` 的 RestartPolicy 均为 `no`，当前均处于 Exited 状态。
+- 后续如果需要临时使用 Langfuse，可手动执行 `cd /home/shiyi/langfuse && docker compose up -d`；用完建议 `docker compose stop`。
+
+## 2026-06-16 - Additional restart safety tuning
+
+- 当前 Onyx-only 状态内存约 9.1GiB used / 2.0GiB free / 5.8GiB available，Langfuse 已不再自启，SSH 进程已有 `oom_score_adj=-1000` 保护，明确 OOM 杀 SSH 的风险较低。
+- 为降低后续系统/服务重启瞬时内存峰值，将 `deployment/docker_compose/docker-compose.yml` 里的 OpenSearch heap 从 `-Xms2g -Xmx2g` 下调到 `-Xms1g -Xmx1g`。注意：需要下次 recreate OpenSearch 容器后生效；当前运行中的 OpenSearch 仍是旧 heap。
+- 进一步保险建议：系统层面把 swap 从 4G 扩到 8G/16G，但当前 sudo 需要密码，未自动执行；如后续仍卡顿，可手动扩容 swap 或继续禁用 Craft/code-interpreter 等可选服务。
+
+## 2026-06-16 - Rebuild and restart Onyx services
+
+- 按要求重新 build/recreate Onyx：完整 build 时 backend/web 使用缓存并成功产出 `glomi-onyx-backend:local` 与 `glomi-onyx-web-server:local`；model-server 本地 build 因需要下载大量 CUDA/Torch 依赖超过 15 分钟 timeout，后续改用已有 `onyxdotapp/onyx-model-server:latest` 镜像执行 `docker compose up -d --no-build --force-recreate --wait`。
+- Onyx compose 服务已全部重建并 healthy：api_server/background/web_server/nginx/search_gateway/sandbox-proxy/model servers/postgres/redis/opensearch/code-interpreter 均启动；`http://localhost:3001/` 与 `http://localhost:8081/api/health` 返回 200。
+- OpenSearch 新容器已确认使用 `OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g`，当前内存约 1.8GiB，比之前约 2.8GiB 明显降低。
+- Langfuse 容器保持 Exited，不参与本次重启；当前系统约 9.0GiB used / 1.8GiB free / 5.9GiB available，swap 已扩到约 15GiB，重启抗压能力更好。
+- 注意：当前仍有 `sandbox-c24ef204` 运行并占用约 1.25GiB/2GiB；如果后续不需要该 sandbox，可停止以释放更多内存。
+
+## 2026-06-16 - Craft sandbox session initialization failure
+
+- 排查 `/api/build/sessions` 500：api_server 日志显示 build session 创建后在写入 sandbox workspace 时失败，核心错误是 `mktemp: failed to create directory via template '/workspace/managed/tmp.XXXXXXXXXX': Permission denied`，随后 `ensure_opencode_session` 超时。
+- 复现定位：在 sandbox 容器中 `uid=1000(sandbox)` 可写 `/workspace/managed`，但 `uid=1001` 写入会 Permission denied；Docker exec 从 api_server 内部发起时在当前环境可能默认成调用方 UID 1001，而不是 sandbox 用户。
+- 修复：`DockerSandboxManager.write_files_to_sandbox` 调用 `stream_stdin_to_container` 时显式指定 `user="1000:1000"`，确保原子写入 skills/user-library/session 文件时使用 sandbox workspace owner，避免权限漂移。
+- 部署动作：已 rebuild backend 镜像并 recreate `api_server/background/search_gateway/sandbox-proxy`；随后停止并移除旧的 `sandbox-c24ef204`，让下一次创建 Build session 时重新 provision 干净 sandbox，避免复用已卡住/权限状态异常的旧容器。

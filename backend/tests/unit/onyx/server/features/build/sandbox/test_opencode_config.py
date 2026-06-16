@@ -87,20 +87,25 @@ def test_multi_provider_each_gets_its_own_block() -> None:
     assert config["model"] == "anthropic/claude-opus-4-7"
 
 
-def test_duplicate_providers_raise_value_error() -> None:
+def test_duplicate_opencode_provider_entries_merge_models_first_credentials_win() -> None:
     """
-    Passing two entries with the same provider would silently overwrite each
-    other under a naive dict comprehension. Detect and refuse.
+    Several Onyx configs can intentionally target one OpenCode provider block
+    (notably openai_compatible -> openai). Keep first credentials/API base but
+    union explicit model declarations for per-message overrides.
     """
-    with pytest.raises(ValueError, match="duplicate provider entries"):
-        build_multi_provider_opencode_config(
-            providers=[
-                _cfg("anthropic", "claude-opus-4-7", api_key="sk-1"),
-                _cfg("anthropic", "claude-sonnet-4-6", api_key="sk-2"),
-            ],
-            default_provider="anthropic",
-            default_model="claude-opus-4-7",
-        )
+    config = build_multi_provider_opencode_config(
+        providers=[
+            _cfg("openai_compatible", "gpt-5.5", api_key="sk-1", api_base="https://a.example/v1"),
+            _cfg("openai_compatible", "qwen3.7-plus", api_key="sk-2", api_base="https://b.example/v1"),
+        ],
+        default_provider="openai_compatible",
+        default_model="gpt-5.5",
+    )
+
+    block = config["provider"]["openai"]
+    assert block["options"]["apiKey"] == "sk-1"
+    assert block["api"] == "https://a.example/v1"
+    assert set(block["models"]) == {"gpt-5.5", "qwen3.7-plus"}
 
 
 def test_empty_providers_list_raises() -> None:

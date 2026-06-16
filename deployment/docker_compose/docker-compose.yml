@@ -435,12 +435,12 @@ services:
       # This and the JVM config below come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
       # We do this to avoid unstable performance from page swaps.
       - bootstrap.memory_lock=true # Disable JVM heap memory swapping.
-      # Java heap should be ~50% of memory limit. For now we assume a limit of
-      # 4g although in practice the container can request more than this.
+      # Java heap should be ~50% of memory limit. This dev mini-host uses a
+      # smaller 1g heap to avoid system-wide memory pressure during restarts.
       # See https://opster.com/guides/opensearch/opensearch-basics/opensearch-heap-size-usage-and-jvm-garbage-collection/
       # Xms is the starting size, Xmx is the maximum size. These should be the
       # same.
-      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g"
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     # These come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
