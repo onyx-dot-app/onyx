@@ -184,6 +184,16 @@ class TestIdentifyConnectorClass:
         # Should be the same class
         assert slack_poll is slack_slim
 
+    def test_identify_connector_mattermost(self) -> None:
+        """Mattermost is a checkpointed connector; resolvable via POLL and SLIM."""
+        mm_poll = identify_connector_class(DocumentSource.MATTERMOST, InputType.POLL)
+        assert mm_poll.__name__ == "MattermostConnector"
+        mm_slim = identify_connector_class(
+            DocumentSource.MATTERMOST, InputType.SLIM_RETRIEVAL
+        )
+        assert mm_slim.__name__ == "MattermostConnector"
+        assert mm_poll is mm_slim
+
     def test_identify_connector_without_input_type(self) -> None:
         """Test connector identification without specifying input type."""
         connector_class = identify_connector_class(DocumentSource.GITHUB)

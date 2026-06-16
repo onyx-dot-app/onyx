@@ -209,6 +209,7 @@ class DocumentSource(str, Enum):
     # Special case, document passed in via Onyx APIs without specifying a source type
     INGESTION_API = "ingestion_api"
     SLACK = "slack"
+    MATTERMOST = "mattermost"
     WEB = "web"
     GOOGLE_DRIVE = "google_drive"
     GMAIL = "gmail"
@@ -688,6 +689,7 @@ NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS = NUM_DAYS_TO_KEEP_CHECKPOINTS + 1
 DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.INGESTION_API: "Documents ingested via API",
     DocumentSource.SLACK: "Team messages and channel discussions",
+    DocumentSource.MATTERMOST: "Team messages and channel discussions",
     DocumentSource.WEB: "Indexed web pages",
     DocumentSource.GOOGLE_DRIVE: "Documents, spreadsheets, and presentations",
     DocumentSource.GMAIL: "Email conversations and threads",

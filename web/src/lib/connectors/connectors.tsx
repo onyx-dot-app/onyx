@@ -1073,6 +1073,68 @@ export const connectorConfigs: Record<
     values: [],
     advanced_values: [],
   },
+  mattermost: {
+    description: "Configure Mattermost connector",
+    values: [],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter teams to include:",
+        label: "Teams",
+        name: "teams",
+        description: `Specify 0 or more team names/slugs to index. If none are specified, all teams the access token can see are indexed.`,
+        optional: true,
+      },
+      {
+        type: "list",
+        query: "Enter channels to include:",
+        label: "Channels",
+        name: "channels",
+        description: `Specify 0 or more channels to index. If none are specified, all accessible channels (subject to the options below) are indexed.`,
+        optional: true,
+      },
+      {
+        type: "checkbox",
+        query: "Enable channel regex?",
+        label: "Enable Channel Regex",
+        name: "channel_regex_enabled",
+        description: `If enabled, the "channels" entries above are treated as regular expressions; a channel is included if its name fully matches any pattern.`,
+        optional: true,
+      },
+      {
+        type: "list",
+        query: "Enter channels to exclude:",
+        label: "Channels to Exclude",
+        name: "exclude_channels",
+        description: `Specify 0 or more channels to exclude. Exclusions apply after the "Channels" filter above.`,
+        optional: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include private channels?",
+        label: "Include Private Channels",
+        name: "include_private_channels",
+        description: `Index private channels the access token's user/bot is a member of.`,
+        optional: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include direct & group messages?",
+        label: "Include DMs and Group Messages",
+        name: "include_dms",
+        description: `Index direct and group messages. Off by default for privacy.`,
+        optional: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include archived channels?",
+        label: "Include Archived Channels",
+        name: "include_archived",
+        description: `Index archived (deleted) channels.`,
+        optional: true,
+      },
+    ],
+  },
   slack: {
     description: "Configure Slack connector",
     values: [],
@@ -2077,6 +2139,16 @@ export interface SlackConfig {
   exclude_channels?: string[];
   exclude_channel_regex_enabled?: boolean;
   include_bot_messages?: boolean;
+}
+
+export interface MattermostConfig {
+  teams?: string[];
+  channels?: string[];
+  channel_regex_enabled?: boolean;
+  exclude_channels?: string[];
+  include_private_channels?: boolean;
+  include_dms?: boolean;
+  include_archived?: boolean;
 }
 
 export interface SlabConfig {
