@@ -434,7 +434,7 @@ async def _drive_refresh(
     that refresh request plus the next request the SDK would send."""
     request = httpx.Request("POST", "https://mcp.example.com/mcp")
     flow = provider.async_auth_flow(request)
-    refresh_request = await flow.__anext__()
+    refresh_request = await anext(flow)
     refresh_response = httpx.Response(
         status_code=refresh_status, json=refresh_body, request=refresh_request
     )
@@ -526,5 +526,7 @@ def test_proactive_refresh_failure_clears_tokens(
     # than retrying a dead access token.
     assert str(refresh_request.url) == "https://accounts.example.com/oauth/token"
     assert provider.context.current_tokens is None
-    assert authed_request is not None
+    assert authed_request is not None, (
+        "SDK no longer yields original request on refresh failure"
+    )
     assert authed_request.headers.get("Authorization") is None
