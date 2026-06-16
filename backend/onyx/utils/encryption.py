@@ -68,8 +68,12 @@ def _sanitize_url_for_logging(value: str) -> str:
     if parsed.username or parsed.password:
         return mask_string(value)
     netloc = parsed.hostname or ""
-    if parsed.port:
-        netloc = f"{netloc}:{parsed.port}"
+    try:
+        port: int | None = parsed.port
+    except ValueError:
+        return mask_string(value)
+    if port is not None:
+        netloc = f"{netloc}:{port}"
     return parsed._replace(netloc=netloc, query="", fragment="").geturl()
 
 
