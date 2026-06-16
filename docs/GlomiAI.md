@@ -60,8 +60,8 @@
 | # | Epic | 期次 | 说明 |
 |---|---|---|---|
 | **E1** | i18n + 品牌替换 | 🟢 验证期·进行中 | 已有 spec+plan。复用现有 web,中文优先；当前 `brand.png` / `logo.png` 品牌资源已接入默认 wordmark、Logo mark、favicon、公开 logo/logotype 静态资源和默认助手头像 |
-| **E2** | 国产模型接入（平台默认 OpenAI-compatible Provider） | 🟢 验证期·进行中 | 第一阶段收敛为平台自动 seed 一个 OpenAI-compatible 主模型到 Onyx 原生 LLMProvider 架构；用户注册后即可用，不进入 Admin LLM 配置页，也不选择模型档位；平台只配置 API base URL、API key、主模型名 |
-| **E3** | 超级对话调优 | 🟢 验证期 | 默认 Persona 的中文 system prompt、工具使用策略、回答体验打磨；搜索由 Agent 在 `web_search` 调用中选择 `lite` / `medium` / `deep`，而不是用户手动选择；普通 chat 研究型回答采用自适应但克制的表达策略，不用固定模板，也不把 deep search 等同于长报告 |
+| **E2** | 平台模型目录与模型选择 | 🟢 验证期·进行中 | 从“每账户一个默认模型”升级为平台内置 Glomi Model Catalog：默认同步 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2 等可选模型到每个 tenant，并由后端返回模型能力（视觉、推理、角色标签）给前端选择器；已有账户通过幂等同步补齐缺失模型，用户选择不被覆盖 |
+| **E3** | 超级对话调优 | 🟢 验证期 | 默认 Persona 的中文 system prompt、工具使用策略、回答体验打磨；搜索由 Agent 在 `web_search` 调用中选择 `lite` / `medium` / `deep`，而不是用户手动选择；普通 chat 研究型回答采用自适应但克制的表达策略，不用固定模板，也不把 deep search 等同于长报告；聊天运行态要支持刷新后继续接上过程 |
 | **E4** | 深度研究中文化 | 🟢 验证期 | 与 E3 共享“中文 Agent 搜索与研究能力层”：问题拆解、query portfolio、来源路由、证据评估、中文报告成稿；默认搜索 provider 第一期接入 Glomi Search Gateway |
 | **E5** | Craft C 端化 | 🟡 王牌期 P2 | 去 `subscription_check`、沙箱镜像/网络国内化（k8s）、消费级生成入口 + 模板 |
 | **E6** | 生成物分享（Sparkpage 式） | 🟡 王牌期 P2 | 生成结果公开分享页,获客/传播 |
@@ -82,7 +82,7 @@
 ## 6. 分期路线
 
 ### Phase A —— 核心能力验证（当前唯一重心）
-- **内容**：E1 i18n + E2 国产模型接入（平台默认 OpenAI-compatible 主模型自动初始化）+ E3/E4 中文 Agent 搜索与研究能力层（平台默认 Glomi Search Gateway + Agent 自动选择 Lite/Medium/Deep 搜索 + 深度研究中文报告）。
+- **内容**：E1 i18n + E2 平台模型目录与模型选择（默认同步 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2 等模型能力画像到 tenant）+ E3/E4 中文 Agent 搜索与研究能力层（平台默认 Glomi Search Gateway + Agent 自动选择 Lite/Medium/Deep 搜索 + 深度研究中文报告）+ 聊天运行态刷新恢复 + 基于后端模型能力的图片粘贴/上传入口。
 - **鉴权/支付**：**验证期不做**。用 `AUTH_TYPE=basic` / 单用户 / 内测白名单即可,不碰微信登录、不碰支付。
 - **交付物**：一个**中文、接国产模型、对话 + 深度研究可用**的内测版（本地或小范围内测）。
 - **验证成功标准**：
@@ -106,7 +106,7 @@
 
 | 决策 | 现状 | 倾向/建议 |
 |---|---|---|
-| **对话模型** | ✅ 已定 | 验证期优先平台统一配置一个 OpenAI-compatible 主模型；C 端不暴露 API key/base URL/参数配置，也不提供模型档位。规模化/合规后再考虑多模型策略或自部署开源模型 |
+| **对话模型** | ✅ 已定 | 验证期从单主模型升级为平台内置模型目录：前期默认 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2；后端同步到每个 tenant 的 LLMProvider/ModelConfiguration，并返回 `supports_image_input`、推理能力和角色标签给前端模型选择器。C 端不暴露 API key/base URL/provider 配置，只选择平台开放的模型 |
 | **默认搜索服务** | ✅ 已定 | Onyx 侧自动 seed `Glomi Search / glomi` provider，配置只暴露 Gateway base URL、API key、可选 channel；仓库内提供本地 `onyx.search_gateway.server`，第一期把 `channel=tavily` 转成 Tavily 搜索；Agent 在 `web_search` 工具调用中选择 `lite` / `medium` / `deep`，不做代码规则匹配，不增加前置 LLM router；Gateway 的 `medium` / `deep` 会做限量 query fan-out、Tavily advanced search、raw-content snippet fallback；`open_url` 抓取失败时可使用最近 web_search snippet 作为标注过的 fallback evidence；Gateway 内部用 adapter capability matrix 支持未来 Tavily / Brave / 国内搜索 / 自研源切换 |
 | **embedding 检索模型** | forward note | 仅当做「文档/知识库 RAG」时才需换中文 embedding（BGE / Qwen-embedding / 云端中文）。纯深度研究（走 web 搜索）验证期不依赖,先不管 |
 | **商业模式** | 未定 | 订阅 / 积分按量 / 免费+增值,Phase C 前定 |
@@ -120,7 +120,7 @@
 
 - 本蓝图 = **顶层**;每个 Epic 各自走独立的 `spec → plan → 实现`。
 - 已落地：**E1**（i18n + UI 资源替换）的 spec 与 plan。
-- **下一步建议**：E1 已落，E2 纠偏为“注册即有平台默认 OpenAI-compatible 主模型”，以 `docs/superpowers/specs/2026-06-14-platform-default-openai-compatible-llm-design.md` 为实施依据；E3/E4 继续以 `docs/superpowers/specs/2026-06-13-agent-search-and-research-strategy-design.md` 为搜索方法论基础，平台默认 Glomi Search Gateway 与 Agent 自动 Lite/Medium/Deep 搜索模式已按 `docs/superpowers/specs/2026-06-15-platform-default-glomi-search-gateway-design.md` 进入一期实现，本地 Gateway 与 open_url snippet fallback 已可用，后续重点是解决本地 Tavily TLS 连通性后做端到端中文搜索/研究 benchmark。
+- **下一步建议**：E1 已落，E2 先前“注册即有平台默认 OpenAI-compatible 主模型”已完成第一阶段；下一阶段以 `docs/superpowers/specs/2026-06-16-resumable-runs-model-strategy-answer-policy-design.md` 为总设计，把 E2 升级为平台模型目录、已有账户模型同步、后端能力画像和前端模型选择器，并与刷新恢复、回答长度策略、图片输入能力一起进入实施计划；E3/E4 继续以 `docs/superpowers/specs/2026-06-13-agent-search-and-research-strategy-design.md` 为搜索方法论基础，平台默认 Glomi Search Gateway 与 Agent 自动 Lite/Medium/Deep 搜索模式已按 `docs/superpowers/specs/2026-06-15-platform-default-glomi-search-gateway-design.md` 进入一期实现，本地 Gateway 与 open_url snippet fallback 已可用，后续重点是解决本地 Tavily TLS 连通性后做端到端中文搜索/研究 benchmark。
 
 ---
 

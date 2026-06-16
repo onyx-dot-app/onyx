@@ -1,5 +1,15 @@
 # 所有相关的变动都需要记录在summary.md中，包括坑，经验，变动等等；关于产品相关的文档在docs/GlomiAI.md，有产品相关变动了需要同步更新这个文件
 
+## 2026-06-16
+
+- 新增总设计文档 `docs/superpowers/specs/2026-06-16-resumable-runs-model-strategy-answer-policy-design.md`，把 5 个产品/架构问题合并为 Phase A 设计：聊天运行态刷新恢复、模型角色与厂商能力画像、回答长度自适应、图片/文档输入能力、平台多模型目录与前端模型选择器。
+- 刷新恢复决策：第一阶段不直接建设完整超级智能体 Task/Run DAG，而是在现有 chat streaming 外加轻量 `chat_run` / `chat_run_event` 层；F5 后可通过 `run_id + event_seq` replay 已有 packet 并继续订阅后续流式进度。
+- 模型策略决策：不把 `low / medium / high` reasoning 暴露给用户，也不把它当跨厂商通用语义；内部使用 Glomi 模型角色（fast / balanced / reasoning / research / vision / coding）和 provider capability profile，再由后端按 OpenAI、DeepSeek、Qwen、GLM 的实际能力映射。
+- 默认模型目录决策：从“每账户 seed 一个默认模型”升级为平台内置 Glomi Model Catalog。前期默认开放 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2；已有账户通过幂等 sync 补齐缺失 provider/model，不覆盖用户已选模型和管理员手动凭据。
+- 视觉能力决策：前端不硬编码模型名判断图片能力，只消费后端返回的 `supports_image_input`；GPT-5.5 与 Qwen3.7 Plus 默认支持图片，DeepSeek V4 Pro 与 GLM-5.2 默认不支持图片。选择支持图片的模型时允许粘贴/拖拽/上传图片，不支持时给温和提示。
+- 回答策略决策：普通 chat 默认根据问题自动选择 direct_answer / focused_brief / deep_report；搜索深度不等于回答长度，研究型普通回答优先让用户抓住判断、证据强弱和下一步，完整长报告只在用户明确要求或 Deep Research 中输出。
+- 同步更新 `docs/GlomiAI.md`：E2 从“平台默认单 OpenAI-compatible 主模型”调整为“平台模型目录与模型选择”；Phase A 纳入刷新恢复、图片输入能力、后端模型能力画像和已有账户模型同步。
+
 ## 2026-06-15
 
 - 满血 Docker Compose 纳入 Glomi Search Gateway：`deployment/docker_compose/docker-compose.yml` 和 `docker-compose.prod.yml` 新增 `search_gateway` 服务，复用 backend 镜像运行 `uvicorn onyx.search_gateway.server:app --host 0.0.0.0 --port 7777`，不暴露公网端口，由 `api_server` 在 compose 内网访问。
