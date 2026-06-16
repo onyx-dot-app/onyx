@@ -45,6 +45,9 @@ from onyx.db.external_app import get_built_in_external_app
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    SANDBOX_EXEC_USER,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
@@ -439,6 +442,7 @@ def test_unlabeled_container_gets_unidentified_sandbox_403() -> None:
 
 def test_sessions_directory_writable_by_sandbox_user(
     module_sandbox: tuple[UUID, str],
+    docker_exec: DockerExec,
 ) -> None:
     """
     The /workspace/sessions volume mount must be writable by UID 1000.
@@ -454,9 +458,7 @@ def test_sessions_directory_writable_by_sandbox_user(
     _session_id, container = module_sandbox
 
     # Verify /workspace/sessions exists and is owned by 1000:1000
-    stat_result = _docker_exec(
-        container, ["stat", "-c", "%u:%g", "/workspace/sessions"]
-    )
+    stat_result = docker_exec(container, ["stat", "-c", "%u:%g", "/workspace/sessions"])
     assert stat_result.returncode == 0, (
         f"/workspace/sessions stat failed: {stat_result.stderr}"
     )
@@ -464,25 +466,22 @@ def test_sessions_directory_writable_by_sandbox_user(
         f"/workspace/sessions not owned by 1000:1000: {stat_result.stdout.strip()}"
     )
 
-    # Attempt to create a test directory as UID 1000 (the default user in the
-    # container after setpriv drop). This mimics what setup_session_workspace
-    # does when creating a new session. Must use --user 1000:1000 explicitly
-    # because in proxy mode the container runs as root initially.
+    # Attempt to create a test directory as UID 1000. Must set the exec user
+    # explicitly because in proxy mode docker exec defaults to the container's
+    # configured root user, not the setpriv-dropped agent user.
     test_dir = f"/workspace/sessions/test-{uuid4().hex[:8]}"
-    mkdir_result = subprocess.run(
-        ["docker", "exec", "--user", "1000:1000", container, "mkdir", "-p", test_dir],
-        capture_output=True,
-        text=True,
+    mkdir_result = docker_exec(
+        container,
+        ["mkdir", "-p", test_dir],
         timeout=10.0,
-        check=False,
+        user=SANDBOX_EXEC_USER,
     )
     assert mkdir_result.returncode == 0, (
         f"mkdir failed as UID 1000: rc={mkdir_result.returncode} "
         f"stderr={mkdir_result.stderr!r}"
     )
 
-    # Clean up (as root is fine for removal)
-    _docker_exec(container, ["rm", "-rf", test_dir])
+    docker_exec(container, ["rm", "-rf", test_dir], user=SANDBOX_EXEC_USER)
 
 
 # ------------------------------------------------------------------------------
