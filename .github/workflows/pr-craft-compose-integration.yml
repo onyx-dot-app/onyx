@@ -157,6 +157,14 @@ jobs:
           docker network create onyx_craft_sandbox
           docker volume create sandbox_proxy_ca
 
+      # install.sh normally generates .env (including USER_AUTH_SECRET) from
+      # env.template; CI skips install.sh, and since #12038 the api server
+      # fail-closes on an empty USER_AUTH_SECRET. Services read .env via
+      # env_file, so a CI-only value here unblocks the stack.
+      - name: Provide USER_AUTH_SECRET (.env)
+        working-directory: deployment/docker_compose
+        run: echo 'USER_AUTH_SECRET=craft-compose-ci-only-dummy-secret' > .env
+
       # TODO(ods): Replace with `ods compose --craft` once that flag is
       # added to tools/ods/cmd/compose.go. Today `ods compose` doesn't support
       # the craft overlay, so we drop to raw docker compose.
