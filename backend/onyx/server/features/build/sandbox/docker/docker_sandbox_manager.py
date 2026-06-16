@@ -446,10 +446,12 @@ def build_container_create_kwargs(
       bypassing the init); ``command=["/workspace/entrypoint.sh"]`` becomes the
       arg firewall-init.sh exec's after setpriv drops caps + switches to UID
       1000.
-    - ``cap_add=["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]`` (NET_ADMIN runs
-      iptables; SETPCAP authorises ``setpriv --bounding-set=-all``;
-      SETUID/SETGID gate setpriv's ``--reuid``/``--regid`` under
-      ``cap_drop=ALL``). All four leave the bounding set before the agent
+    - ``cap_add=["NET_ADMIN", "SETPCAP", "SETUID", "SETGID", "CHOWN"]``
+      (NET_ADMIN runs iptables; SETPCAP authorises
+      ``setpriv --bounding-set=-all``; SETUID/SETGID gate setpriv's
+      ``--reuid``/``--regid`` under ``cap_drop=ALL``; CHOWN repairs the
+      sessions volume mount-point owner). All five leave the bounding set
+      before the agent
       execve, so the running container ends up with no caps at all.
     - ``user="0:0"`` so the init starts as root for iptables. setpriv then drops
       to UID 1000. The root+NET_ADMIN window is bounded by ``firewall-init.sh``
@@ -525,9 +527,10 @@ def build_container_create_kwargs(
         # NET_ADMIN: iptables. SETPCAP: prctl(PR_CAPBSET_DROP) for `setpriv
         # --bounding-set=-all`. SETUID/SETGID: setpriv's --reuid/--regid call
         # setuid()/setgroups(), which are gated on these caps even for UID 0
-        # under cap_drop=ALL. All four leave the bounding set before the agent
-        # execve, so the running container ends up with no caps.
-        cap_add = ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]
+        # under cap_drop=ALL. CHOWN: repair /workspace/sessions mount-point
+        # ownership before dropping to UID 1000. All five leave the bounding set
+        # before the agent execve, so the running container ends up with no caps.
+        cap_add = ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID", "CHOWN"]
     else:
         entrypoint = None
         command = ["/workspace/entrypoint.sh"]
