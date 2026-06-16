@@ -130,18 +130,20 @@ case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
     entrypoint)
         # Compose-only: K8s initcontainer mode exits earlier, never reaches
         # here. Docker manager grants cap_add=[NET_ADMIN, SETPCAP, SETUID,
-        # SETGID]: NET_ADMIN for iptables, SETPCAP for the bounding-set drop,
-        # SETUID/SETGID for setpriv's --reuid/--regid under cap_drop=ALL.
+        # SETGID, CHOWN]: NET_ADMIN for iptables, SETPCAP for the bounding-set
+        # drop, SETUID/SETGID for setpriv's --reuid/--regid under
+        # cap_drop=ALL, and CHOWN for the sessions mount-point repair below.
         # setpriv (not capsh): capsh's `-- args` form invokes /bin/bash and
         # mangles non-script targets; setpriv execve's directly.
         [[ "$#" -ge 1 ]] || die "entrypoint mode requires the real entrypoint as args"
 
         # Fix volume mount permissions: Docker volumes are created with default
         # ownership (root:root). The Dockerfile's chown only affects the image
-        # layer, not mounted volumes. Fix ownership before dropping to UID 1000
-        # so the sandbox user can create sessions.
+        # layer, not mounted volumes. Fix only the mount point before dropping
+        # to UID 1000 so the sandbox user can create sessions without walking
+        # existing saved workspaces on every container restart.
         if [ -d /workspace/sessions ]; then
-            chown -R 1000:1000 /workspace/sessions
+            chown 1000:1000 /workspace/sessions
             log "fixed /workspace/sessions ownership -> 1000:1000"
         else
             log "WARNING: /workspace/sessions not found; session creation will fail"
