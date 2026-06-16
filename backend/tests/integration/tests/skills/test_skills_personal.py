@@ -3,7 +3,7 @@
 Covers the user-facing ``POST /skills/custom``,
 ``PUT /skills/custom/{id}/bundle``, and ``DELETE /skills/custom/{id}``
 endpoints: ownership/visibility rules, reserved slugs, duplicate slugs,
-promotion to org-wide, the disabled-but-deletable owner path, and the
+promotion to org-wide, admin disable as a reversible mute, and the
 per-user cap.
 """
 
@@ -240,39 +240,16 @@ def test_owner_cannot_toggle_after_promotion(
     assert exc_info.value.response.status_code == 403
 
 
-def test_admin_disabled_personal_skill_greyed_for_owner_and_deletable(
+def test_admin_disable_then_owner_reenable(
     admin_user: DATestUser,
     basic_user: DATestUser,
 ) -> None:
-    slug = f"personal-disabled-{uuid4().hex[:6]}"
-    skill = SkillManager.create_personal(basic_user, slug=slug)
-
-    SkillManager.patch_custom(skill, admin_user, enabled=False)
-
-    # enabled is one shared flag: an admin-disabled personal skill stays
-    # listed for the owner (greyed out) and is owner-re-enablable; the
-    # admin's hard kill switch for a personal skill is delete.
-    own = [
-        c
-        for c in SkillManager.list_for_user(basic_user)["customs"]
-        if c["slug"] == slug
-    ]
-    assert len(own) == 1
-    assert own[0]["enabled"] is False
-
-    SkillManager.delete_personal(skill, basic_user)
-    admin_slugs = [c["slug"] for c in SkillManager.list_all(admin_user)["customs"]]
-    assert slug not in admin_slugs
-
-
-def test_admin_disable_owner_reenable_admin_delete_flow(
-    admin_user: DATestUser,
-    basic_user: DATestUser,
-) -> None:
+    """Admin disable is a reversible mute, not a sticky lock: the skill stays
+    listed (greyed) for the owner and the owner can re-enable it. The admin's
+    irreversible override is delete (see test_admin_can_hard_delete_personal_skill)."""
     slug = f"personal-admin-toggle-{uuid4().hex[:6]}"
     skill = SkillManager.create_personal(basic_user, slug=slug)
 
-    # admin disables the owner's personal skill
     SkillManager.patch_custom(skill, admin_user, enabled=False)
     own = [
         c
@@ -281,20 +258,10 @@ def test_admin_disable_owner_reenable_admin_delete_flow(
     ]
     assert len(own) == 1 and own[0]["enabled"] is False
 
-    # owner re-enables it (enabled is a shared flag; no who-disabled tracking)
+    # enabled is a shared flag with no who-disabled tracking, so the owner can
+    # turn it back on.
     reenabled = SkillManager.patch_personal(skill, basic_user, enabled=True)
     assert reenabled.enabled is True
-    own = [
-        c
-        for c in SkillManager.list_for_user(basic_user)["customs"]
-        if c["slug"] == slug
-    ]
-    assert len(own) == 1 and own[0]["enabled"] is True
-
-    # admin can still hard-delete it outright
-    SkillManager.delete_custom(skill, admin_user)
-    admin_slugs = [c["slug"] for c in SkillManager.list_all(admin_user)["customs"]]
-    assert slug not in admin_slugs
 
 
 def test_per_user_personal_skill_cap(admin_user: DATestUser) -> None:  # noqa: ARG001
