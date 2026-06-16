@@ -1064,6 +1064,7 @@ echo "Session cleanup complete"
                     f'[ -d "{target}" ] && echo "WORKSPACE_FOUND" || echo "WORKSPACE_MISSING"',
                 ],
                 check=False,
+                user=SANDBOX_EXEC_USER,
             )
         except ExecError as e:
             logger.warning(
@@ -1083,6 +1084,7 @@ echo "Session cleanup complete"
                 container,
                 ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/ 2>/dev/null || true"],
                 check=False,
+                user=SANDBOX_EXEC_USER,
             )
         except ExecError as e:
             logger.warning(
@@ -1124,6 +1126,7 @@ echo "Session cleanup complete"
                     f'[ -d "{session_path}/outputs" ] && echo OK || echo EMPTY',
                 ],
                 check=False,
+                user=SANDBOX_EXEC_USER,
             )
         except ExecError:
             return None
@@ -1346,6 +1349,7 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
                     f"ls -laL --time-style=+%s {quoted} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
                 ],
                 check=False,
+                user=SANDBOX_EXEC_USER,
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to list directory: {e}") from e
@@ -1413,6 +1417,7 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
                     f"if [ -f {quoted} ]; then base64 {quoted}; else echo 'ERROR_NOT_FOUND'; fi",
                 ],
                 check=False,
+                user=SANDBOX_EXEC_USER,
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to read file: {e}") from e
@@ -1611,7 +1616,12 @@ echo WRITE_OK"""
             f"fi"
         )
         try:
-            result = run_in_container(container, ["/bin/sh", "-c", cmd], check=False)
+            result = run_in_container(
+                container,
+                ["/bin/sh", "-c", cmd],
+                check=False,
+                user=SANDBOX_EXEC_USER,
+            )
         except ExecError as e:
             logger.warning("get_upload_stats failed: %s", e)
             return 0, 0
@@ -1723,6 +1733,7 @@ echo WRITE_OK"""
                     pptx_abs,
                     cache_abs,
                 ],
+                user=SANDBOX_EXEC_USER,
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e

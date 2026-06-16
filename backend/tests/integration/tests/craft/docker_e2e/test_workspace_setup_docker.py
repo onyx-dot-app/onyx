@@ -160,6 +160,38 @@ def test_session_setup_creates_user_writable_workspace(
         f"stdout={write_check.stdout!r} stderr={write_check.stderr!r}"
     )
 
+    private_file = "outputs/private/private.txt"
+    private_setup = _docker_exec(
+        container,
+        [
+            "sh",
+            "-c",
+            (
+                "set -e\n"
+                f'mkdir -p "{session_path}/outputs/private"\n'
+                f'printf private > "{session_path}/{private_file}"\n'
+                f'chmod 700 "{session_path}/outputs/private"\n'
+                f'chmod 600 "{session_path}/{private_file}"\n'
+            ),
+        ],
+        user=_SANDBOX_USER,
+    )
+    assert private_setup.returncode == 0, (
+        "Could not seed sandbox-user-private output file. "
+        f"stdout={private_setup.stdout!r} stderr={private_setup.stderr!r}"
+    )
+
+    private_listing = BuildSessionManager.list_files(
+        workspace_user, session_id, "outputs/private"
+    )
+    private_names = {entry["name"] for entry in private_listing["entries"]}
+    assert "private.txt" in private_names
+
+    downloaded = BuildSessionManager.download_artifact(
+        workspace_user, session_id, private_file
+    )
+    assert downloaded == b"private"
+
     upload_name = f"docker-setup-{uuid4().hex[:8]}.txt"
     upload = BuildSessionManager.upload_file(
         workspace_user,
