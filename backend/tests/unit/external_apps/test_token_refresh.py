@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from onyx.external_apps import token_refresh as tr
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
+from onyx.oauth import single_flight as sf
 from onyx.oauth.errors import TokenRefreshTerminalError
 from onyx.oauth.errors import TokenRefreshTransientError
 
@@ -83,7 +84,7 @@ def test_refresh_missing_refresh_token_is_terminal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     called = MagicMock()
-    monkeypatch.setattr("onyx.oauth.exchange.requests.post", called)
+    monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", called)
     with pytest.raises(TokenRefreshTerminalError):
         GoogleCalendarProvider().refresh_credentials({"access_token": "a"}, "c", "s")
     called.assert_not_called()
@@ -140,7 +141,7 @@ def test_refresh_network_error_is_transient(monkeypatch: pytest.MonkeyPatch) -> 
     def _boom(*_a: Any, **_k: Any) -> None:
         raise requests.RequestException("connection reset")
 
-    monkeypatch.setattr("onyx.oauth.exchange.requests.post", _boom)
+    monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", _boom)
     with pytest.raises(TokenRefreshTransientError):
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
@@ -181,7 +182,7 @@ def _capturing_post(
         captured["data"] = kwargs.get("data")
         return response
 
-    monkeypatch.setattr("onyx.oauth.exchange.requests.post", _post)
+    monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", _post)
     return captured
 
 
@@ -272,7 +273,7 @@ def _setup(
     app = MagicMock()
     app.skill.name = "Google Calendar"
 
-    monkeypatch.setattr(tr, "redis_shared_lock", _noop_cm)
+    monkeypatch.setattr(sf, "redis_shared_lock", _noop_cm)
     monkeypatch.setattr(tr, "get_session_with_tenant", _noop_cm)
     monkeypatch.setattr(tr, "get_external_app_by_id", lambda *_a, **_k: app)
     monkeypatch.setattr(tr, "get_provider_for_app", lambda *_a, **_k: provider)
@@ -361,7 +362,7 @@ def test_ensure_fresh_redis_unavailable_keeps_existing_token(
     def _boom(*_a: Any, **_k: Any) -> Any:
         raise RedisConnectionError("Error connecting to Redis.")
 
-    monkeypatch.setattr(tr, "redis_shared_lock", _boom)
+    monkeypatch.setattr(sf, "redis_shared_lock", _boom)
     _run()  # must not raise
     spies["refresh"].assert_not_called()
     spies["upsert"].assert_not_called()

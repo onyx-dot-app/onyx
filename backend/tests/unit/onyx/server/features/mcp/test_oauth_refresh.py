@@ -18,8 +18,10 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPServerStatus
+from onyx.oauth import single_flight as sf
 from onyx.oauth.errors import TokenRefreshTerminalError
 from onyx.oauth.errors import TokenRefreshTransientError
+from onyx.redis.lock_context import RedisSharedLockAcquisitionError
 from onyx.server.features.mcp import oauth_refresh as orf
 
 TENANT = "public"
@@ -76,7 +78,7 @@ def _setup(
 ) -> dict[str, MagicMock]:
     """Patch oauth_refresh's seams. `config_sequence` is the connection-config data
     returned on successive reads (pre-check, re-read under lock, persist re-read)."""
-    monkeypatch.setattr(orf, "redis_shared_lock", _noop_cm)
+    monkeypatch.setattr(sf, "redis_shared_lock", _noop_cm)
     monkeypatch.setattr(orf, "get_session_with_tenant", _noop_cm)
     monkeypatch.setattr(
         orf, "get_connection_config_by_id", lambda cid, _db: MagicMock(id=cid)
@@ -214,9 +216,9 @@ def test_lock_contention_yields_to_winner(monkeypatch: pytest.MonkeyPatch) -> No
     spies = _setup(monkeypatch, config_sequence=[_stale_config()])
 
     def _boom(*_a: Any, **_k: Any) -> Any:
-        raise orf.RedisSharedLockAcquisitionError("contended")
+        raise RedisSharedLockAcquisitionError("contended")
 
-    monkeypatch.setattr(orf, "redis_shared_lock", _boom)
+    monkeypatch.setattr(sf, "redis_shared_lock", _boom)
     assert _run() is None
     spies["refresh"].assert_not_called()
 
@@ -229,7 +231,7 @@ def test_redis_unavailable_keeps_existing_token(
     def _boom(*_a: Any, **_k: Any) -> Any:
         raise RedisConnectionError("Error connecting to Redis.")
 
-    monkeypatch.setattr(orf, "redis_shared_lock", _boom)
+    monkeypatch.setattr(sf, "redis_shared_lock", _boom)
     assert _run() is None  # must not raise
     spies["refresh"].assert_not_called()
 

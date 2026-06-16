@@ -2,9 +2,11 @@
 
 The MCP SDK's OAuthClientProvider is rebuilt per tool call and never restores token
 expiry, so it never refreshes proactively and an expired token escalates to a full
-re-auth ("Please Reconnect to the server"). Onyx drives refresh itself instead,
-mirroring `external_apps.token_refresh`: check the persisted expiry before a call and
-exchange the stored refresh token when stale. Never raises for a refresh outcome.
+re-auth ("Please Reconnect to the server"). Onyx drives refresh itself instead:
+the storage and dead-grant policy live in :class:`_MCPTokenRefresher`, and the
+single-flight skeleton (lock, stale pre-check, terminal/transient/contention/infra
+routing) is the shared :class:`onyx.oauth.single_flight.SingleFlightTokenRefresher`
+— the same one Craft external apps use. Never raises for a refresh outcome.
 """
 
 from datetime import datetime
@@ -15,8 +17,6 @@ from urllib.parse import urlparse
 
 import requests
 from mcp.shared.auth import OAuthToken
-from redis.exceptions import RedisError
-from sqlalchemy.exc import SQLAlchemyError
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import MCPAuthenticationType
@@ -27,13 +27,11 @@ from onyx.db.mcp import update_connection_config
 from onyx.db.mcp import update_mcp_server__no_commit
 from onyx.db.models import MCPServer
 from onyx.oauth.errors import TokenRefreshTerminalError
-from onyx.oauth.errors import TokenRefreshTransientError
 from onyx.oauth.exchange import exchange_refresh_token
 from onyx.oauth.exchange import OAuthFlowParams
 from onyx.oauth.exchange import validate_oauth_endpoint_url
 from onyx.oauth.expiry import needs_refresh
-from onyx.redis.lock_context import redis_shared_lock
-from onyx.redis.lock_context import RedisSharedLockAcquisitionError
+from onyx.oauth.single_flight import SingleFlightTokenRefresher
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.server.features.mcp.models import MCPOAuthKeys
 from onyx.utils.logger import setup_logger
@@ -41,16 +39,101 @@ from onyx.utils.url import SSRFException
 
 logger = setup_logger()
 
-# Held long enough for the refresh POST + DB write; short wait so a contended caller
-# doesn't pin a worker thread (a timed-out waiter proceeds with the current token).
-_LOCK_HELD_S = 30.0
-_LOCK_WAIT_S = 5.0
-
 _DISCOVERY_PATHS = (
     "/.well-known/oauth-authorization-server",
     "/.well-known/openid-configuration",
 )
 _DISCOVERY_TIMEOUT_S = 10
+
+
+class _MCPTokenRefresher(SingleFlightTokenRefresher[dict[str, str]]):
+    """Refresh the OAuth access token on one MCP connection config.
+
+    Storage is ``MCPConnectionConfig``; on success returns the fresh ``headers``
+    dict (new ``Authorization``) for the caller to apply. A dead grant flips an
+    admin-owned server to ``AWAITING_AUTH``; per-user grants are left alone.
+    """
+
+    log_prefix = "mcp_token_refresh"
+
+    def __init__(
+        self, tenant_id: str, mcp_server: MCPServer, connection_config_id: int
+    ):
+        self.tenant_id = tenant_id
+        self.mcp_server = mcp_server
+        self.connection_config_id = connection_config_id
+
+    def lock_name(self) -> str:
+        return f"mcp_token_refresh:{self.tenant_id}:{self.connection_config_id}"
+
+    def is_stale(self) -> bool:
+        if self.mcp_server.auth_type != MCPAuthenticationType.OAUTH:
+            return False
+        # Cheap pre-check before taking the lock; resolution only happens when stale.
+        with get_session_with_tenant(tenant_id=self.tenant_id) as db:
+            config = get_connection_config_by_id(self.connection_config_id, db)
+            config_data = extract_connection_data(config, apply_mask=False)
+        return _needs_refresh(config_data, datetime.now(timezone.utc))
+
+    def refresh_under_lock(self) -> dict[str, str] | None:
+        # Re-read after the lock wait: a concurrent winner may have already refreshed.
+        with get_session_with_tenant(tenant_id=self.tenant_id) as db:
+            config = get_connection_config_by_id(self.connection_config_id, db)
+            config_data = extract_connection_data(config, apply_mask=False)
+
+        if not _needs_refresh(config_data, datetime.now(timezone.utc)):
+            # Already refreshed by the lock winner — hand back the fresh headers.
+            return config_data.get("headers")
+
+        tokens = config_data.get(MCPOAuthKeys.TOKENS.value) or {}
+        refresh_token = tokens.get("refresh_token")
+        client = _client_credentials(config_data)
+        if not refresh_token or client is None:
+            return None
+        client_id, client_secret = client
+
+        token_endpoint = _resolve_token_endpoint(self.mcp_server, config_data)
+        if token_endpoint is None:
+            logger.warning(
+                "mcp_token_refresh.no_token_endpoint server_id=%s config_id=%s",
+                self.mcp_server.id,
+                self.connection_config_id,
+            )
+            return None
+
+        params = OAuthFlowParams(
+            # authorization_url is unused by refresh; token_url drives the grant.
+            authorization_url=token_endpoint,
+            token_url=token_endpoint,
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+        # Raises Terminal/Transient, routed by the base class.
+        new_token_data = exchange_refresh_token(params, refresh_token)
+
+        new_token_data.setdefault("token_type", "Bearer")
+        if not new_token_data.get("access_token"):
+            logger.warning(
+                "mcp_token_refresh.no_access_token server_id=%s", self.mcp_server.id
+            )
+            return None
+
+        return _persist_refreshed(
+            self.tenant_id, self.connection_config_id, new_token_data, token_endpoint
+        )
+
+    def on_terminal(self, error: TokenRefreshTerminalError) -> dict[str, str] | None:
+        # Dead grant — an admin-owned server needs a manual reconnect.
+        logger.warning(
+            "mcp_token_refresh.terminal server_id=%s config_id=%s error=%s",
+            self.mcp_server.id,
+            self.connection_config_id,
+            error,
+        )
+        _mark_awaiting_auth_if_admin(
+            self.tenant_id, self.mcp_server, self.connection_config_id
+        )
+        return None
 
 
 def ensure_fresh_mcp_token(
@@ -63,113 +146,7 @@ def ensure_fresh_mcp_token(
     for the caller to apply. Returns None when no refresh was needed or possible —
     the caller then proceeds with the currently-stored credentials.
     """
-    if mcp_server.auth_type != MCPAuthenticationType.OAUTH:
-        return None
-
-    # Cheap pre-check before taking the lock; resolution only happens when stale.
-    try:
-        with get_session_with_tenant(tenant_id=tenant_id) as db:
-            config = get_connection_config_by_id(connection_config_id, db)
-            config_data = extract_connection_data(config, apply_mask=False)
-    except SQLAlchemyError as exc:
-        logger.warning(
-            "mcp_token_refresh.read_failed config_id=%s error=%s",
-            connection_config_id,
-            exc,
-        )
-        return None
-
-    if not _needs_refresh(config_data, datetime.now(timezone.utc)):
-        return None
-
-    lock_name = f"mcp_token_refresh:{tenant_id}:{connection_config_id}"
-    try:
-        with redis_shared_lock(
-            lock_name,
-            max_time_lock_held_s=_LOCK_HELD_S,
-            wait_for_lock_s=_LOCK_WAIT_S,
-            logger=logger,
-        ):
-            return _refresh_under_lock(tenant_id, mcp_server, connection_config_id)
-    except RedisSharedLockAcquisitionError:
-        # Another worker is refreshing; proceed with the current token.
-        logger.info(
-            "mcp_token_refresh.lock_contended config_id=%s", connection_config_id
-        )
-        return None
-    except (RedisError, SQLAlchemyError) as exc:
-        # Transient infra failure — keep existing tokens and let the request through.
-        logger.warning(
-            "mcp_token_refresh.infra_unavailable config_id=%s error=%s",
-            connection_config_id,
-            exc,
-        )
-        return None
-
-
-def _refresh_under_lock(
-    tenant_id: str,
-    mcp_server: MCPServer,
-    connection_config_id: int,
-) -> dict[str, str] | None:
-    # Re-read after the lock wait: a concurrent winner may have already refreshed.
-    with get_session_with_tenant(tenant_id=tenant_id) as db:
-        config = get_connection_config_by_id(connection_config_id, db)
-        config_data = extract_connection_data(config, apply_mask=False)
-
-    if not _needs_refresh(config_data, datetime.now(timezone.utc)):
-        # Already refreshed by the lock winner — hand back the fresh headers.
-        return config_data.get("headers")
-
-    tokens = config_data.get(MCPOAuthKeys.TOKENS.value) or {}
-    refresh_token = tokens.get("refresh_token")
-    client = _client_credentials(config_data)
-    if not refresh_token or client is None:
-        return None
-    client_id, client_secret = client
-
-    token_endpoint = _resolve_token_endpoint(mcp_server, config_data)
-    if token_endpoint is None:
-        logger.warning(
-            "mcp_token_refresh.no_token_endpoint server_id=%s config_id=%s",
-            mcp_server.id,
-            connection_config_id,
-        )
-        return None
-
-    params = OAuthFlowParams(
-        # authorization_url is unused by refresh; token_url drives the grant.
-        authorization_url=token_endpoint,
-        token_url=token_endpoint,
-        client_id=client_id,
-        client_secret=client_secret,
-    )
-
-    try:
-        new_token_data = exchange_refresh_token(params, refresh_token)
-    except TokenRefreshTerminalError:
-        # Dead grant — an admin-owned server needs a manual reconnect.
-        logger.warning(
-            "mcp_token_refresh.terminal server_id=%s config_id=%s",
-            mcp_server.id,
-            connection_config_id,
-        )
-        _mark_awaiting_auth_if_admin(tenant_id, mcp_server, connection_config_id)
-        return None
-    except TokenRefreshTransientError as exc:
-        logger.warning(
-            "mcp_token_refresh.transient server_id=%s error=%s", mcp_server.id, exc
-        )
-        return None
-
-    new_token_data.setdefault("token_type", "Bearer")
-    if not new_token_data.get("access_token"):
-        logger.warning("mcp_token_refresh.no_access_token server_id=%s", mcp_server.id)
-        return None
-
-    return _persist_refreshed(
-        tenant_id, connection_config_id, new_token_data, token_endpoint
-    )
+    return _MCPTokenRefresher(tenant_id, mcp_server, connection_config_id).run()
 
 
 def _persist_refreshed(
@@ -275,17 +252,10 @@ def _mark_awaiting_auth_if_admin(
     everyone; that user's next call surfaces the normal auth error instead."""
     if mcp_server.admin_connection_config_id != connection_config_id:
         return
-    try:
-        with get_session_with_tenant(tenant_id=tenant_id) as db:
-            update_mcp_server__no_commit(
-                server_id=mcp_server.id,
-                db_session=db,
-                status=MCPServerStatus.AWAITING_AUTH,
-            )
-            db.commit()
-    except SQLAlchemyError as exc:
-        logger.warning(
-            "mcp_token_refresh.status_update_failed server_id=%s error=%s",
-            mcp_server.id,
-            exc,
+    with get_session_with_tenant(tenant_id=tenant_id) as db:
+        update_mcp_server__no_commit(
+            server_id=mcp_server.id,
+            db_session=db,
+            status=MCPServerStatus.AWAITING_AUTH,
         )
+        db.commit()
