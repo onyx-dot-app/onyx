@@ -57,8 +57,11 @@ docker build --platform linux/amd64 -t onyxdotapp/sandbox:dev .
 kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev
 ```
 
-Run with `SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev` and
-`SANDBOX_IMAGE_PULL_POLICY=Always`. (The repo-root `make` targets automate this.)
+Run with `SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev` and the **default**
+`SANDBOX_IMAGE_PULL_POLICY=IfNotPresent`, so Kubernetes uses the `kind load`ed
+image instead of pulling the remote `:dev` (matches `.vscode/.env.k8s.template`).
+`Always` is only for pinning a *remote* mutable tag. (The repo-root `make`
+targets automate this.)
 Build for **amd64** to match the cluster nodes; add `linux/arm64` via
 `docker buildx --platform linux/amd64,linux/arm64` if you need both.
 
