@@ -1,5 +1,6 @@
 from typing import Any
 from urllib.parse import urlparse
+from urllib.parse import urlunparse
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
 from onyx.configs.constants import MASK_CREDENTIAL_CHAR
@@ -74,7 +75,7 @@ def _sanitize_url_for_logging(value: str) -> str:
         return mask_string(value)
     if port is not None:
         netloc = f"{netloc}:{port}"
-    return parsed._replace(netloc=netloc, query="", fragment="").geturl()
+    return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, "", ""))
 
 
 def mask_env_value_for_logging(key: str, value: str) -> str:
