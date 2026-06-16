@@ -5,7 +5,6 @@ import { Button, Popover, PopoverMenu } from "@opal/components";
 import {
   SvgEye,
   SvgEyeOff,
-  SvgGlobe,
   SvgMoreHorizontal,
   SvgShare,
   SvgTrash,
@@ -22,7 +21,6 @@ import { cn } from "@opal/utils";
 interface CustomSkillRowActionsProps {
   skill: CustomSkill;
   onShare: () => void;
-  onPromote: () => void;
   onReplaceBundle: () => void;
   onToggleEnabled: () => void;
   onDelete: () => void;
@@ -35,7 +33,6 @@ interface CustomSkillRowActionsProps {
 export default function CustomSkillRowActions({
   skill,
   onShare,
-  onPromote,
   onReplaceBundle,
   onToggleEnabled,
   onDelete,
@@ -58,20 +55,6 @@ export default function CustomSkillRowActions({
         <Popover.Content align="end" width="sm">
           <PopoverMenu>
             {[
-              ...(skill.is_personal
-                ? [
-                    <LineItem
-                      key="promote"
-                      icon={SvgGlobe}
-                      onClick={() => {
-                        setPopoverOpen(false);
-                        onPromote();
-                      }}
-                    >
-                      Promote to organization
-                    </LineItem>,
-                  ]
-                : []),
               <LineItem
                 key="share"
                 icon={SvgShare}
