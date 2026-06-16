@@ -22,7 +22,7 @@ import {
   BaseLLMFormValues,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   ModelSelectionField,
   DisplayNameField,
