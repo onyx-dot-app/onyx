@@ -181,3 +181,4 @@
 - 复现定位：在 sandbox 容器中 `uid=1000(sandbox)` 可写 `/workspace/managed`，但 `uid=1001` 写入会 Permission denied；Docker exec 从 api_server 内部发起时在当前环境可能默认成调用方 UID 1001，而不是 sandbox 用户。
 - 修复：`DockerSandboxManager.write_files_to_sandbox` 调用 `stream_stdin_to_container` 时显式指定 `user="1000:1000"`，确保原子写入 skills/user-library/session 文件时使用 sandbox workspace owner，避免权限漂移。
 - 部署动作：已 rebuild backend 镜像并 recreate `api_server/background/search_gateway/sandbox-proxy`；随后停止并移除旧的 `sandbox-c24ef204`，让下一次创建 Build session 时重新 provision 干净 sandbox，避免复用已卡住/权限状态异常的旧容器。
+- 后端 502 复盘：api_server 本身 healthy，但 recreate api 后 nginx 仍缓存旧 upstream IP（日志 `connect() failed ... upstream: http://172.19.0.12:8080`，新 api IP 为 `172.19.0.11`），导致 `/api/*` 经 nginx 返回 502。已 `--force-recreate --no-deps nginx` 刷新 upstream，`/api/health` 在 3001/8081 均恢复 200。
