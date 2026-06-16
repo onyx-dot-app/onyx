@@ -1,12 +1,3 @@
-"""Proactive, single-flighted OAuth refresh for MCP servers.
-
-The MCP SDK's OAuthClientProvider is rebuilt per tool call and never restores token
-expiry, so it never refreshes proactively and an expired token escalates to a full
-re-auth ("Please Reconnect to the server"). Onyx drives refresh itself instead,
-mirroring `external_apps.token_refresh`: check the persisted expiry before a call and
-exchange the stored refresh token when stale. Never raises for a refresh outcome.
-"""
-
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -250,11 +241,16 @@ def _discover_token_endpoint(server_url: str) -> str | None:
         url = urljoin(origin, path)
         try:
             validate_oauth_endpoint_url(url)
+            # Don't follow redirects: a 3xx could escape the validated origin to an
+            # internal target. Treat one as a discovery miss.
             response = requests.get(
                 url,
                 headers={"Accept": "application/json"},
                 timeout=_DISCOVERY_TIMEOUT_S,
+                allow_redirects=False,
             )
+            if response.is_redirect or response.is_permanent_redirect:
+                continue
             response.raise_for_status()
             token_endpoint = response.json().get("token_endpoint")
             if token_endpoint:

@@ -269,6 +269,27 @@ def test_resolve_endpoint_discovers_when_unknown(
     assert orf._resolve_token_endpoint(server, {"headers": {}}) == TOKEN_ENDPOINT
 
 
+def test_discovery_does_not_follow_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A 3xx could escape the validated origin to an internal target: the request must
+    # not follow it, and the redirect is treated as a discovery miss.
+    server = _mcp_server(oauth_token_endpoint=None)
+    monkeypatch.setattr(orf, "validate_oauth_endpoint_url", lambda *_a, **_k: None)
+
+    captured: dict[str, Any] = {}
+    redirect = requests.Response()
+    redirect.status_code = 302
+    redirect.headers["Location"] = "http://169.254.169.254/token"
+
+    def _get(_url: str, **kwargs: Any) -> requests.Response:
+        captured.update(kwargs)
+        return redirect
+
+    monkeypatch.setattr(orf.requests, "get", _get)
+
+    assert orf._resolve_token_endpoint(server, {"headers": {}}) is None
+    assert captured["allow_redirects"] is False
+
+
 def test_no_endpoint_skips_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
     server = _mcp_server(oauth_token_endpoint=None)
     cfg = _stale_config()
