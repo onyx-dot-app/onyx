@@ -23,6 +23,7 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/lib/agents/hooks";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import { useUser } from "@/providers/UserProvider";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import NoAgentModal from "@/sections/modals/NoAgentModal";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import Modal from "@/refresh-components/Modal";
@@ -190,6 +191,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { data: federatedConnectorsData } = useFederatedConnectors();
 
   const { user } = useUser();
+  // `useUser()` collapses the loading state to `null` (its backing state inits
+  // to null and is populated by an effect). Read the raw /me result so the
+  // auth-gate below only fires once the query has actually resolved to "no
+  // user" — otherwise the brief load window redirects everyone to /auth/login.
+  // Logged-in users silently bounce back, but the synthesized anonymous user is
+  // kept on the login page (it's a deliberate non-redirect there), so anonymous
+  // chat visitors get stranded. `undefined` = still loading, `null` = resolved
+  // signed-out / anonymous-disabled, object = a real or anonymous user.
+  const { user: resolvedUser } = useCurrentUser();
 
   function processSearchParamsAndSubmitMessage(searchParamsString: string) {
     const newSearchParams = new URLSearchParams(searchParamsString);
@@ -556,7 +566,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
-  if (!user) {
+  if (resolvedUser === null) {
     redirect("/auth/login");
   }
 

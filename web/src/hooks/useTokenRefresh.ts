@@ -31,6 +31,11 @@ export function useTokenRefresh(
     if (
       !user ||
       user.id === NO_AUTH_USER_ID ||
+      // Anonymous (self-hosted "anonymous chat") users have no session token to
+      // refresh — the backend has no cookie for them and /api/auth/refresh 401s.
+      // A failed refresh triggers onRefreshFail, which churns the /me query and
+      // can bounce the anonymous visitor to login. Skip them entirely.
+      user.is_anonymous_user ||
       authTypeMetadata.authType === AuthType.OIDC ||
       authTypeMetadata.authType === AuthType.SAML
     ) {

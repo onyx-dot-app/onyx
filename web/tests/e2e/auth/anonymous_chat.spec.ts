@@ -11,7 +11,7 @@ import { loginAs } from "@tests/e2e/utils/auth";
 // `page` must be authenticated as an admin.
 async function setAnonymousChatEnabled(
   page: Page,
-  enabled: boolean,
+  enabled: boolean
 ): Promise<void> {
   const getRes = await page.request.get("/api/settings");
   expect(getRes.ok()).toBe(true);
@@ -63,8 +63,9 @@ test.describe("Anonymous chat access @exclusive", () => {
     await page.waitForLoadState("networkidle");
 
     // The cookie-less visitor stays on the chat surface instead of being
-    // bounced to login.
-    expect(new URL(page.url()).pathname).toMatch(/^\/app/);
+    // bounced to login. Use the auto-retrying matcher so a brief client-side
+    // settle after load doesn't flake the assertion.
+    await expect(page).toHaveURL(/\/app(\/|\?|$)/);
     await expect(page).not.toHaveURL(/\/auth\/login/);
 
     // The backend serves the synthesized anonymous user.
@@ -87,7 +88,6 @@ test.describe("Anonymous chat access @exclusive", () => {
     await expect(guestLink).toBeVisible();
     await guestLink.click();
 
-    await page.waitForLoadState("networkidle");
-    expect(new URL(page.url()).pathname).toMatch(/^\/app/);
+    await expect(page).toHaveURL(/\/app(\/|\?|$)/);
   });
 });

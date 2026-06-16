@@ -7,9 +7,6 @@ import {
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
 } from "./lib/constants";
 
-// Authentication cookie names (matches backend constants)
-const ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
-
 // Protected route prefixes that require a real authenticated session and never
 // permit anonymous access — safe to fast-fail at the edge when no cookie is
 // present.
@@ -89,18 +86,20 @@ export async function proxy(request: NextRequest) {
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)
   const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-    pathname.startsWith(route),
+    pathname.startsWith(route)
   );
   const isPublicRoute = PUBLIC_ROUTES.some((route) =>
-    pathname.startsWith(route),
+    pathname.startsWith(route)
   );
 
   if (isProtectedRoute && !isPublicRoute) {
     const authCookie = request.cookies.get(SERVER_SIDE_ONLY__AUTH_COOKIE_NAME);
-    const anonymousCookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME);
 
-    // Allow access if user has either a regular auth cookie or anonymous user cookie
-    if (!authCookie && !anonymousCookie) {
+    // These routes never permit anonymous access, so require a real auth cookie.
+    // The anonymous-user cookie is intentionally not honored here — an anonymous
+    // session must never satisfy the edge gate for /admin, /agents, or
+    // /connector (the server-side role checks reject it anyway).
+    if (!authCookie) {
       const loginUrl = new URL("/auth/login", request.url);
       // Preserve full URL including query params and hash for deep linking
       const fullPath = pathname + request.nextUrl.search + request.nextUrl.hash;
