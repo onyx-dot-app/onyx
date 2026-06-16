@@ -59,6 +59,12 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_USER_ID,
 )
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    SANDBOX_TMP_PATH,
+)
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    SANDBOX_TMPFS_OPTIONS,
+)
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
 
@@ -411,6 +417,13 @@ def test_container_kwargs_mounts_only_workspace_sessions(
         assert not source.startswith("/"), (
             f"Bind mount detected: {source}; only named volumes are allowed"
         )
+
+
+def test_container_kwargs_mounts_tmp_as_tmpfs(
+    kwargs: ContainerCreateKwargs,
+) -> None:
+    """Expose /tmp as sandbox-local scratch space without adding a host mount."""
+    assert kwargs["tmpfs"] == {SANDBOX_TMP_PATH: SANDBOX_TMPFS_OPTIONS}
 
 
 def test_container_kwargs_warns_on_internal_compose_host(

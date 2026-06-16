@@ -154,6 +154,8 @@ SANDBOX_EXEC_USER = "1000:1000"
 # Docker exec bypasses firewall-init.sh's setpriv environment workaround, so
 # sandbox-user execs must carry the uid/gid and user HOME together.
 SANDBOX_EXEC_ENV = {"HOME": "/home/sandbox", "USER": "sandbox"}
+SANDBOX_TMP_PATH = "/tmp"  # noqa: S108 - sandbox-local scratch mount.
+SANDBOX_TMPFS_OPTIONS = "rw,nosuid,nodev,size=5g,mode=1777"
 
 # Mirror the K8s constants in ``kubernetes_sandbox_manager`` (POD_READY_*),
 # which are also module-level and not env-tunable.
@@ -469,6 +471,7 @@ class _ContainerCreateKwargsRequired(TypedDict):
     ports: dict[str, tuple[str, int | None]]
     environment: dict[str, str]
     volumes: dict[str, dict[str, str]]
+    tmpfs: dict[str, str]
     mem_limit: str
     nano_cpus: int
     restart_policy: dict[str, str]
@@ -647,6 +650,7 @@ def build_container_create_kwargs(
         "ports": ports,
         "environment": env,
         "volumes": volumes,
+        "tmpfs": {SANDBOX_TMP_PATH: SANDBOX_TMPFS_OPTIONS},
         "mem_limit": memory_limit,
         "nano_cpus": int(cpu_limit * 1_000_000_000),
         "restart_policy": {"Name": "unless-stopped"},
