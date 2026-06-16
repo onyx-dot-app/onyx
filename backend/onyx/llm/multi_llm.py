@@ -55,8 +55,10 @@ from onyx.llm.well_known_providers.constants import (
 )
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
+from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_generator_function_time
 
 logger = setup_logger()
 
@@ -995,6 +997,7 @@ class LitellmLLM(LLM):
 
 
 @contextmanager
+@log_generator_function_time()
 def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
     """
     Temporarily sets the environment variables to the given values.
@@ -1002,6 +1005,15 @@ def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
     LLM call can observe them. Then cleans up the environment and releases the
     lock.
     """
+    if env_variables:
+        masked_env = {
+            key: mask_env_value_for_logging(key, value)
+            for key, value in env_variables.items()
+        }
+        logger.info(
+            "temporary_env_and_lock setting custom_config env var(s): %s",
+            masked_env,
+        )
     with _env_lock:
         logger.debug("Acquired lock in temporary_env_and_lock")
         # Store original values (None if key didn't exist)

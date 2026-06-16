@@ -95,14 +95,12 @@ def log_generator_function_time(
         def wrapped_func(*args: Any, **kwargs: Any) -> Any:
             start_time = time.monotonic()
             user = kwargs.get("user")
-            gen = func(*args, **kwargs)
             try:
-                value = next(gen)
-                while True:
-                    yield value
-                    value = next(gen)
-            except StopIteration:
-                pass
+                # `yield from` delegates send/throw/close to the inner generator,
+                # so its own finally (cleanup) runs synchronously when an exception
+                # is thrown in — making this safe to stack under @contextmanager.
+                # The parenthesized form also propagates the generator's return value.
+                return (yield from func(*args, **kwargs))
             finally:
                 elapsed_time_str = f"{time.monotonic() - start_time:.3f}"
                 log_name = func_name or func.__name__
