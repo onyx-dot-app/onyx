@@ -13,8 +13,7 @@ import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { LLMOption, buildLlmOptions } from "@/lib/languageModels/options";
-import { useCurrentAgent } from "@/lib/agents/hooks";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 
 export const MAX_MODELS = 3;
@@ -53,8 +52,7 @@ export default function MultiModelSelector({
 
   // Mirror the data source used by `ModelSelectorContent` so the selector is
   // disabled precisely when the popover would render "No models found".
-  const currentAgent = useCurrentAgent();
-  const { llmProviders, isLoading } = useLLMProviders(currentAgent?.id);
+  const { llmProviders, isLoading } = useCurrentAgentLLMProviders();
   const noModelsToSelect = useMemo(
     () => !isLoading && buildLlmOptions(llmProviders).length === 0,
     [isLoading, llmProviders]
@@ -142,6 +140,8 @@ export default function MultiModelSelector({
   };
 
   const handlePillClick = (index: number, element: HTMLElement) => {
+    // `pointer-events-none` only blocks the mouse; guard the keyboard path too.
+    if (noModelsToSelect) return;
     anchorRef.current = element;
     setReplacingIndex(index);
     setOpen(true);
@@ -170,6 +170,7 @@ export default function MultiModelSelector({
               icon={SvgPlusCircle}
               size="sm"
               onClick={(e: React.MouseEvent) => {
+                if (noModelsToSelect) return;
                 anchorRef.current = e.currentTarget as HTMLElement;
                 setReplacingIndex(null);
                 setOpen(true);
