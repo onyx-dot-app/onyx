@@ -32,11 +32,11 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.api.sessions_api import restore_session
 from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
+from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import make_sandbox
@@ -978,7 +978,7 @@ class TestRestoreSession:
 
         # Patch the import site used by ``restore_session``.
         monkeypatch.setattr(
-            "onyx.server.features.build.api.sessions_api.get_sandbox_manager",
+            "onyx.server.features.build.session.api.get_sandbox_manager",
             lambda: stub_sandbox_manager,
         )
 
@@ -1029,7 +1029,7 @@ class TestRestoreSession:
         stub_sandbox_manager.write_files_to_sandbox_silent = True
 
         monkeypatch.setattr(
-            "onyx.server.features.build.api.sessions_api.get_sandbox_manager",
+            "onyx.server.features.build.session.api.get_sandbox_manager",
             lambda: stub_sandbox_manager,
         )
 

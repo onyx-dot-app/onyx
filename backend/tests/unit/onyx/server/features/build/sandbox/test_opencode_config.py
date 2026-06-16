@@ -178,17 +178,27 @@ def test_single_provider_wrapper_back_compat() -> None:
     assert direct == wrapped
 
 
-def test_permission_block_includes_external_directory_deny_by_default() -> None:
+def test_permission_block_allows_tmp_external_directory_by_default() -> None:
     """
-    K8s + Docker run in container, so external_directory must default to deny.
-    Only ``dev_mode=True`` opens it up.
+    K8s + Docker run in container, so external_directory stays deny-by-default.
+    ``/tmp`` is the one sandbox-local exception agents need for scratch files.
+    Only ``dev_mode=True`` opens all external paths up.
     """
     config = build_multi_provider_opencode_config(
         providers=[_cfg("anthropic", "claude-opus-4-7")],
         default_provider="anthropic",
         default_model="claude-opus-4-7",
     )
-    assert config["permission"]["external_directory"] == {"*": "deny"}
+    assert config["permission"]["external_directory"] == {
+        "*": "deny",
+        "/tmp": "allow",
+        "/tmp/**": "allow",
+    }
+    assert list(config["permission"]["external_directory"].items()) == [
+        ("*", "deny"),
+        ("/tmp", "allow"),
+        ("/tmp/**", "allow"),
+    ]
 
     dev_config = build_multi_provider_opencode_config(
         providers=[_cfg("anthropic", "claude-opus-4-7")],

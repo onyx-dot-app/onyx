@@ -88,6 +88,7 @@ from onyx.db.enums import OpenSearchTenantMigrationStatus
 from onyx.db.enums import PatType
 from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
+from onyx.db.enums import PersonaSharePermission
 from onyx.db.enums import ProcessingMode
 from onyx.db.enums import SandboxStatus
 from onyx.db.enums import ScheduledTaskRunStatus
@@ -618,6 +619,14 @@ class Persona__User(Base):
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), primary_key=True, nullable=True
     )
+    permission: Mapped[PersonaSharePermission] = mapped_column(
+        Enum(PersonaSharePermission, native_enum=False),
+        nullable=False,
+        default=PersonaSharePermission.VIEWER,
+        server_default=PersonaSharePermission.VIEWER.value,
+    )
+
+    user: Mapped["User | None"] = relationship("User")
 
 
 class DocumentSet__User(Base):
@@ -3633,8 +3642,17 @@ class Persona(Base):
     __tablename__ = "persona"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # Owner user. SET NULL (not CASCADE) so deleting a user orphans shared
+    # personas instead of destroying them; the delete flow soft-deletes the
+    # private ones first.
     user_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    # Owner group (EE). Mutually exclusive with user_id — a persona is owned
+    # by exactly one user XOR one group; both NULL on a non-builtin persona
+    # means ownership rests with the admins (orphaned).
+    owner_group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_group.id", ondelete="SET NULL"), nullable=True
     )
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
@@ -3700,19 +3718,45 @@ class Persona(Base):
         back_populates="personas",
     )
     # Owner
-    user: Mapped[User | None] = relationship("User", back_populates="personas")
+    user: Mapped[User | None] = relationship(
+        "User", back_populates="personas", foreign_keys=[user_id]
+    )
+    # Owner group (EE) — distinct from `groups` (share rows)
+    owner_group: Mapped["UserGroup | None"] = relationship(
+        "UserGroup", foreign_keys=[owner_group_id]
+    )
     # Other users with access
     users: Mapped[list[User]] = relationship(
         "User",
         secondary=Persona__User.__table__,
         viewonly=True,
+        overlaps="user_shares",
+    )
+    # Share rows with permission levels (association objects)
+    user_shares: Mapped[list[Persona__User]] = relationship(
+        "Persona__User",
+        viewonly=True,
+        overlaps="users",
+    )
+    group_shares: Mapped[list["Persona__UserGroup"]] = relationship(
+        "Persona__UserGroup",
+        viewonly=True,
+        overlaps="groups",
     )
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Level granted to the whole org when is_public is True
+    public_permission: Mapped[PersonaSharePermission] = mapped_column(
+        Enum(PersonaSharePermission, native_enum=False),
+        nullable=False,
+        default=PersonaSharePermission.VIEWER,
+        server_default=PersonaSharePermission.VIEWER.value,
+    )
     groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="persona__user_group",
         viewonly=True,
+        overlaps="group_shares",
     )
     allowed_by_llm_providers: Mapped[list["LLMProvider"]] = relationship(
         "LLMProvider",
@@ -3751,6 +3795,10 @@ class Persona(Base):
             "name",
             unique=True,
             postgresql_where=(builtin_persona == True),  # noqa: E712
+        ),
+        CheckConstraint(
+            "user_id IS NULL OR owner_group_id IS NULL",
+            name="ck_persona_single_owner",
         ),
     )
 
@@ -4396,6 +4444,14 @@ class Persona__UserGroup(Base):
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
     )
+    permission: Mapped[PersonaSharePermission] = mapped_column(
+        Enum(PersonaSharePermission, native_enum=False),
+        nullable=False,
+        default=PersonaSharePermission.VIEWER,
+        server_default=PersonaSharePermission.VIEWER.value,
+    )
+
+    user_group: Mapped["UserGroup"] = relationship("UserGroup")
 
 
 class Skill__UserGroup(Base):

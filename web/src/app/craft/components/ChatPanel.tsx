@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import {
   useSession,
   useSessionId,
@@ -35,7 +35,7 @@ import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import ScheduledRunBanner, {
   useScheduledRunContext,

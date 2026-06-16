@@ -149,6 +149,7 @@ export default function ProjectContextPanel({
               : currentProjectDetails?.project?.instructions ||
                 "Add instructions to tailor the response in this project."
           }
+          descriptionMaxLines={2}
           padding="fit"
           center
           rightChildren={

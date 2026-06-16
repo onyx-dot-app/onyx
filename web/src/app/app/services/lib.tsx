@@ -200,6 +200,40 @@ export async function* sendMessage({
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
+  yield* withoutHeartbeats(handleSSEStream<PacketType>(response, signal));
+}
+
+// Drops keepalive heartbeats so stream consumers only ever see run state.
+async function* withoutHeartbeats(
+  stream: AsyncGenerator<PacketType, void, unknown>
+): AsyncGenerator<PacketType, void, unknown> {
+  for await (const packet of stream) {
+    if ("obj" in packet && packet.obj.type === "chat_heartbeat") {
+      continue;
+    }
+    yield packet;
+  }
+}
+
+// Replays an in-flight run's buffered stream from `cursor`, then tails it live.
+// 404 means there is nothing to resume — callers fall back to the persisted
+// session state. Heartbeats pass through: the consumer uses them as liveness
+// ticks to re-check session focus during quiet phases.
+export async function* resumeStream(
+  chatSessionId: string,
+  cursor: number,
+  signal?: AbortSignal
+): AsyncGenerator<PacketType, void, unknown> {
+  const response = await fetch(
+    `/api/chat/chat-session/${chatSessionId}/resume-stream?cursor=${cursor}`,
+    { signal }
+  );
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
+  }
+
   yield* handleSSEStream<PacketType>(response, signal);
 }
 

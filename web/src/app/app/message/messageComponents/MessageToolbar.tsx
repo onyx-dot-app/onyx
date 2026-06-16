@@ -2,7 +2,7 @@
 
 import React, { RefObject, useState, useCallback, useMemo } from "react";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
-import { FeedbackType } from "@/app/app/interfaces";
+import { FeedbackType, Message } from "@/app/app/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {
@@ -16,22 +16,30 @@ import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
-import { CopyButton } from "@opal/components";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
-import { parseLlmDescriptor } from "@/lib/languageModels/utils";
+import { CopyButton, OpenButton, SelectButton } from "@opal/components";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { LlmManager } from "@/lib/hooks";
-import { Message } from "@/app/app/interfaces";
-import { SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
-import { RegenerationFactory } from "./AgentMessage";
+import { RegenerationFactory } from "@/app/app/message/messageComponents/AgentMessage";
 import useFeedbackController from "@/hooks/useFeedbackController";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import FeedbackModal, {
   FeedbackModalProps,
 } from "@/sections/modals/FeedbackModal";
-import { Button, SelectButton } from "@opal/components";
-import TTSButton from "./TTSButton";
+import TTSButton from "@/app/app/message/messageComponents/TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
+import { findModelConfigId } from "@/lib/languageModels/options";
+
+interface SouurcesTagWrapperProps {
+  citations: StreamingCitation[];
+  documentMap: Map<string, OnyxDocument>;
+  nodeId: number;
+  selectedMessageForDocDisplay: number | null;
+  documentSidebarVisible: boolean;
+  updateCurrentDocumentSidebarVisible: (visible: boolean) => void;
+  updateCurrentSelectedNodeForDocDisplay: (nodeId: number | null) => void;
+}
 
 // Wrapper component for SourceTag in toolbar to handle memoization
 const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
@@ -42,15 +50,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   documentSidebarVisible,
   updateCurrentDocumentSidebarVisible,
   updateCurrentSelectedNodeForDocDisplay,
-}: {
-  citations: StreamingCitation[];
-  documentMap: Map<string, OnyxDocument>;
-  nodeId: number;
-  selectedMessageForDocDisplay: number | null;
-  documentSidebarVisible: boolean;
-  updateCurrentDocumentSidebarVisible: (visible: boolean) => void;
-  updateCurrentSelectedNodeForDocDisplay: (nodeId: number | null) => void;
-}) {
+}: SouurcesTagWrapperProps) {
   // Convert citations to SourceInfo array
   const sources = useMemo(
     () => citationsToSourceInfoArray(citations, documentMap),
@@ -297,18 +297,37 @@ export default function MessageToolbar({
               parentMessage &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
-                  <LLMPopover
-                    llmManager={llmManager}
-                    currentModelName={currentModelName}
-                    onSelect={(modelName) => {
-                      const llmDescriptor = parseLlmDescriptor(modelName);
+                  <ModelSelector
+                    value={findModelConfigId(
+                      llmManager.llmProviders,
+                      llmManager.currentLlm.provider,
+                      currentModelName ?? llmManager.currentLlm.modelName
+                    )}
+                    renderTrigger={() => {
+                      const rawName =
+                        currentModelName ?? llmManager!.currentLlm.modelName;
+                      const mc = llmManager!.llmProviders
+                        ?.flatMap((p) => p.model_configurations)
+                        .find((m) => m.name === rawName);
+                      const displayName = mc?.effectiveDisplayName ?? rawName;
+                      return (
+                        <OpenButton icon={SvgRefreshCw} foldable>
+                          {displayName}
+                        </OpenButton>
+                      );
+                    }}
+                    onChange={(opt) => {
                       const regenerator = onRegenerate({
                         messageId,
                         parentMessage,
                       });
-                      regenerator(llmDescriptor);
+                      regenerator({
+                        name: opt.name,
+                        provider: opt.provider,
+                        modelName: opt.modelName,
+                      });
                     }}
-                    foldable
+                    temperatureManager={llmManager}
                   />
                 </div>
               )}
