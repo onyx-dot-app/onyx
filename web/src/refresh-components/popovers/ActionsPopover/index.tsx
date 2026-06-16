@@ -30,7 +30,7 @@ import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { InputTypeIn } from "@opal/components";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";

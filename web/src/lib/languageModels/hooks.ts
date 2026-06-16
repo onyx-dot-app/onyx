@@ -9,8 +9,64 @@ import {
   LLMProviderName,
   LLMProviderResponse,
   LLMProviderView,
+  ModelConfiguration,
   WellKnownLLMProviderDescriptor,
 } from "@/lib/languageModels/types";
+
+// ---------------------------------------------------------------------------
+// Raw API shapes — local to this module, never exposed to consumers.
+// The enrichment step below populates `effectiveDisplayName` before anything
+// leaves this file, so consumers always receive the full `ModelConfiguration`.
+// ---------------------------------------------------------------------------
+
+type RawModelConfiguration = Omit<ModelConfiguration, "effectiveDisplayName">;
+
+type RawLLMProviderDescriptor = Omit<
+  LLMProviderDescriptor,
+  "model_configurations"
+> & {
+  model_configurations: RawModelConfiguration[];
+};
+
+type RawLLMProviderView = Omit<LLMProviderView, "model_configurations"> & {
+  model_configurations: RawModelConfiguration[];
+};
+
+type RawWellKnownLLMProviderDescriptor = Omit<
+  WellKnownLLMProviderDescriptor,
+  "known_models"
+> & { known_models: RawModelConfiguration[] };
+
+// ---------------------------------------------------------------------------
+// Enrichment — private helpers
+// ---------------------------------------------------------------------------
+
+function enrichModelConfiguration(
+  mc: RawModelConfiguration
+): ModelConfiguration {
+  return {
+    ...mc,
+    effectiveDisplayName: mc.custom_display_name || mc.display_name || mc.name,
+  };
+}
+
+function enrichDescriptors(
+  providers: RawLLMProviderDescriptor[]
+): LLMProviderDescriptor[] {
+  return providers.map((p) => ({
+    ...p,
+    model_configurations: p.model_configurations.map(enrichModelConfiguration),
+  }));
+}
+
+function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
+  return providers.map((p) => ({
+    ...p,
+    model_configurations: p.model_configurations.map(enrichModelConfiguration),
+  }));
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * Fetches configured LLM providers accessible to the current user.
@@ -25,42 +81,53 @@ import {
  * unwraps `.providers` for convenience while still exposing the defaults.
  *
  * **Endpoints:**
- * - No `personaId` → `GET /api/llm/provider`
+ * - No `agentId` → `GET /api/llm/provider`
  *   Returns all public providers plus restricted providers the user can
  *   access via group membership.
- * - With `personaId` → `GET /api/llm/persona/{personaId}/providers`
- *   Returns providers scoped to a specific persona, respecting RBAC
+ * - With `agentId` → `GET /api/llm/persona/{agentId}/providers`
+ *   Returns providers scoped to a specific agent, respecting RBAC
  *   restrictions. Use this when displaying model options for a particular
  *   assistant.
  *
- * @param personaId - Optional persona ID for RBAC-scoped providers.
+ * @param agentId - Optional agent ID for RBAC-scoped providers.
  *
  * @returns
  * - `llmProviders` — The array of provider descriptors, or `undefined`
  *    while loading.
- * - `defaultText` — The global (or persona-overridden) default text model.
- * - `defaultVision` — The global (or persona-overridden) default vision model.
+ * - `defaultText` — The global (or agent-overridden) default text model.
+ * - `defaultVision` — The global (or agent-overridden) default vision model.
  * - `isLoading` — `true` until the first successful response or error.
  * - `error` — The SWR error object, if any.
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
  */
-export function useLLMProviders(personaId?: number) {
+export function useLLMProviders(agentId?: number) {
   const url =
-    personaId !== undefined
-      ? SWR_KEYS.llmProvidersForPersona(personaId)
+    agentId !== undefined
+      ? SWR_KEYS.llmProvidersForPersona(agentId)
       : SWR_KEYS.llmProviders;
 
   // `revalidateIfStale` is intentionally left at its default (true), unlike
   // `useAdminLLMProviders` below. Admin edits call `refreshLlmProviderCaches`,
-  // but persona-scoped keys are orphaned when that runs, so `mutate` on them
+  // but agent-scoped keys are orphaned when that runs, so `mutate` on them
   // is a no-op. Mount-time revalidation picks up the edits on next nav.
   // `dedupingInterval: 60000` keeps this off the hot path.
-  const { data, error, mutate } = useSWR<
-    LLMProviderResponse<LLMProviderDescriptor>
-  >(url, errorHandlingFetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 60000,
-  });
+  const {
+    data: raw,
+    error,
+    mutate,
+  } = useSWR<LLMProviderResponse<RawLLMProviderDescriptor>>(
+    url,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 60000,
+    }
+  );
+
+  const data = useMemo(
+    () => (raw ? { ...raw, providers: enrichDescriptors(raw.providers) } : raw),
+    [raw]
+  );
 
   return {
     llmProviders: data?.providers,
@@ -68,7 +135,9 @@ export function useLLMProviders(personaId?: number) {
     defaultVision: data?.default_vision ?? null,
     isLoading: !error && !data,
     error,
-    refetch: mutate,
+    refetch: mutate as unknown as () => Promise<
+      LLMProviderResponse<LLMProviderDescriptor> | undefined
+    >,
   };
 }
 
@@ -77,7 +146,7 @@ export function useLLMProviders(personaId?: number) {
  *
  * Hits `GET /api/admin/llm/provider` which returns `LLMProviderView` —
  * the full provider object including `id`, `api_key` (masked),
- * group/persona assignments, and all other admin-visible fields.
+ * group/agent assignments, and all other admin-visible fields.
  *
  * Use this hook on admin pages (e.g. the LLM Configuration page) where
  * you need provider IDs for mutations (setting defaults, editing, deleting)
@@ -94,7 +163,11 @@ export function useLLMProviders(personaId?: number) {
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
  */
 export function useAdminLLMProviders() {
-  const { data, error, mutate } = useSWR<LLMProviderResponse<LLMProviderView>>(
+  const {
+    data: raw,
+    error,
+    mutate,
+  } = useSWR<LLMProviderResponse<RawLLMProviderView>>(
     SWR_KEYS.adminLlmProviders,
     errorHandlingFetcher,
     {
@@ -102,6 +175,11 @@ export function useAdminLLMProviders() {
       revalidateIfStale: false,
       dedupingInterval: 60000,
     }
+  );
+
+  const data = useMemo(
+    () => (raw ? { ...raw, providers: enrichViews(raw.providers) } : raw),
+    [raw]
   );
 
   return {
@@ -128,7 +206,11 @@ export function useAdminLLMProviders() {
  *   Pass `null` to suppress the request.
  */
 export function useWellKnownLLMProvider(providerName: LLMProviderName) {
-  const { data, error, isLoading } = useSWR<WellKnownLLMProviderDescriptor>(
+  const {
+    data: raw,
+    error,
+    isLoading,
+  } = useSWR<RawWellKnownLLMProviderDescriptor>(
     providerName && providerName !== LLMProviderName.CUSTOM
       ? SWR_KEYS.wellKnownLlmProvider(providerName)
       : null,
@@ -138,6 +220,17 @@ export function useWellKnownLLMProvider(providerName: LLMProviderName) {
       revalidateIfStale: false,
       dedupingInterval: 60000,
     }
+  );
+
+  const data = useMemo(
+    () =>
+      raw
+        ? {
+            ...raw,
+            known_models: raw.known_models.map(enrichModelConfiguration),
+          }
+        : raw,
+    [raw]
   );
 
   return {

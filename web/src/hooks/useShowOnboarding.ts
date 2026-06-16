@@ -12,7 +12,7 @@ import {
 import { updateUserPersonalization } from "@/lib/userSettings";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalAgent } from "@/lib/agents/types";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { useProviderStatus } from "@/components/chat/ProviderContext";
 
 function getOnboardingCompletedKey(userId: string): string {
