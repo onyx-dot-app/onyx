@@ -48,7 +48,7 @@ import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { Button as OpalButton } from "@opal/components";
 import { cn } from "@opal/utils";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { PHFeatureFlags } from "@/lib/analytics/hooks";
 import {
   shouldShowMoveModal,
   showErrorNotification,
@@ -74,7 +74,7 @@ import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { usePostHog } from "posthog-js/react";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationType } from "@/lib/notifications/interfaces";
 import { dismissNotification } from "@/lib/notifications/api";
@@ -277,7 +277,7 @@ const AppSidebar = memo(function AppSidebarInner() {
   // Gated by PostHog feature flag: if `craft-animation-disabled` is true (or
   // PostHog is unavailable), skip the auto-show entirely.
   const isCraftAnimationDisabled =
-    posthog?.isFeatureEnabled(FEATURE_FLAGS.CRAFT_ANIMATION_DISABLED) ?? true;
+    posthog?.isFeatureEnabled(PHFeatureFlags.CRAFT_ANIMATION_DISABLED) ?? true;
   const hasTenantModal = !!(newTenantInfo || invitationInfo);
   useEffect(() => {
     if (

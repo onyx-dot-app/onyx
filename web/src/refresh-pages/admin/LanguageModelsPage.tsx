@@ -31,7 +31,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
-import { NEXT_PUBLIC_LANGUAGE_MODEL_CONFIGURATION_DISABLED } from "@/lib/constants";
+import { usePHFeatureFlag, PHFeatureFlags } from "@/lib/analytics/hooks";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
 
@@ -298,6 +298,10 @@ export default function LanguageModelsPage() {
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
+  const isConfigurationDisabled = usePHFeatureFlag(
+    PHFeatureFlags.LANGUAGE_MODEL_CONFIGURATION_DISABLED,
+    false
+  );
 
   // Resolve the current default to a model_configuration_id for ModelSelector
   const defaultModelConfigId = useMemo(() => {
@@ -426,7 +430,7 @@ export default function LanguageModelsPage() {
         )}
 
         {/* ── LLM configuration disablement notice ── */}
-        {NEXT_PUBLIC_LANGUAGE_MODEL_CONFIGURATION_DISABLED && (
+        {isConfigurationDisabled && (
           <MessageCard
             title="New LLM configuration temporarily unavailable."
             description="Existing LLM providers can still be used and updated."
@@ -435,7 +439,7 @@ export default function LanguageModelsPage() {
         )}
 
         {/* ── Add Provider (always visible) ── */}
-        <Disabled disabled={NEXT_PUBLIC_LANGUAGE_MODEL_CONFIGURATION_DISABLED}>
+        <Disabled disabled={isConfigurationDisabled}>
           <GeneralLayouts.Section
             gap={0.75}
             height="fit"
