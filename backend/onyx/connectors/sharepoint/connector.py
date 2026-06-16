@@ -1852,6 +1852,20 @@ class SharepointConnector(
                 return fallback_page
             raise
 
+    def _fetch_single_site_page(self, site_id: str, page_id: str) -> dict[str, Any]:
+        """Fetch one site page by id with canvasLayout expanded.
+
+        Fetches metadata first so ``_try_expand_single_page`` has a valid
+        fallback if expansion 400s on a corrupt page. Mirrors a single iteration
+        of ``_fetch_site_pages`` for the targeted-reindex path.
+        """
+        pages_collection = f"{self.graph_api_base}/sites/{site_id}/pages"
+        site_pages_base = f"{pages_collection}/microsoft.graph.sitePage"
+        metadata = self._graph_api_get_json(
+            f"{pages_collection}/{page_id}/microsoft.graph.sitePage"
+        )
+        return self._try_expand_single_page(site_pages_base, page_id, metadata)
+
     def _acquire_token(self) -> dict[str, Any]:
         """
         Acquire token via MSAL
@@ -3283,18 +3297,8 @@ class SharepointConnector(
         )
         site = self.graph_client.sites.get_by_url(site_descriptor.url)
         site.execute_query()
-        site_id = site.id
 
-        site_pages_base = (
-            f"{self.graph_api_base}/sites/{site_id}/pages/microsoft.graph.sitePage"
-        )
-        pages_collection = site_pages_base.removesuffix("/microsoft.graph.sitePage")
-        # Fetch metadata first so _try_expand_single_page has a valid fallback if
-        # canvasLayout expansion 400s on a corrupt page.
-        metadata = self._graph_api_get_json(
-            f"{pages_collection}/{document_id}/microsoft.graph.sitePage"
-        )
-        page = self._try_expand_single_page(site_pages_base, document_id, metadata)
+        page = self._fetch_single_site_page(cast(str, site.id), document_id)
 
         yield from self._yield_site_hierarchy_node(site_descriptor, dedup)
 
