@@ -28,60 +28,59 @@ export default function CreateProjectModal({
   const route = useAppRouter();
 
   return (
-    <>
-      <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
-        <Modal.Content width="sm">
-          <Modal.Header
-            icon={SvgFolderPlus}
-            title="Create New Project"
-            description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
-            onClose={() => modal.toggle(false)}
-          />
-          <Formik
-            initialValues={{ projectName: initialProjectName ?? "" }}
-            validationSchema={validationSchema}
-            enableReinitialize
-            onSubmit={async (values, { setSubmitting }) => {
-              const name = values.projectName.trim();
-              try {
-                const newProject = await createProject(name);
-                route({ projectId: newProject.id });
-                modal.toggle(false);
-              } catch {
-                toast.error(`Failed to create the project ${name}`);
-              } finally {
-                setSubmitting(false);
-              }
-            }}
-          >
-            {({ isSubmitting, isValid }) => (
-              <Form>
-                <Modal.Body>
-                  <InputVertical title="Project Name" withLabel="projectName">
-                    <InputTypeInField
-                      name="projectName"
-                      placeholder="What are you working on?"
-                      clearButton
-                    />
-                  </InputVertical>
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button
-                    prominence="secondary"
-                    type="button"
-                    onClick={() => modal.toggle(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={isSubmitting || !isValid}>
-                    Create Project
-                  </Button>
-                </Modal.Footer>
-              </Form>
-            )}
-          </Formik>
-        </Modal.Content>
-      </Modal>
-    </>
+    <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
+      <Modal.Content width="sm">
+        <Modal.Header
+          icon={SvgFolderPlus}
+          title="Create New Project"
+          description="Use projects to organize your files and chats in one place, and add custom instructions for ongoing work."
+          onClose={() => modal.toggle(false)}
+        />
+        <Formik
+          initialValues={{ projectName: initialProjectName ?? "" }}
+          validationSchema={validationSchema}
+          validateOnMount
+          enableReinitialize
+          onSubmit={async (values, { setSubmitting }) => {
+            const name = values.projectName.trim();
+            try {
+              const newProject = await createProject(name);
+              route({ projectId: newProject.id });
+              modal.toggle(false);
+            } catch {
+              toast.error(`Failed to create the project ${name}`);
+            } finally {
+              setSubmitting(false);
+            }
+          }}
+        >
+          {({ isSubmitting, isValid }) => (
+            <Form>
+              <Modal.Body>
+                <InputVertical title="Project Name" withLabel="projectName">
+                  <InputTypeInField
+                    name="projectName"
+                    placeholder="What are you working on?"
+                    clearButton
+                  />
+                </InputVertical>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button
+                  prominence="secondary"
+                  type="button"
+                  onClick={() => modal.toggle(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting || !isValid}>
+                  Create Project
+                </Button>
+              </Modal.Footer>
+            </Form>
+          )}
+        </Formik>
+      </Modal.Content>
+    </Modal>
   );
 }
