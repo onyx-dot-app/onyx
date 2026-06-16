@@ -92,7 +92,8 @@ function Header() {
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
-  const pageWithHeaderContent = appFocus.isChat() || appFocus.isNewSession();
+  const pageWithHeaderContent =
+    appFocus.isChat() || appFocus.isNewSession() || appFocus.isAgent();
 
   const effectiveMode: AppMode =
     appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
