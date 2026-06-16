@@ -272,8 +272,8 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
 def _extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
     """Extract all text from a PDF via pypdfium2 (PDFium/C).
 
-    PDFium releases the GIL, so a large PDF can't pin a worker or stall the
-    indexing heartbeat the way pypdf's pure-Python extract_text does.
+    PDFium releases the GIL while parsing, so a large or complex PDF can't pin
+    a worker thread or stall the indexing heartbeat during text extraction.
     """
     import pypdfium2 as pdfium
 
@@ -311,7 +311,7 @@ def read_pdf_file(
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
     try:
-        # Read once: pdfium needs the bytes; pypdf reads the same buffer.
+        # Read once: the text extractor and the metadata/image reader share these bytes.
         file_bytes = file.read()
         pdf_reader = PdfReader(io.BytesIO(file_bytes))
 
@@ -349,7 +349,7 @@ def read_pdf_file(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        # pypdfium2 (not pypdf) so a large PDF can't pin the worker — see helper.
+        # GIL-releasing extraction so a large PDF can't pin the worker — see helper.
         text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
 
         if extract_images:
