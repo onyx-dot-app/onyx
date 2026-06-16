@@ -149,6 +149,7 @@ WORKSPACE_ROOT = "/workspace"
 SESSIONS_ROOT = f"{WORKSPACE_ROOT}/sessions"
 TEMPLATES_OUTPUTS_PATH = f"{WORKSPACE_ROOT}/templates/outputs"
 MANAGED_SKILLS_PATH = f"{WORKSPACE_ROOT}/managed/skills"
+SANDBOX_EXEC_USER = "1000:1000"
 
 # Mirror the K8s constants in ``kubernetes_sandbox_manager`` (POD_READY_*),
 # which are also module-level and not env-tunable.
@@ -999,7 +1000,7 @@ echo "Session workspace setup complete"
             # /workspace/sessions which is owned by sandbox=1000. Exec as
             # sandbox so the script's mkdir/cp on the session workspace succeed.
             run_in_container(
-                container, ["/bin/sh", "-c", setup_script], user="1000:1000"
+                container, ["/bin/sh", "-c", setup_script], user=SANDBOX_EXEC_USER
             )
         except ExecError as e:
             raise RuntimeError(
@@ -1033,7 +1034,11 @@ rm -rf {session_path}
 echo "Session cleanup complete"
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", cleanup_script])
+            run_in_container(
+                container,
+                ["/bin/sh", "-c", cleanup_script],
+                user=SANDBOX_EXEC_USER,
+            )
         except ExecError as e:
             logger.warning(
                 "cleanup_session_workspace exec failed for session %s: %s",
@@ -1136,7 +1141,9 @@ echo "Session cleanup complete"
             ),
         ]
 
-        stream = stream_stdout_from_container(container, tar_cmd)
+        stream = stream_stdout_from_container(
+            container, tar_cmd, user=SANDBOX_EXEC_USER
+        )
         adapter = _GeneratorReader(stream)
         try:
             # ``_GeneratorReader`` satisfies the structural ``read(n)`` API that
@@ -1178,6 +1185,7 @@ echo "Session cleanup complete"
             run_in_container(
                 container,
                 ["/bin/sh", "-c", f"mkdir -p {session_path}"],
+                user=SANDBOX_EXEC_USER,
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to prepare session dir: {e}") from e
@@ -1198,6 +1206,7 @@ echo "Session cleanup complete"
                     f"cd {session_path} && tar -xzf -",
                 ],
                 payload,
+                user=SANDBOX_EXEC_USER,
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to extract snapshot: {e}") from e
@@ -1222,7 +1231,11 @@ if [ -f "$web_dir/bun.lock" ]; then
 fi
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", install_script])
+            run_in_container(
+                container,
+                ["/bin/sh", "-c", install_script],
+                user=SANDBOX_EXEC_USER,
+            )
         except ExecError as e:
             raise RuntimeError(f"Failed to reinstall deps after restore: {e}") from e
 
@@ -1239,7 +1252,11 @@ fi
                 session_path, nextjs_port, check_node_modules=True
             )
             try:
-                run_in_container(container, ["/bin/sh", "-c", start_script])
+                run_in_container(
+                    container,
+                    ["/bin/sh", "-c", start_script],
+                    user=SANDBOX_EXEC_USER,
+                )
             except ExecError as e:
                 raise RuntimeError(f"Failed to start Next.js after restore: {e}") from e
 
@@ -1269,7 +1286,11 @@ ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", script])
+            run_in_container(
+                container,
+                ["/bin/sh", "-c", script],
+                user=SANDBOX_EXEC_USER,
+            )
         except ExecError as e:
             raise RuntimeError(f"Failed to regenerate session config: {e}") from e
 
@@ -1449,7 +1470,10 @@ echo "$base"
 """
         try:
             result = stream_stdin_to_container(
-                container, ["/bin/sh", "-c", script], tar_data
+                container,
+                ["/bin/sh", "-c", script],
+                tar_data,
+                user=SANDBOX_EXEC_USER,
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to upload file: {e}") from e
@@ -1498,7 +1522,12 @@ else
 fi
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", script], check=False)
+            run_in_container(
+                container,
+                ["/bin/sh", "-c", script],
+                check=False,
+                user=SANDBOX_EXEC_USER,
+            )
         except ExecError as e:
             logger.warning("AGENTS.md attachments section update failed: %s", e)
 
@@ -1521,6 +1550,7 @@ fi
                     f'[ -f "{target}" ] && rm "{target}" && echo "DELETED" || echo "NOT_FOUND"',
                 ],
                 check=False,
+                user=SANDBOX_EXEC_USER,
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to delete file: {e}") from e
@@ -1550,7 +1580,11 @@ mkdir -p {safe_dir}
 printf '%s' '{escaped}' > {safe_path}
 echo WRITE_OK"""
         try:
-            result = run_in_container(container, ["/bin/sh", "-c", script])
+            result = run_in_container(
+                container,
+                ["/bin/sh", "-c", script],
+                user=SANDBOX_EXEC_USER,
+            )
         except ExecError as e:
             raise RuntimeError(f"Failed to write sandbox file {path}: {e}") from e
         if "WRITE_OK" not in result.stdout_text:
@@ -1644,7 +1678,12 @@ echo WRITE_OK"""
             f"trap - EXIT\n"
         )
         try:
-            stream_stdin_to_container(container, ["/bin/sh", "-c", script], tar_bytes)
+            stream_stdin_to_container(
+                container,
+                ["/bin/sh", "-c", script],
+                tar_bytes,
+                user=SANDBOX_EXEC_USER,
+            )
         except ExecError as e:
             raise RuntimeError(f"write_files_to_sandbox failed: {e}") from e
 
