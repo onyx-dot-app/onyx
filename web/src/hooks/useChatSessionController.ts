@@ -6,7 +6,9 @@ import {
   nameChatSession,
   processRawChatHistory,
   patchMessageToBeLatest,
+  resumeStream,
 } from "@/app/app/services/lib";
+import { Packet } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
   setMessageAsLatest,
@@ -14,6 +16,7 @@ import {
 import {
   BackendChatSession,
   ChatSessionSharedStatus,
+  Message,
 } from "@/app/app/interfaces";
 import {
   SEARCH_PARAM_NAMES,
@@ -30,6 +33,10 @@ import { ProjectFile } from "@/app/app/projects/projectsService";
 import { getSessionProjectTokenCount } from "@/app/app/projects/projectsService";
 import { getProjectFilesForSession } from "@/app/app/projects/projectsService";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
+
+// Runs currently being re-attached; module-level so effect re-runs (incl.
+// strict mode) can't start a second tail for the same run.
+const resumingRuns = new Set<number>();
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -262,6 +269,122 @@ export default function useChatSessionController({
       }
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
+
+      // Re-attach to an in-flight run: replay its buffered stream and tail it
+      // live instead of leaving a stale placeholder. Single-model only — a
+      // multi-model run_id is the user message, not an assistant node, so it
+      // fails the node-type check and keeps the refresh-after-completion
+      // behavior.
+      async function resumeInFlightRun(
+        sessionId: string,
+        runId: number,
+        messageMap: Map<number, Message>
+      ) {
+        const node = messageMap.get(runId);
+        if (!node || resumingRuns.has(runId)) {
+          return;
+        }
+        // Added and deleted in this function only, so an entry can never
+        // outlive its tail.
+        resumingRuns.add(runId);
+        // The reserved row's placeholder text would render above the live
+        // timeline.
+        node.message = "";
+        const accumulated: Packet[] = [];
+        let lastFlush = 0;
+        let trailingFlush: ReturnType<typeof setTimeout> | null = null;
+        // updateSessionAndMessageTree re-points currentSessionId at this
+        // session; once the user navigates elsewhere, any further store write
+        // from this tail would hijack their new session's sends.
+        const stillCurrent = () =>
+          useChatSessionStore.getState().currentSessionId === sessionId;
+        const flush = () => {
+          if (!stillCurrent()) {
+            return;
+          }
+          node.packets = [...accumulated];
+          // AgentMessage's memo compares packetCount, not the packets array.
+          node.packetCount = accumulated.length;
+          updateSessionAndMessageTree(sessionId, new Map(messageMap));
+        };
+        // handleSSEStream only releases the connection via this signal —
+        // bailing out of the loop alone leaves the SSE response open.
+        const abortController = new AbortController();
+        try {
+          for await (const rawPacket of resumeStream(
+            sessionId,
+            0,
+            abortController.signal
+          )) {
+            if (!stillCurrent()) {
+              return;
+            }
+            if (!Object.hasOwn(rawPacket, "obj")) {
+              continue;
+            }
+            const packet = rawPacket as Packet;
+            // Heartbeats are liveness ticks for the stillCurrent check above,
+            // not run state — never render them.
+            if (packet.obj.type === "chat_heartbeat") {
+              continue;
+            }
+            accumulated.push(packet);
+            const now = Date.now();
+            if (now - lastFlush >= 100) {
+              lastFlush = now;
+              flush();
+            } else if (trailingFlush === null) {
+              // A burst's last packets would otherwise wait for the NEXT
+              // packet to render — during quiet phases that's minutes.
+              trailingFlush = setTimeout(() => {
+                trailingFlush = null;
+                lastFlush = Date.now();
+                flush();
+              }, 120);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to resume in-flight run", { runId, error });
+        } finally {
+          abortController.abort();
+          if (trailingFlush !== null) {
+            clearTimeout(trailingFlush);
+          }
+          resumingRuns.delete(runId);
+          if (stillCurrent()) {
+            flush();
+            // Settle final state (message text, citations, documents) from
+            // the persisted session.
+            try {
+              const settledResponse = await fetch(
+                `/api/chat/get-chat-session/${sessionId}`
+              );
+              if (settledResponse.ok && stillCurrent()) {
+                const settled =
+                  (await settledResponse.json()) as BackendChatSession;
+                updateSessionAndMessageTree(
+                  sessionId,
+                  processRawChatHistory(settled.messages, settled.packets)
+                );
+              }
+            } catch (error) {
+              console.error("Post-resume session refresh failed", { error });
+            }
+          }
+        }
+      }
+
+      const currentRun = chatSession.current_run;
+      if (
+        currentRun &&
+        newMessageMap.get(currentRun.run_id)?.type === "assistant"
+      ) {
+        void resumeInFlightRun(
+          chatSession.chat_session_id,
+          currentRun.run_id,
+          newMessageMap
+        );
+      }
 
       // Fetch token count for this chat session's project (if any)
       try {
