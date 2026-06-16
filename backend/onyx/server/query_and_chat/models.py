@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import Field
 from pydantic import model_validator
 
 from onyx.configs.constants import DocumentSource
@@ -262,6 +263,25 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
+
+
+class AvailableChatModel(BaseModel):
+    provider_id: int
+    provider_name: str | None
+    provider_type: str
+    provider_display_name: str
+    model_configuration_id: int | None
+    model_id: str
+    display_name: str
+    supports_image_input: bool
+    supports_reasoning: bool
+    roles: list[str] = Field(default_factory=list)
+    is_default: bool = False
+    is_selected: bool = False
+
+
+class AvailableChatModelsResponse(BaseModel):
+    models: list[AvailableChatModel]
 
 
 class AdminSearchRequest(BaseModel):

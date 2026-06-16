@@ -18,6 +18,7 @@ from onyx.access.access import user_can_access_chat_file
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
+from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_chat_accessible_user
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import is_chat_session_processing
@@ -54,10 +55,17 @@ from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import LLMModelFlowType
 from onyx.db.enums import Permission
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import remove_chat_message_feedback
+from onyx.db.llm import can_user_access_llm_provider
+from onyx.db.llm import fetch_default_llm_model
+from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.llm import fetch_user_group_ids
 from onyx.db.models import ChatSessionSharedStatus
+from onyx.db.models import LLMProvider as LLMProviderModel
+from onyx.db.models import ModelConfiguration
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
@@ -71,9 +79,12 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import get_default_llm
 from onyx.llm.factory import get_llm_for_persona
 from onyx.llm.factory import get_llm_token_counter
+from onyx.llm.well_known_providers.llm_provider_options import get_provider_display_name
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
+from onyx.server.query_and_chat.models import AvailableChatModel
+from onyx.server.query_and_chat.models import AvailableChatModelsResponse
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -109,6 +120,96 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 router = APIRouter(prefix="/chat")
+
+
+def _model_display_name(model_config: ModelConfiguration) -> str:
+    return (
+        model_config.custom_display_name
+        or model_config.display_name
+        or model_config.name
+    )
+
+
+def _model_roles(model_name: str) -> list[str]:
+    from onyx.db.glomi_model_catalog import GLOMI_PLATFORM_MODELS
+
+    for model in GLOMI_PLATFORM_MODELS:
+        if model.model_name == model_name:
+            return list(model.roles)
+    return []
+
+
+def _model_supports_flow(
+    model_config: ModelConfiguration,
+    flow_type: LLMModelFlowType,
+) -> bool:
+    return flow_type in getattr(model_config, "llm_model_flow_types", [])
+
+
+def _model_supports_image_input(model_config: ModelConfiguration) -> bool:
+    return bool(model_config.supports_image_input) or _model_supports_flow(
+        model_config, LLMModelFlowType.VISION
+    )
+
+
+def _model_supports_reasoning(model_config: ModelConfiguration) -> bool:
+    return _model_supports_flow(model_config, LLMModelFlowType.REASONING)
+
+
+def _model_descriptor(
+    provider_name: str | None,
+    provider_type: str,
+    model_name: str,
+) -> str:
+    return f"{provider_name or ''}__{provider_type}__{model_name}"
+
+
+def build_available_chat_models_response(
+    providers: list[LLMProviderModel],
+    default_model: ModelConfiguration | None,
+    user: User,
+) -> AvailableChatModelsResponse:
+    selected_descriptor = getattr(user, "default_model", None)
+    models: list[AvailableChatModel] = []
+
+    for provider in providers:
+        provider_display_name = get_provider_display_name(provider.provider)
+        for model_config in provider.model_configurations:
+            if not model_config.is_visible:
+                continue
+
+            is_default = (
+                default_model is not None
+                and default_model.llm_provider_id == provider.id
+                and default_model.name == model_config.name
+            )
+            descriptor = _model_descriptor(
+                provider.name,
+                provider.provider,
+                model_config.name,
+            )
+            models.append(
+                AvailableChatModel(
+                    provider_id=provider.id,
+                    provider_name=provider.name,
+                    provider_type=provider.provider,
+                    provider_display_name=provider_display_name,
+                    model_configuration_id=model_config.id,
+                    model_id=model_config.name,
+                    display_name=_model_display_name(model_config),
+                    supports_image_input=_model_supports_image_input(model_config),
+                    supports_reasoning=_model_supports_reasoning(model_config),
+                    roles=_model_roles(model_config.name),
+                    is_default=is_default,
+                    is_selected=(
+                        selected_descriptor == descriptor
+                        if selected_descriptor
+                        else is_default
+                    ),
+                )
+            )
+
+    return AvailableChatModelsResponse(models=models)
 
 
 def _get_available_tokens_for_persona(
@@ -147,6 +248,34 @@ def _get_available_tokens_for_persona(
         model_max_input_tokens=llm.config.max_input_tokens,
         system_and_agent_prompt_tokens=combined_prompt_tokens,
         num_tools=len(persona.tools),
+    )
+
+
+@router.get("/available-models")
+def get_available_chat_models(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> AvailableChatModelsResponse:
+    is_admin = user.role == UserRole.ADMIN
+    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+    providers = fetch_existing_llm_providers(
+        db_session=db_session,
+        flow_type_filter=[LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
+    )
+    accessible_providers = [
+        provider
+        for provider in providers
+        if can_user_access_llm_provider(
+            provider,
+            user_group_ids,
+            persona=None,
+            is_admin=is_admin,
+        )
+    ]
+    return build_available_chat_models_response(
+        providers=accessible_providers,
+        default_model=fetch_default_llm_model(db_session),
+        user=user,
     )
 
 
