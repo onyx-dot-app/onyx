@@ -19,6 +19,7 @@ from sendgrid.helpers.mail import FileType
 from sendgrid.helpers.mail import Mail
 from sendgrid.helpers.mail import To
 
+from onyx.configs.app_configs import EMAIL_ARCHIVE_BCC_ADDRESSES
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import EMAIL_FROM
 from onyx.configs.app_configs import SENDGRID_API_KEY
@@ -203,6 +204,21 @@ def send_email(
     )
 
 
+def _get_archive_bcc_addresses(user_email: str) -> tuple[str, ...]:
+    seen_addresses = {user_email.casefold()}
+    archive_bcc_addresses: list[str] = []
+
+    for bcc_address in EMAIL_ARCHIVE_BCC_ADDRESSES:
+        normalized_bcc_address = bcc_address.casefold()
+        if normalized_bcc_address in seen_addresses:
+            continue
+
+        seen_addresses.add(normalized_bcc_address)
+        archive_bcc_addresses.append(bcc_address)
+
+    return tuple(archive_bcc_addresses)
+
+
 def send_email_with_sendgrid(
     user_email: str,
     subject: str,
@@ -220,6 +236,9 @@ def send_email_with_sendgrid(
         subject=subject,
         plain_text_content=Content("text/plain", text_body),
     )
+
+    for bcc_address in _get_archive_bcc_addresses(user_email):
+        mail.add_bcc(bcc_address)
 
     # Add HTML content
     mail.add_content(Content("text/html", html_body))
@@ -259,6 +278,7 @@ def send_email_with_smtplib(
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["To"] = user_email
+    archive_bcc_addresses = _get_archive_bcc_addresses(user_email)
     if not mail_from:
         raise ValueError("EMAIL_FROM must be set when SMTP_USER is not provided")
     msg["From"] = mail_from
@@ -295,7 +315,7 @@ def send_email_with_smtplib(
             s.starttls()
         if SMTP_USER and SMTP_PASS:
             s.login(SMTP_USER, SMTP_PASS)
-        s.send_message(msg)
+        s.send_message(msg, to_addrs=[user_email, *archive_bcc_addresses])
 
 
 def send_subscription_cancellation_email(user_email: str) -> None:

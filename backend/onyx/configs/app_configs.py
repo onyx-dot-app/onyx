@@ -306,6 +306,11 @@ SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "true").lower() not in (
     "no",
 )
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
+EMAIL_ARCHIVE_BCC_ADDRESSES = tuple(
+    email_address.strip()
+    for email_address in os.environ.get("EMAIL_ARCHIVE_BCC_ADDRESSES", "").split(",")
+    if email_address.strip()
+)
 
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
 EMAIL_CONFIGURED = (bool(SMTP_SERVER) and bool(EMAIL_FROM)) or bool(SENDGRID_API_KEY)
