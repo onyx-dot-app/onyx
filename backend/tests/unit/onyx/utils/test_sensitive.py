@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.sensitive import SensitiveAccessError
 from onyx.utils.sensitive import SensitiveValue
 
@@ -240,3 +241,53 @@ class TestSensitiveValueCaching:
         # Masked access should also use cached value
         sensitive.get_value(apply_mask=True)
         assert decrypt_count[0] == 1
+
+
+class TestMaskEnvValueForLogging:
+    """Sanity tests for the env-var log-masking allowlist.
+
+    URL sanitization is exercised through this public entry point (with an
+    allowlisted base-URL key) rather than the private `_sanitize_url_for_logging`.
+    """
+
+    def test_non_allowlisted_key_is_masked(self) -> None:
+        assert mask_env_value_for_logging("OPENAI_API_KEY", "sk-verysecretvalue") != (
+            "sk-verysecretvalue"
+        )
+
+    def test_exact_allowlisted_key_readable(self) -> None:
+        assert mask_env_value_for_logging("AWS_REGION", "us-east-1") == "us-east-1"
+
+    def test_api_base_suffix_readable(self) -> None:
+        # Provider-specific base URLs matched by suffix, e.g. OLLAMA_API_BASE.
+        assert (
+            mask_env_value_for_logging("OLLAMA_API_BASE", "http://localhost:11434")
+            == "http://localhost:11434"
+        )
+
+    def test_base_url_suffix_readable(self) -> None:
+        assert (
+            mask_env_value_for_logging(
+                "ANTHROPIC_BASE_URL", "https://api.anthropic.com"
+            )
+            == "https://api.anthropic.com"
+        )
+
+    def test_lowercase_key_still_matches_suffix(self) -> None:
+        assert (
+            mask_env_value_for_logging("ollama_api_base", "http://localhost:11434")
+            == "http://localhost:11434"
+        )
+
+    def test_allowlisted_url_with_userinfo_is_sanitized(self) -> None:
+        result = mask_env_value_for_logging(
+            "OPENAI_BASE_URL", "https://user:pass@proxy.internal/v1"
+        )
+        assert "user" not in result
+        assert "pass" not in result
+
+    def test_allowlisted_url_with_password_only_userinfo_is_sanitized(self) -> None:
+        result = mask_env_value_for_logging(
+            "OPENAI_BASE_URL", "https://:secret@host.com"
+        )
+        assert "secret" not in result

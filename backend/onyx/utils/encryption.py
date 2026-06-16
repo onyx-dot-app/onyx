@@ -48,15 +48,23 @@ def mask_string(sensitive_str: str) -> str:
 
 # Exact env-var keys whose values are non-sensitive and worth seeing in logs
 _UNMASKED_ENV_KEYS = {
-    "ANTHROPIC_BASE_URL",
-    "ANTHROPIC_API_BASE",
-    "OPENAI_BASE_URL",
-    "OPENAI_API_BASE",
-    "AZURE_API_BASE",
     "AWS_REGION",
     "AWS_REGION_NAME",
     "VERTEX_LOCATION",
 }
+
+# Key suffixes for provider base URLs (e.g. ANTHROPIC_BASE_URL, OLLAMA_API_BASE).
+# Every provider tends to have its own <PROVIDER>_API_BASE / <PROVIDER>_BASE_URL,
+# so match by suffix rather than enumerating each one.
+_UNMASKED_ENV_KEY_SUFFIXES = (
+    "_API_BASE",
+    "_BASE_URL",
+)
+
+
+def _is_unmasked_env_key(key: str) -> bool:
+    upper = key.upper()
+    return upper in _UNMASKED_ENV_KEYS or upper.endswith(_UNMASKED_ENV_KEY_SUFFIXES)
 
 
 def _sanitize_url_for_logging(value: str) -> str:
@@ -81,12 +89,13 @@ def _sanitize_url_for_logging(value: str) -> str:
 def mask_env_value_for_logging(key: str, value: str) -> str:
     """Mask env values, leaving only explicitly-allowlisted keys readable.
 
-    Allowlisted keys (e.g. provider base URLs / regions) are logged so overrides
-    like ANTHROPIC_BASE_URL are visible; if such a value is a URL we still strip
-    any embedded userinfo defensively. Every other key is masked, regardless of
-    what its value looks like.
+    Allowlisted keys (provider base URLs via the _API_BASE / _BASE_URL suffixes,
+    plus a few exact keys like AWS_REGION) are logged so overrides like
+    ANTHROPIC_BASE_URL or OLLAMA_API_BASE are visible; if such a value is a URL we
+    still strip any embedded userinfo defensively. Every other key is masked,
+    regardless of what its value looks like.
     """
-    if key.upper() not in _UNMASKED_ENV_KEYS:
+    if not _is_unmasked_env_key(key):
         return mask_string(value)
     if value.lower().startswith(("http://", "https://")):
         return _sanitize_url_for_logging(value)
