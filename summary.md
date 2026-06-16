@@ -2,6 +2,15 @@
 
 ## 2026-06-16
 
+- 实施 Phase A 模型目录与刷新恢复：平台模型目录 seed GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2，并把图片/深思/研究/代码等能力由后端 `/api/chat/available-models` 返回给前端模型选择器。
+- 图片上传能力改为信任后端 `supports_image_input`：GPT-5.5 / Qwen3.7 Plus 可作为视觉主力模型，DeepSeek V4 Pro / GLM-5.2 暂不支持图片时前端给中文提示，不再只靠前端硬编码判断。
+- 回答形态策略落地到普通 chat prompt：明确 direct_answer / focused_brief / deep_report，默认研究型普通回答走 focused_brief，避免把“搜索更深”误解成“回答更长”。
+- 新增轻量 `chat_run` / `chat_run_event` 持久化：流式回答创建 run，逐 packet 落库，完成/失败/取消时标记状态；`get-chat-session` 返回 `active_run`，`/api/chat/resume-chat-run` 可按 run_id 回放已存事件。
+- 前端会话加载接入 active run replay：F5 后若后端返回 running run，前端会请求 resume、把已落库 packet 合并回 assistant message，并保持 streaming 状态直到看到 stop/error；本期是 Phase A 事件重放，实时追尾后续可再抽共用 packet handler 或加 Redis/pubsub。
+- 经验与坑：后端 run 只能在 `build_chat_turn` 创建好 user/assistant message 后创建，因此最早的 session/message id metadata packet 不进入 run_event；恢复依赖 `active_run.assistant_message_id` 定位消息。前端 `BackendMessage` 也有 `error` 字段，不能用 `"error" in packet` 粗略判断 StreamingError，已补 `isStreamingErrorPart` type guard。
+- 验证记录：后端 focused tests `.venv\Scripts\python.exe -m pytest backend\tests\unit\onyx\db\test_glomi_model_catalog.py backend\tests\unit\onyx\db\test_chat_run.py backend\tests\unit\onyx\prompts backend\tests\unit\onyx\server\query_and_chat backend\tests\unit\onyx\chat\test_resumable_chat_run.py -xv` 通过 `36 passed`；后端 ruff 通过；前端 `npm test -- chatAvailableModels.test.ts resumeChatRun.test.ts` 通过 `2 passed / 3 tests`；`npm run types:check` 通过；`npm run lint` 通过。
+- 手工验证记录：启动 `web` 的 Next dev server 后 `http://localhost:3000` 返回 200，Playwright 打开页面标题为 `Glomi AI`；页面显示“后端仍在启动”提示，因此本轮未完成登录、模型选择、图片粘贴和真实 F5 恢复的端到端手工流程。
+
 - 新增总设计文档 `docs/superpowers/specs/2026-06-16-resumable-runs-model-strategy-answer-policy-design.md`，把 5 个产品/架构问题合并为 Phase A 设计：聊天运行态刷新恢复、模型角色与厂商能力画像、回答长度自适应、图片/文档输入能力、平台多模型目录与前端模型选择器。
 - 刷新恢复决策：第一阶段不直接建设完整超级智能体 Task/Run DAG，而是在现有 chat streaming 外加轻量 `chat_run` / `chat_run_event` 层；F5 后可通过 `run_id + event_seq` replay 已有 packet 并继续订阅后续流式进度。
 - 模型策略决策：不把 `low / medium / high` reasoning 暴露给用户，也不把它当跨厂商通用语义；内部使用 Glomi 模型角色（fast / balanced / reasoning / research / vision / coding）和 provider capability profile，再由后端按 OpenAI、DeepSeek、Qwen、GLM 的实际能力映射。
