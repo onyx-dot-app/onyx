@@ -298,9 +298,9 @@ export default function LanguageModelsPage() {
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
-  const isConfigurationDisabled = usePHFeatureFlag(
-    PHFeatureFlags.LANGUAGE_MODEL_CONFIGURATION_DISABLED,
-    false
+  const isConfigurationDisabled = !usePHFeatureFlag(
+    PHFeatureFlags.LANGUAGE_MODEL_CONFIGURATION_ENABLED,
+    true
   );
 
   // Resolve the current default to a model_configuration_id for ModelSelector

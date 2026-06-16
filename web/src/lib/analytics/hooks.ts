@@ -30,9 +30,8 @@ import { IS_DEV } from "@/lib/constants";
 export const PHFeatureFlags = {
   /** Disables the Onyx Craft (Build Mode) sidebar intro animation. */
   CRAFT_ANIMATION_DISABLED: "craft-animation-disabled",
-  /** Disables adding or modifying LLM providers on the admin Language Models page. */
-  LANGUAGE_MODEL_CONFIGURATION_DISABLED:
-    "language-model-configuration-disabled",
+  /** Enables adding or modifying LLM providers on the admin Language Models page. */
+  LANGUAGE_MODEL_CONFIGURATION_ENABLED: "language-model-configuration-enabled",
 } as const;
 
 export type FeatureFlagKey =
