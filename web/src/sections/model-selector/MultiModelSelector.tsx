@@ -4,8 +4,11 @@ import { useState, useMemo, useRef } from "react";
 import { getModelIcon } from "@/lib/languageModels";
 import { Button, SelectButton, Popover, Divider } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
+import { cn } from "@opal/utils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
-import { LLMOption } from "@/lib/languageModels/options";
+import { LLMOption, buildLlmOptions } from "@/lib/languageModels/options";
+import { useCurrentAgent } from "@/lib/agents/hooks";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 
 export const MAX_MODELS = 3;
@@ -41,6 +44,15 @@ export default function MultiModelSelector({
   const settings = useSettingsContext();
   const multiModelAllowed =
     settings?.settings?.multi_model_chat_enabled ?? true;
+
+  // Mirror the data source used by `ModelSelectorContent` so the selector is
+  // disabled precisely when the popover would render "No models found".
+  const currentAgent = useCurrentAgent();
+  const { llmProviders, isLoading } = useLLMProviders(currentAgent?.id);
+  const noModelsToSelect = useMemo(
+    () => !isLoading && buildLlmOptions(llmProviders).length === 0,
+    [isLoading, llmProviders]
+  );
 
   const isMultiModel = selectedModels.length > 1;
   const atMax = selectedModels.length >= MAX_MODELS || !multiModelAllowed;
@@ -109,6 +121,7 @@ export default function MultiModelSelector({
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen && noModelsToSelect) return;
     setOpen(nextOpen);
     if (!nextOpen) setReplacingIndex(null);
   };
@@ -123,7 +136,11 @@ export default function MultiModelSelector({
     <Popover open={open} onOpenChange={handleOpenChange}>
       <div
         data-testid="model-selector"
-        className="flex items-center justify-end gap-1 p-1"
+        aria-disabled={noModelsToSelect || undefined}
+        className={cn(
+          "flex items-center justify-end gap-1 p-1",
+          noModelsToSelect && "pointer-events-none opacity-50"
+        )}
       >
         {!atMax && (
           <Button
