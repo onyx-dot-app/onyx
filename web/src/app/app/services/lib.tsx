@@ -24,7 +24,7 @@ import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { WEB_SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
-import { Packet } from "./streamingModels";
+import { Packet, PacketType as StreamingPacketType } from "./streamingModels";
 
 export async function updateLlmOverrideForChatSession(
   chatSessionId: string,
@@ -192,6 +192,35 @@ export async function* sendMessage({
       "Content-Type": "application/json",
     },
     body,
+    signal,
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
+  }
+
+  yield* handleSSEStream<PacketType>(response, signal);
+}
+
+export async function* resumeChatRun({
+  runId,
+  afterSeq,
+  signal,
+}: {
+  runId: string;
+  afterSeq?: number | null;
+  signal: AbortSignal;
+}): AsyncGenerator<PacketType, void, unknown> {
+  const response = await fetch("/api/chat/resume-chat-run", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      run_id: runId,
+      after_seq: afterSeq ?? null,
+    }),
     signal,
   });
 
@@ -415,6 +444,71 @@ export function processRawChatHistory(
   });
 
   return messages;
+}
+
+const LOADING_PLACEHOLDER = "Message is loading... Please refresh the page soon.";
+
+export function isStreamingErrorPart(
+  streamPart: PacketType
+): streamPart is StreamingError {
+  return (
+    "error" in streamPart &&
+    !("message_id" in streamPart) &&
+    typeof streamPart.error === "string"
+  );
+}
+
+export function applyResumedPacketsToMessageTree(
+  messageTree: Map<number, Message>,
+  assistantMessageId: number,
+  streamParts: PacketType[]
+): Map<number, Message> {
+  const targetEntry = Array.from(messageTree.entries()).find(
+    ([nodeId, message]) =>
+      message.messageId === assistantMessageId || nodeId === assistantMessageId
+  );
+  if (!targetEntry) {
+    return messageTree;
+  }
+
+  const [nodeId, currentMessage] = targetEntry;
+  const updatedTree = new Map(messageTree);
+  const resumedPackets = [...currentMessage.packets];
+  let resumedText =
+    currentMessage.message === LOADING_PLACEHOLDER ? "" : currentMessage.message;
+  let error: StreamingError | null = null;
+  let sawStopPacket = false;
+
+  for (const streamPart of streamParts) {
+    if ("obj" in streamPart) {
+      resumedPackets.push(streamPart);
+      if (
+        streamPart.obj.type === StreamingPacketType.MESSAGE_DELTA &&
+        "content" in streamPart.obj
+      ) {
+        resumedText += streamPart.obj.content;
+      } else if (streamPart.obj.type === StreamingPacketType.STOP) {
+        sawStopPacket = true;
+      }
+    } else if (isStreamingErrorPart(streamPart)) {
+      error = streamPart;
+    }
+  }
+
+  updatedTree.set(nodeId, {
+    ...currentMessage,
+    message: error?.error ?? resumedText,
+    type: error ? "error" : currentMessage.type,
+    stackTrace: error?.stack_trace ?? currentMessage.stackTrace,
+    errorCode: error?.error_code ?? currentMessage.errorCode,
+    isRetryable: error?.is_retryable ?? currentMessage.isRetryable,
+    errorDetails: error?.details ?? currentMessage.errorDetails,
+    is_generating: error ? false : !sawStopPacket,
+    packets: resumedPackets,
+    packetCount: resumedPackets.length,
+  });
+
+  return updatedTree;
 }
 
 export function personaIncludesRetrieval(selectedPersona: MinimalAgent) {

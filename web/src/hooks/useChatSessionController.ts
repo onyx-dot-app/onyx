@@ -3,9 +3,13 @@
 import { useEffect, useCallback, useState } from "react";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import {
+  applyResumedPacketsToMessageTree,
+  isStreamingErrorPart,
   nameChatSession,
+  PacketType,
   processRawChatHistory,
   patchMessageToBeLatest,
+  resumeChatRun,
 } from "@/app/app/services/lib";
 import {
   getLatestMessageChain,
@@ -99,6 +103,10 @@ export default function useChatSessionController({
   );
   const setCurrentSession = useChatSessionStore(
     (state) => state.setCurrentSession
+  );
+  const updateChatState = useChatSessionStore((state) => state.updateChatState);
+  const setAbortController = useChatSessionStore(
+    (state) => state.setAbortController
   );
   const initializeSession = useChatSessionStore(
     (state) => state.initializeSession
@@ -240,6 +248,57 @@ export default function useChatSessionController({
       );
       const newMessageHistory = getLatestMessageChain(newMessageMap);
 
+      async function resumeActiveRunIfNeeded() {
+        const activeRun = chatSession.active_run;
+        if (activeRun?.status !== "running") {
+          return;
+        }
+
+        const controller = new AbortController();
+        const resumedParts: PacketType[] = [];
+        let sawTerminalPart = false;
+        setAbortController(chatSession.chat_session_id, controller);
+        updateChatState(chatSession.chat_session_id, "streaming");
+
+        try {
+          for await (const streamPart of resumeChatRun({
+            runId: activeRun.run_id,
+            afterSeq: null,
+            signal: controller.signal,
+          })) {
+            resumedParts.push(streamPart);
+            if (
+              isStreamingErrorPart(streamPart) ||
+              ("obj" in streamPart && streamPart.obj.type === "stop")
+            ) {
+              sawTerminalPart = true;
+            }
+
+            const resumedTree = applyResumedPacketsToMessageTree(
+              newMessageMap,
+              activeRun.assistant_message_id,
+              resumedParts
+            );
+            updateSessionMessageTree(chatSession.chat_session_id, resumedTree);
+          }
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            console.error("Failed to resume active chat run", {
+              chatSessionId: chatSession.chat_session_id,
+              runId: activeRun.run_id,
+              error,
+            });
+            updateChatState(chatSession.chat_session_id, "input");
+          }
+          return;
+        }
+
+        updateChatState(
+          chatSession.chat_session_id,
+          sawTerminalPart ? "input" : "streaming"
+        );
+      }
+
       // Update message history except for edge where where
       // last message is an error and we're on a new chat.
       // This corresponds to a "renaming" of chat, which occurs after first message
@@ -262,6 +321,7 @@ export default function useChatSessionController({
       }
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
+      void resumeActiveRunIfNeeded();
 
       // Fetch token count for this chat session's project (if any)
       try {

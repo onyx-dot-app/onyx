@@ -207,6 +207,14 @@ export interface BackendChatSession {
 
   owner_name: string | null;
   packets: Packet[][];
+  active_run?: ActiveChatRun | null;
+}
+
+export interface ActiveChatRun {
+  run_id: string;
+  assistant_message_id: number;
+  status: string;
+  latest_seq: number | null;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {
