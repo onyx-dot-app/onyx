@@ -79,7 +79,7 @@ class MCPConnectionData(TypedDict):
     # with SQLAlchemy
     client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
     tokens: NotRequired[dict[str, Any]]  # OAuthToken
-    metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
+    metadata: NotRequired[dict[str, Any]]  # Discovered MCP OAuth metadata
 
     # the actual models are defined in mcp.shared.auth
     # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken

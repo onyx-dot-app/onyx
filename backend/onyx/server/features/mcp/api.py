@@ -9,6 +9,7 @@ from secrets import token_urlsafe
 from typing import Literal
 from urllib.parse import urlparse
 
+import httpx
 import requests
 from fastapi import APIRouter
 from fastapi import Depends
@@ -18,7 +19,9 @@ from mcp.client.auth import OAuthClientProvider
 from mcp.client.auth import TokenStorage
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthClientMetadata
+from mcp.shared.auth import OAuthMetadata
 from mcp.shared.auth import OAuthToken
+from mcp.shared.auth import ProtectedResourceMetadata
 from mcp.types import InitializeResult
 from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl
@@ -325,6 +328,27 @@ def _build_oauth_admin_config_data_for_update(
     return config_data
 
 
+def _preserve_oauth_metadata(
+    config_data: MCPConnectionData,
+    existing_config_data: MCPConnectionData | None,
+) -> MCPConnectionData:
+    """Carry forward persisted MCP OAuth discovery metadata when rewriting a
+    connection config.
+
+    `update_connection_config()` replaces the whole JSON blob, so callers that
+    rebuild OAuth config from scratch must explicitly preserve metadata fields
+    that are still valid across reconnects (PRM/OAuth metadata is tied to the
+    protected resource + auth server, not the current token set).
+    """
+    if not existing_config_data:
+        return config_data
+
+    metadata = existing_config_data.get(MCPOAuthKeys.METADATA.value)
+    if metadata:
+        config_data[MCPOAuthKeys.METADATA.value] = metadata
+    return config_data
+
+
 router = APIRouter(prefix="/mcp")
 admin_router = APIRouter(prefix="/admin/mcp")
 STATE_TTL_SECONDS = 60 * 5  # 5 minutes
@@ -332,6 +356,9 @@ OAUTH_WAIT_SECONDS = 30  # Give the user 30 seconds to complete the OAuth flow
 UNUSED_RETURN_PATH = "unused_path"
 
 HEADER_SUBSTITUTIONS: Literal["header_substitutions"] = "header_substitutions"
+MCP_OAUTH_PROTECTED_RESOURCE_METADATA_KEY = "protected_resource_metadata"
+MCP_OAUTH_AUTH_SERVER_METADATA_KEY = "oauth_metadata"
+MCP_OAUTH_AUTH_SERVER_URL_KEY = "auth_server_url"
 
 
 def key_auth_url(user_id: str) -> str:
@@ -452,6 +479,98 @@ class OnyxTokenStorage(TokenStorage):
                     self.alt_config_id, db_session, alt_config_data
                 )
 
+    async def get_metadata(self) -> dict[str, object] | None:
+        with get_session_with_current_tenant() as db_session:
+            config = self._ensure_connection_config(db_session)
+            config_data = extract_connection_data(config)
+            metadata_raw = config_data.get(MCPOAuthKeys.METADATA.value)
+            if metadata_raw:
+                return metadata_raw
+            if self.alt_config_id:
+                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
+                if alt_config:
+                    alt_config_data = extract_connection_data(alt_config)
+                    alt_metadata = alt_config_data.get(MCPOAuthKeys.METADATA.value)
+                    if alt_metadata:
+                        config_data[MCPOAuthKeys.METADATA.value] = alt_metadata
+                        update_connection_config(config.id, db_session, config_data)
+                        return alt_metadata
+            return None
+
+    async def set_metadata(self, metadata: dict[str, object]) -> None:
+        with get_session_with_current_tenant() as db_session:
+            config = self._ensure_connection_config(db_session)
+            config_data = extract_connection_data(config)
+            config_data[MCPOAuthKeys.METADATA.value] = metadata
+            update_connection_config(config.id, db_session, config_data)
+
+            if self.alt_config_id:
+                alt_config = get_connection_config_by_id(self.alt_config_id, db_session)
+                alt_config_data = extract_connection_data(alt_config)
+                alt_config_data[MCPOAuthKeys.METADATA.value] = metadata
+                update_connection_config(self.alt_config_id, db_session, alt_config_data)
+
+
+class OnyxOAuthClientProvider(OAuthClientProvider):
+    """OAuth provider that persists MCP discovery metadata across instances."""
+
+    async def _initialize(self) -> None:
+        await super()._initialize()
+
+        storage = self.context.storage
+        if not isinstance(storage, OnyxTokenStorage):
+            return
+
+        metadata = await storage.get_metadata()
+        if not metadata:
+            return
+
+        protected_resource_metadata = metadata.get(
+            MCP_OAUTH_PROTECTED_RESOURCE_METADATA_KEY
+        )
+        if protected_resource_metadata:
+            self.context.protected_resource_metadata = (
+                ProtectedResourceMetadata.model_validate(protected_resource_metadata)
+            )
+
+        oauth_metadata = metadata.get(MCP_OAUTH_AUTH_SERVER_METADATA_KEY)
+        if oauth_metadata:
+            self.context.oauth_metadata = OAuthMetadata.model_validate(oauth_metadata)
+
+        auth_server_url = metadata.get(MCP_OAUTH_AUTH_SERVER_URL_KEY)
+        if isinstance(auth_server_url, str):
+            self.context.auth_server_url = auth_server_url
+
+    async def _persist_metadata(self) -> None:
+        storage = self.context.storage
+        if not isinstance(storage, OnyxTokenStorage):
+            return
+
+        metadata: dict[str, object] = {}
+        if self.context.protected_resource_metadata:
+            metadata[MCP_OAUTH_PROTECTED_RESOURCE_METADATA_KEY] = (
+                self.context.protected_resource_metadata.model_dump(mode="json")
+            )
+        if self.context.oauth_metadata:
+            metadata[MCP_OAUTH_AUTH_SERVER_METADATA_KEY] = (
+                self.context.oauth_metadata.model_dump(mode="json")
+            )
+        if self.context.auth_server_url:
+            metadata[MCP_OAUTH_AUTH_SERVER_URL_KEY] = self.context.auth_server_url
+
+        if metadata:
+            await storage.set_metadata(metadata)
+
+    async def _handle_token_response(self, response: httpx.Response) -> None:
+        await super()._handle_token_response(response)
+        await self._persist_metadata()
+
+    async def _handle_refresh_response(self, response: httpx.Response) -> bool:
+        did_refresh = await super()._handle_refresh_response(response)
+        if did_refresh:
+            await self._persist_metadata()
+        return did_refresh
+
 
 def make_oauth_provider(
     mcp_server: DbMCPServer,
@@ -517,7 +636,7 @@ def make_oauth_provider(
         r.delete(key_auth_url(user_id), key_state(user_id))
         return code, state_obj.state
 
-    return OAuthClientProvider(
+    return OnyxOAuthClientProvider(
         server_url=mcp_server.server_url,
         client_metadata=OAuthClientMetadata(
             client_name=f"Onyx - {mcp_server.name}",
@@ -733,6 +852,10 @@ async def _connect_oauth(
             admin_config.id
         )  # might not have to do this
     elif is_admin:  # only update admin config if we're an admin
+        existing_admin_config_data = extract_connection_data(
+            mcp_server.admin_connection_config, apply_mask=False
+        )
+        config_data = _preserve_oauth_metadata(config_data, existing_admin_config_data)
         update_connection_config(mcp_server.admin_connection_config_id, db, config_data)
 
     connection_config = get_user_connection_config(mcp_server.id, user.email, db)
@@ -745,6 +868,10 @@ async def _connect_oauth(
             db_session=db,
         )
     else:
+        existing_user_config_data = extract_connection_data(
+            connection_config, apply_mask=False
+        )
+        config_data = _preserve_oauth_metadata(config_data, existing_user_config_data)
         update_connection_config(connection_config.id, db, config_data)
 
     db.commit()
