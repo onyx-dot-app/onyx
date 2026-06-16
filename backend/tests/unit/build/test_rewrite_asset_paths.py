@@ -46,7 +46,7 @@ class TestNextjsProxyMountContract:
 
         assert "ONYX_WEBAPP_BASE_PATH" in config_source
         assert "assetPrefix" in config_source
-        assert re.search(r"\bbasePath\s*:", config_source)
+        assert re.search(r"\bbasePath\s*[:=]", config_source)
 
     def test_sandbox_start_scripts_export_next_base_path(self) -> None:
         for manager_source in (DOCKER_SANDBOX_MANAGER, KUBERNETES_SANDBOX_MANAGER):
