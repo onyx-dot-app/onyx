@@ -59,6 +59,13 @@ class MCPOAuthKeys(str, Enum):
     CLIENT_INFO = "client_info"
     TOKENS = "tokens"
     METADATA = "metadata"
+    # Absolute token expiry (ISO 8601). Stored separately because the SDK's
+    # OAuthToken model has no expires_at field and silently drops it on validation,
+    # leaving only the relative expires_in with no record of when the grant happened.
+    EXPIRES_AT = "token_expires_at"
+    # Resolved OAuth token endpoint, persisted so proactive refresh doesn't need to
+    # re-run discovery on every call (auto-discovery mode leaves the server row null).
+    TOKEN_ENDPOINT = "token_endpoint"
 
 
 class MCPConnectionData(TypedDict):
@@ -80,6 +87,10 @@ class MCPConnectionData(TypedDict):
     client_info: NotRequired[dict[str, Any]]  # OAuthClientInformationFull
     tokens: NotRequired[dict[str, Any]]  # OAuthToken
     metadata: NotRequired[dict[str, Any]]  # OAuthClientMetadata
+    # Absolute expiry (ISO 8601) of the access token in `tokens`, and the resolved
+    # token endpoint used to refresh it. See MCPOAuthKeys for why these are separate.
+    token_expires_at: NotRequired[str]
+    token_endpoint: NotRequired[str]
 
     # the actual models are defined in mcp.shared.auth
     # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken

@@ -8,6 +8,7 @@ from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
+from onyx.server.features.mcp.oauth_refresh import ensure_fresh_mcp_token
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
@@ -17,6 +18,7 @@ from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.mcp.mcp_client import call_mcp_tool
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -121,6 +123,28 @@ class MCPTool(Tool[None]):
             )
         )
 
+    def _maybe_refresh_oauth_headers(self) -> dict[str, str] | None:
+        """Refresh the OAuth access token if it's expired/expiring, returning the
+        fresh Authorization headers to apply. Never raises — a refresh failure must
+        not break the tool call; the request then proceeds with the stored token."""
+        if (
+            self.mcp_server.auth_type != MCPAuthenticationType.OAUTH
+            or self.connection_config is None
+        ):
+            return None
+        try:
+            return ensure_fresh_mcp_token(
+                tenant_id=get_current_tenant_id(),
+                mcp_server=self.mcp_server,
+                connection_config_id=self.connection_config.id,
+            )
+        except Exception:
+            logger.exception(
+                "Proactive OAuth refresh failed for MCP tool '%s'; using stored token",
+                self._name,
+            )
+            return None
+
     def run(
         self,
         placement: Placement,
@@ -162,6 +186,14 @@ class MCPTool(Tool[None]):
             if self.connection_config and self.connection_config.config:
                 config_dict = self.connection_config.config.get_value(apply_mask=False)
                 headers.update(config_dict.get("headers", {}))
+
+                # Proactively refresh an expired OAuth access token before the call.
+                # The SDK auth provider won't do it reliably (it never restores token
+                # expiry on load), so an expired token would otherwise escalate to a
+                # full re-auth and force a manual reconnect in the Admin Panel.
+                refreshed_headers = self._maybe_refresh_oauth_headers()
+                if refreshed_headers:
+                    headers.update(refreshed_headers)
 
             # Priority 3: For pass-through OAuth, use the user's login OAuth token
             if self._user_oauth_token:

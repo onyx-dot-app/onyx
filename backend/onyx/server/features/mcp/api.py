@@ -389,6 +389,13 @@ class OnyxTokenStorage(TokenStorage):
             config_data["headers"] = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
+            # OAuthToken drops expires_at, so persist absolute expiry separately —
+            # proactive refresh has no other way to tell when this token lapses.
+            if tokens.expires_in is not None:
+                config_data[MCPOAuthKeys.EXPIRES_AT.value] = (
+                    datetime.datetime.now(datetime.timezone.utc)
+                    + datetime.timedelta(seconds=tokens.expires_in)
+                ).isoformat()
             update_connection_config(config.id, db_session, config_data)
 
         # The shared admin row is intentionally NOT written here: it
@@ -1033,6 +1040,19 @@ async def process_oauth_callback(
         user_config_data["headers"] = {
             "Authorization": f"{oauth_token.token_type} {oauth_token.access_token}"
         }
+        # Persist the refresh inputs (absolute expiry + token endpoint) so proactive
+        # refresh can keep this connection alive without a manual reconnect.
+        token_expires_at = token_payload.get("expires_at")
+        if token_expires_at is not None:
+            user_config_data[MCPOAuthKeys.EXPIRES_AT.value] = (
+                datetime.datetime.fromtimestamp(
+                    int(token_expires_at), tz=datetime.timezone.utc
+                ).isoformat()
+            )
+        if mcp_server.oauth_token_endpoint:
+            user_config_data[MCPOAuthKeys.TOKEN_ENDPOINT.value] = (
+                mcp_server.oauth_token_endpoint
+            )
         update_connection_config(user_config.id, db_session, user_config_data)
         redis_client.delete(key_state(user_id))
 
@@ -1143,9 +1163,13 @@ def save_user_credentials(
                 header_substitutions=request.credentials,
             )
             for oauth_field_key in MCPOAuthKeys:
-                field_key: Literal["client_info", "tokens", "metadata"] = (
-                    oauth_field_key.value
-                )
+                field_key: Literal[
+                    "client_info",
+                    "tokens",
+                    "metadata",
+                    "token_expires_at",
+                    "token_endpoint",
+                ] = oauth_field_key.value
                 if field_val := auth_template_dict.get(field_key):
                     config_data[field_key] = field_val
 
