@@ -249,6 +249,18 @@ class SetPreferredResponseRequest(BaseModel):
     preferred_response_id: int
 
 
+class ActiveChatRun(BaseModel):
+    run_id: UUID
+    assistant_message_id: int
+    status: str
+    latest_seq: int | None = None
+
+
+class ResumeChatRunRequest(BaseModel):
+    run_id: UUID
+    after_seq: int | None = None
+
+
 class ChatSessionDetailResponse(BaseModel):
     chat_session_id: UUID
     description: str | None
@@ -263,6 +275,7 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
+    active_run: ActiveChatRun | None = None
 
 
 class AvailableChatModel(BaseModel):

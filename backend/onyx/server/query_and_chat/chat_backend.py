@@ -52,6 +52,8 @@ from onyx.db.chat import set_as_latest_chat_message
 from onyx.db.chat import set_preferred_response
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
+from onyx.db.chat_run import fetch_active_chat_run
+from onyx.db.chat_run import fetch_chat_run_events_after
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -63,6 +65,7 @@ from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_user_group_ids
+from onyx.db.models import ChatRun
 from onyx.db.models import ChatSessionSharedStatus
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration
@@ -83,6 +86,7 @@ from onyx.llm.well_known_providers.llm_provider_options import get_provider_disp
 from onyx.secondary_llm_flows.chat_session_naming import generate_chat_session_name
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
+from onyx.server.query_and_chat.models import ActiveChatRun
 from onyx.server.query_and_chat.models import AvailableChatModel
 from onyx.server.query_and_chat.models import AvailableChatModelsResponse
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
@@ -98,6 +102,7 @@ from onyx.server.query_and_chat.models import ChatSessionSummary
 from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
 from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import RenameChatSessionResponse
+from onyx.server.query_and_chat.models import ResumeChatRunRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.models import SetPreferredResponseRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
@@ -478,6 +483,18 @@ def get_chat_session(
             "An error occurred while checking if the chat session is processing"
         )
 
+    active_run_response: ActiveChatRun | None = None
+    active_run = fetch_active_chat_run(db_session, session_id)
+    if active_run is not None:
+        active_events = fetch_chat_run_events_after(db_session, active_run.id, None)
+        latest_seq = active_events[-1].seq if active_events else None
+        active_run_response = ActiveChatRun(
+            run_id=active_run.id,
+            assistant_message_id=active_run.assistant_message_id,
+            status=active_run.status,
+            latest_seq=latest_seq,
+        )
+
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
     replay_packet_lists: list[list[Packet]] = []
@@ -505,6 +522,7 @@ def get_chat_session(
         owner_name=chat_session.user.personal_name if chat_session.user else None,
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
+        active_run=active_run_response,
     )
 
 
@@ -530,6 +548,33 @@ def create_new_chat_session(
         raise HTTPException(status_code=400, detail="Invalid Persona provided.")
 
     return CreateChatSessionID(chat_session_id=new_chat_session.id)
+
+
+@router.post("/resume-chat-run")
+def resume_chat_run(
+    resume_req: ResumeChatRunRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> StreamingResponse:
+    run = db_session.get(ChatRun, resume_req.run_id)
+    if run is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Chat run not found")
+
+    get_chat_session_by_id(
+        chat_session_id=run.chat_session_id,
+        user_id=user.id,
+        db_session=db_session,
+    )
+
+    def event_generator() -> Generator[str, None, None]:
+        for event in fetch_chat_run_events_after(
+            db_session,
+            resume_req.run_id,
+            resume_req.after_seq,
+        ):
+            yield get_json_line(event.packet_json)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.put("/rename-chat-session")

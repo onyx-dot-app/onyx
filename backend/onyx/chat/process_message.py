@@ -71,6 +71,12 @@ from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.chat import reserve_multi_model_message_ids
+from onyx.db.chat_run import append_chat_run_event__no_commit
+from onyx.db.chat_run import CANCELLED
+from onyx.db.chat_run import COMPLETED
+from onyx.db.chat_run import create_chat_run__no_commit
+from onyx.db.chat_run import FAILED
+from onyx.db.chat_run import mark_chat_run_status__no_commit
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint
@@ -1035,6 +1041,68 @@ class _PersistContext(Enum):
 _CANCEL_POLL_INTERVAL_S: Final[float] = 0.05
 
 
+def _dump_chat_run_stream_part(stream_part: AnswerStreamPart) -> dict:
+    return stream_part.model_dump(mode="json")
+
+
+def _chat_run_terminal_status(stream_part: AnswerStreamPart) -> str | None:
+    if isinstance(stream_part, StreamingError):
+        return FAILED
+    if isinstance(stream_part, Packet) and isinstance(stream_part.obj, OverallStop):
+        if stream_part.obj.stop_reason == "user_cancelled":
+            return CANCELLED
+        return COMPLETED
+    return None
+
+
+def _create_chat_run_for_setup(setup: ChatTurnSetup) -> UUID | None:
+    if not setup.reserved_messages or not setup.llms:
+        return None
+
+    primary_llm = setup.llms[0]
+    primary_message = setup.reserved_messages[0]
+    with get_session_with_current_tenant() as db_session:
+        run = create_chat_run__no_commit(
+            db_session=db_session,
+            chat_session_id=setup.chat_session.id,
+            user_message_id=setup.user_message.id,
+            assistant_message_id=primary_message.id,
+            model_provider=primary_llm.config.model_provider,
+            model_name=primary_llm.config.model_name,
+        )
+        run_id = run.id
+        db_session.commit()
+    return run_id
+
+
+def _persist_chat_run_stream_part(
+    run_id: UUID,
+    stream_part: AnswerStreamPart,
+) -> None:
+    with get_session_with_current_tenant() as db_session:
+        append_chat_run_event__no_commit(
+            db_session=db_session,
+            run_id=run_id,
+            packet_json=_dump_chat_run_stream_part(stream_part),
+        )
+        db_session.commit()
+
+
+def _mark_chat_run_status(
+    run_id: UUID,
+    status: str,
+    error_detail: str | None = None,
+) -> None:
+    with get_session_with_current_tenant() as db_session:
+        mark_chat_run_status__no_commit(
+            db_session=db_session,
+            run_id=run_id,
+            status=status,
+            error_detail=error_detail,
+        )
+        db_session.commit()
+
+
 def _run_models(
     setup: ChatTurnSetup,
     user: User,
@@ -1459,6 +1527,7 @@ def _stream_chat_turn(
 
     mock_response_token: Token[str | None] | None = None
     setup: ChatTurnSetup | None = None
+    run_id: UUID | None = None
 
     try:
         with get_session_with_current_tenant() as setup_db_session:
@@ -1513,29 +1582,55 @@ def _stream_chat_turn(
         assert setup is not None, (
             "build_chat_turn must complete before _run_models is called"
         )
-        yield from _run_models(
+        run_id = _create_chat_run_for_setup(setup)
+        terminal_status: str | None = None
+
+        for stream_part in _run_models(
             setup=setup,
             user=user,
             external_state_container=external_state_container,
-        )
+        ):
+            if run_id is not None:
+                try:
+                    _persist_chat_run_stream_part(run_id, stream_part)
+                except Exception:
+                    logger.exception("Failed to persist chat run stream part")
+
+                stream_part_status = _chat_run_terminal_status(stream_part)
+                if stream_part_status == FAILED:
+                    terminal_status = FAILED
+                elif terminal_status is None:
+                    terminal_status = stream_part_status
+            yield stream_part
+
+        if run_id is not None:
+            _mark_chat_run_status(run_id, terminal_status or COMPLETED)
 
     except OnyxError as e:
         if e.error_code is not OnyxErrorCode.QUERY_REJECTED:
             log_onyx_error(e)
-        yield StreamingError(
+        streaming_error = StreamingError(
             error=e.detail,
             error_code=e.error_code.code,
             is_retryable=e.status_code >= 500,
         )
+        if run_id is not None:
+            _persist_chat_run_stream_part(run_id, streaming_error)
+            _mark_chat_run_status(run_id, FAILED, streaming_error.error)
+        yield streaming_error
         return
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
-        yield StreamingError(
+        streaming_error = StreamingError(
             error=str(e),
             error_code="VALIDATION_ERROR",
             is_retryable=True,
         )
+        if run_id is not None:
+            _persist_chat_run_stream_part(run_id, streaming_error)
+            _mark_chat_run_status(run_id, FAILED, streaming_error.error)
+        yield streaming_error
         return
 
     except EmptyLLMResponseError as e:
@@ -1546,7 +1641,7 @@ def _stream_chat_turn(
             e.model,
             e.tool_choice,
         )
-        yield StreamingError(
+        streaming_error = StreamingError(
             error=e.client_error_msg,
             stack_trace=stack_trace,
             error_code=e.error_code,
@@ -1557,6 +1652,10 @@ def _stream_chat_turn(
                 "tool_choice": e.tool_choice.value,
             },
         )
+        if run_id is not None:
+            _persist_chat_run_stream_part(run_id, streaming_error)
+            _mark_chat_run_status(run_id, FAILED, streaming_error.error)
+        yield streaming_error
 
     except Exception as e:
         logger.exception("Failed to process chat message due to %s", e)
@@ -1574,7 +1673,7 @@ def _stream_chat_turn(
                 stack_trace = stack_trace.replace(
                     llm.config.api_key, "[REDACTED_API_KEY]"
                 )
-            yield StreamingError(
+            streaming_error = StreamingError(
                 error=client_error_msg,
                 stack_trace=stack_trace,
                 error_code=error_code,
@@ -1584,13 +1683,21 @@ def _stream_chat_turn(
                     "provider": llm.config.model_provider,
                 },
             )
+            if run_id is not None:
+                _persist_chat_run_stream_part(run_id, streaming_error)
+                _mark_chat_run_status(run_id, FAILED, streaming_error.error)
+            yield streaming_error
         else:
-            yield StreamingError(
+            streaming_error = StreamingError(
                 error="Failed to initialize the chat. Please check your configuration and try again.",
                 stack_trace=stack_trace,
                 error_code="INIT_FAILED",
                 is_retryable=True,
             )
+            if run_id is not None:
+                _persist_chat_run_stream_part(run_id, streaming_error)
+                _mark_chat_run_status(run_id, FAILED, streaming_error.error)
+            yield streaming_error
 
     finally:
         if mock_response_token is not None:
