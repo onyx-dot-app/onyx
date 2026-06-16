@@ -392,7 +392,7 @@ OpenCode's native `skill` tool handles inventory; AGENTS.md inlining is duplicat
 
 ### 6.1 Snapshot semantics verification  (spec §12)
 
-- `[TODO]` `P6.001` Confirm snapshot tarball **excludes** `/skills/` (it's a separate pod-level mount, not part of `/workspace/sessions/`). Verify in `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`.
+- `[TODO]` `P6.001` Confirm snapshot tarball **excludes** `/skills/` (it's a separate pod-level mount, not part of `/workspace/sessions/`). Verify in `backend/onyx/server/features/build/sandbox/snapshot_manager.py`.
 - `[TODO]` `P6.002` Verify resume path does NOT re-materialize per-session. The pod's `/skills/` is kept fresh by the background refresh loop; resume just needs the symlink (P3.042).
 - `[TODO]` `P6.003` Add invariant docstring to `backend/onyx/skills/__init__.py`: `"Skill content and inventory are both live (~1-3 sec typical via event-driven push through the bundle pipeline; lifecycle triggers — session setup, snapshot restore, manual refresh — reconcile the failure tail; OpenCode rescans per turn)."`
 - `[TODO]` `P6.004` Integration test `test_snapshot_excludes_skills.py`: pause session A → inspect snapshot tar, confirm no `/skills/` content; resume → `.agents/skills` is a symlink to `/skills/` resolving to current admin state

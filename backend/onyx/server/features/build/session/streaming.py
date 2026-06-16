@@ -570,7 +570,8 @@ def persist_sandbox_event(
         return
 
     if isinstance(sandbox_event, ToolCallStart):
-        # Stream-only; persistence happens on `completed` progress.
+        # Stream-only; persistence happens on terminal (`completed`/`failed`)
+        # progress.
         return
 
     if isinstance(sandbox_event, ToolCallProgress):
@@ -590,7 +591,7 @@ def persist_sandbox_event(
             or raw_input.get("subagentType") is not None
         )
 
-        if is_todo_write or sandbox_event.status == "completed":
+        if is_todo_write or sandbox_event.status in ("completed", "failed"):
             create_message(
                 session_id=session_id,
                 message_type=MessageType.ASSISTANT,

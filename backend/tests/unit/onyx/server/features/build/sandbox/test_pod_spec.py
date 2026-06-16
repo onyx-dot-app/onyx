@@ -310,6 +310,8 @@ def test_workspace_volume_is_shared_for_session_io(pod: client.V1Pod) -> None:
         "workspace",
         "opencode-data",
         "managed",
+        "tmp",
+        "sidecar-tmp",
         "sandbox-ca-source",
         "sandbox-ca-bundle",
     }
@@ -317,6 +319,31 @@ def test_workspace_volume_is_shared_for_session_io(pod: client.V1Pod) -> None:
         mount = _mount(container, "workspace")
         assert mount.mount_path == "/workspace/sessions"
         assert not mount.read_only
+
+
+def test_tmp_volumes_are_writable_and_isolated_by_container(
+    pod: client.V1Pod,
+) -> None:
+    """Agents need /tmp for scratch files. The sidecar also uses /tmp while
+    restoring snapshot archives, but it must not share that scratch space with
+    the agent after archive checksum verification.
+    """
+    assert pod.spec.security_context.fs_group == 1000
+
+    volumes = {v.name: v for v in pod.spec.volumes}
+    assert volumes["tmp"].empty_dir.size_limit == "5Gi"
+    assert volumes["sidecar-tmp"].empty_dir.size_limit == "5Gi"
+
+    sandbox_tmp = _mount(_container(pod, "sandbox"), "tmp")
+    sidecar_tmp = _mount(_sidecar(pod), "sidecar-tmp")
+    assert sandbox_tmp.mount_path == sidecar_tmp.mount_path == "/tmp"
+    assert not sandbox_tmp.read_only
+    assert not sidecar_tmp.read_only
+
+    sandbox_mount_names = {m.name for m in _container(pod, "sandbox").volume_mounts}
+    sidecar_mount_names = {m.name for m in _sidecar(pod).volume_mounts}
+    assert "sidecar-tmp" not in sandbox_mount_names
+    assert "tmp" not in sidecar_mount_names
 
 
 def test_opencode_data_volume_is_shared_outside_session_tree(

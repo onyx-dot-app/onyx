@@ -3,10 +3,8 @@
 from unittest.mock import MagicMock
 from uuid import uuid4
 
+from onyx.background.celery.tasks.build.tasks import _prune_prior_session_snapshots
 from onyx.db.models import Snapshot
-from onyx.server.features.build.sandbox.tasks.tasks import (
-    _prune_prior_session_snapshots,
-)
 
 
 def _snap() -> Snapshot:

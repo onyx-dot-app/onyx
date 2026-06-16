@@ -1,7 +1,8 @@
 # Stands up the full Craft docker-compose stack with the --include-craft overlay
-# once per run and exercises the end-to-end approval-gate flow + the
-# docker-specific posture invariants the K8s lane can't catch by construction
-# (image ENTRYPOINT concat, HOME after setpriv, curl httpoxy on the bridge).
+# once per run and exercises the Docker-backed Craft E2E suite: approval-gate
+# flow, workspace setup, and docker-specific posture invariants the K8s lane
+# can't catch by construction (image ENTRYPOINT concat, HOME after setpriv,
+# curl httpoxy on the bridge).
 #
 # Always triggers on PRs + merge_group so the `craft-compose-required` job below
 # can serve as the single stable required status check in branch protection; the
@@ -157,6 +158,14 @@ jobs:
           docker network create onyx_craft_sandbox
           docker volume create sandbox_proxy_ca
 
+      # install.sh normally generates .env (including USER_AUTH_SECRET) from
+      # env.template; CI skips install.sh, and since #12038 the api server
+      # fail-closes on an empty USER_AUTH_SECRET. Services read .env via
+      # env_file, so a CI-only value here unblocks the stack.
+      - name: Provide USER_AUTH_SECRET (.env)
+        working-directory: deployment/docker_compose
+        run: echo 'USER_AUTH_SECRET=craft-compose-ci-only-dummy-secret' > .env
+
       # TODO(ods): Replace with `ods compose --craft` once that flag is
       # added to tools/ods/cmd/compose.go. Today `ods compose` doesn't support
       # the craft overlay, so we drop to raw docker compose.
@@ -221,7 +230,7 @@ jobs:
             -o faulthandler_timeout=90 \
             --tb=short \
             --durations=10 \
-            tests/integration/tests/craft/docker_e2e/test_approval_gate_docker.py \
+            tests/integration/tests/craft/docker_e2e \
             2>&1 | tee ../compose-logs/pytest.log
 
       # Inline tail for fast triage in the GH Actions UI without downloading

@@ -5,7 +5,7 @@ import {
   track,
   AnalyticsEvent,
   LLMProviderConfiguredSource,
-} from "@/lib/analytics";
+} from "@/lib/analytics/utils";
 import { SvgArrowRight, SvgArrowLeft, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";

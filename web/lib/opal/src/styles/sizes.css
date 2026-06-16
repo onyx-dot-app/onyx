@@ -23,6 +23,8 @@
   --sidebar-width-expanded: 15rem;
   --sidebar-width-folded: 3.25rem;
 
+  --chrome-header-height: 3.25rem;
+
   /* BLOCK — WIDTH */
   --block-width-tooltip-max: 15rem;
 

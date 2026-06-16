@@ -1452,6 +1452,8 @@ configMap:
   # SMTP_PASS: ""
   # 'your-email@company.com' SMTP_USER missing used instead
   EMAIL_FROM: ""
+  # Optional comma-separated BCC archive recipients for all emails
+  EMAIL_ARCHIVE_BCC_ADDRESSES: ""
   # MinIO/S3 Configuration override
   S3_ENDPOINT_URL: ""  # only used if minio is not enabled
   S3_FILE_STORE_BUCKET_NAME: ""

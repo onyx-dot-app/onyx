@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { SelectButton } from "@opal/components";
 import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
 import { useOnboarding } from "@/app/craft/onboarding/BuildOnboardingProvider";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { getModelIcon } from "@/lib/languageModels";
 import {
   BuildLlmSelection,

@@ -21,9 +21,7 @@ import {
   InputVertical,
 } from "@opal/layouts";
 import { useFormikContext } from "formik";
-import LLMSelector from "@/components/llm/LLMSelector";
-import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import {
   STARTER_MESSAGES_EXAMPLES,
   MAX_CHARACTERS_STARTER_MESSAGE,
@@ -506,48 +504,6 @@ export default function AgentEditorPage({
   const { mcpData, isLoading: isMcpLoading } = useMcpServersForAgentEditor();
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
     useOpenApiTools();
-  const { llmProviders } = useLLMProviders(existingAgent?.id);
-
-  // LLM Model Selection — placed after llmProviders so the callbacks can close over it
-  const getCurrentLlm = useCallback((values: any, providers: any) => {
-    // Canonical path: resolve from model configuration ID.
-    if (values.default_model_configuration_id != null) {
-      for (const p of providers ?? []) {
-        const mc = p.model_configurations?.find(
-          (m: any) => m.id === values.default_model_configuration_id
-        );
-        if (mc) {
-          return structureValue(p.name ?? String(p.id), p.provider, mc.name);
-        }
-      }
-    }
-    return null;
-  }, []);
-
-  const onLlmSelect = useCallback(
-    (selected: string | null, setFieldValue: any) => {
-      if (selected === null) {
-        setFieldValue("default_model_configuration_id", null);
-      } else {
-        const { modelName, name } = parseLlmDescriptor(selected);
-        if (modelName) {
-          // `name` is either the display name or String(provider.id) for nameless
-          // providers, so we match by both.
-          const provider = llmProviders?.find(
-            (p: any) => p.name === name || String(p.id) === name
-          );
-          const modelConfig = provider?.model_configurations?.find(
-            (mc: any) => mc.name === modelName
-          );
-          setFieldValue(
-            "default_model_configuration_id",
-            modelConfig?.id ?? null
-          );
-        }
-      }
-    },
-    [llmProviders]
-  );
 
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
@@ -1606,16 +1562,19 @@ export default function AgentEditorPage({
                                   title="Default Model"
                                   description="This model will be used by Onyx by default in your chats."
                                 >
-                                  <LLMSelector
-                                    name="llm_model"
-                                    llmProviders={llmProviders ?? []}
-                                    currentLlm={getCurrentLlm(
-                                      values,
-                                      llmProviders
-                                    )}
-                                    onSelect={(selected) =>
-                                      onLlmSelect(selected, setFieldValue)
+                                  <ModelSelector
+                                    value={
+                                      (values.default_model_configuration_id as
+                                        | number
+                                        | null) ?? null
                                     }
+                                    onChange={(opt) =>
+                                      setFieldValue(
+                                        "default_model_configuration_id",
+                                        opt.modelConfigurationId ?? null
+                                      )
+                                    }
+                                    includeGlobalDefault
                                   />
                                 </InputHorizontal>
                                 <InputHorizontal

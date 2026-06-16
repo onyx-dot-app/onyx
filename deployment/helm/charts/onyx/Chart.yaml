@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.0
+version: 0.6.1
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,6 +16,9 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: changed
+      description: Add isolated writable /tmp scratch space for sandboxed
+        OpenCode agents.
     - kind: changed
       description: Preserve Craft opencode history across Kubernetes sandbox
         restarts by restoring it before opencode starts.

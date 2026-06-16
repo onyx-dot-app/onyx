@@ -3,7 +3,6 @@ import os
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from contextlib import nullcontext
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -720,47 +719,37 @@ class LitellmLLM(LLM):
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
 
-            # We only need to set environment variables if custom config is set
-            env_ctx = (
-                temporary_env_and_lock(self._custom_config)
-                if self._custom_config
-                else nullcontext()
-            )
-            with env_ctx:
-                messages = _prompt_to_dicts(prompt)
+            messages = _prompt_to_dicts(prompt)
 
-                # Bedrock's Converse API requires toolConfig when messages
-                # contain toolUse/toolResult content blocks. When no tools are
-                # provided for this request but the history contains tool
-                # content from previous turns, strip it to plain text.
-                is_bedrock = self._model_provider in {
-                    LlmProviderNames.BEDROCK,
-                    LlmProviderNames.BEDROCK_CONVERSE,
-                }
-                if (
-                    is_bedrock
-                    and not tools
-                    and _messages_contain_tool_content(messages)
-                ):
-                    messages = _strip_tool_content_from_messages(messages)
+            # Bedrock's Converse API requires toolConfig when messages
+            # contain toolUse/toolResult content blocks. When no tools are
+            # provided for this request but the history contains tool
+            # content from previous turns, strip it to plain text.
+            is_bedrock = self._model_provider in {
+                LlmProviderNames.BEDROCK,
+                LlmProviderNames.BEDROCK_CONVERSE,
+            }
+            if is_bedrock and not tools and _messages_contain_tool_content(messages):
+                messages = _strip_tool_content_from_messages(messages)
 
-                # Some models (e.g. Mistral) reject a user message
-                # immediately after a tool message. Insert a synthetic
-                # assistant bridge message to satisfy the ordering
-                # constraint. Check both the provider and the deployment/
-                # model name to catch Mistral hosted on Azure.
-                model_or_deployment = (
-                    self._deployment_name or self._model_version or ""
-                ).lower()
-                is_mistral_model = is_mistral or "mistral" in model_or_deployment
-                if is_mistral_model:
-                    messages = _fix_tool_user_message_ordering(messages)
+            # Some models (e.g. Mistral) reject a user message
+            # immediately after a tool message. Insert a synthetic
+            # assistant bridge message to satisfy the ordering
+            # constraint. Check both the provider and the deployment/
+            # model name to catch Mistral hosted on Azure.
+            model_or_deployment = (
+                self._deployment_name or self._model_version or ""
+            ).lower()
+            is_mistral_model = is_mistral or "mistral" in model_or_deployment
+            if is_mistral_model:
+                messages = _fix_tool_user_message_ordering(messages)
 
-                # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
-                # reject requests where tool_choice is explicitly null.
-                if tools and tool_choice is not None:
-                    optional_kwargs["tool_choice"] = tool_choice
+            # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
+            # reject requests where tool_choice is explicitly null.
+            if tools and tool_choice is not None:
+                optional_kwargs["tool_choice"] = tool_choice
 
+            with temporary_env_and_lock(self._custom_config or {}):
                 response = litellm.completion(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
@@ -1009,8 +998,9 @@ class LitellmLLM(LLM):
 def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
     """
     Temporarily sets the environment variables to the given values.
-    Code path is locked while the environment variables are set.
-    Then cleans up the environment and frees the lock.
+    _env_lock is held while the environment variables are set, so no concurrent
+    LLM call can observe them. Then cleans up the environment and releases the
+    lock.
     """
     with _env_lock:
         logger.debug("Acquired lock in temporary_env_and_lock")

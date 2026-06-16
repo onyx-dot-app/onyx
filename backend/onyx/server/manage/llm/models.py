@@ -155,15 +155,27 @@ class LLMProviderView(LLMProvider):
 
         provider = llm_provider_model.provider
 
+        api_key: str | None = None
+        if llm_provider_model.api_key:
+            # NOTE: this decrypts the stored LLM provider key (chat hot path).
+            # No user is in scope here, so attribution relies on
+            # request_id / client_ip context. Audit is best-effort and never
+            # raises into this read path.
+            from onyx.utils.credential_audit import emit_credential_access
+
+            emit_credential_access(
+                credential_type="llm_provider",
+                provider=provider,
+                row_id=llm_provider_model.id,
+                user_id=None,
+            )
+            api_key = llm_provider_model.api_key.get_value(apply_mask=False)
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
             provider=provider,
-            api_key=(
-                llm_provider_model.api_key.get_value(apply_mask=False)
-                if llm_provider_model.api_key
-                else None
-            ),
+            api_key=api_key,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,

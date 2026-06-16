@@ -45,6 +45,9 @@ interface ContentBaseProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
+  /** Clamp the description to N lines. Maps to Text's maxLines prop. */
+  descriptionMaxLines?: number;
+
   /** Enable inline editing of the title. */
   editable?: boolean;
 

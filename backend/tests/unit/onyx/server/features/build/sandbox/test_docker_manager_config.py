@@ -9,6 +9,8 @@ env allowlist), so we lock it down here.
 from __future__ import annotations
 
 import re
+from collections.abc import Generator
+from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
@@ -56,6 +58,12 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
 )
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_USER_ID,
+)
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    SANDBOX_TMP_PATH,
+)
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    SANDBOX_TMPFS_OPTIONS,
 )
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
@@ -165,6 +173,78 @@ def test_container_kwargs_has_required_security_options(
     assert kwargs["cap_drop"] == ["ALL"]
     assert "no-new-privileges:true" in kwargs["security_opt"]
     assert kwargs["privileged"] is False
+
+
+def test_sandbox_exec_wrapper_pairs_uid_with_user_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_run = MagicMock(return_value=dsm.ExecResult(0, b"", b""))
+    monkeypatch.setattr(dsm, "run_in_container", mock_run)
+    container = MagicMock()
+
+    result = dsm._run_in_container_as_sandbox_user(
+        container,
+        ["/bin/sh", "-c", "id"],
+        check=False,
+        workdir="/workspace",
+    )
+
+    assert result.exit_code == 0
+    mock_run.assert_called_once_with(
+        container,
+        ["/bin/sh", "-c", "id"],
+        user=dsm.SANDBOX_EXEC_USER,
+        workdir="/workspace",
+        environment=dsm.SANDBOX_EXEC_ENV,
+        check=False,
+    )
+
+
+def _empty_byte_stream() -> Generator[bytes, None, int]:
+    yield from ()
+    return 0
+
+
+def test_sandbox_stream_exec_wrappers_pair_uid_with_user_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_stdin = MagicMock(return_value=dsm.ExecResult(0, b"", b""))
+    stream = _empty_byte_stream()
+    mock_stdout = MagicMock(return_value=stream)
+    monkeypatch.setattr(dsm, "stream_stdin_to_container", mock_stdin)
+    monkeypatch.setattr(dsm, "stream_stdout_from_container", mock_stdout)
+    container = MagicMock()
+
+    result = dsm._stream_stdin_to_container_as_sandbox_user(
+        container,
+        ["tar", "-xzf", "-"],
+        b"payload",
+        workdir="/workspace",
+    )
+    returned_stream = dsm._stream_stdout_from_container_as_sandbox_user(
+        container,
+        ["tar", "-czf", "-"],
+        workdir="/workspace",
+    )
+
+    assert result.exit_code == 0
+    assert returned_stream is stream
+    mock_stdin.assert_called_once_with(
+        container,
+        ["tar", "-xzf", "-"],
+        b"payload",
+        user=dsm.SANDBOX_EXEC_USER,
+        workdir="/workspace",
+        environment=dsm.SANDBOX_EXEC_ENV,
+    )
+    mock_stdout.assert_called_once_with(
+        container,
+        ["tar", "-czf", "-"],
+        user=dsm.SANDBOX_EXEC_USER,
+        workdir="/workspace",
+        environment=dsm.SANDBOX_EXEC_ENV,
+        chunk_size=64 * 1024,
+    )
 
 
 def test_container_kwargs_does_not_mount_docker_socket(
@@ -339,6 +419,13 @@ def test_container_kwargs_mounts_only_workspace_sessions(
         )
 
 
+def test_container_kwargs_mounts_tmp_as_tmpfs(
+    kwargs: ContainerCreateKwargs,
+) -> None:
+    """Expose /tmp as sandbox-local scratch space without adding a host mount."""
+    assert kwargs["tmpfs"] == {SANDBOX_TMP_PATH: SANDBOX_TMPFS_OPTIONS}
+
+
 def test_container_kwargs_warns_on_internal_compose_host(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -432,10 +519,17 @@ def test_proxy_kwargs_runs_init_as_root_with_required_caps(
     proxy_kwargs: ContainerCreateKwargs,
 ) -> None:
     """NET_ADMIN for iptables; SETPCAP authorises the bounding-set drop;
-    SETUID + SETGID gate the uid/gid switch under cap_drop=ALL."""
+    SETUID + SETGID gate the uid/gid switch under cap_drop=ALL; CHOWN repairs
+    the sessions mount-point owner."""
     assert proxy_kwargs["user"] == "0:0"
     assert proxy_kwargs["cap_drop"] == ["ALL"]
-    assert proxy_kwargs["cap_add"] == ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]
+    assert proxy_kwargs["cap_add"] == [
+        "NET_ADMIN",
+        "SETPCAP",
+        "SETUID",
+        "SETGID",
+        "CHOWN",
+    ]
     # The other invariants must not regress in proxy mode.
     assert proxy_kwargs["privileged"] is False
     assert "no-new-privileges:true" in proxy_kwargs["security_opt"]
