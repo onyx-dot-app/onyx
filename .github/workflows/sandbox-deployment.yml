@@ -1,18 +1,22 @@
 name: Build and Push Sandbox Image
 
-# The sandbox image is the only Craft-specific image. Build a new version on
-# the nightly tag when its build context changed, or manually on demand.
+# The sandbox image is the only Craft-specific image, versioned on its own line
+# independent of Onyx releases. Publishing is fully manual:
 #
-# To push an ad-hoc dev build:
-#   git tag -f sandbox-dev && git push -f origin sandbox-dev
-# builds unconditionally and pushes onyxdotapp/sandbox:dev. Dev builds never
-# cut a vX.Y.Z version or move :latest — those only happen on the nightly
-# path. Only sandbox-dev is supported, to keep Docker Hub free of one-off tags.
+#   - sandbox-edge tag (or workflow_dispatch): builds + auto-increments
+#     onyxdotapp/sandbox:vX.Y.Z and moves :edge.
+#       git tag -f sandbox-edge && git push -f origin sandbox-edge
+#   - sandbox-dev tag: builds + pushes the mutable onyxdotapp/sandbox:dev.
+#       git tag -f sandbox-dev && git push -f origin sandbox-dev
+#
+# Onyx deployments pin a specific vX.Y.Z (SANDBOX_CONTAINER_IMAGE in configs.py);
+# bumping the pin to adopt a new sandbox is a deliberate, reviewable change (a
+# future `ods release sandbox` command tags this + bumps the pin).
 on:
   push:
     tags:
-      - "nightly-latest-*"
       - "sandbox-dev"
+      - "sandbox-edge"
   workflow_dispatch:
 
 # Restrictive defaults; jobs declare what they need.
@@ -29,6 +33,8 @@ jobs:
       # metadata-action tags input: set by the check step for dev builds,
       # otherwise by the version step.
       image-tags: ${{ steps.check.outputs.image-tags || steps.version.outputs.image-tags }}
+      # Content-hash dedup key (git tree hash of the build context).
+      src-tag: ${{ steps.check.outputs.src-tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -41,45 +47,42 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          # Manual runs always build.
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "Manual dispatch: building unconditionally"
-            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+          # sandbox-edge / dispatch cut a new version only when the build context
+          # changed: skip if its content hash (src-<tree-hash>) is already published.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$GITHUB_REF_NAME" = "sandbox-edge" ]; then
+            CONTEXT="backend/onyx/server/features/build/sandbox/image"
+            SRC_TAG="src-$(git rev-parse "HEAD:${CONTEXT}" | cut -c1-16)"
+            echo "src-tag=${SRC_TAG}" >> "$GITHUB_OUTPUT"
+            HTTP=$(curl -sS -o /dev/null -w '%{http_code}' \
+              "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags/${SRC_TAG}" || true)
+            if [ "$HTTP" = "200" ]; then
+              echo "Build context unchanged (${SRC_TAG} already published); no new version"
+              echo "sandbox-changed=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "Build context changed (${SRC_TAG} not found, HTTP ${HTTP}); cutting a new version"
+              echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
 
-          # The sandbox-dev tag always builds and pushes the :dev image tag.
+          # sandbox-dev always rebuilds the mutable :dev tag (no dedup).
           if [ "$GITHUB_REF_NAME" = "sandbox-dev" ]; then
-            echo "Dev tag: building and pushing :dev"
             echo "image-tags=type=raw,value=dev" >> "$GITHUB_OUTPUT"
             echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Diff the sandbox image build context against the previous nightly tag.
-          CURRENT_TAG="${GITHUB_REF_NAME}"
-          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep '^nightly-latest-' | grep -v "^${CURRENT_TAG}$" | head -n 1)
-          if [ -z "$PREVIOUS_TAG" ]; then
-            echo "No previous nightly tag; building unconditionally"
-            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "Comparing ${PREVIOUS_TAG}..${CURRENT_TAG}"
-          if git diff --name-only "${PREVIOUS_TAG}..${CURRENT_TAG}" -- \
-              "backend/onyx/server/features/build/sandbox/image/" | grep -q .; then
-            echo "Sandbox image changed"
-            echo "sandbox-changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No sandbox image changes"
-            echo "sandbox-changed=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Unreachable: the branches above cover every trigger.
+          echo "Unexpected event ${EVENT_NAME}/${GITHUB_REF_NAME}; not building"
+          echo "sandbox-changed=false" >> "$GITHUB_OUTPUT"
 
       - name: Determine new sandbox version
         id: version
         if: steps.check.outputs.sandbox-changed == 'true' && steps.check.outputs.image-tags == ''
+        env:
+          SRC_TAG: ${{ steps.check.outputs.src-tag }}
         run: |
-          # Query Docker Hub for the latest versioned tag
+          # Patch-bump off the highest published vX.Y.Z on Docker Hub.
           LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
             | jq -r '.results[].name' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
@@ -93,7 +96,6 @@ jobs:
             CURRENT_VERSION="${LATEST_TAG#v}"
             echo "Latest version on Docker Hub: $CURRENT_VERSION"
 
-            # Increment patch version
             MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
             MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
             PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
@@ -102,10 +104,12 @@ jobs:
           fi
 
           echo "New version: $NEW_VERSION"
+          # src-<hash> is published too: it's the dedup key the next run checks.
           {
             echo "image-tags<<EOF"
             echo "type=raw,value=v${NEW_VERSION}"
-            echo "type=raw,value=latest"
+            echo "type=raw,value=edge"
+            echo "type=raw,value=${SRC_TAG}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -174,7 +178,7 @@ jobs:
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
           cache-to: |
             type=inline
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
@@ -244,7 +248,7 @@ jobs:
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
+            type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
           cache-to: |
             type=inline
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true

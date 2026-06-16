@@ -25,16 +25,21 @@ and are pushed into sandboxes at session setup, never baked into the image.
 
 ### Via CI (preferred)
 
-Push the `sandbox-dev` git tag to have `.github/workflows/sandbox-deployment.yml`
-build multi-arch and push `onyxdotapp/sandbox:dev`:
+Sandbox images are published **manually** by
+`.github/workflows/sandbox-deployment.yml` — never on nightly or release tags:
 
-```bash
-git tag -f sandbox-dev && git push -f origin sandbox-dev
-```
-
-Dev builds never cut a `vX.Y.Z` version or move `:latest`. The nightly tag
-still cuts an auto-versioned `vX.Y.Z` + `latest` when the image context changed.
-Only `sandbox-dev` is supported, to keep Docker Hub free of one-off tags.
+- **Push the `sandbox-edge` git tag** (or run the workflow via
+  `workflow_dispatch`) to cut a versioned release. It publishes a new
+  `onyxdotapp/sandbox:vX.Y.Z` + `:edge` **only if the build context changed**
+  (fingerprinted by git tree hash); an unchanged context is a no-op:
+  ```bash
+  git tag -f sandbox-edge && git push -f origin sandbox-edge
+  ```
+- **Push the `sandbox-dev` git tag** for an ad-hoc dev build →
+  `onyxdotapp/sandbox:dev`:
+  ```bash
+  git tag -f sandbox-dev && git push -f origin sandbox-dev
+  ```
 
 Environments that pin `SANDBOX_CONTAINER_IMAGE` to `:dev` must also set
 `SANDBOX_IMAGE_PULL_POLICY=Always` (default `IfNotPresent`) so re-pushed dev
@@ -42,62 +47,34 @@ builds are picked up by new pods. See `docs/craft/image-architecture.md`.
 
 ### Building locally
 
-The sandbox image must be built for **amd64** architecture since our Kubernetes cluster runs on x86_64 nodes.
-
-### Build for amd64 only (fastest)
+For local iteration, build and load straight into your kind cluster as `:dev`
+(don't hand-push `vX.Y.Z` / channel tags — the `sandbox-deployment.yml` workflow
+owns those, and a manual push would desync the auto-increment):
 
 ```bash
 cd backend/onyx/server/features/build/sandbox/image
-docker build --platform linux/amd64 -t onyxdotapp/sandbox:v0.1.x .
-docker push onyxdotapp/sandbox:v0.1.x
+docker build --platform linux/amd64 -t onyxdotapp/sandbox:dev .
+kind load docker-image onyxdotapp/sandbox:dev --name onyx-dev
 ```
 
-### Build multi-arch (recommended for flexibility)
-
-```bash
-docker buildx build --platform linux/amd64,linux/arm64 \
-  -t onyxdotapp/sandbox:v0.1.x \
-  --push .
-```
-
-### Update the `latest` tag
-
-After pushing a versioned tag, update `latest`:
-
-```bash
-docker tag onyxdotapp/sandbox:v0.1.x onyxdotapp/sandbox:latest
-docker push onyxdotapp/sandbox:latest
-```
-
-Or with buildx:
-
-```bash
-docker buildx build --platform linux/amd64,linux/arm64 \
-  -t onyxdotapp/sandbox:v0.1.x \
-  -t onyxdotapp/sandbox:latest \
-  --push .
-```
+Run with `SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev` and
+`SANDBOX_IMAGE_PULL_POLICY=Always`. (The repo-root `make` targets automate this.)
+Build for **amd64** to match the cluster nodes; add `linux/arm64` via
+`docker buildx --platform linux/amd64,linux/arm64` if you need both.
 
 ## Deploying a New Version
 
-1. **Build and push** the new image (see above)
+1. **Publish** the new sandbox version — push the `sandbox-edge` tag
+   (`git tag -f sandbox-edge && git push -f origin sandbox-edge`), which cuts the
+   next `vX.Y.Z` + `:edge`.
 
-2. **Update the ConfigMap** in in the internal repo
-   ```yaml
-   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:v0.1.x"
-   ```
+2. **Bump the pin** — set `SANDBOX_CONTAINER_IMAGE` in `configs.py` (and the
+   `docker-compose.craft.yml` defaults) to the new `vX.Y.Z`. This is the
+   reviewable step that makes an Onyx version adopt the new sandbox; a future
+   `ods release sandbox` command will do steps 1–2 in one shot.
 
-3. **Apply the ConfigMap**:
-   ```bash
-   kubectl apply -f configmap/env-configmap.yaml
-   ```
-
-4. **Restart the API server** to pick up the new config:
-   ```bash
-   kubectl rollout restart deployment/api-server -n danswer
-   ```
-
-5. **Delete existing sandbox pods** (they will be recreated with the new image):
+3. **Roll out** the new config and recreate sandbox pods so they pull the new
+   image:
    ```bash
    kubectl delete pods -n onyx-sandboxes -l app.kubernetes.io/component=sandbox
    ```

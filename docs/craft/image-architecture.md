@@ -23,36 +23,39 @@ at runtime (`onyx/server/features/build/configs.py`) to toggle the feature.
 | `onyxdotapp/onyx-model-server` | No | Standard image. |
 | **`onyxdotapp/sandbox`** | **Yes** | The only Craft-specific image. Bundles Node + the `opencode` CLI; runs the agent. |
 
-## How the sandbox image is built
+## How the sandbox image is built & versioned
 
-`.github/workflows/sandbox-deployment.yml` builds it on the **nightly** tag
-(`nightly-latest-*`), but only when its build context
-(`backend/onyx/server/features/build/sandbox/image/`) changed since the
-previous nightly. It publishes `onyxdotapp/sandbox:vX.Y.Z` (auto-incremented
-patch) + `:latest`. Run it manually any time via the workflow's
-`workflow_dispatch` to cut a build on demand.
+The sandbox is an **independently-versioned dependency** of Onyx, published
+**manually** — it is *not* built on nightly or release tags. This keeps the
+lifecycle consistent: a new sandbox version is a deliberate publish, and adopting
+it is a deliberate pin bump (no auto-publish that you then have to manually adopt).
 
-For an ad-hoc dev build, push the `sandbox-dev` git tag:
+`.github/workflows/sandbox-deployment.yml` is the only thing that publishes it:
 
-```bash
-git tag -f sandbox-dev && git push -f origin sandbox-dev
-```
+- **`sandbox-edge` git tag** (or `workflow_dispatch`) → **if the build context
+  changed**, auto-increments the patch off the highest published tag and pushes
+  `onyxdotapp/sandbox:vX.Y.Z` + `:edge` (+ a `src-<hash>` dedup tag). The context
+  is fingerprinted by its git tree hash, so pushing the tag with no change is a
+  no-op — no new version:
+  ```bash
+  git tag -f sandbox-edge && git push -f origin sandbox-edge
+  ```
+- **`sandbox-dev` git tag** → builds and pushes the mutable `onyxdotapp/sandbox:dev`:
+  ```bash
+  git tag -f sandbox-dev && git push -f origin sandbox-dev
+  ```
 
-This builds unconditionally and pushes `onyxdotapp/sandbox:dev`. Dev builds
-never cut a `vX.Y.Z` version or move `:latest` — those only happen on the
-nightly path. Only `sandbox-dev` is supported, to keep Docker Hub free of
-one-off tags.
+**Onyx pins the sandbox version it requires** via `SANDBOX_CONTAINER_IMAGE`
+(default in `configs.py`, a specific `onyxdotapp/sandbox:vX.Y.Z`). The pin is
+committed, so each Onyx version reproducibly resolves its sandbox. Bumping the
+pin to adopt a newer sandbox is a deliberate, reviewable change — a future
+`ods release sandbox` command will dispatch the publish workflow and bump the
+pin in one step.
 
-Sandbox pods default to `imagePullPolicy: IfNotPresent`, which would keep
-serving a node-cached `:dev` after a re-push. Environments that pin the
-mutable `:dev` tag must also set `SANDBOX_IMAGE_PULL_POLICY=Always` (next to
-`SANDBOX_CONTAINER_IMAGE` in the env config) so new pods always pull the
-latest dev build. Already running sandbox pods are unaffected — delete them
-to pick up the new image.
-
-The backend does **not** track `:latest` — it pins a specific version via
-`SANDBOX_CONTAINER_IMAGE` (default in `configs.py`). Bump that pin to adopt a
-new sandbox version.
+Immutable `:vX.Y.Z` pins are safe with the default `imagePullPolicy: IfNotPresent`.
+Environments pinning a mutable tag (`:dev`, `:edge`) must set
+`SANDBOX_IMAGE_PULL_POLICY=Always` and delete running sandbox pods to pick up a
+re-push.
 
 ## Deploying Craft
 
