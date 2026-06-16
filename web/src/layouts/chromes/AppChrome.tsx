@@ -278,7 +278,10 @@ function Header() {
         </ConfirmationModalLayout>
       )}
 
-      {(appFocus.isChat() || appFocus.isNewSession() || isMobile) &&
+      {(appFocus.isChat() ||
+        appFocus.isNewSession() ||
+        appFocus.isAgent() ||
+        isMobile) &&
         !appFocus.isSharedChat() && (
           <RootLayout.Header>
             <div className="w-full h-full flex flex-row flex-wrap justify-center items-center px-4 py-2">
