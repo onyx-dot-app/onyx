@@ -92,7 +92,8 @@ function Header() {
 
   const customHeaderContent =
     settings?.enterpriseSettings?.custom_header_content;
-  const pageWithHeaderContent = appFocus.isChat() || appFocus.isNewSession();
+  const pageWithHeaderContent =
+    appFocus.isChat() || appFocus.isNewSession() || appFocus.isAgent();
 
   const effectiveMode: AppMode =
     appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
@@ -278,7 +279,11 @@ function Header() {
         </ConfirmationModalLayout>
       )}
 
-      {(appFocus.isChat() || appFocus.isNewSession() || isMobile) &&
+      {(appFocus.isChat() ||
+        appFocus.isNewSession() ||
+        appFocus.isAgent() ||
+        appFocus.isProject() ||
+        isMobile) &&
         !appFocus.isSharedChat() && (
           <RootLayout.Header>
             <div className="w-full h-full flex flex-row flex-wrap justify-center items-center px-4 py-2">
