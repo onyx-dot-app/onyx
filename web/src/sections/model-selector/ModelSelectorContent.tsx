@@ -18,8 +18,7 @@ import {
   buildLlmOptions,
   groupLlmOptions,
 } from "@/lib/languageModels/options";
-import { useCurrentAgent } from "@/lib/agents/hooks";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import {
   Collapsible,
   CollapsibleContent,
@@ -48,10 +47,8 @@ export default function ModelSelectorContent({
   includeGlobalDefault = false,
   footer,
 }: ModelSelectorContentProps) {
-  const currentAgent = useCurrentAgent();
-  const { llmProviders, isLoading, defaultText } = useLLMProviders(
-    currentAgent?.id
-  );
+  const { llmProviders, isLoading, defaultText } =
+    useCurrentAgentLLMProviders();
 
   const globalDefaultDisplayName = useMemo(() => {
     if (!defaultText || !llmProviders) return null;
