@@ -18,7 +18,7 @@ from onyx.external_apps.providers.base import OAuthFlowSpec
 from onyx.external_apps.providers.base import OAuthProviderSpec
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.base import OrgCredentialField
-from onyx.external_apps.providers.base import token_response_error
+from onyx.oauth.errors import token_response_error
 
 
 class GitHubAction(ExternalAppAction):

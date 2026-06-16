@@ -10,11 +10,11 @@ import asyncio
 import httpx
 import pytest
 
-from onyx.auth import oauth_token_manager
-from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
-from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.oauth import exchange as oauth_exchange
+from onyx.oauth.exchange import exchange_oauth_code_for_token
+from onyx.oauth.exchange import OAuthFlowParams
 from onyx.server.features.mcp import api
 from onyx.server.security.models import SecuritySettings
 from onyx.server.security.models import SSRFProtectionLevel
@@ -53,7 +53,7 @@ def _set_level(monkeypatch: pytest.MonkeyPatch, level: SSRFProtectionLevel) -> N
     tenant-aware store (no DB in unit tests)."""
     settings = _settings_with(level)
     monkeypatch.setattr(mcp_ssrf, "get_security_settings", lambda: settings)
-    monkeypatch.setattr(oauth_token_manager, "get_security_settings", lambda: settings)
+    monkeypatch.setattr(oauth_exchange, "get_security_settings", lambda: settings)
 
 
 @pytest.fixture(autouse=True)

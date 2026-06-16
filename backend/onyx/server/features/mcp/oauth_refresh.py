@@ -18,9 +18,6 @@ from mcp.shared.auth import OAuthToken
 from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
-from onyx.auth.oauth_token_manager import exchange_refresh_token
-from onyx.auth.oauth_token_manager import OAuthFlowParams
-from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPServerStatus
@@ -29,9 +26,12 @@ from onyx.db.mcp import get_connection_config_by_id
 from onyx.db.mcp import update_connection_config
 from onyx.db.mcp import update_mcp_server__no_commit
 from onyx.db.models import MCPServer
-from onyx.external_apps.providers.base import TokenRefreshTerminalError
-from onyx.external_apps.providers.base import TokenRefreshTransientError
-from onyx.external_apps.token_utils import needs_refresh
+from onyx.oauth.errors import TokenRefreshTerminalError
+from onyx.oauth.errors import TokenRefreshTransientError
+from onyx.oauth.exchange import exchange_refresh_token
+from onyx.oauth.exchange import OAuthFlowParams
+from onyx.oauth.exchange import validate_oauth_endpoint_url
+from onyx.oauth.expiry import needs_refresh
 from onyx.redis.lock_context import redis_shared_lock
 from onyx.redis.lock_context import RedisSharedLockAcquisitionError
 from onyx.server.features.mcp.models import MCPConnectionData

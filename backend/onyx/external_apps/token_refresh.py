@@ -22,11 +22,11 @@ from onyx.db.external_app import get_external_app_user_credential
 from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.models import ExternalApp
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.base import TokenRefreshTerminalError
-from onyx.external_apps.providers.base import TokenRefreshTransientError
 from onyx.external_apps.providers.registry import get_provider_for_app
-from onyx.external_apps.token_utils import needs_refresh
-from onyx.external_apps.token_utils import stamp_expires_at
+from onyx.oauth.errors import TokenRefreshTerminalError
+from onyx.oauth.errors import TokenRefreshTransientError
+from onyx.oauth.expiry import needs_refresh
+from onyx.oauth.expiry import stamp_expires_at
 from onyx.redis.lock_context import redis_shared_lock
 from onyx.redis.lock_context import RedisSharedLockAcquisitionError
 from onyx.utils.logger import setup_logger

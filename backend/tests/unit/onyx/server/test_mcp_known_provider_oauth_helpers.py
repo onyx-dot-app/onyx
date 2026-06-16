@@ -6,14 +6,14 @@ from urllib.parse import urlparse
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull
 
-from onyx.auth.oauth_token_manager import build_oauth_authorization_url
-from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
-from onyx.auth.oauth_token_manager import exchange_refresh_token
-from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.base import TokenRefreshTerminalError
-from onyx.external_apps.providers.base import TokenRefreshTransientError
+from onyx.oauth.errors import TokenRefreshTerminalError
+from onyx.oauth.errors import TokenRefreshTransientError
+from onyx.oauth.exchange import build_oauth_authorization_url
+from onyx.oauth.exchange import exchange_oauth_code_for_token
+from onyx.oauth.exchange import exchange_refresh_token
+from onyx.oauth.exchange import OAuthFlowParams
 from onyx.server.features.mcp.api import _mcp_known_provider_flow_params
 
 
@@ -124,10 +124,10 @@ def test_known_provider_code_exchange_sends_code_verifier(
         captured["data"] = data
         return _Response()
 
-    monkeypatch.setattr("onyx.auth.oauth_token_manager.requests.post", _fake_post)
+    monkeypatch.setattr("onyx.oauth.exchange.requests.post", _fake_post)
     # Placeholder host can't resolve; the SSRF guard is exercised in test_mcp_ssrf.
     monkeypatch.setattr(
-        "onyx.auth.oauth_token_manager.validate_oauth_endpoint_url",
+        "onyx.oauth.exchange.validate_oauth_endpoint_url",
         lambda url: None,  # noqa: ARG005
     )
 
@@ -162,9 +162,9 @@ def _patch_refresh_post(
         captured["data"] = data
         return _Response()
 
-    monkeypatch.setattr("onyx.auth.oauth_token_manager.requests.post", _fake_post)
+    monkeypatch.setattr("onyx.oauth.exchange.requests.post", _fake_post)
     monkeypatch.setattr(
-        "onyx.auth.oauth_token_manager.validate_oauth_endpoint_url",
+        "onyx.oauth.exchange.validate_oauth_endpoint_url",
         lambda url: None,  # noqa: ARG005
     )
     return captured

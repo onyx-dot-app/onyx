@@ -18,8 +18,8 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPServerStatus
-from onyx.external_apps.providers.base import TokenRefreshTerminalError
-from onyx.external_apps.providers.base import TokenRefreshTransientError
+from onyx.oauth.errors import TokenRefreshTerminalError
+from onyx.oauth.errors import TokenRefreshTransientError
 from onyx.server.features.mcp import oauth_refresh as orf
 
 TENANT = "public"
