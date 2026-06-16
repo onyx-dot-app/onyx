@@ -131,7 +131,20 @@ export default function UserSkillsPage() {
         c.is_personal && user !== null && c.author_user_id === user.id,
       enabled: c.enabled,
     }));
-    return [...builtinItems, ...customItems];
+    // Group order: built-in, then custom (org-wide), then personal; alphabetical within each group.
+    const groupRank = (item: SkillCardItem): number => {
+      switch (item.source) {
+        case "builtin":
+          return 0;
+        case "custom":
+          return item.is_personal ? 2 : 1;
+      }
+    };
+    return [...builtinItems, ...customItems].sort(
+      (a, b) =>
+        groupRank(a) - groupRank(b) ||
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
   }, [data, user]);
 
   const visibleItems = useMemo(() => {
