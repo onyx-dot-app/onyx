@@ -1,6 +1,5 @@
 "use client";
 
-import "@opal/core/disabled/styles.css";
 import { useState, useMemo, useRef } from "react";
 import { getModelIcon } from "@/lib/languageModels";
 import {
@@ -11,6 +10,7 @@ import {
   Tooltip,
 } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
+import { cn } from "@opal/utils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { LLMOption, buildLlmOptions } from "@/lib/languageModels/options";
 import { useCurrentAgent } from "@/lib/agents/hooks";
@@ -62,6 +62,15 @@ export default function MultiModelSelector({
 
   const isMultiModel = selectedModels.length > 1;
   const atMax = selectedModels.length >= MAX_MODELS || !multiModelAllowed;
+
+  // Single tooltip for the whole selector. The disabled reason takes
+  // precedence; otherwise it labels the add affordance. When at max there is
+  // no add action, so the tooltip is omitted.
+  const selectorTooltip = noModelsToSelect
+    ? "No models currently configured"
+    : atMax
+      ? undefined
+      : "Add Model";
 
   const selectedKeys = useMemo(
     () => new Set(selectedModels.map((m) => modelKey(m.provider, m.modelName))),
@@ -141,29 +150,25 @@ export default function MultiModelSelector({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       {/*
-        `data-opal-disabled` greys out the selector and blocks pointer events on
-        its children while leaving the container itself hoverable, so the
-        Tooltip can still surface its message. The Tooltip wrapper is a no-op
-        (children returned as-is) whenever `tooltip` is undefined.
+        When disabled, pointer events are blocked on the children (so the add
+        button / pills are inert) while the container itself stays hoverable, so
+        the Tooltip can still surface its message even in the disabled state.
       */}
-      <Tooltip
-        tooltip={
-          noModelsToSelect ? "No models currently configured" : undefined
-        }
-        side="top"
-      >
+      <Tooltip tooltip={selectorTooltip} side="top">
         <div
           data-testid="model-selector"
           aria-disabled={noModelsToSelect || undefined}
-          data-opal-disabled={noModelsToSelect || undefined}
-          className="flex items-center justify-end gap-1 p-1"
+          className={cn(
+            "flex items-center justify-end gap-1 p-1",
+            noModelsToSelect &&
+              "cursor-not-allowed select-none opacity-50 [&>*]:pointer-events-none"
+          )}
         >
           {!atMax && (
             <Button
               prominence="tertiary"
               icon={SvgPlusCircle}
               size="sm"
-              tooltip="Add Model"
               onClick={(e: React.MouseEvent) => {
                 anchorRef.current = e.currentTarget as HTMLElement;
                 setReplacingIndex(null);
