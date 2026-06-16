@@ -18,6 +18,7 @@ from onyx.connectors.slack.connector import get_channels_across_teams
 from onyx.connectors.slack.connector import list_grid_team_ids
 from onyx.connectors.slack.connector import make_paginated_slack_api_call
 from onyx.connectors.slack.connector import SlackConnector
+from onyx.connectors.slack.models import ChannelType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_pool import get_redis_client
@@ -39,6 +40,43 @@ def _fetch_workspace_permissions(
         external_user_group_ids=set(),
         # No way to determine if slack is invite only without enterprise license
         is_public=False,
+    )
+
+
+def _filter_channels_for_permissions(
+    all_channels: list[ChannelType],
+    channels_to_include: list[str] | None,
+    include_regex_enabled: bool,
+    channels_to_exclude: list[str] | None = None,
+    exclude_regex_enabled: bool = False,
+) -> list[ChannelType]:
+    if channels_to_include and not include_regex_enabled:
+        available_channel_names = {channel["name"] for channel in all_channels}
+        available_channels_to_include = [
+            channel
+            for channel in channels_to_include
+            if channel in available_channel_names
+        ]
+        missing_channels = sorted(
+            set(channels_to_include) - set(available_channels_to_include)
+        )
+        if missing_channels:
+            logger.warning(
+                "Skipping Slack permission sync for configured channels missing "
+                "from Slack API response: %s",
+                missing_channels,
+            )
+        if not available_channels_to_include:
+            return []
+
+        channels_to_include = available_channels_to_include
+
+    return filter_channels(
+        all_channels,
+        channels_to_include,
+        include_regex_enabled,
+        channels_to_exclude,
+        exclude_regex_enabled,
     )
 
 
@@ -78,7 +116,7 @@ def _fetch_channel_permissions(
             get_public=False,
             get_private=True,
         )
-    filtered_channels = filter_channels(
+    filtered_channels = _filter_channels_for_permissions(
         public_channels + private_channels,
         channels_to_include,
         include_regex_enabled,
