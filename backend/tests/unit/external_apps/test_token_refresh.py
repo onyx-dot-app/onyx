@@ -10,9 +10,10 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.exc import SQLAlchemyError
 
 from onyx.external_apps import token_refresh as tr
-from onyx.external_apps.providers.base import TokenRefreshTerminalError
-from onyx.external_apps.providers.base import TokenRefreshTransientError
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
+from onyx.oauth import single_flight as sf
+from onyx.oauth.errors import TokenRefreshTerminalError
+from onyx.oauth.errors import TokenRefreshTransientError
 
 # ---------------------------------------------------------------------------
 # Provider.refresh_credentials (RFC-6749 default on OAuthExternalAppProvider)
@@ -30,7 +31,7 @@ def _response(status_code: int, body: dict[str, Any]) -> requests.Response:
 
 def _patch_post(monkeypatch: pytest.MonkeyPatch, response: object) -> None:
     monkeypatch.setattr(
-        "onyx.external_apps.providers.base.requests.post",
+        "onyx.oauth.exchange.requests.post",
         lambda *_a, **_k: response,
     )
 
@@ -272,7 +273,7 @@ def _setup(
     app = MagicMock()
     app.skill.name = "Google Calendar"
 
-    monkeypatch.setattr(tr, "redis_shared_lock", _noop_cm)
+    monkeypatch.setattr(sf, "redis_shared_lock", _noop_cm)
     monkeypatch.setattr(tr, "get_session_with_tenant", _noop_cm)
     monkeypatch.setattr(tr, "get_external_app_by_id", lambda *_a, **_k: app)
     monkeypatch.setattr(tr, "get_provider_for_app", lambda *_a, **_k: provider)
@@ -361,7 +362,7 @@ def test_ensure_fresh_redis_unavailable_keeps_existing_token(
     def _boom(*_a: Any, **_k: Any) -> Any:
         raise RedisConnectionError("Error connecting to Redis.")
 
-    monkeypatch.setattr(tr, "redis_shared_lock", _boom)
+    monkeypatch.setattr(sf, "redis_shared_lock", _boom)
     _run()  # must not raise
     spies["refresh"].assert_not_called()
     spies["upsert"].assert_not_called()

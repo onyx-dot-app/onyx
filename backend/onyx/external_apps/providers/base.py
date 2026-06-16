@@ -11,48 +11,15 @@ from pydantic import ConfigDict
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.presentation.payload_decoders import PayloadDecoder
 from onyx.external_apps.providers.actions import EndpointSpec
+from onyx.oauth.errors import token_response_error
+from onyx.oauth.errors import TokenRefreshError
+from onyx.oauth.errors import TokenRefreshTerminalError
+from onyx.oauth.errors import TokenRefreshTransientError
+from onyx.oauth.exchange import default_refresh_request_body
+from onyx.oauth.exchange import request_oauth_token
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-class TokenRefreshError(Exception):
-    """Base class for OAuth access-token refresh failures."""
-
-
-class TokenRefreshTerminalError(TokenRefreshError):
-    """The refresh token is dead (revoked / invalid_grant / missing). The stored
-    credential should be cleared and the user prompted to reconnect — retrying
-    cannot succeed."""
-
-
-class TokenRefreshTransientError(TokenRefreshError):
-    """A transient failure (network, 5xx, non-JSON, rate-limit). The existing
-    token should be left in place and the refresh retried on a later request."""
-
-
-def token_response_error(http_response: requests.Response, body: Any) -> str | None:
-    """Slack returns 200 + ``{"ok": false}`` on failure; everyone else uses
-    non-2xx. Returns the error string or ``None`` on success.
-
-    ``body`` is whatever ``response.json()`` produced, so it may not be a JSON
-    object (a gateway can return a bare array / string / number / ``null``). A
-    non-object can't carry an OAuth error code, so a non-2xx is reported as a
-    generic failure and a 2xx falls through to credential mapping — never an
-    unguarded ``.get()`` that would escape the refresh error handling."""
-    if not isinstance(body, dict):
-        if http_response.status_code >= 400:
-            return f"unexpected token response (status={http_response.status_code})"
-        return None
-    if http_response.status_code >= 400:
-        # Prefer the machine-readable `error` code over the human-readable
-        # `error_description`: terminal-vs-transient classification matches against
-        # OAuth error codes (e.g. `invalid_grant`), so returning the prose would
-        # misclassify a dead grant as transient and skip required reconnect handling.
-        return body.get("error") or body.get("error_description") or "unknown"
-    if body.get("ok") is False:
-        return body.get("error") or "unknown"
-    return None
 
 
 class OrgCredentialField(BaseModel):
@@ -261,34 +228,13 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
                 "No refresh token stored; the user must reconnect."
             )
 
-        try:
-            response = requests.post(
-                self.spec.oauth.token_url,
-                # Ask for JSON so providers that default to form-encoded
-                # refresh responses (e.g. GitHub) still parse via response.json().
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Accept": "application/json",
-                },
-                data=self.build_refresh_request(
-                    refresh_token, client_id, client_secret
-                ),
-                timeout=self.refresh_http_timeout_seconds,
-            )
-        except requests.RequestException as exc:
-            raise TokenRefreshTransientError(f"network error: {exc}") from exc
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise TokenRefreshTransientError(
-                f"non-JSON token response (status={response.status_code})"
-            ) from exc
-
-        error = self.classify_token_response(response, body)
-        if error is not None:
-            if error in self.terminal_refresh_errors:
-                raise TokenRefreshTerminalError(error)
-            raise TokenRefreshTransientError(error)
+        body = request_oauth_token(
+            self.spec.oauth.token_url,
+            self.build_refresh_request(refresh_token, client_id, client_secret),
+            terminal_errors=self.terminal_refresh_errors,
+            classify_response=self.classify_token_response,
+            timeout_s=self.refresh_http_timeout_seconds,
+        )
 
         try:
             mapped = self.extract_credentials(body)
@@ -312,12 +258,7 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     ) -> dict[str, str]:
         """The refresh POST form body. Override to add provider-specific params
         (scope, resource, audience, …) or change the grant."""
-        return {
-            "grant_type": "refresh_token",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
-        }
+        return default_refresh_request_body(refresh_token, client_id, client_secret)
 
     def classify_token_response(
         self, response: requests.Response, body: dict[str, Any]

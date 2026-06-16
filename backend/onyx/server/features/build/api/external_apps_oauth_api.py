@@ -22,7 +22,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_provider_or_raise
-from onyx.external_apps.token_utils import stamp_expires_at
+from onyx.oauth.expiry import stamp_expires_at
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.api.models import OAuthCallbackRequest
 from onyx.server.features.build.api.models import OAuthCallbackResponse
