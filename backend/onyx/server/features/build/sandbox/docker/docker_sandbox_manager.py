@@ -106,6 +106,7 @@ from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     published_opencode_serve_base_url,
 )
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecError
+from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecResult
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     run_in_container,
 )
@@ -149,6 +150,10 @@ WORKSPACE_ROOT = "/workspace"
 SESSIONS_ROOT = f"{WORKSPACE_ROOT}/sessions"
 TEMPLATES_OUTPUTS_PATH = f"{WORKSPACE_ROOT}/templates/outputs"
 MANAGED_SKILLS_PATH = f"{WORKSPACE_ROOT}/managed/skills"
+SANDBOX_EXEC_USER = "1000:1000"
+# Docker exec bypasses firewall-init.sh's setpriv environment workaround, so
+# sandbox-user execs must carry the uid/gid and user HOME together.
+SANDBOX_EXEC_ENV = {"HOME": "/home/sandbox", "USER": "sandbox"}
 
 # Mirror the K8s constants in ``kubernetes_sandbox_manager`` (POD_READY_*),
 # which are also module-level and not env-tunable.
@@ -170,6 +175,57 @@ _PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # Registered in the opencode config only when the proxy is wired up; otherwise
 # it would no-op (no HTTP(S)_PROXY to re-tag).
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+
+
+def _run_in_container_as_sandbox_user(
+    container: Container,
+    command: list[str] | str,
+    *,
+    workdir: str | None = None,
+    check: bool = True,
+) -> ExecResult:
+    return run_in_container(
+        container,
+        command,
+        user=SANDBOX_EXEC_USER,
+        workdir=workdir,
+        environment=SANDBOX_EXEC_ENV,
+        check=check,
+    )
+
+
+def _stream_stdin_to_container_as_sandbox_user(
+    container: Container,
+    command: list[str],
+    payload: bytes,
+    *,
+    workdir: str | None = None,
+) -> ExecResult:
+    return stream_stdin_to_container(
+        container,
+        command,
+        payload,
+        user=SANDBOX_EXEC_USER,
+        workdir=workdir,
+        environment=SANDBOX_EXEC_ENV,
+    )
+
+
+def _stream_stdout_from_container_as_sandbox_user(
+    container: Container,
+    command: list[str],
+    *,
+    workdir: str | None = None,
+    chunk_size: int = 64 * 1024,
+) -> Generator[bytes, None, int]:
+    return stream_stdout_from_container(
+        container,
+        command,
+        user=SANDBOX_EXEC_USER,
+        workdir=workdir,
+        environment=SANDBOX_EXEC_ENV,
+        chunk_size=chunk_size,
+    )
 
 
 def _build_nextjs_start_script(
@@ -446,10 +502,12 @@ def build_container_create_kwargs(
       bypassing the init); ``command=["/workspace/entrypoint.sh"]`` becomes the
       arg firewall-init.sh exec's after setpriv drops caps + switches to UID
       1000.
-    - ``cap_add=["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]`` (NET_ADMIN runs
-      iptables; SETPCAP authorises ``setpriv --bounding-set=-all``;
-      SETUID/SETGID gate setpriv's ``--reuid``/``--regid`` under
-      ``cap_drop=ALL``). All four leave the bounding set before the agent
+    - ``cap_add=["NET_ADMIN", "SETPCAP", "SETUID", "SETGID", "CHOWN"]``
+      (NET_ADMIN runs iptables; SETPCAP authorises
+      ``setpriv --bounding-set=-all``; SETUID/SETGID gate setpriv's
+      ``--reuid``/``--regid`` under ``cap_drop=ALL``; CHOWN repairs the
+      sessions volume mount-point owner). All five leave the bounding set
+      before the agent
       execve, so the running container ends up with no caps at all.
     - ``user="0:0"`` so the init starts as root for iptables. setpriv then drops
       to UID 1000. The root+NET_ADMIN window is bounded by ``firewall-init.sh``
@@ -525,9 +583,10 @@ def build_container_create_kwargs(
         # NET_ADMIN: iptables. SETPCAP: prctl(PR_CAPBSET_DROP) for `setpriv
         # --bounding-set=-all`. SETUID/SETGID: setpriv's --reuid/--regid call
         # setuid()/setgroups(), which are gated on these caps even for UID 0
-        # under cap_drop=ALL. All four leave the bounding set before the agent
-        # execve, so the running container ends up with no caps.
-        cap_add = ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]
+        # under cap_drop=ALL. CHOWN: repair /workspace/sessions mount-point
+        # ownership before dropping to UID 1000. All five leave the bounding set
+        # before the agent execve, so the running container ends up with no caps.
+        cap_add = ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID", "CHOWN"]
     else:
         entrypoint = None
         command = ["/workspace/entrypoint.sh"]
@@ -980,7 +1039,14 @@ echo "Session workspace setup complete"
             "Setting up session workspace %s in sandbox %s.", session_id, sandbox_id
         )
         try:
-            run_in_container(container, ["/bin/sh", "-c", setup_script])
+            # user="1000:1000": container's User spec is "0:0" (proxy init needs
+            # root for iptables), so docker exec defaults to root. Without
+            # CAP_DAC_OVERRIDE (cap_drop=ALL), root cannot write to
+            # /workspace/sessions which is owned by sandbox=1000. Exec as
+            # sandbox so the script's mkdir/cp on the session workspace succeed.
+            _run_in_container_as_sandbox_user(
+                container, ["/bin/sh", "-c", setup_script]
+            )
         except ExecError as e:
             raise RuntimeError(
                 f"Failed to setup session workspace {session_id}: {e}"
@@ -1013,7 +1079,10 @@ rm -rf {session_path}
 echo "Session cleanup complete"
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", cleanup_script])
+            _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", cleanup_script],
+            )
         except ExecError as e:
             logger.warning(
                 "cleanup_session_workspace exec failed for session %s: %s",
@@ -1031,7 +1100,7 @@ echo "Session cleanup complete"
             return False
         target = f"{SESSIONS_ROOT}/{session_id}/outputs"
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1054,7 +1123,7 @@ echo "Session cleanup complete"
         if container is None:
             return []
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 ["/bin/sh", "-c", f"ls -1 {SESSIONS_ROOT}/ 2>/dev/null || true"],
                 check=False,
@@ -1091,7 +1160,7 @@ echo "Session cleanup complete"
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         # Bail out if there's nothing worth snapshotting.
         try:
-            probe = run_in_container(
+            probe = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1117,7 +1186,7 @@ echo "Session cleanup complete"
             ),
         ]
 
-        stream = stream_stdout_from_container(container, tar_cmd)
+        stream = _stream_stdout_from_container_as_sandbox_user(container, tar_cmd)
         adapter = _GeneratorReader(stream)
         try:
             # ``_GeneratorReader`` satisfies the structural ``read(n)`` API that
@@ -1156,7 +1225,7 @@ echo "Session cleanup complete"
 
         # Make sure the session directory exists before we extract into it.
         try:
-            run_in_container(
+            _run_in_container_as_sandbox_user(
                 container,
                 ["/bin/sh", "-c", f"mkdir -p {session_path}"],
             )
@@ -1171,7 +1240,7 @@ echo "Session cleanup complete"
         payload = buf.getvalue()
 
         try:
-            stream_stdin_to_container(
+            _stream_stdin_to_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1203,7 +1272,10 @@ if [ -f "$web_dir/bun.lock" ]; then
 fi
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", install_script])
+            _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", install_script],
+            )
         except ExecError as e:
             raise RuntimeError(f"Failed to reinstall deps after restore: {e}") from e
 
@@ -1220,7 +1292,10 @@ fi
                 session_path, nextjs_port, check_node_modules=True
             )
             try:
-                run_in_container(container, ["/bin/sh", "-c", start_script])
+                _run_in_container_as_sandbox_user(
+                    container,
+                    ["/bin/sh", "-c", start_script],
+                )
             except ExecError as e:
                 raise RuntimeError(f"Failed to start Next.js after restore: {e}") from e
 
@@ -1250,7 +1325,10 @@ ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", script])
+            _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", script],
+            )
         except ExecError as e:
             raise RuntimeError(f"Failed to regenerate session config: {e}") from e
 
@@ -1298,7 +1376,7 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
         quoted = shlex.quote(target_path)
 
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1365,7 +1443,7 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
         quoted = shlex.quote(target_path)
 
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1429,8 +1507,10 @@ chmod 644 "$target_dir/$base"
 echo "$base"
 """
         try:
-            result = stream_stdin_to_container(
-                container, ["/bin/sh", "-c", script], tar_data
+            result = _stream_stdin_to_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", script],
+                tar_data,
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to upload file: {e}") from e
@@ -1479,7 +1559,11 @@ else
 fi
 """
         try:
-            run_in_container(container, ["/bin/sh", "-c", script], check=False)
+            _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", script],
+                check=False,
+            )
         except ExecError as e:
             logger.warning("AGENTS.md attachments section update failed: %s", e)
 
@@ -1494,7 +1578,7 @@ fi
         clean_path = path.lstrip("/")
         target = f"{SESSIONS_ROOT}/{session_id}/{clean_path}"
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "/bin/sh",
@@ -1531,7 +1615,10 @@ mkdir -p {safe_dir}
 printf '%s' '{escaped}' > {safe_path}
 echo WRITE_OK"""
         try:
-            result = run_in_container(container, ["/bin/sh", "-c", script])
+            result = _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", script],
+            )
         except ExecError as e:
             raise RuntimeError(f"Failed to write sandbox file {path}: {e}") from e
         if "WRITE_OK" not in result.stdout_text:
@@ -1558,7 +1645,11 @@ echo WRITE_OK"""
             f"fi"
         )
         try:
-            result = run_in_container(container, ["/bin/sh", "-c", cmd], check=False)
+            result = _run_in_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", cmd],
+                check=False,
+            )
         except ExecError as e:
             logger.warning("get_upload_stats failed: %s", e)
             return 0, 0
@@ -1625,7 +1716,11 @@ echo WRITE_OK"""
             f"trap - EXIT\n"
         )
         try:
-            stream_stdin_to_container(container, ["/bin/sh", "-c", script], tar_bytes)
+            _stream_stdin_to_container_as_sandbox_user(
+                container,
+                ["/bin/sh", "-c", script],
+                tar_bytes,
+            )
         except ExecError as e:
             raise RuntimeError(f"write_files_to_sandbox failed: {e}") from e
 
@@ -1657,7 +1752,7 @@ echo WRITE_OK"""
         cache_abs = f"{session_root}/{clean_cache}"
 
         try:
-            result = run_in_container(
+            result = _run_in_container_as_sandbox_user(
                 container,
                 [
                     "python",
