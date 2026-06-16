@@ -257,36 +257,39 @@ function NewCustomProviderCard({
   const { icon, productName, companyName, Modal } = getProvider("custom");
 
   return (
-    <SelectCard
-      state="empty"
-      padding="sm"
-      rounding="lg"
-      onClick={() => setIsOpen(true)}
-    >
-      <ContentAction
-        icon={icon}
-        title={productName}
-        description={companyName}
-        sizePreset="main-ui"
-        variant="section"
-        padding="lg"
-        rightChildren={
-          <Button
-            rightIcon={SvgArrowExchange}
-            prominence="tertiary"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsOpen(true);
-            }}
-          >
-            Set Up
-          </Button>
-        }
-      />
+    <>
       {isOpen && (
         <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
       )}
-    </SelectCard>
+
+      <SelectCard
+        state="empty"
+        padding="sm"
+        rounding="lg"
+        onClick={() => setIsOpen(true)}
+      >
+        <ContentAction
+          icon={icon}
+          title={productName}
+          description={companyName}
+          sizePreset="main-ui"
+          variant="section"
+          padding="lg"
+          rightChildren={
+            <Button
+              rightIcon={SvgArrowExchange}
+              prominence="tertiary"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsOpen(true);
+              }}
+            >
+              Set Up
+            </Button>
+          }
+        />
+      </SelectCard>
+    </>
   );
 }
 
