@@ -432,10 +432,17 @@ def test_proxy_kwargs_runs_init_as_root_with_required_caps(
     proxy_kwargs: ContainerCreateKwargs,
 ) -> None:
     """NET_ADMIN for iptables; SETPCAP authorises the bounding-set drop;
-    SETUID + SETGID gate the uid/gid switch under cap_drop=ALL."""
+    SETUID + SETGID gate the uid/gid switch under cap_drop=ALL; CHOWN repairs
+    the sessions mount-point owner."""
     assert proxy_kwargs["user"] == "0:0"
     assert proxy_kwargs["cap_drop"] == ["ALL"]
-    assert proxy_kwargs["cap_add"] == ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]
+    assert proxy_kwargs["cap_add"] == [
+        "NET_ADMIN",
+        "SETPCAP",
+        "SETUID",
+        "SETGID",
+        "CHOWN",
+    ]
     # The other invariants must not regress in proxy mode.
     assert proxy_kwargs["privileged"] is False
     assert "no-new-privileges:true" in proxy_kwargs["security_opt"]
