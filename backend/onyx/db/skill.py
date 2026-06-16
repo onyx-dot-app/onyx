@@ -519,8 +519,10 @@ def _personal_skill_lock_id(user_id: UUID) -> int:
     digest = hashlib.sha256(
         f"{_PERSONAL_SKILL_LOCK_NAMESPACE}:{user_id}".encode()
     ).digest()
+    # Full 64-bit key (not 32-bit hashtext) so distinct users don't collide;
+    # explicit big-endian so the id is stable across platforms.
     # pg_advisory_xact_lock takes a signed 8-byte int.
-    return struct.unpack("q", digest[:8])[0]
+    return struct.unpack(">q", digest[:8])[0]
 
 
 def lock_personal_skills_for_user(user_id: UUID, db_session: Session) -> None:

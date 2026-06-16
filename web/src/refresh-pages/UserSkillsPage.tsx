@@ -98,6 +98,7 @@ export default function UserSkillsPage() {
     if (!target) return;
     setDeleteTarget(null);
 
+    setPendingId(target.id);
     try {
       await deleteUserSkill(target.id);
       toast.success(`Deleted "${target.name}"`);
@@ -105,6 +106,8 @@ export default function UserSkillsPage() {
     } catch (err) {
       console.error("Failed to delete skill", err);
       toast.error(err instanceof Error ? err.message : "Failed to delete");
+    } finally {
+      setPendingId(null);
     }
   }
 

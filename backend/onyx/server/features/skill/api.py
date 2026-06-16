@@ -46,6 +46,7 @@ from onyx.server.features.skill.models import SkillsList
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.skills.bundle import DEFAULT_TOTAL_MAX_BYTES
+from onyx.skills.bundle import slug_from_filename
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
@@ -384,17 +385,17 @@ def create_personal_skill(
             "personal skills. Delete one before creating another.",
         )
 
+    # Reject reserved slugs up front so we never write a bundle blob for one.
+    slug = slug_from_filename(bundle.filename)
+    if slug in _RESERVED_SKILL_SLUGS:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
+
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
         _read_bundle_upload(bundle), bundle.filename, file_store
     )
 
     try:
-        if ingested.slug in _RESERVED_SKILL_SLUGS:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"slug '{ingested.slug}' is reserved",
-            )
         skill = create_skill__no_commit(
             slug=ingested.slug,
             name=ingested.name,
