@@ -31,7 +31,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { NEXT_PUBLIC_LANGUAGE_MODEL_CONFIGURATION_DISABLED } from "@/lib/constants";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
 
@@ -426,7 +426,7 @@ export default function LanguageModelsPage() {
         )}
 
         {/* ── Cloud disablement notice ── */}
-        {NEXT_PUBLIC_CLOUD_ENABLED && (
+        {NEXT_PUBLIC_LANGUAGE_MODEL_CONFIGURATION_DISABLED && (
           <MessageCard
             title="New LLM configuration temporarily unavailable."
             description="Existing LLM providers can still be used and updated."
@@ -435,7 +435,7 @@ export default function LanguageModelsPage() {
         )}
 
         {/* ── Add Provider (always visible) ── */}
-        <Disabled disabled={NEXT_PUBLIC_CLOUD_ENABLED}>
+        <Disabled disabled={NEXT_PUBLIC_LANGUAGE_MODEL_CONFIGURATION_DISABLED}>
           <GeneralLayouts.Section
             gap={0.75}
             height="fit"
