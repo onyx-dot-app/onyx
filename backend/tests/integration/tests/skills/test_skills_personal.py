@@ -265,6 +265,38 @@ def test_admin_disabled_personal_skill_greyed_for_owner_and_deletable(
     assert slug not in admin_slugs
 
 
+def test_admin_disable_owner_reenable_admin_delete_flow(
+    admin_user: DATestUser,
+    basic_user: DATestUser,
+) -> None:
+    slug = f"personal-admin-toggle-{uuid4().hex[:6]}"
+    skill = SkillManager.create_personal(basic_user, slug=slug)
+
+    # admin disables the owner's personal skill
+    SkillManager.patch_custom(skill, admin_user, enabled=False)
+    own = [
+        c
+        for c in SkillManager.list_for_user(basic_user)["customs"]
+        if c["slug"] == slug
+    ]
+    assert len(own) == 1 and own[0]["enabled"] is False
+
+    # owner re-enables it (enabled is a shared flag; no who-disabled tracking)
+    reenabled = SkillManager.patch_personal(skill, basic_user, enabled=True)
+    assert reenabled.enabled is True
+    own = [
+        c
+        for c in SkillManager.list_for_user(basic_user)["customs"]
+        if c["slug"] == slug
+    ]
+    assert len(own) == 1 and own[0]["enabled"] is True
+
+    # admin can still hard-delete it outright
+    SkillManager.delete_custom(skill, admin_user)
+    admin_slugs = [c["slug"] for c in SkillManager.list_all(admin_user)["customs"]]
+    assert slug not in admin_slugs
+
+
 def test_per_user_personal_skill_cap(admin_user: DATestUser) -> None:  # noqa: ARG001
     # dedicated user so personal skills from other tests don't skew the count
     capped_user = UserManager.create(name=f"capped_{uuid4().hex[:8]}")
