@@ -70,7 +70,7 @@ def _sanitize_url_for_logging(value: str) -> str:
     netloc = parsed.hostname or ""
     if parsed.port:
         netloc = f"{netloc}:{parsed.port}"
-    return parsed._replace(netloc=netloc).geturl()
+    return parsed._replace(netloc=netloc, query="", fragment="").geturl()
 
 
 def mask_env_value_for_logging(key: str, value: str) -> str:
@@ -83,7 +83,7 @@ def mask_env_value_for_logging(key: str, value: str) -> str:
     """
     if key.upper() not in _UNMASKED_ENV_KEYS:
         return mask_string(value)
-    if value.startswith(("http://", "https://")):
+    if value.lower().startswith(("http://", "https://")):
         return _sanitize_url_for_logging(value)
     return value
 
