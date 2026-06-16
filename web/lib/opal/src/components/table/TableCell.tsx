@@ -1,5 +1,3 @@
-import { cn } from "@opal/utils";
-import { useTableSize } from "@opal/components/table/TableSizeContext";
 import type { WithoutStyles } from "@opal/types";
 
 interface TableCellProps extends WithoutStyles<
@@ -15,18 +13,16 @@ export default function TableCell({
   children,
   ...props
 }: TableCellProps) {
-  const resolvedSize = useTableSize();
+  // Size is not declared here — it is read off the parent `.tbl-row[data-size]`
+  // via CSS selectors (see styles.css). The cell owns the height; the inner box
+  // fills it (`h-full`) and centers its content.
   return (
     <td
       className="tbl-cell overflow-hidden"
-      data-size={resolvedSize}
       style={width != null ? { width } : undefined}
       {...props}
     >
-      <div
-        className={cn("tbl-cell-inner", "flex items-center overflow-hidden")}
-        data-size={resolvedSize}
-      >
+      <div className="tbl-cell-inner flex h-full items-center overflow-hidden">
         {children}
       </div>
     </td>

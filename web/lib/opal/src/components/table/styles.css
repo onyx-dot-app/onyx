@@ -10,18 +10,31 @@
 
 /* ---- TableCell ---- */
 
-.tbl-cell[data-size="lg"] {
-  @apply px-1 py-0.5;
+/* Size is declared once on the row (data-size on .tbl-row) and selected down to
+ * its cells: the cell carries the height + padding, and the inner box fills it
+ * with `h-full` and centers its content.
+ *
+ * The height uses `box-content` (content-box) on purpose. A td is border-box by
+ * default, so a plain height would absorb the per-variant td border (4px in
+ * "cards", 1px in "rows") and shrink the content differently per variant.
+ * content-box makes the height the content area, so border + padding add outside
+ * and the previous sizing is reproduced exactly in both variants. Column widths
+ * are unaffected — they are driven by the <colgroup>. Only the data cell gets a
+ * fixed height; qualifier/actions cells keep their own padding and stretch to
+ * the row. */
+
+.tbl-row[data-size="lg"] .tbl-cell {
+  @apply h-10 box-content px-1 py-0.5;
 }
-.tbl-cell[data-size="md"] {
-  @apply pl-0.5 pr-1.5 py-1.5;
+.tbl-row[data-size="md"] .tbl-cell {
+  @apply h-6 box-content pl-0.5 pr-1.5 py-1.5;
 }
 
-.tbl-cell-inner[data-size="lg"] {
-  @apply h-10 px-1;
+.tbl-row[data-size="lg"] .tbl-cell-inner {
+  @apply px-1;
 }
-.tbl-cell-inner[data-size="md"] {
-  @apply h-6 px-0.5;
+.tbl-row[data-size="md"] .tbl-cell-inner {
+  @apply px-0.5;
 }
 
 /* ---- TableHead ---- */

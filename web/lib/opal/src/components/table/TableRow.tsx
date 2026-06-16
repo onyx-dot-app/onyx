@@ -59,6 +59,7 @@ function SortableTableRow({
       ref={setNodeRef}
       style={style}
       className="tbl-row group/row"
+      data-size={resolvedSize}
       data-drag-handle={showDragHandle || undefined}
       data-selected={selected || undefined}
       data-disabled={disabled || undefined}
@@ -109,6 +110,8 @@ export default function TableRow({
   ref,
   ...props
 }: TableRowProps) {
+  const resolvedSize = useTableSize();
+
   if (sortableId) {
     return (
       <SortableTableRow
@@ -126,6 +129,7 @@ export default function TableRow({
     <tr
       ref={ref}
       className="tbl-row group/row"
+      data-size={resolvedSize}
       data-selected={selected || undefined}
       data-disabled={disabled || undefined}
       {...props}
