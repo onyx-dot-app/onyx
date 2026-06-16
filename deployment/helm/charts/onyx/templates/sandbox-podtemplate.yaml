@@ -101,6 +101,7 @@ template:
           - { name: workspace, mountPath: /workspace/sessions }
           - { name: opencode-data, mountPath: /workspace/opencode-data }
           - { name: managed, mountPath: /workspace/managed }
+          - { name: sidecar-tmp, mountPath: /tmp }
           - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
         resources:
           # Snapshot tar/stream runs through this sidecar, so give it headroom.
@@ -147,6 +148,7 @@ template:
           - { name: workspace, mountPath: /workspace/sessions }
           - { name: opencode-data, mountPath: /workspace/opencode-data }
           - { name: managed, mountPath: /workspace/managed, readOnly: true }
+          - { name: tmp, mountPath: /tmp }
           - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
         resources:
           requests:
@@ -165,6 +167,10 @@ template:
       - name: opencode-data
         emptyDir: { sizeLimit: 5Gi }
       - name: managed
+        emptyDir: { sizeLimit: 5Gi }
+      - name: tmp
+        emptyDir: { sizeLimit: 5Gi }
+      - name: sidecar-tmp
         emptyDir: { sizeLimit: 5Gi }
       - name: sandbox-ca-source
         configMap:
