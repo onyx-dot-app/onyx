@@ -281,11 +281,15 @@ def _extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
     try:
         page_texts: list[str] = []
         for page in pdf:
-            textpage = page.get_textpage()
+            # Per-page try/finally so a get_textpage() failure still closes the
+            # native page handle instead of leaking it until GC.
             try:
-                page_texts.append(textpage.get_text_range())
+                textpage = page.get_textpage()
+                try:
+                    page_texts.append(textpage.get_text_range())
+                finally:
+                    textpage.close()
             finally:
-                textpage.close()
                 page.close()
         return TEXT_SECTION_SEPARATOR.join(page_texts)
     finally:
