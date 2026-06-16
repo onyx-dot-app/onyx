@@ -277,10 +277,11 @@ class DynamicCitationProcessor:
         """
         # None -> end of stream, flush remaining segment and held tokens
         if token is None:
-            remaining = self.hold + self.curr_segment
+            remaining = self.curr_segment + self.hold
             if remaining:
                 yield remaining
             self.hold = ""
+            self.curr_segment = ""
             return
 
         # Handle stop stream token

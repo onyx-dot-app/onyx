@@ -2545,21 +2545,22 @@ class TestHoldBufferFlushOnStreamEnd:
 
     def test_hold_and_curr_segment_both_flushed(self) -> None:
         """Both `self.hold` and `self.curr_segment` should be flushed on
-        stream end."""
+        stream end, with correct ordering (curr_segment before hold)."""
         processor = DynamicCitationProcessor(stop_stream="END")
 
         results: list[str | CitationInfo] = []
-        # "EN" partially matches stop stream, held in self.hold
-        for token in ["Prefix ", "EN"]:
+        # "[" starts a citation -> sits in curr_segment
+        # "EN" partially matches stop stream -> held in self.hold
+        # At stream end, output should be "[EN" (curr_segment first, then hold)
+        for token in ["[", "EN"]:
             for result in processor.process_token(token):
                 results.append(result)
-        # End of stream — should flush held "EN"
+        # End of stream — should flush curr_segment + hold in order
         for result in processor.process_token(None):
             results.append(result)
 
         output = "".join(r for r in results if isinstance(r, str))
-        assert "Prefix " in output
-        assert "EN" in output
+        assert output == "[EN"
 
     def test_no_truncation_with_citation_near_end(self) -> None:
         """End-to-end: a well-cited RAG response whose final characters
