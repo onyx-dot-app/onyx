@@ -316,6 +316,7 @@ def create_update_persona(
             search_start_date=create_persona_request.search_start_date,
             label_ids=create_persona_request.label_ids,
             is_featured=create_persona_request.is_featured,
+            include_citations=create_persona_request.include_citations,
             user_file_ids=converted_user_file_ids,
             commit=False,
             hierarchy_node_ids=create_persona_request.hierarchy_node_ids,
@@ -929,6 +930,7 @@ def upsert_persona(
     search_start_date: datetime | None = None,
     builtin_persona: bool = False,
     is_featured: bool | None = None,
+    include_citations: bool | None = None,
     label_ids: list[int] | None = None,
     user_file_ids: list[UUID] | None = None,
     hierarchy_node_ids: list[int] | None = None,
@@ -1058,6 +1060,11 @@ def upsert_persona(
         existing_persona.is_featured = (
             is_featured if is_featured is not None else existing_persona.is_featured
         )
+        existing_persona.include_citations = (
+            include_citations
+            if include_citations is not None
+            else existing_persona.include_citations
+        )
         # Update embedded prompt fields if provided
         if system_prompt is not None:
             existing_persona.system_prompt = system_prompt
@@ -1124,6 +1131,9 @@ def upsert_persona(
             is_listed=is_listed,
             search_start_date=search_start_date,
             is_featured=(is_featured if is_featured is not None else False),
+            include_citations=(
+                include_citations if include_citations is not None else True
+            ),
             user_files=user_files or [],
             labels=labels or [],
             hierarchy_nodes=hierarchy_nodes or [],

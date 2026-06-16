@@ -598,6 +598,7 @@ export default function AgentEditorPage({
       : null,
     replace_base_system_prompt:
       existingAgent?.replace_base_system_prompt ?? false,
+    include_citations: existingAgent?.include_citations ?? true,
     reminders: existingAgent?.task_prompt ?? "",
     // For new agents, default to false for optional tools to avoid
     // "Tool not available" errors when the tool isn't configured.
@@ -717,6 +718,7 @@ export default function AgentEditorPage({
         (value) => !value || !isDateInFuture(value)
       ),
     replace_base_system_prompt: Yup.boolean(),
+    include_citations: Yup.boolean(),
     reminders: Yup.string().optional(),
 
     // MCP servers - dynamically add validation for each server with nested tool validation
@@ -838,6 +840,7 @@ export default function AgentEditorPage({
         replace_base_system_prompt: values.replace_base_system_prompt,
         task_prompt: values.reminders || "",
         datetime_aware: false,
+        include_citations: values.include_citations,
       };
 
       // Call API
@@ -1595,6 +1598,13 @@ export default function AgentEditorPage({
                                   description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
                                 >
                                   <SwitchField name="replace_base_system_prompt" />
+                                </InputHorizontal>
+                                <InputHorizontal
+                                  withLabel="include_citations"
+                                  title="Include Citations"
+                                  description="Show inline citations and a sources list pointing to the documents used in the answer. Turn off to hide sources from responses."
+                                >
+                                  <SwitchField name="include_citations" />
                                 </InputHorizontal>
                               </GeneralLayouts.Section>
                             </Card>
