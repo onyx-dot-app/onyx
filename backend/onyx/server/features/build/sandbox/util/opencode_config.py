@@ -9,6 +9,7 @@ restart.
 
 from typing import Any
 
+from onyx.llm.constants import LlmProviderNames
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 
 # 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
@@ -31,6 +32,19 @@ def _model_options(provider: str, model_name: str) -> dict[str, Any]:
     if provider == "azure":
         return {"reasoningEffort": "high"}
     return {}
+
+
+def opencode_provider_id(provider: str) -> str:
+    """Provider ID to write into opencode config/request bodies.
+
+    Onyx stores OpenAI-compatible endpoints as ``openai_compatible`` so the
+    rest of the platform can distinguish them from first-party OpenAI. OpenCode
+    expects these endpoints under the ``openai`` provider with a custom API
+    base, so Craft translates at the sandbox boundary.
+    """
+    if provider == LlmProviderNames.OPENAI_COMPATIBLE:
+        return "openai"
+    return provider
 
 
 _PERMISSIONS_TEMPLATE: dict[str, Any] = {
@@ -117,6 +131,26 @@ def _build_provider_block(
     return block
 
 
+def _dedupe_for_opencode(
+    providers: list[LLMProviderConfig],
+) -> list[LLMProviderConfig]:
+    """Collapse provider configs that target the same OpenCode provider ID.
+
+    A configured ``openai`` provider and an ``openai_compatible`` provider both
+    render as OpenCode ``openai``. Preserve caller order so the default config
+    wins when it is placed first by the session setup path.
+    """
+    seen: set[str] = set()
+    deduped: list[LLMProviderConfig] = []
+    for provider in providers:
+        provider_id = opencode_provider_id(provider.provider)
+        if provider_id in seen:
+            continue
+        seen.add(provider_id)
+        deduped.append(provider)
+    return deduped
+
+
 def build_opencode_config(
     provider: str,
     model_name: str,
@@ -175,8 +209,10 @@ def build_multi_provider_opencode_config(
             "uses one block per providerID; merge them at the call site"
         )
 
-    provider_names = {p.provider for p in providers}
-    if default_provider not in provider_names:
+    providers = _dedupe_for_opencode(providers)
+    provider_names = {opencode_provider_id(p.provider) for p in providers}
+    default_provider_id = opencode_provider_id(default_provider)
+    if default_provider_id not in provider_names:
         raise ValueError(
             f"default_provider={default_provider!r} not in providers"
             f" {sorted(provider_names)}"
@@ -184,8 +220,11 @@ def build_multi_provider_opencode_config(
 
     config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
-        "model": f"{default_provider}/{default_model}",
-        "provider": {p.provider: _build_provider_block(p) for p in providers},
+        "model": f"{default_provider_id}/{default_model}",
+        "provider": {
+            opencode_provider_id(p.provider): _build_provider_block(p)
+            for p in providers
+        },
         "enabled_providers": sorted(provider_names),
         "permission": _build_permissions(disabled_tools, dev_mode),
     }

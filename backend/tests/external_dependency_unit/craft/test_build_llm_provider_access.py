@@ -46,6 +46,25 @@ def _make_group_restricted_anthropic_provider(
     return provider.id
 
 
+def _make_public_openai_compatible_provider(db_session: Session) -> int:
+    provider = upsert_llm_provider(
+        LLMProviderUpsertRequest(
+            name=f"craft-openai-compatible-test-{uuid4().hex[:8]}",
+            provider="openai_compatible",
+            api_key="sk-openai-compatible-not-used",
+            api_key_changed=True,
+            api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            is_public=True,
+            model_configurations=[
+                ModelConfigurationUpsertRequest(name="qwen3.7-plus", is_visible=True)
+            ],
+        ),
+        db_session=db_session,
+    )
+    db_session.commit()
+    return provider.id
+
+
 def _has_provider(db_session: Session, user: User, provider_id: int) -> bool:
     return any(
         view.id == provider_id
@@ -72,6 +91,21 @@ def test_group_restricted_provider_scoped_by_membership(
         # A non-member must NOT get it — otherwise their sandbox would be keyed
         # with a provider they can't access.
         assert not _has_provider(db_session, non_member, provider_id)
+    finally:
+        remove_llm_provider(db_session, provider_id)
+        db_session.commit()
+
+
+def test_openai_compatible_provider_is_available_to_craft(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session)
+    db_session.commit()
+
+    provider_id = _make_public_openai_compatible_provider(db_session)
+    try:
+        assert _has_provider(db_session, user, provider_id)
     finally:
         remove_llm_provider(db_session, provider_id)
         db_session.commit()

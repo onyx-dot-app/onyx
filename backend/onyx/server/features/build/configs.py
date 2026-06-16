@@ -69,6 +69,14 @@ SANDBOX_PUSH_PRIVATE_KEY = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY", "")
 # shared recommended-models config (served via /build/recommended-models).
 BUILD_MODE_ALLOWED_PROVIDER_TYPES = ["anthropic", "openai", "openrouter"]
 
+# Dynamic provider types that Craft can use when the org has configured them.
+# They are not dummy-backfilled because the sandbox needs the org-specific
+# api_base/api_key to route them correctly.
+BUILD_MODE_DYNAMIC_PROVIDER_TYPES = ["openai_compatible"]
+BUILD_MODE_ACCESSIBLE_PROVIDER_TYPES = (
+    BUILD_MODE_ALLOWED_PROVIDER_TYPES + BUILD_MODE_DYNAMIC_PROVIDER_TYPES
+)
+
 # apiKey sentinel for a supported provider the org hasn't configured. We register
 # every supported provider so a cross-provider override never hits "model not
 # found"; an unconfigured one fails closed instead (proxy 403 / upstream 401).

@@ -63,7 +63,7 @@
 | **E2** | 平台模型目录与模型选择 | 🟢 验证期·进行中 | 从“每账户一个默认模型”升级为平台内置 Glomi Model Catalog：默认同步 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2 等可选模型到每个 tenant，并由后端返回模型能力（视觉、推理、角色标签）给前端选择器；已有账户通过幂等同步补齐缺失模型，用户选择不被覆盖 |
 | **E3** | 超级对话调优 | 🟢 验证期 | 默认 Persona 的中文 system prompt、工具使用策略、回答体验打磨；搜索由 Agent 在 `web_search` 调用中选择 `lite` / `medium` / `deep`，而不是用户手动选择；普通 chat 研究型回答采用自适应但克制的表达策略，不用固定模板，也不把 deep search 等同于长报告；聊天运行态要支持刷新后继续接上过程 |
 | **E4** | 深度研究中文化 | 🟢 验证期 | 与 E3 共享“中文 Agent 搜索与研究能力层”：问题拆解、query portfolio、来源路由、证据评估、中文报告成稿；默认搜索 provider 第一期接入 Glomi Search Gateway |
-| **E5** | Craft C 端化 | 🟡 王牌期 P2 | 去 `subscription_check`、沙箱镜像/网络国内化（k8s）、消费级生成入口 + 模板 |
+| **E5** | Craft C 端化 | 🟡 王牌期 P2 | 去 `subscription_check`、沙箱镜像/网络国内化（远端 Compose / k8s）、支持平台模型目录里的 OpenAI-compatible 模型、消费级生成入口 + 模板 |
 | **E6** | 生成物分享（Sparkpage 式） | 🟡 王牌期 P2 | 生成结果公开分享页,获客/传播 |
 | **E7** | 鉴权重建 | 🔵 商业化期·延后 | 剥离 `ee` 鉴权,微信扫码（网站应用 OAuth）+ 手机号验证码 |
 | **E8** | 计费 & 商业化 | 🔵 商业化期·延后 | 微信支付/支付宝,套餐或积分,用量计量（替代 `ee billing`） |
@@ -92,7 +92,7 @@
 - **退出条件**：验证通过 → 进 Phase B;不通过 → 调整产品方向（而不是继续投商业化）。
 
 ### Phase B —— 亮王牌（Craft + 超级编排）
-- **内容**：E5 Craft C 端化 + E6 生成物分享 + **E13 超级编排层**。沙箱国内化（镜像/网络/k8s）。
+- **内容**：E5 Craft C 端化 + E6 生成物分享 + **E13 超级编排层**。沙箱国内化（镜像/网络/远端 Compose/k8s），并让 Craft 复用 Phase A 平台模型目录；OpenAI-compatible 模型在 Onyx 内仍保留独立 provider 类型，在 OpenCode 沙箱边界映射为 `openai` provider。
 - **交付物**：能**生成并分享**站点 / PPT / 数据 / 海报,且主控能**自动路由 + 调度子 agent**（聊天/研究/建站无感切换）——对标 Genspark 的核心差异化。
 - **次序提示**：先 E5/E6 把 Craft 变成"可派的子 agent",再上 E13 让主控自动编排;验证期（Phase A）用现有"对话 + 深度研究开关"已足够像 Genspark,不必提前做 E13。
 
@@ -130,4 +130,5 @@
 - **自维护成本**：硬 fork 脱离上游,引擎进化/安全补丁全自管。
 - **内容合规**：公网开放前必须有内容安全审核（E9 不可省）。
 - **Craft 国内化复杂度**：沙箱镜像/网络/k8s 国内化是 Phase B 的主要工程风险。
+- **Craft 模型兼容风险**：平台模型目录里的 GPT-5.5、Qwen3.7 Plus、GLM-5.2 等可通过 OpenAI-compatible 进入 Craft，但不同厂商对 tool calling、streaming、reasoning 参数和长上下文的兼容性不完全一致，需要后续用真实沙箱任务做模型白名单与降级策略。
 - **模型成本**：深度研究/Craft 多轮调用 token 消耗大,需成本监控（影响商业模式）。

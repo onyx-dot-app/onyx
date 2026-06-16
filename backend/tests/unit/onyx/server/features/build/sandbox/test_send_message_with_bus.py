@@ -360,6 +360,52 @@ def test_send_message_threads_model_override_into_prompt_async(
     assert posted_bodies[0]["parts"] == [{"type": "text", "text": "hello"}]
 
 
+def test_send_message_maps_openai_compatible_override_for_opencode(
+    bus: PodEventBus,
+) -> None:
+    """OpenAI-compatible providers are stored separately in Onyx, but OpenCode
+    expects them under the ``openai`` provider ID with the configured API base.
+    """
+    posted_bodies: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/prompt_async"):
+            posted_bodies.append(httpx.Response(200, content=request.content).json())
+        return httpx.Response(204)
+
+    transport = httpx.MockTransport(handler)
+    client = _make_client(bus, transport)
+    events, t = _run_send_message(
+        client, model_provider="openai_compatible", model_id="qwen3.7-plus"
+    )
+    try:
+        assert _wait_for(lambda: len(posted_bodies) == 1)
+        bus._dispatch(
+            {
+                "type": "message.updated",
+                "properties": {
+                    "sessionID": _SESSION,
+                    "info": {
+                        "id": "msg1",
+                        "sessionID": _SESSION,
+                        "role": "assistant",
+                        "time": {"completed": 1},
+                    },
+                },
+            }
+        )
+        _dispatch_session_idle(bus)
+        assert _wait_for(lambda: any(isinstance(e, PromptResponse) for e in events))
+    finally:
+        t.join(timeout=3.0)
+
+    assert len(posted_bodies) == 1
+    assert posted_bodies[0]["model"] == {
+        "providerID": "openai",
+        "modelID": "qwen3.7-plus",
+    }
+
+
 def test_send_message_omits_model_when_override_missing(bus: PodEventBus) -> None:
     """No model override → no ``model`` key in the body. opencode-serve
     falls back to its loaded config's default. This preserves the

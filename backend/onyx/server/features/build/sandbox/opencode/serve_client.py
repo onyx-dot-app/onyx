@@ -41,6 +41,7 @@ from onyx.server.features.build.sandbox.opencode.event_bus import _Subscription
 from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SENTINEL
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.sandbox.util.opencode_config import opencode_provider_id
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -1486,7 +1487,10 @@ class OpencodeServeClient:
         """
         body: dict[str, Any] = {"parts": [{"type": "text", "text": message}]}
         if model_provider and model_id:
-            body["model"] = {"providerID": model_provider, "modelID": model_id}
+            body["model"] = {
+                "providerID": opencode_provider_id(model_provider),
+                "modelID": model_id,
+            }
         # idempotent=False: only the 401 reload retries this POST.
         r = self._request(
             "POST",

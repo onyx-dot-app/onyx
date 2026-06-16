@@ -2,6 +2,11 @@
 
 ## 2026-06-16
 
+- Craft 远端调试路径确认：本机继续源码启动前端/后端/Search Gateway，Craft 依赖放到远端 Docker Compose；远端已启动 `onyx-sandbox-proxy-1`、`docker-compose.craft.yml`、`onyxdotapp/sandbox:v0.1.52`、`onyx_craft_sandbox` 网络和 `sandbox_proxy_ca` volume。该模式适合小本机开发，避免本地跑 k8s/sandbox 吃满资源。
+- Craft `LLM Provider Required` 根因：Craft 前后端原来只把 `anthropic` / `openai` / `openrouter` 当作 Build 支持 provider，Glomi 平台默认模型目录使用 `openai_compatible`，所以普通 chat 可用但 Craft onboarding 会拦住非管理员/普通用户。
+- Craft OpenAI-compatible 二开：前端 onboarding/model picker 纳入 `openai_compatible`；后端 Build provider 查询允许可访问的 `openai_compatible`；沙箱 OpenCode 边界把 Onyx 的 `openai_compatible` 映射为 OpenCode 识别的 `openai` provider，并保留自定义 `api_base/api_key`，从而可让 GPT-5.5、GLM-5.2、Qwen3.7 Plus 等平台 OpenAI-compatible 模型进入 Craft。
+- Craft 沙箱配置经验：如果同时存在 first-party `openai` 与 `openai_compatible`，两者在 OpenCode 侧都会渲染为 `openai`，因此配置生成时按调用顺序去重，保留默认/首选 provider，避免同一个 OpenCode provider block 被覆盖。
+- Craft 验证记录：前端 `bun test src/app/craft/onboarding/__tests__/constants.test.ts` 通过 `10 pass`；后端 `.venv\Scripts\python.exe -m pytest -q backend/tests/unit/onyx/server/features/build/sandbox/test_opencode_config.py backend/tests/unit/onyx/server/features/build/session/test_get_all_build_mode_llm_configs.py backend/tests/unit/onyx/server/features/build/sandbox/test_send_message_with_bus.py` 通过 `55 passed`；`git diff --check` 无空白错误，仅有 Windows LF→CRLF 提示。外部依赖测试 `.venv\Scripts\python.exe -m pytest -q backend/tests/external_dependency_unit/craft/test_build_llm_provider_access.py` 在 setup 阶段因本机 `127.0.0.1:5432` Postgres 连接被拒绝失败，属于本地依赖环境限制，不是新增断言失败。
 - 实施 Phase A 模型目录与刷新恢复：平台模型目录 seed GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2，并把图片/深思/研究/代码等能力由后端 `/api/chat/available-models` 返回给前端模型选择器。
 - 图片上传能力改为信任后端 `supports_image_input`：GPT-5.5 / Qwen3.7 Plus 可作为视觉主力模型，DeepSeek V4 Pro / GLM-5.2 暂不支持图片时前端给中文提示，不再只靠前端硬编码判断。
 - 回答形态策略落地到普通 chat prompt：明确 direct_answer / focused_brief / deep_report，默认研究型普通回答走 focused_brief，避免把“搜索更深”误解成“回答更长”。

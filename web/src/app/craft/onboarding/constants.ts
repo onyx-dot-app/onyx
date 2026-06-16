@@ -10,9 +10,13 @@ export interface BuildLlmSelection {
   modelName: string; // e.g., "claude-opus-4-7"
 }
 
-export type ProviderKey = "anthropic" | "openai" | "openrouter";
+export type ProviderKey =
+  | "anthropic"
+  | "openai"
+  | "openai_compatible"
+  | "openrouter";
 
-// Craft-supported provider types (mirrors backend BUILD_MODE_ALLOWED_PROVIDER_TYPES)
+// Craft-supported provider types (mirrors backend build-mode accessible providers)
 // in priority order, plus the api-key placeholder for onboarding. Which model is
 // recommended comes from the backend `is_recommended_default` flag on each model.
 export const CRAFT_PROVIDERS: {
@@ -22,6 +26,7 @@ export const CRAFT_PROVIDERS: {
 }[] = [
   { key: "anthropic", apiKeyPlaceholder: "sk-ant-...", recommended: true },
   { key: "openai", apiKeyPlaceholder: "sk-..." },
+  { key: "openai_compatible", apiKeyPlaceholder: "sk-..." },
   { key: "openrouter", apiKeyPlaceholder: "sk-or-..." },
 ];
 

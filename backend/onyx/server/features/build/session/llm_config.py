@@ -91,7 +91,8 @@ def select_default_llm_config(
     raise OnyxError(
         OnyxErrorCode.INVALID_INPUT,
         "No accessible LLM provider of a supported type "
-        f"({', '.join(BUILD_MODE_ALLOWED_PROVIDER_TYPES)}) is configured.",
+        f"({', '.join(BUILD_MODE_ALLOWED_PROVIDER_TYPES)} or openai_compatible) "
+        "is configured.",
     )
 
 

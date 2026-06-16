@@ -159,6 +159,51 @@ def test_api_base_propagates() -> None:
     )
 
 
+def test_openai_compatible_provider_renders_as_opencode_openai_provider() -> None:
+    config = build_multi_provider_opencode_config(
+        providers=[
+            _cfg(
+                "openai_compatible",
+                "qwen3.7-plus",
+                api_key="sk-compatible",
+                api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            )
+        ],
+        default_provider="openai_compatible",
+        default_model="qwen3.7-plus",
+    )
+
+    assert config["model"] == "openai/qwen3.7-plus"
+    assert config["enabled_providers"] == ["openai"]
+    assert "openai_compatible" not in config["provider"]
+    assert config["provider"]["openai"]["options"]["apiKey"] == "sk-compatible"
+    assert (
+        config["provider"]["openai"]["api"]
+        == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    )
+
+
+def test_openai_compatible_provider_wins_opencode_collision_when_default() -> None:
+    config = build_multi_provider_opencode_config(
+        providers=[
+            _cfg(
+                "openai_compatible",
+                "glm-5.2",
+                api_key="sk-compatible",
+                api_base="https://open.bigmodel.cn/api/paas/v4",
+            ),
+            _cfg("openai", "gpt-5.5", api_key="sk-openai"),
+        ],
+        default_provider="openai_compatible",
+        default_model="glm-5.2",
+    )
+
+    assert config["model"] == "openai/glm-5.2"
+    assert config["enabled_providers"] == ["openai"]
+    assert config["provider"]["openai"]["options"]["apiKey"] == "sk-compatible"
+    assert config["provider"]["openai"]["api"] == "https://open.bigmodel.cn/api/paas/v4"
+
+
 def test_single_provider_wrapper_back_compat() -> None:
     """
     ``build_opencode_config`` wraps the multi-provider helper for the docker

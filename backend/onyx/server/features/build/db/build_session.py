@@ -26,7 +26,7 @@ from onyx.db.models import BuildSession
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Sandbox
 from onyx.db.models import User
-from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
+from onyx.server.features.build.configs import BUILD_MODE_ACCESSIBLE_PROVIDER_TYPES
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.manage.llm.models import LLMProviderView
@@ -622,12 +622,12 @@ def clear_nextjs_ports_for_user(db_session: Session, user_id: UUID) -> int:
 def fetch_all_supported_build_llm_providers(
     db_session: Session, user: User
 ) -> list[LLMProviderView]:
-    """Every provider of a Craft-supported type (anthropic, openai, openrouter)
+    """Every provider of a Craft-supported type (including OpenAI-compatible)
     that the ``user`` can access. Respects is_public / group restrictions so a
     user never gets a sandbox keyed with a provider they can't use."""
     provider_models = db_session.scalars(
         select(LLMProviderModel)
-        .where(LLMProviderModel.provider.in_(BUILD_MODE_ALLOWED_PROVIDER_TYPES))
+        .where(LLMProviderModel.provider.in_(BUILD_MODE_ACCESSIBLE_PROVIDER_TYPES))
         .options(
             selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),

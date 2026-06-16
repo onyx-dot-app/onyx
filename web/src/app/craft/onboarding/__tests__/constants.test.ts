@@ -32,6 +32,7 @@ describe("isSupportedProviderType", () => {
   it("recognizes craft provider types", () => {
     expect(isSupportedProviderType("anthropic")).toBe(true);
     expect(isSupportedProviderType("openai")).toBe(true);
+    expect(isSupportedProviderType("openai_compatible")).toBe(true);
     expect(isSupportedProviderType("openrouter")).toBe(true);
     expect(isSupportedProviderType("azure")).toBe(false);
   });
@@ -40,6 +41,9 @@ describe("isSupportedProviderType", () => {
 describe("hasSupportedCraftProvider", () => {
   it("is true when a configured provider is a craft type", () => {
     expect(hasSupportedCraftProvider([{ provider: "anthropic" }])).toBe(true);
+    expect(hasSupportedCraftProvider([{ provider: "openai_compatible" }])).toBe(
+      true
+    );
   });
 
   it("is false for unsupported-only or empty/undefined", () => {
@@ -87,6 +91,17 @@ describe("getDefaultLlmSelection", () => {
       provider("openai", [model("gpt-5.5")]),
     ]);
     expect(result?.modelName).toBe("gpt-5.5");
+  });
+
+  it("uses openai-compatible providers when no higher-priority craft provider exists", () => {
+    const result = getDefaultLlmSelection([
+      provider("openai_compatible", [model("qwen3.7-plus")]),
+    ]);
+    expect(result).toEqual({
+      providerName: "openai_compatible",
+      provider: "openai_compatible",
+      modelName: "qwen3.7-plus",
+    });
   });
 
   it("returns null with no providers", () => {
