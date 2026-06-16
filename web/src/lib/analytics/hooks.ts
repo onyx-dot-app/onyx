@@ -36,6 +36,8 @@ export enum PHFeatureFlag {
   CRAFT_ANIMATION_DISABLED = "craft-animation-disabled",
   /** Disables adding or modifying LLM providers on the admin Language Models page. */
   LANGUAGE_MODEL_CONFIGURATION_DISABLED = "language-model-configuration-disabled",
+  /** Disables new account creation on the signup page. */
+  SIGNUP_DISABLED = "signup-disabled",
 }
 
 /**
@@ -49,6 +51,7 @@ export enum PHFeatureFlag {
 const PHFeatureFlagDefaults: Record<PHFeatureFlag, boolean> = {
   [PHFeatureFlag.CRAFT_ANIMATION_DISABLED]: true,
   [PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED]: false,
+  [PHFeatureFlag.SIGNUP_DISABLED]: false,
 };
 
 // ─── Hooks ─────────────────────────────────────────────────────────────────
