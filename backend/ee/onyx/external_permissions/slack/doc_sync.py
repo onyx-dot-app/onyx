@@ -12,6 +12,7 @@ from onyx.access.models import ExternalAccess
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.slack.connector import filter_channels
 from onyx.connectors.slack.connector import get_channels
 from onyx.connectors.slack.connector import get_channels_across_teams
 from onyx.connectors.slack.connector import list_grid_team_ids
@@ -47,6 +48,10 @@ def _fetch_channel_permissions(
     user_id_to_email_map: dict[str, str],
     team_ids: list[str] | None = None,
     team_id_to_user_emails: dict[str, set[str]] | None = None,
+    channels_to_include: list[str] | None = None,
+    include_regex_enabled: bool = False,
+    channels_to_exclude: list[str] | None = None,
+    exclude_regex_enabled: bool = False,
 ) -> dict[str, ExternalAccess]:
     channel_permissions = {}
     if team_ids:
@@ -73,6 +78,20 @@ def _fetch_channel_permissions(
             get_public=False,
             get_private=True,
         )
+    filtered_channels = filter_channels(
+        public_channels + private_channels,
+        channels_to_include,
+        include_regex_enabled,
+        channels_to_exclude,
+        exclude_regex_enabled,
+    )
+    public_channels = [
+        channel for channel in filtered_channels if not channel.get("is_private")
+    ]
+    private_channels = [
+        channel for channel in filtered_channels if channel.get("is_private")
+    ]
+
     for channel in public_channels:
         channel_id = channel.get("id")
         if not channel_id:
@@ -199,6 +218,8 @@ def slack_doc_sync(
         SlackConnector.MAX_RETRIES,
         r,
     )
+    slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
+    slack_connector.set_credentials_provider(provider)
 
     grid_team_ids: list[str] | None = None
     try:
@@ -236,10 +257,12 @@ def slack_doc_sync(
         user_id_to_email_map=user_id_to_email_map,
         team_ids=grid_team_ids,
         team_id_to_user_emails=team_id_to_user_emails,
+        channels_to_include=slack_connector.channels,
+        include_regex_enabled=slack_connector.channel_regex_enabled,
+        channels_to_exclude=slack_connector.exclude_channels,
+        exclude_regex_enabled=slack_connector.exclude_channel_regex_enabled,
     )
 
-    slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
-    slack_connector.set_credentials_provider(provider)
     indexing_start_ts: SecondsSinceUnixEpoch | None = (
         cc_pair.connector.indexing_start.timestamp()
         if cc_pair.connector.indexing_start is not None
