@@ -11,11 +11,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, Suspense, type ReactElement } from "react";
 import { usePostHog } from "posthog-js/react";
 import { useReportWebVitals } from "next/web-vitals";
-import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
-import { useSettings } from "@/lib/settings/hooks";
-import { EE_ENABLED } from "@/lib/constants";
+import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
 
 // ─── WebVitals ─────────────────────────────────────────────────────────────
 
@@ -65,6 +61,7 @@ function PostHogPageTrackerInner(): null {
 
   return null;
 }
+
 export function PostHogPageTracker(): ReactElement {
   return (
     <Suspense fallback={null}>
@@ -74,30 +71,6 @@ export function PostHogPageTracker(): ReactElement {
 }
 
 // ─── CustomAnalyticsScript ─────────────────────────────────────────────────
-
-/**
- * Fetches the admin-configured custom analytics script string.
- *
- * Self-gated on EE availability. Returns `null` when EE is disabled or no
- * script is configured.
- */
-export function useCustomAnalyticsScript(): string | null {
-  const { isLoading, error, ee_features_enabled } = useSettings();
-  const shouldFetch =
-    EE_ENABLED || (!isLoading && !error && ee_features_enabled !== false);
-
-  const { data } = useSWR<string>(
-    shouldFetch ? SWR_KEYS.customAnalyticsScript : null,
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      revalidateIfStale: false,
-      dedupingInterval: 60_000,
-    }
-  );
-  return data ?? null;
-}
 
 /**
  * Injects an admin-configured JS analytics snippet into `document.head`.

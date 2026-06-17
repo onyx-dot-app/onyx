@@ -2,14 +2,14 @@
 
 import { Label, SubLabel } from "@/components/Field";
 import { toast } from "@/hooks/useToast";
-import { useCustomAnalyticsScript } from "@/lib/analytics/shared";
+import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useState } from "react";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { Spacer } from "@opal/components";
 
-export function CustomAnalyticsUpdateForm() {
+export default function CustomAnalyticsUpdateForm() {
   const customAnalyticsScript = useCustomAnalyticsScript();
 
   const [newCustomAnalyticsScript, setNewCustomAnalyticsScript] =
