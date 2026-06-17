@@ -1,6 +1,6 @@
 "use client";
 
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   DEFAULT_LOGO_SIZE_PX,
   NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED,
@@ -27,9 +27,10 @@ export default function Logo({
   onyxBranded,
 }: LogoProps) {
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
-  const settings = useSettingsContext();
-  const logoDisplayStyle = settings.enterpriseSettings?.logo_display_style;
-  const applicationName = settings.enterpriseSettings?.application_name;
+  const settings = useSettings();
+  const enterpriseSettings = settings.enterprise;
+  const logoDisplayStyle = enterpriseSettings?.logo_display_style;
+  const applicationName = enterpriseSettings?.application_name;
 
   // Cache-buster: the logo URL never changes (/api/enterprise-settings/logo)
   // so the browser serves the in-memory cached image even after an admin
@@ -39,7 +40,7 @@ export default function Logo({
   const logoBuster = useMemo(
     () => Date.now(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings.enterpriseSettings]
+    [enterpriseSettings]
   );
 
   if (onyxBranded) {
@@ -50,7 +51,7 @@ export default function Logo({
     );
   }
 
-  const logo = settings.enterpriseSettings?.use_custom_logo ? (
+  const logo = enterpriseSettings?.use_custom_logo ? (
     <div
       className={cn(
         "aspect-square rounded-full overflow-hidden relative shrink-0",
@@ -83,7 +84,7 @@ export default function Logo({
               <Truncated headingH3>{applicationName}</Truncated>
             )}
             {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED &&
-              !settings.enterpriseSettings?.hide_onyx_branding && (
+              !enterpriseSettings?.hide_onyx_branding && (
                 <Text
                   secondaryBody
                   text03

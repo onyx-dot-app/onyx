@@ -76,15 +76,15 @@ import {
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { useSettingsContext } from "@/providers/SettingsProvider";
-import { Settings } from "@/interfaces/settings";
+import { useSettings } from "@/lib/settings/hooks";
+import { Settings, toSettings } from "@/lib/settings/types";
 import { toast } from "@/hooks/useToast";
 import {
   useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
   useSecondarySearchSettings,
-} from "@/hooks/useSearchSettings";
+} from "@/lib/indexing/hooks";
 import { useLlmDefaults } from "@/hooks/useLanguageModels";
 import useFilter from "@/hooks/useFilter";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";
@@ -707,7 +707,7 @@ interface IndexSettingsFormValues {
 
 export default function IndexSettingsPage() {
   const router = useRouter();
-  const settings = useSettingsContext();
+  const settings = useSettings();
   const editModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState(MODEL_TAB_CLOUD);
@@ -747,10 +747,10 @@ export default function IndexSettingsPage() {
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
-      if (!settings.settings) return;
+      if (!settings) return;
 
       try {
-        await saveAdminSettings({ ...settings.settings, ...updates });
+        await saveAdminSettings({ ...toSettings(settings), ...updates });
         router.refresh();
         await mutate(SWR_KEYS.settings);
         toast.success("Settings updated");
@@ -758,11 +758,11 @@ export default function IndexSettingsPage() {
         toast.error("Failed to update settings");
       }
     },
-    [settings.settings, router]
+    [settings, router]
   );
 
   const imageProcessingEnabled =
-    settings.settings.image_extraction_and_analysis_enabled ?? false;
+    settings.image_extraction_and_analysis_enabled ?? false;
 
   const { data: currentEmbeddingModel, isLoading: isLoadingCurrentModel } =
     useCurrentEmbeddingModel();
@@ -1669,8 +1669,7 @@ export default function IndexSettingsPage() {
                             >
                               <InputSelect
                                 value={String(
-                                  settings.settings
-                                    .image_analysis_max_size_mb ?? 20
+                                  settings.image_analysis_max_size_mb ?? 20
                                 )}
                                 onValueChange={(value) => {
                                   void saveSettings({

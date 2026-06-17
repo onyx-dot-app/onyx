@@ -31,13 +31,10 @@ import {
   InputHorizontal,
   InputVertical,
 } from "@opal/layouts";
-import {
-  useSettingsContext,
-  useVectorDbEnabled,
-} from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
-import { QueryHistoryType, Settings } from "@/interfaces/settings";
+import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
@@ -67,7 +64,7 @@ import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
@@ -375,8 +372,8 @@ function FileSizeLimitFields({
 
 export default function ChatPreferencesPage() {
   const router = useRouter();
-  const settings = useSettingsContext();
-  const s = settings.settings;
+  const settings = useSettings();
+  const s = settings;
   // Search Mode toggle is Business+; Chat Retention is Enterprise-only.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
@@ -412,7 +409,7 @@ export default function ChatPreferencesPage() {
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = settings;
 
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
@@ -524,10 +521,13 @@ export default function ChatPreferencesPage() {
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
-      const currentSettings = settings?.settings;
+      const currentSettings = settings;
       if (!currentSettings) return;
 
-      const newSettings = { ...currentSettings, ...updates };
+      const newSettings: Settings = {
+        ...toSettings(currentSettings),
+        ...updates,
+      };
 
       try {
         const response = await fetch("/api/admin/settings", {

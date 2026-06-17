@@ -5,14 +5,14 @@ import { mutate } from "swr";
 import { ContentAction } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Switch } from "@opal/components";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
-import { Settings } from "@/interfaces/settings";
+import { Settings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 
 export default function InviteOnlyCard() {
-  const { settings } = useSettingsContext();
+  const settings = useSettings();
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {

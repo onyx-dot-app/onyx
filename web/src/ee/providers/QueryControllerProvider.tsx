@@ -10,8 +10,8 @@ import {
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { Tier } from "@/lib/settings/types";
+import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
 import {
   QueryControllerContext,
@@ -29,8 +29,7 @@ export function QueryControllerProvider({
 }: QueryControllerProviderProps) {
   const appFocus = useAppFocus();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const settings = useSettingsContext();
-  const { isSearchModeAvailable: searchUiEnabled } = settings;
+  const searchUiEnabled = useIsSearchModeAvailable();
   const { user } = useUser();
 
   // ── Merged query state (discriminated union) ──────────────────────────

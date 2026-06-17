@@ -20,10 +20,9 @@ import { pinAgents } from "@/lib/agents/svc";
 import { useUser } from "@/providers/UserProvider";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { CombinedSettings } from "@/interfaces/settings";
 import { ChatSession } from "@/app/app/interfaces";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
 import useChatSessions from "@/hooks/useChatSessions";
 import { buildUpdateAgentPreferenceUrl } from "./utils";
@@ -220,7 +219,8 @@ export function useAgentController(
   const searchParams = useSearchParams();
   const { agents: availableAgents } = useAgents();
   const { pinnedAgents } = usePinnedAgents();
-  const combinedSettings = useSettingsContext();
+  const settings = useSettings();
+  const disableDefaultAssistant = settings.disable_default_assistant ?? false;
 
   const defaultAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
   const defaultAgentId = defaultAgentIdRaw
@@ -251,8 +251,6 @@ export function useAgentController(
 
   const liveAgent: MinimalAgent | undefined = useMemo(() => {
     if (selectedAgent) return selectedAgent;
-    const disableDefaultAssistant =
-      combinedSettings?.settings?.disable_default_assistant ?? false;
     if (disableDefaultAssistant) {
       const nonDefaultPinned = pinnedAgents.filter((a) => a.id !== 0);
       const nonDefaultAvailable = availableAgents.filter((a) => a.id !== 0);
@@ -263,7 +261,7 @@ export function useAgentController(
     const unifiedAgent = availableAgents.find((a) => a.id === 0);
     if (unifiedAgent) return unifiedAgent;
     return pinnedAgents[0] || availableAgents[0];
-  }, [selectedAgent, pinnedAgents, availableAgents, combinedSettings]);
+  }, [selectedAgent, pinnedAgents, availableAgents, disableDefaultAssistant]);
 
   const setSelectedAgentFromId = useCallback(
     (agentId: number | null | undefined) => {
@@ -294,13 +292,13 @@ export function useIsDefaultAgent(
   liveAgent: MinimalAgent | undefined,
   existingChatSessionId: string | null,
   selectedChatSession: ChatSession | undefined,
-  settings: CombinedSettings | null
+  disableDefaultAssistant: boolean
 ) {
   const searchParams = useSearchParams();
   const urlAssistantId = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
 
   return useMemo(() => {
-    if (settings?.settings?.disable_default_assistant) return false;
+    if (disableDefaultAssistant) return false;
     if (
       urlAssistantId !== null &&
       urlAssistantId !== DEFAULT_AGENT_ID.toString()
@@ -315,7 +313,7 @@ export function useIsDefaultAgent(
       return false;
     return true;
   }, [
-    settings?.settings?.disable_default_assistant,
+    disableDefaultAssistant,
     urlAssistantId,
     existingChatSessionId,
     selectedChatSession?.persona_id,

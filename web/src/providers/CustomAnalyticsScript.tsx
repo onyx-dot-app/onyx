@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
 
 export default function CustomAnalyticsScript() {
-  const { customAnalyticsScript } = useSettingsContext();
+  const customAnalyticsScript = useCustomAnalyticsScript();
   const injectedRef = useRef(false);
 
   useEffect(() => {
