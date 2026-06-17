@@ -11,7 +11,14 @@ from pathlib import Path
 from sandbox_daemon.snapshot import SESSIONS_ROOT
 from sandbox_daemon.snapshot import SnapshotError
 
-OPENCODE_DATA_DIR = Path("/workspace/opencode-data")
+# Opencode's data home. K8s mounts a shared ``opencode-data`` emptyDir here and
+# sets OPENCODE_DATA_HOME on the app container to match; the sidecar leaves the
+# env unset and falls back to this same default. The Docker backend execs this
+# module with OPENCODE_DATA_HOME pointed at its writable-layer data home, which
+# the entrypoint keeps at ``/workspace/.opencode-data``.
+OPENCODE_DATA_DIR = Path(
+    os.environ.get("OPENCODE_DATA_HOME", "/workspace/opencode-data")
+)
 OPENCODE_HISTORY_RESTORED_SENTINEL = Path(
     "/workspace/managed/.onyx/opencode-history-restored"
 )

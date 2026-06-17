@@ -281,19 +281,23 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     mgr._docker.networks.get.return_value = MagicMock()
     # _ensure_sandbox_volume — pretend it exists already.
     mgr._docker.volumes.get.return_value = MagicMock()
+    # No durable opencode history, so the fresh-container restore is a no-op.
+    mgr._snapshot_manager = MagicMock()  # type: ignore[attr-defined]
+    mgr._snapshot_manager.has_opencode_history_snapshot.return_value = False
 
-    # Capture the kwargs passed to containers.run.
+    # Capture the kwargs passed to containers.create (provision now creates the
+    # container stopped, restores opencode history, then starts it).
     fake_container = MagicMock()
     fake_container.name = "sandbox-12345678"
     fake_container.attrs = {"State": {"Status": "running"}}
 
     run_calls: list[dict[str, Any]] = []
 
-    def _capture_run(**kwargs: Any) -> Any:
+    def _capture_create(**kwargs: Any) -> Any:
         run_calls.append(kwargs)
         return fake_container
 
-    mgr._docker.containers.run.side_effect = _capture_run
+    mgr._docker.containers.create.side_effect = _capture_create
 
     info = mgr.provision(
         sandbox_id=_SBX,
@@ -305,6 +309,8 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
 
     assert info.status.value == "running"
     assert len(run_calls) == 1
+    # Created stopped, then started explicitly after the (no-op) history restore.
+    fake_container.start.assert_called_once()
     env = run_calls[0]["environment"]
     assert set(env.keys()) == {
         "ONYX_PAT",
