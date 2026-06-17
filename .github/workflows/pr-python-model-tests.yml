@@ -30,7 +30,7 @@ jobs:
       - "run-id=${{ github.run_id }}-model-check"
       - "extras=ecr-cache"
     environment: ci-protected
-    timeout-minutes: 45
+    timeout-minutes: 20
 
     env:
       PYTHONPATH: ./backend

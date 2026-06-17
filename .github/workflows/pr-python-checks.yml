@@ -56,7 +56,7 @@ jobs:
         "run-id=${{ github.run_id }}-mypy-check",
         "extras=s3-cache",
       ]
-    timeout-minutes: 15
+    timeout-minutes: 8
 
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60

@@ -48,7 +48,7 @@ jobs:
     if: needs.changes.outputs.python == 'true'
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=4cpu-linux-arm64, "run-id=${{ github.run_id }}-backend-check"]
-    timeout-minutes: 45
+    timeout-minutes: 10
 
 
     env:

@@ -88,7 +88,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
     runs-on: ubuntu-slim
-    timeout-minutes: 45
+    timeout-minutes: 5
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
       editions: ${{ steps.set-editions.outputs.editions }}
@@ -140,7 +140,7 @@ jobs:
         "run-id=${{ github.run_id }}-build-model-server-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
@@ -199,7 +199,7 @@ jobs:
         "run-id=${{ github.run_id }}-build-devcontainer-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
       - name: Checkout code
@@ -264,7 +264,7 @@ jobs:
       - runner=4cpu-linux-arm64
       - ${{ format('run-id={0}-integration-tests-{1}-job-{2}', github.run_id, matrix.edition, strategy['job-index']) }}
       - extras=ecr-cache
-    timeout-minutes: 45
+    timeout-minutes: 25
 
     strategy:
       fail-fast: false
@@ -471,7 +471,7 @@ jobs:
         "run-id=${{ github.run_id }}-onyx-lite-tests",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
 
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
@@ -578,7 +578,7 @@ jobs:
         "run-id=${{ github.run_id }}-multitenant-tests",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 15
 
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
