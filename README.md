@@ -1,6 +1,6 @@
 # GlomiAI
 
-GlomiAI 是基于 Onyx MIT 核心能力继续演进的中文消费级超级 Agent。当前目标不是先做完整商业化 SaaS，而是先验证一句话：
+GlomiAI 是基于 Onyx MIT 核心能力继续演进的中文消费级超级 Agent。Phase A 已完成中文对话、搜索、深度研究和平台模型能力的核心验证；当前进入 Phase B，重点是把 Craft 改造成 GlomiAI 的生成交付运行时。
 
 > 一个中文输入框，自动帮用户把活干完并交付成品。
 
@@ -9,10 +9,10 @@ GlomiAI 是基于 Onyx MIT 核心能力继续演进的中文消费级超级 Agen
 ## 当前定位
 
 - **产品方向**：C 端消费级超级 Agent，Web / PC 优先。
-- **当前阶段**：Phase A 核心能力验证。
+- **当前阶段**：Phase B Craft 王牌能力启动。
 - **北极星体验**：用户不配置工具、不懂提示词，只输入中文需求，系统自动搜索、研究、分析、写作和交付。
 - **工程策略**：硬 fork，自管后端，不依赖上游 Onyx 同步。
-- **底座选择**：最大化复用 Onyx 的成熟 Agent runtime 和 Next.js 前端，先改产品体验和关键默认能力，不重写底层引擎。
+- **底座选择**：最大化复用 Onyx 的成熟 Agent runtime、Deep Research、Craft sandbox 和 Next.js 前端；Phase B 先把 Craft 跑稳、C 端化、接分享闭环，再接入主控派发。
 
 ## 当前分支状态
 
@@ -20,33 +20,33 @@ GlomiAI 是基于 Onyx MIT 核心能力继续演进的中文消费级超级 Agen
 
 | 模块 | 状态 | 已完成内容 | 下一步 |
 |---|---|---|---|
-| E1 i18n + 品牌替换 | 已落地基础版 | 中文优先与 UI rebrand 的设计/计划已沉淀，复用现有 Web 前端做消费级重塑 | 继续补齐前台消费级入口、发现页、历史页和品牌视觉 |
-| E2 平台默认 LLM | 已实现一期 | 自动 seed 一个 `Glomi Default / openai_compatible` LLM Provider；移除 C 端模型档位、catalog、preference API 和 selector | 用真实 DashScope/Qwen 配置做端到端回归，后续再评估多模型/fallback |
-| E3 中文超级对话 | 已实现方法论与搜索工具增强 | 普通 chat tool guidance 引入中文搜索策略；`web_search` 支持 `lite / medium / deep`；Agent 在工具调用中自行选择搜索强度 | 跑中文 benchmark 和真实内测样例，继续调 prompt 与默认 Persona |
-| E4 中文深度研究 | 已实现一期 prompt/search 改造 | Deep Research research agent 默认 `mode=deep`；planner/orchestrator/research-agent/report prompt 已加入中文研究方法论 | 用真实模型跑研究报告质量评估，补引用质量和证据冲突体验 |
+| E1 i18n + 品牌替换 | Phase A 已验证 | 中文优先与 UI rebrand 的设计/计划已沉淀，复用现有 Web 前端做消费级重塑 | Phase B 继续服务 Craft 入口、分享页和生成物展示 |
+| E2 平台模型目录 | Phase A 已验证，继续服务 Craft | 从单默认 LLM 演进为平台模型目录；后端同步模型能力画像，前端只暴露平台可选模型，不暴露 API key/base URL | Craft 侧复用同一模型目录，并处理 OpenAI-compatible 到 OpenCode 沙箱 provider 的映射 |
+| E3 中文超级对话 | Phase A 已验证，转为主控入口 | 普通 chat tool guidance 引入中文搜索策略；`web_search` 支持 `lite / medium / deep`；Agent 在工具调用中自行选择搜索强度 | 增加“生成交付意图”识别，把页面/PPT/看板/小工具任务派发给 Craft |
+| E4 中文深度研究 | Phase A 已验证，继续增强 | Deep Research research agent 默认 `mode=deep`；planner/orchestrator/research-agent/report prompt 已加入中文研究方法论 | 作为 Craft 的上游材料来源，为页面、报告、看板等生成物提供证据和结构 |
 | Glomi Search Gateway | 已实现本地一期 | Onyx 侧只接 `glomi` provider；本地 FastAPI Gateway 支持 Tavily channel、`lite / medium / deep`、query fan-out、raw-content snippet fallback | 接 Brave / 国内搜索 / 自研源；做渠道 fallback、成本限制和线上部署形态 |
 | Gateway adapter 架构 | 已实现 | Gateway 内部拆出 adapter protocol、capability matrix、common service、URL dedupe 和 channel routing | 新增具体 adapter 时不改 Onyx `web_search` 契约 |
 | Search Debug Drawer | 已实现 | 后端流式发送 `search_tool_debug_delta`；前端在 Web Search FULL timeline 中折叠展示 provider、mode、queries、URLs、耗时和错误 | 后续按需要接入更完整的开发/管理员排障页 |
-| Craft C 端化 | 未启动实现 | 已在产品蓝图中定义为 Phase B 王牌能力 | 去订阅门控、沙箱国内化、消费级生成入口、分享页 |
-| 超级编排层 E13 | 未启动实现 | 已明确不是 Phase A 重写对象，未来复用 `CodingAgentTool` 与 `dr_loop` 原语 | 在 Craft 可派发后做自动路由、多子 agent、MoA 汇总 |
-| 鉴权/支付/合规/部署 | 延后 | 已进入产品蓝图，但不属于验证期 | 核心能力验证通过后进入 Phase C；公网前必须先做内容安全 |
+| Craft C 端化 | Phase B 当前重心 | 已明确要把 Craft 从独立 Build 工作台改造成 GlomiAI 的生成交付运行时 | 先做稳定运行/资源治理/模型适配，再做消费级模板入口、分享页和主控派发 |
+| 超级编排层 E13 | Phase B 当前重心，依赖 Craft 稳定产物 | 复用 `CodingAgentTool` 与 `dr_loop` 原语，主对话仍是一号入口 | 在 Craft 可稳定生成后做自动路由、多子 agent、MoA 汇总 |
+| 鉴权/支付/合规/部署 | 延后 | 已进入产品蓝图，但不阻塞 Phase B 起步 | Phase C 处理商业化与上线；公网前必须先做内容安全 |
 
 ## 已完成功能的逻辑说明
 
-### 1. 平台默认 LLM Provider
+### 1. 平台模型目录
 
-目标：用户注册后默认能用模型，不进入 Admin，不选择模型档位，不看到 API key。
+目标：用户注册后默认能用平台模型，不进入 Admin，不看到 API key/base URL；Phase B 中 Craft 也复用同一套模型目录。
 
 运行链路：
 
 ```text
 平台 env
   -> setup_postgres() / tenant provisioning
-  -> seed_consumer_default_llm_provider()
-  -> LLMProvider: Glomi Default / openai_compatible
-  -> ModelConfiguration: CONSUMER_DEFAULT_LLM_MODEL_NAME
+  -> seed/sync Glomi model catalog
+  -> LLMProvider / ModelConfiguration
+  -> model capability metadata
   -> Onyx default CHAT flow
-  -> chat / deep research / title / Craft 复用默认模型解析链路
+  -> chat / deep research / title / Craft provider mapping
 ```
 
 关键文件：
@@ -58,11 +58,10 @@ GlomiAI 是基于 Onyx MIT 核心能力继续演进的中文消费级超级 Agen
 
 当前行为：
 
-- 配置项收敛为 `CONSUMER_DEFAULT_LLM_API_BASE`、`CONSUMER_DEFAULT_LLM_API_KEY`、`CONSUMER_DEFAULT_LLM_MODEL_NAME`。
-- provider type 固定为 `openai_compatible`，内部 provider name 固定为 `Glomi Default`。
-- 如果缺配置，只跳过 seed，不阻塞服务启动。
-- 如果已有管理员手动设置的默认模型，不强行覆盖。
-- 已移除 C 端模型档位、`/api/model-catalog`、`/api/user/model-preference` 和前端模型 selector。
+- C 端用户不配置 provider、API key、base URL。
+- 后端负责同步平台开放模型与能力画像。
+- 用户只选择平台开放的模型，不接触底层 provider 配置。
+- Craft 沙箱侧需要把 OpenAI-compatible 模型映射到 OpenCode 可用 provider，同时保留 GlomiAI 后端内部 provider 边界。
 
 ### 2. 中文 Agent 搜索与研究能力层
 
@@ -196,23 +195,45 @@ WebSearchTool provider execution
 - `web/src/app/app/services/packetUtils.ts`
 - `web/src/app/app/message/messageComponents/timeline/renderers/search/*`
 
+### 5. Craft 生成交付运行时
+
+目标：把 Onyx Craft 从“独立 Build 工作台”改造成 GlomiAI 的王牌交付能力。短问答和研究仍走 chat / Deep Research；需要页面、PPT、报告、看板、小工具、可分享成品时才进入 Craft。
+
+集成路线：
+
+```text
+User Chinese request
+  -> chat main controller
+  -> intent: answer / research / generate artifact
+  -> answer: chat loop
+  -> research: Deep Research
+  -> generate artifact: Craft session
+  -> sandbox preview / files / snapshots
+  -> shareable artifact page
+```
+
+Phase B 顺序：
+
+1. **稳定运行与资源治理**：明确 Docker Compose / 远端 Compose / k8s 形态，限制 sandbox 并发、CPU、内存、闲置回收和任务超时，避免单机 Linux 被预创建 sandbox 拖垮。
+2. **独立 Craft C 端入口**：把原 Onyx 企业知识库语境改为中文消费级模板入口，如落地页、PPT、数据看板、报告、小工具。
+3. **生成物分享闭环**：让 Craft 输出默认可以公开/私密分享，分享页隐藏工作台复杂性。
+4. **主对话派发 Craft**：主控识别生成交付意图，创建或复用 Craft session，把进度、预览和最终产物回填到对话。
+
+保留的 Craft 资产：
+
+- sandbox 隔离和实时预览
+- opencode-serve agent 执行链
+- 文件系统、上传、快照和恢复
+- skills / external apps / approvals 作为后续扩展底座
+
 ## 规划中的任务
 
-### Phase A 还需要补的验证任务
+### Phase B 当前任务
 
-| 任务 | 目的 | 参考文档 |
-|---|---|---|
-| 真实模型端到端验证 | 用真实 Qwen / DashScope 配置跑普通 chat、标题、Deep Research、Craft 默认模型链路 | `docs/superpowers/specs/2026-06-14-platform-default-openai-compatible-llm-design.md` |
-| 真实 Tavily / Gateway 联调 | 填入真实 Tavily key，确认 Onyx -> Gateway -> Tavily -> timeline 全链路可用 | `docs/superpowers/specs/2026-06-15-local-glomi-search-gateway-design.md` |
-| 中文搜索 benchmark | 用固定中文问题集评估搜索、open_url、证据引用、中文回答质量 | `backend/onyx/evals/glomi_search_research_benchmark.py` |
-| 深度研究质量回归 | 评估 planner、orchestrator、research agent、final report 的中文报告质量 | `docs/superpowers/specs/2026-06-13-agent-search-and-research-strategy-design.md` |
-| 默认 Persona 打磨 | 让普通对话更像中文超级助手，而不是企业知识库助手 | `docs/GlomiAI.md` |
-| 前台消费级体验 | 首页、历史、发现、分享、品牌视觉继续从 Onyx 工作台形态转向 C 端产品 | `docs/GlomiAI.md` |
-
-### Phase B 规划任务
-
+- **Craft 运行稳定性**：把资源治理作为第一优先级，解决 sandbox 启动、卡死、回收、日志和失败恢复。
+- **Craft 模型适配**：让 Craft 复用平台模型目录，验证 OpenAI-compatible 模型在 opencode-serve 工具调用、streaming、长上下文下的兼容性。
 - **Craft C 端化**：去订阅门控、沙箱镜像/网络国内化、消费级生成入口、模板化体验。
-- **生成物分享**：把站点、PPT、数据看板、报告等生成结果做成可公开分享页面。
+- **生成物分享**：把站点、PPT、数据看板、报告等生成结果做成可公开/私密分享页面。
 - **超级编排层 E13**：主控自动判断聊天/研究/建站/代码任务，派子 agent 并行执行，再汇总结果。
 - **搜索能力继续增强**：Gateway 多来源聚合、渠道 fallback、成本控制、source_type / score 展示、证据质量评估。
 
@@ -229,16 +250,16 @@ WebSearchTool provider execution
 - 不是 Onyx 企业知识库产品的简单换皮。
 - 不是优先做鉴权、支付、计费、团队版和商业化后台。
 - 不是让用户自己配置 LLM provider、搜索 provider 或复杂工具链。
-- 不是第一期就重写 superagent orchestrator。
+- 不是把所有请求都塞进重型 sandbox。
 
-验证期只碰核心产品能力。鉴权、支付、合规、国内云部署、连接器生态和正式商业化会在核心能力验证通过后再进入 Phase C。
+Phase B 先把 Craft 作为生成交付运行时打磨出来。鉴权、支付、合规、国内云部署、连接器生态和正式商业化会在 Phase C 推进；公网前必须先做内容安全和合规 gate。
 
 ## 产品路线
 
 | 阶段 | 目标 | 状态 |
 |---|---|---|
-| Phase A | 中文核心能力验证：i18n、平台默认 LLM、超级对话、深度研究、Glomi Search Gateway | 进行中 |
-| Phase B | Craft C 端化、生成物分享、超级编排层 | 待核心能力验证后启动 |
+| Phase A | 中文核心能力验证：i18n、平台模型、超级对话、深度研究、Glomi Search Gateway | 已完成核心验证 |
+| Phase B | Craft C 端化、生成物分享、超级编排层 | 当前重心 |
 | Phase C | 鉴权、计费、内容安全、国内云部署、商业化上线 | 延后 |
 
 详细路线见 [docs/GlomiAI.md](docs/GlomiAI.md)。
@@ -289,7 +310,7 @@ source .venv/bin/activate
 
 本地开发常用配置在 `.vscode/.env`。不要提交真实 API key。
 
-平台默认 LLM：
+平台模型目录 / 默认兼容模型：
 
 ```env
 CONSUMER_DEFAULT_LLM_ENABLED=true

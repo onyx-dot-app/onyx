@@ -2,6 +2,10 @@
 
 ## 2026-06-16
 
+- 产品路线切换记录：用户确认 Phase A 核心能力已经验证完成，当前正式进入 Phase B，开始把 Craft 作为 GlomiAI 的生成交付运行时来集成和改造。
+- 同步更新 `docs/GlomiAI.md`：把状态从“验证期当前唯一重心”调整为“Phase A 已完成，Phase B/Craft 当前重心”；新增 Craft 集成/改造路线 B0-B4，明确先做稳定运行与资源治理，再做独立 Craft C 端入口、生成物分享、主对话派发和超级编排增强。
+- 同步更新 `README.md`：当前阶段改为 Phase B Craft 王牌能力启动；分支状态表对齐平台模型目录、中文对话/深度研究已验证，并新增 Craft 生成交付运行时章节，强调短问答/研究不进重型 sandbox，需要页面/PPT/看板/小工具/可分享成品时才派发 Craft。
+- 决策经验：前一阶段对 Craft “太重”的担心仍成立，但 Phase B 不是绕开 Craft，而是把资源治理当成第一优先级；最大化发挥 Craft 的方式是保留 sandbox、实时预览、文件系统、快照、skills、approvals 等强项，同时改入口、控并发、做分享闭环，并让主控只在生成交付场景派发 Craft。
 - 本地 Docker Compose 升级执行：使用 `docker compose -f docker-compose.yml -f docker-compose.craft.yml build api_server web_server` 重建本地 `glomi-onyx-backend:local` / `glomi-onyx-web-server:local`，随后依次强制重建 `api_server`、`background`、`search_gateway`、`sandbox-proxy`、`web_server`；`api_server` 启动时已执行 Alembic `01c63968ff8f -> 2aedcb0ff5fd`，数据库 `alembic_version=2aedcb0ff5fd` 且 `chat_run_event` 表存在，`http://localhost:3001/` 返回 200。
 - Craft 模型继承修复：遇到 `Model not found: openai/codex-auto-review`，根因是 OpenAI-compatible 动态 provider 的自动同步模型列表把 `codex-auto-review` 排在首位，Craft 预创建 sandbox 时没有用户显式选择模型，后端默认落到该模型；同时 OpenCode 对 OpenAI-compatible 自定义 API base 仍会用内置 OpenAI 模型目录校验，未显式声明的平台模型会被拦截。修复为后端对 `openai_compatible` 优先选择 Glomi Craft 模型（`gpt-5.5` 等），并在 `opencode.json` 的 `openai` provider block 显式合并声明同一 API base 下所有可见 OpenAI-compatible 模型，支持后续 per-message 模型 override 到 Qwen/DeepSeek/GLM。已重建后端镜像并重启 `api_server`、`background`、`search_gateway`、`sandbox-proxy`；旧 `sandbox-c24ef204` 已删除并把 sandbox 状态置为 `TERMINATED`，历史 `codex-auto-review` build_session 记录已改回 `gpt-5.5`，避免继续使用旧 `openai/codex-auto-review` 配置。
 - Next 16 构建兼容坑：生产构建会校验 App Router page/route export。修复 `web/src/app/app/shared/[chatId]/page.tsx` 中非页面 API 的 `constructMiniFiedPersona` 命名导出；修复 `web/src/app/mcp/[[...path]]/route.ts` route context 类型，把 `params` 改为必有 `Promise<{ path?: string[] }>`，否则 `next build --webpack` 在类型检查阶段失败。

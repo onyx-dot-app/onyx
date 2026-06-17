@@ -1,7 +1,7 @@
 # Glomi AI 产品蓝图（Product Blueprint v0）
 
 - **日期**：2026-06-12
-- **状态**：活文档（讨论稿，会随验证结果迭代）
+- **状态**：活文档（Phase A 已完成核心验证，当前进入 Phase B / Craft 王牌能力启动）
 - **定位**：顶层产品蓝图 + 分期路线。每个 Epic 后续各自走 `spec → plan → 实现`。
 - **相关**：能力/Agents 深度解读见 [`2026-06-12-i18n-and-ui-rebrand-design.md`](./2026-06-12-i18n-and-ui-rebrand-design.md) Part A。
 
@@ -10,8 +10,8 @@
 ## 0. 这份文档是什么 / 不是什么
 
 - **是**：Glomi AI 的完整产品蓝图与分期路线,用来指导后续每个 Epic 独立立项。
-- **不是**：立即全量实现的承诺。**当前唯一重心 = 验证核心产品能力**;商业化/上线模块（鉴权、支付、合规、部署）写进规划但**延后**,等核心验证可行后再逐步实现。
-- **决策原则（本期）**：验证阶段只碰"**核心产品能力**"。鉴权/支付/合规/连接器/部署运维 = 已规划但不在验证期动手。
+- **不是**：立即全量商业化 SaaS 的承诺。**Phase A 核心能力验证已通过**，当前重心切到 Phase B：把 Craft 从 Onyx 的独立创作工作台改造成 GlomiAI 的生成交付运行时。
+- **决策原则（本期）**：Phase B 优先让用户从中文需求拿到可预览、可迭代、可分享的成品。鉴权/支付/合规/连接器/正式部署运维仍按 Phase C 节奏推进；公网开放前必须补内容安全与合规 gate。
 
 ---
 
@@ -27,14 +27,17 @@
 
 ---
 
-## 2. 目标用户与核心场景（验证假设）
+## 2. 目标用户与核心场景
 
 - **用户**：个人知识工作者、学生/研究者、自媒体/内容创作者、独立创业者。
-- **验证期要打中的核心场景**：
+- **Phase A 已验证的核心场景**：
   1. **深度研究**："帮我研究 X,出一份带引用的报告。"
   2. **超级对话**："边搜边算边写",系统自动调用工具完成多步任务。
-  3.（P2）**Craft 创作**："帮我做一个 X 的落地页 / PPT / 数据看板。"
-- **要验证的核心问题**：*在中文场景下,这套「自动编排 + 深度研究」能不能给出让用户「惊艳到愿意留下」的结果?* —— 先验证这个,再谈商业化。
+- **Phase B 要打中的交付场景**：
+  1. **Craft 创作**："帮我做一个 X 的落地页 / PPT / 数据看板 / 小工具。"
+  2. **生成物分享**："把结果变成一个能发给别人看的页面。"
+  3. **主控派发**：用户仍从一个中文输入框开始，系统自动判断该聊天、研究还是进入 Craft 生成交付。
+- **当前要验证的问题**：*在中文场景下，GlomiAI 能不能不只回答问题，而是稳定交付可运行、可修改、可传播的成品?*
 
 ---
 
@@ -42,10 +45,10 @@
 
 | 支柱 | 底座（Onyx 已有, MIT） | Glomi 要做的 | 期次 |
 |---|---|---|---|
-| **超级对话** 自动编排工具/研究/生成 | `chat/llm_loop.py`（自研循环 + XML tool-call,兼容国产模型） | 默认体 prompt 调优、轻量搜索策略、中文体验 | 验证期 |
-| **深度研究** 带引用研究报告 | `deep_research/dr_loop.py` | 中文搜索策略、证据上下文、中文报告成稿 | 验证期 |
-| **Craft 创作交付**（差异化王牌） | `server/features/build/*` 沙箱 | 去订阅门控、沙箱国内化、消费级入口 + 分享页 | 王牌期 P2 |
-| **智能体 & 记忆** | `db/persona.py` + `db/memory.py` | 预置中文智能体、个人记忆、分享 | 验证期(轻)/后续 |
+| **超级对话** 自动编排工具/研究/生成 | `chat/llm_loop.py`（自研循环 + XML tool-call,兼容国产模型） | 已完成 Phase A 验证；Phase B 作为主控入口派发 Craft / Deep Research | 已验证，继续增强 |
+| **深度研究** 带引用研究报告 | `deep_research/dr_loop.py` | 已完成中文搜索策略、证据上下文、中文报告成稿的一期验证 | 已验证，继续增强 |
+| **Craft 创作交付**（差异化王牌） | `server/features/build/*` 沙箱 | 从独立工作台改造成生成交付运行时：消费级入口、模板、资源治理、分享页、主控派发 | Phase B 当前重心 |
+| **智能体 & 记忆** | `db/persona.py` + `db/memory.py` | 预置中文智能体、个人记忆、分享 | Phase B/后续增强 |
 
 ---
 
@@ -59,19 +62,19 @@
 
 | # | Epic | 期次 | 说明 |
 |---|---|---|---|
-| **E1** | i18n + 品牌替换 | 🟢 验证期·进行中 | 已有 spec+plan。复用现有 web,中文优先；当前 `brand.png` / `logo.png` 品牌资源已接入默认 wordmark、Logo mark、favicon、公开 logo/logotype 静态资源和默认助手头像 |
-| **E2** | 平台模型目录与模型选择 | 🟢 验证期·进行中 | 从“每账户一个默认模型”升级为平台内置 Glomi Model Catalog：默认同步 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2 等可选模型到每个 tenant，并由后端返回模型能力（视觉、推理、角色标签）给前端选择器；已有账户通过幂等同步补齐缺失模型，用户选择不被覆盖 |
-| **E3** | 超级对话调优 | 🟢 验证期 | 默认 Persona 的中文 system prompt、工具使用策略、回答体验打磨；搜索由 Agent 在 `web_search` 调用中选择 `lite` / `medium` / `deep`，而不是用户手动选择；普通 chat 研究型回答采用自适应但克制的表达策略，不用固定模板，也不把 deep search 等同于长报告；聊天运行态要支持刷新后继续接上过程 |
-| **E4** | 深度研究中文化 | 🟢 验证期 | 与 E3 共享“中文 Agent 搜索与研究能力层”：问题拆解、query portfolio、来源路由、证据评估、中文报告成稿；默认搜索 provider 第一期接入 Glomi Search Gateway |
-| **E5** | Craft C 端化 | 🟡 王牌期 P2 | 去 `subscription_check`、沙箱镜像/网络国内化（远端 Compose / k8s）、支持平台模型目录里的 OpenAI-compatible 模型、消费级生成入口 + 模板 |
-| **E6** | 生成物分享（Sparkpage 式） | 🟡 王牌期 P2 | 生成结果公开分享页,获客/传播 |
+| **E1** | i18n + 品牌替换 | ✅ Phase A 已验证 | 已有 spec+plan。复用现有 web,中文优先；当前 `brand.png` / `logo.png` 品牌资源已接入默认 wordmark、Logo mark、favicon、公开 logo/logotype 静态资源和默认助手头像 |
+| **E2** | 平台模型目录与模型选择 | ✅ Phase A 已验证，Phase B 继续服务 Craft | 从“每账户一个默认模型”升级为平台内置 Glomi Model Catalog：默认同步 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2 等可选模型到每个 tenant，并由后端返回模型能力（视觉、推理、角色标签）给前端选择器；已有账户通过幂等同步补齐缺失模型，用户选择不被覆盖；Craft 需要复用同一模型目录并做沙箱侧 provider 映射 |
+| **E3** | 超级对话调优 | ✅ Phase A 已验证，Phase B 转为主控入口 | 默认 Persona 的中文 system prompt、工具使用策略、回答体验打磨；搜索由 Agent 在 `web_search` 调用中选择 `lite` / `medium` / `deep`；普通 chat 研究型回答采用自适应但克制的表达策略；Phase B 要把“生成交付意图”路由到 Craft |
+| **E4** | 深度研究中文化 | ✅ Phase A 已验证，继续增强 | 与 E3 共享“中文 Agent 搜索与研究能力层”：问题拆解、query portfolio、来源路由、证据评估、中文报告成稿；默认搜索 provider 第一期接入 Glomi Search Gateway |
+| **E5** | Craft C 端化 | 🚀 Phase B 当前重心 | 去 `subscription_check`、沙箱镜像/网络国内化（远端 Compose / k8s）、支持平台模型目录里的 OpenAI-compatible 模型、资源限额与回收、消费级生成入口 + 模板 |
+| **E6** | 生成物分享（Sparkpage 式） | 🚀 Phase B 当前重心 | 生成结果公开分享页,获客/传播；分享页要成为 Craft 成品的默认出口，而不是隐藏在工作台里 |
 | **E7** | 鉴权重建 | 🔵 商业化期·延后 | 剥离 `ee` 鉴权,微信扫码（网站应用 OAuth）+ 手机号验证码 |
 | **E8** | 计费 & 商业化 | 🔵 商业化期·延后 | 微信支付/支付宝,套餐或积分,用量计量（替代 `ee billing`） |
 | **E9** | 合规 / 内容安全 | 🔴 上线 gate | ICP 备案、内容安全审核（阿里云/腾讯云 API,输入输出双审）、实名、数据本地化。**有公网用户前必做** |
 | **E10** | C 端前台重塑 | 🔵 商业化期 | 在现有 web 上做消费级 UI:首页/发现/历史/分享/品牌视觉 |
 | **E11** | 国内云部署运维 | 🔵 上线期 | 阿里云/腾讯云,托管 OpenSearch/PG/Redis/OSS,Craft 的 k8s,监控 |
 | **E12** | 国内连接器 | ⚪ 生态·最后 | 飞书/钉钉/语雀/企业微信 |
-| **E13** | 超级编排层（Orchestrator / MoA） | 🟡 王牌期 P2（增强） | 把主对话从"单 agent + 工具"升级为"主控**自动路由意图** + **派子 agent**"。基于现成原语：`CodingAgentTool`（子 agent 即工具）、`dr_loop`（orchestrator 模板）、`Emitter/Packet`（子 agent 进度流式展示）。目标：自动判断意图（聊天/研究/建站）、并行派子 agent、汇总（Mixture-of-Agents） |
+| **E13** | 超级编排层（Orchestrator / MoA） | 🚀 Phase B 当前重心（在 Craft 可稳定产物后接入） | 把主对话从"单 agent + 工具"升级为"主控**自动路由意图** + **派子 agent**"。基于现成原语：`CodingAgentTool`（子 agent 即工具）、`dr_loop`（orchestrator 模板）、`Emitter/Packet`（子 agent 进度流式展示）。目标：自动判断意图（聊天/研究/建站/做 PPT/做看板/做页面）、并行派子 agent、汇总（Mixture-of-Agents） |
 
 > **架构洞察（为什么 E13 是"增强"而非"重写"）**：在 Onyx 里「**子 agent = 一个内部跑 agent loop 的工具**」。主对话（`chat/llm_loop.py`）已是"单 agent + 工具自动编排",且 `CodingAgentTool` 就是把内部 agent loop 包成工具的现成范式;深度研究（`dr_loop.py`）已是"orchestrator 规划 → 派 research 子 agent → 汇总"的完整实现,只是靠请求上的 `deep_research` 开关触发（`process_message.py:1223`），不是主控自动决定。**原语齐备（子 agent 即工具 + orchestrator 模板 + 流式协议），E13 差的只是上面那层"自动路由 + 多子 agent 编排"。**
 
@@ -81,20 +84,40 @@
 
 ## 6. 分期路线
 
-### Phase A —— 核心能力验证（当前唯一重心）
+### Phase A —— 核心能力验证（已完成）
 - **内容**：E1 i18n + E2 平台模型目录与模型选择（默认同步 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2 等模型能力画像到 tenant）+ E3/E4 中文 Agent 搜索与研究能力层（平台默认 Glomi Search Gateway + Agent 自动选择 Lite/Medium/Deep 搜索 + 深度研究中文报告）+ 聊天运行态刷新恢复 + 基于后端模型能力的图片粘贴/上传入口。
-- **鉴权/支付**：**验证期不做**。用 `AUTH_TYPE=basic` / 单用户 / 内测白名单即可,不碰微信登录、不碰支付。
+- **结论**：核心中文对话、搜索、深度研究和平台默认模型能力已经完成验证，允许产品路线进入 Phase B。
+- **鉴权/支付**：Phase A 未做，仍不作为 Phase B 起步阻塞项。继续用 `AUTH_TYPE=basic` / 单用户 / 内测白名单即可；公网开放前再进入 Phase C 补齐。
 - **交付物**：一个**中文、接国产模型、对话 + 深度研究可用**的内测版（本地或小范围内测）。
-- **验证成功标准**：
+- **已满足的验证标准**：
   1. 内测用户能用中文完成多类研究/问答/多步任务,且结果**可用、靠谱**;
   2. 深度研究报告**引用准确、可读、成稿质量高**;
   3. 主观信号:用户**愿意再用 / 愿意推荐**（留存与口碑意愿）。
-- **退出条件**：验证通过 → 进 Phase B;不通过 → 调整产品方向（而不是继续投商业化）。
+- **退出状态**：验证通过 → 已进入 Phase B。
 
-### Phase B —— 亮王牌（Craft + 超级编排）
+### Phase B —— 亮王牌（Craft + 生成物分享 + 主控派发，当前重心）
 - **内容**：E5 Craft C 端化 + E6 生成物分享 + **E13 超级编排层**。沙箱国内化（镜像/网络/远端 Compose/k8s），并让 Craft 复用 Phase A 平台模型目录；OpenAI-compatible 模型在 Onyx 内仍保留独立 provider 类型，在 OpenCode 沙箱边界映射为 `openai` provider。
-- **交付物**：能**生成并分享**站点 / PPT / 数据 / 海报,且主控能**自动路由 + 调度子 agent**（聊天/研究/建站无感切换）——对标 Genspark 的核心差异化。
-- **次序提示**：先 E5/E6 把 Craft 变成"可派的子 agent",再上 E13 让主控自动编排;验证期（Phase A）用现有"对话 + 深度研究开关"已足够像 Genspark,不必提前做 E13。
+- **核心定位**：Craft 不再只是侧边栏里的独立 Build 工作台，而是 GlomiAI 的“生成交付运行时”。用户仍从中文输入框开始；当需求需要页面、PPT、报告、看板、小工具或可分享成品时，主控应把任务派给 Craft。
+- **交付物**：能**生成并分享**站点 / PPT / 数据看板 / 海报 / 报告 / 小工具,且主控能**自动路由 + 调度子 agent**（聊天/研究/建站/做 PPT 无感切换）——对标 Genspark 的核心差异化。
+- **次序提示**：先 E5 把独立 Craft 跑稳并 C 端化，再 E6 做分享闭环，最后 E13 把 Craft 包成主控可派发的生成子 agent。不要一上来重写整个主控；先复用 Craft 现有 sandbox、streaming、preview、snapshot、skills 和 file APIs。
+
+#### Phase B Craft 集成/改造路线
+
+| 阶段 | 目标 | 要改造的重点 |
+|---|---|---|
+| **B0 稳定运行与资源治理** | 让 Craft 在当前 Linux/远端环境可控运行 | 明确 `ENABLE_CRAFT` 部署形态；优先远端 Compose/k8s sandbox；限制 `SANDBOX_MAX_CONCURRENT_PER_ORG`、`SANDBOX_IDLE_TIMEOUT_SECONDS`、CPU/内存；降低无意义预创建；补可观测日志和失败恢复 |
+| **B1 独立 Craft C 端入口** | 用户可以直接用 Craft 生成成品 | 中文模板入口（落地页/PPT/看板/报告/小工具）；默认 prompt 与示例从企业知识库语境改为消费级交付；复用平台模型目录；保留实时预览、文件、上传和迭代能力 |
+| **B2 生成物分享闭环** | 让 Craft 产物天然能传播 | 把 web artifact、报告、PPT 等输出统一成可公开/私密分享链接；分享页不暴露工作台复杂 UI；支持继续编辑/复制任务 |
+| **B3 主对话派发 Craft** | 一个输入框自动进入生成模式 | 在主 chat 中识别“要交付成品”的意图，创建/复用 Craft session，流式展示进度，把预览和最终产物回填到对话；Deep Research 继续负责研究，Craft 负责可运行/可展示交付物 |
+| **B4 超级编排增强** | 多子 agent / MoA 汇总 | 研究子 agent 收集材料，Craft 子 agent 生成页面/报告/看板，主控汇总并让用户选择继续迭代或分享 |
+
+#### Craft 最大化发挥的原则
+
+- **保留强项**：sandbox 隔离、OpenCode agent、实时预览、文件系统、快照恢复、skills、外部应用和 approvals 是 Craft 的核心资产，不应为了“轻量化”把它拆空。
+- **改造入口**：Onyx 原始 Craft 偏企业知识库工作台；GlomiAI 要把入口改成中文消费级生成任务，而不是让用户理解 session、apps、skills、scheduled tasks。
+- **控制资源**：单机 Linux 不适合无限预创建 sandbox。Phase B 起步必须把并发、闲置回收、容器内存/CPU、任务超时和失败清理作为产品能力的一部分。
+- **主控解耦**：短问答和研究仍走 chat / Deep Research；需要产物交付才进入 Craft。这样既最大化 Craft 价值，也避免所有请求都进重型 sandbox。
+- **分享优先**：Craft 的商业与传播价值不在“生成过程很酷”，而在“成品能被打开、检查、转发、二次编辑”。
 
 ### Phase C —— 商业化与上线（验证可行后再启动）
 - **内容**：E7 鉴权（微信/手机）→ E8 计费 → **E9 合规（内容安全先行）** → E10 前台重塑 → E11 国内云部署 → E12 连接器。
@@ -106,9 +129,10 @@
 
 | 决策 | 现状 | 倾向/建议 |
 |---|---|---|
-| **对话模型** | ✅ 已定 | 验证期从单主模型升级为平台内置模型目录：前期默认 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2；后端同步到每个 tenant 的 LLMProvider/ModelConfiguration，并返回 `supports_image_input`、推理能力和角色标签给前端模型选择器。C 端不暴露 API key/base URL/provider 配置，只选择平台开放的模型 |
+| **对话模型** | ✅ 已定 | Phase A 已从单主模型升级为平台内置模型目录：前期默认 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2；后端同步到每个 tenant 的 LLMProvider/ModelConfiguration，并返回 `supports_image_input`、推理能力和角色标签给前端模型选择器。C 端不暴露 API key/base URL/provider 配置，只选择平台开放的模型；Phase B 继续让 Craft 复用这套目录 |
 | **默认搜索服务** | ✅ 已定 | Onyx 侧自动 seed `Glomi Search / glomi` provider，配置只暴露 Gateway base URL、API key、可选 channel；仓库内提供本地 `onyx.search_gateway.server`，第一期把 `channel=tavily` 转成 Tavily 搜索；Agent 在 `web_search` 工具调用中选择 `lite` / `medium` / `deep`，不做代码规则匹配，不增加前置 LLM router；Gateway 的 `medium` / `deep` 会做限量 query fan-out、Tavily advanced search、raw-content snippet fallback；`open_url` 抓取失败时可使用最近 web_search snippet 作为标注过的 fallback evidence；Gateway 内部用 adapter capability matrix 支持未来 Tavily / Brave / 国内搜索 / 自研源切换 |
-| **embedding 检索模型** | forward note | 仅当做「文档/知识库 RAG」时才需换中文 embedding（BGE / Qwen-embedding / 云端中文）。纯深度研究（走 web 搜索）验证期不依赖,先不管 |
+| **Craft 集成路线** | ✅ 已定 | Phase B 已启动。先跑稳独立 Craft 和资源治理，再做消费级模板入口与生成物分享，最后把 Craft 包成主控可派发的生成子 agent。短问答/研究不进 sandbox，需要可预览、可迭代、可分享成品时才派发 Craft |
+| **embedding 检索模型** | forward note | 仅当做「文档/知识库 RAG」时才需换中文 embedding（BGE / Qwen-embedding / 云端中文）。纯深度研究（走 web 搜索）暂不依赖，Phase B 起步先不作为 Craft 阻塞项 |
 | **商业模式** | 未定 | 订阅 / 积分按量 / 免费+增值,Phase C 前定 |
 | **定价与套餐** | 未定 | 随商业模式定 |
 | **是否做团队版** | 暂不（当前 C 端优先） | 若 B 端获客需求出现再议 |
@@ -120,15 +144,15 @@
 
 - 本蓝图 = **顶层**;每个 Epic 各自走独立的 `spec → plan → 实现`。
 - 已落地：**E1**（i18n + UI 资源替换）的 spec 与 plan。
-- **下一步建议**：E1 已落，E2 先前“注册即有平台默认 OpenAI-compatible 主模型”已完成第一阶段；下一阶段以 `docs/superpowers/specs/2026-06-16-resumable-runs-model-strategy-answer-policy-design.md` 为总设计，把 E2 升级为平台模型目录、已有账户模型同步、后端能力画像和前端模型选择器，并与刷新恢复、回答长度策略、图片输入能力一起进入实施计划；E3/E4 继续以 `docs/superpowers/specs/2026-06-13-agent-search-and-research-strategy-design.md` 为搜索方法论基础，平台默认 Glomi Search Gateway 与 Agent 自动 Lite/Medium/Deep 搜索模式已按 `docs/superpowers/specs/2026-06-15-platform-default-glomi-search-gateway-design.md` 进入一期实现，本地 Gateway 与 open_url snippet fallback 已可用，后续重点是解决本地 Tavily TLS 连通性后做端到端中文搜索/研究 benchmark。
+- **下一步建议**：Phase A 已完成核心验证。Phase B 应优先为 Craft 单独立项：先做运行稳定性/资源治理/模型目录适配，再做 C 端模板入口和分享页，最后接入主对话派发。E3/E4 的中文搜索与研究能力继续作为 Craft 的上游材料来源，不替代 Craft 的生成交付职责。
 
 ---
 
 ## 9. 风险
 
-- **验证期最大风险**：核心能力在中文场景"不够惊艳" → 所以**先验证再投商业化**是正确次序。
+- **Phase B 最大风险**：Craft 能力强但系统重，若没有资源治理和清晰派发边界，会拖垮单机部署并让普通问答也变慢。
 - **自维护成本**：硬 fork 脱离上游,引擎进化/安全补丁全自管。
 - **内容合规**：公网开放前必须有内容安全审核（E9 不可省）。
-- **Craft 国内化复杂度**：沙箱镜像/网络/k8s 国内化是 Phase B 的主要工程风险。
+- **Craft 国内化复杂度**：沙箱镜像/网络/远端 Compose/k8s 国内化是 Phase B 的主要工程风险。
 - **Craft 模型兼容风险**：平台模型目录里的 GPT-5.5、Qwen3.7 Plus、GLM-5.2 等可通过 OpenAI-compatible 进入 Craft，但不同厂商对 tool calling、streaming、reasoning 参数和长上下文的兼容性不完全一致，需要后续用真实沙箱任务做模型白名单与降级策略。
 - **模型成本**：深度研究/Craft 多轮调用 token 消耗大,需成本监控（影响商业模式）。
