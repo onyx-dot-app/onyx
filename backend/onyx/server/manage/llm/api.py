@@ -51,6 +51,7 @@ from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import is_sensitive_custom_config_key
+from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
@@ -1726,7 +1727,10 @@ def get_bifrost_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=infer_vision_support(model_id),
+                    # Vision support from the LiteLLM cost map, not a hardcoded list
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.BIFROST
+                    ),
                     supports_reasoning=is_reasoning_model(model_id, model_name),
                 )
             )
