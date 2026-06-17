@@ -50,12 +50,12 @@ ATTACHMENTS_DIRECTORY = "attachments"
 
 SANDBOX_NAMESPACE = os.environ.get("SANDBOX_NAMESPACE", "onyx-sandboxes")
 
-SANDBOX_CONTAINER_IMAGE = os.environ.get(
-    "SANDBOX_CONTAINER_IMAGE", "onyxdotapp/sandbox:v0.1.52"
+SANDBOX_CONTAINER_IMAGE = (
+    os.environ.get("SANDBOX_CONTAINER_IMAGE", "").strip() or "onyxdotapp/sandbox:latest"
 )
 
-# Set to "Always" in environments that pin a mutable tag (e.g. :dev) so nodes
-# re-pull on every pod start; immutable version pins can use the node cache.
+# Set to "Always" only in internal environments that deliberately pin a mutable
+# tag. Non-dev deployments should use app-aligned immutable tags.
 SANDBOX_IMAGE_PULL_POLICY = os.environ.get("SANDBOX_IMAGE_PULL_POLICY", "IfNotPresent")
 
 SANDBOX_SERVICE_ACCOUNT_NAME = os.environ.get("SANDBOX_SERVICE_ACCOUNT_NAME", "sandbox")

@@ -1,11 +1,11 @@
 apiVersion: v2
 name: onyx
-description: A Helm chart for Kubernetes
+description: Onyx application and Craft sandbox deployment chart
 home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.1
+version: 0.6.2
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,6 +16,9 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
+    - kind: changed
+      description: Default Craft sandbox images to the application chart
+        version and app image pull policy.
     - kind: changed
       description: Add isolated writable /tmp scratch space for sandboxed
         OpenCode agents.

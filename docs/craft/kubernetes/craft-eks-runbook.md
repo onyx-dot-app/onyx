@@ -213,10 +213,13 @@ sandboxProxy:
 - Craft: `ENABLE_CRAFT=true`, `SANDBOX_API_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080`, `auth.sandboxPushSecret.enabled=true`. (`SANDBOX_SERVICE_ACCOUNT_NAME`/`SANDBOX_CONTAINER_IMAGE` default correctly.)
 
 ### Images
-`global.version: edge` (backend/web/model-server — the moving build from `main`; or a release
-`vX.Y.Z`). Craft is enabled at runtime via `ENABLE_CRAFT=true` — there are no craft-specific app
-images (see [image architecture](../image-architecture.md)). `code-interpreter`: `latest`. Sandbox
-image default tracks the current `onyxdotapp/sandbox:vX.Y.Z`.
+Use an immutable release tag for Kubernetes customer Craft deployments, e.g.
+`global.version: vX.Y.Z`. Internal mainline clusters may use `edge` with
+`SANDBOX_IMAGE_PULL_POLICY=Always`. Craft is enabled at runtime via
+`ENABLE_CRAFT=true` — there are no craft-specific app images (see
+[image architecture](../infra/image-architecture.md)). `code-interpreter`:
+`latest`. Sandbox image default tracks the same app tag via
+`onyxdotapp/sandbox:${global.version}`.
 
 ---
 

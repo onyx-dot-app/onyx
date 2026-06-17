@@ -177,6 +177,7 @@ _PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # Registered in the opencode config only when the proxy is wired up; otherwise
 # it would no-op (no HTTP(S)_PROXY to re-tag).
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+_MUTABLE_SANDBOX_IMAGE_TAGS = {"latest", "beta", "edge"}
 
 
 def _run_in_container_as_sandbox_user(
@@ -697,6 +698,8 @@ class DockerSandboxManager(SandboxManager):
 
         self._docker = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
         self._image = SANDBOX_CONTAINER_IMAGE
+        self._image_checked = False
+        self._image_check_lock = threading.Lock()
         self._network_name = SANDBOX_DOCKER_NETWORK
         self._memory_limit = SANDBOX_DOCKER_MEMORY_LIMIT
         self._cpu_limit = SANDBOX_DOCKER_CPU_LIMIT
@@ -719,6 +722,55 @@ class DockerSandboxManager(SandboxManager):
             self._network_name,
             self._compose_project,
         )
+
+    def _ensure_sandbox_image(self) -> None:
+        with self._image_check_lock:
+            if self._image_checked:
+                return
+
+            image_tag: str | None = None
+            # Digest refs use ``@sha256:...``; do not parse that colon as a tag.
+            if "@" not in self._image:
+                image_name = self._image.rsplit("/", 1)[-1]
+                image_tag = (
+                    image_name.rsplit(":", 1)[1] if ":" in image_name else "latest"
+                )
+            is_mutable_tag = image_tag in _MUTABLE_SANDBOX_IMAGE_TAGS
+            if not is_mutable_tag:
+                try:
+                    self._docker.images.get(self._image)
+                    self._image_checked = True
+                    return
+                except NotFound:
+                    pass
+
+            logger.info(
+                "%s sandbox image %s.",
+                "Refreshing" if is_mutable_tag else "Pulling missing",
+                self._image,
+            )
+            try:
+                self._docker.images.pull(self._image)
+            except APIError as e:
+                if not is_mutable_tag:
+                    raise RuntimeError(
+                        f"Failed to pull sandbox image {self._image}: {e}"
+                    ) from e
+
+                try:
+                    self._docker.images.get(self._image)
+                except NotFound:
+                    raise RuntimeError(
+                        f"Failed to pull sandbox image {self._image}: {e}"
+                    ) from e
+                logger.warning(
+                    "Failed to refresh mutable sandbox image %s; using cached "
+                    "local image: %s",
+                    self._image,
+                    e,
+                )
+
+            self._image_checked = True
 
     def _ensure_sandbox_network(self) -> None:
         try:
@@ -844,6 +896,7 @@ class DockerSandboxManager(SandboxManager):
                     plugins=session_tag_plugins,
                 )
             )
+            self._ensure_sandbox_image()
             self._ensure_sandbox_network()
             volume_name = self._ensure_sandbox_volume(sandbox_id, tenant_id)
             container = self._create_sandbox_container(
