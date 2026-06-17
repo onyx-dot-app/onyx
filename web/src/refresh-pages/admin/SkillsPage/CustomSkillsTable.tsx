@@ -66,6 +66,21 @@ export default function CustomSkillsTable({
 }: CustomSkillsTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
+  const sortedSkills = useMemo(() => {
+    // Group order: org-wide, then group-granted, then personal;
+    // alphabetical by name within each group.
+    const groupRank = (skill: CustomSkill): number => {
+      if (skill.is_public) return 0;
+      if (skill.is_personal) return 2;
+      return 1;
+    };
+    return [...skills].sort(
+      (a, b) =>
+        groupRank(a) - groupRank(b) ||
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
+  }, [skills]);
+
   const columns = useMemo(() => {
     const tc = createTableColumns<CustomSkill>();
 
@@ -126,7 +141,7 @@ export default function CustomSkillsTable({
         searchIcon
       />
       <Table
-        data={skills}
+        data={sortedSkills}
         columns={columns}
         getRowId={(row) => row.id}
         pageSize={DEFAULT_PAGE_SIZE}

@@ -707,7 +707,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (liveAgent?.starter_messages?.length ?? 0) > 0;
 
   const gridStyle = {
-    gridTemplateColumns: "1fr",
+    // minmax(0, 1fr) (instead of "1fr") lets the single column shrink to the
+    // grid's width. A bare "1fr" is minmax(auto, 1fr), whose auto minimum is
+    // the content's min-content — wide content (e.g. the onboarding cards) would
+    // otherwise blow the column past the viewport and clip the right edge.
+    gridTemplateColumns: "minmax(0, 1fr)",
     gridTemplateRows: isSearch
       ? "0fr auto 1fr"
       : appFocus.isChat()
@@ -796,7 +800,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center px-4">
+                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center px-2 sm:px-4">
                   {/* ChatUI */}
                   <Fade
                     show={
@@ -921,7 +925,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 {/* ── Middle-center: AppInputBar ── */}
                 <div
                   className={cn(
-                    "row-start-2 flex flex-col items-center px-4",
+                    "row-start-2 flex flex-col items-center px-2 sm:px-4",
                     sessionFetchError && "hidden"
                   )}
                 >
@@ -1036,7 +1040,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
-                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-4">
+                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
                   {/* Agent description below input */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&
                     !isDefaultAgent && (
