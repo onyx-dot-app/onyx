@@ -19,6 +19,7 @@ from onyx.server.security.store import _install_cache_for_test
 from onyx.server.security.store import apply_patch
 from onyx.server.security.store import get_security_settings
 from onyx.server.security.store import invalidate_security_cache
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
@@ -166,6 +167,24 @@ def test_pre_tenant_returns_env_defaults_without_raising(
     """Multi-tenant + contextvar unset must short-circuit to env defaults
     without touching the DB."""
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
+    try:
+        monkeypatch.setattr(security_store, "MULTI_TENANT", True)
+
+        with patch.object(security_store, "_load_raw_overrides_unlocked") as spy:
+            effective = get_security_settings()
+            spy.assert_not_called()
+        assert effective == _build_env_defaults()
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
+def test_multi_tenant_default_schema_returns_env_defaults_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Multi-tenant + contextvar resolved to the shared/default schema (an
+    unprovisioned/unmapped user) must short-circuit to env defaults without
+    touching the DB — ``public`` never carries the per-tenant table."""
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
     try:
         monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 

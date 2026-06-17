@@ -212,14 +212,17 @@ def invalidate_security_cache(tenant_id: str) -> None:
 def get_security_settings() -> SecuritySettings:
     """Effective, env-merged, immutable settings for the current tenant.
 
-    Pre-tenant safe: returns env defaults (uncached) when the contextvar is
-    unset in multi-tenant. DB errors fall back to env defaults so a Postgres
-    outage never bricks the auth path. Returned ``SecuritySettings`` is frozen.
+    Pre-tenant safe: returns env defaults (uncached) when there is no real
+    tenant schema to read from. DB errors fall back to env defaults so a
+    Postgres outage never bricks the auth path. Returned ``SecuritySettings``
+    is frozen.
     """
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
-    if tenant_id is None:
-        # Single-tenant defaults the contextvar at module import; this branch
-        # fires only in multi-tenant before tenant resolution.
+    # In multi-tenant the shared/default schema carries no per-tenant
+    # security_settings row, so reading it raises UndefinedTable. Unmapped users
+    # (registration, login for an email with no tenant) and pre-resolution
+    # requests land here; fall back to env defaults rather than a doomed query.
+    if tenant_id is None or (MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA):
         return _build_env_defaults()
 
     with _CACHE_LOCK:
