@@ -148,14 +148,11 @@ LABEL_USER_ID = "onyx.app/user-id"
 # Path conventions inside the sandbox container — must match the K8s image.
 WORKSPACE_ROOT = "/workspace"
 SESSIONS_ROOT = f"{WORKSPACE_ROOT}/sessions"
-# Opencode's XDG data home inside the container. The container leaves
-# OPENCODE_DATA_HOME unset, so this matches ``entrypoint.sh``'s default. Unlike
-# K8s (shared ``opencode-data`` emptyDir), only ``/workspace/sessions`` is a
-# persistent volume here, so this lives in the writable layer: it survives a
-# container restart but not a re-creation. Durability across re-provision comes
-# from the FileStore history snapshot. Its basename must equal the daemon's
-# archive root (``.opencode-data``) so ``put_archive`` at WORKSPACE_ROOT lands
-# the restored tree here -- see ``_maybe_restore_opencode_history``.
+# Opencode's data home (its XDG_DATA_HOME); matches entrypoint.sh's default. It
+# lives in the container writable layer, not the per-sandbox volume, so it is
+# durable only via the FileStore history snapshot. Its basename must equal the
+# daemon archive's root dir, so put_archive at WORKSPACE_ROOT lands the restored
+# tree here (see _maybe_restore_opencode_history).
 OPENCODE_DATA_DIR = f"{WORKSPACE_ROOT}/.opencode-data"
 TEMPLATES_OUTPUTS_PATH = f"{WORKSPACE_ROOT}/templates/outputs"
 MANAGED_SKILLS_PATH = f"{WORKSPACE_ROOT}/managed/skills"
@@ -187,12 +184,9 @@ _PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # it would no-op (no HTTP(S)_PROXY to re-tag).
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
 
-# Builds the opencode-history archive in-container via the shared sandbox_daemon
-# helper (sqlite-consistent backup + symlink/traversal guards), reusing the same
-# code path as the K8s sidecar. Prints the archive's temp path to stdout, or
-# nothing when there is no history to capture. ``sandbox_daemon`` is importable
-# via the image's PYTHONPATH=/workspace; OPENCODE_DATA_HOME (set on the exec)
-# points the helper at the container's writable-layer data home.
+# In-container opencode-history archive builder: reuses the sandbox_daemon
+# helper (sqlite-safe backup + symlink guards) and prints the temp archive path,
+# or nothing when there's no history. Exec it with OPENCODE_DATA_HOME set.
 _OPENCODE_HISTORY_CREATE_SCRIPT = (
     "import sys; "
     "from sandbox_daemon.opencode_history import create_opencode_history_archive_file; "
@@ -882,17 +876,17 @@ class DockerSandboxManager(SandboxManager):
             )
 
         if created_fresh:
-            # A fresh container's opencode-data lives in the empty writable
-            # layer. Repopulate it from the durable history snapshot *before*
-            # starting the container, so entrypoint.sh's opencode-serve opens
-            # the restored database instead of racing an extraction on top of a
-            # live process. Mirrors the K8s init-sidecar restore handshake.
-            self._maybe_restore_opencode_history(container, sandbox_id, tenant_id)
+            # Restore history into the empty writable layer before starting, so
+            # opencode-serve opens the restored DB instead of creating an empty
+            # one. On failure, remove the container so a retry re-creates
+            # cleanly.
             try:
+                self._maybe_restore_opencode_history(container, sandbox_id, tenant_id)
                 container.start()
-            except APIError as e:
+            except Exception as e:
+                self._remove_incomplete_container(container)
                 raise RuntimeError(
-                    f"Failed to start sandbox container {container.name}: {e}"
+                    f"Failed to provision sandbox container {container.name}: {e}"
                 ) from e
 
         if not self._wait_for_container_running(container):
@@ -916,7 +910,13 @@ class DockerSandboxManager(SandboxManager):
         )
 
     def _reuse_existing_container(self, sandbox_id: UUID) -> Container | None:
-        """Returns a running/restarted container if one exists, else None."""
+        """Returns a reusable running/exited container, else None.
+
+        A ``created`` container means a prior provision died before start;
+        starting it would skip the opencode-history restore, so remove it and
+        let the caller re-create. The per-sandbox volume survives, so session
+        workspaces are kept.
+        """
         existing = self._get_container(sandbox_id)
         if existing is None:
             return None
@@ -925,11 +925,31 @@ class DockerSandboxManager(SandboxManager):
         if status == "running":
             logger.info("Reusing existing running sandbox %s.", sandbox_id)
             return existing
-        if status in ("exited", "created"):
+        if status == "exited":
             logger.info("Starting existing stopped sandbox %s.", existing.name)
             existing.start()
             return existing
+        if status == "created":
+            logger.warning(
+                "Sandbox %s container is in 'created' state (incomplete prior "
+                "provision); removing so it can be re-created and restored.",
+                sandbox_id,
+            )
+            self._remove_incomplete_container(existing)
+            return None
         return None
+
+    @staticmethod
+    def _remove_incomplete_container(container: Container) -> None:
+        """Best-effort force-remove of a container we failed to fully provision."""
+        try:
+            container.remove(force=True)
+        except (APIError, NotFound) as e:
+            logger.warning(
+                "Failed to remove incomplete sandbox container %s: %s",
+                container.name,
+                e,
+            )
 
     def _create_sandbox_container(
         self,
@@ -942,16 +962,13 @@ class DockerSandboxManager(SandboxManager):
         opencode_password: str,
         opencode_config_json: str,
     ) -> tuple[Container, bool]:
-        """Create (but do not start) the sandbox container.
+        """
+        Creates (not starts) the container; returns ``(container,
+        created_fresh)``.
 
-        Returns ``(container, created_fresh)``. ``created_fresh`` is True when
-        this call created the container -- the caller restores opencode history
-        into the still-stopped writable layer and starts it. On a concurrent
-        provision (409 conflict) we reuse the racing provisioner's container and
-        return False, leaving its start/restore to that provisioner.
-
-        Applies our security/network/labels invariants via
-        ``build_container_create_kwargs``.
+        ``created_fresh`` is False only when a concurrent provision already
+        created it (409 conflict); the caller then skips restore/start and lets
+        that provisioner finish.
         """
         # Proxy posture is gated on SANDBOX_PROXY_HOST; threaded through
         # build_container_create_kwargs to layer on the legacy posture without
@@ -974,9 +991,8 @@ class DockerSandboxManager(SandboxManager):
             sandbox_proxy_host=proxy_host,
             proxy_ca_volume_name=(SANDBOX_PROXY_CA_VOLUME_NAME if proxy_host else None),
         )
-        # ``create`` rather than ``run`` so we can put_archive the opencode
-        # history into the writable layer before the entrypoint launches.
-        # ``detach`` is a run-only flag; create starts nothing.
+        # create (not run) so the caller can put_archive history before start.
+        # detach is run-only.
         run_kwargs = dict(create_kwargs)
         run_kwargs.pop("detach", None)
         try:
@@ -1279,12 +1295,10 @@ echo "Session cleanup complete"
         tenant_id: str,
         timeout_seconds: float = 300.0,  # noqa: ARG002 - exec uses the docker client timeout
     ) -> bool:
-        """Capture sandbox-global opencode history (chat DB + sessions).
+        """Captures sandbox-global opencode history to the FileStore.
 
-        Builds a sqlite-consistent archive in-container via the shared
-        sandbox_daemon helper, then streams it into the FileStore. Returns
-        False when opencode has not written any data yet (leaving any existing
-        durable archive untouched).
+        Returns False when opencode has written no data yet, leaving any
+        existing durable archive untouched.
         """
         container = self._get_container(sandbox_id)
         if container is None:
@@ -1294,8 +1308,7 @@ echo "Session cleanup complete"
             )
             return False
 
-        # OPENCODE_DATA_HOME points the daemon helper at the Docker data home
-        # (the container leaves it unset, so the helper's default would miss it).
+        # Point the daemon helper at the Docker data home (unset in the container).
         history_env = {**SANDBOX_EXEC_ENV, "OPENCODE_DATA_HOME": OPENCODE_DATA_DIR}
         try:
             built = run_in_container(
@@ -1316,9 +1329,8 @@ echo "Session cleanup complete"
             stream = _stream_stdout_from_container_as_sandbox_user(
                 container, ["cat", archive_path]
             )
+            # _GeneratorReader gives the read(n) API persist_* needs (not a typing.IO).
             adapter = _GeneratorReader(stream)
-            # ``_GeneratorReader`` satisfies the structural ``read(n)`` API that
-            # ``SnapshotManager``/``FileStore`` use without subclassing IO[bytes].
             storage_path, size_bytes = (
                 self._snapshot_manager.persist_opencode_snapshot_from_stream(
                     stream=adapter,  # ty: ignore[invalid-argument-type]
@@ -1356,15 +1368,13 @@ echo "Session cleanup complete"
         sandbox_id: UUID,
         tenant_id: str,
     ) -> None:
-        """Extract any durable opencode history into a freshly-created (not yet
-        started) container before opencode-serve opens its database.
+        """
+        Restores durable opencode history into a freshly-created,
+        not-yet-started container, before opencode-serve opens its DB. No-op
+        when no snapshot exists.
 
-        Only ``/workspace/sessions`` is a persistent volume, so a fresh
-        container's opencode-data is empty. ``put_archive`` into the stopped
-        container writes the writable layer with no live opencode process racing
-        the DB file -- the Docker analogue of the K8s init-sidecar restore. The
-        archive's top-level member is the daemon's ``.opencode-data`` root, so
-        extracting at WORKSPACE_ROOT lands it at OPENCODE_DATA_DIR.
+        Writing the stopped container's writable layer avoids racing a live
+        opencode process over the DB file.
         """
         if not self._snapshot_manager.has_opencode_history_snapshot(
             tenant_id, str(sandbox_id)
@@ -1385,8 +1395,7 @@ echo "Session cleanup complete"
             return
 
         try:
-            # Docker untars (including gzip) at the destination path. put_archive
-            # works on a created-but-unstarted container's filesystem.
+            # put_archive untars (gzip ok) into the stopped container's writable layer.
             if not container.put_archive(WORKSPACE_ROOT, archive_bytes):
                 raise RuntimeError("docker put_archive reported failure")
         except (APIError, NotFound) as e:
