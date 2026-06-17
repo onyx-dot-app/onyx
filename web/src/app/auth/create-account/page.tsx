@@ -1,45 +1,27 @@
 "use client";
 
-import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
+import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
 import { REGISTRATION_URL } from "@/lib/constants";
 import { Button } from "@opal/components";
-import Link from "next/link";
+import { markdown } from "@opal/utils";
 import { SvgImport } from "@opal/icons";
 
 export default function Page() {
   return (
-    <AuthFlowContainer>
-      <div className="flex flex-col space-y-6">
-        <h2 className="text-2xl font-bold text-text-900 text-center">
-          Account Not Found
-        </h2>
-        <p className="text-text-700 max-w-md text-center">
-          We couldn&apos;t find your account in our records. To access Onyx, you
-          need to either:
-        </p>
-        <ul className="list-disc text-left text-text-600 w-full pl-6 mx-auto">
-          <li>Be invited to an existing Onyx team</li>
-          <li>Create a new Onyx team</li>
-        </ul>
-        <div className="flex justify-center">
-          <Button
-            href={`${REGISTRATION_URL}/register`}
-            width="full"
-            icon={SvgImport}
-          >
-            Create New Organization
-          </Button>
-        </div>
-        <p className="text-sm text-text-500 text-center">
-          Have an account with a different email?{" "}
-          <Link
-            href="/auth/login"
-            className="text-action-link-05 hover:underline"
-          >
-            Sign in
-          </Link>
-        </p>
-      </div>
+    <AuthFlowContainer
+      title="Account Not Found"
+      description="We couldn't find your account in our records. To access Onyx, you need to either be invited to an existing team or create a new one."
+      bottomPrompt={markdown(
+        "Have an account with a different email? [Sign in](/auth/login)"
+      )}
+    >
+      <Button
+        href={`${REGISTRATION_URL}/register`}
+        width="full"
+        icon={SvgImport}
+      >
+        Create New Organization
+      </Button>
     </AuthFlowContainer>
   );
 }

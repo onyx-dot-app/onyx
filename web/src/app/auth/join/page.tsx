@@ -8,7 +8,7 @@ import {
 import { redirect } from "next/navigation";
 import EmailPasswordForm from "../login/EmailPasswordForm";
 import SignInButton from "@/app/auth/login/SignInButton";
-import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
+import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import { AuthType } from "@/lib/constants";
 
@@ -24,13 +24,6 @@ const Page = async (props: {
     ? searchParams?.email[0]
     : searchParams?.email || null;
 
-  const teamName = Array.isArray(searchParams?.team)
-    ? searchParams?.team[0]
-    : searchParams?.team || "your team";
-
-  // catch cases where the backend is completely unreachable here
-  // without try / catch, will just raise an exception and the page
-  // will not render
   let authTypeMetadata: AuthTypeMetadata | null = null;
   let currentUser: User | null = null;
   try {
@@ -42,7 +35,6 @@ const Page = async (props: {
     console.log(`Some fetch failed for the login page - ${e}`);
   }
 
-  // if user is already logged in, take them to the main app page
   if (currentUser && currentUser.is_active && !currentUser.is_anonymous_user) {
     if (!authTypeMetadata?.requiresVerification || currentUser.is_verified) {
       return redirect("/app");
@@ -51,7 +43,6 @@ const Page = async (props: {
   }
   const cloud = authTypeMetadata?.authType === AuthType.CLOUD;
 
-  // only enable this page if basic login is enabled
   if (authTypeMetadata?.authType !== AuthType.BASIC && !cloud) {
     return redirect("/app");
   }
@@ -60,39 +51,32 @@ const Page = async (props: {
   if (cloud && authTypeMetadata) {
     authUrl = await getAuthUrlSS(authTypeMetadata.authType, null);
   }
-  const emailDomain = defaultEmail?.split("@")[1];
 
   return (
-    <AuthFlowContainer authState="join">
+    <AuthFlowContainer
+      title="Re-authenticate to join team"
+      description="Sign in to accept your team invitation."
+    >
       <AuthErrorDisplay searchParams={searchParams} />
 
-      <>
-        <div className="absolute top-10x w-full"></div>
-        <div className="flex w-full flex-col justify-center">
-          <h2 className="text-center text-xl text-strong font-bold">
-            Re-authenticate to join team
-          </h2>
-
-          {cloud && authUrl && (
-            <div className="w-full justify-center">
-              <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
-              <div className="flex items-center w-full my-4">
-                <div className="grow border-t border-background-300"></div>
-                <span className="px-4 text-text-500">or</span>
-                <div className="grow border-t border-background-300"></div>
-              </div>
-            </div>
-          )}
-
-          <EmailPasswordForm
-            isSignup
-            isJoin
-            shouldVerify={authTypeMetadata?.requiresVerification}
-            nextUrl={nextUrl}
-            defaultEmail={defaultEmail}
-          />
+      {cloud && authUrl && (
+        <div className="w-full justify-center">
+          <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
+          <div className="flex items-center w-full my-4">
+            <div className="grow border-t border-background-300"></div>
+            <span className="px-4 text-text-500">or</span>
+            <div className="grow border-t border-background-300"></div>
+          </div>
         </div>
-      </>
+      )}
+
+      <EmailPasswordForm
+        isSignup
+        isJoin
+        shouldVerify={authTypeMetadata?.requiresVerification}
+        nextUrl={nextUrl}
+        defaultEmail={defaultEmail}
+      />
     </AuthFlowContainer>
   );
 };

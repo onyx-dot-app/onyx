@@ -1,13 +1,10 @@
 "use client";
 import React, { useState } from "react";
 import { forgotPassword } from "./utils";
-import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import Title from "@/components/ui/title";
-import { Text } from "@opal/components";
+import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
+import { Text, Button } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
-import Link from "next/link";
-import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { TextFormField } from "@/components/Field";
@@ -24,61 +21,49 @@ const ForgotPasswordPage: React.FC = () => {
   }
 
   return (
-    <AuthFlowContainer>
-      <div className="flex flex-col w-full justify-center">
-        <div className="flex">
-          <Title className="mb-2 mx-auto font-bold">Forgot Password</Title>
-        </div>
-        {isWorking && <Spinner />}
-        <Formik
-          initialValues={{
-            email: "",
-          }}
-          validationSchema={Yup.object().shape({
-            email: Yup.string().email().required(),
-          })}
-          onSubmit={async (values) => {
-            setIsWorking(true);
-            try {
-              await forgotPassword(values.email);
-              toast.success(
-                "Password reset email sent. Please check your inbox."
-              );
-            } catch (error) {
-              const errorMessage =
-                error instanceof Error
-                  ? error.message
-                  : "An error occurred. Please try again.";
-              toast.error(errorMessage);
-            } finally {
-              setIsWorking(false);
-            }
-          }}
-        >
-          {({ isSubmitting }) => (
-            <Form className="w-full flex flex-col items-stretch mt-2">
-              <TextFormField
-                name="email"
-                label="Email"
-                type="email"
-                placeholder="email@yourcompany.com"
-              />
-
-              <div className="flex">
-                <Button disabled={isSubmitting} type="submit" width="full">
-                  Reset Password
-                </Button>
-              </div>
-            </Form>
-          )}
-        </Formik>
-        <Spacer rem={1} />
-        <div className="flex">
-          <div className="mx-auto">
-            <Text as="p">{markdown("[Back to Login](/auth/login)")}</Text>
-          </div>
-        </div>
-      </div>
+    <AuthFlowContainer
+      title="Forgot Password"
+      description="Enter your email address and we'll send you a reset link."
+      bottomPrompt={markdown("[Back to Login](/auth/login)")}
+    >
+      {isWorking && <Spinner />}
+      <Formik
+        initialValues={{ email: "" }}
+        validationSchema={Yup.object().shape({
+          email: Yup.string().email().required(),
+        })}
+        onSubmit={async (values) => {
+          setIsWorking(true);
+          try {
+            await forgotPassword(values.email);
+            toast.success(
+              "Password reset email sent. Please check your inbox."
+            );
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : "An error occurred. Please try again.";
+            toast.error(errorMessage);
+          } finally {
+            setIsWorking(false);
+          }
+        }}
+      >
+        {({ isSubmitting }) => (
+          <Form className="w-full flex flex-col items-stretch gap-4">
+            <TextFormField
+              name="email"
+              label="Email"
+              type="email"
+              placeholder="email@yourcompany.com"
+            />
+            <Button disabled={isSubmitting} type="submit" width="full">
+              Reset Password
+            </Button>
+          </Form>
+        )}
+      </Formik>
     </AuthFlowContainer>
   );
 };

@@ -1,13 +1,9 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { resetPassword } from "../forgot-password/utils";
-import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import Title from "@/components/ui/title";
-import { Text } from "@opal/components";
-import { markdown } from "@opal/utils";
-import { Spacer } from "@opal/components";
-import Link from "next/link";
+import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
 import { Button } from "@opal/components";
+import { markdown } from "@opal/utils";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { TextFormField } from "@/components/Field";
@@ -25,14 +21,13 @@ const ResetPasswordPage: React.FC = () => {
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
   const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
-  // Keep search param same name as cookie for simplicity
 
   useEffect(() => {
     if (tenantId) {
       Cookies.set(TENANT_ID_COOKIE_NAME, tenantId, {
         path: "/",
         expires: 1 / 24,
-      }); // Expires in 1 hour
+      });
     }
   }, [tenantId]);
 
@@ -41,80 +36,67 @@ const ResetPasswordPage: React.FC = () => {
   }
 
   return (
-    <AuthFlowContainer>
-      <div className="flex flex-col w-full justify-center">
-        <div className="flex">
-          <Title className="mb-2 mx-auto font-bold">Reset Password</Title>
-        </div>
-        {isWorking && <Spinner />}
-        <Formik
-          initialValues={{
-            password: "",
-            confirmPassword: "",
-          }}
-          validationSchema={Yup.object().shape({
-            password: Yup.string().required("Password is required"),
-            confirmPassword: Yup.string()
-              .oneOf([Yup.ref("password"), undefined], "Passwords must match")
-              .required("Confirm Password is required"),
-          })}
-          onSubmit={async (values) => {
-            if (!token) {
-              toast.error("Invalid or missing reset token.");
-              return;
-            }
-            setIsWorking(true);
-            try {
-              await resetPassword(token, values.password);
-              toast.success(
-                "Password reset successfully. Redirecting to login..."
+    <AuthFlowContainer
+      title="Reset Password"
+      description="Enter your new password below."
+      bottomPrompt={markdown("[Back to Login](/auth/login)")}
+    >
+      {isWorking && <Spinner />}
+      <Formik
+        initialValues={{ password: "", confirmPassword: "" }}
+        validationSchema={Yup.object().shape({
+          password: Yup.string().required("Password is required"),
+          confirmPassword: Yup.string()
+            .oneOf([Yup.ref("password"), undefined], "Passwords must match")
+            .required("Confirm Password is required"),
+        })}
+        onSubmit={async (values) => {
+          if (!token) {
+            toast.error("Invalid or missing reset token.");
+            return;
+          }
+          setIsWorking(true);
+          try {
+            await resetPassword(token, values.password);
+            toast.success(
+              "Password reset successfully. Redirecting to login..."
+            );
+            setTimeout(() => {
+              redirect("/auth/login");
+            }, 1000);
+          } catch (error) {
+            if (error instanceof Error) {
+              toast.error(
+                error.message || "An error occurred during password reset."
               );
-              setTimeout(() => {
-                redirect("/auth/login");
-              }, 1000);
-            } catch (error) {
-              if (error instanceof Error) {
-                toast.error(
-                  error.message || "An error occurred during password reset."
-                );
-              } else {
-                toast.error("An unexpected error occurred. Please try again.");
-              }
-            } finally {
-              setIsWorking(false);
+            } else {
+              toast.error("An unexpected error occurred. Please try again.");
             }
-          }}
-        >
-          {({ isSubmitting }) => (
-            <Form className="w-full flex flex-col items-stretch mt-2">
-              <TextFormField
-                name="password"
-                label="New Password"
-                type="password"
-                placeholder="Enter your new password"
-              />
-              <TextFormField
-                name="confirmPassword"
-                label="Confirm New Password"
-                type="password"
-                placeholder="Confirm your new password"
-              />
-
-              <div className="flex">
-                <Button disabled={isSubmitting} type="submit" width="full">
-                  Reset Password
-                </Button>
-              </div>
-            </Form>
-          )}
-        </Formik>
-        <Spacer rem={1} />
-        <div className="flex">
-          <div className="mx-auto">
-            <Text as="p">{markdown("[Back to Login](/auth/login)")}</Text>
-          </div>
-        </div>
-      </div>
+          } finally {
+            setIsWorking(false);
+          }
+        }}
+      >
+        {({ isSubmitting }) => (
+          <Form className="w-full flex flex-col items-stretch gap-4">
+            <TextFormField
+              name="password"
+              label="New Password"
+              type="password"
+              placeholder="Enter your new password"
+            />
+            <TextFormField
+              name="confirmPassword"
+              label="Confirm New Password"
+              type="password"
+              placeholder="Confirm your new password"
+            />
+            <Button disabled={isSubmitting} type="submit" width="full">
+              Reset Password
+            </Button>
+          </Form>
+        )}
+      </Formik>
     </AuthFlowContainer>
   );
 };
