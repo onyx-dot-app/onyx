@@ -52,6 +52,9 @@ from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 SKILL_SLUG_UNIQUE_CONSTRAINT = "uq_skill_slug"
 
@@ -528,10 +531,17 @@ def _personal_skill_lock_id(user_id: UUID) -> int:
 def lock_personal_skills_for_user(user_id: UUID, db_session: Session) -> None:
     """Serialize a user's concurrent personal-skill creates so the
     count-then-insert cap check is race-free; released at transaction end."""
+    lock_id = _personal_skill_lock_id(user_id)
+    logger.debug(
+        "Acquiring personal-skill advisory lock for user %s (lock_id=%d)",
+        user_id,
+        lock_id,
+    )
     db_session.execute(
         text("SELECT pg_advisory_xact_lock(:lock_id)"),
-        {"lock_id": _personal_skill_lock_id(user_id)},
+        {"lock_id": lock_id},
     )
+    logger.debug("Acquired personal-skill advisory lock for user %s", user_id)
 
 
 def skill_ids_with_grants(skill_ids: Sequence[UUID], db_session: Session) -> set[UUID]:
