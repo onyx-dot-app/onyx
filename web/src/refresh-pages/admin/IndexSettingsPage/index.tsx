@@ -82,7 +82,7 @@ import {
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
   useSecondarySearchSettings,
-} from "@/lib/settings/hooks";
+} from "@/lib/indexing/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import useFilter from "@/hooks/useFilter";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
