@@ -32,6 +32,12 @@ from cryptography.hazmat.primitives.serialization import PublicFormat
 from fastapi.testclient import TestClient
 
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    FilesystemListRequest,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_FILESYSTEM_LIST_PATH,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_HEALTH_PATH,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
@@ -76,6 +82,7 @@ def _load_sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
         "sandbox_daemon.server" in sys.modules
         and "sandbox_daemon.contract" in sys.modules
         and "sandbox_daemon.extract" in sys.modules
+        and "sandbox_daemon.filesystem" in sys.modules
     ):
         return sys.modules["sandbox_daemon.extract"], sys.modules[
             "sandbox_daemon.server"
@@ -84,7 +91,14 @@ def _load_sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
     if "sandbox_daemon" not in sys.modules:
         sys.modules["sandbox_daemon"] = types.ModuleType("sandbox_daemon")
 
-    for name in ("contract", "extract", "snapshot", "opencode_history", "server"):
+    for name in (
+        "contract",
+        "extract",
+        "snapshot",
+        "opencode_history",
+        "filesystem",
+        "server",
+    ):
         spec = importlib.util.spec_from_file_location(
             f"sandbox_daemon.{name}", str(_DAEMON_DIR / f"{name}.py")
         )
@@ -253,6 +267,51 @@ def _push_request(
     )
 
 
+def _signed_json_request(
+    client: TestClient,
+    *,
+    priv: Ed25519PrivateKey,
+    endpoint_path: str,
+    body: bytes,
+) -> httpx.Response:
+    sha = hashlib.sha256(body).hexdigest()
+    ts = str(int(time.time()))
+    return client.post(
+        endpoint_path,
+        content=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Push-Signature": _sign(
+                priv,
+                mount_path=endpoint_path,
+                sha256_hex=sha,
+                timestamp=ts,
+            ),
+            "X-Push-Timestamp": ts,
+        },
+    )
+
+
+def _filesystem_list_request(
+    client: TestClient,
+    *,
+    priv: Ed25519PrivateKey,
+    session_id: UUID,
+    path: str = ".",
+) -> httpx.Response:
+    body = (
+        FilesystemListRequest(session_id=session_id, path=path)
+        .model_dump_json()
+        .encode()
+    )
+    return _signed_json_request(
+        client,
+        priv=priv,
+        endpoint_path=SIDECAR_FILESYSTEM_LIST_PATH,
+        body=body,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -262,6 +321,162 @@ def test_health_returns_200(client: TestClient) -> None:
     resp = client.get(SIDECAR_HEALTH_PATH)
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
+
+
+def test_filesystem_list_classifies_symlinks_and_expands_valid_directory(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, priv, _ = configured_sandbox_daemon
+    filesystem_mod = sys.modules["sandbox_daemon.filesystem"]
+    sessions_root = tmp_path / "sessions"
+    managed_root = tmp_path / "managed"
+    user_library_link = managed_root / "user_library"
+    user_library_version = managed_root / ".versions" / "user-library"
+    skills_root = managed_root / "skills"
+    monkeypatch.setattr(filesystem_mod, "SESSIONS_ROOT", sessions_root)
+    monkeypatch.setattr(filesystem_mod, "_USER_LIBRARY_LINK_TARGET", user_library_link)
+
+    session_id = UUID("903a9a86-b7b1-4b49-9269-1fe558b243ee")
+    session_root = sessions_root / str(session_id)
+    session_root.mkdir(parents=True)
+    user_library_version.mkdir(parents=True)
+    user_library_link.symlink_to(user_library_version)
+    skills_root.mkdir(parents=True)
+    (session_root / "outputs").mkdir()
+    (session_root / "docs").mkdir()
+    (session_root / "docs" / "readme.md").write_text("# hi\n")
+    (session_root / "data.csv").write_text("a,b\n1,2\n")
+    (user_library_version / "notes.txt").write_text("notes\n")
+    (skills_root / "skill.txt").write_text("private\n")
+    (session_root / "docs_link").symlink_to("docs")
+    (session_root / "link.csv").symlink_to("data.csv")
+    (session_root / "user_library").symlink_to(user_library_link)
+    (session_root / "skills_link").symlink_to(skills_root)
+    (session_root / "managed_link").symlink_to(managed_root)
+
+    resp = _filesystem_list_request(
+        client,
+        priv=priv,
+        session_id=session_id,
+    )
+
+    assert resp.status_code == 200, resp.text
+    entries = {entry["name"]: entry for entry in resp.json()["entries"]}
+    assert entries["outputs"]["is_directory"]
+    assert entries["docs_link"]["is_directory"]
+    assert not entries["link.csv"]["is_directory"]
+    assert entries["user_library"]["is_directory"]
+    assert not entries["skills_link"]["is_directory"]
+    assert not entries["managed_link"]["is_directory"]
+
+    resp = _filesystem_list_request(
+        client,
+        priv=priv,
+        session_id=session_id,
+        path="docs_link",
+    )
+
+    assert resp.status_code == 200, resp.text
+    entries = {entry["name"]: entry for entry in resp.json()["entries"]}
+    assert entries["readme.md"]["path"] == "docs_link/readme.md"
+    assert not entries["readme.md"]["is_directory"]
+
+    resp = _filesystem_list_request(
+        client,
+        priv=priv,
+        session_id=session_id,
+        path="user_library",
+    )
+
+    assert resp.status_code == 200, resp.text
+    entries = {entry["name"]: entry for entry in resp.json()["entries"]}
+    assert entries["notes.txt"]["path"] == "user_library/notes.txt"
+
+    resp = _filesystem_list_request(
+        client,
+        priv=priv,
+        session_id=session_id,
+        path="skills_link",
+    )
+
+    assert resp.status_code == 404
+
+
+def test_filesystem_list_keeps_broken_user_library_link_visible(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, priv, _ = configured_sandbox_daemon
+    filesystem_mod = sys.modules["sandbox_daemon.filesystem"]
+    sessions_root = tmp_path / "sessions"
+    managed_root = tmp_path / "managed"
+    user_library_link = managed_root / "user_library"
+    monkeypatch.setattr(filesystem_mod, "SESSIONS_ROOT", sessions_root)
+    monkeypatch.setattr(filesystem_mod, "_USER_LIBRARY_LINK_TARGET", user_library_link)
+
+    session_id = UUID("903a9a86-b7b1-4b49-9269-1fe558b243ee")
+    session_root = sessions_root / str(session_id)
+    session_root.mkdir(parents=True)
+    (session_root / "outputs").mkdir()
+    (session_root / "user_library").symlink_to(user_library_link)
+
+    resp = _filesystem_list_request(
+        client,
+        priv=priv,
+        session_id=session_id,
+    )
+
+    assert resp.status_code == 200, resp.text
+    entries = {entry["name"]: entry for entry in resp.json()["entries"]}
+    assert entries["user_library"]["is_directory"]
+
+    resp = _filesystem_list_request(
+        client,
+        priv=priv,
+        session_id=session_id,
+        path="user_library",
+    )
+
+    assert resp.status_code == 404
+
+
+def test_filesystem_list_rejects_user_library_target_outside_versions(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, priv, _ = configured_sandbox_daemon
+    filesystem_mod = sys.modules["sandbox_daemon.filesystem"]
+    sessions_root = tmp_path / "sessions"
+    managed_root = tmp_path / "managed"
+    user_library_link = managed_root / "user_library"
+    outside_root = tmp_path / "outside"
+    monkeypatch.setattr(filesystem_mod, "SESSIONS_ROOT", sessions_root)
+    monkeypatch.setattr(filesystem_mod, "_USER_LIBRARY_LINK_TARGET", user_library_link)
+
+    session_id = UUID("903a9a86-b7b1-4b49-9269-1fe558b243ee")
+    session_root = sessions_root / str(session_id)
+    session_root.mkdir(parents=True)
+    managed_root.mkdir(exist_ok=True)
+    outside_root.mkdir()
+    (outside_root / "secret.txt").write_text("secret\n")
+    user_library_link.symlink_to(outside_root)
+    (session_root / "user_library").symlink_to(user_library_link)
+
+    resp = _filesystem_list_request(
+        client,
+        priv=priv,
+        session_id=session_id,
+        path="user_library",
+    )
+
+    assert resp.status_code == 404
 
 
 def test_push_with_valid_signature_extracts(

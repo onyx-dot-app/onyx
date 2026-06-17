@@ -41,7 +41,6 @@ import hashlib
 import io
 import ipaddress
 import json
-import mimetypes
 import os
 import re
 import secrets
@@ -1989,14 +1988,15 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
     ) -> list[FilesystemEntry]:
-        """List contents of a directory in the session's outputs directory.
+        """List contents of a directory in the session workspace.
 
-        For Kubernetes backend, we exec into the pod to list files.
+        For Kubernetes backend, the sandbox sidecar owns pod-local filesystem
+        access and returns structured entries.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
-            path: Relative path within sessions/$session_id/outputs/
+            path: Relative path within sessions/$session_id/
 
         Returns:
             List of FilesystemEntry objects sorted by directory first, then name
@@ -2004,126 +2004,25 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         Raises:
             ValueError: If path traversal attempted or path is not a directory
         """
-        # _get_pod_name needs string
-        pod_name = self._get_pod_name(str(sandbox_id))
-
-        # Security: sanitize path by removing '..' components individually
-        path_obj = Path(path.lstrip("/"))
-        clean_parts = [p for p in path_obj.parts if p != ".."]
-        clean_path = str(Path(*clean_parts)) if clean_parts else "."
-        target_path = f"/workspace/sessions/{session_id}/{clean_path}"
-        # Use shlex.quote to prevent command injection
-        quoted_path = shlex.quote(target_path)
-
-        logger.info("Listing directory %s in pod %s", target_path, pod_name)
-
-        # List the requested directory without dereferencing every child symlink.
-        # A dangling managed symlink should not make the whole directory look empty.
-        exec_command = [
-            "/bin/sh",
-            "-c",
-            (
-                f"target={quoted_path}; "
-                'if [ -d "$target" ]; then '
-                'ls -la --time-style=+%s "$target"/ 2>/dev/null; '
-                "else echo 'ERROR_NOT_FOUND'; fi"
-            ),
-        ]
-
         try:
-            resp = k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container=_SANDBOX_CONTAINER_NAME,
-                command=exec_command,
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
+            return self._sidecar_client.list_directory(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                path=path,
             )
-
-            if "ERROR_NOT_FOUND" in resp:
-                raise ValueError(f"Path not found or not a directory: {path}")
-
-            entries = self._parse_ls_output(resp, clean_path)
-            return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
-
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list directory: {e}") from e
-
-    def _parse_ls_output(self, ls_output: str, base_path: str) -> list[FilesystemEntry]:
-        """Parse ls -la output into FilesystemEntry objects.
-
-        Handles regular files, directories, and symlinks. Symlinks to directories
-        are treated as directories for navigation purposes.
-        """
-        entries = []
-        lines = ls_output.strip().split("\n")
-
-        logger.debug("Parsing %s lines of ls output for %s", len(lines), base_path)
-
-        for line in lines:
-            logger.debug("Parsing line: %s", line)
-
-            # Skip header line and . / .. entries
-            if line.startswith("total") or not line:
-                continue
-
-            parts = line.split()
-            # ls -la --time-style=+%s format: perms links owner group size timestamp name
-            # Minimum 7 parts for a simple filename
-            if len(parts) < 7:
-                continue
-
-            # Handle symlinks: format is "name -> target"
-            # For symlinks, parts[-1] is the target, not the name
-            is_symlink = line.startswith("l")
-            if is_symlink and " -> " in line:
-                # Extract name from the "name -> target" portion
-                # Filename starts at index 6 (after perms, links, owner, group, size, timestamp)
-                try:
-                    # Rejoin from index 6 onwards to handle names with spaces
-                    name_and_target = " ".join(parts[6:])
-                    if " -> " in name_and_target:
-                        name = name_and_target.split(" -> ")[0]
-                    else:
-                        name = parts[-1]
-                except (IndexError, ValueError):
-                    name = parts[-1]
-            else:
-                # For regular files/directories, name is at index 6 or later (with spaces)
-                name = " ".join(parts[6:])
-
-            if name in (".", ".."):
-                continue
-
-            # Directories start with 'd', symlinks start with 'l'
-            # Treat symlinks as directories (they typically point to directories
-            # in our sandbox setup)
-            is_directory = line.startswith("d") or is_symlink
-            size_str = parts[4]
-
+        except SidecarStatusError as e:
             try:
-                size = int(size_str) if not is_directory else None
-            except ValueError:
-                size = None
+                detail = json.loads(e.body).get("detail", "")
+            except (TypeError, ValueError):
+                detail = ""
 
-            # Guess MIME type for files based on extension
-            mime_type = mimetypes.guess_type(name)[0] if not is_directory else None
-
-            entry_path = f"{base_path}/{name}".lstrip("/")
-            entries.append(
-                FilesystemEntry(
-                    name=name,
-                    path=entry_path,
-                    is_directory=is_directory,
-                    size=size,
-                    mime_type=mime_type,
-                )
-            )
-
-        return entries
+            if e.status_code == 400 and detail == "path traversal is not allowed":
+                raise ValueError(f"path traversal attempted: {path}") from e
+            if e.status_code == 404 and detail == "path not found or not a directory":
+                raise ValueError(f"Path not found or not a directory: {path}") from e
+            raise RuntimeError(f"Failed to list directory: {e}") from e
+        except SidecarRequestError as e:
+            raise RuntimeError(f"Failed to list directory: {e}") from e
 
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
         """Read a file from the session's workspace.
