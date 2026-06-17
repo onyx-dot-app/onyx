@@ -4,8 +4,11 @@ from typing import Any
 from mcp.client.auth import OAuthClientProvider
 
 from onyx.chat.emitter import Emitter
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
+from onyx.db.mcp import record_user_connection_auth_failure
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer
 from onyx.server.query_and_chat.placement import Placement
@@ -113,6 +116,32 @@ class MCPTool(Tool[None]):
                 "parameters": _normalize_parameters_schema(self._tool_definition),
             },
         }
+
+    def _record_auth_failure_best_effort(self) -> None:
+        """Persist that we just hit a runtime 401 against a PER_USER server, so
+        the auth-status endpoint can report `recent_failure` after a reload —
+        catching a token that was valid but died mid-session.
+
+        Best-effort: only meaningful when there is a per-user config row to
+        stamp (the never-authenticated pre-call path has no row). Any DB error
+        is swallowed so it can never break the chat stream; the in-stream
+        re-auth signal (CustomToolErrorInfo) is unaffected.
+        """
+        if (
+            self.mcp_server.auth_performer != MCPAuthenticationPerformer.PER_USER
+            or self.connection_config is None
+        ):
+            return
+        config_id = self.connection_config.id
+        try:
+            with get_session_with_current_tenant() as db_session:
+                record_user_connection_auth_failure(config_id, db_session)
+                db_session.commit()
+        except Exception:
+            logger.exception(
+                "Best-effort: failed to record MCP auth failure for config %s",
+                config_id,
+            )
 
     def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
@@ -317,27 +346,39 @@ class MCPTool(Tool[None]):
 
             error_info: CustomToolErrorInfo | None = None
             if is_auth_error:
-                auth_error_msg = (
-                    f"Authentication failed for the {self._name} tool from {self.mcp_server.name}. "
-                    f"Please use the MCP dropdown in the chat bar to update your credentials "
-                    f"for the {self.mcp_server.name} server. Original error: {str(e)}"
+                # A 403 is access-denied with valid credentials (an entitlement
+                # gap): re-auth can't clear it, so surface a plain access error
+                # instead of the re-auth prompt and don't persist a sticky
+                # marker. Only a 401 (missing/expired creds) drives re-auth.
+                is_forbidden = (
+                    "403" in error_str
+                    or "forbidden" in error_str
+                    or "access denied" in error_str
                 )
-                error_result = {"error": auth_error_msg}
-                # Tag as an auth error so the chat UI can prompt re-auth (mirrors
-                # custom_tool.py); a bare message string never reaches that path.
-                # message is the user-facing label the re-auth UI renders, not the
-                # verbose LLM instruction above.
-                error_info = CustomToolErrorInfo(
-                    is_auth_error=True,
-                    status_code=(
-                        403
-                        if "403" in error_str
-                        or "forbidden" in error_str
-                        or "access denied" in error_str
-                        else 401
-                    ),
-                    message=f"Re-authentication required for {self.mcp_server.name}",
-                )
+                if is_forbidden:
+                    error_result = {
+                        "error": (
+                            f"Access denied by {self.mcp_server.name} for the "
+                            f"{self._name} tool — your account lacks permission. "
+                            f"Original error: {str(e)}"
+                        )
+                    }
+                else:
+                    self._record_auth_failure_best_effort()
+                    auth_error_msg = (
+                        f"Authentication failed for the {self._name} tool from {self.mcp_server.name}. "
+                        f"Please use the MCP dropdown in the chat bar to update your credentials "
+                        f"for the {self.mcp_server.name} server. Original error: {str(e)}"
+                    )
+                    error_result = {"error": auth_error_msg}
+                    # Tag as an auth error so the chat UI can prompt re-auth
+                    # (mirrors custom_tool.py); message is the user-facing label
+                    # the re-auth UI renders, not the verbose LLM instruction.
+                    error_info = CustomToolErrorInfo(
+                        is_auth_error=True,
+                        status_code=401,
+                        message=f"Re-authentication required for {self.mcp_server.name}",
+                    )
             else:
                 error_result = {"error": f"Tool execution failed: {str(e)}"}
 

@@ -342,6 +342,9 @@ def upsert_user_connection_config(
 
     if existing_config:
         existing_config.config = config_data  # ty: ignore[invalid-assignment]
+        # A credential write is a fresh successful (re)auth: clear any stale
+        # runtime-401 marker so the re-auth badge doesn't stay stuck lit.
+        existing_config.last_auth_failure_at = None
         db_session.flush()  # Don't commit yet, let caller decide when to commit
         return existing_config
     else:
@@ -351,6 +354,34 @@ def upsert_user_connection_config(
             user_email=user_email,
             db_session=db_session,
         )
+
+
+def record_user_connection_auth_failure(
+    config_id: int,
+    db_session: Session,
+) -> None:
+    """Stamp a per-user connection config with the time we just observed a
+    runtime auth failure (401) calling its server. Surfaced by the auth-status
+    endpoint as `recent_failure` until the user re-authenticates (which clears
+    it via `clear_user_connection_auth_failure` / `upsert_user_connection_config`).
+
+    Caller is responsible for committing. Kept separate from the `config` JSON
+    write so it never collides with concurrent token-refresh writes.
+    """
+    config = get_connection_config_by_id(config_id, db_session)
+    config.last_auth_failure_at = datetime.datetime.now(datetime.timezone.utc)
+    db_session.flush()
+
+
+def clear_user_connection_auth_failure(
+    config_id: int,
+    db_session: Session,
+) -> None:
+    """Clear the runtime-401 marker on a per-user connection config after a
+    successful (re)authentication. Caller commits."""
+    config = get_connection_config_by_id(config_id, db_session)
+    config.last_auth_failure_at = None
+    db_session.flush()
 
 
 # TODO: do this in one db call

@@ -46,6 +46,7 @@ from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.enums import Permission
+from onyx.db.mcp import clear_user_connection_auth_failure
 from onyx.db.mcp import create_connection_config
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.mcp import delete_all_user_connection_configs_for_server_no_commit
@@ -484,6 +485,10 @@ class OnyxTokenStorage(TokenStorage):
             config_data["headers"] = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }
+            # Fresh tokens (initial grant or silent refresh) => clear any
+            # runtime-401 marker so the re-auth badge doesn't stay stuck lit.
+            # Clear before the config write so its commit persists both.
+            clear_user_connection_auth_failure(config.id, db_session)
             update_connection_config(config.id, db_session, config_data)
 
         # The shared admin row is intentionally NOT written here: it
@@ -1149,6 +1154,8 @@ async def process_oauth_callback(
             "Authorization": f"{oauth_token.token_type} {oauth_token.access_token}"
         }
         update_connection_config(user_config.id, db_session, user_config_data)
+        # Fresh tokens => clear any runtime-401 marker so the badge unsticks.
+        clear_user_connection_auth_failure(user_config.id, db_session)
         redis_client.delete(key_state(user_id))
 
         db_session.commit()
@@ -1594,13 +1601,30 @@ def _compute_user_reauth_reason(
     using only stored connection config — never a probe of the MCP server.
 
     Conservative by design: only `never_authenticated` is a sure thing.
-    `token_expired` is returned only for OAuth tokens we can confidently
-    judge expired with no usable refresh; any ambiguity yields ``None`` so
-    we never nag a user whose credentials may still be valid.
+    `recent_failure` reflects a runtime 401 the tool path persisted (see
+    `record_user_connection_auth_failure`). `token_expired` is returned only
+    for OAuth tokens we can confidently judge expired with no usable refresh;
+    any ambiguity yields ``None`` so we never nag a user whose credentials may
+    still be valid.
+
+    Precedence: never_authenticated (no row) > recent_failure (observed 401) >
+    token_expired (derived).
     """
     user_config = get_user_connection_config(db_server.id, user_email, db)
     if user_config is None:
         return "never_authenticated"
+
+    # An observed-and-persisted runtime 401. We rely on the marker being NULL
+    # except between a 401 and the next successful (re)auth: every credential
+    # write / OAuth callback clears it (see `upsert_user_connection_config` and
+    # `clear_user_connection_auth_failure`). We deliberately do NOT compare it
+    # against `updated_at`: a credential write bumps `updated_at` via
+    # `onupdate=func.now()`, so a "marker newer than updated_at" test would race
+    # the very write that clears the marker. NULL-on-success is the source of
+    # truth instead, so a non-NULL marker always means "failed since last
+    # success" regardless of timestamps.
+    if user_config.last_auth_failure_at is not None:
+        return "recent_failure"
 
     if db_server.auth_type != MCPAuthenticationType.OAUTH:
         # A stored API_TOKEN config is assumed valid; we can't tell otherwise

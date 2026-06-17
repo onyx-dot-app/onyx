@@ -495,7 +495,11 @@ class MCPToolListResponse(BaseModel):
 
 
 # Why a server needs (re)auth, when it does. `null` means it does not.
-MCPReauthReason = Literal["never_authenticated", "token_expired"]
+# - never_authenticated: no stored credentials at all
+# - recent_failure: a runtime 401 was observed and persisted since the last
+#   successful (re)auth (catches a token that was valid but died mid-session)
+# - token_expired: a stored OAuth token we can confidently judge expired
+MCPReauthReason = Literal["never_authenticated", "recent_failure", "token_expired"]
 
 
 class MCPServerAuthStatus(BaseModel):

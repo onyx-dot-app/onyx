@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.enums import MCPTransport
 from onyx.server.query_and_chat.placement import Placement
@@ -49,11 +50,14 @@ def _captured_deltas(emitter: MagicMock) -> list[CustomToolDelta]:
 def _make_tool(
     emitter: MagicMock,
     auth_type: MCPAuthenticationType,
+    auth_performer: MCPAuthenticationPerformer = MCPAuthenticationPerformer.ADMIN,
+    connection_config: MagicMock | None = None,
 ) -> MCPTool:
     mcp_server = MagicMock()
     mcp_server.name = "test-mcp"
     mcp_server.server_url = "https://mcp.example.com/mcp"
     mcp_server.auth_type = auth_type
+    mcp_server.auth_performer = auth_performer
     mcp_server.transport = MCPTransport.STREAMABLE_HTTP
     return MCPTool(
         tool_id=1,
@@ -62,7 +66,7 @@ def _make_tool(
         tool_name="do_thing",
         tool_description="Does a thing",
         tool_definition={"type": "object", "properties": {}},
-        connection_config=None,
+        connection_config=connection_config,
     )
 
 
@@ -151,6 +155,96 @@ class TestCallTimeAuthFailurePath:
         summary = response.rich_response
         assert isinstance(summary, CustomToolCallSummary)
         assert summary.error is None
+
+
+class TestPersistAuthFailureBestEffort:
+    """The call-time 401 path persists `last_auth_failure_at` on a PER_USER
+    config, but the persistence is best-effort: a DB failure must never break
+    the chat stream (the tool still returns its tagged auth-error response)."""
+
+    def _per_user_tool(self, emitter: MagicMock) -> MCPTool:
+        # auth_type NONE skips the pre-call has-auth check so we reach
+        # call_mcp_tool (and thus the call-time except branch). config=None
+        # keeps the header-merge step from choking on a MagicMock dict; the
+        # branch under test only needs auth_performer + a non-None config row.
+        connection_config = MagicMock()
+        connection_config.id = 4242
+        connection_config.config = None
+        return _make_tool(
+            emitter,
+            MCPAuthenticationType.NONE,
+            auth_performer=MCPAuthenticationPerformer.PER_USER,
+            connection_config=connection_config,
+        )
+
+    def test_records_failure_on_call_time_401(self) -> None:
+        emitter = _capturing_emitter()
+        tool = self._per_user_tool(emitter)
+
+        with (
+            patch(
+                "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
+                side_effect=Exception("HTTP 401 Unauthorized"),
+            ),
+            patch.object(tool, "_record_auth_failure_best_effort") as record_mock,
+        ):
+            response = tool.run(_placement())
+
+        # The 401 path stamps the marker exactly once.
+        record_mock.assert_called_once_with()
+        summary = response.rich_response
+        assert isinstance(summary, CustomToolCallSummary)
+        assert summary.error is not None
+        assert summary.error.is_auth_error is True
+
+    def test_db_failure_in_record_path_does_not_raise(self) -> None:
+        # The whole point of best-effort: if getting a session / writing throws,
+        # the tool must still return its auth-error response, not propagate.
+        emitter = _capturing_emitter()
+        tool = self._per_user_tool(emitter)
+
+        with (
+            patch(
+                "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
+                side_effect=Exception("HTTP 401 Unauthorized"),
+            ),
+            patch(
+                "onyx.tools.tool_implementations.mcp.mcp_tool.get_session_with_current_tenant",
+                side_effect=Exception("db is down"),
+            ),
+        ):
+            response = tool.run(_placement())
+
+        # No exception leaked; the tagged auth error still came back.
+        deltas = _captured_deltas(emitter)
+        assert deltas[0].error is not None
+        assert deltas[0].error.is_auth_error is True
+        summary = response.rich_response
+        assert isinstance(summary, CustomToolCallSummary)
+        assert summary.error is not None
+        assert summary.error.is_auth_error is True
+
+    def test_admin_server_does_not_record(self) -> None:
+        # Only PER_USER servers have a per-user row to stamp.
+        emitter = _capturing_emitter()
+        tool = _make_tool(
+            emitter,
+            MCPAuthenticationType.NONE,
+            auth_performer=MCPAuthenticationPerformer.ADMIN,
+        )
+
+        with (
+            patch(
+                "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
+                side_effect=Exception("HTTP 401 Unauthorized"),
+            ),
+            patch(
+                "onyx.tools.tool_implementations.mcp.mcp_tool.record_user_connection_auth_failure"
+            ) as record_mock,
+        ):
+            tool.run(_placement())
+
+        record_mock.assert_not_called()
 
 
 if __name__ == "__main__":

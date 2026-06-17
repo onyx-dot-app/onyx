@@ -5128,6 +5128,16 @@ class MCPConnectionConfig(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    # When the runtime last observed a 401 calling this PER_USER server with
+    # these credentials. Set best-effort on a call-time auth error, cleared
+    # (NULL) whenever the user (re)authenticates. Non-NULL => the auth-status
+    # endpoint reports `recent_failure`: a token that was valid but died
+    # mid-session, which the derived never_authenticated/token_expired checks
+    # can't see.
+    last_auth_failure_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Relationships
     mcp_server: Mapped["MCPServer | None"] = relationship(
         "MCPServer",
