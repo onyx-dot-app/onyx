@@ -1,12 +1,23 @@
 name: Build and Push Sandbox Image
 
 # The sandbox image is the only Craft-specific image. Build a new version on
-# the nightly tag when its build context changed, or manually on demand.
+# the nightly tag when its build context changed, or manually with an explicit
+# Docker tag for stable release branches.
 on:
   push:
     tags:
       - "nightly-latest-*"
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Docker tag to publish, e.g. v4.1.3. Leave blank to auto-increment."
+        required: false
+        type: string
+      update_latest:
+        description: "Also move onyxdotapp/sandbox:latest to this image"
+        required: true
+        default: false
+        type: boolean
 
 # Restrictive defaults; jobs declare what they need.
 permissions: {}
@@ -19,7 +30,8 @@ jobs:
       contents: read
     outputs:
       sandbox-changed: ${{ steps.check.outputs.sandbox-changed }}
-      new-version: ${{ steps.version.outputs.new-version }}
+      image-tag: ${{ steps.version.outputs.image-tag }}
+      publish-latest: ${{ steps.version.outputs.publish-latest }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -61,7 +73,46 @@ jobs:
       - name: Determine new sandbox version
         id: version
         if: steps.check.outputs.sandbox-changed == 'true'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+          REQUESTED_UPDATE_LATEST: ${{ github.event.inputs.update_latest }}
         run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            PUBLISH_LATEST="${REQUESTED_UPDATE_LATEST:-false}"
+          else
+            PUBLISH_LATEST="true"
+          fi
+
+          if [ "$PUBLISH_LATEST" != "true" ] && [ "$PUBLISH_LATEST" != "false" ]; then
+            echo "update_latest must be true or false, got '${PUBLISH_LATEST}'" >&2
+            exit 1
+          fi
+
+          if [ -n "$REQUESTED_IMAGE_TAG" ]; then
+            if ! printf '%s' "$REQUESTED_IMAGE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "image_tag must use the form vX.Y.Z, got '${REQUESTED_IMAGE_TAG}'" >&2
+              exit 1
+            fi
+
+            TAG_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+              "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags/${REQUESTED_IMAGE_TAG}")
+            if [ "$TAG_STATUS" = "200" ]; then
+              echo "Docker Hub tag onyxdotapp/sandbox:${REQUESTED_IMAGE_TAG} already exists" >&2
+              exit 1
+            fi
+            if [ "$TAG_STATUS" != "404" ]; then
+              echo "Could not verify Docker Hub tag availability; got HTTP ${TAG_STATUS}" >&2
+              exit 1
+            fi
+
+            IMAGE_TAG="$REQUESTED_IMAGE_TAG"
+            echo "Using requested Docker tag: $IMAGE_TAG"
+            echo "image-tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+            echo "publish-latest=$PUBLISH_LATEST" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           # Query Docker Hub for the latest versioned tag
           LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
             | jq -r '.results[].name' \
@@ -84,8 +135,10 @@ jobs:
             NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
           fi
 
-          echo "New version: $NEW_VERSION"
-          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          IMAGE_TAG="v${NEW_VERSION}"
+          echo "New version: $IMAGE_TAG"
+          echo "image-tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "publish-latest=$PUBLISH_LATEST" >> "$GITHUB_OUTPUT"
 
   build-sandbox-amd64:
     needs: check-sandbox-changes
@@ -277,8 +330,8 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=raw,value=v${{ needs.check-sandbox-changes.outputs.new-version }}
-            type=raw,value=latest
+            type=raw,value=${{ needs.check-sandbox-changes.outputs.image-tag }}
+            type=raw,value=latest,enable=${{ needs.check-sandbox-changes.outputs.publish-latest == 'true' }}
 
       - name: Create and push manifest
         env:
