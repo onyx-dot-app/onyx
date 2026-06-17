@@ -86,4 +86,25 @@ export class ChatPage {
   async expectNoHumanMessages(): Promise<void> {
     await expect(this.humanMessages).toHaveCount(0);
   }
+
+  // ---------------------------------------------------------------------------
+  // Context-window gauge
+  // ---------------------------------------------------------------------------
+
+  /** The gauge, matched by its accessible label. Omit `pctUsed` to match any %. */
+  contextGauge(pctUsed?: number): Locator {
+    const label =
+      pctUsed === undefined
+        ? /Context window \d+% used/
+        : new RegExp(`Context window ${pctUsed}% used`);
+    return this.page.getByLabel(label);
+  }
+
+  async expectContextGauge(pctUsed: number): Promise<void> {
+    await expect(this.contextGauge(pctUsed)).toBeVisible({ timeout: 15_000 });
+  }
+
+  async expectNoContextGauge(): Promise<void> {
+    await expect(this.contextGauge()).toHaveCount(0);
+  }
 }

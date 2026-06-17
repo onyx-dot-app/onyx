@@ -5,6 +5,7 @@ import {
   StreamStopReason,
 } from "@/lib/search/interfaces";
 import { Packet } from "./services/streamingModels";
+import { ContextUsage } from "@/sections/chat/interfaces";
 
 export type FeedbackType = "like" | "dislike";
 
@@ -209,6 +210,9 @@ export interface BackendChatSession {
   packets: Packet[][];
   // Set while a run is in flight and resumable via the resume-stream endpoint
   current_run?: { run_id: number } | null;
+
+  // Session-level context-window usage baseline (gauge fallback when no live turn).
+  context_usage?: ContextUsage | null;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {

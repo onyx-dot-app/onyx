@@ -117,6 +117,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import ContextUsagePacket
 from onyx.server.query_and_chat.streaming_models import heartbeat_packet
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
@@ -1127,8 +1128,12 @@ def _run_models(
         context: _PersistContext,
         *,
         stop_button: bool = False,
-    ) -> None:
+    ) -> int | None:
         """Persist one model's outcome exactly once, from any thread.
+
+        Returns the turn's prompt (context) token count when this call did the
+        completion, else None (already persisted, errored, or skipped) — the
+        caller uses it to emit the context-window gauge from a safe thread.
 
         The LLM loops never observe the stop signal, so a worker that returns
         non-errored always holds a complete answer. Partial content exists only
@@ -1155,7 +1160,7 @@ def _run_models(
             return value
 
         try:
-            llm_loop_completion_handle(
+            return llm_loop_completion_handle(
                 state_container=state_containers[model_idx],
                 is_connected=_is_connected,
                 assistant_message=setup.reserved_messages[model_idx],
@@ -1169,6 +1174,7 @@ def _run_models(
                 model_idx,
                 setup.model_display_names[model_idx],
             )
+        return None
 
     def _run_post_steps() -> None:
         with persist_lock:
@@ -1301,7 +1307,24 @@ def _run_models(
             merged_queue.put((model_idx, e))
 
         finally:
-            _persist_model_outcome(model_idx, _PersistContext.WORKER)
+            prompt_tokens = _persist_model_outcome(model_idx, _PersistContext.WORKER)
+            # Route the gauge packet through the queue so the writer (sole owner
+            # of the stream) emits it — never _publish from this worker thread.
+            if prompt_tokens is not None:
+                merged_queue.put(
+                    (
+                        model_idx,
+                        Packet(
+                            placement=Placement(turn_index=0, model_index=model_idx),
+                            obj=ContextUsagePacket(
+                                used_tokens=prompt_tokens,
+                                max_input_tokens=setup.llms[
+                                    model_idx
+                                ].config.max_input_tokens,
+                            ),
+                        ),
+                    )
+                )
             merged_queue.put((model_idx, _MODEL_DONE))
 
     def _save_errored_message(model_idx: int, context: _PersistContext) -> None:
@@ -1376,9 +1399,25 @@ def _run_models(
                         for i in range(n_models):
                             # Snapshot every model now: finished loops save
                             # complete, in-flight ones save partial + stopped.
-                            _persist_model_outcome(
+                            prompt_tokens = _persist_model_outcome(
                                 i, _PersistContext.STOP_BUTTON, stop_button=True
                             )
+                            # Writer thread here — safe to _publish directly so
+                            # the gauge reflects the cancelled turn.
+                            if prompt_tokens is not None:
+                                _publish(
+                                    Packet(
+                                        placement=Placement(
+                                            turn_index=0, model_index=i
+                                        ),
+                                        obj=ContextUsagePacket(
+                                            used_tokens=prompt_tokens,
+                                            max_input_tokens=setup.llms[
+                                                i
+                                            ].config.max_input_tokens,
+                                        ),
+                                    )
+                                )
                         _publish(
                             Packet(
                                 placement=Placement(turn_index=0),
@@ -1829,7 +1868,7 @@ def llm_loop_completion_handle(
     assistant_message: ChatMessage,
     llm: LLM,
     reserved_tokens: int,
-) -> None:
+) -> int | None:
     # Snapshot all state under the container's lock before any DB write.
     # Worker threads may still be running (e.g. user-cancellation path), so
     # direct attribute access is not thread-safe — use the provided getters.
@@ -1841,6 +1880,7 @@ def llm_loop_completion_handle(
     all_search_docs = state_container.get_all_search_docs()
     emitted_citations = state_container.get_emitted_citations()
     pre_answer_processing_time = state_container.get_pre_answer_processing_time()
+    prompt_tokens = state_container.get_prompt_tokens()
 
     completed_normally = is_connected()
     chat_session_id: UUID = assistant_message.chat_session_id
@@ -1883,6 +1923,8 @@ def llm_loop_completion_handle(
             is_clarification=is_clarification,
             emitted_citations=emitted_citations,
             pre_answer_processing_time=pre_answer_processing_time,
+            prompt_tokens=prompt_tokens,
+            max_input_tokens=llm.config.max_input_tokens,
         )
 
         updated_chat_history = create_chat_history_chain(
@@ -1902,6 +1944,8 @@ def llm_loop_completion_handle(
             llm=llm,
             compression_params=compression_params,
         )
+
+    return prompt_tokens
 
 
 _CITATION_LINK_START_PATTERN = re.compile(r"\s*\[\[\d+\]\]\(")

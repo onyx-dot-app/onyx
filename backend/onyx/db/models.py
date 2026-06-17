@@ -2848,6 +2848,12 @@ class ChatMessage(Base):
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     message: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int] = mapped_column(Integer)
+    # Provider-reported input-token count for the assistant turn (the real
+    # context size). Nullable: user/root and pre-migration rows have none.
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The producing model's context window at turn time, persisted so a reload
+    # after a mid-chat model switch keeps the original gauge denominator.
+    max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     message_type: Mapped[MessageType] = mapped_column(
         Enum(MessageType, native_enum=False)
     )

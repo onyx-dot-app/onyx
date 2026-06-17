@@ -63,6 +63,8 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
+import ContextGauge from "@/sections/chat/ContextGauge";
+import { ContextUsage } from "@/sections/chat/interfaces";
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -77,6 +79,9 @@ export interface AppInputBarProps {
   chatState: ChatState;
   currentSessionFileTokenCount: number;
   availableContextTokens: number;
+
+  // Context-window usage for the gauge (live turn value, else session baseline).
+  contextUsage?: ContextUsage | null;
 
   // agents
   selectedAgent: MinimalAgent | undefined;
@@ -105,6 +110,7 @@ const AppInputBar = React.memo(
     chatState,
     currentSessionFileTokenCount,
     availableContextTokens,
+    contextUsage,
     selectedAgent,
 
     handleFileUpload,
@@ -674,6 +680,7 @@ const AppInputBar = React.memo(
 
         {/* Bottom right controls */}
         <div className="flex flex-row items-center gap-1">
+          <ContextGauge usage={contextUsage ?? null} />
           {showMicButton &&
             (sttEnabled ? (
               <MicrophoneButton
