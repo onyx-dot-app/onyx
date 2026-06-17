@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { useMemo } from "react";
 import useCCPairs from "@/hooks/useCCPairs";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -74,10 +75,21 @@ export function useSettings(): AppSettings {
     }
   );
 
+  // Cache-buster: the logo endpoint URL never changes, so the browser serves
+  // a cached image even after an admin uploads a new logo. Regenerating this
+  // timestamp whenever the enterprise settings reference changes forces a
+  // re-fetch. We use referential equality on the SWR data (compare: a===b),
+  // so this only fires when SWR actually receives new enterprise data.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const logoBuster = useMemo(() => Date.now(), [enterprise]);
+
   return {
     ...core,
     enterprise: enterprise ?? null,
     appName: enterprise?.application_name?.trim() || "Onyx",
+    logoUrl: enterprise?.use_custom_logo
+      ? `/api/enterprise-settings/logo?v=${logoBuster}`
+      : null,
     vectorDbEnabled:
       !settingsLoading && !settingsError && core.vector_db_enabled !== false,
     isLoading:
