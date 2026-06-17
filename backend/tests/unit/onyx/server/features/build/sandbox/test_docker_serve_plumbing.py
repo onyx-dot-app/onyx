@@ -34,9 +34,11 @@ _SBX = UUID("12345678-1234-1234-1234-1234567890ab")
 
 
 def _bare_manager() -> DockerSandboxManager:
-    """DockerSandboxManager without touching the Docker socket: skips
+    """
+    DockerSandboxManager without touching the Docker socket: skips
     ``_initialize`` so contributors without docker running can still run
-    these tests."""
+    these tests.
+    """
     DockerSandboxManager._instance = None
     mgr: DockerSandboxManager = object.__new__(DockerSandboxManager)
     mgr._agent_instructions_template_path = (  # type: ignore[attr-defined]
@@ -62,7 +64,9 @@ def test_load_serve_connection_info_uses_container_name_and_port() -> None:
 def test_load_serve_connection_info_prefers_localhost_published_port_in_dev(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Host-run workers cannot resolve Docker bridge DNS; use the published port."""
+    """
+    Host-run workers cannot resolve Docker bridge DNS; use the published port.
+    """
     monkeypatch.setattr(dsm, "DEV_MODE", True)
     mgr = _bare_manager()
     fake_container = MagicMock()
@@ -109,7 +113,9 @@ def test_load_serve_connection_info_ignores_published_port_outside_dev() -> None
 def test_load_serve_connection_info_normalizes_wildcard_host_ip_in_dev(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Docker may report wildcard binds; clients should connect via localhost."""
+    """
+    Docker may report wildcard binds; clients should connect via localhost.
+    """
     monkeypatch.setattr(dsm, "DEV_MODE", True)
     mgr = _bare_manager()
     fake_container = MagicMock()
@@ -132,9 +138,11 @@ def test_load_serve_connection_info_normalizes_wildcard_host_ip_in_dev(
 
 
 def test_load_serve_connection_info_parses_password_from_container_env() -> None:
-    """The cleartext password lives in the container's env (Docker
-    Engine API). Decoded on every load; cached by the mixin so the hot
-    path doesn't re-hit ``docker inspect``."""
+    """
+    The cleartext password lives in the container's env (Docker Engine API).
+    Decoded on every load; cached by the mixin so the hot path doesn't re-hit
+    ``docker inspect``.
+    """
     mgr = _bare_manager()
     fake_container = MagicMock()
     fake_container.attrs = {
@@ -155,9 +163,11 @@ def test_load_serve_connection_info_parses_password_from_container_env() -> None
 
 
 def test_load_serve_connection_info_yields_none_password_for_legacy() -> None:
-    """A container provisioned before this code landed has no
-    ``OPENCODE_SERVER_PASSWORD`` in env. The bus then falls back to
-    no-auth and logs a warning."""
+    """
+    A container provisioned before this code landed has no
+    ``OPENCODE_SERVER_PASSWORD`` in env. The bus then falls back to no-auth and
+    logs a warning.
+    """
     mgr = _bare_manager()
     fake_container = MagicMock()
     fake_container.attrs = {
@@ -172,8 +182,10 @@ def test_load_serve_connection_info_yields_none_password_for_legacy() -> None:
 
 
 def test_load_serve_connection_info_returns_none_when_container_missing() -> None:
-    """terminate() races provision() — looking up a deleted container
-    should fail gracefully, not raise."""
+    """
+    terminate() races provision() — looking up a deleted container should fail
+    gracefully, not raise.
+    """
     mgr = _bare_manager()
     mgr._docker = MagicMock()  # type: ignore[attr-defined]
     mgr._docker.containers.get.side_effect = dsm.NotFound("gone")
@@ -182,8 +194,10 @@ def test_load_serve_connection_info_returns_none_when_container_missing() -> Non
 
 
 def test_load_serve_connection_info_handles_password_with_equals_sign() -> None:
-    """``token_urlsafe(32)`` can produce ``=`` chars at the tail. The
-    parser must split on the FIRST equals only."""
+    """
+    ``token_urlsafe(32)`` can produce ``=`` chars at the tail. The parser must
+    split on the FIRST equals only.
+    """
     mgr = _bare_manager()
     weird_password = "tail==padding=="
     fake_container = MagicMock()
@@ -215,8 +229,10 @@ def llm_config() -> LLMProviderConfig:
 def test_render_agents_md_returns_escaped_string(
     llm_config: LLMProviderConfig,
 ) -> None:
-    """opencode.json is not rendered per-session; only AGENTS.md is, with
-    single quotes shell-escaped for ``printf '%s' '...'``."""
+    """
+    opencode.json is not rendered per-session; only AGENTS.md is, with single
+    quotes shell-escaped for ``printf '%s' '...'``.
+    """
     mgr = _bare_manager()
     agents_md = mgr._render_agents_md(
         llm_config=llm_config,
@@ -229,8 +245,10 @@ def test_render_agents_md_returns_escaped_string(
 
 
 def test_init_serve_state_is_idempotent() -> None:
-    """``_init_serve_state`` is called from ``_initialize``; provision
-    paths must not blow up if called twice."""
+    """
+    ``_init_serve_state`` is called from ``_initialize``; provision paths must
+    not blow up if called twice.
+    """
     mgr = _bare_manager()
     first_lock = mgr._event_buses_lock
     mgr._init_serve_state()  # second call
@@ -240,8 +258,10 @@ def test_init_serve_state_is_idempotent() -> None:
 
 
 def test_prompt_slot_serializes_on_docker() -> None:
-    """Pins the prompt-slot lock contract on Docker — same as the K8s
-    test, catches a regression if Docker skips ``_init_serve_state``."""
+    """
+    Pins the prompt-slot lock contract on Docker — same as the K8s test, catches
+    a regression if Docker skips ``_init_serve_state``.
+    """
     mgr = _bare_manager()
 
     other_session = UUID("00000000-0000-0000-0000-000000000001")
@@ -255,9 +275,11 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     monkeypatch: pytest.MonkeyPatch,
     llm_config: LLMProviderConfig,
 ) -> None:
-    """``provision()`` must mint a per-call HTTP Basic password and
-    thread it through ``build_container_create_kwargs`` into the
-    container env — otherwise every later request 401s."""
+    """
+    ``provision()`` must mint a per-call HTTP Basic password and thread it
+    through ``build_container_create_kwargs`` into the container env — otherwise
+    every later request 401s.
+    """
     monkeypatch.setattr(dsm, "DEV_MODE", True)
     monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
     # Skip the actual readiness HTTP probe — that needs a real container.
@@ -309,7 +331,8 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
 
     assert info.status.value == "running"
     assert len(run_calls) == 1
-    # Created stopped, then started explicitly after the (no-op) history restore.
+    # Created stopped, then started explicitly after the (no-op) history
+    # restore.
     fake_container.start.assert_called_once()
     # A successful provision must not remove the container it just started.
     fake_container.remove.assert_not_called()
@@ -339,8 +362,10 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
 
 
 def test_terminate_closes_event_bus_and_tombstones_sandbox() -> None:
-    """terminate must close every per-directory bus and add the sandbox
-    to ``_terminated_sandboxes`` so a late subscribe can't race in."""
+    """
+    terminate must close every per-directory bus and add the sandbox to
+    ``_terminated_sandboxes`` so a late subscribe can't race in.
+    """
     mgr = _bare_manager()
     mgr._docker = MagicMock()  # type: ignore[attr-defined]
     mgr._docker.containers.get.return_value = None
@@ -363,9 +388,11 @@ def test_terminate_closes_event_bus_and_tombstones_sandbox() -> None:
 
 
 def test_reuse_existing_container_removes_created_state() -> None:
-    """A container stranded in 'created' state is an incomplete prior provision.
+    """
+    A container stranded in 'created' state is an incomplete prior provision.
     Reuse must remove it (not start it) so the retry re-creates and restores
-    opencode history -- starting it would skip the restore."""
+    opencode history -- starting it would skip the restore.
+    """
     mgr = _bare_manager()
     mgr._docker = MagicMock()  # type: ignore[attr-defined]
 
@@ -382,8 +409,10 @@ def test_reuse_existing_container_removes_created_state() -> None:
 
 
 def test_reuse_existing_container_starts_exited() -> None:
-    """An 'exited' container ran before, so its writable-layer data home is
-    populated; reuse should start it rather than discard it."""
+    """
+    An 'exited' container ran before, so its writable-layer data home is
+    populated; reuse should start it rather than discard it.
+    """
     mgr = _bare_manager()
     mgr._docker = MagicMock()  # type: ignore[attr-defined]
 
@@ -403,10 +432,12 @@ def test_provision_removes_container_when_history_restore_fails(
     monkeypatch: pytest.MonkeyPatch,
     llm_config: LLMProviderConfig,
 ) -> None:
-    """If opencode-history restore fails on a fresh container, provision must
-    remove the half-provisioned container (so a retry re-creates + restores)
-    and propagate the failure -- it must not start opencode against an empty
-    data home."""
+    """
+    If opencode-history restore fails on a fresh container, provision must
+    remove the half-provisioned container (so a retry re-creates + restores) and
+    propagate the failure -- it must not start opencode against an empty data
+    home.
+    """
     monkeypatch.setattr(dsm, "DEV_MODE", True)
     monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
 

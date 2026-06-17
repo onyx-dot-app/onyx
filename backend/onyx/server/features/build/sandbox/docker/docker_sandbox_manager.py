@@ -184,9 +184,9 @@ _PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # it would no-op (no HTTP(S)_PROXY to re-tag).
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
 
-# In-container opencode-history archive builder: reuses the sandbox_daemon helper
-# (sqlite-safe backup + symlink guards) and prints the temp archive path, or
-# nothing when there's no history. Exec it with OPENCODE_DATA_HOME set.
+# In-container opencode-history archive builder: reuses the sandbox_daemon
+# helper (sqlite-safe backup + symlink guards) and prints the temp archive path,
+# or nothing when there's no history. Exec it with OPENCODE_DATA_HOME set.
 _OPENCODE_HISTORY_CREATE_SCRIPT = (
     "import sys; "
     "from sandbox_daemon.opencode_history import create_opencode_history_archive_file; "
@@ -878,7 +878,8 @@ class DockerSandboxManager(SandboxManager):
         if created_fresh:
             # Restore history into the empty writable layer before starting, so
             # opencode-serve opens the restored DB instead of creating an empty
-            # one. On failure, remove the container so a retry re-creates cleanly.
+            # one. On failure, remove the container so a retry re-creates
+            # cleanly.
             try:
                 self._maybe_restore_opencode_history(container, sandbox_id, tenant_id)
                 container.start()
@@ -909,7 +910,7 @@ class DockerSandboxManager(SandboxManager):
         )
 
     def _reuse_existing_container(self, sandbox_id: UUID) -> Container | None:
-        """Return a reusable running/exited container, else None.
+        """Returns a reusable running/exited container, else None.
 
         A ``created`` container means a prior provision died before start;
         starting it would skip the opencode-history restore, so remove it and
@@ -961,7 +962,9 @@ class DockerSandboxManager(SandboxManager):
         opencode_password: str,
         opencode_config_json: str,
     ) -> tuple[Container, bool]:
-        """Create (not start) the container; returns ``(container, created_fresh)``.
+        """
+        Creates (not starts) the container; returns ``(container,
+        created_fresh)``.
 
         ``created_fresh`` is False only when a concurrent provision already
         created it (409 conflict); the caller then skips restore/start and lets
@@ -1292,7 +1295,7 @@ echo "Session cleanup complete"
         tenant_id: str,
         timeout_seconds: float = 300.0,  # noqa: ARG002 - exec uses the docker client timeout
     ) -> bool:
-        """Capture sandbox-global opencode history to the FileStore.
+        """Captures sandbox-global opencode history to the FileStore.
 
         Returns False when opencode has written no data yet, leaving any
         existing durable archive untouched.
@@ -1365,8 +1368,10 @@ echo "Session cleanup complete"
         sandbox_id: UUID,
         tenant_id: str,
     ) -> None:
-        """Restore durable opencode history into a freshly-created, not-yet-started
-        container, before opencode-serve opens its DB. No-op when no snapshot exists.
+        """
+        Restores durable opencode history into a freshly-created,
+        not-yet-started container, before opencode-serve opens its DB. No-op
+        when no snapshot exists.
 
         Writing the stopped container's writable layer avoids racing a live
         opencode process over the DB file.
