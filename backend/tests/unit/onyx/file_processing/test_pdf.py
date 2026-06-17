@@ -41,6 +41,14 @@ class TestReadPdfFile:
         assert "Page one content" in text
         assert "Page two content" in text
 
+    def test_text_extraction_uses_pdfium(self) -> None:
+        """Text extraction goes through pypdfium2 (GIL-releasing), not pypdf."""
+        text = extract_file_text._extract_pdf_text_pdfium(
+            (FIXTURES / "multipage.pdf").read_bytes(), None
+        )
+        assert "Page one content" in text
+        assert "Page two content" in text
+
     def test_metadata_extraction(self) -> None:
         _, pdf_metadata, _ = read_pdf_file(_load("with_metadata.pdf"))
         assert pdf_metadata.get("Title") == "My Title"
