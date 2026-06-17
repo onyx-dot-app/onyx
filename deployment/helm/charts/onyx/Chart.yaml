@@ -18,7 +18,7 @@ annotations:
   artifacthub.io/changes: |
     - kind: changed
       description: Default Craft sandbox images to the application chart
-        version and use Always pull policy for moving sandbox tags.
+        version and app image pull policy.
     - kind: changed
       description: Add isolated writable /tmp scratch space for sandboxed
         OpenCode agents.

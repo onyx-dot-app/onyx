@@ -53,9 +53,10 @@ We do not publish sandbox-only `v0.1.x` tags or a Docker Hub
 `onyxdotapp/sandbox:dev` tag for new builds. Local development can still use
 `onyxdotapp/sandbox:dev` as a locally built, kind-loaded image tag.
 
-Kubernetes sandbox pods normally use app-aligned tags with `IfNotPresent`.
-Moving Kubernetes tags such as `latest`, `beta`, and `edge` default to
-`Always` so nodes do not reuse stale cached sandbox images.
+Kubernetes sandbox pods default to the chart's app image pull policy. Internal
+clusters that deliberately use moving tags such as `latest`, `beta`, or `edge`
+should set `SANDBOX_IMAGE_PULL_POLICY=Always` alongside the matching app image
+pull policy.
 
 Docker compose follows the existing compose `IMAGE_TAG` behavior, including the
 default `latest`. Since sandboxes are created later by the Docker manager rather
