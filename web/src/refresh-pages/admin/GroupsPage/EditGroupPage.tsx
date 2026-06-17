@@ -25,8 +25,8 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
-import { useSettingsContext } from "@/providers/SettingsProvider";
-import { Tier } from "@/interfaces/settings";
+import { useSettings } from "@/lib/settings/hooks";
+import { Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
 import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
 import { baseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
@@ -56,11 +56,8 @@ interface EditGroupPageProps {
 function EditGroupPage({ groupId }: EditGroupPageProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
-  const settings = useSettingsContext();
-  const isEnterpriseTier = tierAtLeast(
-    settings?.settings.tier,
-    Tier.ENTERPRISE
-  );
+  const settings = useSettings();
+  const isEnterpriseTier = tierAtLeast(settings.tier, Tier.ENTERPRISE);
   const tokenLimitsDisabledTooltip = markdown(
     "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only."
   );

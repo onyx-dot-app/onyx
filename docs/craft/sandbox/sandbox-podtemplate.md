@@ -49,10 +49,9 @@ genuinely dynamic per-pod fields.
   PodTemplate values and the env vars in `configs.py` are retired (or kept only
   as the template's value source — pick one source of truth, prefer the
   template).
-- **Image ownership:** `SANDBOX_CONTAINER_IMAGE` default lives in `configs.py`
-  today and is referenced for all three containers. Once the template owns the
-  image, the chart is the single source; the api-server no longer needs the
-  value except possibly for logging.
+- **Image ownership:** the PodTemplate defaults all sandbox containers to
+  `onyxdotapp/sandbox:${global.version}`. `SANDBOX_CONTAINER_IMAGE` remains an
+  internal override, but the chart owns the normal Kubernetes image default.
 - **Version skew is the main risk.** A PodTemplate rendered by an older chart
   against a newer api-server (or vice versa). The overlay code must be
   defensive — append the secret-env entries and hostAliases in Python rather

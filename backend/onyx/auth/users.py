@@ -45,6 +45,7 @@ from fastapi_users import models
 from fastapi_users import schemas
 from fastapi_users import UUIDIDMixin
 from fastapi_users.authentication import AuthenticationBackend
+from fastapi_users.authentication import BearerTransport
 from fastapi_users.authentication import CookieTransport
 from fastapi_users.authentication import JWTStrategy
 from fastapi_users.authentication import (
@@ -1329,6 +1330,17 @@ cookie_transport = CookieTransport(
     cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
 )
 
+# Native mobile clients can't use the HttpOnly auth cookie above, so they
+# authenticate with the SAME stateful session token returned/refreshed as a
+# Bearer value (Authorization header) via this transport. `tokenUrl` is only
+# used for OpenAPI docs. The token itself is identical to the web cookie value
+# (see `mobile_auth_backend` below).
+#
+# API keys / PATs also ride in the Authorization header; for those the session
+# strategy's read_token simply finds nothing and the request falls through to
+# Onyx's own API-key/PAT handlers (see `optional_user`).
+bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
+
 
 T = TypeVar("T", covariant=True)
 ID = TypeVar("ID", contravariant=True)
@@ -1559,6 +1571,17 @@ elif AUTH_BACKEND == AuthBackend.JWT:
 else:
     raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
 
+# Second backend for native mobile clients: same strategy (so it mints/reads
+# the exact same stateful session token as the cookie backend), but delivered
+# as a Bearer token. fastapi-users namespaces router names by backend name
+# (`auth:mobile-bearer.*`), so the mobile login/refresh/logout routers never
+# collide with the cookie backend's routes.
+mobile_auth_backend = AuthenticationBackend(
+    name="mobile-bearer",
+    transport=bearer_transport,
+    get_strategy=auth_backend.get_strategy,
+)
+
 
 class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
     def get_logout_router(
@@ -1682,7 +1705,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
 
 
 fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
-    get_user_manager, [auth_backend]
+    get_user_manager, [auth_backend, mobile_auth_backend]
 )
 
 

@@ -1,10 +1,10 @@
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { APP_SLOGAN } from "@/lib/constants";
 
 export function useCustomFooterContent(): string {
-  const settings = useSettingsContext();
+  const settings = useSettings();
   return (
-    settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
-    `[Onyx ${settings?.webVersion || "dev"}](https://www.onyx.app/) - ${APP_SLOGAN}`
+    settings.enterprise?.custom_lower_disclaimer_content ||
+    `[Onyx ${settings.version ?? "dev"}](https://www.onyx.app/) - ${APP_SLOGAN}`
   );
 }

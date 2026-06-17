@@ -2,10 +2,18 @@
 
 import { useState, useMemo, useRef } from "react";
 import { getModelIcon } from "@/lib/languageModels";
-import { Button, SelectButton, Popover, Divider } from "@opal/components";
+import {
+  Button,
+  SelectButton,
+  Popover,
+  Divider,
+  Tooltip,
+} from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
-import { useSettingsContext } from "@/providers/SettingsProvider";
-import { LLMOption } from "@/lib/languageModels/options";
+import { cn } from "@opal/utils";
+import { useSettings } from "@/lib/settings/hooks";
+import { LLMOption, buildLlmOptions } from "@/lib/languageModels/options";
+import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 
 export const MAX_MODELS = 3;
@@ -38,12 +46,28 @@ export default function MultiModelSelector({
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
 
-  const settings = useSettingsContext();
-  const multiModelAllowed =
-    settings?.settings?.multi_model_chat_enabled ?? true;
+  const settings = useSettings();
+  const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
+
+  // Mirror the data source used by `ModelSelectorContent` so the selector is
+  // disabled precisely when the popover would render "No models found".
+  const { llmProviders, isLoading } = useCurrentAgentLLMProviders();
+  const noModelsToSelect = useMemo(
+    () => !isLoading && buildLlmOptions(llmProviders).length === 0,
+    [isLoading, llmProviders]
+  );
 
   const isMultiModel = selectedModels.length > 1;
   const atMax = selectedModels.length >= MAX_MODELS || !multiModelAllowed;
+
+  // Single tooltip for the whole selector. The disabled reason takes
+  // precedence; otherwise it labels the add affordance. When at max there is
+  // no add action, so the tooltip is omitted.
+  const selectorTooltip = noModelsToSelect
+    ? "No models currently configured"
+    : atMax
+      ? undefined
+      : "Add Model";
 
   const selectedKeys = useMemo(
     () => new Set(selectedModels.map((m) => modelKey(m.provider, m.modelName))),
@@ -109,11 +133,14 @@ export default function MultiModelSelector({
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen && noModelsToSelect) return;
     setOpen(nextOpen);
     if (!nextOpen) setReplacingIndex(null);
   };
 
   const handlePillClick = (index: number, element: HTMLElement) => {
+    // `pointer-events-none` only blocks the mouse; guard the keyboard path too.
+    if (noModelsToSelect) return;
     anchorRef.current = element;
     setReplacingIndex(index);
     setOpen(true);
@@ -121,90 +148,105 @@ export default function MultiModelSelector({
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <div
-        data-testid="model-selector"
-        className="flex items-center justify-end gap-1 p-1"
-      >
-        {!atMax && (
-          <Button
-            prominence="tertiary"
-            icon={SvgPlusCircle}
-            size="sm"
-            tooltip="Add Model"
-            onClick={(e: React.MouseEvent) => {
-              anchorRef.current = e.currentTarget as HTMLElement;
-              setReplacingIndex(null);
-              setOpen(true);
-            }}
+      {/*
+        When disabled, pointer events are blocked on the children (so the add
+        button / pills are inert) while the container itself stays hoverable, so
+        the Tooltip can still surface its message even in the disabled state.
+      */}
+      <Tooltip tooltip={selectorTooltip} side="top">
+        <div
+          data-testid="model-selector"
+          aria-disabled={noModelsToSelect || undefined}
+          className={cn(
+            "flex items-center justify-end gap-1 p-1",
+            noModelsToSelect &&
+              "cursor-not-allowed select-none opacity-50 [&>*]:pointer-events-none"
+          )}
+        >
+          {!atMax && (
+            <Button
+              prominence="tertiary"
+              icon={SvgPlusCircle}
+              size="sm"
+              onClick={(e: React.MouseEvent) => {
+                if (noModelsToSelect) return;
+                anchorRef.current = e.currentTarget as HTMLElement;
+                setReplacingIndex(null);
+                setOpen(true);
+              }}
+            />
+          )}
+
+          <Popover.Anchor
+            virtualRef={anchorRef as React.RefObject<HTMLElement>}
           />
-        )}
+          {selectedModels.length > 0 && (
+            <>
+              {!atMax && (
+                <Divider
+                  orientation="vertical"
+                  paddingParallel="sm"
+                  paddingPerpendicular="sm"
+                />
+              )}
+              <div className="flex items-center shrink-0">
+                {selectedModels.map((model, index) => {
+                  const ProviderIcon = getModelIcon(
+                    model.provider,
+                    model.modelName
+                  );
 
-        <Popover.Anchor
-          virtualRef={anchorRef as React.RefObject<HTMLElement>}
-        />
-        {selectedModels.length > 0 && (
-          <>
-            {!atMax && (
-              <Divider
-                orientation="vertical"
-                paddingParallel="sm"
-                paddingPerpendicular="sm"
-              />
-            )}
-            <div className="flex items-center shrink-0">
-              {selectedModels.map((model, index) => {
-                const ProviderIcon = getModelIcon(
-                  model.provider,
-                  model.modelName
-                );
-
-                return (
-                  <div
-                    key={
-                      isMultiModel
-                        ? modelKey(model.provider, model.modelName)
-                        : "single-model-pill"
-                    }
-                    className="flex items-center"
-                  >
-                    {index > 0 && (
-                      <Divider
-                        orientation="vertical"
-                        paddingParallel="sm"
-                        paddingPerpendicular="sm"
-                      />
-                    )}
-                    <SelectButton
-                      icon={ProviderIcon}
-                      rightIcon={isMultiModel ? SvgX : undefined}
-                      state="empty"
-                      variant="select-input"
-                      size="lg"
-                      onClick={(e: React.MouseEvent) => {
-                        if (isMultiModel) {
-                          const target = e.target as HTMLElement;
-                          const btn = e.currentTarget as HTMLElement;
-                          const icons = btn.querySelectorAll(
-                            ".interactive-foreground-icon"
-                          );
-                          const lastIcon = icons[icons.length - 1];
-                          if (lastIcon && lastIcon.contains(target)) {
-                            onRemove(index);
-                            return;
-                          }
-                        }
-                        handlePillClick(index, e.currentTarget as HTMLElement);
-                      }}
+                  return (
+                    <div
+                      key={
+                        isMultiModel
+                          ? modelKey(model.provider, model.modelName)
+                          : "single-model-pill"
+                      }
+                      className="flex items-center"
                     >
-                      {model.displayName}
-                    </SelectButton>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
+                      {index > 0 && (
+                        <Divider
+                          orientation="vertical"
+                          paddingParallel="sm"
+                          paddingPerpendicular="sm"
+                        />
+                      )}
+                      <SelectButton
+                        icon={ProviderIcon}
+                        rightIcon={isMultiModel ? SvgX : undefined}
+                        state="empty"
+                        variant="select-input"
+                        size="lg"
+                        onClick={(e: React.MouseEvent) => {
+                          if (isMultiModel) {
+                            const target = e.target as HTMLElement;
+                            const btn = e.currentTarget as HTMLElement;
+                            const icons = btn.querySelectorAll(
+                              ".interactive-foreground-icon"
+                            );
+                            const lastIcon = icons[icons.length - 1];
+                            if (lastIcon && lastIcon.contains(target)) {
+                              onRemove(index);
+                              return;
+                            }
+                          }
+                          handlePillClick(
+                            index,
+                            e.currentTarget as HTMLElement
+                          );
+                        }}
+                      >
+                        {model.displayName}
+                      </SelectButton>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      </Tooltip>
 
       {!(atMax && replacingIndex === null) && (
         <Popover.Content side="top" align="end" width="xl">

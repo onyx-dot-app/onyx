@@ -9,6 +9,11 @@
  */
 
 import { usePostHog } from "posthog-js/react";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useSettings } from "@/lib/settings/hooks";
+import { EE_ENABLED } from "@/lib/constants";
 
 // ─── Feature Flag Registry ─────────────────────────────────────────────────
 
@@ -69,4 +74,28 @@ const PHFeatureFlagDefaults: Record<PHFeatureFlag, boolean> = {
 export function usePHFeatureFlag(flag: PHFeatureFlag): boolean {
   const posthog = usePostHog();
   return posthog?.isFeatureEnabled(flag) ?? PHFeatureFlagDefaults[flag];
+}
+
+/**
+ * Fetches the admin-configured custom analytics script string.
+ *
+ * Self-gated on EE availability. Returns `null` when EE is disabled or no
+ * script is configured.
+ */
+export function useCustomAnalyticsScript(): string | null {
+  const { isLoading, error, ee_features_enabled } = useSettings();
+  const shouldFetch =
+    EE_ENABLED || (!isLoading && !error && ee_features_enabled !== false);
+
+  const { data } = useSWR<string>(
+    shouldFetch ? SWR_KEYS.customAnalyticsScript : null,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 60_000,
+    }
+  );
+  return data ?? null;
 }

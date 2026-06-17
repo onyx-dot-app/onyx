@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import useSWRInfinite from "swr/infinite";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -22,8 +22,8 @@ import { SWR_KEYS } from "@/lib/swr-keys";
  * is suppressed entirely in that case.
  */
 export function useShowLogoWhenFolded(): boolean {
-  const settings = useSettingsContext();
-  return settings.enterpriseSettings?.logo_display_style !== "name_only";
+  const settings = useSettings();
+  return settings.enterprise?.logo_display_style !== "name_only";
 }
 
 // ---------------------------------------------------------------------------

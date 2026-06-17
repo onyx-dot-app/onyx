@@ -47,6 +47,13 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/reset-password", {"POST"}),
     ("/auth/request-verify-token", {"POST"}),
     ("/auth/verify", {"POST"}),
+    # native mobile bearer-token auth — mirrors the basic-auth routes above,
+    # but the session token is delivered as a Bearer instead of a cookie.
+    # (refresh/logout still enforce the token via their own dependencies;
+    # listing them here only satisfies the startup public-route assertion.)
+    ("/auth/mobile/login", {"POST"}),
+    ("/auth/mobile/refresh", {"POST"}),
+    ("/auth/mobile/logout", {"POST"}),
     ("/users/me", {"GET"}),
     ("/users/me", {"PATCH"}),
     ("/users/{id}", {"GET"}),

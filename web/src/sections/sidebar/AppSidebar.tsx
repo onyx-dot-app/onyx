@@ -3,7 +3,7 @@
 import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
@@ -199,7 +199,7 @@ function RecentsSection({
 const AppSidebar = memo(function AppSidebarInner() {
   const { folded } = useSidebarState();
   const router = useRouter();
-  const combinedSettings = useSettingsContext();
+  const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
   const { setAppMode, reset } = useQueryController();
 
@@ -247,8 +247,7 @@ const AppSidebar = memo(function AppSidebarInner() {
 
   // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled
-  const isOnyxCraftEnabled =
-    combinedSettings?.settings?.onyx_craft_enabled === true;
+  const isOnyxCraftEnabled = combinedSettingsData?.onyx_craft_enabled === true;
 
   // Fetch notifications for build mode intro
   const { notifications, refresh: mutateNotifications } = useNotifications({
@@ -478,7 +477,7 @@ const AppSidebar = memo(function AppSidebarInner() {
     "chat";
   const newSessionButton = useMemo(() => {
     const href =
-      combinedSettings?.settings?.disable_default_assistant && currentAgent
+      combinedSettingsData?.disable_default_assistant && currentAgent
         ? `/app?agentId=${currentAgent.id}`
         : "/app";
     return (
@@ -501,7 +500,7 @@ const AppSidebar = memo(function AppSidebarInner() {
   }, [
     folded,
     activeSidebarTab,
-    combinedSettings,
+    combinedSettingsData,
     currentAgent,
     defaultAppMode,
   ]);

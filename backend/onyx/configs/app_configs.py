@@ -16,6 +16,16 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
+def _non_negative_int_env(name: str, default: int) -> int:
+    """Parse an int env var, falling back to ``default`` when unset or negative."""
+    value = int(os.environ.get(name) or default)
+    if value < 0:
+        logger.warning("%s=%d is negative; falling back to %d", name, value, default)
+        return default
+    return value
+
+
 #####
 # App Configs
 #####
@@ -47,31 +57,21 @@ BLURB_SIZE = 128  # Number Encoder Tokens included in the chunk blurb
 
 # Hard ceiling for the admin-configurable file upload size (in MB).
 # Self-hosted customers can raise or lower this via the environment variable.
-_raw_max_upload_size_mb = int(os.environ.get("MAX_ALLOWED_UPLOAD_SIZE_MB", "250"))
-if _raw_max_upload_size_mb < 0:
-    logger.warning(
-        "MAX_ALLOWED_UPLOAD_SIZE_MB=%d is negative; falling back to 250",
-        _raw_max_upload_size_mb,
-    )
-    _raw_max_upload_size_mb = 250
-MAX_ALLOWED_UPLOAD_SIZE_MB = _raw_max_upload_size_mb
+MAX_ALLOWED_UPLOAD_SIZE_MB = _non_negative_int_env("MAX_ALLOWED_UPLOAD_SIZE_MB", 250)
 
 # Default fallback for the per-user file upload size limit (in MB) when no
 # admin-configured value exists.  Clamped to MAX_ALLOWED_UPLOAD_SIZE_MB at
 # runtime so this never silently exceeds the hard ceiling.
-_raw_default_upload_size_mb = int(
-    os.environ.get("DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", "100")
+DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = _non_negative_int_env(
+    "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", 100
 )
-if _raw_default_upload_size_mb < 0:
-    logger.warning(
-        "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB=%d is negative; falling back to 100",
-        _raw_default_upload_size_mb,
-    )
-    _raw_default_upload_size_mb = 100
-DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = _raw_default_upload_size_mb
 GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
+
+# Per-user cap on self-managed personal skills. Env-overridable so CI can lower
+# it without uploading the full quota of real bundles to exercise the limit.
+MAX_PERSONAL_SKILLS_PER_USER = _non_negative_int_env("MAX_PERSONAL_SKILLS_PER_USER", 50)
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"

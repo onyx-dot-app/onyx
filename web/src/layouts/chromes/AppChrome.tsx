@@ -49,12 +49,12 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useCustomFooterContent } from "@/lib/app/hooks";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +65,8 @@ function Header() {
   const appFocus = useAppFocus();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
-  const settings = useSettingsContext();
+  const isSearchModeAvailable = useIsSearchModeAvailable();
+  const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
   const [showShareModal, setShowShareModal] = useState(false);
@@ -90,8 +91,7 @@ function Header() {
     useChatSessions();
   const router = useRouter();
 
-  const customHeaderContent =
-    settings?.enterpriseSettings?.custom_header_content;
+  const customHeaderContent = settings.enterprise?.custom_header_content;
   const pageWithHeaderContent =
     appFocus.isChat() || appFocus.isNewSession() || appFocus.isAgent();
 
@@ -286,7 +286,7 @@ function Header() {
         isMobile) &&
         !appFocus.isSharedChat() && (
           <RootLayout.Header>
-            <div className="w-full h-full flex flex-row flex-wrap justify-center items-center px-4 py-2">
+            <div className="w-full h-full flex flex-row flex-wrap justify-center items-center p-2 sm:px-4">
               {/*
           Left:
           - (mobile) sidebar toggle
@@ -301,7 +301,7 @@ function Header() {
                   />
                 )}
                 {businessTier &&
-                  settings.isSearchModeAvailable &&
+                  isSearchModeAvailable &&
                   appFocus.isNewSession() &&
                   state.phase === "idle" && (
                     <Popover
@@ -436,7 +436,7 @@ function Footer() {
     <RootLayout.Footer>
       <div
         className={cn(
-          "relative w-full flex flex-row justify-center items-center gap-2 px-4 mt-auto",
+          "relative w-full flex flex-row justify-center items-center gap-2 px-2 sm:px-4 mt-auto",
           // # Note (from @raunakab):
           //
           // The conditional rendering of vertical padding based on the current page is intentional.

@@ -12,9 +12,7 @@ import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import Text from "@/refresh-components/texts/Text";
-import { Button, Text as OpalText } from "@opal/components";
-import { SvgArrowRightCircle, SvgInfo } from "@opal/icons";
-import { cn, markdown } from "@opal/utils";
+import { cn } from "@opal/utils";
 import { AuthType } from "@/lib/constants";
 
 const Page = async (props: {
@@ -51,46 +49,6 @@ const Page = async (props: {
     return redirect("/auth/waiting-on-verification");
   }
   const cloud = authTypeMetadata?.authType === AuthType.CLOUD;
-
-  if (cloud) {
-    return (
-      <AuthFlowContainer authState="signup">
-        <div className="flex w-full flex-col justify-start gap-6">
-          <div className="w-full">
-            <OpalText as="h2" font="heading-h2" color="text-05">
-              Create account
-            </OpalText>
-            <OpalText as="p" font="main-ui-body" color="text-03">
-              Get started with Onyx
-            </OpalText>
-          </div>
-
-          <div className="flex w-full gap-3 rounded-16 border border-border-01 bg-background p-4">
-            <SvgInfo className="mt-0.5 size-5 shrink-0 text-text-03" />
-            <div className="flex min-w-0 flex-col gap-1">
-              <OpalText as="p" font="main-ui-action" color="text-04">
-                New account creation unavailable.
-              </OpalText>
-              <OpalText as="p" font="main-ui-body" color="text-03">
-                {markdown(
-                  "Existing accounts can still [sign in](/auth/login?autoRedirectToSignup=false). New accounts will be available again soon."
-                )}
-              </OpalText>
-              <OpalText as="p" font="main-ui-body" color="text-03">
-                {markdown(
-                  "You can still try Onyx by [self-hosting](https://docs.onyx.app/deployment/overview)."
-                )}
-              </OpalText>
-            </div>
-          </div>
-
-          <Button disabled width="full" rightIcon={SvgArrowRightCircle}>
-            Create Account
-          </Button>
-        </div>
-      </AuthFlowContainer>
-    );
-  }
 
   // only enable this page if basic login is enabled
   if (authTypeMetadata?.authType !== AuthType.BASIC && !cloud) {

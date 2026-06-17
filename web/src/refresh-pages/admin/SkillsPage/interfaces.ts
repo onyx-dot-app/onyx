@@ -35,6 +35,8 @@ export interface CustomSkill {
   name: string;
   description: string;
   is_public: boolean;
+  /** True for private personal skills: not public, no grants, custom. */
+  is_personal: boolean;
   enabled: boolean;
   author_user_id: string | null;
   author_email: string | null;
