@@ -15,7 +15,7 @@ export interface ArtifactInfo {
 }
 
 // =============================================================================
-// ACP Event Types (from Agent Client Protocol)
+// Sandbox event types
 // =============================================================================
 
 /** Text or image content from the agent */
@@ -82,8 +82,8 @@ export interface PromptResponseEvent {
   };
 }
 
-/** ACP error event */
-export interface ACPErrorEvent {
+/** Sandbox error event */
+export interface SandboxErrorEvent {
   code: number;
   message: string;
 }
@@ -136,8 +136,8 @@ export interface DirectoryListing {
 // Union Types
 // =============================================================================
 
-/** All possible ACP events from the agent */
-export type ACPEvent =
+/** All possible sandbox events from the agent */
+export type SandboxEvent =
   | { type: "agent_message_chunk"; data: AgentMessageChunkEvent }
   | { type: "agent_thought_chunk"; data: AgentThoughtChunkEvent }
   | { type: "tool_call"; data: ToolCallStartEvent }
@@ -145,13 +145,10 @@ export type ACPEvent =
   | { type: "plan"; data: AgentPlanUpdateEvent }
   | { type: "current_mode_update"; data: CurrentModeUpdateEvent }
   | { type: "prompt_response"; data: PromptResponseEvent }
-  | { type: "error"; data: ACPErrorEvent }
+  | { type: "error"; data: SandboxErrorEvent }
   | { type: "status"; data: StatusEvent }
   | { type: "artifact"; data: ArtifactEvent }
   | { type: "file_write"; data: FileWriteEvent };
-
-/** Legacy BuildEvent type - alias for ACPEvent */
-export type BuildEvent = ACPEvent;
 
 export async function createSession(
   request: CreateSessionRequest
@@ -180,7 +177,7 @@ export async function executeTask(
   sessionId: string,
   task: string,
   context: string | undefined,
-  onEvent: (event: BuildEvent) => void,
+  onEvent: (event: SandboxEvent) => void,
   onError: (error: Error) => void,
   onComplete: () => void
 ): Promise<void> {
@@ -223,7 +220,7 @@ export async function executeTask(
           if (data) {
             try {
               const parsed = JSON.parse(data);
-              onEvent({ type: currentEventType, data: parsed } as BuildEvent);
+              onEvent({ type: currentEventType, data: parsed } as SandboxEvent);
             } catch {
               // Skip malformed JSON
             }
@@ -245,7 +242,7 @@ export async function executeTask(
 export async function sendMessage(
   sessionId: string,
   message: string,
-  onEvent: (event: BuildEvent) => void,
+  onEvent: (event: SandboxEvent) => void,
   onError: (error: Error) => void,
   onComplete: () => void
 ): Promise<void> {
@@ -291,10 +288,10 @@ export async function sendMessage(
           if (data) {
             try {
               const parsed = JSON.parse(data);
-              // Map frontend packet types to BuildEvent types
+              // Map frontend packet types to SandboxEvent types
               const eventType = mapMessagePacketToEventType(parsed.type);
               if (eventType) {
-                onEvent({ type: eventType, data: parsed } as BuildEvent);
+                onEvent({ type: eventType, data: parsed } as SandboxEvent);
               }
             } catch (err) {
               console.error("Failed to parse SSE data:", err);
@@ -311,12 +308,12 @@ export async function sendMessage(
 }
 
 /**
- * Map message API packet types to BuildEvent types.
- * Uses direct ACP event names from the backend, plus custom Onyx packet types.
+ * Map message API packet types to SandboxEvent types.
+ * Uses direct sandbox-event names from the backend, plus custom Onyx packet types.
  */
 function mapMessagePacketToEventType(packetType: string): string | null {
   const mapping: Record<string, string> = {
-    // Direct ACP event types
+    // Direct sandbox event types
     agent_message_chunk: "agent_message_chunk",
     agent_thought_chunk: "agent_thought_chunk",
     tool_call_start: "tool_call",
@@ -325,7 +322,7 @@ function mapMessagePacketToEventType(packetType: string): string | null {
     current_mode_update: "current_mode_update",
     prompt_response: "prompt_response",
     error: "error",
-    // Custom Onyx packet types (extensions to ACP)
+    // Custom Onyx packet types
     artifact_created: "artifact",
     file_write: "file_write",
   };

@@ -82,7 +82,6 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
                 placeholder={
                   isLoadingCredentials ? "Loading..." : "Enter your API key"
                 }
-                showClearButton={false}
                 disabled={disabled}
                 error={apiStatus === "error"}
               />

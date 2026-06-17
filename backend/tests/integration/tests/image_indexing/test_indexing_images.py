@@ -109,7 +109,9 @@ def test_image_indexing(
 
         assert len(documents) == 2
         for document in documents:
-            if "These  are  Johns  dogs" in document.content:
+            # Whitespace-normalize: PDF text extractors differ in inter-word spacing.
+            normalized = " ".join(document.content.split())
+            if "These are Johns dogs" in normalized:
                 assert document.image_file_id is None
             else:
                 assert document.image_file_id is not None

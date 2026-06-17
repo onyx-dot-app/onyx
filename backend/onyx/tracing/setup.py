@@ -83,6 +83,7 @@ def _setup_langfuse() -> None:
 
     from langfuse import Langfuse
 
+    from onyx import __version__
     from onyx.tracing.framework import add_trace_processor
     from onyx.tracing.langfuse_tracing_processor import LangfuseTracingProcessor
 
@@ -95,6 +96,7 @@ def _setup_langfuse() -> None:
         public_key=LANGFUSE_PUBLIC_KEY,
         secret_key=LANGFUSE_SECRET_KEY,
         host=LANGFUSE_HOST if LANGFUSE_HOST else None,
+        release=__version__,
     )
 
     add_trace_processor(LangfuseTracingProcessor(client=client))

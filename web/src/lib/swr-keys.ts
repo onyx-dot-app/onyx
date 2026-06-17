@@ -19,6 +19,7 @@ export const SWR_KEYS = {
   enterpriseSettings: "/api/enterprise-settings",
   customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
   authType: "/api/auth/type",
+  adminSecuritySettings: "/api/admin/security",
 
   // ── Agents / Personas ─────────────────────────────────────────────────────
   personas: "/api/persona",
@@ -76,12 +77,22 @@ export const SWR_KEYS = {
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────
   chatSessions: "/api/chat/get-user-chat-sessions",
+  chatSearch: "/api/chat/search",
 
   // ── Projects & Files ──────────────────────────────────────────────────────
   userProjects: "/api/user/projects",
   recentFiles: "/api/user/files/recent",
   userPats: "/api/user/pats",
+  userPatScopes: "/api/user/pats/scopes",
   notifications: "/api/notifications",
+  notificationsSummary: "/api/notifications/summary",
+  notificationsPage: (pageNum: number, pageSize: number) => {
+    const params = new URLSearchParams({
+      page_num: pageNum.toString(),
+      page_size: pageSize.toString(),
+    });
+    return `/api/notifications?${params.toString()}`;
+  },
 
   // ── Users ─────────────────────────────────────────────────────────────────
   acceptedUsers: "/api/manage/users/accepted/all",
@@ -109,6 +120,10 @@ export const SWR_KEYS = {
   adminMcpServers: "/api/admin/mcp/servers",
   mcpServers: "/api/mcp/servers",
 
+  // ── Skills ────────────────────────────────────────────────────────────────
+  adminSkills: "/api/admin/skills",
+  userSkills: "/api/skills",
+
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
   openApiTools: "/api/tool/openapi",
@@ -132,10 +147,11 @@ export const SWR_KEYS = {
     `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
-
-  // ── OpenSearch Migration ──────────────────────────────────────────────────
-  opensearchMigrationStatus: "/api/admin/opensearch-migration/status",
-  opensearchMigrationRetrieval: "/api/admin/opensearch-migration/retrieval",
+  buildExternalApps: "/api/build/apps",
+  buildExternalAppsAdmin: "/api/build/admin/apps",
+  buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
+  buildSessionLiveApprovals: (sessionId: string) =>
+    `/api/build/approvals/sessions/${sessionId}/live`,
 
   // ── Token Rate Limits ─────────────────────────────────────────────────────
   globalTokenRateLimits: "/api/admin/token-rate-limits/global",

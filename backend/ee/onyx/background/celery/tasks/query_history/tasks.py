@@ -20,6 +20,7 @@ from onyx.db.tasks import mark_task_as_finished_with_id
 from onyx.db.tasks import mark_task_as_started_with_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.settings.store import load_settings
+from onyx.utils.csv_utils import sanitize_csv_row
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -71,7 +72,9 @@ def export_query_history_task(
                     snapshot.user_email = ONYX_ANONYMIZED_EMAIL
 
                 writer.writerows(
-                    qa_pair.to_json()
+                    # Sanitize to prevent CSV/formula injection against
+                    # whoever opens the export in a spreadsheet (ON-008).
+                    sanitize_csv_row(qa_pair.to_json())
                     for qa_pair in QuestionAnswerPairSnapshot.from_chat_session_snapshot(
                         snapshot
                     )

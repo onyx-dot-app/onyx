@@ -8,7 +8,7 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 import * as Yup from "yup";
 import {
   useInitialValues,
@@ -16,7 +16,7 @@ import {
   BaseLLMFormValues,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   DisplayNameField,

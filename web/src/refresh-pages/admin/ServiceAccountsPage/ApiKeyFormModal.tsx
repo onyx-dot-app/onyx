@@ -10,14 +10,14 @@ import {
 import type { APIKey } from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { InputVertical } from "@opal/layouts";
 import { SvgCheck, SvgKey, SvgLogOut, SvgUsers } from "@opal/icons";
 import useGroups from "@/hooks/useGroups";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import ShadowDiv from "@/refresh-components/ShadowDiv";
+import { ShadowDiv } from "@opal/components";
 import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 
@@ -132,12 +132,11 @@ export default function ApiKeyFormModal({
                   <InputVertical withLabel="name" title="Name">
                     <FormikField<string>
                       name="name"
-                      render={(field, helper) => (
+                      render={(field) => (
                         <InputTypeIn
                           {...field}
                           placeholder="Enter a name"
-                          onClear={() => helper.setValue("")}
-                          showClearButton={false}
+                          clearButton
                         />
                       )}
                     />
@@ -164,7 +163,7 @@ export default function ApiKeyFormModal({
                               value={searchTerm}
                               onChange={(e) => setSearchTerm(e.target.value)}
                               placeholder="Search groups..."
-                              leftSearchIcon
+                              searchIcon
                             />
                           </div>
                         </Popover.Trigger>

@@ -12,6 +12,7 @@ from onyx.chat.citation_processor import CitationMode
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import update_citation_processor_from_tool_response
 from onyx.chat.emitter import Emitter
+from onyx.chat.llm_step import _looks_like_xml_tool_call_payload
 from onyx.chat.llm_step import extract_tool_calls_from_response_text
 from onyx.chat.llm_step import run_llm_step
 from onyx.chat.models import ChatMessageSimple
@@ -131,18 +132,6 @@ def _build_empty_llm_response_error(
             "completed. No text or tool calls were received from the upstream "
             "provider."
         ),
-    )
-
-
-def _looks_like_xml_tool_call_payload(text: str | None) -> bool:
-    """Detect XML-style marshaled tool calls emitted as plain text."""
-    if not text:
-        return False
-    lowered = text.lower()
-    return (
-        "<function_calls" in lowered
-        and "<invoke" in lowered
-        and "<parameter" in lowered
     )
 
 
@@ -485,16 +474,6 @@ def construct_message_history(
                         forgotten_meta, token_counter
                     )
 
-    # Attach project images to the last user message
-    if context_files and context_files.image_files:
-        existing_images = last_user_message.image_files or []
-        last_user_message = ChatMessageSimple(
-            message=last_user_message.message,
-            token_count=last_user_message.token_count,
-            message_type=last_user_message.message_type,
-            image_files=existing_images + context_files.image_files,
-        )
-
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [context_files],
     # [forgotten_files], [last_user_message], [messages_after_last_user], [reminder]
@@ -648,6 +627,7 @@ def run_llm_loop(
         metadata={
             "tenant_id": get_current_tenant_id(),
             "chat_session_id": chat_session_id,
+            "user_id": user_identity.user_id if user_identity else None,
         },
     ):
         # Fix some LiteLLM issues,

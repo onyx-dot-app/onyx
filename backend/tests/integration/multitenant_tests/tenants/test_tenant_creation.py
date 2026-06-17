@@ -1,11 +1,10 @@
 from http import HTTPStatus
 from uuid import uuid4
 
-import requests
-
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -112,7 +111,7 @@ def test_settings_access() -> None:
     """Calls to the enterprise settings endpoint without authentication should fail with
     403 (and not 500, which will lock the web UI into a "maintenance mode" page)"""
 
-    response = requests.get(url=f"{API_SERVER_URL}/enterprise-settings")
+    response = client.get(url=f"{API_SERVER_URL}/enterprise-settings")
     assert response.status_code == HTTPStatus.FORBIDDEN
 
 

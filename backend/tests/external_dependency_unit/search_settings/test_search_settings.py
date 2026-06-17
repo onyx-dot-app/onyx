@@ -15,6 +15,7 @@ from onyx.db.llm import update_default_contextual_model
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import create_search_settings
+from onyx.db.search_settings import update_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.indexing.indexing_pipeline import IndexingPipelineResult
 from onyx.indexing.indexing_pipeline import run_indexing_pipeline
@@ -22,6 +23,7 @@ from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.search_settings import set_new_search_settings
 from onyx.server.manage.search_settings import update_saved_search_settings
+from shared_configs.configs import PRESERVED_SEARCH_FIELDS
 
 TEST_PROVIDER_NAME = "test-contextual-provider"
 TEST_MODEL_NAME = "test-contextual-model"
@@ -299,3 +301,77 @@ def test_indexing_pipeline_skips_llm_when_contextual_rag_disabled(
     _run_indexing_pipeline_with_mocks(mock_get_llm, mock_index_handler, db_session)
 
     mock_get_llm.assert_not_called()
+
+
+def test_create_search_settings_coerces_none_prefixes(
+    tenant_context: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    """Registry-less cloud providers (e.g. Bedrock/LiteLLM/Azure) can arrive
+    without query/passage prefixes. The search_settings DB columns are NOT
+    NULL, so create_search_settings must coerce None -> "" instead of raising
+    a NotNullViolation. Regression test for the v4.0.x embedding-switch bug."""
+    saved = _make_saved_search_settings(enable_contextual_rag=False)
+    # Explicitly force the None path the failing customer hit.
+    saved.query_prefix = None
+    saved.passage_prefix = None
+
+    created = create_search_settings(
+        search_settings=saved,
+        db_session=db_session,
+        status=IndexModelStatus.FUTURE,
+    )
+
+    assert created.query_prefix == ""
+    assert created.passage_prefix == ""
+
+
+def test_update_search_settings_coerces_none_prefixes(
+    tenant_context: None,  # noqa: ARG001
+    db_session: Session,
+) -> None:
+    """The update path setattr's columns straight from model_dump(). Today's
+    callers always include the prefixes in PRESERVED_SEARCH_FIELDS, but if a
+    caller does NOT preserve them, an explicit null must still not write NULL to
+    the NOT NULL columns. Exercises the coercion with prefixes un-preserved
+    (while keeping 'id' preserved so the PK isn't nulled)."""
+    current = create_search_settings(
+        search_settings=_make_saved_search_settings(enable_contextual_rag=False),
+        db_session=db_session,
+        status=IndexModelStatus.PRESENT,
+    )
+
+    updated = _make_saved_search_settings(enable_contextual_rag=False)
+    updated.query_prefix = None
+    updated.passage_prefix = None
+
+    preserved = [
+        f
+        for f in PRESERVED_SEARCH_FIELDS
+        if f not in ("query_prefix", "passage_prefix")
+    ]
+    update_search_settings(current, updated, preserved_fields=preserved)
+    db_session.commit()
+
+    assert current.query_prefix == ""
+    assert current.passage_prefix == ""
+
+
+def test_creation_request_defaults_blank_prefixes() -> None:
+    """When the client omits query/passage prefixes entirely, the Pydantic
+    request model should default them to "" rather than leaving them unset/None."""
+    request = SearchSettingsCreationRequest(
+        model_name="bedrock-titan-embed-text-2",
+        model_dim=1024,
+        normalize=False,
+        provider_type=None,
+        index_name=None,
+        multipass_indexing=False,
+        embedding_precision=EmbeddingPrecision.FLOAT,
+        reduced_dimension=None,
+        enable_contextual_rag=False,
+        contextual_rag_model_configuration_id=None,
+    )
+
+    assert request.query_prefix == ""
+    assert request.passage_prefix == ""

@@ -11,11 +11,14 @@ from collections.abc import Coroutine
 from typing import Any
 
 from fastapi import Depends
+from fastapi import Request
 from pydantic import BaseModel
 from pydantic import field_validator
 
+from onyx.db.enums import AccountType
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.db.permissions import parse_permission_values
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -56,21 +59,27 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS.value: {
         Permission.READ_USER_GROUPS.value,
     },
+    # basic grants the search/chat surfaces; admin grants read:admin (and the
+    # rest) via the FULL_ADMIN_PANEL_ACCESS short-circuit in
+    # resolve_effective_permissions.
+    Permission.BASIC_ACCESS.value: {
+        Permission.READ_SEARCH.value,
+        Permission.READ_CHAT.value,
+        Permission.WRITE_CHAT.value,
+    },
+    Permission.WRITE_CHAT.value: {Permission.READ_CHAT.value},
 }
 
 # Permissions that cannot be toggled via the group-permission API.
 # BASIC_ACCESS is always granted, FULL_ADMIN_PANEL_ACCESS is too broad,
-# and READ_* permissions are implied (never stored directly).
+# and implied permissions (READ_* and the API-surface scopes) are never
+# stored directly.
 NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
     {
         Permission.BASIC_ACCESS,
         Permission.FULL_ADMIN_PANEL_ACCESS,
-        Permission.READ_CONNECTORS,
-        Permission.READ_DOCUMENT_SETS,
-        Permission.READ_AGENTS,
-        Permission.READ_USERS,
-        Permission.READ_USER_GROUPS,
     }
+    | Permission.IMPLIED
 )
 
 # Permissions auto-granted to all users in Community Edition.
@@ -205,7 +214,7 @@ PERMISSION_REGISTRY: list[PermissionRegistryEntry] = [
 def resolve_effective_permissions(granted: set[str]) -> set[str]:
     """Expand granted permissions with their implied permissions.
 
-    If "admin" is present, returns all 19 permissions.
+    If "admin" is present, returns all permissions.
     """
     if Permission.FULL_ADMIN_PANEL_ACCESS.value in granted:
         return set(ALL_PERMISSIONS)
@@ -223,22 +232,17 @@ def resolve_effective_permissions(granted: set[str]) -> set[str]:
 
 
 def get_effective_permissions(user: User) -> set[Permission]:
-    """Read granted permissions from the column and expand implied permissions.
-
-    Admin-role users always receive all permissions regardless of the JSONB
-    column, maintaining backward compatibility with role-based access control.
-    """
-
-    granted: set[Permission] = set()
-    for p in user.effective_permissions:
-        try:
-            granted.add(Permission(p))
-        except ValueError:
-            logger.warning("Skipping unknown permission '%s' for user %s", p, user.id)
+    """Read granted permissions from the column and expand implied permissions."""
+    granted = set(parse_permission_values(user.effective_permissions))
     if Permission.FULL_ADMIN_PANEL_ACCESS in granted:
         return set(Permission)
 
-    if not global_version.is_ee_version():
+    # CE auto-grants capabilities (no permission UI exists), but never to the
+    # anonymous user — it stays a chat-only surface.
+    if (
+        not global_version.is_ee_version()
+        and user.account_type != AccountType.ANONYMOUS
+    ):
         granted |= CE_UNGATED_PERMISSIONS
 
     expanded = resolve_effective_permissions({p.value for p in granted})
@@ -250,41 +254,36 @@ def has_permission(user: User, permission: Permission) -> bool:
     return permission in get_effective_permissions(user)
 
 
-def _get_current_user() -> Any:
-    """Lazy import to break circular dependency between permissions and users modules."""
-    from onyx.auth.users import current_user
-
-    return current_user
-
-
 def require_permission(
     required: Permission,
+    *,
+    allow_anonymous: bool = False,
 ) -> Callable[..., Coroutine[Any, Any, User]]:
-    """FastAPI dependency factory for permission-based access control.
+    """FastAPI dependency factory: require ``required`` of the caller, capped by the
+    authenticating token's scopes (unrestricted PAT / session / API key = no cap).
+    allow_anonymous admits the anonymous user where the tenant permits it (the
+    anonymous-capable chat surface)."""
+    # Lazy import to break the circular dependency between permissions and users
+    # (users.py imports has_permission from this module at top level).
+    from onyx.auth.users import current_chat_accessible_user
+    from onyx.auth.users import current_user
 
-    Usage:
-        @router.get("/endpoint")
-        def endpoint(user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS))):
-            ...
-    """
+    base_user = current_chat_accessible_user if allow_anonymous else current_user
 
-    async def dependency(
-        user: User = Depends(_get_current_user()),
-    ) -> User:
-        effective = get_effective_permissions(user)
-
-        if Permission.FULL_ADMIN_PANEL_ACCESS in effective:
-            return user
-
-        if required not in effective:
+    async def dependency(request: Request, user: User = Depends(base_user)) -> User:
+        token_scopes: list[Permission] | None = getattr(
+            request.state, "token_scopes", None
+        )
+        permitted_by_user = required in get_effective_permissions(user)
+        permitted_by_token = token_scopes is None or required.value in (
+            resolve_effective_permissions({s.value for s in token_scopes})
+        )
+        if not (permitted_by_user and permitted_by_token):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "You do not have the required permissions for this action.",
             )
-
         return user
 
-    dependency._is_require_permission = (  # ty: ignore[unresolved-attribute]
-        True  # sentinel for auth_check detection
-    )
+    dependency._is_require_permission = True  # ty: ignore[unresolved-attribute]
     return dependency

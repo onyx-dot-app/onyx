@@ -40,7 +40,21 @@ export const skipRetryOnAuthError: NonNullable<
   )
     return;
   const delay = Math.min(2000 * 2 ** retryCount, 30000);
-  setTimeout(() => revalidate({ retryCount }), delay);
+  setTimeout(() => {
+    if (typeof document === "undefined" || !document.hidden) {
+      revalidate({ retryCount });
+      return;
+    }
+    // Hidden at retry time: defer until the tab is visible again, so hidden
+    // tabs stay quiet without permanently dropping the retry chain (which
+    // would strand consumers that disable revalidateOnFocus).
+    const retryOnVisible = () => {
+      if (document.hidden) return;
+      document.removeEventListener("visibilitychange", retryOnVisible);
+      revalidate({ retryCount });
+    };
+    document.addEventListener("visibilitychange", retryOnVisible);
+  }, delay);
 };
 
 export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {

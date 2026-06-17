@@ -9,10 +9,15 @@ import {
 } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Table, Tooltip, createTableColumns } from "@opal/components";
+import {
+  Button,
+  Table,
+  Text,
+  Tooltip,
+  createTableColumns,
+} from "@opal/components";
 import SvgLock from "@opal/icons/lock";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SvgSimpleLoader } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { listScheduledTaskRuns } from "@/app/craft/v1/tasks/api";
 import { RunStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
@@ -38,6 +43,7 @@ interface RunHistoryTableProps {
 }
 
 const tc = createTableColumns<ScheduledRunSummary>();
+const RUN_HISTORY_REFRESH_INTERVAL_MS = 5000;
 
 interface NonClickableCellProps {
   reason: string | null;
@@ -70,10 +76,10 @@ function buildColumns() {
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row)}>
           <div className="flex flex-col gap-0.5">
-            <Text mainUiBody text05 nowrap>
+            <Text font="main-ui-body" color="text-05" nowrap>
               {formatAbsolute(value)}
             </Text>
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {formatRelativeShort(value)}
             </Text>
           </div>
@@ -113,7 +119,7 @@ function buildColumns() {
       width: { weight: 12 },
       cell: (row) => (
         <NonClickableCell reason={getNonClickableReason(row)}>
-          <Text mainUiBody text03 nowrap>
+          <Text font="main-ui-body" color="text-03" nowrap>
             {formatRunDuration(row.started_at, row.finished_at)}
           </Text>
         </NonClickableCell>
@@ -125,7 +131,7 @@ function buildColumns() {
       width: { weight: 38 },
       cell: (row) => (
         <NonClickableCell reason={getNonClickableReason(row)}>
-          <Text mainUiBody text03>
+          <Text font="main-ui-body" color="text-03">
             {row.summary ?? row.skip_reason ?? row.error_class ?? "—"}
           </Text>
         </NonClickableCell>
@@ -137,7 +143,7 @@ function buildColumns() {
       enableSorting: false,
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row)}>
-          <Text mainUiBody text03 nowrap>
+          <Text font="main-ui-body" color="text-03" nowrap>
             {value === "MANUAL_RUN_NOW" ? "Run Now" : "Schedule"}
           </Text>
         </NonClickableCell>
@@ -148,8 +154,8 @@ function buildColumns() {
 
 export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   const router = useRouter();
-  const [pages, setPages] = useState<ScheduledRunSummary[][]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [olderPages, setOlderPages] = useState<ScheduledRunSummary[][]>([]);
+  const [olderNextCursor, setOlderNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const firstPageUrl = `${SWR_KEYS.scheduledTaskRuns(
@@ -158,31 +164,34 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   const { data, error, isLoading, mutate } = useSWR<ScheduledRunListResponse>(
     firstPageUrl,
     errorHandlingFetcher,
-    { revalidateOnFocus: false }
+    {
+      revalidateOnFocus: false,
+      refreshInterval: RUN_HISTORY_REFRESH_INTERVAL_MS,
+    }
   );
 
-  // Reset paginated state whenever the first page is (re)fetched so the
-  // table snaps back to page 1 after a revalidation (e.g. "Run Now").
   useEffect(() => {
-    if (!data) return;
-    setPages([data.items]);
-    setNextCursor(data.next_cursor);
-  }, [data]);
+    setOlderPages([]);
+    setOlderNextCursor(null);
+  }, [taskId]);
+
+  const loadMoreCursor =
+    olderPages.length > 0 ? olderNextCursor : (data?.next_cursor ?? null);
 
   const loadMore = useCallback(async () => {
-    if (!nextCursor) return;
+    if (!loadMoreCursor) return;
     setLoadingMore(true);
     try {
       const res = await listScheduledTaskRuns(taskId, {
-        cursor: nextCursor,
+        cursor: loadMoreCursor,
         limit: RUNS_PAGE_SIZE,
       });
-      setPages((prev) => [...prev, res.items]);
-      setNextCursor(res.next_cursor);
+      setOlderPages((prev) => [...prev, res.items]);
+      setOlderNextCursor(res.next_cursor);
     } finally {
       setLoadingMore(false);
     }
-  }, [nextCursor, taskId]);
+  }, [loadMoreCursor, taskId]);
 
   const refresh = useCallback(() => {
     void mutate();
@@ -190,12 +199,30 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
 
   const columns = useMemo(() => buildColumns(), []);
 
-  const allRuns = pages.flat();
+  const allRuns = useMemo(() => {
+    const runs: ScheduledRunSummary[] = [];
+    const seenRunIds = new Set<string>();
+
+    for (const run of data?.items ?? []) {
+      runs.push(run);
+      seenRunIds.add(run.id);
+    }
+
+    for (const page of olderPages) {
+      for (const run of page) {
+        if (seenRunIds.has(run.id)) continue;
+        runs.push(run);
+        seenRunIds.add(run.id);
+      }
+    }
+
+    return runs;
+  }, [data?.items, olderPages]);
 
   if (isLoading && !data) {
     return (
       <div className="flex justify-center py-8">
-        <SimpleLoader className="h-6 w-6" />
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   }
@@ -203,7 +230,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   if (error) {
     return (
       <Section gap={0.5}>
-        <Text mainUiBody text03>
+        <Text font="main-ui-body" color="text-03">
           Failed to load run history.
         </Text>
         <Button
@@ -220,10 +247,12 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
 
   if (allRuns.length === 0) {
     return (
-      <Text mainUiBody text03 className="py-6 text-center">
-        No runs yet. The task will create one each time it fires, or use Run Now
-        above.
-      </Text>
+      <div className="py-6 text-center">
+        <Text font="main-ui-body" color="text-03">
+          No runs yet. The task will create one each time it fires, or use Run
+          Now above.
+        </Text>
+      </div>
     );
   }
 
@@ -240,7 +269,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
           }
         }}
       />
-      {nextCursor && (
+      {loadMoreCursor && (
         <div className="flex justify-center pt-2">
           <Button
             variant="default"

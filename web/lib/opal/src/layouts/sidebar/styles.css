@@ -1,0 +1,165 @@
+@reference "#reference.css";
+
+/*
+  CSS custom properties required by this module — define on :root or an ancestor:
+
+    --sidebar-width-folded    Width when collapsed  (e.g. 4rem)
+    --sidebar-width-expanded  Width when open       (e.g. 15rem)
+*/
+
+/* ---------------------------------------------------------------------------
+   SidebarRoot — inner content wrapper (hosts Header / Body / Footer)
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-root__inner {
+  @apply flex flex-col min-h-0 h-full;
+}
+
+/* ---------------------------------------------------------------------------
+   SidebarRoot — desktop column
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-root__column {
+  @apply h-screen flex flex-col bg-background-tint-02 pb-2 shrink-0;
+  width: var(--sidebar-width-expanded);
+  transition: width 200ms ease-in-out;
+}
+.opal-sidebar-root__column[data-folded="true"] {
+  width: var(--sidebar-width-folded);
+}
+
+/* ---------------------------------------------------------------------------
+   SidebarRoot — mobile / medium overlays
+   --------------------------------------------------------------------------- */
+
+/* Shared visual column styles for overlaid sidebar */
+.opal-sidebar-root__overlay {
+  @apply flex flex-col bg-background-tint-02 pb-2;
+  width: var(--sidebar-width-expanded);
+  transition: width 200ms ease-in-out;
+}
+.opal-sidebar-root__overlay[data-folded="true"] {
+  width: var(--sidebar-width-folded);
+}
+
+/* Mobile: full-height overlay that slides in/out */
+.opal-sidebar-root__overlay[data-variant="mobile"] {
+  @apply fixed inset-y-0 left-0 z-50 transition-transform duration-200;
+}
+.opal-sidebar-root__overlay[data-variant="mobile"][data-folded="true"] {
+  @apply -translate-x-full;
+}
+.opal-sidebar-root__overlay[data-variant="mobile"][data-folded="false"] {
+  @apply translate-x-0;
+}
+
+/* Medium: fixed overlay (spacer holds width in the layout flow) */
+.opal-sidebar-root__overlay[data-variant="medium"] {
+  @apply fixed inset-y-0 left-0 z-50;
+}
+
+/* Spacer that reserves the folded width in the flex row on medium screens */
+.opal-sidebar-root__spacer {
+  @apply shrink-0;
+  width: var(--sidebar-width-folded);
+}
+
+/* Shared backdrop */
+.opal-sidebar-root__backdrop {
+  @apply fixed inset-0 z-40 backdrop-blur-03 transition-opacity duration-200;
+}
+.opal-sidebar-root__backdrop[data-variant="mobile"] {
+  @apply bg-mask-03;
+}
+.opal-sidebar-root__backdrop[data-folded="true"] {
+  @apply opacity-0 pointer-events-none;
+}
+.opal-sidebar-root__backdrop[data-folded="false"] {
+  @apply opacity-100 pointer-events-auto;
+}
+
+/* ---------------------------------------------------------------------------
+   SidebarHeader — topbar row (logo + fold button) + optional pinned content
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-header {
+  @apply flex flex-col gap-4 pb-2;
+}
+
+.opal-sidebar-header__topbar {
+  @apply flex flex-row justify-between items-start pt-3 px-2;
+}
+
+.opal-sidebar-header__content {
+  @apply px-2;
+}
+
+/* Logo: visible by default, hidden on hover while folded */
+.opal-sidebar-root__logo-default {
+  display: block;
+}
+.opal-sidebar-root__overlay:hover .opal-sidebar-root__logo-default,
+.opal-sidebar-root__column:hover .opal-sidebar-root__logo-default {
+  display: none;
+}
+
+/* Fold button: hidden by default, revealed on hover while folded */
+.opal-sidebar-root__logo-hover {
+  display: none;
+}
+.opal-sidebar-root__overlay:hover .opal-sidebar-root__logo-hover,
+.opal-sidebar-root__column:hover .opal-sidebar-root__logo-hover {
+  display: flex;
+}
+
+/* ---------------------------------------------------------------------------
+   SidebarFooter
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-footer {
+  @apply pt-4 px-2;
+}
+
+/* ---------------------------------------------------------------------------
+   SidebarBody
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-body {
+  @apply relative flex-1 min-h-0 overflow-y-hidden flex flex-col;
+}
+
+.opal-sidebar-body__scroll {
+  @apply flex-1 min-h-0 overflow-y-auto flex flex-col;
+}
+
+.opal-sidebar-body__content {
+  @apply flex-1 flex flex-col px-2 gap-2;
+}
+.opal-sidebar-body__content[data-folded="true"] {
+  @apply hidden;
+}
+
+.opal-sidebar-body__spacer {
+  min-height: 2rem;
+}
+
+.opal-sidebar-body__fade {
+  @apply absolute bottom-0 left-0 right-0 h-4 z-20 pointer-events-none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--background-tint-02)
+  );
+}
+
+/* ---------------------------------------------------------------------------
+   SidebarSection
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-section__header {
+  @apply pl-2 pb-1 pt-2 flex flex-row justify-between items-center;
+}
+
+.opal-sidebar-section__title {
+  @apply flex p-0.5;
+}

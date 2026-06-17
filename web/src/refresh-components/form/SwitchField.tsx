@@ -1,7 +1,7 @@
 "use client";
 
 import { useField } from "formik";
-import Switch, { SwitchProps } from "@/refresh-components/inputs/Switch";
+import { Switch, type SwitchProps } from "@opal/components";
 import { useOnChangeValue } from "@/hooks/formHooks";
 
 interface SwitchFieldProps extends Omit<SwitchProps, "checked"> {

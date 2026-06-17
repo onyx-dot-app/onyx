@@ -10,7 +10,7 @@ Two flavors:
 
 | Flavor | Origin | Storage | Lifecycle |
 |---|---|---|---|
-| **Built-in** | Ships in the codebase under `docker/skills/<slug>/` | Source files on disk + in-memory registry entry | Deployed with the app; no per-tenant config |
+| **Built-in** | Ships in the codebase under `onyx/skills/builtin/<slug>/` | Source files on disk + in-memory registry entry | Deployed with the app; no per-tenant config |
 | **Custom** | Uploaded as a zip by a tenant admin | `skill` row in Postgres + bundle blob in object storage | Mutable per tenant; admin-managed |
 
 Both follow the same on-disk format and are indistinguishable to the agent at run time.

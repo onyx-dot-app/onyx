@@ -1,6 +1,6 @@
 {
   "name": "@onyx-ai/opal",
-  "version": "0.1.2",
+  "version": "0.0.0",
   "description": "Opal — Onyx's Typescript component library and design system.",
   "license": "MIT",
   "repository": {
@@ -19,7 +19,8 @@
   "files": [
     "dist",
     "tailwind-preset.cjs",
-    "README.md"
+    "README.md",
+    "NOTICE.md"
   ],
   "main": "./dist/components/index.js",
   "types": "./dist/components/index.d.ts",
@@ -44,6 +45,14 @@
       "types": "./dist/illustrations/index.d.ts",
       "import": "./dist/illustrations/index.js"
     },
+    "./logos": {
+      "types": "./dist/logos/index.d.ts",
+      "import": "./dist/logos/index.js"
+    },
+    "./time": {
+      "types": "./dist/time.d.ts",
+      "import": "./dist/time.js"
+    },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
@@ -52,15 +61,16 @@
       "types": "./dist/utils.d.ts",
       "import": "./dist/utils.js"
     },
-    "./styles.css": "./dist/styles.css",
+    "./root.css": "./dist/root.css",
     "./tailwind-preset": "./tailwind-preset.cjs"
   },
   "scripts": {
     "build": "tsup && node scripts/bundle-css.mjs",
-    "prepublishOnly": "npm run build"
+    "prepare": "bun run build"
   },
   "dependencies": {
     "clsx": "^2.0.0",
+    "copy-to-clipboard": "^3.3.3",
     "tailwind-merge": "^2.0.0"
   },
   "peerDependencies": {
@@ -69,6 +79,7 @@
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.0.0",
     "@radix-ui/react-popover": "^1.0.0",
+    "@radix-ui/react-tabs": "^1.0.0",
     "@radix-ui/react-separator": "^1.0.0",
     "@radix-ui/react-slot": "^1.0.0",
     "@radix-ui/react-tooltip": "^1.0.0",
@@ -82,6 +93,7 @@
     "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
+    "@onyx-ai/shared": "file:../shared",
     "tsup": "^8.3.0",
     "typescript": "^5.0.0"
   }

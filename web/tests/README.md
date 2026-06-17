@@ -21,22 +21,22 @@ Comprehensive guide for writing integration tests in the Onyx web application us
 
 ```bash
 # Run all tests
-npm test
+bun run test
 
 # Run specific test file
-npm test -- EmailPasswordForm.test
+bun run test -- EmailPasswordForm.test
 
 # Run tests matching pattern
-npm test -- --testPathPattern="auth"
+bun run test -- --testPathPattern="auth"
 
 # Run without coverage
-npm test -- --no-coverage
+bun run test -- --no-coverage
 
 # Run in watch mode
-npm test -- --watch
+bun run test -- --watch
 
 # Run with verbose output
-npm test -- --verbose
+bun run test -- --verbose
 ```
 
 ## Core Concepts

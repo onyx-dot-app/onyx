@@ -1,3 +1,5 @@
+"use client";
+
 import { useFormContext } from "@/components/context/FormContext";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import Text from "@/refresh-components/texts/Text";

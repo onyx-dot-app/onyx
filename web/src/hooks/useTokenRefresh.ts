@@ -64,9 +64,16 @@ export function useTokenRefresh(
       }
     };
 
-    refreshTokenPeriodically();
+    // Hidden tabs skip refreshes entirely; the visibilitychange handler below
+    // catches the session up as soon as the user returns.
+    if (!document.hidden) {
+      refreshTokenPeriodically();
+    }
 
-    const intervalId = setInterval(refreshTokenPeriodically, REFRESH_INTERVAL);
+    const intervalId = setInterval(() => {
+      if (document.hidden) return;
+      refreshTokenPeriodically();
+    }, REFRESH_INTERVAL);
 
     const handleVisibilityChange = () => {
       if (

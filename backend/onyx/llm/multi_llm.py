@@ -1,14 +1,16 @@
+import copy
 import os
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from contextlib import nullcontext
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
 from typing import Union
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.app_configs import SEND_USER_METADATA_TO_LLM_PROVIDER
+from onyx.configs.chat_configs import LLM_FIRST_CHUNK_MAX_RETRIES
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
@@ -53,8 +55,10 @@ from onyx.llm.well_known_providers.constants import (
 )
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.llm.well_known_providers.constants import VERTEX_PROJECT_KWARG
+from onyx.utils.encryption import mask_env_value_for_logging
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_generator_function_time
 
 logger = setup_logger()
 
@@ -72,11 +76,19 @@ _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
     "claude-opus-4-5",
     "claude-opus-4-6",
     "claude-opus-4-7",
+    "claude-opus-4-8",
 )
 
 # Anthropic models that require the adaptive thinking API (thinking.type.adaptive
 # + output_config.effort) instead of the legacy thinking.type.enabled + budget_tokens.
-_ANTHROPIC_ADAPTIVE_THINKING_MODELS = ("claude-opus-4-7",)
+_ANTHROPIC_ADAPTIVE_THINKING_MODELS = (
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-fable-5",
+    "claude-5-fable",
+    "claude-mythos-5",
+    "claude-5-mythos",
+)
 
 # Anthropic models that reject any non-default sampling parameter (temperature,
 # top_p, top_k). For these models we must omit these params entirely from the
@@ -89,6 +101,14 @@ _ANTHROPIC_NO_SAMPLING_PARAMS_MODELS = (
     "claude-opus-4.7",
     "claude-4-7-opus",
     "claude-4.7-opus",
+    "claude-opus-4-8",
+    "claude-opus-4.8",
+    "claude-4-8-opus",
+    "claude-4.8-opus",
+    "claude-fable-5",
+    "claude-5-fable",
+    "claude-mythos-5",
+    "claude-5-mythos",
 )
 
 
@@ -541,8 +561,8 @@ class LitellmLLM(LLM):
 
         # Temperature
         # Some models reject any non-default sampling parameter (e.g. Claude
-        # Opus 4.7 returns a 400 invalid_request_error if temperature is set to
-        # anything). For those models we must omit the param entirely —
+        # Opus 4.7/4.8 return a 400 invalid_request_error if temperature is set
+        # to anything). For those models we must omit the param entirely —
         # LiteLLM's drop_params is not reliable here because the upstream
         # provider config can still claim the param is supported.
         # https://github.com/BerriAI/litellm/issues/26444
@@ -650,6 +670,48 @@ class LitellmLLM(LLM):
             user_identity=user_identity,
         )
 
+        # OpenRouter: inject session_id and user into extra_body.
+        #
+        # session_id — sticky routing: pins all turns of a conversation to the
+        # same upstream provider, enabling prompt cache hits across turns.
+        # Without this, OpenRouter may alternate between e.g. Anthropic and Google
+        # for the same model, causing cache misses on every other turn.
+        # See: https://openrouter.ai/docs/features/provider-routing#session-id
+        #
+        # user — activity tracking: OpenRouter reads the user identifier from
+        # extra_body for its per-user activity logs; the top-level LiteLLM
+        # `user` parameter is forwarded to the upstream model but is not picked
+        # up by OpenRouter's own tracking dashboard.
+        #
+        # Both are gated on SEND_USER_METADATA_TO_LLM_PROVIDER: an operator who
+        # opted out of sending session/user identifiers to providers should not
+        # have them forwarded to OpenRouter either.
+        if (
+            SEND_USER_METADATA_TO_LLM_PROVIDER
+            and self._model_provider == LlmProviderNames.OPENROUTER
+            and user_identity is not None
+        ):
+            extra_body_updates: dict[str, str] = {}
+            if user_identity.session_id:
+                extra_body_updates["session_id"] = user_identity.session_id
+            if user_identity.user_id:
+                extra_body_updates["user"] = user_identity.user_id
+            if extra_body_updates:
+                if passthrough_kwargs is self._model_kwargs:
+                    passthrough_kwargs = copy.deepcopy(self._model_kwargs)
+                existing_extra_body = passthrough_kwargs.get("extra_body") or {}
+                if isinstance(existing_extra_body, dict):
+                    passthrough_kwargs["extra_body"] = {
+                        **existing_extra_body,
+                        **extra_body_updates,
+                    }
+                else:
+                    logger.warning(
+                        "OpenRouter extra_body injection: extra_body is not a dict (%s), "
+                        "skipping session_id/user injection",
+                        type(existing_extra_body).__name__,
+                    )
+
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm
             # can have some issues with bedrock.
@@ -659,47 +721,37 @@ class LitellmLLM(LLM):
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
 
-            # We only need to set environment variables if custom config is set
-            env_ctx = (
-                temporary_env_and_lock(self._custom_config)
-                if self._custom_config
-                else nullcontext()
-            )
-            with env_ctx:
-                messages = _prompt_to_dicts(prompt)
+            messages = _prompt_to_dicts(prompt)
 
-                # Bedrock's Converse API requires toolConfig when messages
-                # contain toolUse/toolResult content blocks. When no tools are
-                # provided for this request but the history contains tool
-                # content from previous turns, strip it to plain text.
-                is_bedrock = self._model_provider in {
-                    LlmProviderNames.BEDROCK,
-                    LlmProviderNames.BEDROCK_CONVERSE,
-                }
-                if (
-                    is_bedrock
-                    and not tools
-                    and _messages_contain_tool_content(messages)
-                ):
-                    messages = _strip_tool_content_from_messages(messages)
+            # Bedrock's Converse API requires toolConfig when messages
+            # contain toolUse/toolResult content blocks. When no tools are
+            # provided for this request but the history contains tool
+            # content from previous turns, strip it to plain text.
+            is_bedrock = self._model_provider in {
+                LlmProviderNames.BEDROCK,
+                LlmProviderNames.BEDROCK_CONVERSE,
+            }
+            if is_bedrock and not tools and _messages_contain_tool_content(messages):
+                messages = _strip_tool_content_from_messages(messages)
 
-                # Some models (e.g. Mistral) reject a user message
-                # immediately after a tool message. Insert a synthetic
-                # assistant bridge message to satisfy the ordering
-                # constraint. Check both the provider and the deployment/
-                # model name to catch Mistral hosted on Azure.
-                model_or_deployment = (
-                    self._deployment_name or self._model_version or ""
-                ).lower()
-                is_mistral_model = is_mistral or "mistral" in model_or_deployment
-                if is_mistral_model:
-                    messages = _fix_tool_user_message_ordering(messages)
+            # Some models (e.g. Mistral) reject a user message
+            # immediately after a tool message. Insert a synthetic
+            # assistant bridge message to satisfy the ordering
+            # constraint. Check both the provider and the deployment/
+            # model name to catch Mistral hosted on Azure.
+            model_or_deployment = (
+                self._deployment_name or self._model_version or ""
+            ).lower()
+            is_mistral_model = is_mistral or "mistral" in model_or_deployment
+            if is_mistral_model:
+                messages = _fix_tool_user_message_ordering(messages)
 
-                # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
-                # reject requests where tool_choice is explicitly null.
-                if tools and tool_choice is not None:
-                    optional_kwargs["tool_choice"] = tool_choice
+            # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
+            # reject requests where tool_choice is explicitly null.
+            if tools and tool_choice is not None:
+                optional_kwargs["tool_choice"] = tool_choice
 
+            with temporary_env_and_lock(self._custom_config or {}):
                 response = litellm.completion(
                     mock_response=get_llm_mock_response() or MOCK_LLM_RESPONSE,
                     model=model,
@@ -849,8 +901,23 @@ class LitellmLLM(LLM):
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper
         from litellm import HTTPHandler
+        from litellm.exceptions import APIConnectionError as LiteLLMAPIConnectionError
+        from litellm.exceptions import InternalServerError as LiteLLMInternalServerError
+        from litellm.exceptions import (
+            ServiceUnavailableError as LiteLLMServiceUnavailableError,
+        )
+        from litellm.exceptions import Timeout as LiteLLMTimeout
 
         from onyx.llm.model_response import from_litellm_model_response_stream
+
+        retryable_exceptions = (
+            LiteLLMTimeout,
+            LiteLLMAPIConnectionError,
+            LiteLLMServiceUnavailableError,
+            LiteLLMInternalServerError,
+        )
+        max_attempts: int = 1 + LLM_FIRST_CHUNK_MAX_RETRIES
+        yielded_any: bool = False
 
         # HTTPHandler Threading & Connection Pool Notes:
         # =============================================
@@ -881,48 +948,72 @@ class LitellmLLM(LLM):
         #    - litellm's InMemoryCache (used for client caching) is NOT thread-safe
         #    - Shared pools can have connections corrupted by other threads
         #    - Per-request HTTPHandler eliminates cross-thread interference
-        client = None
-        if is_true_openai_model(self.config.model_provider, self.config.model_name):
-            client = HTTPHandler(timeout=timeout_override or self._timeout)
+        for attempt in range(max_attempts):
+            client = None
+            if is_true_openai_model(self.config.model_provider, self.config.model_name):
+                client = HTTPHandler(timeout=timeout_override or self._timeout)
 
-        try:
-            response = cast(
-                LiteLLMCustomStreamWrapper,
-                self._completion(
-                    prompt=prompt,
-                    tools=tools,
-                    tool_choice=tool_choice,
-                    stream=True,
-                    structured_response_format=structured_response_format,
-                    timeout_override=timeout_override,
-                    max_tokens=max_tokens,
-                    parallel_tool_calls=True,
-                    reasoning_effort=reasoning_effort,
-                    user_identity=user_identity,
-                    client=client,
-                ),
-            )
+            try:
+                response = cast(
+                    LiteLLMCustomStreamWrapper,
+                    self._completion(
+                        prompt=prompt,
+                        tools=tools,
+                        tool_choice=tool_choice,
+                        stream=True,
+                        structured_response_format=structured_response_format,
+                        timeout_override=timeout_override,
+                        max_tokens=max_tokens,
+                        parallel_tool_calls=True,
+                        reasoning_effort=reasoning_effort,
+                        user_identity=user_identity,
+                        client=client,
+                    ),
+                )
 
-            for chunk in response:
-                model_response = from_litellm_model_response_stream(chunk)
+                for chunk in response:
+                    model_response = from_litellm_model_response_stream(chunk)
 
-                # Track LLM cost when usage info is available (typically in the last chunk)
-                if model_response.usage:
-                    self._track_llm_cost(model_response.usage)
+                    # Track LLM cost when usage info is available (typically in the last chunk)
+                    if model_response.usage:
+                        self._track_llm_cost(model_response.usage)
 
-                yield model_response
-        finally:
-            if client is not None:
-                client.close()
+                    yielded_any = True
+                    yield model_response
+                return
+            except retryable_exceptions as e:
+                if yielded_any or attempt >= max_attempts - 1:
+                    raise
+                logger.warning(
+                    "Retrying pre-chunk stream for model %s after %s on attempt %d/%d",
+                    self.config.model_name,
+                    type(e).__name__,
+                    attempt + 1,
+                    max_attempts,
+                )
+            finally:
+                if client is not None:
+                    client.close()
 
 
 @contextmanager
+@log_generator_function_time()
 def temporary_env_and_lock(env_variables: dict[str, str]) -> Iterator[None]:
     """
     Temporarily sets the environment variables to the given values.
-    Code path is locked while the environment variables are set.
-    Then cleans up the environment and frees the lock.
+    _env_lock is held while the environment variables are set, so no concurrent
+    LLM call can observe them. Then cleans up the environment and releases the
+    lock.
     """
+    if env_variables:
+        masked_env = {
+            key: mask_env_value_for_logging(key, value)
+            for key, value in env_variables.items()
+        }
+        logger.info(
+            "temporary_env_and_lock setting custom_config env var(s): %s",
+            masked_env,
+        )
     with _env_lock:
         logger.debug("Acquired lock in temporary_env_and_lock")
         # Store original values (None if key didn't exist)

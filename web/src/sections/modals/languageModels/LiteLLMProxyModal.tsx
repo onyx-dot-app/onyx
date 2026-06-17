@@ -7,7 +7,7 @@ import {
   LLMProviderFormProps,
   LLMProviderName,
   LLMProviderView,
-} from "@/interfaces/llm";
+} from "@/lib/languageModels/types";
 import { fetchLiteLLMProxyModels } from "@/lib/languageModels/svc";
 import {
   useInitialValues,
@@ -16,7 +16,7 @@ import {
   mergeFetchedModelConfigurations,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   APIBaseField,

@@ -3,15 +3,26 @@
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Table, Tooltip, createTableColumns } from "@opal/components";
+import {
+  Button,
+  Table,
+  Text,
+  Tooltip,
+  createTableColumns,
+} from "@opal/components";
+import { IllustrationContent } from "@opal/layouts";
+import SvgNoResult from "@opal/illustrations/no-result";
 import { toast } from "@/hooks/useToast";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { SvgClock, SvgPlus, SvgRefreshCw, SvgTrash } from "@opal/icons";
+import {
+  SvgClock,
+  SvgPlus,
+  SvgRefreshCw,
+  SvgTrash,
+  SvgSimpleLoader,
+} from "@opal/icons";
 import { deleteScheduledTask } from "@/app/craft/v1/tasks/api";
 import {
   RunStatusBadge,
@@ -19,7 +30,7 @@ import {
 } from "@/app/craft/v1/tasks/components/StatusBadge";
 import {
   NEW_TASK_PATH,
-  STARTER_PROMPTS,
+  TASKS_PAGE_SIZE,
   taskDetailPath,
 } from "@/app/craft/v1/tasks/constants";
 import type {
@@ -30,6 +41,7 @@ import {
   formatAbsolute,
   formatRelativeShort,
 } from "@/app/craft/v1/tasks/utils";
+import { humanReadableScheduleFromCron } from "@/app/craft/v1/tasks/schedule";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
@@ -47,7 +59,7 @@ function buildColumns(handlers: RowActionHandlers) {
       weight: 25,
       enableSorting: false,
       cell: (value) => (
-        <Text mainUiBody text05 nowrap>
+        <Text font="main-ui-body" color="text-05" nowrap>
           {value}
         </Text>
       ),
@@ -57,7 +69,7 @@ function buildColumns(handlers: RowActionHandlers) {
       weight: 22,
       enableSorting: false,
       cell: (value) => (
-        <Text mainUiBody text03 nowrap>
+        <Text font="main-ui-body" color="text-03" nowrap>
           {value}
         </Text>
       ),
@@ -75,7 +87,7 @@ function buildColumns(handlers: RowActionHandlers) {
       cell: (lastRun) => {
         if (!lastRun) {
           return (
-            <Text mainUiBody text03>
+            <Text font="main-ui-body" color="text-03">
               —
             </Text>
           );
@@ -83,7 +95,7 @@ function buildColumns(handlers: RowActionHandlers) {
         return (
           <div className="flex flex-col gap-0.5">
             <RunStatusBadge status={lastRun.status} />
-            <Text secondaryBody text03>
+            <Text font="secondary-body" color="text-03">
               {formatRelativeShort(lastRun.started_at)}
             </Text>
           </div>
@@ -97,14 +109,14 @@ function buildColumns(handlers: RowActionHandlers) {
       cell: (nextRunAt) => {
         if (!nextRunAt) {
           return (
-            <Text mainUiBody text03>
+            <Text font="main-ui-body" color="text-03">
               —
             </Text>
           );
         }
         return (
           <Tooltip tooltip={formatAbsolute(nextRunAt)} side="top">
-            <Text mainUiBody text03 nowrap>
+            <Text font="main-ui-body" color="text-03" nowrap>
               {formatRelativeShort(nextRunAt)}
             </Text>
           </Tooltip>
@@ -126,7 +138,17 @@ export default function ScheduledTasksListPage() {
     errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
-  const tasks = data?.items;
+  const tasks = useMemo<ScheduledTaskListItem[]>(
+    () =>
+      data?.items.map((task) => ({
+        ...task,
+        human_readable_schedule: humanReadableScheduleFromCron(
+          task.editor_mode,
+          task.cron_expression
+        ),
+      })) ?? [],
+    [data?.items]
+  );
   const [pendingDelete, setPendingDelete] =
     useState<ScheduledTaskListItem | null>(null);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
@@ -168,14 +190,14 @@ export default function ScheduledTasksListPage() {
         href={NEW_TASK_PATH}
         data-testid="new-task-button"
       >
-        New scheduled task
+        New Scheduled Task
       </Button>
     ),
     []
   );
 
   return (
-    <SettingsLayouts.Root width="lg">
+    <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgClock}
         title="Scheduled Tasks"
@@ -185,11 +207,11 @@ export default function ScheduledTasksListPage() {
       <SettingsLayouts.Body>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <SimpleLoader className="h-6 w-6" />
+            <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : error ? (
           <Section gap={0.5}>
-            <Text mainUiBody text03>
+            <Text font="main-ui-body" color="text-03">
               Failed to load scheduled tasks.
             </Text>
             <Button
@@ -201,25 +223,23 @@ export default function ScheduledTasksListPage() {
               Try again
             </Button>
           </Section>
-        ) : !tasks || tasks.length === 0 ? (
-          <EmptyState
-            onSelectStarter={(prompt) => {
-              const params = new URLSearchParams({
-                starter: prompt.title,
-                prompt: prompt.prompt,
-                mode: prompt.mode,
-                payload: JSON.stringify(prompt.payload),
-              });
-              router.push(`${NEW_TASK_PATH}?${params.toString()}`);
-            }}
-          />
         ) : (
           <Table
             data={tasks}
             columns={columns}
             getRowId={(row) => row.id}
+            pageSize={
+              tasks.length > 0 ? Math.min(tasks.length, TASKS_PAGE_SIZE) : 1
+            }
             selectionBehavior="single-select"
             onRowClick={(row) => router.push(taskDetailPath(row.id))}
+            emptyState={
+              <IllustrationContent
+                illustration={SvgNoResult}
+                title="No scheduled tasks found"
+                description="No scheduled tasks have been created yet."
+              />
+            }
           />
         )}
       </SettingsLayouts.Body>
@@ -272,63 +292,5 @@ function TaskRowActions({ task, handlers }: TaskRowActionsProps) {
         />
       </Tooltip>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Empty state
-// ---------------------------------------------------------------------------
-
-interface EmptyStateProps {
-  onSelectStarter: (prompt: (typeof STARTER_PROMPTS)[number]) => void;
-}
-
-function EmptyState({ onSelectStarter }: EmptyStateProps) {
-  return (
-    <Section gap={1}>
-      <div className="flex flex-col items-center text-center py-6 gap-2">
-        <SvgClock size={48} className="text-text-03" />
-        <Text headingH2 text05>
-          Hand Craft a recurring job
-        </Text>
-        <Text mainUiBody text03 className="max-w-xl">
-          Save a prompt + schedule and Craft will run it on a timer. Each fire
-          creates a fresh session you can open from this page.
-        </Text>
-        <div className="pt-2">
-          <Button
-            variant="default"
-            prominence="primary"
-            icon={SvgPlus}
-            href={NEW_TASK_PATH}
-          >
-            Create scheduled task
-          </Button>
-        </div>
-      </div>
-      <Text mainUiAction text05>
-        Or start from a template:
-      </Text>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {STARTER_PROMPTS.map((starter) => (
-          <button
-            key={starter.title}
-            type="button"
-            onClick={() => onSelectStarter(starter)}
-            className="text-left"
-            data-testid={`starter-${starter.title}`}
-          >
-            <Card>
-              <Text mainUiAction text05>
-                {starter.title}
-              </Text>
-              <Text secondaryBody text03>
-                {starter.prompt}
-              </Text>
-            </Card>
-          </button>
-        ))}
-      </div>
-    </Section>
   );
 }

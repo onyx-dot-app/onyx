@@ -26,6 +26,11 @@ export interface MCPServer {
   transport?: MCPTransportType;
   auth_type?: MCPAuthenticationType;
   auth_performer?: MCPAuthenticationPerformer;
+  oauth_provider_mode?: MCPOAuthProviderMode;
+  oauth_authorization_endpoint?: string;
+  oauth_token_endpoint?: string;
+  oauth_scopes_override?: string[];
+  oauth_additional_auth_params?: Record<string, string>;
   is_authenticated: boolean;
   user_authenticated?: boolean;
   auth_template?: any;
@@ -119,6 +124,11 @@ export enum MCPAuthenticationType {
 export enum MCPAuthenticationPerformer {
   ADMIN = "ADMIN",
   PER_USER = "PER_USER",
+}
+
+export enum MCPOAuthProviderMode {
+  AUTO_DISCOVERY = "AUTO_DISCOVERY",
+  KNOWN_PROVIDER = "KNOWN_PROVIDER",
 }
 
 export interface ApiResponse<T> {

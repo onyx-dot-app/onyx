@@ -1,4 +1,4 @@
-"""Tests for safe_extract_then_atomic_swap from the push daemon's extract module."""
+"""Tests for safe_extract_then_atomic_swap from the sandbox_daemon's extract module."""
 
 import io
 import os
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from onyx.server.features.build.sandbox.kubernetes.docker.daemon.extract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
     safe_extract_then_atomic_swap,
 )
 
@@ -17,7 +17,7 @@ def _patch_allowed_prefix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     """Redirect ALLOWED_PREFIX to tmp_path so tests can write to it."""
     prefix = str(tmp_path) + "/"
     monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.kubernetes.docker.daemon.extract.ALLOWED_PREFIX",
+        "onyx.server.features.build.sandbox.image.sandbox_daemon.extract.ALLOWED_PREFIX",
         prefix,
     )
 
@@ -136,7 +136,7 @@ def test_oversized_file_rejected(
 
     # Lower MAX_FILE_BYTES so we don't need to create a 25 MiB payload
     monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.kubernetes.docker.daemon.extract.MAX_FILE_BYTES",
+        "onyx.server.features.build.sandbox.image.sandbox_daemon.extract.MAX_FILE_BYTES",
         50,
     )
 
@@ -154,7 +154,7 @@ def test_oversized_bundle_rejected(
 
     # Lower the bundle limit for a fast test
     monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.kubernetes.docker.daemon.extract.MAX_BUNDLE_BYTES",
+        "onyx.server.features.build.sandbox.image.sandbox_daemon.extract.MAX_BUNDLE_BYTES",
         100,
     )
 

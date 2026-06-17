@@ -12,23 +12,23 @@
 
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
-  OllamaModelResponse,
-  OpenRouterModelResponse,
-  BedrockModelResponse,
-  LMStudioModelResponse,
-  LiteLLMProxyModelResponse,
-  BifrostModelResponse,
-  ModelConfiguration,
   LLMProviderName,
-  BedrockFetchParams,
-  OllamaFetchParams,
-  LMStudioFetchParams,
-  OpenRouterFetchParams,
-  LiteLLMProxyFetchParams,
-  BifrostFetchParams,
-  OpenAICompatibleFetchParams,
-  OpenAICompatibleModelResponse,
-} from "@/interfaces/llm";
+  type ModelConfiguration,
+  type OllamaModelResponse,
+  type OpenRouterModelResponse,
+  type BedrockModelResponse,
+  type LMStudioModelResponse,
+  type LiteLLMProxyModelResponse,
+  type BifrostModelResponse,
+  type BedrockFetchParams,
+  type OllamaFetchParams,
+  type LMStudioFetchParams,
+  type OpenRouterFetchParams,
+  type LiteLLMProxyFetchParams,
+  type BifrostFetchParams,
+  type OpenAICompatibleFetchParams,
+  type OpenAICompatibleModelResponse,
+} from "@/lib/languageModels/types";
 
 /**
  * Test the default LLM provider.
@@ -161,6 +161,7 @@ export const fetchBedrockModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -215,6 +216,7 @@ export const fetchOllamaModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -276,6 +278,7 @@ export const fetchOpenRouterModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -335,6 +338,7 @@ export const fetchLMStudioModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: modelData.supports_reasoning,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -393,6 +397,7 @@ export const fetchBifrostModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: modelData.supports_reasoning,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -451,6 +456,7 @@ export const fetchOpenAICompatibleModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: modelData.supports_reasoning,
+      effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
     return { models };
@@ -510,6 +516,7 @@ export const fetchLiteLLMProxyModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: modelData.supports_reasoning,
+      effectiveDisplayName: modelData.model_name,
     }));
 
     return { models };

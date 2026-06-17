@@ -78,6 +78,7 @@ from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricsResponse
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.models import StatusResponse
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
@@ -256,7 +257,7 @@ def get_cc_pair_external_group_sync_attempts(
     cc_pair_id: int,
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot]:
     """Recent external-group sync attempts a viewer of this cc-pair would
@@ -362,6 +363,7 @@ def get_cc_pair_full_info(
 
     return CCPairFullInfo.from_models(
         cc_pair_model=cc_pair,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
         number_of_index_attempts=count_index_attempts_for_cc_pair(
             db_session=db_session,
             cc_pair_id=cc_pair_id,

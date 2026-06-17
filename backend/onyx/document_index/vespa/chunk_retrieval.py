@@ -9,7 +9,6 @@ from typing import Any
 from typing import cast
 
 import httpx
-from retry import retry
 
 from onyx.background.celery.tasks.opensearch_migration.constants import (
     FINISHED_VISITING_SLICE_CONTINUATION_TOKEN,
@@ -61,6 +60,7 @@ from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from shared_configs.configs import MULTI_TENANT
 
@@ -502,7 +502,7 @@ def parallel_visit_api_retrieval(
     return inference_chunks
 
 
-@retry(tries=3, delay=1, backoff=2)
+@retry_builder(tries=3, delay=1, backoff=2)
 def query_vespa(
     query_params: Mapping[str, str | int | float],
 ) -> list[InferenceChunkUncleaned]:

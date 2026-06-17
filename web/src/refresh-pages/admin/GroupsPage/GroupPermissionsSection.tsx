@@ -20,13 +20,12 @@ import {
   SvgFiles,
   SvgCreateAgent,
   SvgManageAgent,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
+import { Switch, Divider } from "@opal/components";
 import Card from "@/refresh-components/cards/Card";
-import Switch from "@/refresh-components/inputs/Switch";
-import Separator from "@/refresh-components/Separator";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { PermissionRegistryEntry } from "@/refresh-pages/admin/GroupsPage/interfaces";
@@ -92,7 +91,7 @@ function GroupPermissionsSection({
       />
       <SimpleCollapsible.Content>
         {isLoading || !registry ? (
-          <SimpleLoader />
+          <SvgSimpleLoader />
         ) : (
           <Card>
             {registry.map((entry, index) => {
@@ -102,7 +101,7 @@ function GroupPermissionsSection({
               return (
                 <Fragment key={entry.id}>
                   {index > 0 && entry.group !== prevGroup && (
-                    <Separator noPadding />
+                    <Divider paddingParallel="fit" paddingPerpendicular="fit" />
                   )}
                   <ContentAction
                     icon={icon}
@@ -114,7 +113,7 @@ function GroupPermissionsSection({
                     rightChildren={
                       <Switch
                         checked={isRowEnabled(entry)}
-                        onCheckedChange={(checked) =>
+                        onCheckedChange={(checked: boolean) =>
                           handleToggle(entry, checked)
                         }
                       />

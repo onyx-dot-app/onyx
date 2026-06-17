@@ -14,11 +14,13 @@ from onyx.auth.api_key import generate_api_key
 from onyx.auth.api_key import hash_api_key
 from onyx.configs.constants import DISCORD_SERVICE_API_KEY_NAME
 from onyx.db.api_key import insert_api_key
+from onyx.db.enums import Permission
 from onyx.db.models import ApiKey
 from onyx.db.models import DiscordBotConfig
 from onyx.db.models import DiscordChannelConfig
 from onyx.db.models import DiscordGuildConfig
 from onyx.db.models import User
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.db.utils import DiscordChannelView
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.utils.logger import setup_logger
@@ -105,6 +107,12 @@ def get_or_create_discord_service_api_key(
         new_api_key = generate_api_key(tenant_id)
         existing.hashed_api_key = hash_api_key(new_api_key)
         existing.api_key_display = build_displayable_api_key(new_api_key)
+        # Backfill chat scope on keys provisioned before chat APIs were scoped.
+        service_user = db_session.scalar(
+            select(User).where(User.id == existing.user_id)  # ty: ignore[invalid-argument-type]
+        )
+        if service_user is not None:
+            service_user.effective_permissions = [Permission.WRITE_CHAT.value]
         db_session.flush()
         return new_api_key
 
@@ -118,6 +126,18 @@ def get_or_create_discord_service_api_key(
         api_key_args=api_key_args,
         user_id=None,  # Service account, no owner
     )
+
+    # Chat APIs are permission-scoped; put the service account in the default
+    # Basic group, which grants BASIC_ACCESS (implies the chat scopes). Deriving
+    # access from group membership keeps effective_permissions correct across
+    # later recomputes, unlike a hardcoded grant.
+    service_user = db_session.scalar(
+        select(User).where(
+            User.id == api_key_descriptor.user_id  # ty: ignore[invalid-argument-type]
+        )
+    )
+    if service_user is not None:
+        assign_user_to_default_groups__no_commit(db_session, service_user)
 
     if not api_key_descriptor.api_key:
         raise RuntimeError(

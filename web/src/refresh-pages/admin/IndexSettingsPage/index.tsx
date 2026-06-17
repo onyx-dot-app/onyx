@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
@@ -9,17 +9,20 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
 import {
   Button,
   Card,
   Divider,
+  InputTypeIn,
   LinkButton,
   MessageCard,
-  OpenButton,
   SelectCard,
+  Spacer,
+  Switch,
+  Tabs,
   Text,
 } from "@opal/components";
 import {
@@ -38,9 +41,7 @@ import {
   SvgUnplug,
   SvgVector,
 } from "@opal/icons";
-import Switch from "@/refresh-components/inputs/Switch";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -50,6 +51,7 @@ import {
   SwitchoverType,
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
+  type EmbeddingModelRequest,
   type EmbeddingModelState,
   type EmbeddingProvider,
 } from "@/lib/indexing/interfaces";
@@ -63,7 +65,6 @@ import {
   MAX_IMAGE_SIZE_OPTIONS,
   resolveProviderName,
 } from "@/lib/indexing";
-import Tabs from "@/refresh-components/Tabs";
 import {
   saveAdminSettings,
   cancelNewEmbedding,
@@ -82,14 +83,10 @@ import {
   useCurrentSearchSettings,
   useSecondarySearchSettings,
 } from "@/hooks/useSearchSettings";
-import { useLlmDefaults } from "@/hooks/useLanguageModels";
-import Spacer from "@/refresh-components/Spacer";
+import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import useFilter from "@/hooks/useFilter";
-import { Popover } from "@opal/components";
-import ModelListContent from "@/refresh-components/popovers/ModelListContent";
-import type { LLMOption } from "@/refresh-components/popovers/interfaces";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import type { RichStr } from "@opal/types";
-import { getModelIcon } from "@/lib/languageModels";
 import { ProviderCredentialsModal } from "@/refresh-pages/admin/IndexSettingsPage/modals";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
@@ -168,137 +165,6 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Contextual RAG LLM picker
-// ---------------------------------------------------------------------------
-
-interface LlmPickerProps {
-  modelConfigurationId?: number | null;
-  modelName?: string | null;
-  providerName?: string | null;
-  onChange: (next: {
-    modelConfigurationId: number | null;
-    modelName: string;
-    providerName: string | null;
-  }) => void;
-  disabled?: boolean;
-  /**
-   * When true, restricts the popover to vision-capable models (those with
-   * `supports_image_input === true`). Used by the Captioning LLM picker;
-   * leave unset for any-model use cases like Contextual Retrieval.
-   */
-  requiresImageInput?: boolean;
-}
-
-/**
- * Single-select LLM picker bound to external state, unlike `LLMPopover`
- * which is wired to `LlmManager.currentLlm` and would mutate the user's
- * default chat model on select. Reuses the same popover primitives
- * (`Popover`, `OpenButton`, `ModelListContent`) for visual parity.
- *
- * Supports two selection modes:
- * - By ID: pass `modelConfigurationId` — preferred when the FK integer is
- *   available (e.g. contextual RAG, where the backend now stores the integer).
- * - By name: pass `modelName` + `providerName` — used for the captioning LLM
- *   which is keyed by the global vision default rather than a stored FK.
- *
- * `onChange` always emits all three fields so callers can destructure what
- * they need.
- */
-function LlmPicker({
-  modelConfigurationId,
-  modelName,
-  providerName,
-  onChange,
-  disabled,
-  requiresImageInput,
-}: LlmPickerProps) {
-  const [open, setOpen] = useState(false);
-  const { llmProviders, isLoading } = useLlmDefaults();
-
-  const isSelected = useCallback(
-    (option: LLMOption) => {
-      if (modelConfigurationId != null) {
-        return option.modelConfigurationId === modelConfigurationId;
-      }
-      return option.modelName === modelName && option.name === providerName;
-    },
-    [modelConfigurationId, modelName, providerName]
-  );
-
-  const handleSelect = useCallback(
-    (option: LLMOption) => {
-      onChange({
-        modelConfigurationId: option.modelConfigurationId ?? null,
-        modelName: option.modelName,
-        providerName: option.name ?? null,
-      });
-      setOpen(false);
-    },
-    [onChange]
-  );
-
-  const { displayName, providerType } = useMemo(() => {
-    if (!llmProviders) {
-      return { displayName: null as string | null, providerType: null };
-    }
-    if (modelConfigurationId != null) {
-      for (const p of llmProviders) {
-        const cfg = p.model_configurations.find(
-          (m) => m.id === modelConfigurationId
-        );
-        if (cfg) {
-          return {
-            displayName: cfg.display_name || cfg.name,
-            providerType: p.provider,
-          };
-        }
-      }
-      return { displayName: null, providerType: null };
-    }
-    if (!modelName || !providerName) {
-      return { displayName: null, providerType: null };
-    }
-    for (const p of llmProviders) {
-      if (p.name !== providerName) continue;
-      const cfg = p.model_configurations.find((m) => m.name === modelName);
-      if (cfg) {
-        return {
-          displayName: cfg.display_name || cfg.name,
-          providerType: p.provider,
-        };
-      }
-    }
-    return { displayName: modelName, providerType: null };
-  }, [llmProviders, modelConfigurationId, modelName, providerName]);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild disabled={disabled}>
-        <OpenButton
-          disabled={disabled}
-          icon={
-            providerType
-              ? getModelIcon(providerType, modelName ?? "")
-              : undefined
-          }
-        >
-          {displayName ?? "Select a model"}
-        </OpenButton>
-      </Popover.Trigger>
-      <Popover.Content side="top" align="end" width="xl">
-        <ModelListContent
-          llmProviders={llmProviders}
-          isLoading={isLoading}
-          onSelect={handleSelect}
-          isSelected={isSelected}
-          requiresImageInput={requiresImageInput}
-        />
-      </Popover.Content>
-    </Popover>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Embedding model picker components
 // ---------------------------------------------------------------------------
 
@@ -314,7 +180,17 @@ interface ProviderGroupProps {
    * `LiteLLMProviderModal` can preload its model-spec fields on edit.
    */
   existingModel?: EmbeddingModel;
-  onSelectModel: (modelName: string) => void;
+  /**
+   * Stage a model into the parent form. `customModel` is populated only when
+   * the provider has no pre-registered models and the user defined the spec in
+   * the connect modal (LiteLLM / Azure) — the parent uses it to set both
+   * `model_name` and `custom_model`, and to remember this cloud provider as the
+   * staged model's owner so submit doesn't misresolve it as self-hosted.
+   */
+  onSelectModel: (
+    modelName: string,
+    customModel?: EmbeddingModelRequest
+  ) => void;
   onDeselectModel: () => void;
 }
 
@@ -423,10 +299,10 @@ function ProviderGroup({
           <connectModal.Provider>
             <ProviderCredentialsModal
               provider={provider}
-              onSubmit={async () => {
+              onSubmit={async (customModel) => {
                 await mutate(SWR_KEYS.embeddingProviders);
                 if (pendingConnectModel) {
-                  onSelectModel(pendingConnectModel.modelName);
+                  onSelectModel(pendingConnectModel.modelName, customModel);
                   setPendingConnectModel(null);
                 }
                 connectModal.toggle(false);
@@ -451,17 +327,24 @@ function ProviderGroup({
       <providerCreationModal.Provider>
         <ProviderCredentialsModal
           provider={provider}
-          onSubmit={async () => {
+          onSubmit={async (customModel) => {
             await mutate(SWR_KEYS.embeddingProviders);
+            // Providers with no pre-registered models (LiteLLM / Azure) define
+            // their model spec right here — stage it so the user can apply it.
+            // Without this the provider row is saved but the model is dropped,
+            // so no search-settings row is ever created.
+            if (customModel?.modelName) {
+              onSelectModel(customModel.modelName, customModel);
+            }
             providerCreationModal.toggle(false);
           }}
         />
       </providerCreationModal.Provider>
 
       <GeneralLayouts.Section gap={0.25}>
-        <div className="px-1 pt-1 w-full h-(--opal-line-height-lg)">
+        <div className="px-1 pt-1 w-full h-(--height-line-h1-headline)">
           <GeneralLayouts.Section flexDirection="row" gap={0}>
-            <Spacer horizontal rem={0.675} />
+            <Spacer orientation="horizontal" rem={0.675} />
             <div className="flex flex-row justify-between items-center w-full py-1">
               <Content
                 icon={provider.icon}
@@ -502,7 +385,7 @@ function ProviderGroup({
                     tooltip="Edit credentials"
                     onClick={() => editCredentialsModal.toggle(true)}
                   />
-                  <Spacer horizontal rem={0.25} />
+                  <Spacer orientation="horizontal" rem={0.25} />
                 </GeneralLayouts.Section>
               ) : undefined}
             </div>
@@ -673,6 +556,16 @@ interface IndexSettingsFormValues {
    * model.
    */
   custom_model: EmbeddingModel | null;
+  /**
+   * The cloud provider that owns a staged `custom_model` (LiteLLM / Azure).
+   * Those providers have no pre-registered models, so `resolveProviderName`
+   * can't recover their identity from the model name alone and would fall
+   * through to `CUSTOM` (self-hosted) — sending `provider_type=null` to the
+   * backend and bypassing the cloud credentials. Carrying it explicitly keeps
+   * the staged model bound to its provider. `null` for registered or
+   * self-hosted models, where name-based resolution is sufficient.
+   */
+  custom_model_provider: EmbeddingProviderName | null;
   enable_contextual_rag: boolean;
   contextual_rag_model_configuration_id: number | null;
 }
@@ -736,6 +629,21 @@ export default function IndexSettingsPage() {
   const imageProcessingEnabled =
     settings.settings.image_extraction_and_analysis_enabled ?? false;
 
+  const { data: secondarySearchSettings } = useSecondarySearchSettings();
+  const isReindexing = !!secondarySearchSettings;
+
+  // When a migration finishes, the fast poll on the current settings stops in
+  // the same render — revalidate once so the new model shows as current.
+  const wasReindexingRef = useRef(false);
+  useEffect(() => {
+    if (wasReindexingRef.current && !isReindexing) {
+      mutate(SWR_KEYS.currentSearchSettings);
+    }
+    wasReindexingRef.current = isReindexing;
+  }, [isReindexing]);
+
+  // Shares the current-settings SWR key, which useCurrentSearchSettings
+  // below already polls while reindexing — one timer drives both hooks.
   const { data: currentEmbeddingModel, isLoading: isLoadingCurrentModel } =
     useCurrentEmbeddingModel();
 
@@ -770,15 +678,13 @@ export default function IndexSettingsPage() {
     : false;
 
   const { data: searchSettings, isLoading: isLoadingSearchSettings } =
-    useCurrentSearchSettings();
+    useCurrentSearchSettings({ pollIntervalMs: isReindexing ? 5000 : 0 });
   const { data: configuredProvidersList } = useConfiguredEmbeddingProviders();
   const configuredProviders = useMemo(
     () =>
       new Map((configuredProvidersList ?? []).map((p) => [p.provider_type, p])),
     [configuredProvidersList]
   );
-  const { data: secondarySearchSettings } = useSecondarySearchSettings();
-  const isReindexing = !!secondarySearchSettings;
   const cancelReindexModal = useCreateModal();
   const customModelModal = useCreateModal();
 
@@ -836,10 +742,24 @@ export default function IndexSettingsPage() {
     [llmProviders]
   );
 
+  // Resolve defaultVision (name-based) to a model_configuration_id for ModelSelector
+  const captioningModelConfigId = useMemo(() => {
+    if (!defaultVision?.modelName || !llmProviders) return null;
+    for (const p of llmProviders) {
+      if (p.name !== defaultVision.providerName) continue;
+      const mc = p.model_configurations.find(
+        (m) => m.name === defaultVision.modelName
+      );
+      if (mc?.id != null) return mc.id;
+    }
+    return null;
+  }, [llmProviders, defaultVision]);
+
   const initialFormValues: IndexSettingsFormValues = useMemo(
     () => ({
       model_name: currentEmbeddingModel?.model_name ?? "",
       custom_model: null,
+      custom_model_provider: null,
       enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
       contextual_rag_model_configuration_id:
         searchSettings?.contextual_rag_model_configuration_id ?? null,
@@ -937,7 +857,13 @@ export default function IndexSettingsPage() {
                 toast.error("Could not find the selected model");
                 return;
               }
-              const providerName = resolveProviderName(values.model_name, null);
+              // A staged custom model from a no-registry cloud provider
+              // (LiteLLM / Azure) carries its owning provider explicitly;
+              // otherwise fall back to resolving the provider from the model
+              // name against the static registry.
+              const providerName =
+                values.custom_model_provider ??
+                resolveProviderName(values.model_name, null);
 
               const response = await setNewSearchSettings({
                 model: stagedModel,
@@ -986,6 +912,9 @@ export default function IndexSettingsPage() {
                             customModel.modelName
                           );
                           void setFieldValue("custom_model", customModel);
+                          // Self-hosted custom models resolve to CUSTOM by
+                          // name — no cloud provider to bind.
+                          void setFieldValue("custom_model_provider", null);
                         }
                         customModelModal.toggle(false);
                       }}
@@ -1128,6 +1057,7 @@ export default function IndexSettingsPage() {
                           <Tabs
                             value={activeModelTab}
                             onValueChange={setActiveModelTab}
+                            variant="underline"
                           >
                             <Card
                               expandable
@@ -1139,10 +1069,7 @@ export default function IndexSettingsPage() {
                               padding={viewAllModelsOpen ? "fit" : "sm"}
                               expandedContent={
                                 <>
-                                  <Tabs.Content
-                                    value={MODEL_TAB_CLOUD}
-                                    className="pt-0"
-                                  >
+                                  <Tabs.Content value={MODEL_TAB_CLOUD}>
                                     {filteredCloudProviders.length > 0 ? (
                                       <GeneralLayouts.Section
                                         gap={0.5}
@@ -1170,14 +1097,26 @@ export default function IndexSettingsPage() {
                                                     undefined)
                                                   : undefined
                                               }
-                                              onSelectModel={(name) => {
+                                              onSelectModel={(
+                                                name,
+                                                customModel
+                                              ) => {
                                                 void setFieldValue(
                                                   "model_name",
                                                   name
                                                 );
                                                 void setFieldValue(
                                                   "custom_model",
-                                                  null
+                                                  customModel ?? null
+                                                );
+                                                // Bind a just-defined LiteLLM /
+                                                // Azure model to its provider so
+                                                // submit doesn't misresolve it.
+                                                void setFieldValue(
+                                                  "custom_model_provider",
+                                                  customModel
+                                                    ? provider.providerName
+                                                    : null
                                                 );
                                               }}
                                               onDeselectModel={() => {
@@ -1187,6 +1126,10 @@ export default function IndexSettingsPage() {
                                                 );
                                                 void setFieldValue(
                                                   "custom_model",
+                                                  null
+                                                );
+                                                void setFieldValue(
+                                                  "custom_model_provider",
                                                   null
                                                 );
                                               }}
@@ -1203,10 +1146,7 @@ export default function IndexSettingsPage() {
                                     )}
                                   </Tabs.Content>
 
-                                  <Tabs.Content
-                                    value={MODEL_TAB_SELF}
-                                    className="pt-0"
-                                  >
+                                  <Tabs.Content value={MODEL_TAB_SELF}>
                                     {filteredSelfHostedProviders.length > 0 ? (
                                       <GeneralLayouts.Section
                                         gap={0.5}
@@ -1232,6 +1172,10 @@ export default function IndexSettingsPage() {
                                                   "custom_model",
                                                   null
                                                 );
+                                                void setFieldValue(
+                                                  "custom_model_provider",
+                                                  null
+                                                );
                                               }}
                                               onDeselectModel={() => {
                                                 void setFieldValue(
@@ -1242,18 +1186,25 @@ export default function IndexSettingsPage() {
                                                   "custom_model",
                                                   null
                                                 );
+                                                void setFieldValue(
+                                                  "custom_model_provider",
+                                                  null
+                                                );
                                               }}
                                             />
                                           )
                                         )}
 
                                         <GeneralLayouts.Section gap={0.25}>
-                                          <div className="px-1 pt-1 w-full h-(--opal-line-height-lg)">
+                                          <div className="px-1 pt-1 w-full h-(--height-line-h1-headline)">
                                             <GeneralLayouts.Section
                                               flexDirection="row"
                                               gap={0}
                                             >
-                                              <Spacer horizontal rem={0.675} />
+                                              <Spacer
+                                                orientation="horizontal"
+                                                rem={0.675}
+                                              />
                                               <div className="flex flex-row justify-between items-center w-full py-1">
                                                 <Content
                                                   icon={CUSTOM_PROVIDER.icon}
@@ -1313,7 +1264,7 @@ export default function IndexSettingsPage() {
                                     <InputTypeIn
                                       placeholder="Search models..."
                                       variant="internal"
-                                      leftSearchIcon
+                                      searchIcon
                                       value={query}
                                       onChange={(e) => setQuery(e.target.value)}
                                     />
@@ -1323,12 +1274,20 @@ export default function IndexSettingsPage() {
                                           icon={SvgRevert}
                                           prominence="internal"
                                           tooltip="Revert embedding model selection"
-                                          onClick={() =>
+                                          onClick={() => {
                                             void setFieldValue(
                                               "model_name",
                                               initialFormValues.model_name
-                                            )
-                                          }
+                                            );
+                                            void setFieldValue(
+                                              "custom_model",
+                                              null
+                                            );
+                                            void setFieldValue(
+                                              "custom_model_provider",
+                                              null
+                                            );
+                                          }}
                                         />
                                       )}
                                       <Button
@@ -1344,7 +1303,7 @@ export default function IndexSettingsPage() {
                                   </div>
 
                                   <div className="px-2">
-                                    <Tabs.List variant="underline">
+                                    <Tabs.List>
                                       <Tabs.Trigger value={MODEL_TAB_CLOUD}>
                                         Cloud-based
                                       </Tabs.Trigger>
@@ -1503,17 +1462,17 @@ export default function IndexSettingsPage() {
                               disabled={!values.enable_contextual_rag}
                               withLabel
                             >
-                              <LlmPicker
-                                modelConfigurationId={
+                              <ModelSelector
+                                value={
                                   values.contextual_rag_model_configuration_id
                                 }
                                 disabled={!values.enable_contextual_rag}
-                                onChange={({ modelConfigurationId }) => {
+                                onChange={(opt) =>
                                   void setFieldValue(
                                     "contextual_rag_model_configuration_id",
-                                    modelConfigurationId
-                                  );
-                                }}
+                                    opt.modelConfigurationId ?? null
+                                  )
+                                }
                               />
                             </InputHorizontal>
                           </Disabled>
@@ -1576,14 +1535,16 @@ export default function IndexSettingsPage() {
                               disabled={!imageProcessingEnabled}
                               withLabel
                             >
-                              <LlmPicker
-                                modelName={defaultVision?.modelName ?? null}
-                                providerName={
-                                  defaultVision?.providerName ?? null
-                                }
+                              <ModelSelector
+                                value={captioningModelConfigId}
                                 disabled={!imageProcessingEnabled}
-                                onChange={handleCaptioningModelChange}
                                 requiresImageInput
+                                onChange={(opt) =>
+                                  void handleCaptioningModelChange({
+                                    modelName: opt.modelName,
+                                    providerName: opt.name,
+                                  })
+                                }
                               />
                             </InputHorizontal>
                           </Disabled>

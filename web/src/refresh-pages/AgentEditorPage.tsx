@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
@@ -21,9 +21,7 @@ import {
   InputVertical,
 } from "@opal/layouts";
 import { useFormikContext } from "formik";
-import LLMSelector from "@/components/llm/LLMSelector";
-import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import {
   STARTER_MESSAGES_EXAMPLES,
   MAX_CHARACTERS_STARTER_MESSAGE,
@@ -45,7 +43,7 @@ import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
-import UserFilesModal from "@/components/modals/UserFilesModal";
+import UserFilesModal from "@/sections/modals/UserFilesModal";
 import {
   ProjectFile,
   UserFileStatus,
@@ -62,6 +60,7 @@ import {
   SvgSliders,
   SvgUsers,
   SvgTrash,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import CustomAgentAvatar, {
   agentAvatarIconMap,
@@ -76,7 +75,7 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -93,7 +92,6 @@ import { Permission, ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 
@@ -326,7 +324,7 @@ function MCPServerCard({
     cardContent = (
       <div className="flex flex-col gap-2 p-2">
         <GeneralLayouts.Section padding={1}>
-          <SimpleLoader />
+          <SvgSimpleLoader />
         </GeneralLayouts.Section>
       </div>
     );
@@ -377,7 +375,7 @@ function MCPServerCard({
             <InputTypeIn
               placeholder="Search tools..."
               variant="internal"
-              leftSearchIcon
+              searchIcon
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -510,48 +508,6 @@ export default function AgentEditorPage({
   const { mcpData, isLoading: isMcpLoading } = useMcpServersForAgentEditor();
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
     useOpenApiTools();
-  const { llmProviders } = useLLMProviders(existingAgent?.id);
-
-  // LLM Model Selection — placed after llmProviders so the callbacks can close over it
-  const getCurrentLlm = useCallback((values: any, providers: any) => {
-    // Canonical path: resolve from model configuration ID.
-    if (values.default_model_configuration_id != null) {
-      for (const p of providers ?? []) {
-        const mc = p.model_configurations?.find(
-          (m: any) => m.id === values.default_model_configuration_id
-        );
-        if (mc) {
-          return structureValue(p.name ?? String(p.id), p.provider, mc.name);
-        }
-      }
-    }
-    return null;
-  }, []);
-
-  const onLlmSelect = useCallback(
-    (selected: string | null, setFieldValue: any) => {
-      if (selected === null) {
-        setFieldValue("default_model_configuration_id", null);
-      } else {
-        const { modelName, name } = parseLlmDescriptor(selected);
-        if (modelName) {
-          // `name` is either the display name or String(provider.id) for nameless
-          // providers, so we match by both.
-          const provider = llmProviders?.find(
-            (p: any) => p.name === name || String(p.id) === name
-          );
-          const modelConfig = provider?.model_configurations?.find(
-            (mc: any) => mc.name === modelName
-          );
-          setFieldValue(
-            "default_model_configuration_id",
-            modelConfig?.id ?? null
-          );
-        }
-      }
-    },
-    [llmProviders]
-  );
 
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
@@ -1610,16 +1566,19 @@ export default function AgentEditorPage({
                                   title="Default Model"
                                   description="This model will be used by Onyx by default in your chats."
                                 >
-                                  <LLMSelector
-                                    name="llm_model"
-                                    llmProviders={llmProviders ?? []}
-                                    currentLlm={getCurrentLlm(
-                                      values,
-                                      llmProviders
-                                    )}
-                                    onSelect={(selected) =>
-                                      onLlmSelect(selected, setFieldValue)
+                                  <ModelSelector
+                                    value={
+                                      (values.default_model_configuration_id as
+                                        | number
+                                        | null) ?? null
                                     }
+                                    onChange={(opt) =>
+                                      setFieldValue(
+                                        "default_model_configuration_id",
+                                        opt.modelConfigurationId ?? null
+                                      )
+                                    }
+                                    includeGlobalDefault
                                   />
                                 </InputHorizontal>
                                 <InputHorizontal

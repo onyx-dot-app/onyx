@@ -250,6 +250,7 @@ class ScimDAL(DAL):
         email: str | None = None,
         is_active: bool | None = None,
         personal_name: str | None = None,
+        account_type: AccountType | None = None,
     ) -> None:
         """Update user attributes. Only sets fields that are provided."""
         if email is not None:
@@ -258,6 +259,8 @@ class ScimDAL(DAL):
             user.is_active = is_active
         if personal_name is not None:
             user.personal_name = personal_name
+        if account_type is not None:
+            user.account_type = account_type
 
     def deactivate_user(self, user: User) -> None:
         """Mark a user as inactive."""

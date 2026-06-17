@@ -343,6 +343,13 @@ export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type StopObj = Stop;
 
+// Connection keepalive emitted during silent stretches; carries no run state
+export interface ChatHeartbeat extends BaseObj {
+  type: "chat_heartbeat";
+}
+
+export type ChatHeartbeatObj = ChatHeartbeat;
+
 export type SectionEndObj = SectionEnd;
 
 export type TopLevelBranchingObj = TopLevelBranching;
@@ -439,6 +446,7 @@ export type ObjTypes =
   | NewToolObj
   | ReasoningObj
   | StopObj
+  | ChatHeartbeatObj
   | SectionEndObj
   | TopLevelBranchingObj
   | CitationObj

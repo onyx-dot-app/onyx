@@ -3,6 +3,59 @@ locals {
     bucket_arn     = "arn:aws:s3:::${name}"
     bucket_objects = "arn:aws:s3:::${name}/*"
   }]
+
+  workload_irsa_enabled = (
+    length(var.s3_bucket_names) > 0 ||
+    (var.enable_rds_iam_for_service_account && var.rds_db_connect_arn != null)
+  )
+
+  workload_irsa_service_account_subjects = [
+    for service_account_name in distinct(concat(
+      [var.irsa_service_account_name],
+      var.irsa_additional_service_account_names,
+    )) :
+    "system:serviceaccount:${var.irsa_service_account_namespace}:${service_account_name}"
+  ]
+
+  # Optional dedicated node group for sandbox pods (nodeSelector/toleration below).
+  # IMDSv2 hop-limit 1 blocks sandboxed containers from the node metadata service.
+  craft_sandbox_node_groups = var.enable_craft_sandbox_node_group ? {
+    sandbox = {
+      name           = "sandbox-node-group"
+      instance_types = var.craft_sandbox_node_instance_types
+      min_size       = var.craft_sandbox_node_min_size
+      max_size       = var.craft_sandbox_node_max_size
+      desired_size   = var.craft_sandbox_node_desired_size
+      # Keep the sandbox nodes on the upstream shared node security group only.
+      # Attaching the EKS primary cluster SG as well puts two
+      # kubernetes.io/cluster/<name>-tagged SGs on the same nodes, which breaks
+      # tag-based discovery in controllers such as AWS Load Balancer Controller.
+      labels = {
+        "onyx.app/workload" = "sandbox"
+      }
+      taints = [{
+        key    = "workload"
+        value  = "sandbox"
+        effect = "NO_SCHEDULE"
+      }]
+      metadata_options = {
+        http_endpoint               = "enabled"
+        http_tokens                 = "required"
+        http_put_response_hop_limit = 1
+      }
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = 50
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+          }
+        }
+      }
+    }
+  } : {}
 }
 
 module "eks" {
@@ -27,7 +80,7 @@ module "eks" {
     ami_type = "AL2023_x86_64_STANDARD"
   }
 
-  eks_managed_node_groups = {
+  eks_managed_node_groups = merge({
     for k, v in var.eks_managed_node_groups : k => merge(v,
       {
         instance_types = v.instance_types != null ? v.instance_types : (
@@ -45,7 +98,7 @@ module "eks" {
         subnet_ids = var.main_node_subnet_ids
       } : {}
     )
-  }
+  }, local.craft_sandbox_node_groups)
 
   tags = var.tags
 }
@@ -145,22 +198,22 @@ resource "aws_iam_policy" "s3_access_policy" {
 
 # Create IAM role for workload access using IRSA (S3 + RDS)
 module "irsa-workload-access" {
-  count   = length(var.s3_bucket_names) == 0 ? 0 : 1
+  count   = local.workload_irsa_enabled ? 1 : 0
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version = "4.7.0"
 
   create_role                   = true
   role_name                     = "AmazonEKSTFWorkloadAccessRole-${module.eks.cluster_name}"
   provider_url                  = module.eks.oidc_provider
-  role_policy_arns              = [aws_iam_policy.s3_access_policy[0].arn]
-  oidc_fully_qualified_subjects = ["system:serviceaccount:${var.irsa_service_account_namespace}:${var.irsa_service_account_name}"]
+  role_policy_arns              = aws_iam_policy.s3_access_policy[*].arn
+  oidc_fully_qualified_subjects = local.workload_irsa_service_account_subjects
 
   depends_on = [module.eks]
 }
 
-# Create Kubernetes service account for S3 access (optional)
+# Create Kubernetes service account for workload IRSA access (optional)
 resource "kubernetes_service_account" "s3_access" {
-  count = length(var.s3_bucket_names) == 0 ? 0 : 1
+  count = local.workload_irsa_enabled ? 1 : 0
   metadata {
     name      = var.irsa_service_account_name
     namespace = var.irsa_service_account_namespace

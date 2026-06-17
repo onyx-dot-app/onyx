@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton } from "@opal/components";
 import useSWR from "swr";
@@ -23,7 +23,7 @@ import React, { useState } from "react";
 import { UsageReport } from "./types";
 import { ThreeDotsLoader } from "@/components/Loading";
 import Link from "next/link";
-import { humanReadableFormat, humanReadableFormatWithTime } from "@/lib/time";
+import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageSelector } from "@/components/PageSelector";
 import { Divider } from "@opal/components";

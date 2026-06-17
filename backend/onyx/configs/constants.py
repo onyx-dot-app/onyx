@@ -1,3 +1,4 @@
+import os
 import platform
 import re
 import socket
@@ -31,8 +32,12 @@ DEFAULT_BOOST = 0
 PUBLIC_API_TAGS: list[str | Enum] = ["public"]
 
 # Cookies
+# Configurable via env so multiple deployments sharing a hostname (e.g. parallel
+# local worktrees on different ports of localhost) can keep their auth cookies
+# separate — cookies are scoped by host, not port. The frontend reads the same
+# AUTH_COOKIE_NAME so the Next proxy / auth checks look for the matching cookie.
 FASTAPI_USERS_AUTH_COOKIE_NAME = (
-    "fastapiusersauth"  # Currently a constant, but logic allows for configuration
+    os.environ.get("AUTH_COOKIE_NAME") or "fastapiusersauth"
 )
 TENANT_ID_COOKIE_NAME = "onyx_tid"  # tenant id - for workaround cases
 ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
@@ -256,6 +261,7 @@ class DocumentSource(str, Enum):
     IMAP = "imap"
     BITBUCKET = "bitbucket"
     TESTRAIL = "testrail"
+    BRAINTRUST = "braintrust"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -289,6 +295,8 @@ class NotificationType(str, Enum):
     LICENSE_EXPIRY_WARNING = "license_expiry_warning"
     SCHEDULED_TASK_FAILED = "scheduled_task_failed"
     SCHEDULED_TASK_AWAITING_APPROVAL = "scheduled_task_awaiting_approval"
+    SCHEDULED_TASK_PRE_APPROVED_ACTION = "scheduled_task_pre_approved_action"
+    APPROVAL_REQUESTED = "approval_requested"
 
 
 class BlobType(str, Enum):
@@ -464,6 +472,8 @@ class OnyxRedisLocks:
     OPENSEARCH_MIGRATION_BEAT_LOCK = "da_lock:opensearch_migration_beat"
     OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX = "da_lock:opensearch_verify_index"
 
+    SECURITY_SETTINGS = "da_lock:security_settings"
+
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
@@ -502,7 +512,6 @@ class OnyxRedisLocks:
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES_BEAT_LOCK = "da_lock:cleanup_idle_sandboxes_beat"
-    CLEANUP_OLD_SNAPSHOTS_BEAT_LOCK = "da_lock:cleanup_old_snapshots_beat"
 
 
 class OnyxRedisSignals:
@@ -631,7 +640,6 @@ class OnyxCeleryTask:
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
-    CLEANUP_OLD_SNAPSHOTS = "cleanup_old_snapshots"
 
     # Scheduled tasks (Craft)
     SCHEDULED_TASKS_DISPATCH_DUE = "scheduled_tasks_dispatch_due"
@@ -730,4 +738,5 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.DRUPAL_WIKI: "Knowledge base pages and content",
     DocumentSource.IMAP: "Email messages and threads",
     DocumentSource.TESTRAIL: "Test cases and QA management",
+    DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
 }

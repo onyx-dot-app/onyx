@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
   SvgConfluence,
   SvgGithub,
@@ -13,6 +13,8 @@ import {
 import { SvgChevronRight } from "@opal/icons";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 
 interface ConnectDataBannerProps {
   className?: string;
@@ -29,8 +31,11 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 export default function ConnectDataBanner({
   className,
 }: ConnectDataBannerProps) {
-  const { isAdmin, isCurator } = useUser();
-  const canManageConnectors = isAdmin || isCurator;
+  const { permissions } = useUser();
+  const canManageConnectors = hasPermission(
+    permissions,
+    Permission.MANAGE_CONNECTORS
+  );
   const { ccPairs, isLoading } = useCCPairs(canManageConnectors);
   const hasConnectorEverSucceeded = ccPairs.some((cc) => cc.has_successful_run);
 
@@ -78,7 +83,7 @@ export default function ConnectDataBanner({
         </div>
 
         <div className="flex items-center justify-center gap-1">
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             Connect your data
           </Text>
           <SvgChevronRight className="h-4 w-4 text-text-03" />

@@ -95,6 +95,9 @@ from onyx.server.manage.llm.models import OpenRouterModelsRequest
 from onyx.server.manage.llm.models import SyncModelEntry
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
+from onyx.server.manage.llm.provider_cache import cache_provider_listing
+from onyx.server.manage.llm.provider_cache import get_cached_provider_listing
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.manage.llm.utils import generate_bedrock_display_name
 from onyx.server.manage.llm.utils import generate_ollama_display_name
 from onyx.server.manage.llm.utils import infer_vision_support
@@ -184,6 +187,7 @@ def _sync_fetched_models(
                 source_label,
                 provider_name,
             )
+        invalidate_provider_listing_cache()
     except ValueError as e:
         logger.warning("Failed to sync %s models to DB: %s", source_label, e)
 
@@ -619,6 +623,10 @@ def put_llm_provider(
     except ValueError as e:
         logger.exception("Failed to upsert LLM Provider")
         raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e))
+    finally:
+        # upsert_llm_provider and sync_auto_mode_models commit internally, so a
+        # post-commit failure must still drop cached listings
+        invalidate_provider_listing_cache()
 
 
 @admin_router.delete("/provider/{provider_id}")
@@ -642,6 +650,8 @@ def delete_llm_provider(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
+    invalidate_provider_listing_cache()
+
 
 @admin_router.post("/default")
 def set_provider_as_default(
@@ -654,6 +664,7 @@ def set_provider_as_default(
         model_name=default_model_request.model_name,
         db_session=db_session,
     )
+    invalidate_provider_listing_cache()
 
 
 @admin_router.post("/default-vision")
@@ -667,6 +678,7 @@ def set_provider_as_default_vision(
         vision_model=default_model.model_name,
         db_session=db_session,
     )
+    invalidate_provider_listing_cache()
 
 
 @admin_router.get("/auto-config")
@@ -749,9 +761,18 @@ def list_llm_provider_basics(
     start_time = datetime.now(timezone.utc)
     logger.debug("Starting to fetch user-accessible LLM providers")
 
-    all_providers = fetch_existing_llm_providers(db_session, [])
-    user_group_ids = fetch_user_group_ids(db_session, user)
     can_manage_llms = has_permission(user, Permission.MANAGE_LLMS)
+    user_group_ids = (
+        set() if can_manage_llms else fetch_user_group_ids(db_session, user)
+    )
+
+    cache_lookup = get_cached_provider_listing(
+        persona_id=None, is_admin=can_manage_llms, user_group_ids=user_group_ids
+    )
+    if cache_lookup.response is not None:
+        return cache_lookup.response
+
+    all_providers = fetch_existing_llm_providers(db_session, [])
 
     accessible_providers = []
 
@@ -775,7 +796,7 @@ def list_llm_provider_basics(
         format(duration, ".2f"),
     )
 
-    return LLMProviderResponse[LLMProviderDescriptor].from_models(
+    response = LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=accessible_providers,
         default_text=DefaultModel.from_model_config(
             fetch_default_llm_model(db_session)
@@ -784,6 +805,14 @@ def list_llm_provider_basics(
             fetch_default_vision_model(db_session)
         ),
     )
+    cache_provider_listing(
+        persona_id=None,
+        is_admin=can_manage_llms,
+        user_group_ids=user_group_ids,
+        response=response,
+        version=cache_lookup.version,
+    )
+    return response
 
 
 def get_valid_model_names_for_persona(
@@ -833,16 +862,18 @@ def get_valid_model_configuration_ids_for_persona(
     Unlike `get_valid_model_names_for_persona`, this check is unambiguous when
     multiple providers expose a model with the same name.
     """
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_permission(user, Permission.MANAGE_LLMS)
     all_providers = fetch_existing_llm_providers(
         db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
-    user_group_ids = set() if is_admin else fetch_user_group_ids(db_session, user)
+    user_group_ids = (
+        set() if can_manage_llms else fetch_user_group_ids(db_session, user)
+    )
 
     valid_ids: set[int] = set()
     for llm_provider_model in all_providers:
         if can_user_access_llm_provider(
-            llm_provider_model, user_group_ids, persona, is_admin=is_admin
+            llm_provider_model, user_group_ids, persona, can_manage_llms=can_manage_llms
         ):
             for model_config in llm_provider_model.model_configurations:
                 if model_config.is_visible and model_config.id is not None:
@@ -880,11 +911,18 @@ def list_llm_providers_for_persona(
         )
 
     can_manage_llms = has_permission(user, Permission.MANAGE_LLMS)
-    all_providers = fetch_existing_llm_providers(
-        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
-    )
     user_group_ids = (
         set() if can_manage_llms else fetch_user_group_ids(db_session, user)
+    )
+
+    cache_lookup = get_cached_provider_listing(
+        persona_id=persona_id, is_admin=can_manage_llms, user_group_ids=user_group_ids
+    )
+    if cache_lookup.response is not None:
+        return cache_lookup.response
+
+    all_providers = fetch_existing_llm_providers(
+        db_session, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]
     )
 
     llm_provider_list: list[LLMProviderDescriptor] = []
@@ -920,18 +958,29 @@ def list_llm_providers_for_persona(
             db_session, persona.default_model_configuration_id
         )
         if model_config and can_user_access_llm_provider(
-            model_config.llm_provider, user_group_ids, persona, can_manage_llms=can_manage_llms
+            model_config.llm_provider,
+            user_group_ids,
+            persona,
+            can_manage_llms=can_manage_llms,
         ):
             default_text = DefaultModel(
                 provider_id=model_config.llm_provider_id,
                 model_name=model_config.name,
             )
 
-    return LLMProviderResponse[LLMProviderDescriptor].from_models(
+    response = LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=llm_provider_list,
         default_text=default_text,
         default_vision=default_vision,
     )
+    cache_provider_listing(
+        persona_id=persona_id,
+        is_admin=can_manage_llms,
+        user_group_ids=user_group_ids,
+        response=response,
+        version=cache_lookup.version,
+    )
+    return response
 
 
 @admin_router.get("/provider-contextual-cost")
@@ -1141,12 +1190,28 @@ def get_bedrock_available_models(
 
 
 def _get_ollama_available_model_names(api_base: str) -> set[str]:
-    """Fetch available model names from Ollama server."""
+    """Fetch available model names from an Ollama server.
+
+    An unreachable address surfaces as 400, not 502: the admin supplied the
+    URL, so a server Onyx can't route to is a client misconfiguration.
+    """
     tags_url = f"{api_base}/api/tags"
     try:
         response = httpx.get(tags_url, timeout=5.0)
         response.raise_for_status()
         response_json = response.json()
+    except httpx.HTTPStatusError as e:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Ollama server at {api_base} returned an error "
+            f"({e.response.status_code}).",
+        )
+    except httpx.RequestError as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Could not reach an Ollama server at {api_base}. Check that the URL "
+            f"is correct and reachable from Onyx ({type(e).__name__}).",
+        )
     except Exception as e:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
@@ -1209,8 +1274,9 @@ def get_ollama_available_models(
             architecture = ollama_model_details.model_info.get(
                 "general.architecture", ""
             )
-            context_limit = ollama_model_details.model_info.get(
-                architecture + ".context_length", None
+            context_limit = (
+                ollama_model_details.num_ctx
+                or ollama_model_details.model_info.get(architecture + ".context_length")
             )
             supports_image_input = ollama_model_details.supports_image_input()
         except ValidationError as e:
@@ -1608,13 +1674,14 @@ def _get_openai_compatible_models_response(
             )
     except httpx.RequestError as e:
         logger.warning(
-            "Failed to fetch models from OpenAI-compatible endpoint",
+            "Could not reach OpenAI-compatible models endpoint",
             extra={"source": source_name, "url": url, "error": str(e)},
             exc_info=True,
         )
         raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"Failed to fetch {source_name} models: {e}",
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Could not reach {source_name} at {url}. Check that the URL is "
+            f"correct and reachable from Onyx ({type(e).__name__}).",
         )
     except ValueError as e:
         logger.warning(

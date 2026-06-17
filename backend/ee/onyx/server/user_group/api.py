@@ -35,6 +35,7 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -54,7 +55,11 @@ def list_user_groups(
         eager_load_for_snapshot=True,
         include_default=include_default,
     )
-    return [UserGroup.from_model(user_group) for user_group in user_groups]
+    mask_credential_prefix = get_security_settings().mask_credential_prefix
+    return [
+        UserGroup.from_model(user_group, mask_credential_prefix=mask_credential_prefix)
+        for user_group in user_groups
+    ]
 
 
 @router.get("/user-groups/minimal")
@@ -150,7 +155,10 @@ def create_user_group(
             f"User group with name '{user_group.name}' already exists. Please "
             "choose a different name.",
         )
-    return UserGroup.from_model(db_user_group)
+    return UserGroup.from_model(
+        db_user_group,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    )
 
 
 @router.patch("/admin/user-group/rename")
@@ -168,7 +176,8 @@ def rename_user_group_endpoint(
                 db_session=db_session,
                 user_group_id=rename_request.id,
                 new_name=rename_request.name,
-            )
+            ),
+            mask_credential_prefix=get_security_settings().mask_credential_prefix,
         )
     except IntegrityError:
         raise OnyxError(
@@ -196,7 +205,8 @@ def patch_user_group(
                 user=user,
                 user_group_id=user_group_id,
                 user_group_update=user_group_update,
-            )
+            ),
+            mask_credential_prefix=get_security_settings().mask_credential_prefix,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
@@ -216,7 +226,8 @@ def add_users(
                 user=user,
                 user_group_id=user_group_id,
                 user_ids=add_users_request.user_ids,
-            )
+            ),
+            mask_credential_prefix=get_security_settings().mask_credential_prefix,
         )
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))

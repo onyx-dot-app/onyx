@@ -1,24 +1,27 @@
 import uuid
 from typing import Any
 
+import httpx
 import pytest
-import requests
-from requests.models import Response
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_name_parser import parse_litellm_model_name
 from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import model_is_reasoning_model
+from onyx.llm.well_known_providers.llm_provider_options import (
+    fetch_default_model_for_provider,
+)
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
 def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None:
     """Utility function to fetch an LLM provider by ID"""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
     )
@@ -29,7 +32,7 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None
 
 def assert_response_is_equivalent(
     admin_user: DATestUser,
-    response: Response,
+    response: httpx.Response,
     model_configurations: list[ModelConfigurationUpsertRequest],
     api_key: str | None = None,
 ) -> None:
@@ -70,6 +73,8 @@ def assert_response_is_equivalent(
                 req.name, provider_name
             ),
             "supports_reasoning": model_is_reasoning_model(req.name, provider_name),
+            "is_recommended_default": req.name
+            == fetch_default_model_for_provider(provider_name),
             "display_name": display_name,
             "provider_display_name": parsed.provider_display_name,
             "vendor": parsed.vendor,
@@ -147,7 +152,7 @@ def test_create_llm_provider(
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
 
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -244,7 +249,7 @@ def test_update_model_configurations(
 
     name = str(uuid.uuid4())
 
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -267,7 +272,7 @@ def test_update_model_configurations(
         initial_expected,
     )
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/llm/default",
         headers=admin_user.headers,
         json={
@@ -277,7 +282,7 @@ def test_update_model_configurations(
     )
     assert response.status_code == 200
 
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
         json={
@@ -300,7 +305,7 @@ def test_update_model_configurations(
         "sk-0****0000",
     )
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/llm/default",
         headers=admin_user.headers,
         json={
@@ -310,7 +315,7 @@ def test_update_model_configurations(
     )
     assert response.status_code == 200
 
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
         json={
@@ -356,7 +361,7 @@ def test_delete_llm_provider(
     admin_user = UserManager.create(name="admin_user")
 
     # Create a provider
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -375,7 +380,7 @@ def test_delete_llm_provider(
     assert response.status_code == 200
 
     # Delete the provider
-    response = requests.delete(
+    response = client.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
         headers=admin_user.headers,
     )
@@ -393,7 +398,7 @@ def test_delete_default_llm_provider_rejected(
     admin_user = UserManager.create(name="admin_user")
 
     # Create a provider
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -413,7 +418,7 @@ def test_delete_default_llm_provider_rejected(
     created_provider = response.json()
 
     # Set this provider as the default
-    set_default_response = requests.post(
+    set_default_response = client.post(
         f"{API_SERVER_URL}/admin/llm/default",
         headers=admin_user.headers,
         json={
@@ -424,7 +429,7 @@ def test_delete_default_llm_provider_rejected(
     assert set_default_response.status_code == 200
 
     # Attempt to delete the default provider — should be rejected
-    delete_response = requests.delete(
+    delete_response = client.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
         headers=admin_user.headers,
     )
@@ -443,7 +448,7 @@ def test_delete_non_default_llm_provider_with_default_set(
     admin_user = UserManager.create(name="admin_user")
 
     # Create two providers
-    response_default = requests.put(
+    response_default = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -462,7 +467,7 @@ def test_delete_non_default_llm_provider_with_default_set(
     assert response_default.status_code == 200
     default_provider = response_default.json()
 
-    response_other = requests.put(
+    response_other = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -482,7 +487,7 @@ def test_delete_non_default_llm_provider_with_default_set(
     other_provider = response_other.json()
 
     # Set the first provider as default
-    set_default_response = requests.post(
+    set_default_response = client.post(
         f"{API_SERVER_URL}/admin/llm/default",
         headers=admin_user.headers,
         json={
@@ -493,7 +498,7 @@ def test_delete_non_default_llm_provider_with_default_set(
     assert set_default_response.status_code == 200
 
     # Delete the non-default provider — should succeed
-    delete_response = requests.delete(
+    delete_response = client.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{other_provider['id']}",
         headers=admin_user.headers,
     )
@@ -515,7 +520,7 @@ def test_force_delete_default_llm_provider(
     admin_user = UserManager.create(name="admin_user")
 
     # Create a provider
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -535,7 +540,7 @@ def test_force_delete_default_llm_provider(
     created_provider = response.json()
 
     # Set this provider as the default
-    set_default_response = requests.post(
+    set_default_response = client.post(
         f"{API_SERVER_URL}/admin/llm/default",
         headers=admin_user.headers,
         json={
@@ -546,14 +551,14 @@ def test_force_delete_default_llm_provider(
     assert set_default_response.status_code == 200
 
     # Attempt to delete without force — should be rejected
-    delete_response = requests.delete(
+    delete_response = client.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
         headers=admin_user.headers,
     )
     assert delete_response.status_code == 400
 
     # Force delete — should succeed
-    force_delete_response = requests.delete(
+    force_delete_response = client.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}?force=true",
         headers=admin_user.headers,
     )
@@ -571,7 +576,7 @@ def test_delete_default_vision_provider_clears_vision_default(
     admin_user = UserManager.create(name="admin_user")
 
     # Create a text provider and set it as default (so we have a default text provider)
-    text_response = requests.put(
+    text_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -592,7 +597,7 @@ def test_delete_default_vision_provider_clears_vision_default(
     _set_default_provider(admin_user, text_provider["id"], "gpt-4o-mini")
 
     # Create a vision provider and set it as default vision
-    vision_response = requests.put(
+    vision_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -622,7 +627,7 @@ def test_delete_default_vision_provider_clears_vision_default(
     assert vision_default["provider_id"] == vision_provider["id"]
 
     # Delete the vision provider — should succeed (only text default is protected)
-    delete_response = requests.delete(
+    delete_response = client.delete(
         f"{API_SERVER_URL}/admin/llm/provider/{vision_provider['id']}",
         headers=admin_user.headers,
     )
@@ -665,7 +670,7 @@ def test_duplicate_provider_name_allowed(reset: None) -> None:  # noqa: ARG001
     }
 
     # First creation succeeds
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json=base_payload,
@@ -674,7 +679,7 @@ def test_duplicate_provider_name_allowed(reset: None) -> None:  # noqa: ARG001
     first_id = response.json()["id"]
 
     # Second creation with the same display name also succeeds — names are not unique
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json=base_payload,
@@ -704,7 +709,7 @@ def test_rename_provider_allowed(reset: None) -> None:  # noqa: ARG001
         "groups": [],
     }
 
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json=create_payload,
@@ -715,7 +720,7 @@ def test_rename_provider_allowed(reset: None) -> None:  # noqa: ARG001
     # Rename the provider — should succeed
     new_name = f"renamed-provider-{uuid.uuid4()}"
     update_payload = {**create_payload, "id": provider_id, "name": new_name}
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json=update_payload,
@@ -769,7 +774,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
     ]
 
     # Create the provider
-    create_response = requests.put(
+    create_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -817,7 +822,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
         ),
     ]
 
-    edit_response_1 = requests.put(
+    edit_response_1 = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
@@ -865,7 +870,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
         ),
     ]
 
-    edit_response_2 = requests.put(
+    edit_response_2 = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
@@ -913,7 +918,7 @@ def test_model_visibility_preserved_on_edit(reset: None) -> None:  # noqa: ARG00
             supports_image_input=None,
         ),
     ]
-    edit_response_3 = requests.put(
+    edit_response_3 = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
@@ -959,7 +964,7 @@ def _get_provider_by_name(providers: list[dict], provider_name: str) -> dict | N
 def _get_providers_admin(
     admin_user: DATestUser,
 ) -> dict | None:
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
     )
@@ -980,7 +985,7 @@ def _unpack_data(data: dict) -> tuple[list[dict], dict | None, dict | None]:
 def _get_providers_basic(
     user: DATestUser,
 ) -> dict | None:
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/llm/provider",
         headers=user.headers,
     )
@@ -1007,7 +1012,7 @@ def _get_provider_by_name_admin(
     admin_user: DATestUser, provider_name: str
 ) -> dict | None:
     """Utility function to fetch an LLM provider by name via admin endpoint."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
     )
@@ -1018,7 +1023,7 @@ def _get_provider_by_name_admin(
 
 def _get_provider_by_name_basic(user: DATestUser, provider_name: str) -> dict | None:
     """Utility function to fetch an LLM provider by name via basic (non-admin) endpoint."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/llm/provider",
         headers=user.headers,
     )
@@ -1156,7 +1161,7 @@ def test_default_model_persistence_and_update(
     expected_visible = {"gpt-4": True, "gpt-4o": True}
 
     # Step 1: Admin creates the provider with initial default model
-    create_response = requests.put(
+    create_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -1231,7 +1236,7 @@ def test_default_model_persistence_and_update(
     )
 
     # Step 5: Admin updates the provider to change the default model
-    update_response = requests.put(
+    update_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
@@ -1247,7 +1252,7 @@ def test_default_model_persistence_and_update(
     )
     assert update_response.status_code == 200
 
-    default_provider_response = requests.post(
+    default_provider_response = client.post(
         f"{API_SERVER_URL}/admin/llm/default",
         json={
             "provider_id": update_response.json()["id"],
@@ -1324,7 +1329,7 @@ def test_default_model_persistence_and_update(
 
 def _get_all_providers_basic(user: DATestUser) -> list[dict]:
     """Utility function to fetch all LLM providers via basic endpoint."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/llm/provider",
         headers=user.headers,
     )
@@ -1334,7 +1339,7 @@ def _get_all_providers_basic(user: DATestUser) -> list[dict]:
 
 def _get_all_providers_admin(admin_user: DATestUser) -> list[dict]:
     """Utility function to fetch all LLM providers via admin endpoint."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
     )
@@ -1346,7 +1351,7 @@ def _set_default_provider(
     admin_user: DATestUser, provider_id: int, model_name: str
 ) -> None:
     """Utility function to set a provider as the default."""
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/llm/default",
         json={
             "provider_id": provider_id,
@@ -1361,7 +1366,7 @@ def _set_default_vision_provider(
     admin_user: DATestUser, provider_id: int, vision_model: str | None = None
 ) -> None:
     """Utility function to set a provider as the default vision provider."""
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/llm/default-vision",
         json={
             "provider_id": provider_id,
@@ -1435,7 +1440,7 @@ def test_multiple_providers_default_switching(
     provider_2_visible = {shared_model_name: True, provider_2_unique_model: True}
 
     # Step 1: Create provider 1 with shared_model_name as default
-    create_response_1 = requests.put(
+    create_response_1 = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -1454,7 +1459,7 @@ def test_multiple_providers_default_switching(
     _set_default_provider(admin_user, provider_1["id"], shared_model_name)
 
     # Create provider 2 with provider_2_unique_model as default initially
-    create_response_2 = requests.put(
+    create_response_2 = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -1543,7 +1548,7 @@ def test_multiple_providers_default_switching(
 
     # Step 4: Admin changes the default provider to provider 2 and updates its default model
     # First update provider 2's default model to the unique model (it already is, but reconfirm)
-    update_response = requests.put(
+    update_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
@@ -1632,7 +1637,7 @@ def test_multiple_providers_default_switching(
 
     # Step 6: Admin changes provider 2's default model to the shared model name
     # (same model name as provider 1 had)
-    update_response = requests.put(
+    update_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=false",
         headers=admin_user.headers,
         json={
@@ -1804,7 +1809,7 @@ def test_default_provider_and_vision_provider_selection(
     }
 
     # Step 1: Create provider 1 with mixed models, set non-vision model as default
-    create_response_1 = requests.put(
+    create_response_1 = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -1821,7 +1826,7 @@ def test_default_provider_and_vision_provider_selection(
     provider_1 = create_response_1.json()
 
     # Step 2: Create provider 2 with vision-only models
-    create_response_2 = requests.put(
+    create_response_2 = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -1996,7 +2001,7 @@ def test_default_provider_is_not_default_vision_provider(
     expected_visible = {"gpt-4": True, "gpt-4o": True}
 
     # Step 1: Create the provider
-    create_response = requests.put(
+    create_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -2058,7 +2063,7 @@ def test_default_provider_is_not_default_vision_provider(
 
 def _get_all_image_gen_configs(admin_user: DATestUser) -> list[dict]:
     """Utility function to fetch all image generation configs."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/admin/image-generation/config",
         headers=admin_user.headers,
     )
@@ -2074,7 +2079,7 @@ def _create_image_gen_config(
     is_default: bool = False,
 ) -> dict:
     """Utility function to create an image generation config using clone mode."""
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/image-generation/config",
         headers=admin_user.headers,
         json={
@@ -2094,7 +2099,7 @@ def _set_image_gen_config_default(
     admin_user: DATestUser, image_provider_id: str
 ) -> None:
     """Utility function to set an image generation config as default."""
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}/default",
         headers=admin_user.headers,
     )
@@ -2103,7 +2108,7 @@ def _set_image_gen_config_default(
 
 def _delete_image_gen_config(admin_user: DATestUser, image_provider_id: str) -> None:
     """Utility function to delete an image generation config."""
-    response = requests.delete(
+    response = client.delete(
         f"{API_SERVER_URL}/admin/image-generation/config/{image_provider_id}",
         headers=admin_user.headers,
     )
@@ -2155,7 +2160,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     ]
 
     # Step 1: Create regular LLM provider
-    create_regular_response = requests.put(
+    create_regular_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={
@@ -2175,7 +2180,7 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     _set_default_provider(admin_user, regular_provider["id"], "gpt-4")
 
     # Step 2: Create vision LLM provider
-    create_vision_response = requests.put(
+    create_vision_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json={

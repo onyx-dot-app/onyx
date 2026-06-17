@@ -10,13 +10,13 @@ sync pipelines — no admin API downgrades a user any more.
 import os
 
 import pytest
-import requests
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType
 from onyx.db.enums import Permission
 from onyx.db.users import get_user_by_email
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -24,7 +24,7 @@ from tests.integration.common_utils.test_models import DATestUser
 
 def _simulate_saml_login(email: str, admin_user: DATestUser) -> dict:
     """Simulate a SAML login by calling the test upsert endpoint."""
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/manage/users/test-upsert-user",
         json={"email": email},
         headers=admin_user.headers,
@@ -83,9 +83,9 @@ def test_saml_converts_non_web_user(
         f"Converted user '{test_email}' not found in Basic default group"
     )
     assert user_data["account_type"] == AccountType.STANDARD.value
-    assert test_email in _get_basic_group_member_emails(
-        admin_user
-    ), f"Converted user '{test_email}' not found in Basic default group"
+    assert test_email in _get_basic_group_member_emails(admin_user), (
+        f"Converted user '{test_email}' not found in Basic default group"
+    )
     assert Permission.BASIC_ACCESS.value in _get_effective_permissions(test_email)
 
 

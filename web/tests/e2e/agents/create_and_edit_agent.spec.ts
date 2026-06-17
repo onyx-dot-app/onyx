@@ -1,7 +1,7 @@
 import { test, expect, Page, Browser } from "@playwright/test";
 import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
-import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
+import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 import { Permission } from "@/lib/types";
 import {
   grantWorkerPermissions,
@@ -310,8 +310,27 @@ test.describe("Assistant Creation and Edit Verification", () => {
       expect(agentIdMatch).toBeTruthy();
       const agentId = agentIdMatch ? agentIdMatch[1] : null;
       expect(agentId).not.toBeNull();
-      await expectScreenshot(page, {
-        name: "welcome-page-with-assistant",
+      // Split the previous full-page screenshot into two scoped element
+      // screenshots. The full-page variant was flaky because the sidebar can
+      // pick up agents/projects/recents created by other tests; scoping to the
+      // Agents section and the main container isolates the relevant UI.
+      //
+      // Locate the Agents SidebarSection by its title rather than a dedicated
+      // test id: SidebarSection roots are the only elements carrying
+      // `data-hover-group="sidebar-section"`, and we filter to the one whose
+      // section title is exactly "Agents".
+      const agentsSidebarSection = page
+        .locator('[data-hover-group="sidebar-section"]')
+        .filter({ has: page.getByText("Agents", { exact: true }) });
+      await expect(agentsSidebarSection).toBeVisible();
+      await expectElementScreenshot(agentsSidebarSection, {
+        name: "welcome-page-with-assistant-agents-sidebar",
+      });
+
+      const mainContainer = page.locator("[data-main-container]");
+      await expect(mainContainer).toBeVisible();
+      await expectElementScreenshot(mainContainer, {
+        name: "welcome-page-with-assistant-main",
         hide: ["[data-testid='model-selector']"],
       });
 

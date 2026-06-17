@@ -20,7 +20,6 @@ import httpx
 import jinja2
 import requests
 from pydantic import BaseModel
-from retry import retry
 
 from onyx.configs.app_configs import MAX_CHUNKS_PER_DOC_BATCH
 from onyx.configs.app_configs import RECENCY_BIAS_MULTIPLIER
@@ -81,6 +80,7 @@ from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.tools.tool_implementations.search.constants import KEYWORD_QUERY_HYBRID_ALPHA
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
 
@@ -197,7 +197,9 @@ def deploy_vespa_schemas(
         )
         return
 
-    jinja_env = jinja2.Environment()
+    # TODO(security): if schema generation ever takes user-controlled input,
+    # swap to `jinja2.Environment(autoescape=select_autoescape(["xml"]))`.
+    jinja_env = jinja2.Environment()  # noqa: S701 — renders Vespa schema files, not HTML
 
     deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
     logger.notice("Deploying Vespa application package to %s", deploy_url)
@@ -303,7 +305,9 @@ def register_multitenant_vespa_indices(
         vespa_schema_path, "validation-overrides.xml.jinja"
     )
 
-    jinja_env = jinja2.Environment()
+    # TODO(security): if schema generation ever takes user-controlled input,
+    # swap to `jinja2.Environment(autoescape=select_autoescape(["xml"]))`.
+    jinja_env = jinja2.Environment()  # noqa: S701 — renders Vespa schema files, not HTML
 
     with open(services_jinja_file, "r") as services_f:
         schema_names = list(indices)
@@ -435,7 +439,7 @@ def _enrich_basic_chunk_info(
     return enriched_doc_info
 
 
-@retry(
+@retry_builder(
     tries=3,
     delay=1,
     backoff=2,
@@ -1096,7 +1100,7 @@ class VespaDocumentIndex(DocumentIndex):
         where_clause = (
             f'tenant_id contains "{self._tenant_id}"' if self._multitenant else "true"
         )
-        yql = f"select documentid from {self._index_name} where {where_clause} limit 0"
+        yql = f"select documentid from {self._index_name} where {where_clause} limit 0"  # noqa: S608 - Vespa YQL with internal index_name/tenant_id
         params: dict[str, str | int] = {
             "yql": yql,
             "ranking.profile": "unranked",
@@ -1127,7 +1131,7 @@ class VespaDocumentIndex(DocumentIndex):
         """Runs a batch of KG chunk updates in parallel via the
         ThreadPoolExecutor."""
 
-        @retry(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
+        @retry_builder(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
         def _kg_update_chunk(
             update: KGVespaChunkUpdateRequest, http_client: httpx.Client
         ) -> httpx.Response:

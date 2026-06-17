@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { getArtifactUrl } from "@/lib/build/client";
@@ -82,12 +82,14 @@ export default function PdfPreview({
         padding={2}
       >
         <SvgFileText size={48} className="stroke-text-02" />
-        <Text headingH3 text03>
+        <Text font="heading-h3" color="text-03">
           Cannot preview PDF
         </Text>
-        <Text secondaryBody text02 className="text-center max-w-md">
-          The PDF file could not be loaded.
-        </Text>
+        <div className="text-center max-w-md">
+          <Text font="secondary-body" color="text-02">
+            The PDF file could not be loaded.
+          </Text>
+        </div>
       </Section>
     );
   }
@@ -100,7 +102,7 @@ export default function PdfPreview({
         justifyContent="center"
         padding={2}
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           Loading PDF...
         </Text>
       </Section>

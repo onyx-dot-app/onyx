@@ -1,4 +1,4 @@
-import { LLMProviderName, LLMProviderView } from "@/interfaces/llm";
+import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
 import isEqual from "lodash/isEqual";
@@ -7,7 +7,7 @@ import {
   track,
   AnalyticsEvent,
   LLMProviderConfiguredSource,
-} from "@/lib/analytics";
+} from "@/lib/analytics/utils";
 import {
   BaseLLMFormValues,
   TestApiKeyResult,

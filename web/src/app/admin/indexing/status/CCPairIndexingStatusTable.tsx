@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { CCPairStatus } from "@/components/Status";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import {
   ValidSources,
   ConnectorIndexingStatusLiteResponse,

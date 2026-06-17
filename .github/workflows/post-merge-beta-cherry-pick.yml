@@ -98,8 +98,10 @@ jobs:
 
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         with:
-          app-id: ${{ vars.CHERRY_PICK_APP_ID }}
+          client-id: ${{ vars.CHERRY_PICK_APP_ID }}
           private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -158,7 +160,14 @@ jobs:
           echo "status=failure" >> "$GITHUB_OUTPUT"
 
           reason="command-failed"
-          if grep -qiE "merge conflict during cherry-pick|CONFLICT|could not apply|cherry-pick in progress with staged changes" "$output_file"; then
+          # The GitHub App installation token only carries contents + pull-requests
+          # write permissions, not `workflows`. Pushing a cherry-pick that touches
+          # .github/workflows is therefore rejected by the remote. Detect that
+          # specific rejection so the Slack alert can explain it clearly instead of
+          # surfacing a raw git error.
+          if grep -qiE "refusing to allow .* to (create or update|update) workflow|without [^[:space:]]*workflows[^[:space:]]* permission" "$output_file"; then
+            reason="workflow-permission"
+          elif grep -qiE "merge conflict during cherry-pick|CONFLICT|could not apply|cherry-pick in progress with staged changes" "$output_file"; then
             reason="merge-conflict"
           fi
           echo "reason=${reason}" >> "$GITHUB_OUTPUT"
@@ -270,6 +279,8 @@ jobs:
             reason_text="failed to capture cherry-pick output for classification"
           elif [ "${CHERRY_PICK_REASON}" = "merge-conflict" ]; then
             reason_text="merge conflict during cherry-pick"
+          elif [ "${CHERRY_PICK_REASON}" = "workflow-permission" ]; then
+            reason_text="PR changes .github/workflows, which the cherry-pick GitHub App is not permitted to push — please cherry-pick this PR manually"
           fi
 
           details_excerpt="$(printf '%s' "${CHERRY_PICK_DETAILS}" | tail -n 8 | tr '\n' ' ' | sed "s/[[:space:]]\\+/ /g" | sed "s/\"/'/g" | cut -c1-350)"

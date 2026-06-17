@@ -41,7 +41,9 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import ScheduledTaskErrorClass
 from onyx.db.enums import ScheduledTaskRunStatus
+from onyx.db.enums import ScheduledTaskSkipReason
 from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.scheduled_task import advance_next_run_at
 from onyx.db.scheduled_task import claim_due_scheduled_tasks
@@ -125,7 +127,7 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
                         task_id=task.id,
                         trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
                         status=ScheduledTaskRunStatus.SKIPPED,
-                        skip_reason="prior_in_flight",
+                        skip_reason=ScheduledTaskSkipReason.PRIOR_IN_FLIGHT,
                     )
                     skipped_count += 1
                 else:
@@ -257,7 +259,7 @@ def cleanup_stuck_scheduled_runs(self: Task, *, tenant_id: str) -> int:
                     db_session=db_session,
                     run_id=run.id,
                     status=ScheduledTaskRunStatus.FAILED,
-                    error_class="stuck",
+                    error_class=ScheduledTaskErrorClass.STUCK,
                     error_detail=detail,
                 )
                 marked += 1

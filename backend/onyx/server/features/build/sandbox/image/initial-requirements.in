@@ -1,0 +1,16 @@
+cryptography
+defusedxml
+fastapi
+google-genai
+lxml
+matplotlib
+matplotlib-inline
+numpy
+onyx-cli
+openpyxl
+pandas
+pdfplumber
+pillow
+pydantic
+python-pptx
+uvicorn[standard]

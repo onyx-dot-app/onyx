@@ -45,10 +45,17 @@ def acquire_seat_lock(db_session: Session, tenant_id: str | None = None) -> None
     same transaction.
     """
     lock_id = seat_lock_id_for_tenant(tenant_id or get_current_tenant_id())
+    # Bounded wait: a double-acquisition bug or wedged holder should fail
+    # fast with lock_not_available, not hang until the idle-in-transaction
+    # reaper kills the session (observed as 10-minute invite freezes).
+    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
     db_session.execute(
         text("SELECT pg_advisory_xact_lock(:lock_id)"),
         {"lock_id": lock_id},
     )
+    # Restore the session default so the caller's later row-lock waits
+    # aren't capped by the advisory-acquisition bound.
+    db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))
 
 
 class SeatAvailabilityResult(NamedTuple):
@@ -136,7 +143,7 @@ def user_counts_toward_seats(user: User) -> bool:
     """
     return (
         bool(user.is_active)
-        and user.role != UserRole.EXT_PERM_USER
+        and user.account_type != AccountType.EXT_PERM_USER
         and user.email != ANONYMOUS_USER_EMAIL
         and user.account_type != AccountType.SERVICE_ACCOUNT
     )
@@ -164,10 +171,10 @@ def get_used_seats(tenant_id: str | None = None) -> int:
                 select(func.count())
                 .select_from(User)
                 .where(
-                    User.is_active == True,  # noqa: E712
+                    User.is_active == True,  # noqa: E712  # ty: ignore[invalid-argument-type]
                     User.account_type != AccountType.EXT_PERM_USER,
                     User.account_type != AccountType.SERVICE_ACCOUNT,
-                    User.email != ANONYMOUS_USER_EMAIL,
+                    User.email != ANONYMOUS_USER_EMAIL,  # ty: ignore[invalid-argument-type]
                 )
             )
             return result.scalar() or 0

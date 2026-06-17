@@ -1,6 +1,8 @@
 import random
 import threading
 import time
+from datetime import datetime
+from datetime import timezone
 from typing import Any
 from typing import cast
 from typing import List
@@ -23,6 +25,7 @@ from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import _apply_document_ingestion_hook
 from onyx.indexing.indexing_pipeline import add_contextual_summaries
 from onyx.indexing.indexing_pipeline import filter_documents
+from onyx.indexing.indexing_pipeline import get_docs_to_update
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_response import Choice
@@ -236,15 +239,19 @@ def test_contextual_rag(
     assert "tag1" in chunks[0].metadata_suffix_keyword
     assert "tag2" in chunks[0].metadata_suffix_semantic
 
-    doc_summary = "Test1" if enable_contextual_rag else ""
-    chunk_context = ""
-    count = 2
-    for chunk in chunks:
-        if enable_contextual_rag:
-            chunk_context = f"Test{count}"
-            count += 1
-        assert chunk.doc_summary == doc_summary
-        assert chunk.chunk_context == chunk_context
+    # The doc summary is computed once (the first LLM call) and shared by every
+    # chunk. The per-chunk context calls then run in parallel
+    # (run_functions_tuples_in_parallel), so the mock's "TestN" counter is assigned
+    # to chunks in nondeterministic order — assert the SET of contexts rather than a
+    # per-chunk ordering.
+    if enable_contextual_rag:
+        assert all(chunk.doc_summary == "Test1" for chunk in chunks)
+        assert {chunk.chunk_context for chunk in chunks} == {
+            f"Test{n}" for n in range(2, 2 + len(chunks))
+        }
+    else:
+        assert all(chunk.doc_summary == "" for chunk in chunks)
+        assert all(chunk.chunk_context == "" for chunk in chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +318,23 @@ def _make_ctx() -> MagicMock:
     ctx.__enter__ = MagicMock(return_value=MagicMock())
     ctx.__exit__ = MagicMock(return_value=False)
     return ctx
+
+
+def test_document_push_skipped_when_from_beginning() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(
+            _make_adapter(),
+            [doc],
+            _make_insertion_records(["doc1"]),
+            from_beginning=True,
+        )
+    mock_hook.assert_not_called()
 
 
 def test_document_push_skipped_in_multi_tenant_mode() -> None:
@@ -757,3 +781,239 @@ class TestProcessImageSections:
         # allow_failures=True → None result → fallback text
         assert sections[1].text == "[Error processing image]"
         assert sections[2].text == "summary-of-ok2"
+
+
+# ---------------------------------------------------------------------------
+# content_hash
+# ---------------------------------------------------------------------------
+
+
+def _doc_with_text(title: str | None, *texts: str) -> Document:
+    return Document(
+        id="x",
+        title=title,
+        semantic_identifier="x",
+        sections=[TextSection(text=t, link=None) for t in texts],
+        source=DocumentSource.WEB,
+        metadata={},
+    )
+
+
+def test_content_hash_is_stable() -> None:
+    doc = _doc_with_text("Title", "Hello world")
+    assert doc.content_hash() == doc.content_hash()
+
+
+def test_content_hash_changes_with_text() -> None:
+    doc1 = _doc_with_text("Title", "Hello world")
+    doc2 = _doc_with_text("Title", "Hello world CHANGED")
+    assert doc1.content_hash() != doc2.content_hash()
+
+
+def test_content_hash_changes_with_title() -> None:
+    doc1 = _doc_with_text("Title A", "Same content")
+    doc2 = _doc_with_text("Title B", "Same content")
+    assert doc1.content_hash() != doc2.content_hash()
+
+
+def test_content_hash_none_title_treated_as_empty() -> None:
+    doc_none = _doc_with_text(None, "content")
+    doc_empty = _doc_with_text("", "content")
+    assert doc_none.content_hash() == doc_empty.content_hash()
+
+
+def test_content_hash_changes_with_metadata() -> None:
+    doc1 = _doc_with_text("T", "content")
+    doc1.doc_metadata = {"author": "Alice"}
+    doc2 = _doc_with_text("T", "content")
+    doc2.doc_metadata = {"author": "Bob"}
+    assert doc1.content_hash() != doc2.content_hash()
+
+
+def test_content_hash_metadata_key_order_is_irrelevant() -> None:
+    doc1 = _doc_with_text("T", "content")
+    doc1.doc_metadata = {"a": "1", "b": "2"}
+    doc2 = _doc_with_text("T", "content")
+    doc2.doc_metadata = {"b": "2", "a": "1"}
+    assert doc1.content_hash() == doc2.content_hash()
+
+
+def test_content_hash_ignores_semantic_identifier() -> None:
+    doc1 = Document(
+        id="x",
+        title="T",
+        semantic_identifier="old-name",
+        sections=[TextSection(text="content", link=None)],
+        source=DocumentSource.WEB,
+        metadata={},
+    )
+    doc2 = Document(
+        id="x",
+        title="T",
+        semantic_identifier="new-name",
+        sections=[TextSection(text="content", link=None)],
+        source=DocumentSource.WEB,
+        metadata={},
+    )
+    assert doc1.content_hash() == doc2.content_hash()
+
+
+def test_content_hash_changes_with_owners() -> None:
+    from onyx.connectors.models import BasicExpertInfo
+
+    doc1 = _doc_with_text("T", "content")
+    doc1.primary_owners = [BasicExpertInfo(email="alice@example.com")]
+    doc2 = _doc_with_text("T", "content")
+    doc2.primary_owners = [BasicExpertInfo(email="bob@example.com")]
+    assert doc1.content_hash() != doc2.content_hash()
+
+
+def test_content_hash_owner_order_is_irrelevant() -> None:
+    from onyx.connectors.models import BasicExpertInfo
+
+    alice = BasicExpertInfo(email="alice@example.com")
+    bob = BasicExpertInfo(email="bob@example.com")
+    doc1 = _doc_with_text("T", "content")
+    doc1.primary_owners = [alice, bob]
+    doc2 = _doc_with_text("T", "content")
+    doc2.primary_owners = [bob, alice]
+    assert doc1.content_hash() == doc2.content_hash()
+
+
+def test_content_hash_includes_image_file_id() -> None:
+    doc_text_only = _doc_with_text("T", "text")
+    doc_with_image = Document(
+        id="x",
+        title="T",
+        semantic_identifier="x",
+        sections=[
+            TextSection(text="text", link=None),
+            ImageSection(image_file_id="img-1"),
+        ],
+        source=DocumentSource.WEB,
+        metadata={},
+    )
+    assert doc_text_only.content_hash() != doc_with_image.content_hash()
+
+
+def test_content_hash_changes_when_image_file_id_changes() -> None:
+    def _image_doc(file_id: str) -> Document:
+        return Document(
+            id="x",
+            title="T",
+            semantic_identifier="x",
+            sections=[ImageSection(image_file_id=file_id)],
+            source=DocumentSource.WEB,
+            metadata={},
+        )
+
+    assert _image_doc("img-v1").content_hash() != _image_doc("img-v2").content_hash()
+
+
+# ---------------------------------------------------------------------------
+# get_docs_to_update — content hash skip
+# ---------------------------------------------------------------------------
+
+
+def _make_db_doc(
+    doc_id: str,
+    content_hash: str | None = None,
+    doc_updated_at: datetime | None = None,
+) -> MagicMock:
+    db_doc = MagicMock()
+    db_doc.id = doc_id
+    db_doc.content_hash = content_hash
+    db_doc.doc_updated_at = doc_updated_at
+    return db_doc
+
+
+def test_get_docs_to_update_new_doc_always_included() -> None:
+    doc = _doc_with_text("Title", "content")
+    doc.id = "new-doc"
+    docs, hashes = get_docs_to_update([doc], db_docs=[])
+    assert len(docs) == 1
+    assert "new-doc" in hashes
+
+
+def test_get_docs_to_update_hash_match_skips_doc_without_timestamp() -> None:
+    """Hash skip applies only when doc_updated_at is absent (e.g. web connector)."""
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.doc_updated_at = None
+    stored_hash = doc.content_hash()
+    db_doc = _make_db_doc("doc1", content_hash=stored_hash)
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert docs == []
+    assert hashes == {}
+
+
+def test_get_docs_to_update_hash_not_consulted_when_timestamp_available() -> None:
+    """When doc_updated_at advances, the document must be re-indexed even if the
+    hash matches — e.g. GDrive in-place image replacement keeps image_file_id
+    the same but the image bytes changed."""
+    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    new_time = datetime(2021, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "same text")
+    doc.id = "doc1"
+    doc.doc_updated_at = new_time
+    stored_hash = doc.content_hash()  # hash matches — text unchanged
+    db_doc = _make_db_doc("doc1", content_hash=stored_hash, doc_updated_at=old_time)
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert len(docs) == 1  # timestamp advanced → must re-index despite hash match
+    assert "doc1" in hashes
+
+
+def test_get_docs_to_update_hash_mismatch_includes_doc() -> None:
+    doc = _doc_with_text("Title", "new content")
+    doc.id = "doc1"
+    db_doc = _make_db_doc("doc1", content_hash="stale_hash_abc123")
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert len(docs) == 1
+    assert docs[0].id == "doc1"
+    assert hashes["doc1"] == doc.content_hash()
+
+
+def test_get_docs_to_update_null_hash_always_included() -> None:
+    """Null hash (pre-migration doc) must be indexed to populate the hash."""
+    doc = _doc_with_text("Title", "content")
+    doc.id = "doc1"
+    db_doc = _make_db_doc("doc1", content_hash=None)
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert len(docs) == 1
+    assert "doc1" in hashes
+
+
+def test_get_docs_to_update_time_skip_still_works() -> None:
+    """The existing doc_updated_at skip should still apply before the hash check."""
+    doc = _doc_with_text("Title", "content")
+    doc.id = "doc1"
+    old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc.doc_updated_at = old_time
+    db_doc = _make_db_doc("doc1", content_hash=None, doc_updated_at=old_time)
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+    assert docs == []
+    assert hashes == {}
+
+
+def test_get_docs_to_update_mixed_batch() -> None:
+    """Unchanged doc is skipped; changed doc is included."""
+    doc_unchanged = _doc_with_text("T", "same")
+    doc_unchanged.id = "unchanged"
+    doc_changed = _doc_with_text("T", "different now")
+    doc_changed.id = "changed"
+
+    db_unchanged = _make_db_doc("unchanged", content_hash=doc_unchanged.content_hash())
+    db_changed = _make_db_doc("changed", content_hash="old_hash")
+
+    docs, hashes = get_docs_to_update(
+        [doc_unchanged, doc_changed], db_docs=[db_unchanged, db_changed]
+    )
+    assert len(docs) == 1
+    assert docs[0].id == "changed"
+    assert "changed" in hashes
+    assert "unchanged" not in hashes

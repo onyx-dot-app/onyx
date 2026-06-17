@@ -15,9 +15,17 @@ export interface LogoProps {
   folded?: boolean;
   size?: number;
   className?: string;
+  // Always render the real Onyx logo, ignoring enterprise white-label settings
+  // (custom logo / application name). Used by Onyx-branded surfaces like Craft.
+  onyxBranded?: boolean;
 }
 
-export default function Logo({ folded, size, className }: LogoProps) {
+export default function Logo({
+  folded,
+  size,
+  className,
+  onyxBranded,
+}: LogoProps) {
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
   const settings = useSettingsContext();
   const logoDisplayStyle = settings.enterpriseSettings?.logo_display_style;
@@ -33,6 +41,14 @@ export default function Logo({ folded, size, className }: LogoProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [settings.enterpriseSettings]
   );
+
+  if (onyxBranded) {
+    return folded ? (
+      <SvgOnyxLogo size={resolvedSize} className={cn("shrink-0", className)} />
+    ) : (
+      <SvgOnyxLogoTyped size={resolvedSize} className={className} />
+    );
+  }
 
   const logo = settings.enterpriseSettings?.use_custom_logo ? (
     <div
@@ -66,16 +82,17 @@ export default function Logo({ folded, size, className }: LogoProps) {
             {opts.includeName && (
               <Truncated headingH3>{applicationName}</Truncated>
             )}
-            {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-              <Text
-                secondaryBody
-                text03
-                className={"line-clamp-1 truncate"}
-                nowrap
-              >
-                Powered by Onyx
-              </Text>
-            )}
+            {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED &&
+              !settings.enterpriseSettings?.hide_onyx_branding && (
+                <Text
+                  secondaryBody
+                  text03
+                  className={"line-clamp-1 truncate"}
+                  nowrap
+                >
+                  Powered by Onyx
+                </Text>
+              )}
           </div>
         )}
       </div>

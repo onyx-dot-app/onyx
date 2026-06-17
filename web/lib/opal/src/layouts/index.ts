@@ -48,3 +48,23 @@ export {
   type AlignItems,
   type Length,
 } from "@opal/layouts/general/components";
+
+/* SettingsLayouts */
+export * as SettingsLayouts from "@opal/layouts/settings/components";
+export type { SettingsHeaderProps } from "@opal/layouts/settings/components";
+
+/* RootLayout */
+export * as RootLayout from "@opal/layouts/root/components";
+export {
+  useSidebarState,
+  SidebarStateProvider,
+  RootLayoutRightPanelSlotContext,
+} from "@opal/layouts/root/components";
+export type {
+  SidebarStateProviderProps,
+  RightPanelSlotSetter,
+} from "@opal/layouts/root/components";
+
+/* SidebarLayouts */
+export * as SidebarLayouts from "@opal/layouts/sidebar/components";
+export { type SidebarRootProps } from "@opal/layouts/sidebar/components";

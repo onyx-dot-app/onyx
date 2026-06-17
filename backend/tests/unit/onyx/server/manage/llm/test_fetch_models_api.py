@@ -87,6 +87,47 @@ class TestGetOllamaAvailableModels:
                 [r.name for r in results], key=str.lower
             )
 
+    def test_unreachable_server_returns_400(self) -> None:
+        """An unreachable Ollama URL maps to 400, not a 502 gateway fault.
+
+        Patch ``httpx.get``, not the whole module, so the real ``httpx``
+        exception classes remain usable in the handler's except clauses.
+        """
+        from onyx.error_handling.error_codes import OnyxErrorCode
+        from onyx.server.manage.llm.api import get_ollama_available_models
+
+        with patch(
+            "onyx.server.manage.llm.api.httpx.get",
+            side_effect=httpx.ConnectError("connection refused", request=MagicMock()),
+        ):
+            request = OllamaModelsRequest(api_base="http://localhost:11434")
+            with pytest.raises(OnyxError) as exc_info:
+                get_ollama_available_models(request, MagicMock(), MagicMock())
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.status_code == 400
+
+    def test_upstream_error_status_returns_502(self) -> None:
+        """An error *response* from Ollama is a genuine upstream fault → 502."""
+        from onyx.error_handling.error_codes import OnyxErrorCode
+        from onyx.server.manage.llm.api import get_ollama_available_models
+
+        error_response = httpx.Response(
+            status_code=500, request=httpx.Request("GET", "http://localhost:11434")
+        )
+        with patch(
+            "onyx.server.manage.llm.api.httpx.get",
+            side_effect=httpx.HTTPStatusError(
+                "server error", request=error_response.request, response=error_response
+            ),
+        ):
+            request = OllamaModelsRequest(api_base="http://localhost:11434")
+            with pytest.raises(OnyxError) as exc_info:
+                get_ollama_available_models(request, MagicMock(), MagicMock())
+
+        assert exc_info.value.error_code == OnyxErrorCode.BAD_GATEWAY
+        assert exc_info.value.status_code == 502
+
     def test_syncs_to_db_when_provider_name_specified(
         self, mock_ollama_tags_response: dict, mock_ollama_show_response: dict
     ) -> None:
@@ -149,6 +190,102 @@ class TestGetOllamaAvailableModels:
             # No DB operations should happen
             mock_session.execute.assert_not_called()
             mock_session.commit.assert_not_called()
+
+    def test_prefers_modelfile_num_ctx_over_architecture_context_length(
+        self, mock_ollama_tags_response: dict
+    ) -> None:
+        from onyx.server.manage.llm.api import get_ollama_available_models
+
+        show_response = {
+            "model_info": {
+                "general.architecture": "qwen3moe",
+                "qwen3moe.context_length": 262144,
+            },
+            "capabilities": ["completion"],
+            "parameters": (
+                "top_k                          20\n"
+                "top_p                          0.95\n"
+                "num_ctx                        8192\n"
+                "temperature                    0.6"
+            ),
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_get_response = MagicMock()
+            mock_get_response.json.return_value = mock_ollama_tags_response
+            mock_get_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_get_response
+
+            mock_post_response = MagicMock()
+            mock_post_response.json.return_value = show_response
+            mock_post_response.raise_for_status = MagicMock()
+            mock_httpx.post.return_value = mock_post_response
+
+            request = OllamaModelsRequest(api_base="http://localhost:11434")
+            results = get_ollama_available_models(request, MagicMock(), MagicMock())
+
+            assert all(r.max_input_tokens == 8192 for r in results)
+
+    def test_falls_back_to_architecture_context_length_without_num_ctx(
+        self, mock_ollama_tags_response: dict
+    ) -> None:
+        from onyx.server.manage.llm.api import get_ollama_available_models
+
+        show_response = {
+            "model_info": {
+                "general.architecture": "llama",
+                "llama.context_length": 32768,
+            },
+            "capabilities": ["completion"],
+            "parameters": "temperature                    0.6",
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_get_response = MagicMock()
+            mock_get_response.json.return_value = mock_ollama_tags_response
+            mock_get_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_get_response
+
+            mock_post_response = MagicMock()
+            mock_post_response.json.return_value = show_response
+            mock_post_response.raise_for_status = MagicMock()
+            mock_httpx.post.return_value = mock_post_response
+
+            request = OllamaModelsRequest(api_base="http://localhost:11434")
+            results = get_ollama_available_models(request, MagicMock(), MagicMock())
+
+            assert all(r.max_input_tokens == 32768 for r in results)
+
+    def test_handles_null_parameters_field(
+        self, mock_ollama_tags_response: dict
+    ) -> None:
+        from onyx.server.manage.llm.api import get_ollama_available_models
+
+        show_response = {
+            "model_info": {
+                "general.architecture": "llama",
+                "llama.context_length": 16384,
+            },
+            "capabilities": ["completion"],
+            "parameters": None,
+        }
+
+        with patch("onyx.server.manage.llm.api.httpx") as mock_httpx:
+            mock_get_response = MagicMock()
+            mock_get_response.json.return_value = mock_ollama_tags_response
+            mock_get_response.raise_for_status = MagicMock()
+            mock_httpx.get.return_value = mock_get_response
+
+            mock_post_response = MagicMock()
+            mock_post_response.json.return_value = show_response
+            mock_post_response.raise_for_status = MagicMock()
+            mock_httpx.post.return_value = mock_post_response
+
+            request = OllamaModelsRequest(api_base="http://localhost:11434")
+            results = get_ollama_available_models(request, MagicMock(), MagicMock())
+
+            assert len(results) == 3
+            assert all(r.max_input_tokens == 16384 for r in results)
 
 
 class TestGetOpenRouterAvailableModels:
@@ -1130,8 +1267,9 @@ class TestGetLitellmAvailableModels:
             call_args = mock_get.call_args
             assert call_args[0][0] == "http://localhost:4000/v1/model/info"
 
-    def test_connection_failure_raises_onyx_error(self) -> None:
-        """Test that connection failures are wrapped in OnyxError."""
+    def test_connection_failure_returns_400(self) -> None:
+        """An unreachable proxy is a client misconfig → 400 VALIDATION_ERROR, not 502."""
+        from onyx.error_handling.error_codes import OnyxErrorCode
         from onyx.server.manage.llm.api import get_litellm_available_models
 
         mock_session = MagicMock()
@@ -1145,8 +1283,11 @@ class TestGetLitellmAvailableModels:
                 api_base="http://localhost:4000",
                 api_key="test-key",
             )
-            with pytest.raises(OnyxError, match="Failed to fetch LiteLLM proxy models"):
+            with pytest.raises(OnyxError) as exc_info:
                 get_litellm_available_models(request, MagicMock(), mock_session)
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.status_code == 400
 
     def test_401_raises_authentication_error(self) -> None:
         """Test that a 401 response raises OnyxError with authentication message."""
@@ -1314,8 +1455,9 @@ class TestGetBifrostAvailableModels:
             assert by_name["openai/gpt-4o"] == "GPT-4o"
             assert by_name["some/custom-model"] == "some/custom-model"
 
-    def test_request_failure_is_logged_and_wrapped(self) -> None:
-        """Test that request-layer failures are logged before raising OnyxError."""
+    def test_request_failure_is_logged_and_returns_400(self) -> None:
+        """A request-layer failure is logged and returns 400 (client misconfig)."""
+        from onyx.error_handling.error_codes import OnyxErrorCode
         from onyx.server.manage.llm.api import get_bifrost_available_models
 
         mock_session = MagicMock()
@@ -1329,7 +1471,10 @@ class TestGetBifrostAvailableModels:
             )
 
             request = BifrostModelsRequest(api_base="https://bifrost.example.com")
-            with pytest.raises(OnyxError, match="Failed to fetch Bifrost models"):
+            with pytest.raises(OnyxError) as exc_info:
                 get_bifrost_available_models(request, MagicMock(), mock_session)
 
             mock_warning.assert_called_once()
+
+        assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+        assert exc_info.value.status_code == 400

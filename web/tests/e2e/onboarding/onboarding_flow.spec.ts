@@ -34,7 +34,9 @@ async function createFreshAdmin(
 ): Promise<{ email: string; password: string }> {
   // First, log in as the existing admin so we can promote the new user
   await page.context().clearCookies();
-  const { email, password } = await loginAsRandomUser(page);
+  const { email, password } = await loginAsRandomUser(page, {
+    setDisplayName: false,
+  });
 
   // Now promote the new user to admin via the existing admin
   await page.context().clearCookies();
@@ -53,7 +55,7 @@ async function createFreshUser(
   page: Page
 ): Promise<{ email: string; password: string }> {
   await page.context().clearCookies();
-  return await loginAsRandomUser(page);
+  return await loginAsRandomUser(page, { setDisplayName: false });
 }
 
 test.describe("Onboarding Flow @exclusive", () => {

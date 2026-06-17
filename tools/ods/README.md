@@ -222,7 +222,7 @@ ods backend model_server --port 9001
 
 ### `web` - Run Frontend Scripts
 
-Run npm scripts from `web/package.json` without manually changing directories.
+Run bun scripts from `web/package.json` without manually changing directories.
 
 ```shell
 ods web <script> [args...]
@@ -248,7 +248,7 @@ ods web test --watch
 
 Manage the Onyx devcontainer. Also available as `ods dc`.
 
-Requires the [devcontainer CLI](https://github.com/devcontainers/cli) (`npm install -g @devcontainers/cli`).
+Requires the [devcontainer CLI](https://github.com/devcontainers/cli) (`bun install -g @devcontainers/cli`).
 
 ```shell
 ods dev <subcommand>
@@ -276,7 +276,7 @@ ods dev up
 ods dev into
 
 # Run a command
-ods dev exec -- npm test
+ods dev exec -- bun test
 
 # Restart the container
 ods dev restart

@@ -71,7 +71,7 @@ class RedisCacheBackend(CacheBackend):
     # -- distributed lock --------------------------------------------------
 
     def lock(self, name: str, timeout: float | None = None) -> CacheLock:
-        return RedisCacheLock(self._r.lock(name, timeout=timeout))
+        return RedisCacheLock(self._r.lock(name, timeout=timeout, thread_local=False))
 
     # -- blocking list (MCP OAuth BLPOP pattern) ---------------------------
 

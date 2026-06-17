@@ -1,10 +1,10 @@
 {{- /* Metrics port must match the default in metrics_server.py (_DEFAULT_PORTS).
        Do NOT use PROMETHEUS_METRICS_PORT env var in Helm — each worker needs its own port. */ -}}
-{{- if gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0 }}
+{{- if and (gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0) (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-scheduled-tasks-metrics
+  name: {{ include "onyx.resourceName" (list . "celery-worker-scheduled-tasks-metrics") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- if .Values.celery_worker_scheduled_tasks.deploymentLabels }}

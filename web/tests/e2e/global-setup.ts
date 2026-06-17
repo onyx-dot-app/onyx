@@ -123,7 +123,36 @@ async function apiLoginAndSaveState(
 }
 
 /**
+ * Set the user's display name via the personalization API. This dismisses the
+ * first-time "What should Onyx call you?" prompt that otherwise covers the
+ * chat UI and silently breaks tests that interact with the action popover.
+ */
+async function setDisplayName(
+  baseURL: string,
+  storageStatePath: string,
+  name: string
+): Promise<void> {
+  const ctx = await request.newContext({
+    baseURL,
+    storageState: storageStatePath,
+  });
+  try {
+    const res = await ctx.patch("/api/user/personalization", {
+      data: { name },
+    });
+    if (!res.ok()) {
+      console.warn(
+        `[global-setup] Failed to set display name for ${storageStatePath}: ${res.status()}`
+      );
+    }
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+/**
  * Promote a user to admin by adding them to the Admin default group.
+ * Promote a user to admin via the manage API.
  * Requires an authenticated context (admin storage state).
  */
 async function promoteToAdmin(
@@ -242,6 +271,8 @@ async function globalSetup(config: FullConfig) {
     "admin_auth.json"
   );
 
+  await setDisplayName(baseURL, "admin_auth.json", "Admin");
+
   // Promote admin2 now that we have an admin session
   await promoteToAdmin(
     baseURL,
@@ -255,28 +286,13 @@ async function globalSetup(config: FullConfig) {
     TEST_ADMIN2_CREDENTIALS.password,
     "admin2_auth.json"
   );
+  await setDisplayName(baseURL, "admin2_auth.json", "Admin 2");
 
   for (let i = 0; i < WORKER_USER_POOL_SIZE; i++) {
     const { email, password } = workerUserCredentials(i);
     const storageStatePath = `worker${i}_auth.json`;
     await apiLoginAndSaveState(baseURL, email, password, storageStatePath);
-
-    const workerCtx = await request.newContext({
-      baseURL,
-      storageState: storageStatePath,
-    });
-    try {
-      const res = await workerCtx.patch("/api/user/personalization", {
-        data: { name: "worker" },
-      });
-      if (!res.ok()) {
-        console.warn(
-          `[global-setup] Failed to set display name for ${email}: ${res.status()}`
-        );
-      }
-    } finally {
-      await workerCtx.dispose();
-    }
+    await setDisplayName(baseURL, storageStatePath, "worker");
   }
 
   // ── Ensure a public LLM provider exists ───────────────────────────

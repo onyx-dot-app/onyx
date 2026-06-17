@@ -15,7 +15,6 @@ from datetime import timedelta
 from datetime import timezone
 
 import redis
-import requests
 
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
@@ -27,6 +26,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.server.settings.models import ApplicationStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -75,7 +75,7 @@ def _get_user_is_active(email: str, admin_user: DATestUser) -> bool:
 
 
 def _deactivate_by_email(email: str, admin_user: DATestUser) -> None:
-    response = requests.patch(
+    response = client.patch(
         url=f"{API_SERVER_URL}/manage/admin/deactivate-user",
         json={"user_email": email},
         headers=admin_user.headers,
@@ -84,7 +84,7 @@ def _deactivate_by_email(email: str, admin_user: DATestUser) -> None:
 
 
 def _activate_by_email(email: str, admin_user: DATestUser) -> None:
-    response = requests.patch(
+    response = client.patch(
         url=f"{API_SERVER_URL}/manage/admin/activate-user",
         json={"user_email": email},
         headers=admin_user.headers,
@@ -125,7 +125,7 @@ def test_slack_user_reactivation_blocked_by_seat_limit(
     _seed_license(r, seats=1)
 
     try:
-        response = requests.patch(
+        response = client.patch(
             url=f"{API_SERVER_URL}/manage/admin/activate-user",
             json={"user_email": slack_email},
             headers=admin_user.headers,

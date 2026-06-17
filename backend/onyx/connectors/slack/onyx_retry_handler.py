@@ -8,6 +8,7 @@ from slack_sdk.http_retry.state import RetryState
 
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -115,11 +116,14 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
                 else retry_after_header_value
             )
 
-            retry_after_value_int = int(
-                retry_after_value
-            )  # will raise ValueError if somehow we can't convert to int
-            jitter = retry_after_value_int * 0.25 * random.random()
-            duration_s = retry_after_value_int + jitter
+            parsed_retry_after = parse_retry_after_seconds(retry_after_value)
+            if parsed_retry_after is None:
+                raise ValueError(
+                    "OnyxRedisSlackRetryHandler.prepare_for_next_attempt: "
+                    "could not parse retry-after value"
+                )
+            jitter = parsed_retry_after * 0.25 * random.random()
+            duration_s = parsed_retry_after + jitter
         except ValueError:
             duration_s += random.random()
 

@@ -159,7 +159,7 @@ func deployEdge(opts *DeployEdgeOptions) {
 		log.Fatalf("Failed to find dispatched deploy run: %v", err)
 	}
 	log.Infof("Deploy run started: %s", deployRun.URL)
-	log.Info("A kickoff Slack message will appear in #monitor-deployments.")
+	log.Info("A kickoff Slack message will appear in the deployments Slack channel.")
 
 	if opts.NoWaitDeploy {
 		log.Info("--no-wait-deploy set; not waiting for deploy completion.")

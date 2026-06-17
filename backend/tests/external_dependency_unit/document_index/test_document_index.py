@@ -1,6 +1,6 @@
 """External dependency tests for the new DocumentIndex interface.
 
-These tests assume Vespa and OpenSearch are running.
+These tests assume OpenSearch is running.
 """
 
 import time
@@ -9,11 +9,11 @@ from collections.abc import Generator
 from collections.abc import Iterator
 from unittest.mock import patch
 
-import httpx
 import pytest
 
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.models import IndexFilters
+from onyx.context.search.models import InferenceChunk
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.interfaces_new import DocumentIndex as DocumentIndexNew
 from onyx.document_index.interfaces_new import DocumentSectionRequest
@@ -22,7 +22,6 @@ from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
-from onyx.document_index.vespa.vespa_document_index import VespaDocumentIndex
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.document_index.conftest import EMBEDDING_DIM
@@ -31,23 +30,45 @@ from tests.external_dependency_unit.document_index.conftest import (
     make_indexing_metadata,
 )
 
+
+def _retrieve_chunks_with_expected_boost(
+    document_index: DocumentIndexNew,
+    document_id: str,
+    expected_chunk_count: int,
+    expected_boost: int,
+    filters: IndexFilters,
+    timeout_s: float = 10.0,
+    poll_interval_s: float = 0.25,
+) -> list[InferenceChunk]:
+    """Polls id_based_retrieval until the retrieved chunks match the expected
+    count and boost, or the timeout is reached.
+
+    OpenSearch is eventually consistent after updates (~1s refresh interval).
+    Polling avoids relying on a fixed sleep that races the refresh window.
+    """
+    deadline = time.time() + timeout_s
+    retrieved: list[InferenceChunk] = []
+    while time.time() < deadline:
+        retrieved = document_index.id_based_retrieval(
+            chunk_requests=[DocumentSectionRequest(document_id=document_id)],
+            filters=filters,
+        )
+        if len(retrieved) == expected_chunk_count and all(
+            chunk.boost == expected_boost for chunk in retrieved
+        ):
+            return retrieved
+        time.sleep(poll_interval_s)
+    actual_boosts = [chunk.boost for chunk in retrieved]
+    pytest.fail(
+        f"Timed out after {timeout_s}s waiting for document {document_id!r}: "
+        f"expected {expected_chunk_count} chunk(s) with boost={expected_boost}, "
+        f"got {len(retrieved)} chunk(s) with boosts={actual_boosts}."
+    )
+
+
 # ------------------------------------------------------------------------------
 # Fixtures
 # ------------------------------------------------------------------------------
-
-
-@pytest.fixture(scope="module")
-def vespa_document_index(
-    vespa_index: VespaDocumentIndex,  # noqa: ARG001 — ensures schema exists
-    httpx_client: httpx.Client,
-    test_index_name: str,
-) -> Generator[VespaDocumentIndex, None, None]:
-    yield VespaDocumentIndex(
-        index_name=test_index_name,
-        tenant_state=TenantState(tenant_id=TEST_TENANT_ID, multitenant=False),
-        large_chunks_enabled=False,
-        httpx_client=httpx_client,
-    )
 
 
 @pytest.fixture(scope="module")
@@ -65,10 +86,9 @@ def opensearch_document_index(
 
 @pytest.fixture(scope="module")
 def document_indices(
-    vespa_document_index: VespaDocumentIndex,
     opensearch_document_index: OpenSearchDocumentIndex,
 ) -> Generator[list[DocumentIndexNew], None, None]:
-    yield [opensearch_document_index, vespa_document_index]
+    yield [opensearch_document_index]
 
 
 # ------------------------------------------------------------------------------
@@ -78,7 +98,7 @@ def document_indices(
 
 class TestDocumentIndexNew:
     """
-    Tests the new DocumentIndex interface against real Vespa and OpenSearch.
+    Tests the new DocumentIndex interface against a real OpenSearch.
     """
 
     def test_index_single_new_doc(
@@ -124,7 +144,7 @@ class TestDocumentIndexNew:
             )
             document_index.index(chunks=[chunk], indexing_metadata=metadata_first)
 
-            # Allow near-real-time indexing to settle (needed for Vespa).
+            # Allow OpenSearch refresh interval to settle.
             time.sleep(1)
 
             # Re-index — old_chunk_cnt=1 signals the document already existed.
@@ -215,7 +235,7 @@ class TestDocumentIndexNew:
             )
             document_index.index(chunks=[pre_chunk], indexing_metadata=pre_metadata)
 
-            # Allow near-real-time indexing to settle (needed for Vespa).
+            # Allow OpenSearch refresh interval to settle.
             time.sleep(1)
 
             # Now index a batch with the existing doc and a new doc.
@@ -325,7 +345,7 @@ class TestDocumentIndexNew:
             )
             document_index.index(chunks=chunks, indexing_metadata=metadata)
 
-            # Allow near-real-time indexing to settle (needed for Vespa).
+            # Allow OpenSearch refresh interval to settle.
             time.sleep(1)
 
             # Under test.
@@ -336,20 +356,25 @@ class TestDocumentIndexNew:
             )
             document_index.update([update_request])
 
-            # Allow near-real-time updating to settle (needed for Vespa).
-            time.sleep(1)
-
-            # Postcondition.
+            # Postcondition. Poll until the eventually-consistent indexes
+            # reflect the updates rather than racing a fixed sleep against
+            # OpenSearch's ~1s refresh window.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
                 tenant_id=TEST_TENANT_ID,
             )
-            retrieved_doc1 = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc1)],
+            retrieved_doc1 = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc1,
+                expected_chunk_count=3,
+                expected_boost=7,
                 filters=filters,
             )
-            retrieved_doc2 = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc2)],
+            retrieved_doc2 = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc2,
+                expected_chunk_count=2,
+                expected_boost=7,
                 filters=filters,
             )
             assert len(retrieved_doc1) == 3
@@ -380,7 +405,7 @@ class TestDocumentIndexNew:
             )
             document_index.index(chunks=chunks, indexing_metadata=metadata)
 
-            # Allow near-real-time indexing to settle (needed for Vespa).
+            # Allow OpenSearch refresh interval to settle.
             time.sleep(1)
 
             # Under test - two separate requests, each updating a different doc.
@@ -396,20 +421,25 @@ class TestDocumentIndexNew:
             )
             document_index.update([req1, req2])
 
-            # Allow near-real-time updating to settle (needed for Vespa).
-            time.sleep(1)
-
-            # Postcondition.
+            # Postcondition. Poll until the eventually-consistent indexes
+            # reflect the updates rather than racing a fixed sleep against
+            # OpenSearch's ~1s refresh window.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
                 tenant_id=TEST_TENANT_ID,
             )
-            retrieved_doc1 = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc1)],
+            retrieved_doc1 = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc1,
+                expected_chunk_count=2,
+                expected_boost=3,
                 filters=filters,
             )
-            retrieved_doc2 = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc2)],
+            retrieved_doc2 = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=doc2,
+                expected_chunk_count=1,
+                expected_boost=9,
                 filters=filters,
             )
             assert len(retrieved_doc1) == 2
@@ -434,7 +464,7 @@ class TestDocumentIndexNew:
             metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[2])
             document_index.index(chunks=chunks, indexing_metadata=metadata)
 
-            # Allow near-real-time indexing to settle (needed for Vespa).
+            # Allow OpenSearch refresh interval to settle.
             time.sleep(1)
 
             # Under test - no fields set.
@@ -444,7 +474,7 @@ class TestDocumentIndexNew:
             )
             document_index.update([update_request])
 
-            # Allow near-real-time updating to settle (needed for Vespa).
+            # Allow OpenSearch refresh interval to settle.
             time.sleep(1)
 
             # Postcondition - chunks still retrievable with their default boost.

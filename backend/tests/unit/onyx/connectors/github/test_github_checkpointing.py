@@ -902,8 +902,8 @@ def test_load_from_checkpoint_cursor_pagination_completion(
     assert cp4.cached_repo is not None
     assert cp4.cached_repo.id == mock_repo1.id  # Last processed repo
     assert (
-        cp4.stage == GithubConnectorStage.PRS
-    )  # Reset for a hypothetical next run/repo
+        cp4.stage == GithubConnectorStage.FILES
+    )  # FILES is the terminal stage of the pipeline
     assert cp4.curr_page == 0
     assert cp4.num_retrieved == 0
     assert cp4.cursor_url is None

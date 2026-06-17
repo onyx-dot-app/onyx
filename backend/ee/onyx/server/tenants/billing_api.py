@@ -174,8 +174,8 @@ async def create_checkout_session(
     seats = request.seats if request else None
 
     try:
-        checkout_url = fetch_stripe_checkout_session(tenant_id, billing_period, seats)
-        return {"stripe_checkout_url": checkout_url}
+        result = fetch_stripe_checkout_session(tenant_id, billing_period, seats)
+        return {"stripe_checkout_url": result.url}
     except OnyxError:
         raise
     except Exception:
@@ -197,8 +197,12 @@ async def create_subscription_session(
             raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, "Tenant ID not found")
 
         billing_period = request.billing_period if request else "monthly"
-        session_id = fetch_stripe_checkout_session(tenant_id, billing_period)
-        return SubscriptionSessionResponse(sessionId=session_id)
+        result = fetch_stripe_checkout_session(tenant_id, billing_period)
+        return SubscriptionSessionResponse(
+            sessionId=result.session_id,
+            url=result.url,
+            requires_payment_method_update=result.requires_payment_method_update,
+        )
 
     except OnyxError:
         raise

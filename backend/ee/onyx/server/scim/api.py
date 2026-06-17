@@ -225,6 +225,42 @@ def _check_seat_availability(dal: ScimDAL) -> str | None:
     return None
 
 
+def _is_ext_perm_user(user: User) -> bool:
+    """Whether *user* is a shadow ``EXT_PERM_USER`` being adopted into SCIM.
+
+    ``EXT_PERM_USER`` accounts are created by external permission sync and do
+    not count toward the seat limit. When SCIM adopts one it must be promoted
+    to a real STANDARD account — which consumes a seat. Real users
+    (BASIC/ADMIN) are left untouched so we never demote an admin.
+    """
+    return user.account_type == AccountType.EXT_PERM_USER
+
+
+def _assign_default_groups_or_error(
+    dal: ScimDAL,
+    db_session: Session,
+    user: User,
+    email: str,
+    is_admin: bool = False,
+) -> ScimJSONResponse | None:
+    """Assign *user* to the Basic/Admin default group, or return a SCIM error.
+
+    ``assign_user_to_default_groups__no_commit`` raises (e.g. ``RuntimeError``)
+    if the default group is missing, so failures are rolled back and surfaced
+    as a structured SCIM 500 instead of leaking a raw 500. Returns the error
+    response on failure, else ``None``.
+    """
+    try:
+        assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
+    except Exception:
+        dal.rollback()
+        logger.exception("Failed to assign SCIM user %s to default groups", email)
+        return _scim_error_response(
+            500, f"Failed to assign user {email} to default group"
+        )
+    return None
+
+
 def _fetch_user_or_404(user_id: str, dal: ScimDAL) -> User | ScimJSONResponse:
     """Parse *user_id* as UUID, look up the user, or return a 404 error."""
     try:
@@ -449,9 +485,11 @@ def create_user(
             return _scim_error_response(409, f"User with email {email} already exists")
 
         # Adopt pre-existing user into SCIM management.
-        # Reactivating a deactivated user consumes a seat, so enforce the
-        # seat limit the same way replace_user does.
-        if user_resource.active and not existing_user.is_active:
+        # Becoming an active, seat-counting account consumes a seat — that
+        # happens when we reactivate a deactivated user OR promote a shadow
+        # EXT_PERM_USER (which doesn't count toward seats) to STANDARD.
+        promote = _is_ext_perm_user(existing_user)
+        if user_resource.active and (not existing_user.is_active or promote):
             seat_error = _check_seat_availability(dal)
             if seat_error:
                 return _scim_error_response(403, seat_error)
@@ -460,8 +498,19 @@ def create_user(
         dal.update_user(
             existing_user,
             is_active=user_resource.active,
+            account_type=AccountType.STANDARD if promote else None,
             **({"personal_name": personal_name} if personal_name else {}),
         )
+
+        # A promoted shadow user is now a real STANDARD account and must land
+        # in the Basic default group like any net-new SCIM user (the shadow
+        # EXT_PERM_USER role made this a no-op before).
+        if promote:
+            error = _assign_default_groups_or_error(
+                dal, db_session, existing_user, email
+            )
+            if error:
+                return error
 
         try:
             dal.create_user_mapping(
@@ -527,14 +576,9 @@ def create_user(
 
     # Assign user to default group BEFORE commit so everything is atomic.
     # If this fails, the entire user creation rolls back and IdP can retry.
-    try:
-        assign_user_to_default_groups__no_commit(db_session, user)
-    except Exception:
-        dal.rollback()
-        logger.exception("Failed to assign SCIM user %s to default groups", email)
-        return _scim_error_response(
-            500, f"Failed to assign user {email} to default group"
-        )
+    error = _assign_default_groups_or_error(dal, db_session, user, email)
+    if error:
+        return error
 
     dal.commit()
 
@@ -566,9 +610,12 @@ def replace_user(
         return result
     user = result
 
-    # Handle activation (need seat check) / deactivation
+    # Handle activation (need seat check) / deactivation. Promoting a shadow
+    # EXT_PERM_USER also consumes a seat, so self-heal any that the IdP
+    # re-syncs after being adopted while still in the shadow role.
+    promote = _is_ext_perm_user(user)
     is_reactivation = user_resource.active and not user.is_active
-    if is_reactivation:
+    if user_resource.active and (is_reactivation or promote):
         seat_error = _check_seat_availability(dal)
         if seat_error:
             return _scim_error_response(403, seat_error)
@@ -580,13 +627,17 @@ def replace_user(
         email=user_resource.userName.strip(),
         is_active=user_resource.active,
         personal_name=personal_name,
+        account_type=AccountType.STANDARD if promote else None,
     )
 
-    # Reconcile default-group membership on reactivation
-    if is_reactivation:
-        assign_user_to_default_groups__no_commit(
-            db_session, user, is_admin=user_is_admin(user)
+    # Reconcile default-group membership on reactivation or promotion — a
+    # promoted shadow user is now a real account and needs the Basic group.
+    if is_reactivation or promote:
+        error = _assign_default_groups_or_error(
+            dal, db_session, user, user.email, is_admin=user_is_admin(user)
         )
+        if error:
+            return error
 
     new_external_id = user_resource.externalId
     scim_username = user_resource.userName.strip()
@@ -652,13 +703,15 @@ def patch_user(
     except ScimPatchError as e:
         return _scim_error_response(e.status, e.detail)
 
-    # Apply changes back to the DB model
+    # Apply changes back to the DB model. A seat is consumed when the user
+    # becomes active (reactivation) or when a shadow EXT_PERM_USER is promoted
+    # to a real STANDARD account on re-sync.
+    promote = _is_ext_perm_user(user)
     is_reactivation = patched.active and not user.is_active
-    if patched.active != user.is_active:
-        if patched.active:
-            seat_error = _check_seat_availability(dal)
-            if seat_error:
-                return _scim_error_response(403, seat_error)
+    if patched.active and (patched.active != user.is_active or promote):
+        seat_error = _check_seat_availability(dal)
+        if seat_error:
+            return _scim_error_response(403, seat_error)
 
     # Track the scim_username — if userName was patched, update it
     new_scim_username = patched.userName.strip() if patched.userName else None
@@ -680,13 +733,17 @@ def patch_user(
         ),
         is_active=patched.active if patched.active != user.is_active else None,
         personal_name=personal_name,
+        account_type=AccountType.STANDARD if promote else None,
     )
 
-    # Reconcile default-group membership on reactivation
-    if is_reactivation:
-        assign_user_to_default_groups__no_commit(
-            db_session, user, is_admin=user_is_admin(user)
+    # Reconcile default-group membership on reactivation or promotion — a
+    # promoted shadow user is now a real account and needs the Basic group.
+    if is_reactivation or promote:
+        error = _assign_default_groups_or_error(
+            dal, db_session, user, user.email, is_admin=user_is_admin(user)
         )
+        if error:
+            return error
 
     # Build updated fields by merging PATCH enterprise data with current values
     cf = current_fields or ScimMappingFields()

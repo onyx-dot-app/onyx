@@ -4,8 +4,7 @@ import { useMemo, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SettingsLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { Button, Tag, Text, MessageCard } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
@@ -18,11 +17,12 @@ import {
   SvgTrash,
   SvgUserEdit,
   SvgUserKey,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
-import Code from "@/refresh-components/Code";
+import { Code } from "@opal/components";
 import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
@@ -240,7 +240,7 @@ export default function ServiceAccountsPage() {
           divider
         />
         <SettingsLayouts.Body>
-          <SimpleLoader />
+          <SvgSimpleLoader />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );

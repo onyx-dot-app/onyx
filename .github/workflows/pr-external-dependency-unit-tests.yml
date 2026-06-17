@@ -14,6 +14,7 @@ on:
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
       - ".github/actions/setup-playwright/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
   push:
@@ -24,6 +25,8 @@ permissions:
   contents: read
 
 env:
+  SANDBOX_BACKEND: "docker"
+
   # AWS credentials for S3-specific test
   S3_AWS_ACCESS_KEY_ID_FOR_TEST: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
   S3_AWS_SECRET_ACCESS_KEY_FOR_TEST: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}
@@ -113,21 +116,16 @@ jobs:
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
 
-      # needed for pulling Vespa, Redis, Postgres, and Minio images
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Create .env file for Docker Compose
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          COMPOSE_PROFILES=s3-filestore,opensearch-enabled
+          COMPOSE_PROFILES=s3-filestore
           DISABLE_TELEMETRY=true
-          OPENSEARCH_FOR_ONYX_ENABLED=true
           EOF
 
       - name: Set up Standard Dependencies
@@ -140,7 +138,6 @@ jobs:
             minio \
             relational_db \
             cache \
-            index \
             opensearch \
             code-interpreter
 
