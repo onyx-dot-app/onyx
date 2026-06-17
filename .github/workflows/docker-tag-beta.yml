@@ -1,5 +1,5 @@
 # This workflow is set up to be manually triggered via the GitHub Action tab.
-# Given a version, it will tag those backend and webserver images as "beta".
+# Given a version, it will tag the release images as "beta".
 
 name: Tag Beta Version
 
@@ -49,3 +49,9 @@ jobs:
           VERSION: ${{ github.event.inputs.version }}
         run: |
           docker buildx imagetools create -t onyxdotapp/onyx-model-server:beta onyxdotapp/onyx-model-server:${VERSION}
+
+      - name: Pull, Tag and Push Sandbox Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          docker buildx imagetools create -t onyxdotapp/sandbox:beta onyxdotapp/sandbox:${VERSION}

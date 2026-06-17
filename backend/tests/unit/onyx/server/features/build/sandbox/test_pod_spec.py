@@ -146,6 +146,104 @@ def _render_pod_template() -> client.V1PodTemplate:
     return client.ApiClient().deserialize(_Resp(rendered), "V1PodTemplate")
 
 
+def test_sandbox_image_defaults_to_global_version() -> None:
+    rendered = yaml.safe_load(
+        _render_pod_template_yaml(
+            [
+                "--set",
+                "global.version=v9.8.7",
+                "--set-string",
+                "configMap.SANDBOX_CONTAINER_IMAGE=",
+            ]
+        )
+    )
+    containers = {c["name"]: c for c in rendered["template"]["spec"]["containers"]}
+    init_containers = {
+        c["name"]: c for c in rendered["template"]["spec"]["initContainers"]
+    }
+    sandbox = containers["sandbox"]
+    sandbox_init = init_containers["sandbox-init"]
+    sidecar = init_containers["sidecar"]
+
+    assert sandbox["image"] == "onyxdotapp/sandbox:v9.8.7"
+    assert sandbox_init["image"] == "onyxdotapp/sandbox:v9.8.7"
+    assert sidecar["image"] == "onyxdotapp/sandbox:v9.8.7"
+    assert sandbox["imagePullPolicy"] == "IfNotPresent"
+    assert sandbox_init["imagePullPolicy"] == "IfNotPresent"
+    assert sidecar["imagePullPolicy"] == "IfNotPresent"
+
+
+def test_moving_sandbox_image_defaults_to_always_pull() -> None:
+    rendered = yaml.safe_load(
+        _render_pod_template_yaml(
+            [
+                "--set",
+                "global.version=edge",
+                "--set-string",
+                "configMap.SANDBOX_CONTAINER_IMAGE=",
+            ]
+        )
+    )
+    containers = {c["name"]: c for c in rendered["template"]["spec"]["containers"]}
+    init_containers = {
+        c["name"]: c for c in rendered["template"]["spec"]["initContainers"]
+    }
+    sandbox = containers["sandbox"]
+    sandbox_init = init_containers["sandbox-init"]
+    sidecar = init_containers["sidecar"]
+
+    assert sandbox["image"] == "onyxdotapp/sandbox:edge"
+    assert sandbox["imagePullPolicy"] == "Always"
+    assert sandbox_init["imagePullPolicy"] == "Always"
+    assert sidecar["imagePullPolicy"] == "Always"
+
+
+def test_implicit_latest_sandbox_image_defaults_to_always_pull() -> None:
+    rendered = yaml.safe_load(
+        _render_pod_template_yaml(
+            [
+                "--set-string",
+                "configMap.SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox",
+            ]
+        )
+    )
+    containers = {c["name"]: c for c in rendered["template"]["spec"]["containers"]}
+    init_containers = {
+        c["name"]: c for c in rendered["template"]["spec"]["initContainers"]
+    }
+    sandbox = containers["sandbox"]
+    sandbox_init = init_containers["sandbox-init"]
+    sidecar = init_containers["sidecar"]
+
+    assert sandbox["image"] == "onyxdotapp/sandbox"
+    assert sandbox["imagePullPolicy"] == "Always"
+    assert sandbox_init["imagePullPolicy"] == "Always"
+    assert sidecar["imagePullPolicy"] == "Always"
+
+
+def test_local_dev_sandbox_image_defaults_to_if_not_present() -> None:
+    rendered = yaml.safe_load(
+        _render_pod_template_yaml(
+            [
+                "--set-string",
+                "configMap.SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev",
+            ]
+        )
+    )
+    containers = {c["name"]: c for c in rendered["template"]["spec"]["containers"]}
+    init_containers = {
+        c["name"]: c for c in rendered["template"]["spec"]["initContainers"]
+    }
+    sandbox = containers["sandbox"]
+    sandbox_init = init_containers["sandbox-init"]
+    sidecar = init_containers["sidecar"]
+
+    assert sandbox["image"] == "onyxdotapp/sandbox:dev"
+    assert sandbox["imagePullPolicy"] == "IfNotPresent"
+    assert sandbox_init["imagePullPolicy"] == "IfNotPresent"
+    assert sidecar["imagePullPolicy"] == "IfNotPresent"
+
+
 def test_craft_helm_version_guard_rejects_old_kubernetes() -> None:
     result = _render_chart(
         [

@@ -1,5 +1,5 @@
 # This workflow is set up to be manually triggered via the GitHub Action tab.
-# Given a version, it will tag those backend and webserver images as "latest".
+# Given a version, it will tag the release images as "latest".
 
 name: Tag Latest Version
 
@@ -49,3 +49,9 @@ jobs:
           VERSION: ${{ github.event.inputs.version }}
         run: |
           docker buildx imagetools create -t onyxdotapp/onyx-model-server:latest onyxdotapp/onyx-model-server:${VERSION}
+
+      - name: Pull, Tag and Push Sandbox Image
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+        run: |
+          docker buildx imagetools create -t onyxdotapp/sandbox:latest onyxdotapp/sandbox:${VERSION}

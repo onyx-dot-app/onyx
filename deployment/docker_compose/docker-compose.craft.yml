@@ -11,7 +11,7 @@ services:
       # Public Onyx URL; Internal compose hostnames don't resolve from the
       # sandbox bridge.
       - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
-      - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.52}
+      - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:${IMAGE_TAG:-latest}}
       # Pinned: Must match the compose `networks:` block + install.sh literal.
       # An env_file leak would point Python at a non-existent network.
       - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
@@ -45,7 +45,7 @@ services:
       # backend to snapshot + terminate sandboxes.
       - SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}
       - SANDBOX_API_SERVER_URL=${SANDBOX_API_SERVER_URL:-}
-      - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:v0.1.52}
+      - SANDBOX_CONTAINER_IMAGE=${SANDBOX_CONTAINER_IMAGE:-onyxdotapp/sandbox:${IMAGE_TAG:-latest}}
       # See api_server above re: Pinned env_file-override vars.
       - SANDBOX_DOCKER_NETWORK=onyx_craft_sandbox
       - SANDBOX_DOCKER_MEMORY_LIMIT=${SANDBOX_DOCKER_MEMORY_LIMIT:-2g}
