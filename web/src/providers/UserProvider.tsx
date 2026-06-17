@@ -16,7 +16,7 @@ import {
   ThemePreference,
 } from "@/lib/types";
 import { usePostHog } from "posthog-js/react";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
@@ -64,12 +64,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser } = useCurrentUser();
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
-  const updatedSettings = useContext(SettingsContext);
+  const updatedSettingsData = useSettings();
   const posthog = usePostHog();
 
   // For auto_scroll and temperature_override_enabled:
   // - If user has a preference set, use that
   // - Otherwise, use the workspace setting if available
+  const wsAutoScroll = updatedSettingsData.auto_scroll;
+  const wsTemperatureOverride =
+    updatedSettingsData.temperature_override_enabled;
+
   const mergeUserPreferences = useCallback(
     (currentUser: User | null): User | null => {
       if (!currentUser) return null;
@@ -78,17 +82,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         preferences: {
           ...currentUser.preferences,
           auto_scroll:
-            currentUser.preferences?.auto_scroll ??
-            updatedSettings?.settings?.auto_scroll ??
-            false,
+            currentUser.preferences?.auto_scroll ?? wsAutoScroll ?? false,
           temperature_override_enabled:
             currentUser.preferences?.temperature_override_enabled ??
-            updatedSettings?.settings?.temperature_override_enabled ??
+            wsTemperatureOverride ??
             false,
         },
       };
     },
-    [updatedSettings]
+    [wsAutoScroll, wsTemperatureOverride]
   );
 
   const [upToDateUser, setUpToDateUser] = useState<User | null>(null);

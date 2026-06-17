@@ -2,10 +2,11 @@
 
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
-import { useSettingsContext } from "@/providers/SettingsProvider";
-import { ApplicationStatus } from "@/interfaces/settings";
+import { useSettings } from "@/lib/settings/hooks";
+import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
+import { RootLayout } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import { SvgSidebar, SvgSimpleLoader } from "@opal/icons";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
@@ -21,17 +22,17 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
-  const settings = useSettingsContext();
+  const settings = useSettings();
 
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
   const hasCustomSidebar = pathname.startsWith("/admin/connectors");
 
   // Lite mode (no vector DB): connector/indexing pages can't run, show a notice.
-  const vectorDbEnabled = settings.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = settings.vector_db_enabled !== false;
   let content = children;
   if (isVectorDbRequiredRoute(pathname)) {
-    if (settings.settingsLoading) {
+    if (settings.isLoading) {
       content = (
         <Section padding={2}>
           <SvgSimpleLoader className="h-6 w-6" />
@@ -43,9 +44,8 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
   }
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden">
-      {settings.settings.application_status ===
-        ApplicationStatus.PAYMENT_REMINDER && (
+    <RootLayout.Root>
+      {settings.application_status === ApplicationStatus.PAYMENT_REMINDER && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 bg-status-warning-01 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
           <Text font="main-ui-body" color="text-05">
             {markdown(
@@ -82,6 +82,6 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
           </div>
         </>
       )}
-    </div>
+    </RootLayout.Root>
   );
 }

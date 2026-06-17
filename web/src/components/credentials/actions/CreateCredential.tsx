@@ -14,7 +14,7 @@ import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailP
 import { ActionType, dictionaryType } from "../types";
 import { createValidationSchema } from "../lib";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import {
   IsPublicGroupSelectorFormType,

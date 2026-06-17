@@ -2,25 +2,35 @@
 
 import { Label, SubLabel } from "@/components/Field";
 import { toast } from "@/hooks/useToast";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useSettings } from "@/lib/settings/hooks";
+import { EE_ENABLED } from "@/lib/constants";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
-import { Callout } from "@/components/ui/callout";
-import { useContext, useState } from "react";
+import { useState } from "react";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { Spacer } from "@opal/components";
 
-export function CustomAnalyticsUpdateForm() {
-  const settings = useContext(SettingsContext);
-  const customAnalyticsScript = settings?.customAnalyticsScript;
+export default function CustomAnalyticsUpdateForm() {
+  const { isLoading, error, ee_features_enabled } = useSettings();
+  const shouldFetch =
+    EE_ENABLED || (!isLoading && !error && ee_features_enabled !== false);
+  const { data: customAnalyticsScript } = useSWR<string>(
+    shouldFetch ? SWR_KEYS.customAnalyticsScript : null,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 60_000,
+    }
+  );
 
   const [newCustomAnalyticsScript, setNewCustomAnalyticsScript] =
     useState<string>(customAnalyticsScript || "");
   const [secretKey, setSecretKey] = useState<string>("");
-
-  if (!settings) {
-    return <Callout type="danger" title="Failed to fetch settings"></Callout>;
-  }
 
   return (
     <div>

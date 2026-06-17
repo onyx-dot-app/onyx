@@ -1,5 +1,5 @@
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import React, { useState, useEffect } from "react";
 import { FormikProps } from "formik";
 import { UserRole } from "@/lib/types";
