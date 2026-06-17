@@ -1,6 +1,6 @@
 "use client";
 
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import { useEffect, useState, useMemo } from "react";
 import {
@@ -112,7 +112,7 @@ export function AgentStats({ agentId }: { agentId: number }) {
   if (isLoading || !agent) {
     content = (
       <div className="h-80 flex flex-col">
-        <ThreeDotsLoader />
+        <OnyxLoader />
       </div>
     );
   } else if (error) {

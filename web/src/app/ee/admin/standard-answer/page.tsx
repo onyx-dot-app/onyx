@@ -3,7 +3,7 @@
 import { SettingsLayouts } from "@opal/layouts";
 import { toast } from "@/hooks/useToast";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Divider } from "@opal/components";
 import {
@@ -359,7 +359,7 @@ function Main() {
   } = useStandardAnswerCategories();
 
   if (standardAnswersIsLoading || standardAnswerCategoriesIsLoading) {
-    return <ThreeDotsLoader />;
+    return <OnyxLoader />;
   }
 
   if (standardAnswersError || !standardAnswers) {

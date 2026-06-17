@@ -2,7 +2,7 @@
 
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import { SourceIcon } from "@/components/SourceIcon";
 import { CCPairStatus, PermissionSyncStatus } from "@/components/Status";
 import { toast } from "@/hooks/useToast";
@@ -348,7 +348,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   };
 
   if (isLoadingCCPair || isLoadingIndexAttempts) {
-    return <ThreeDotsLoader />;
+    return <OnyxLoader />;
   }
 
   if (!ccPair || (!hasLoadedOnce && ccPairError)) {

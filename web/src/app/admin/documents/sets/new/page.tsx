@@ -4,7 +4,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { useRouter } from "next/navigation";
 import { refreshDocumentSets } from "../hooks";
@@ -29,7 +29,7 @@ function Main() {
   if ((vectorDbEnabled && isCCPairsLoading) || userGroupsIsLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
-        <ThreeDotsLoader />
+        <OnyxLoader />
       </div>
     );
   }

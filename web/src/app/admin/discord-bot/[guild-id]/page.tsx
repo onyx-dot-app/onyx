@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@opal/utils";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
@@ -65,7 +65,7 @@ function GuildDetailContent({
     useDiscordChannels(guildId);
 
   if (guildLoading) {
-    return <ThreeDotsLoader />;
+    return <OnyxLoader />;
   }
 
   if (guildError || !guild) {
@@ -128,7 +128,7 @@ function GuildDetailContent({
             registered.
           </Text>
         ) : channelsLoading ? (
-          <ThreeDotsLoader />
+          <OnyxLoader />
         ) : channelsError ? (
           <ErrorCallout
             errorTitle="Failed to load channels"

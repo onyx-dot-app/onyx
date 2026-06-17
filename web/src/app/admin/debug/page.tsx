@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { SettingsLayouts } from "@opal/layouts";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import {
   Table,
   TableBody,
@@ -69,7 +69,7 @@ function Main() {
   };
 
   if (isLoading) {
-    return <ThreeDotsLoader />;
+    return <OnyxLoader />;
   }
 
   return (

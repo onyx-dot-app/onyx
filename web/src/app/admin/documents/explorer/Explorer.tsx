@@ -19,7 +19,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import { InputTypeIn } from "@opal/components";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 
 const DocumentDisplay = ({
   document,
@@ -207,7 +207,7 @@ export function Explorer({
           })}
         </div>
       )}
-      {isLoading && <ThreeDotsLoader />}
+      {isLoading && <OnyxLoader />}
     </div>
   );
 }

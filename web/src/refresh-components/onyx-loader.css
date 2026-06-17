@@ -1,0 +1,87 @@
+/**
+ * Onyx loading indicator animation.
+ *
+ * The Onyx mark rotates a full turn while crossfading between the octagon
+ * outline and the diamond logo, then briefly holds before looping. Timing
+ * mirrors the Onyx UI Library design:
+ *   0ms  – 900ms : rotate 0deg  -> 180deg (ease in),  outline -> logo
+ *   900ms – 1800ms: rotate 180deg -> 360deg (ease out), logo -> outline
+ *   1800ms – 2000ms: hold at 360deg (== 0deg) before the loop resets
+ */
+
+.onyx-loader__rotator {
+  position: absolute;
+  inset: 0;
+  animation: onyx-loader-spin 2000ms infinite;
+}
+
+.onyx-loader__layer {
+  position: absolute;
+  inset: 0;
+}
+
+.onyx-loader__outline {
+  animation: onyx-loader-outline 2000ms infinite;
+}
+
+.onyx-loader__mark {
+  animation: onyx-loader-mark 2000ms infinite;
+}
+
+@keyframes onyx-loader-spin {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: ease-in;
+  }
+  45% {
+    transform: rotate(180deg);
+    animation-timing-function: ease-out;
+  }
+  90%,
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes onyx-loader-outline {
+  0% {
+    opacity: 1;
+    animation-timing-function: ease-in;
+  }
+  45% {
+    opacity: 0;
+    animation-timing-function: ease-out;
+  }
+  90%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes onyx-loader-mark {
+  0% {
+    opacity: 0;
+    animation-timing-function: ease-in;
+  }
+  45% {
+    opacity: 1;
+    animation-timing-function: ease-out;
+  }
+  90%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Respect reduced-motion: hold the static octagon outline, no rotation. */
+@media (prefers-reduced-motion: reduce) {
+  .onyx-loader__rotator,
+  .onyx-loader__outline,
+  .onyx-loader__mark {
+    animation: none;
+  }
+
+  .onyx-loader__mark {
+    opacity: 0;
+  }
+}

@@ -1,4 +1,4 @@
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import { X, Search } from "lucide-react";
 import {
   getDatesList,
@@ -140,7 +140,7 @@ export function PersonaMessagesChart({
   if (isLoading) {
     content = (
       <div className="h-80 flex flex-col">
-        <ThreeDotsLoader />
+        <OnyxLoader />
       </div>
     );
   } else if (!availablePersonas || hasError) {

@@ -1,4 +1,4 @@
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import { getDatesList, useOnyxBotAnalytics } from "../lib";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { Text } from "@opal/components";
@@ -21,7 +21,7 @@ export function OnyxBotChart({
   if (isOnyxBotAnalyticsLoading) {
     chart = (
       <div className="h-80 flex flex-col">
-        <ThreeDotsLoader />
+        <OnyxLoader />
       </div>
     );
   } else if (

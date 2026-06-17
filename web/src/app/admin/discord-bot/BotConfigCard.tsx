@@ -7,7 +7,7 @@ import Card from "@/refresh-components/cards/Card";
 import { Button } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import { Tooltip } from "@opal/components";
 import {
   useDiscordBotConfig,
@@ -49,7 +49,7 @@ export function BotConfigCard() {
             Bot Token
           </Text>
         </Section>
-        <ThreeDotsLoader />
+        <OnyxLoader />
       </Card>
     );
   }

@@ -5,7 +5,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import { Content } from "@opal/layouts";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { FetchError } from "@/lib/fetcher";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import { useWebSearchProviders } from "@/lib/webSearch/hooks";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
@@ -262,7 +262,7 @@ export default function WebSearchPage() {
           divider
         />
         <SettingsLayouts.Body>
-          <ThreeDotsLoader />
+          <OnyxLoader />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );

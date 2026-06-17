@@ -1,7 +1,7 @@
 "use client";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
@@ -21,7 +21,7 @@ function Main() {
   } = useSlackBots();
 
   if (isSlackBotsLoading) {
-    return <ThreeDotsLoader />;
+    return <OnyxLoader />;
   }
 
   if (slackBotsError || !slackBots) {

@@ -18,7 +18,7 @@ import {
 import { toast } from "@/hooks/useToast";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { OnyxLoader } from "@/refresh-components/OnyxLoader";
 import Modal from "@/refresh-components/Modal";
 import Text from "@/refresh-components/texts/Text";
 import {
@@ -147,7 +147,7 @@ export default function InlineFileManagement({
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <ThreeDotsLoader />
+        <OnyxLoader />
       </div>
     );
   }
