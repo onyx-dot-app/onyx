@@ -4,7 +4,6 @@ from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import not_
 from sqlalchemy import or_
@@ -16,12 +15,12 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.access.hierarchy_access import get_user_external_group_ids
-from onyx.auth.schemas import UserRole
-from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
+from onyx.auth.permissions import has_permission
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import NotificationType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.document_access import get_accessible_documents_by_ids
+from onyx.db.enums import Permission
 from onyx.db.enums import PersonaSharePermission
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
@@ -41,6 +40,7 @@ from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
 from onyx.db.persona_sharing import get_persona_access_level
 from onyx.db.persona_sharing import get_user_group_ids_for_user
+from onyx.db.users import user_is_admin
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -77,7 +77,9 @@ class PersonaLoadType(Enum):
 def _add_user_filters(
     stmt: Select[tuple[Persona]], user: User, get_editable: bool = True
 ) -> Select[tuple[Persona]]:
-    if user.role == UserRole.ADMIN:
+    if has_permission(user, Permission.MANAGE_AGENTS):
+        return stmt
+    if not get_editable and has_permission(user, Permission.READ_AGENTS):
         return stmt
 
     stmt = stmt.distinct()
@@ -107,14 +109,6 @@ def _add_user_filters(
         )
         return stmt.where(where_clause)
 
-    # If curator ownership restriction is enabled, curators can only access their own assistants
-    if CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS and user.role in [
-        UserRole.CURATOR,
-        UserRole.GLOBAL_CURATOR,
-    ]:
-        where_clause = (Persona.user_id == user.id) | (Persona.user_id.is_(None))
-        return stmt.where(where_clause)
-
     user_group_ids = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
 
     # Owner: the owning user, or any member of the owning group
@@ -136,23 +130,6 @@ def _add_user_filters(
         where_clause |= (Persona.is_public == True) & (  # noqa: E712
             Persona.public_permission == PersonaSharePermission.EDITOR
         )
-        # Curators keep their group-attachment edit rights: member (curator,
-        # for the CURATOR role) of share groups, with no share group outside
-        # their (curated) groups.
-        if user.role in [UserRole.CURATOR, UserRole.GLOBAL_CURATOR]:
-            curator_clause = User__UserGroup.user_id == user.id
-            curated_group_ids = user_group_ids
-            if user.role == UserRole.CURATOR:
-                curator_clause &= User__UserGroup.is_curator == True  # noqa: E712
-                curated_group_ids = curated_group_ids.where(
-                    User__UG.is_curator == True  # noqa: E712
-                )
-            curator_clause &= ~exists().where(
-                Persona__UG.persona_id == Persona.id
-            ).where(~Persona__UG.user_group_id.in_(curated_group_ids)).correlate(
-                Persona
-            )
-            where_clause |= curator_clause
     else:
         listed = Persona.is_listed == True  # noqa: E712
 
@@ -221,7 +198,7 @@ def _get_persona_by_name(
     - Non-admin users: can only see their own personas
     """
     stmt = select(Persona).where(Persona.name == persona_name)
-    if user and user.role != UserRole.ADMIN:
+    if user and not has_permission(user, Permission.MANAGE_AGENTS):
         stmt = stmt.where(Persona.user_id == user.id)
     result = db_session.execute(stmt).scalar_one_or_none()
     return result
@@ -357,12 +334,10 @@ def create_update_persona(
     try:
         # Featured persona validation
         if create_persona_request.is_featured:
-            # Curators can edit featured personas, but not make them
-            # TODO this will be reworked soon with RBAC permissions feature
-            if user.role == UserRole.CURATOR or user.role == UserRole.GLOBAL_CURATOR:
-                pass
-            elif user.role != UserRole.ADMIN:
-                raise ValueError("Only admins can make a featured persona")
+            if not has_permission(user, Permission.MANAGE_AGENTS):
+                raise ValueError(
+                    "Only users with agent management permissions can make a featured persona"
+                )
 
         # Convert incoming string UUIDs to UUID objects for DB operations
         converted_user_file_ids = None
@@ -464,7 +439,7 @@ def update_persona_shared(
     # edit user/group shares but must not flip is_public / public_permission
     # (the same guard update_persona_public_status enforces).
     is_owner_or_admin: bool = (
-        user.role == UserRole.ADMIN
+        user_is_admin(user)
         or persona.user_id == user.id
         or (
             persona.owner_group_id is not None
@@ -532,7 +507,7 @@ def update_persona_public_status(
         and persona.owner_group_id in get_user_group_ids_for_user(db_session, user.id)
     )
     if (
-        user.role != UserRole.ADMIN
+        not has_permission(user, Permission.MANAGE_AGENTS)
         and persona.user_id != user.id
         and not is_owner_group_member
     ):
@@ -1226,11 +1201,9 @@ def upsert_persona(
         # Featured/listed changes are curator/admin-only (ENG-4179): shared
         # editors saving the form must never flip them, so non-privileged
         # updates silently preserve the stored values.
-        user_can_set_admin_flags = user is None or user.role in [
-            UserRole.ADMIN,
-            UserRole.CURATOR,
-            UserRole.GLOBAL_CURATOR,
-        ]
+        user_can_set_admin_flags = user is None or has_permission(
+            user, Permission.MANAGE_AGENTS
+        )
         if is_listed is not None and user_can_set_admin_flags:
             existing_persona.is_listed = is_listed
         if is_featured is not None and user_can_set_admin_flags:
@@ -1406,7 +1379,11 @@ def get_persona_by_id(
     if not include_deleted:
         persona_stmt = persona_stmt.where(Persona.deleted.is_(False))
 
-    if not user or user.role == UserRole.ADMIN:
+    if (
+        not user
+        or has_permission(user, Permission.MANAGE_AGENTS)
+        or (not is_for_edit and has_permission(user, Permission.READ_AGENTS))
+    ):
         result = db_session.execute(persona_stmt)
         persona = result.scalar_one_or_none()
         if persona is None:
@@ -1436,14 +1413,6 @@ def get_persona_by_id(
         # if the user is in the .users of the persona
         or_conditions |= User.id == user.id
         or_conditions |= Persona.is_public == True  # noqa: E712
-    elif user.role == UserRole.GLOBAL_CURATOR:
-        # global curators can edit personas for the groups they are in
-        or_conditions |= User__UserGroup.user_id == user.id
-    elif user.role == UserRole.CURATOR:
-        # curators can edit personas for the groups they are curators of
-        or_conditions |= (User__UserGroup.user_id == user.id) & (
-            User__UserGroup.is_curator == True  # noqa: E712
-        )
 
     persona_stmt = persona_stmt.where(or_conditions)
     result = db_session.execute(persona_stmt)

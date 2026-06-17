@@ -51,7 +51,7 @@ import {
 } from "lucide-react";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-import { IndexAttemptSnapshot } from "@/lib/types";
+import { IndexAttemptSnapshot, Permission } from "@/lib/types";
 import { Spinner } from "@/components/Spinner";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
@@ -66,10 +66,10 @@ import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import { Button } from "@opal/components";
 import { SvgSettings } from "@opal/icons";
-import { UserRole } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { hasPermission } from "@/lib/permissions";
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
@@ -95,7 +95,7 @@ const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, permissions } = useUser();
 
   const {
     data: ccPair,
@@ -186,7 +186,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const canManageInlineFileConnectorFiles =
     ccPair?.connector.source === "file" &&
     (ccPair.is_editable_for_current_user ||
-      (user?.role === UserRole.GLOBAL_CURATOR &&
+      (hasPermission(permissions, Permission.MANAGE_CONNECTORS) &&
+        !hasPermission(permissions, Permission.FULL_ADMIN_PANEL_ACCESS) &&
         ccPair.access_type === "public"));
 
   const isResolvingErrors =

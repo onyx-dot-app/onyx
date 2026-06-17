@@ -151,6 +151,7 @@ async function setDisplayName(
 }
 
 /**
+ * Promote a user to admin by adding them to the Admin default group.
  * Promote a user to admin via the manage API.
  * Requires an authenticated context (admin storage state).
  */
@@ -164,28 +165,71 @@ async function promoteToAdmin(
     storageState: adminStorageState,
   });
   try {
-    const res = await ctx.patch("/api/manage/set-user-role", {
-      data: {
-        user_email: email,
-        new_role: "admin",
-      },
-    });
-    if (res.ok()) {
-      console.log(`[global-setup] Promoted ${email} to admin`);
-    } else if (res.status() === 403) {
+    const groupsRes = await ctx.get(
+      "/api/manage/admin/user-group?include_default=true"
+    );
+    if (!groupsRes.ok()) {
+      const body = await groupsRes.text();
       throw new Error(
-        `[global-setup] Cannot promote ${email} — the primary admin account ` +
-          `(${TEST_ADMIN_CREDENTIALS.email}) does not have the admin role.\n\n` +
+        `[global-setup] Cannot fetch user groups — the primary admin account ` +
+          `(${TEST_ADMIN_CREDENTIALS.email}) may not have admin privileges ` +
+          `(status ${groupsRes.status()}).\n\n` +
           `This usually happens when running tests against a non-fresh database ` +
           `where another user was registered first.\n\n` +
-          `To fix this, either:\n` +
-          `  1. Promote the user manually: ${baseURL}/admin/users\n` +
-          `  2. Reset to a seeded database: ods db restore --fetch-seeded\n`
+          `To fix this, reset to a seeded database: ods db restore --fetch-seeded\n` +
+          `Response body: ${body}`
       );
+    }
+    const groups = (await groupsRes.json()) as Array<{
+      id: number;
+      name: string;
+      is_default?: boolean;
+    }>;
+    const adminGroup = groups.find(
+      (g) => g.is_default === true && g.name === "Admin"
+    );
+    if (!adminGroup) {
+      throw new Error(
+        `[global-setup] Admin default group not found in response: ${JSON.stringify(
+          groups.map((g) => ({
+            id: g.id,
+            name: g.name,
+            is_default: g.is_default,
+          }))
+        )}`
+      );
+    }
+
+    const usersRes = await ctx.get("/api/manage/users/accepted/all");
+    if (!usersRes.ok()) {
+      const body = await usersRes.text();
+      throw new Error(
+        `[global-setup] Failed to list users (status ${usersRes.status()}): ${body}`
+      );
+    }
+    const users = (await usersRes.json()) as Array<{
+      id: string;
+      email: string;
+    }>;
+    const target = users.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase()
+    );
+    if (!target) {
+      throw new Error(
+        `[global-setup] User ${email} not found — cannot add to Admin group`
+      );
+    }
+
+    const res = await ctx.post(
+      `/api/manage/admin/user-group/${adminGroup.id}/add-users`,
+      { data: { user_ids: [target.id] } }
+    );
+    if (res.ok()) {
+      console.log(`[global-setup] Added ${email} to Admin group`);
     } else {
       const body = await res.text();
       console.warn(
-        `[global-setup] Failed to promote ${email}: ${res.status()} ${body}`
+        `[global-setup] Failed to add ${email} to Admin group: ${res.status()} ${body}`
       );
     }
   } finally {

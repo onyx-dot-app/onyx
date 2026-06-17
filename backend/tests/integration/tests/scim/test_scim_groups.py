@@ -20,7 +20,6 @@ User lifecycle tests live in test_scim_users.py.
 import httpx
 import pytest
 
-from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -60,7 +59,7 @@ def scim_token(idp_style: str) -> str:
                 email=build_email(ADMIN_USER_NAME),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.ADMIN,
+                is_admin=True,
                 is_active=True,
             )
         )
@@ -640,14 +639,17 @@ def test_scim_created_group_has_basic_permission(
         email=build_email(ADMIN_USER_NAME),
         password=DEFAULT_PASSWORD,
         headers=GENERAL_HEADERS,
-        role=UserRole.ADMIN,
+        is_admin=True,
         is_active=True,
     )
     admin = UserManager.login_as_user(admin)
 
-    # Verify the group itself was granted the basic permission
+    # Verify the group itself was granted the basic permission. BASIC_ACCESS
+    # is non-toggleable so the default GET response hides it; pass
+    # include_non_toggleable=true to surface all grants for this assertion.
     perms_resp = client.get(
         f"{API_SERVER_URL}/manage/admin/user-group/{group_id}/permissions",
+        params={"include_non_toggleable": "true"},
         headers=admin.headers,
     )
     perms_resp.raise_for_status()

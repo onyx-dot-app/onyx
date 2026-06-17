@@ -21,6 +21,7 @@ interface UserContextType {
   user: any;
   isAdmin: boolean;
   isCurator: boolean;
+  permissions: string[];
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
@@ -38,6 +39,7 @@ const mockUserContext: UserContextType = {
   user: null,
   isAdmin: false,
   isCurator: false,
+  permissions: [],
   refreshUser: async () => {},
   isCloudSuperuser: false,
   updateUserAutoScroll: async () => {},

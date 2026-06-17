@@ -5,7 +5,6 @@ from fastapi.dependencies.models import Dependant
 from starlette.routing import BaseRoute
 
 from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
 from onyx.auth.users import current_user_from_websocket
@@ -148,7 +147,6 @@ def check_router_auth(
                 if (
                     depends_fn == current_limited_user
                     or depends_fn == current_user
-                    or depends_fn == current_curator_or_admin_user
                     or depends_fn == current_user_with_expired_token
                     or depends_fn == current_chat_accessible_user
                     or depends_fn == current_user_from_websocket

@@ -23,7 +23,7 @@ def test_me_endpoint_returns_anonymous_user_when_enabled(
     data = response.json()
     assert data["is_anonymous_user"] is True
     assert data["email"] == "anonymous@onyx.app"
-    assert data["role"] == "limited"
+    assert data["account_type"] == "ANONYMOUS"
 
 
 def test_me_endpoint_returns_403_when_anonymous_disabled(
@@ -58,7 +58,7 @@ def test_me_endpoint_returns_authenticated_user_info(
     data = response.json()
     assert data.get("is_anonymous_user") is not True
     assert data["email"] == admin_user.email
-    assert data["role"] == "admin"
+    assert "admin" in data["effective_permissions"]
 
 
 def test_anonymous_user_can_access_persona_when_enabled(

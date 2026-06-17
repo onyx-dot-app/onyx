@@ -10,6 +10,7 @@ import pytest
 from fastapi import Request
 
 from onyx.auth.permissions import ALL_PERMISSIONS
+from onyx.auth.permissions import CE_UNGATED_PERMISSIONS
 from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import IMPLIED_PERMISSIONS
 from onyx.auth.permissions import NON_TOGGLEABLE_PERMISSIONS
@@ -19,6 +20,7 @@ from onyx.auth.users import get_anonymous_user
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.variable_functionality import global_version
 
 
 def _request(token_scopes: list[Permission] | None = None) -> Request:
@@ -66,14 +68,19 @@ class TestResolveEffectivePermissions:
         result = resolve_effective_permissions({"add:agents"})
         assert result == {"add:agents", "read:agents"}
 
-    def test_manage_agents_implies_add_and_read(self) -> None:
-        """manage:agents directly maps to {add:agents, read:agents}."""
+    def test_manage_agents_implies_add_and_reads(self) -> None:
+        """manage:agents implies add:agents, read:agents, and read:document_sets."""
         result = resolve_effective_permissions({"manage:agents"})
-        assert result == {"manage:agents", "add:agents", "read:agents"}
+        assert result == {
+            "manage:agents",
+            "add:agents",
+            "read:agents",
+            "read:document_sets",
+        }
 
     def test_manage_connectors_chain(self) -> None:
         result = resolve_effective_permissions({"manage:connectors"})
-        assert result == {"manage:connectors", "add:connectors", "read:connectors"}
+        assert result == {"manage:connectors", "read:connectors"}
 
     def test_manage_document_sets(self) -> None:
         result = resolve_effective_permissions({"manage:document_sets"})
@@ -81,6 +88,7 @@ class TestResolveEffectivePermissions:
             "manage:document_sets",
             "read:document_sets",
             "read:connectors",
+            "read:user_groups",
         }
 
     def test_manage_user_groups_implies_all_reads(self) -> None:
@@ -89,6 +97,16 @@ class TestResolveEffectivePermissions:
             "manage:user_groups",
             "read:connectors",
             "read:document_sets",
+            "read:agents",
+            "read:users",
+            "read:user_groups",
+        }
+
+    def test_manage_llms_implies_reads(self) -> None:
+        result = resolve_effective_permissions({"manage:llms"})
+        assert result == {
+            "manage:llms",
+            "read:user_groups",
             "read:agents",
             "read:users",
         }
@@ -113,7 +131,6 @@ class TestResolveEffectivePermissions:
             "add:agents",
             "read:agents",
             "manage:connectors",
-            "add:connectors",
             "read:connectors",
         }
 
@@ -136,6 +153,13 @@ class TestResolveEffectivePermissions:
 
 
 class TestGetEffectivePermissions:
+    def setup_method(self) -> None:
+        """Ensure EE mode is set so CE ungating does not interfere."""
+        global_version.set_ee()
+
+    def teardown_method(self) -> None:
+        global_version.unset_ee()
+
     def test_expands_implied_permissions(self) -> None:
         """Column stores only granted; get_effective_permissions expands implied."""
         user = MagicMock()
@@ -160,11 +184,58 @@ class TestGetEffectivePermissions:
             Permission.WRITE_CHAT,
         }
 
-    def test_empty_column(self) -> None:
+    def test_empty_column_in_ee(self) -> None:
         user = MagicMock()
         user.effective_permissions = []
         result = get_effective_permissions(user)
         assert result == set()
+
+
+class TestCEUngatedPermissions:
+    """Verify CE_UNGATED_PERMISSIONS are auto-granted in CE but not in EE."""
+
+    def setup_method(self) -> None:
+        global_version.unset_ee()
+
+    def teardown_method(self) -> None:
+        global_version.unset_ee()
+
+    def test_basic_user_gets_ungated_permissions_in_ce(self) -> None:
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+        result = get_effective_permissions(user)
+        assert Permission.ADD_AGENTS in result
+        assert Permission.READ_AGENTS in result
+        assert Permission.BASIC_ACCESS in result
+
+    def test_empty_user_gets_ungated_permissions_in_ce(self) -> None:
+        user = MagicMock()
+        user.effective_permissions = []
+        result = get_effective_permissions(user)
+        assert Permission.ADD_AGENTS in result
+        assert Permission.READ_AGENTS in result
+
+    def test_basic_user_does_not_get_ungated_permissions_in_ee(self) -> None:
+        global_version.set_ee()
+        user = MagicMock()
+        user.effective_permissions = ["basic"]
+        result = get_effective_permissions(user)
+        assert Permission.ADD_AGENTS not in result
+        assert result == {
+            Permission.BASIC_ACCESS,
+            Permission.READ_SEARCH,
+            Permission.READ_CHAT,
+            Permission.WRITE_CHAT,
+        }
+
+    def test_admin_unaffected_by_ce_ungating(self) -> None:
+        user = MagicMock()
+        user.effective_permissions = ["admin"]
+        result = get_effective_permissions(user)
+        assert result == set(Permission)
+
+    def test_ce_ungated_set_contains_add_agents(self) -> None:
+        assert Permission.ADD_AGENTS in CE_UNGATED_PERMISSIONS
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +244,12 @@ class TestGetEffectivePermissions:
 
 
 class TestRequirePermission:
+    def setup_method(self) -> None:
+        global_version.set_ee()
+
+    def teardown_method(self) -> None:
+        global_version.unset_ee()
+
     @pytest.mark.asyncio
     async def test_admin_bypass(self) -> None:
         """Admin stored in column should pass any permission check."""
@@ -322,6 +399,7 @@ class TestApiSurfaceScopeRegistration:
         "read:document_sets",
         "read:agents",
         "read:users",
+        "read:user_groups",
         "read:search",
         "read:chat",
         "write:chat",

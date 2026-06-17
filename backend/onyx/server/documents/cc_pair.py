@@ -3,7 +3,6 @@ from http import HTTPStatus
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
@@ -11,7 +10,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
@@ -94,17 +92,17 @@ def get_cc_pair_index_attempts(
     cc_pair_id: int,
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptSnapshot]:
-    if user:
-        user_has_access = verify_user_has_access_to_cc_pair(
-            cc_pair_id, db_session, user, get_editable=False
+    user_has_access = verify_user_has_access_to_cc_pair(
+        cc_pair_id, db_session, user, get_editable=False
+    )
+    if not user_has_access:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
         )
-        if not user_has_access:
-            raise HTTPException(
-                status_code=400, detail="CC Pair not found for current user permissions"
-            )
 
     total_count = count_index_attempts_for_cc_pair(
         db_session=db_session,
@@ -128,7 +126,7 @@ def get_cc_pair_index_attempts(
 @router.get("/admin/index-attempt/{index_attempt_id}/stage-metrics")
 def get_index_attempt_stage_metrics(
     index_attempt_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> IndexAttemptStageMetricsResponse:
     """Return the per-stage timing breakdown for a single ``IndexAttempt``.
@@ -211,7 +209,7 @@ def get_cc_pair_permission_sync_attempts(
     cc_pair_id: int,
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot]:
     """Recent doc-permission sync attempts for a cc-pair, paginated.
@@ -259,7 +257,7 @@ def get_cc_pair_external_group_sync_attempts(
     cc_pair_id: int,
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot]:
     """Recent external-group sync attempts a viewer of this cc-pair would
@@ -308,7 +306,7 @@ def get_cc_pair_external_group_sync_attempts(
 @router.get("/admin/cc-pair/{cc_pair_id}", tags=PUBLIC_API_TAGS)
 def get_cc_pair_full_info(
     cc_pair_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> CCPairFullInfo:
     tenant_id = get_current_tenant_id()
@@ -317,8 +315,9 @@ def get_cc_pair_full_info(
         cc_pair_id, db_session, user, get_editable=False
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=404, detail="CC Pair not found for current user permissions"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "CC Pair not found for current user permissions",
         )
     editable_cc_pair = get_connector_credential_pair_from_id_for_user(
         cc_pair_id, db_session, user, get_editable=True
@@ -425,7 +424,7 @@ def _connector_supports_targeted_reindex(
 def update_cc_pair_status(
     cc_pair_id: int,
     status_update_request: CCStatusUpdateRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> JSONResponse:
     """This method returns nearly immediately. It simply sets some signals and
@@ -444,9 +443,9 @@ def update_cc_pair_status(
     )
 
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="Connection not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
         )
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
@@ -510,7 +509,7 @@ def update_cc_pair_status(
 def update_cc_pair_name(
     cc_pair_id: int,
     new_name: str,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     cc_pair = get_connector_credential_pair_from_id_for_user(
@@ -520,8 +519,9 @@ def update_cc_pair_name(
         get_editable=True,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400, detail="CC Pair not found for current user's permissions"
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user's permissions",
         )
 
     try:
@@ -532,14 +532,14 @@ def update_cc_pair_name(
         )
     except IntegrityError:
         db_session.rollback()
-        raise HTTPException(status_code=400, detail="Name must be unique")
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Name must be unique")
 
 
 @router.put("/admin/cc-pair/{cc_pair_id}/property")
 def update_cc_pair_property(
     cc_pair_id: int,
     update_request: CCPropertyUpdateRequest,  # in seconds
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     cc_pair = get_connector_credential_pair_from_id_for_user(
@@ -549,8 +549,9 @@ def update_cc_pair_property(
         get_editable=True,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400, detail="CC Pair not found for current user's permissions"
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user's permissions",
         )
 
     # Can we centralize logic for updating connector properties
@@ -568,8 +569,9 @@ def update_cc_pair_property(
 
         msg = "Pruning frequency updated successfully"
     else:
-        raise HTTPException(
-            status_code=400, detail=f"Property name {update_request.name} is not valid."
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Property name {update_request.name} is not valid.",
         )
 
     return StatusResponse(success=True, message=msg, data=cc_pair_id)
@@ -578,7 +580,7 @@ def update_cc_pair_property(
 @router.get("/admin/cc-pair/{cc_pair_id}/last_pruned")
 def get_cc_pair_last_pruned(
     cc_pair_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> datetime | None:
     cc_pair = get_connector_credential_pair_from_id_for_user(
@@ -588,9 +590,9 @@ def get_cc_pair_last_pruned(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="cc_pair not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user's permissions",
         )
 
     return cc_pair.last_pruned
@@ -599,7 +601,7 @@ def get_cc_pair_last_pruned(
 @router.post("/admin/cc-pair/{cc_pair_id}/prune", tags=PUBLIC_API_TAGS)
 def prune_cc_pair(
     cc_pair_id: int,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[list[int]]:
     """Triggers pruning on a particular cc_pair immediately"""
@@ -612,18 +614,18 @@ def prune_cc_pair(
         get_editable=False,
     )
     if not cc_pair:
-        raise HTTPException(
-            status_code=400,
-            detail="Connection not found for current user's permissions",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Connection not found for current user's permissions",
         )
 
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if redis_connector.prune.fenced:
-        raise HTTPException(
-            status_code=HTTPStatus.CONFLICT,
-            detail="Pruning task already in progress.",
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Pruning task already in progress.",
         )
 
     logger.info(
@@ -637,9 +639,9 @@ def prune_cc_pair(
         client_app, cc_pair, db_session, r, tenant_id
     )
     if not payload_id:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail="Pruning task creation failed.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Pruning task creation failed.",
         )
 
     logger.info("Pruning queued: cc_pair=%s id=%s", cc_pair.id, payload_id)
@@ -653,7 +655,7 @@ def prune_cc_pair(
 @router.get("/admin/cc-pair/{cc_pair_id}/get-docs-sync-status")
 def get_docs_sync_status(
     cc_pair_id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> list[DocumentSyncStatus]:
     all_docs_for_cc_pair = get_documents_for_cc_pair(
@@ -669,7 +671,7 @@ def get_cc_pair_indexing_errors(
     include_resolved: bool = Query(False),
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=100),
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.READ_CONNECTORS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[IndexAttemptErrorPydantic]:
     """Gives back all errors for a given CC Pair. Allows pagination based on page and page_size params.
@@ -711,7 +713,7 @@ def associate_credential_to_connector(
     connector_id: int,
     credential_id: int,
     metadata: ConnectorCredentialPairMetadata,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> StatusResponse[int]:
@@ -720,17 +722,6 @@ def associate_credential_to_connector(
 
     The intent of this endpoint is to handle connectors that actually need credentials.
     """
-
-    fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_object_creation_for_user", None
-    )(
-        db_session=db_session,
-        user=user,
-        target_group_ids=metadata.groups,
-        object_is_public=metadata.access_type == AccessType.PUBLIC,
-        object_is_perm_sync=metadata.access_type == AccessType.SYNC,
-        object_is_new=True,
-    )
 
     try:
         validate_ccpair_for_user(
@@ -774,20 +765,21 @@ def associate_credential_to_connector(
         delete_connector(db_session, connector_id)
         db_session.commit()
 
-        raise HTTPException(
-            status_code=400, detail="Connector validation error: " + str(e)
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Connector validation error: " + str(e),
         )
     except IntegrityError as e:
         logger.error("IntegrityError: %s", e)
         delete_connector(db_session, connector_id)
         db_session.commit()
 
-        raise HTTPException(status_code=400, detail="Name must be unique")
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Name must be unique")
 
     except Exception as e:
         logger.exception("Unexpected error: %s", e)
 
-        raise HTTPException(status_code=500, detail="Unexpected error")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Unexpected error")
 
 
 @router.delete(

@@ -88,9 +88,10 @@ import {
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
-import { ValidSources } from "@/lib/types";
+import { Permission, ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/providers/SettingsProvider";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 
@@ -487,8 +488,11 @@ export default function AgentEditorPage({
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
-  const { isAdmin, isCurator } = useUser();
-  const canUpdateFeaturedStatus = isAdmin || isCurator;
+  const { isAdmin, permissions } = useUser();
+  const canUpdateFeaturedStatus = hasPermission(
+    permissions,
+    Permission.MANAGE_AGENTS
+  );
   const vectorDbEnabled = useVectorDbEnabled();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 

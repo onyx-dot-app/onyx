@@ -13,6 +13,8 @@ import {
 import { SvgChevronRight } from "@opal/icons";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 
 interface ConnectDataBannerProps {
   className?: string;
@@ -29,8 +31,11 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 export default function ConnectDataBanner({
   className,
 }: ConnectDataBannerProps) {
-  const { isAdmin, isCurator } = useUser();
-  const canManageConnectors = isAdmin || isCurator;
+  const { permissions } = useUser();
+  const canManageConnectors = hasPermission(
+    permissions,
+    Permission.MANAGE_CONNECTORS
+  );
   const { ccPairs, isLoading } = useCCPairs(canManageConnectors);
   const hasConnectorEverSucceeded = ccPairs.some((cc) => cc.has_successful_run);
 

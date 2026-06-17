@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.elements import ColumnElement
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import has_permission
 from onyx.configs.constants import NotificationType
+from onyx.db.enums import Permission
 from onyx.db.models import Notification
 from onyx.db.models import User
 
@@ -95,7 +96,9 @@ def get_notification_by_id(
     if not notif:
         raise ValueError(f"No notification found with id {notification_id}")
     if notif.user_id != user_id and not (
-        notif.user_id is None and user is not None and user.role == UserRole.ADMIN
+        notif.user_id is None
+        and user is not None
+        and has_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
     ):
         raise PermissionError(
             f"User {user_id} is not authorized to access notification {notification_id}"

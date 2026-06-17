@@ -53,7 +53,6 @@ def mock_get_session() -> Generator[MagicMock, None, None]:
 def mock_current_user() -> MagicMock:
     """Mock admin user for endpoints protected by require_permission."""
     mock_admin = MagicMock()
-    mock_admin.role = UserRole.ADMIN
     mock_admin.effective_permissions = [Permission.FULL_ADMIN_PANEL_ACCESS.value]
     return mock_admin
 

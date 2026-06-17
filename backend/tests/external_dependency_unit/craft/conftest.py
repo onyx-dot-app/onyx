@@ -60,7 +60,6 @@ from onyx.db.models import Skill__UserGroup
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -321,7 +320,6 @@ def test_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.EXT_PERM_USER,
         account_type=AccountType.EXT_PERM_USER,
     )
     db_session.add(user)
@@ -749,7 +747,6 @@ def _create_committed_craft_user() -> UUID:
                 is_active=True,
                 is_superuser=False,
                 is_verified=True,
-                role=UserRole.BASIC,
                 account_type=AccountType.STANDARD,
             )
         )
@@ -1100,7 +1097,6 @@ def granted_users(
                         is_active=True,
                         is_superuser=False,
                         is_verified=True,
-                        role=UserRole.EXT_PERM_USER,
                         account_type=AccountType.EXT_PERM_USER,
                     )
                     db_session.add(user)

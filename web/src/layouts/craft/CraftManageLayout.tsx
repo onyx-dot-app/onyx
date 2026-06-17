@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/requireAuth";
-import { UserRole } from "@/lib/types";
+import { Permission } from "@/lib/types";
+import { hasPermission } from "@/lib/permissions";
 
 interface CraftManageLayoutProps {
   children: React.ReactNode;
@@ -16,7 +17,12 @@ export default async function CraftManageLayout({
   if (authResult.redirect) {
     return redirect(authResult.redirect as Route);
   }
-  if (authResult.user?.role !== UserRole.ADMIN) {
+  if (
+    !hasPermission(
+      authResult.user?.effective_permissions ?? [],
+      Permission.FULL_ADMIN_PANEL_ACCESS
+    )
+  ) {
     return redirect("/craft/v1" as Route);
   }
   return <>{children}</>;

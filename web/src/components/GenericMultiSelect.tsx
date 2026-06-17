@@ -133,6 +133,7 @@ export function GenericMultiSelect<
               }))}
             strict
             searchIcon
+            data-testid={`${fieldName}-search-input`}
           />
         </div>
       </Disabled>

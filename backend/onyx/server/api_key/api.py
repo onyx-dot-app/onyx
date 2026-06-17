@@ -19,7 +19,7 @@ router = APIRouter(prefix="/admin/api-key")
 
 @router.get("")
 def list_api_keys(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)),
     db_session: Session = Depends(get_session),
 ) -> list[ApiKeyDescriptor]:
     return fetch_api_keys(db_session)
@@ -28,7 +28,9 @@ def list_api_keys(
 @router.post("")
 def create_api_key(
     api_key_args: APIKeyArgs,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
     return insert_api_key(db_session, api_key_args, user.id)
@@ -37,7 +39,7 @@ def create_api_key(
 @router.post("/{api_key_id}/regenerate")
 def regenerate_existing_api_key(
     api_key_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
     return regenerate_api_key(db_session, api_key_id)
@@ -47,7 +49,7 @@ def regenerate_existing_api_key(
 def update_existing_api_key(
     api_key_id: int,
     api_key_args: APIKeyArgs,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
     return update_api_key(db_session, api_key_id, api_key_args)
@@ -56,7 +58,7 @@ def update_existing_api_key(
 @router.delete("/{api_key_id}")
 def delete_api_key(
     api_key_id: int,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     remove_api_key(db_session, api_key_id)

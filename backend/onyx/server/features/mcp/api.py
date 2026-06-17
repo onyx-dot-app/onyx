@@ -33,9 +33,8 @@ from onyx.auth.oauth_token_manager import build_oauth_authorization_url
 from onyx.auth.oauth_token_manager import exchange_oauth_code_for_token
 from onyx.auth.oauth_token_manager import OAuthFlowParams
 from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
+from onyx.auth.permissions import get_effective_permissions
 from onyx.auth.permissions import require_permission
-from onyx.auth.schemas import UserRole
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -738,7 +737,7 @@ class MCPOauthState(BaseModel):
 async def connect_admin_oauth(
     request: MCPUserOAuthConnectRequest,
     db: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> MCPUserOAuthConnectResponse:
     """Connect OAuth flow for admin MCP server authentication"""
     return await _connect_oauth(request, db, is_admin=True, user=user)
@@ -1354,20 +1353,19 @@ class ServerToolsResponse(BaseModel):
 
 def _ensure_mcp_server_owner_or_admin(server: DbMCPServer, user: User) -> None:
     logger.info(
-        "Ensuring MCP server owner or admin: %s %s %s server.owner=%s",
+        "Ensuring MCP server owner or admin: %s %s server.owner=%s",
         server.name,
         user,
-        user.role,
         server.owner,
     )
-    if user.role == UserRole.ADMIN:
+    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
         return
 
     logger.info("User email: %s server.owner=%s", user.email, server.owner)
     if server.owner != user.email:
-        raise HTTPException(
-            status_code=403,
-            detail="Curators can only modify MCP servers that they have created.",
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only the server owner can modify MCP servers they have created.",
         )
 
 
@@ -1389,7 +1387,8 @@ def _db_mcp_server_to_api_mcp_server(
     can_view_admin_credentials = bool(include_auth_config) and (
         request_user is not None
         and (
-            request_user.role == UserRole.ADMIN
+            Permission.FULL_ADMIN_PANEL_ACCESS
+            in get_effective_permissions(request_user)
             or (request_user.email and request_user.email == db_server.owner)
         )
     )
@@ -1640,7 +1639,7 @@ def _get_connection_config(
 def admin_list_mcp_tools_by_id(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> MCPToolListResponse:
     return _list_mcp_tools_by_id(server_id, db, True, user)
 
@@ -1655,7 +1654,7 @@ def get_mcp_server_tools_snapshots(
     server_id: int,
     source: ToolSnapshotSource = ToolSnapshotSource.DB,
     db: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> list[ToolSnapshot]:
     """
     Get tools for an MCP server as ToolSnapshot objects.
@@ -2255,7 +2254,7 @@ def _sync_tools_for_server(
 def get_mcp_server_detail(
     server_id: int,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> MCPServer:
     """Return details for one MCP server if user has access"""
     try:
@@ -2282,7 +2281,7 @@ def get_mcp_server_detail(
 @admin_router.get("/tools")
 def get_all_mcp_tools(
     db: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),  # noqa: ARG001
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),  # noqa: ARG001
 ) -> list:
     """Get all tools associated with MCP servers, including both enabled and disabled tools"""
     from sqlalchemy import select
@@ -2303,7 +2302,7 @@ def update_mcp_server_status(
     server_id: int,
     status: MCPServerStatus,
     db: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> dict[str, str]:
     """Update the status of an MCP server"""
     logger.info("Updating MCP server %s status to %s", server_id, status)
@@ -2329,7 +2328,7 @@ def update_mcp_server_status(
 @admin_router.get("/servers", response_model=MCPServersResponse)
 def get_mcp_servers_for_admin(
     db: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> MCPServersResponse:
     """Get all MCP servers for admin display"""
 
@@ -2355,7 +2354,7 @@ def get_mcp_servers_for_admin(
 def get_mcp_server_db_tools(
     server_id: int,
     db: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> ServerToolsResponse:
     """Get existing database tools created for an MCP server"""
     logger.info("Getting database tools for MCP server: %s", server_id)
@@ -2400,7 +2399,7 @@ def get_mcp_server_db_tools(
 def upsert_mcp_server(
     request: MCPToolCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> MCPServerCreateResponse:
     """Create or update an MCP server (no tools yet)"""
 
@@ -2467,7 +2466,7 @@ def upsert_mcp_server(
 def update_mcp_server_with_tools(
     request: MCPToolUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> MCPServerUpdateResponse:
     """Update an MCP server and associated tools"""
 
@@ -2519,7 +2518,7 @@ def update_mcp_server_with_tools(
 def create_mcp_server_simple(
     request: MCPServerSimpleCreateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> MCPServer:
     """Create MCP server with minimal information - auth to be configured later"""
 
@@ -2566,7 +2565,7 @@ def update_mcp_server_simple(
     server_id: int,
     request: MCPServerSimpleUpdateRequest,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> MCPServer:
     """Update MCP server basic information (name, description, URL)"""
     try:
@@ -2599,7 +2598,7 @@ def update_mcp_server_simple(
 def delete_mcp_server_admin(
     server_id: int,
     db_session: Session = Depends(get_session),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
 ) -> dict:
     """Delete an MCP server and cascading related objects (tools, configs)."""
     try:

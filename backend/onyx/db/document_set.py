@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlalchemy import and_
 from sqlalchemy import delete
-from sqlalchemy import exists
+from sqlalchemy import false as sa_false
 from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import Select
@@ -13,11 +13,13 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_permission
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import Permission
 from onyx.db.federated import create_federated_connector_document_set_mapping
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
@@ -28,7 +30,6 @@ from onyx.db.models import DocumentSet__UserGroup
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
-from onyx.db.models import UserRole
 from onyx.server.features.document_set.models import DocumentSetCreationRequest
 from onyx.server.features.document_set.models import DocumentSetUpdateRequest
 from onyx.utils.logger import setup_logger
@@ -38,53 +39,31 @@ logger = setup_logger()
 
 
 def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Select:
-    if user.role == UserRole.ADMIN:
+    # MANAGE → always return all
+    if has_permission(user, Permission.MANAGE_DOCUMENT_SETS):
+        return stmt
+    # Editing requires MANAGE; readers and group-members cannot edit.
+    if get_editable:
+        return stmt.where(sa_false())
+    # READ → return all when reading, nothing when editing
+    if has_permission(user, Permission.READ_DOCUMENT_SETS):
         return stmt
 
-    stmt = stmt.distinct()
-    DocumentSet__UG = aliased(DocumentSet__UserGroup)
-    User__UG = aliased(User__UserGroup)
-    """
-    Here we select cc_pairs by relation:
-    User -> User__UserGroup -> DocumentSet__UserGroup -> DocumentSet
-    """
-    stmt = stmt.outerjoin(DocumentSet__UG).outerjoin(
-        User__UserGroup,
-        User__UserGroup.user_group_id == DocumentSet__UG.user_group_id,
+    # Otherwise: public document sets, plus those owned by groups the user
+    # is a member of (so a user can use a private group-owned document set
+    # they have access to via group membership in chat / search).
+    user_group_ids = select(User__UserGroup.user_group_id).where(
+        User__UserGroup.user_id == user.id
     )
-    """
-    Filter DocumentSets by:
-    - if the user is in the user_group that owns the DocumentSet
-    - if the user is not a global_curator, they must also have a curator relationship
-    to the user_group
-    - if editing is being done, we also filter out DocumentSets that are owned by groups
-    that the user isn't a curator for
-    - if we are not editing, we show all DocumentSets in the groups the user is a curator
-    for (as well as public DocumentSets)
-    """
-
-    # Anonymous users only see public DocumentSets
-    if user.is_anonymous:
-        where_clause = DocumentSetDBModel.is_public == True  # noqa: E712
-        return stmt.where(where_clause)
-
-    where_clause = User__UserGroup.user_id == user.id
-    if user.role == UserRole.CURATOR and get_editable:
-        where_clause &= User__UserGroup.is_curator == True  # noqa: E712
-    if get_editable:
-        user_groups = select(User__UG.user_group_id).where(User__UG.user_id == user.id)
-        if user.role == UserRole.CURATOR:
-            user_groups = user_groups.where(User__UG.is_curator == True)  # noqa: E712
-        where_clause &= ~exists().where(
-            DocumentSet__UG.document_set_id == DocumentSetDBModel.id
-        ).where(~DocumentSet__UG.user_group_id.in_(user_groups)).correlate(
-            DocumentSetDBModel
+    accessible_via_group = select(DocumentSet__UserGroup.document_set_id).where(
+        DocumentSet__UserGroup.user_group_id.in_(user_group_ids)
+    )
+    return stmt.where(
+        or_(
+            DocumentSetDBModel.is_public.is_(True),
+            DocumentSetDBModel.id.in_(accessible_via_group),
         )
-        where_clause |= DocumentSetDBModel.user_id == user.id
-    else:
-        where_clause |= DocumentSetDBModel.is_public == True  # noqa: E712
-
-    return stmt.where(where_clause)
+    )
 
 
 def _delete_document_set_cc_pairs__no_commit(

@@ -61,10 +61,10 @@ from onyx.db.models import ScimToken
 from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
 from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
 from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
+from onyx.db.users import user_is_admin
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -233,7 +233,7 @@ def _is_ext_perm_user(user: User) -> bool:
     to a real STANDARD account — which consumes a seat. Real users
     (BASIC/ADMIN) are left untouched so we never demote an admin.
     """
-    return user.role == UserRole.EXT_PERM_USER
+    return user.account_type == AccountType.EXT_PERM_USER
 
 
 def _assign_default_groups_or_error(
@@ -498,7 +498,6 @@ def create_user(
         dal.update_user(
             existing_user,
             is_active=user_resource.active,
-            role=UserRole.BASIC if promote else None,
             account_type=AccountType.STANDARD if promote else None,
             **({"personal_name": personal_name} if personal_name else {}),
         )
@@ -548,7 +547,6 @@ def create_user(
     user = User(
         email=email,
         hashed_password=_pw_helper.hash(_pw_helper.generate()),
-        role=UserRole.BASIC,
         account_type=AccountType.STANDARD,
         is_active=user_resource.active,
         is_verified=True,
@@ -629,7 +627,6 @@ def replace_user(
         email=user_resource.userName.strip(),
         is_active=user_resource.active,
         personal_name=personal_name,
-        role=UserRole.BASIC if promote else None,
         account_type=AccountType.STANDARD if promote else None,
     )
 
@@ -637,7 +634,7 @@ def replace_user(
     # promoted shadow user is now a real account and needs the Basic group.
     if is_reactivation or promote:
         error = _assign_default_groups_or_error(
-            dal, db_session, user, user.email, is_admin=(user.role == UserRole.ADMIN)
+            dal, db_session, user, user.email, is_admin=user_is_admin(user)
         )
         if error:
             return error
@@ -736,7 +733,6 @@ def patch_user(
         ),
         is_active=patched.active if patched.active != user.is_active else None,
         personal_name=personal_name,
-        role=UserRole.BASIC if promote else None,
         account_type=AccountType.STANDARD if promote else None,
     )
 
@@ -744,7 +740,7 @@ def patch_user(
     # promoted shadow user is now a real account and needs the Basic group.
     if is_reactivation or promote:
         error = _assign_default_groups_or_error(
-            dal, db_session, user, user.email, is_admin=(user.role == UserRole.ADMIN)
+            dal, db_session, user, user.email, is_admin=user_is_admin(user)
         )
         if error:
             return error

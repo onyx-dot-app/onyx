@@ -4,6 +4,10 @@ Verifies that:
 - Slack users can be deactivated by admins
 - Deactivated Slack users can be reactivated by admins
 - Reactivation is blocked when the seat limit is reached
+
+Slack users are seeded directly via ``add_slack_user_if_not_exists`` (the
+same path used by the Slack bot handler) because they never have a web
+login flow.
 """
 
 from datetime import datetime
@@ -15,10 +19,11 @@ import redis
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
 from ee.onyx.server.license.models import PlanType
-from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import REDIS_DB_NUMBER
 from onyx.configs.app_configs import REDIS_HOST
 from onyx.configs.app_configs import REDIS_PORT
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.users import add_slack_user_if_not_exists
 from onyx.server.settings.models import ApplicationStatus
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -52,6 +57,12 @@ def _redis() -> redis.Redis:
     return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB_NUMBER)
 
 
+def _seed_slack_user(email: str) -> None:
+    """Create a BOT-account user directly — no web login flow exists for Slack users."""
+    with get_session_with_current_tenant() as db_session:
+        add_slack_user_if_not_exists(db_session, email=email)
+
+
 def _get_user_is_active(email: str, admin_user: DATestUser) -> bool:
     """Look up a user's is_active flag via the admin users list endpoint."""
     result = UserManager.get_user_page(
@@ -63,31 +74,38 @@ def _get_user_is_active(email: str, admin_user: DATestUser) -> bool:
     return matching[0].is_active
 
 
+def _deactivate_by_email(email: str, admin_user: DATestUser) -> None:
+    response = client.patch(
+        url=f"{API_SERVER_URL}/manage/admin/deactivate-user",
+        json={"user_email": email},
+        headers=admin_user.headers,
+    )
+    response.raise_for_status()
+
+
+def _activate_by_email(email: str, admin_user: DATestUser) -> None:
+    response = client.patch(
+        url=f"{API_SERVER_URL}/manage/admin/activate-user",
+        json={"user_email": email},
+        headers=admin_user.headers,
+    )
+    response.raise_for_status()
+
+
 def test_slack_user_deactivate_and_reactivate(
     reset: None,  # noqa: ARG001
-) -> None:  # noqa: ARG001
+) -> None:
     """Admin can deactivate and then reactivate a Slack user."""
     admin_user = UserManager.create(name="admin_user")
 
-    slack_user = UserManager.create(name="slack_test_user")
-    slack_user = UserManager.set_role(
-        user_to_set=slack_user,
-        target_role=UserRole.SLACK_USER,
-        user_performing_action=admin_user,
-        explicit_override=True,
-    )
+    slack_email = "slack_test_user@example.com"
+    _seed_slack_user(slack_email)
 
-    # Deactivate the Slack user
-    UserManager.set_status(
-        slack_user, target_status=False, user_performing_action=admin_user
-    )
-    assert _get_user_is_active(slack_user.email, admin_user) is False
+    _deactivate_by_email(slack_email, admin_user)
+    assert _get_user_is_active(slack_email, admin_user) is False
 
-    # Reactivate the Slack user
-    UserManager.set_status(
-        slack_user, target_status=True, user_performing_action=admin_user
-    )
-    assert _get_user_is_active(slack_user.email, admin_user) is True
+    _activate_by_email(slack_email, admin_user)
+    assert _get_user_is_active(slack_email, admin_user) is True
 
 
 def test_slack_user_reactivation_blocked_by_seat_limit(
@@ -98,17 +116,10 @@ def test_slack_user_reactivation_blocked_by_seat_limit(
 
     admin_user = UserManager.create(name="admin_user")
 
-    slack_user = UserManager.create(name="slack_test_user")
-    slack_user = UserManager.set_role(
-        user_to_set=slack_user,
-        target_role=UserRole.SLACK_USER,
-        user_performing_action=admin_user,
-        explicit_override=True,
-    )
+    slack_email = "slack_test_user@example.com"
+    _seed_slack_user(slack_email)
 
-    UserManager.set_status(
-        slack_user, target_status=False, user_performing_action=admin_user
-    )
+    _deactivate_by_email(slack_email, admin_user)
 
     # License allows 1 seat — only admin counts
     _seed_license(r, seats=1)
@@ -116,7 +127,7 @@ def test_slack_user_reactivation_blocked_by_seat_limit(
     try:
         response = client.patch(
             url=f"{API_SERVER_URL}/manage/admin/activate-user",
-            json={"user_email": slack_user.email},
+            json={"user_email": slack_email},
             headers=admin_user.headers,
         )
         assert response.status_code == 402

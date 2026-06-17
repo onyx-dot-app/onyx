@@ -137,6 +137,7 @@ export const ConnectorMultiSelect = ({
             setOpen(true);
           }}
           onKeyDown={handleKeyDown}
+          data-testid="connector-search-input"
         />
 
         {open && (
