@@ -285,8 +285,8 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     mgr._snapshot_manager = MagicMock()  # type: ignore[attr-defined]
     mgr._snapshot_manager.has_opencode_history_snapshot.return_value = False
 
-    # Capture the kwargs passed to containers.create (provision now creates the
-    # container stopped, restores opencode history, then starts it).
+    # Provision creates the container stopped, restores history, then starts it;
+    # capture the create kwargs.
     fake_container = MagicMock()
     fake_container.name = "sandbox-12345678"
     fake_container.attrs = {"State": {"Status": "running"}}
