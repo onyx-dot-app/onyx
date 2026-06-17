@@ -100,6 +100,8 @@ export interface FullAgent extends Agent {
   sharing_status: PersonaSharingStatus;
   admin_count: number;
   ownership_vacant: boolean;
+  // Skills attached to this agent, masked to the viewer's visible set.
+  skill_ids: string[];
 }
 
 // ── Upsert / API parameter types ──────────────────────────────────────────────
@@ -129,6 +131,7 @@ export interface AgentUpsertParameters {
   user_file_ids: string[];
   hierarchy_node_ids?: number[];
   document_ids?: string[];
+  skill_ids: string[];
 }
 
 export interface AgentUpsertRequest {
@@ -155,6 +158,7 @@ export interface AgentUpsertRequest {
   replace_base_system_prompt: boolean;
   hierarchy_node_ids: number[];
   document_ids: string[];
+  skill_ids: string[];
 }
 
 export interface PaginatedAgentsResponse {

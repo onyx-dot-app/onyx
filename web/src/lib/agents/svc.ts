@@ -37,6 +37,7 @@ function buildAgentUpsertRequest(
     replace_base_system_prompt: params.replace_base_system_prompt,
     hierarchy_node_ids: params.hierarchy_node_ids ?? [],
     document_ids: params.document_ids ?? [],
+    skill_ids: params.skill_ids ?? [],
   };
 }
 

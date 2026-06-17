@@ -34,6 +34,7 @@ import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
+import useUserSkills from "@/hooks/useUserSkills";
 import { getDisplayName } from "@/lib/languageModels/utils";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { Interactive } from "@opal/core";
@@ -229,6 +230,21 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const hasActions = mcpServersWithTools.length > 0 || openApiTools.length > 0;
   const defaultModel = getDisplayName(agent, llmProviders ?? []);
 
+  // Resolve the agent's attached skills to ones the viewer can see (custom
+  // skills are keyed by UUID); names come from the user's own skill list.
+  const {
+    data: userSkills,
+    isLoading: skillsLoading,
+    error: skillsError,
+  } = useUserSkills();
+  const attachedSkills = useMemo(
+    () =>
+      (userSkills?.customs ?? []).filter((skill) =>
+        agent.skill_ids?.includes(skill.id)
+      ),
+    [userSkills, agent.skill_ids]
+  );
+
   return (
     <Modal
       open={agentViewerModal.isOpen}
@@ -329,6 +345,36 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 </Section>
               ) : (
                 <EmptyMessageCard sizePreset="main-ui" title="No Actions" />
+              )}
+            </SimpleCollapsible.Content>
+          </SimpleCollapsible>
+
+          {/* Skills */}
+          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <SimpleCollapsible>
+            <SimpleCollapsible.Header title="Skills" />
+            <SimpleCollapsible.Content>
+              {skillsLoading ? (
+                <EmptyMessageCard sizePreset="main-ui" title="Loading skills…" />
+              ) : skillsError ? (
+                <EmptyMessageCard
+                  sizePreset="main-ui"
+                  title="Couldn't load skills"
+                />
+              ) : attachedSkills.length > 0 ? (
+                <Section gap={0.5} alignItems="start">
+                  {attachedSkills.map((skill) => (
+                    <Content
+                      key={skill.id}
+                      title={skill.name}
+                      description={skill.description}
+                      sizePreset="main-ui"
+                      variant="section"
+                    />
+                  ))}
+                </Section>
+              ) : (
+                <EmptyMessageCard sizePreset="main-ui" title="No Skills" />
               )}
             </SimpleCollapsible.Content>
           </SimpleCollapsible>
