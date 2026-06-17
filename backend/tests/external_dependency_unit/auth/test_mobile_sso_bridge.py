@@ -12,7 +12,8 @@ Coverage:
   * the callback's `client=="mobile"` branch returns a 302 to the deep link
     carrying a single-use, PKCE-bound code and NO web auth cookie,
   * the web cookie path is byte-for-byte unchanged when the marker is absent,
-  * disallowed redirect URI / missing PKCE challenge are rejected (400).
+  * disallowed redirect URI / missing PKCE challenge are rejected at
+    authorize-time (400), before the IdP round-trip.
 """
 
 import asyncio
@@ -239,46 +240,61 @@ def test_web_callback_unchanged_when_marker_absent() -> None:
     user_manager.oauth_callback.assert_awaited_once()
 
 
-def test_mobile_callback_rejects_disallowed_redirect_uri() -> None:
+def test_authorize_rejects_disallowed_redirect_uri() -> None:
+    # Fail fast at authorize-time — before the IdP round-trip — for a redirect
+    # URI that isn't allowlisted, so no signed state is ever minted for it.
     client, _, login_mock, _ = _build_test_client()
     _, challenge = generate_pkce_pair()
-    state = _authorize_and_get_state(
-        client,
-        {
+    response = client.get(
+        "/auth/oauth/authorize",
+        params={
             "mobile_redirect_uri": "https://evil.example.com/callback",
             "app_state": "s",
             "app_code_challenge": challenge,
         },
     )
 
-    response = _callback(client, state)
-
     assert response.status_code == 400
     assert response.json()["error_code"] == "VALIDATION_ERROR"
     login_mock.assert_not_awaited()
 
 
-def test_mobile_callback_rejects_missing_pkce_challenge() -> None:
-    # Mobile SSO is PKCE-only — no silent fallback to a non-PKCE code.
+def test_authorize_rejects_missing_pkce_challenge() -> None:
+    # Mobile SSO is PKCE-only — reject at authorize-time rather than deferring the
+    # failure to the callback (no silent fallback to a non-PKCE code).
     client, _, login_mock, _ = _build_test_client()
-    state = _authorize_and_get_state(
-        client,
-        {
+    response = client.get(
+        "/auth/oauth/authorize",
+        params={
             "mobile_redirect_uri": _ALLOWED_REDIRECT,
             "app_state": "s",
         },
     )
 
-    response = _callback(client, state)
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "VALIDATION_ERROR"
+    login_mock.assert_not_awaited()
+
+
+def test_authorize_pkce_provider_rejects_missing_challenge() -> None:
+    # Same authorize-time rejection on a PKCE provider (OIDC); the raise happens
+    # before any IdP-leg PKCE cookie is issued.
+    client, _, login_mock, _ = _build_test_client(enable_pkce=True)
+    response = client.get(
+        "/auth/oauth/authorize",
+        params={
+            "mobile_redirect_uri": _ALLOWED_REDIRECT,
+            "app_state": "s",
+        },
+    )
 
     assert response.status_code == 400
     assert response.json()["error_code"] == "VALIDATION_ERROR"
     login_mock.assert_not_awaited()
 
 
-# The mobile branch in the shared complete_login_flow also runs for PKCE
-# providers (OIDC), where an OnyxError is funneled through build_error_response
-# (+ delete_pkce_cookie) — a different disposition than the non-PKCE path above.
+# The mobile branch in the shared complete_login_flow also runs the success path
+# for PKCE providers (OIDC), which share this router and the same mobile branch.
 
 
 def test_mobile_callback_pkce_path_returns_deep_link_with_consumable_code() -> None:
@@ -305,22 +321,3 @@ def test_mobile_callback_pkce_path_returns_deep_link_with_consumable_code() -> N
     assert "testsession" not in response.cookies
     login_mock.assert_not_awaited()
     assert asyncio.run(consume_sso_code(query["code"][0], verifier)) == _MINTED_TOKEN
-
-
-def test_mobile_callback_pkce_path_rejects_missing_challenge() -> None:
-    # On the PKCE path the OnyxError flows through build_error_response; assert it
-    # still surfaces as a clean 400 (and doesn't corrupt the response).
-    client, _, login_mock, _ = _build_test_client(enable_pkce=True)
-    state = _authorize_and_get_state(
-        client,
-        {
-            "mobile_redirect_uri": _ALLOWED_REDIRECT,
-            "app_state": "s",
-        },
-    )
-
-    response = _callback(client, state)
-
-    assert response.status_code == 400
-    assert response.json()["error_code"] == "VALIDATION_ERROR"
-    login_mock.assert_not_awaited()

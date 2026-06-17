@@ -12,6 +12,8 @@ need no separate cookie. ``is_mobile_sso`` / ``apply_mobile_state`` keep the
 state-key spelling private to this module — callers never touch the raw keys.
 """
 
+from typing import cast
+
 from fastapi.responses import RedirectResponse
 from fastapi_users import models
 from fastapi_users.authentication import Strategy
@@ -44,15 +46,46 @@ def apply_mobile_state(
     """Fold guarded mobile-SSO params into the (about-to-be-signed) OAuth state.
 
     No-op for the web flow (``mobile_redirect_uri`` absent), so the signed state
-    is byte-identical to today's for every non-mobile caller.
+    is byte-identical to today's for every non-mobile caller. For a mobile caller
+    the params are validated here — failing fast at authorize-time so a bad
+    request is rejected before the IdP round-trip rather than after it. Raises
+    ``OnyxError(VALIDATION_ERROR)`` on a missing challenge / disallowed URI.
     """
     if mobile_redirect_uri is None:
         return
+    _validate_mobile_sso_params(mobile_redirect_uri, app_code_challenge)
     state_data[_STATE_CLIENT_KEY] = _MOBILE_CLIENT_MARKER
     state_data[_STATE_APP_REDIRECT_URI_KEY] = mobile_redirect_uri
     state_data[_STATE_APP_STATE_KEY] = app_state or ""
-    if app_code_challenge is not None:
-        state_data[_STATE_APP_CODE_CHALLENGE_KEY] = app_code_challenge
+    # Non-None and validated above.
+    state_data[_STATE_APP_CODE_CHALLENGE_KEY] = cast(str, app_code_challenge)
+
+
+def _validate_mobile_sso_params(
+    app_redirect_uri: str | None, app_code_challenge: str | None
+) -> None:
+    """Enforce the mobile-SSO invariants (PKCE-only + allowlisted redirect URI).
+
+    Used at authorize-time (fail fast) and again in ``complete_mobile_sso`` as a
+    defensive backstop against any path that fills the state directly.
+    """
+    if not app_code_challenge:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Mobile SSO requires a PKCE code challenge",
+        )
+    if not app_redirect_uri or app_redirect_uri not in MOBILE_ALLOWED_REDIRECT_URIS:
+        # A redirect URI isn't a secret; log it + the allowlist so a misconfig
+        # is diagnosable instead of a silent 400.
+        logger.warning(
+            "Rejected mobile SSO redirect URI %r; allowed: %s",
+            app_redirect_uri,
+            MOBILE_ALLOWED_REDIRECT_URIS,
+        )
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Disallowed mobile redirect URI",
+        )
 
 
 def is_mobile_sso(state_data: dict[str, str]) -> bool:
@@ -75,24 +108,11 @@ async def complete_mobile_sso(
     app_code_challenge = state_data.get(_STATE_APP_CODE_CHALLENGE_KEY)
     app_state = state_data.get(_STATE_APP_STATE_KEY, "")
 
-    if not app_code_challenge:
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Mobile SSO requires a PKCE code challenge",
-        )
-
-    if not app_redirect_uri or app_redirect_uri not in MOBILE_ALLOWED_REDIRECT_URIS:
-        # A redirect URI isn't a secret; log it + the allowlist so a misconfig
-        # is diagnosable instead of a silent 400.
-        logger.warning(
-            "Rejected mobile SSO redirect URI %r; allowed: %s",
-            app_redirect_uri,
-            MOBILE_ALLOWED_REDIRECT_URIS,
-        )
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Disallowed mobile redirect URI",
-        )
+    # Backstop: these are already enforced at authorize-time (apply_mobile_state),
+    # but re-check so any path that fills the state directly still fails closed.
+    _validate_mobile_sso_params(app_redirect_uri, app_code_challenge)
+    app_redirect_uri = cast(str, app_redirect_uri)
+    app_code_challenge = cast(str, app_code_challenge)
 
     token = await issue_session_credential(user, strategy)
     code = await store_sso_code(token, app_code_challenge)

@@ -271,21 +271,23 @@ SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_confi
 # /auth/mobile/sso/exchange.
 MOBILE_SSO_CODE_PREFIX = "mobile_sso_code:"
 # Lifetime of the one-time code; intentionally short — it only has to survive the
-# system-browser -> app handoff plus the immediate exchange call.
+# system-browser -> app handoff plus the immediate exchange call. A non-positive
+# TTL would make Redis reject the SET, breaking every exchange — fail fast at boot.
 MOBILE_SSO_CODE_TTL_SECONDS = int(os.environ.get("MOBILE_SSO_CODE_TTL_SECONDS") or 60)
+if MOBILE_SSO_CODE_TTL_SECONDS < 1:
+    raise ValueError("MOBILE_SSO_CODE_TTL_SECONDS must be >= 1")
 # Deep-link URIs the SSO completion is allowed to 302 to. Defaults to the app's
 # custom scheme; override (comma-separated) to add Universal/App Links later.
-_MOBILE_ALLOWED_REDIRECT_URIS_STR = os.environ.get(
-    "MOBILE_ALLOWED_REDIRECT_URIS", ""
-).strip()
+_DEFAULT_MOBILE_REDIRECT_URIS = frozenset({"onyx://auth/callback"})
+# A misconfigured value (e.g. just commas/whitespace) parses to an empty set,
+# which would silently reject every mobile redirect — fall back to the default.
 MOBILE_ALLOWED_REDIRECT_URIS: frozenset[str] = (
     frozenset(
         uri.strip()
-        for uri in _MOBILE_ALLOWED_REDIRECT_URIS_STR.split(",")
+        for uri in os.environ.get("MOBILE_ALLOWED_REDIRECT_URIS", "").split(",")
         if uri.strip()
     )
-    if _MOBILE_ALLOWED_REDIRECT_URIS_STR
-    else frozenset({"onyx://auth/callback"})
+    or _DEFAULT_MOBILE_REDIRECT_URIS
 )
 
 # JWT Public Key URL for JWT token verification

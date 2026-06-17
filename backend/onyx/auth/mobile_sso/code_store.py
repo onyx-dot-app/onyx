@@ -67,11 +67,22 @@ async def consume_sso_code(code: str, code_verifier: str) -> str | None:
         record = json.loads(raw)
         stored_challenge = record["code_challenge"]
         token = record["token"]
+        # A non-str challenge would make compare_digest raise TypeError below;
+        # treat a malformed record as the same generic miss to keep the
+        # fail-closed contract.
+        if not isinstance(stored_challenge, str) or not isinstance(token, str):
+            raise TypeError("malformed code record")
         # A malformed verifier (e.g. non-ascii) must fail closed as the same
         # generic miss — compute_s256_challenge raises ValueError on bad input.
         provided_challenge = compute_s256_challenge(code_verifier)
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-        logger.error("Malformed mobile SSO code record or verifier; rejecting")
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        # Log the exception *type* only (never the value — that could leak the
+        # verifier) so a malformed record is distinguishable in logs from a
+        # normal miss.
+        logger.error(
+            "Malformed mobile SSO code record or verifier (%s); rejecting",
+            type(exc).__name__,
+        )
         return None
 
     if not secrets.compare_digest(provided_challenge, stored_challenge):

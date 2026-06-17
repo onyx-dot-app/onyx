@@ -6,6 +6,7 @@ binding so a hijacked code is useless without the matching verifier.
 """
 
 import asyncio
+import json
 
 import pytest
 
@@ -103,3 +104,18 @@ async def test_non_ascii_verifier_fails_closed_as_generic_miss() -> None:
     _, challenge = generate_pkce_pair()
     code = await store_sso_code("tok_non_ascii", challenge)
     assert await consume_sso_code(code, "naïve-vérifier-✗") is None
+
+
+@pytest.mark.asyncio
+async def test_malformed_record_fails_closed_as_generic_miss() -> None:
+    # A record with a non-str challenge would make compare_digest raise; it must
+    # instead fail closed as the same generic miss (fail-closed contract).
+    verifier, _ = generate_pkce_pair()
+    code = "manually-planted-malformed-code"
+    redis = await get_async_redis_connection()
+    await redis.set(
+        f"{MOBILE_SSO_CODE_PREFIX}{code}",
+        json.dumps({"token": "tok", "code_challenge": 12345}),
+        ex=MOBILE_SSO_CODE_TTL_SECONDS,
+    )
+    assert await consume_sso_code(code, verifier) is None
