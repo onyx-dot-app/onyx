@@ -158,7 +158,7 @@ OPENCODE_DISABLED_TOOLS=question           # Comma-separated list, default: ques
 SANDBOX_NAMESPACE=onyx-sandboxes          # Default: onyx-sandboxes
 
 # Container image
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:latest
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v4.1.3
 
 # S3 bucket for snapshots and files
 SANDBOX_S3_BUCKET=onyx-sandbox-files      # Default: onyx-sandbox-files
@@ -171,7 +171,7 @@ SANDBOX_SERVICE_ACCOUNT_NAME=sandbox-file-sync  # Has S3 access via IRSA for sna
 
 ```bash
 # Container image (defaults to a pinned tag in docker-compose.yml)
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.52
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v4.1.3
 
 # Public URL the sandbox agent uses to reach Onyx (HTTPS, externally resolvable —
 # compose hostnames like http://api_server:8080 will not resolve from inside the
