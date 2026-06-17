@@ -49,7 +49,9 @@ export function BotConfigCard() {
             Bot Token
           </Text>
         </Section>
-        <div className="flex justify-center"><SvgSimpleLoader className="h-6 w-6" /></div>
+        <div className="flex justify-center">
+          <SvgSimpleLoader className="h-6 w-6" />
+        </div>
       </Card>
     );
   }

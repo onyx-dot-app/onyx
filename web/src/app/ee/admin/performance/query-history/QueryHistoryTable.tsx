@@ -345,7 +345,9 @@ export function QueryHistoryTable() {
               <TableBody>
                 <TableRow>
                   <TableCell colSpan={6} className="text-center">
-                    <div className="flex justify-center"><SvgSimpleLoader className="h-6 w-6" /></div>
+                    <div className="flex justify-center">
+                      <SvgSimpleLoader className="h-6 w-6" />
+                    </div>
                   </TableCell>
                 </TableRow>
               </TableBody>
