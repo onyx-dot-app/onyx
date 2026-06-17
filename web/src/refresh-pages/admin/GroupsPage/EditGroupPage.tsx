@@ -26,7 +26,7 @@ import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
 import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
 import { baseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";

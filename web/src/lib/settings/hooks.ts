@@ -20,7 +20,7 @@ import {
   EnterpriseSettings,
   QueryHistoryType,
   Settings,
-} from "@/interfaces/settings";
+} from "@/lib/settings/types";
 import { EE_ENABLED } from "@/lib/constants";
 
 // ─── Internal constants ─────────────────────────────────────────────────────

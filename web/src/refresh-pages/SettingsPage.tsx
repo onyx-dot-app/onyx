@@ -65,7 +65,7 @@ import { SvgCheck } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";

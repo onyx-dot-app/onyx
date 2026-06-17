@@ -12,7 +12,7 @@ import { useEnterpriseSettings } from "@/lib/settings/hooks";
 import { toast } from "@/hooks/useToast";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { EnterpriseSettings } from "@/interfaces/settings";
+import { EnterpriseSettings } from "@/lib/settings/types";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 

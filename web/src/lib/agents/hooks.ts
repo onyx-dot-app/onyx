@@ -20,7 +20,7 @@ import { pinAgents } from "@/lib/agents/svc";
 import { useUser } from "@/providers/UserProvider";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { CombinedSettings } from "@/interfaces/settings";
+import { CombinedSettings } from "@/lib/settings/types";
 import { ChatSession } from "@/app/app/interfaces";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";

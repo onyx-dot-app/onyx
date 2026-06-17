@@ -10,7 +10,7 @@ import {
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
 import {

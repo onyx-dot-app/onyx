@@ -8,7 +8,7 @@ import {
 import { useField } from "formik";
 import { AutoSyncOptions } from "./AutoSyncOptions";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useEffect, useMemo } from "react";
 import { Credential } from "@/lib/connectors/credentials";
 import { credentialTemplates } from "@/lib/connectors/credentials";

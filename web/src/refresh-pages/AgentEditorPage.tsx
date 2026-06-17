@@ -92,7 +92,7 @@ import { ValidSources } from "@/lib/types";
 import { useVectorDbEnabled } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 
 interface AgentIconEditorProps {
   existingAgent?: FullAgent | null;

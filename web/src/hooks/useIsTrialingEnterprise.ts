@@ -1,6 +1,6 @@
 "use client";
 
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
 import { useSettings } from "@/lib/settings/hooks";
 import { useBillingInformation } from "@/hooks/useBillingInformation";

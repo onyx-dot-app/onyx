@@ -1,6 +1,6 @@
 "use client";
 
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
 import { useSettings } from "@/lib/settings/hooks";
 

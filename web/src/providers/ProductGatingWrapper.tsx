@@ -1,6 +1,6 @@
 "use client";
 
-import { ApplicationStatus } from "@/interfaces/settings";
+import { ApplicationStatus } from "@/lib/settings/types";
 import { useSettings } from "@/lib/settings/hooks";
 import GatedContentWrapper from "@/components/GatedContentWrapper";
 

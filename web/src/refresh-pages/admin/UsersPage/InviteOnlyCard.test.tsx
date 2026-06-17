@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen, waitFor, userEvent } from "@tests/setup/test-utils";
 import InviteOnlyCard from "./InviteOnlyCard";
-import { Settings } from "@/interfaces/settings";
+import { Settings } from "@/lib/settings/types";
 
 const baseSettings: Partial<Settings> = {
   invite_only_enabled: false,

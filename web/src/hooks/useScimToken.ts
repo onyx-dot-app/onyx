@@ -2,7 +2,7 @@ import useSWR from "swr";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import type { ScimTokenResponse } from "@/app/admin/scim/interfaces";
 import { SWR_KEYS } from "@/lib/swr-keys";
 

@@ -7,7 +7,7 @@ import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
-import { Settings, Tier } from "@/interfaces/settings";
+import { Settings, Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
 import { Divider, InputTypeIn, Spacer, SidebarTab } from "@opal/components";
 import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";

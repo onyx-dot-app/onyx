@@ -1,4 +1,4 @@
-import type { Settings } from "@/interfaces/settings";
+import type { Settings } from "@/lib/settings/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   EmbeddingModel,

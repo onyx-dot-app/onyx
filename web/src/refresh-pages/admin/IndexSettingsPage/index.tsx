@@ -75,7 +75,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useSettings } from "@/lib/settings/hooks";
-import { Settings } from "@/interfaces/settings";
+import { Settings } from "@/lib/settings/types";
 import { toast } from "@/hooks/useToast";
 import {
   useConfiguredEmbeddingProviders,

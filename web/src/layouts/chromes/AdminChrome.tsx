@@ -3,7 +3,7 @@
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
 import { useSettings } from "@/lib/settings/hooks";
-import { ApplicationStatus } from "@/interfaces/settings";
+import { ApplicationStatus } from "@/lib/settings/types";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";

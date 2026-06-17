@@ -34,7 +34,7 @@ import {
 import { useSettings, useVectorDbEnabled } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
-import { QueryHistoryType, Settings } from "@/interfaces/settings";
+import { QueryHistoryType, Settings } from "@/lib/settings/types";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
@@ -64,7 +64,7 @@ import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
