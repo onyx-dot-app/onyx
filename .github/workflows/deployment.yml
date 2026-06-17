@@ -228,13 +228,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release-tag.outputs.tag }}
         run: |
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
+          # Look up an existing release (including drafts) by tag name.
+          #
+          # NOTE: a draft release does not create the underlying git tag until
+          # it is published, so `GET /releases/tags/{tag}` (and
+          # `gh release view <tag>`) returns 404 for drafts. We must list
+          # releases instead — that endpoint DOES include drafts — and match
+          # on tag_name.
+          get_release_id() {
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+              --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n1
+          }
+
+          release_id=$(get_release_id)
+          if [ -z "$release_id" ]; then
             gh release create "$TAG" \
               --title "$TAG" \
               --notes "See the assets to download this version and install." \
               --draft
+            release_id=$(get_release_id)
           fi
-          release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.id')
+
+          if [ -z "$release_id" ]; then
+            echo "::error::Failed to resolve release id for tag ${TAG}"
+            exit 1
+          fi
           echo "id=${release_id}" >> "$GITHUB_OUTPUT"
 
   build-desktop:
@@ -1428,6 +1446,7 @@ jobs:
   notify-slack-on-failure:
     needs:
       - determine-builds
+      - create-release
       - build-desktop
       - build-web-amd64
       - build-web-arm64
@@ -1441,7 +1460,7 @@ jobs:
       - build-model-server-amd64
       - build-model-server-arm64
       - merge-model-server
-    if: always() && (needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+    if: always() && (needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
@@ -1457,6 +1476,9 @@ jobs:
         shell: bash
         run: |
           FAILED_JOBS=""
+          if [ "${NEEDS_CREATE_RELEASE_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• create-release\\n"
+          fi
           if [ "${NEEDS_BUILD_DESKTOP_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-desktop\\n"
           fi
@@ -1500,6 +1522,7 @@ jobs:
           FAILED_JOBS=$(printf '%s' "$FAILED_JOBS" | sed 's/\\n$//')
           echo "jobs=$FAILED_JOBS" >> "$GITHUB_OUTPUT"
         env:
+          NEEDS_CREATE_RELEASE_RESULT: ${{ needs.create-release.result }}
           NEEDS_BUILD_DESKTOP_RESULT: ${{ needs.build-desktop.result }}
           NEEDS_BUILD_WEB_AMD64_RESULT: ${{ needs.build-web-amd64.result }}
           NEEDS_BUILD_WEB_ARM64_RESULT: ${{ needs.build-web-arm64.result }}
