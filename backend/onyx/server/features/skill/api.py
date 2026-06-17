@@ -141,6 +141,16 @@ def _read_bundle_upload(bundle: UploadFile) -> bytes:
     return data
 
 
+def _reject_reserved_slug(bundle: UploadFile) -> None:
+    """Reject a bundle whose slug collides with a built-in or external-app slug,
+    before any blob is written. Applies to both admin and personal creation — a
+    reserved slug would block the org from connecting that app regardless of who
+    claims it."""
+    slug = slug_from_filename(bundle.filename)
+    if slug in _RESERVED_SKILL_SLUGS:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
+
+
 def _ensure_owned_personal(skill: Skill, user: User, db_session: Session) -> None:
     """Gate user-endpoint mutations to the caller's own personal skills.
 
@@ -177,6 +187,7 @@ def create_custom_skill(
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     parsed_group_ids = _parse_group_ids(group_ids)
+    _reject_reserved_slug(bundle)
 
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
@@ -386,9 +397,7 @@ def create_personal_skill(
         )
 
     # Reject reserved slugs up front so we never write a bundle blob for one.
-    slug = slug_from_filename(bundle.filename)
-    if slug in _RESERVED_SKILL_SLUGS:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"slug '{slug}' is reserved")
+    _reject_reserved_slug(bundle)
 
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
