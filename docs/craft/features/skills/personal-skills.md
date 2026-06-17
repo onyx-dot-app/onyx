@@ -25,10 +25,15 @@ A row is a **personal skill of user U** when all of these hold (see
 - zero rows in `skill__user_group` (no group grants)
 - `author_user_id = U`
 
-This is deliberate: the lifecycle is a one-way ratchet. A personal skill becomes
-"org-managed" the instant an admin makes it public **or** adds a group grant.
-After that it is no longer personal, and the owner loses self-serve control.
-There is no "demote back to personal" path in V1.
+This is deliberate and **fully reversible by admins** — "personal" is a view of
+the row's current state, not a stored mode. A personal skill becomes
+"org-managed" the instant an admin makes it public **or** adds a group grant,
+and the owner loses self-serve control while it stays that way. If an admin
+later clears `is_public` and removes every group grant via the normal admin
+visibility controls, the row again satisfies the predicate and the original
+author regains self-serve access — that is intended (it is once more a private,
+author-owned custom skill), not an invariant violation. There is intentionally
+no persisted "promoted" flag to make promotion one-way.
 
 `_personal_skill_clause` is the **single source of truth** for this predicate.
 It is shared by:
@@ -155,9 +160,11 @@ deletable, admin hard-delete, and the per-user cap. The manager helpers live in
 - **No `is_personal` column.** Keep it derived via `_personal_skill_clause`.
   Adding a stored flag would create a second source of truth that can diverge
   from `is_public`/grants state.
-- **Promotion is one-way in V1.** No demote path. If product wants demote,
-  that's a new transition with its own fanout + ownership re-grant — design it,
-  don't bolt it on.
+- **"Personal" is derived and reversible — do NOT add a persisted promoted
+  flag.** If an admin reverts a skill to fully private (no public, no grants),
+  the author regaining self-serve control is intended, not a bug. Reviewers
+  flag this as a "reversible predicate" violation; it isn't — it's the
+  confirmed design for custom-skill visibility.
 - **Ownership ≠ visibility.** Don't "simplify" the user mutation routes to use
   `fetch_skill_for_user`; the disabled-but-owned case needs the bare fetch.
 - **The advisory lock is load-bearing.** Don't drop it for a "simpler"
