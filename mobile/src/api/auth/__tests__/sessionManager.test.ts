@@ -12,6 +12,7 @@ import type { Mock } from "jest-mock";
 
 import { getToken, setToken } from "@/api/auth/tokenStore";
 import {
+  __resetSessionStateForTests,
   type BearerTokenResponse,
   getValidToken,
   login,
@@ -58,6 +59,9 @@ const token = (access: string): BearerTokenResponse => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Reset the module-level session epoch + single-flight handle so a test can't
+  // leak state (e.g. a non-null inFlightRefresh) into the next one.
+  __resetSessionStateForTests();
   mockSetToken.mockResolvedValue(undefined);
   mockGetToken.mockResolvedValue(null);
   mockRemoveClient.mockResolvedValue(undefined);
@@ -104,14 +108,21 @@ describe("logout", () => {
     expect(mockRemoveClient).toHaveBeenCalledTimes(1);
   });
 
-  it("still wipes locally when server revocation fails", async () => {
-    mockApiFetch.mockRejectedValue(new ApiError({ status: 500 }));
+  it("logs, then still wipes locally, when server revocation fails", async () => {
+    const revocationError = new ApiError({ status: 500 });
+    mockApiFetch.mockRejectedValue(revocationError);
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
     await logout();
 
+    // The failure is surfaced (traceable) rather than silently swallowed...
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), revocationError);
+    // ...and the local wipe still runs regardless of the network outcome.
     expect(mockSetToken).toHaveBeenCalledWith(null);
     expect(mockClear).toHaveBeenCalledTimes(1);
     expect(mockRemoveClient).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
   });
 });
 

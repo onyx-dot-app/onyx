@@ -86,8 +86,10 @@ export async function logout(): Promise<void> {
   // network failure can't strand the user half-logged-out.
   try {
     await apiFetch<void>(LOGOUT_PATH, { method: "POST" });
-  } catch {
-    // ignore — fall through to the local wipe
+  } catch (err) {
+    // Log so a failed revocation stays traceable, then fall through to the
+    // local wipe — the on-device token is cleared regardless of the outcome.
+    console.warn("Mobile logout: server-side token revocation failed", err);
   }
   await clearLocalSession();
 }
@@ -126,6 +128,15 @@ export function refreshToken(): Promise<string | null> {
     }
   })();
   return inFlightRefresh;
+}
+
+// Test-only: reset the module-level session state (epoch + single-flight
+// handle) so each test starts from a known-clean slate. Without this, a test
+// that leaves `inFlightRefresh` non-null would make the next test's
+// `refreshToken()` silently reuse the stale promise. No production callers.
+export function __resetSessionStateForTests(): void {
+  sessionEpoch = 0;
+  inFlightRefresh = null;
 }
 
 // Returns a usable Bearer token, or null if none. The V1 session token is an

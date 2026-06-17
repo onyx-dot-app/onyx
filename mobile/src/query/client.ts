@@ -35,18 +35,32 @@ export const persister = createSyncStoragePersister({
   storage: makeMmkvStorage(queryStorage),
 });
 
-// Query keys whose data is identity PII (or otherwise must not be written to
-// disk). The MMKV query-cache snapshot is unencrypted: a secure encryption key
-// would have to be fetched asynchronously from the keychain before the
-// synchronous MMKV instance is created — fragile — so instead we keep PII out of
-// the persisted snapshot entirely. /api/me (email, role) is the only such query
-// today. The in-memory cache still holds it for the session; only persistence is
-// skipped, so a relaunch refetches it (and the auth gate shows a brief splash).
-const NON_PERSISTED_KEYS: readonly string[] = [QUERY_KEYS.me(null)[0]];
+// Query-key prefixes whose data is identity PII (or otherwise must not be
+// written to disk). The MMKV query-cache snapshot is unencrypted: a secure
+// encryption key would have to be fetched asynchronously from the keychain
+// before the synchronous MMKV instance is created — fragile — so instead we keep
+// PII out of the persisted snapshot entirely. /api/me (email, role) is the only
+// such query today. The in-memory cache still holds it for the session; only
+// persistence is skipped, so a relaunch refetches it (and the auth gate shows a
+// brief splash).
+//
+// Matched structurally, segment by segment (see `isNonPersistedKey`), so the
+// whole `["me", serverUrl]` family is excluded for any serverUrl while an
+// unrelated key such as `["me-preferences"]` is not. The trailing serverUrl
+// varies per instance, so only the leading entity segment forms the prefix.
+const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
+  [QUERY_KEYS.me(null)[0]],
+];
+
+function isNonPersistedKey(queryKey: readonly unknown[]): boolean {
+  return NON_PERSISTED_KEY_PREFIXES.some((prefix) =>
+    prefix.every((segment, i) => queryKey[i] === segment),
+  );
+}
 
 export const dehydrateOptions: DehydrateOptions = {
   shouldDehydrateQuery: (query) => {
-    if (NON_PERSISTED_KEYS.includes(String(query.queryKey[0]))) return false;
+    if (isNonPersistedKey(query.queryKey)) return false;
     // Otherwise keep the library default: only persist successful queries.
     return query.state.status === "success";
   },

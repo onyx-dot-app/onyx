@@ -13,6 +13,11 @@ export function useAuthConfig() {
   const serverUrl = useSession((state) => state.serverUrl);
   return useQuery({
     queryKey: QUERY_KEYS.authType(serverUrl),
+    // Stay idle until an instance is connected. Before then `getBaseUrl()`
+    // throws a plain Error (the dev-only EXPO_PUBLIC_API_URL aside), which isn't
+    // an auth error, so TanStack would retry once and park the query in error
+    // state instead of simply waiting for a URL.
+    enabled: serverUrl !== null,
     queryFn: ({ signal }) =>
       apiFetch<AuthTypeMetadata>("/api/auth/type", { auth: false, signal }),
   });
