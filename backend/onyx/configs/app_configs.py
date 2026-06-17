@@ -279,16 +279,22 @@ if MOBILE_SSO_CODE_TTL_SECONDS < 1:
 # Deep-link URIs the SSO completion is allowed to 302 to. Defaults to the app's
 # custom scheme; override (comma-separated) to add Universal/App Links later.
 _DEFAULT_MOBILE_REDIRECT_URIS = frozenset({"onyx://auth/callback"})
-# A misconfigured value (e.g. just commas/whitespace) parses to an empty set,
-# which would silently reject every mobile redirect — fall back to the default.
-MOBILE_ALLOWED_REDIRECT_URIS: frozenset[str] = (
-    frozenset(
-        uri.strip()
-        for uri in os.environ.get("MOBILE_ALLOWED_REDIRECT_URIS", "").split(",")
-        if uri.strip()
-    )
-    or _DEFAULT_MOBILE_REDIRECT_URIS
+_MOBILE_ALLOWED_REDIRECT_URIS_RAW = os.environ.get("MOBILE_ALLOWED_REDIRECT_URIS", "")
+MOBILE_ALLOWED_REDIRECT_URIS: frozenset[str] = frozenset(
+    uri.strip() for uri in _MOBILE_ALLOWED_REDIRECT_URIS_RAW.split(",") if uri.strip()
 )
+if not MOBILE_ALLOWED_REDIRECT_URIS:
+    # An override that was set but parsed empty (e.g. just commas/whitespace) is a
+    # misconfig — warn rather than silently rejecting every mobile redirect. An
+    # unset value is the normal default, so don't warn there.
+    if _MOBILE_ALLOWED_REDIRECT_URIS_RAW.strip():
+        logger.warning(
+            "MOBILE_ALLOWED_REDIRECT_URIS=%r parsed to an empty set; "
+            "falling back to default %s",
+            _MOBILE_ALLOWED_REDIRECT_URIS_RAW,
+            _DEFAULT_MOBILE_REDIRECT_URIS,
+        )
+    MOBILE_ALLOWED_REDIRECT_URIS = _DEFAULT_MOBILE_REDIRECT_URIS
 
 # JWT Public Key URL for JWT token verification
 JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
