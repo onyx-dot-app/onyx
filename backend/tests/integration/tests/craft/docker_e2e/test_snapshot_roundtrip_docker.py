@@ -1,20 +1,11 @@
-"""Docker-backend snapshot + restore round-trip.
+"""
+Docker-backend snapshot + restore round-trip against the full Craft compose
+stack.
 
-Drives the real product lifecycle against the full Craft docker-compose stack:
-
-1. Provision a sandbox and seed two markers -- one in the session's ``outputs/``
-   (per-session snapshot) and one in opencode's data home (sandbox-global
-   chat-history snapshot).
-2. Backdate the heartbeat so the idle-cleanup beat reaps the sandbox: it
-   snapshots both kinds to the FileStore, then tears down the container and its
-   named volume -- wiping the session workspace and the writable-layer data home.
-3. Reopen the session via the API, re-provisioning a fresh container that
-   restores both snapshots.
-
-Exercises, against a real container: the Docker session-snapshot round-trip,
-opencode chat-history capture (docker-exec -> sandbox_daemon archive ->
-FileStore), and chat-history restore (``put_archive`` into the freshly
-re-provisioned, still-stopped container).
+Seeds markers in the session outputs and opencode's data home, forces the
+idle-cleanup beat to reap the sandbox (snapshot both kinds + tear down), then
+restores via the API and asserts both survived a real re-provision -- covering
+the session-snapshot and opencode chat-history round-trips end to end.
 """
 
 from __future__ import annotations
@@ -65,7 +56,9 @@ def snapshot_user() -> DATestUser:
 
 
 def _force_idle(user_id: UUID) -> UUID:
-    """Backdate the sandbox heartbeat past the idle timeout; returns sandbox id."""
+    """
+    Backdate the sandbox heartbeat past the idle timeout; returns sandbox id.
+    """
     with get_session_with_tenant(tenant_id=_TENANT_ID) as db:
         sandbox = db.scalar(select(Sandbox).where(Sandbox.user_id == user_id))
         assert sandbox is not None, "Sandbox row missing for user."
@@ -127,8 +120,8 @@ def test_session_and_opencode_history_survive_snapshot_restore(
         f"stderr={seed.stderr!r}"
     )
 
-    # Force the idle reap: snapshots both kinds to the FileStore, then tears down
-    # the container + named volume.
+    # Force the idle reap: snapshots both kinds to the FileStore, then tears
+    # down.
     sandbox_id = _force_idle(UUID(snapshot_user.id))
     _wait_for_reap(sandbox_id)
 
@@ -141,9 +134,17 @@ def test_session_and_opencode_history_survive_snapshot_restore(
     )
 
     # Reopen the session: re-provision a fresh container and restore both
-    # snapshots (chat history via put_archive during provision, session outputs
-    # via the restore endpoint).
-    BuildSessionManager.restore(snapshot_user, session_id)
+    # snapshots.
+    restored = BuildSessionManager.restore(snapshot_user, session_id)
+
+    # The container name derives from the sandbox id, which restore keeps
+    # stable, so `container` still points at the fresh container. Assert it so a
+    # future re-key fails here loudly rather than as a cryptic exec error below.
+    assert restored["sandbox"] is not None
+    assert restored["sandbox"]["id"] == str(sandbox_id), (
+        "Restore changed the sandbox id; the container name derived from the "
+        "original id is now stale."
+    )
 
     check = docker_exec(
         container,
