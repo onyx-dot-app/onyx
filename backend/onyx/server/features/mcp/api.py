@@ -438,6 +438,15 @@ class OnyxTokenStorage(TokenStorage):
                 self._oauth_context.token_expiry_time = (
                     float(expires_at) if expires_at is not None else None
                 )
+                # Re-seed discovered metadata so refresh targets the real token
+                # endpoint, not the SDK's `<origin>/token` fallback. Don't
+                # clobber a known provider's metadata set in make_oauth_provider.
+                if self._oauth_context.oauth_metadata is None:
+                    metadata_raw = config_data.get(MCPOAuthKeys.METADATA.value)
+                    if metadata_raw:
+                        self._oauth_context.oauth_metadata = (
+                            OAuthMetadata.model_validate(metadata_raw)
+                        )
             tokens_raw = config_data.get(MCPOAuthKeys.TOKENS.value)
             if tokens_raw:
                 return OAuthToken.model_validate(tokens_raw)
@@ -458,6 +467,15 @@ class OnyxTokenStorage(TokenStorage):
                 # No expires_in: drop any stale expiry so the next tool call
                 # doesn't see the just-refreshed token as expired.
                 config_data.pop(MCPOAuthKeys.TOKEN_EXPIRES_AT.value, None)
+            # Persist discovered metadata so the next per-call provider can
+            # refresh without repeating discovery.
+            if (
+                self._oauth_context is not None
+                and self._oauth_context.oauth_metadata is not None
+            ):
+                config_data[MCPOAuthKeys.METADATA.value] = (
+                    self._oauth_context.oauth_metadata.model_dump(mode="json")
+                )
             config_data["headers"] = {
                 "Authorization": f"{tokens.token_type} {tokens.access_token}"
             }

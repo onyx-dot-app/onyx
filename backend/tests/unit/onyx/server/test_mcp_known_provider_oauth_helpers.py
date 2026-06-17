@@ -7,10 +7,14 @@ from typing import Iterator
 from urllib.parse import parse_qs
 from urllib.parse import urlparse
 
+import httpx
 import pytest
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull
+from mcp.shared.auth import OAuthMetadata
 from mcp.shared.auth import OAuthToken
+from pydantic import AnyHttpUrl
+from pydantic import AnyUrl
 
 import onyx.server.features.mcp.api as mcp_api
 from onyx.auth.oauth_token_manager import build_oauth_authorization_url
@@ -223,7 +227,10 @@ def test_absolute_token_expiry_from_expires_in() -> None:
         OAuthToken(access_token="a", token_type="Bearer", expires_in=3600)
     )
     assert expiry is not None
-    assert before + 3600 <= expiry <= time.time() + 3600
+    # The expiry is `now + expires_in` pulled back by the refresh buffer so we
+    # refresh slightly early; bound the assertion the same way.
+    buffer = mcp_api.TOKEN_EXPIRY_BUFFER_SECONDS
+    assert before + 3600 - buffer <= expiry <= time.time() + 3600 - buffer
 
 
 def test_absolute_token_expiry_none_without_expires_in() -> None:
@@ -256,7 +263,7 @@ def _patch_config_read(
     monkeypatch.setattr(
         mcp_api.OnyxTokenStorage,
         "_ensure_connection_config",
-        lambda _self, _db: object(),
+        lambda _self, _db: SimpleNamespace(id=1),
     )
     monkeypatch.setattr(mcp_api, "extract_connection_data", lambda _config: config_data)
 
@@ -311,3 +318,215 @@ def test_get_tokens_clears_stale_expiry_when_absent(
     )
     asyncio.run(provider.context.storage.get_tokens())
     assert provider.context.token_expiry_time is None
+
+
+# --- Discovered OAuth metadata persistence (AUTO_DISCOVERY cross-host refresh) ---
+
+
+_DISCOVERED_METADATA = OAuthMetadata(
+    issuer=cast(AnyHttpUrl, "https://idp.other-host.com"),
+    authorization_endpoint=cast(AnyHttpUrl, "https://idp.other-host.com/authorize"),
+    token_endpoint=cast(AnyHttpUrl, "https://idp.other-host.com/token"),
+)
+
+
+def _patch_config_store(
+    monkeypatch: pytest.MonkeyPatch, config_data: dict[str, object]
+) -> None:
+    """Like `_patch_config_read`, but also stubs the write path so `set_tokens`
+    persists into the same in-memory `config_data` dict (`extract_connection_data`
+    returns it, so mutations land in place; the update is a no-op)."""
+    _patch_config_read(monkeypatch, config_data)
+    monkeypatch.setattr(
+        mcp_api, "update_connection_config", lambda *_args, **_kwargs: None
+    )
+
+
+def test_get_tokens_rehydrates_discovered_metadata_for_auto_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
+    assert provider.context.oauth_metadata is None
+    _patch_config_read(
+        monkeypatch,
+        {
+            MCPOAuthKeys.METADATA.value: _DISCOVERED_METADATA.model_dump(mode="json"),
+            MCPOAuthKeys.TOKENS.value: {"access_token": "a", "token_type": "Bearer"},
+        },
+    )
+    asyncio.run(provider.context.storage.get_tokens())
+    # Cross-host AUTO_DISCOVERY now refreshes against the discovered endpoint
+    # instead of the SDK's `<server-origin>/token` fallback.
+    assert provider.context.oauth_metadata is not None
+    assert (
+        str(provider.context.oauth_metadata.token_endpoint)
+        == "https://idp.other-host.com/token"
+    )
+
+
+def test_get_tokens_does_not_override_known_provider_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
+    # A stale/different persisted metadata must not displace the configured
+    # known-provider endpoints that make_oauth_provider injected.
+    _patch_config_read(
+        monkeypatch,
+        {
+            MCPOAuthKeys.METADATA.value: _DISCOVERED_METADATA.model_dump(mode="json"),
+            MCPOAuthKeys.TOKENS.value: {"access_token": "a", "token_type": "Bearer"},
+        },
+    )
+    asyncio.run(provider.context.storage.get_tokens())
+    assert provider.context.oauth_metadata is not None
+    assert (
+        str(provider.context.oauth_metadata.token_endpoint)
+        == "https://accounts.example.com/oauth/token"
+    )
+
+
+def test_set_tokens_persists_discovered_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _build_provider(MCPOAuthProviderMode.AUTO_DISCOVERY)
+    # Simulate the SDK having discovered the auth server during the 401 flow.
+    provider.context.oauth_metadata = _DISCOVERED_METADATA
+    config_data: dict[str, object] = {}
+    _patch_config_store(monkeypatch, config_data)
+    asyncio.run(
+        provider.context.storage.set_tokens(
+            OAuthToken(access_token="a", token_type="Bearer", expires_in=3600)
+        )
+    )
+    persisted = cast(dict, config_data.get(MCPOAuthKeys.METADATA.value))
+    assert isinstance(persisted, dict)
+    assert persisted["token_endpoint"] == "https://idp.other-host.com/token"
+
+
+# --- End-to-end proactive refresh through the SDK's async_auth_flow ---
+
+
+def _seed_refreshable_config(expires_at: float) -> dict[str, object]:
+    """Stored state for a user whose access token is expired but refreshable."""
+    client_info = OAuthClientInformationFull(
+        client_id="client-123",
+        client_secret="secret-123",
+        redirect_uris=[cast(AnyUrl, "https://app.example.com/mcp/oauth/callback")],
+    )
+    return {
+        MCPOAuthKeys.CLIENT_INFO.value: client_info.model_dump(mode="json"),
+        MCPOAuthKeys.TOKEN_EXPIRES_AT.value: expires_at,
+        MCPOAuthKeys.TOKENS.value: {
+            "access_token": "access-old",
+            "token_type": "Bearer",
+            "refresh_token": "refresh-old",
+        },
+    }
+
+
+async def _drive_refresh(
+    provider: OAuthClientProvider,
+    refresh_status: int,
+    refresh_body: dict[str, object],
+) -> tuple[httpx.Request, httpx.Request | None]:
+    """Drive `async_auth_flow` through its proactive-refresh branch: take the
+    first yielded request (the refresh), feed it the given response, and return
+    that refresh request plus the next request the SDK would send."""
+    request = httpx.Request("POST", "https://mcp.example.com/mcp")
+    flow = provider.async_auth_flow(request)
+    refresh_request = await anext(flow)
+    refresh_response = httpx.Response(
+        status_code=refresh_status, json=refresh_body, request=refresh_request
+    )
+    try:
+        next_request: httpx.Request | None = await flow.asend(refresh_response)
+    except StopAsyncIteration:
+        next_request = None
+    await flow.aclose()
+    return refresh_request, next_request
+
+
+def test_proactive_refresh_targets_configured_endpoint_and_persists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
+    config_data = _seed_refreshable_config(expires_at=time.time() - 60)
+    _patch_config_store(monkeypatch, config_data)
+
+    refresh_request, authed_request = asyncio.run(
+        _drive_refresh(
+            provider,
+            refresh_status=200,
+            refresh_body={
+                "access_token": "access-new",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "refresh_token": "refresh-new",
+            },
+        )
+    )
+
+    # Refresh must hit the configured token endpoint, not <server-origin>/token.
+    assert str(refresh_request.url) == "https://accounts.example.com/oauth/token"
+    assert b"grant_type=refresh_token" in refresh_request.content
+    assert b"refresh-old" in refresh_request.content
+    # The in-flight request is retried with the freshly minted token.
+    assert authed_request is not None
+    assert authed_request.headers.get("Authorization") == "Bearer access-new"
+    # The new token + a future expiry are persisted for the next call.
+    persisted_tokens = cast(dict, config_data[MCPOAuthKeys.TOKENS.value])
+    assert persisted_tokens["access_token"] == "access-new"
+    assert persisted_tokens["refresh_token"] == "refresh-new"
+    assert cast(float, config_data[MCPOAuthKeys.TOKEN_EXPIRES_AT.value]) > time.time()
+
+
+def test_proactive_refresh_preserves_refresh_token_when_response_omits_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
+    config_data = _seed_refreshable_config(expires_at=time.time() - 60)
+    _patch_config_store(monkeypatch, config_data)
+
+    _, authed_request = asyncio.run(
+        _drive_refresh(
+            provider,
+            refresh_status=200,
+            refresh_body={
+                "access_token": "access-new",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+            },
+        )
+    )
+
+    assert authed_request is not None
+    persisted_tokens = cast(dict, config_data[MCPOAuthKeys.TOKENS.value])
+    assert persisted_tokens["access_token"] == "access-new"
+    # Providers that only issue a refresh token once keep working.
+    assert persisted_tokens["refresh_token"] == "refresh-old"
+
+
+def test_proactive_refresh_failure_clears_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _build_provider(MCPOAuthProviderMode.KNOWN_PROVIDER)
+    config_data = _seed_refreshable_config(expires_at=time.time() - 60)
+    _patch_config_store(monkeypatch, config_data)
+
+    refresh_request, authed_request = asyncio.run(
+        _drive_refresh(
+            provider,
+            refresh_status=400,
+            refresh_body={"error": "invalid_grant"},
+        )
+    )
+
+    # A rejected refresh clears the in-memory token so the SDK falls through to
+    # re-auth (which surfaces as "please reconnect" at the tool layer) rather
+    # than retrying a dead access token.
+    assert str(refresh_request.url) == "https://accounts.example.com/oauth/token"
+    assert provider.context.current_tokens is None
+    assert authed_request is not None, (
+        "SDK no longer yields original request on refresh failure"
+    )
+    assert authed_request.headers.get("Authorization") is None
