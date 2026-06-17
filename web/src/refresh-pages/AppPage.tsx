@@ -803,7 +803,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center px-2 md:px-4">
+                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center px-2 sm:px-4">
                   {/* ChatUI */}
                   <Fade
                     show={
@@ -928,7 +928,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 {/* ── Middle-center: AppInputBar ── */}
                 <div
                   className={cn(
-                    "row-start-2 flex flex-col items-center px-2 md:px-4",
+                    "row-start-2 flex flex-col items-center px-2 sm:px-4",
                     sessionFetchError && "hidden"
                   )}
                 >
@@ -1043,7 +1043,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
-                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 md:px-4">
+                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
                   {/* Agent description below input */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&
                     !isDefaultAgent && (
