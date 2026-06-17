@@ -13,6 +13,6 @@ import { useSettings } from "@/lib/settings/hooks";
  * Returns false when the tier is undefined (loading, no license).
  */
 export function useTierAtLeast(required: Tier): boolean {
-  const { settings } = useSettings();
+  const settings = useSettings();
   return tierAtLeast(settings.tier, required);
 }

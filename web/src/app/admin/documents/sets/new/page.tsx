@@ -9,13 +9,13 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { useRouter } from "next/navigation";
 import { refreshDocumentSets } from "../hooks";
 import CardSection from "@/components/admin/CardSection";
-import { useVectorDbEnabled } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
 function Main() {
   const router = useRouter();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = useSettings();
 
   const {
     data: ccPairs,

@@ -39,7 +39,7 @@ export default function AccessRestricted() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: license } = useLicense();
-  const { settings } = useSettings();
+  const settings = useSettings();
 
   const isSeatLimitExceeded =
     settings.application_status === ApplicationStatus.SEAT_LIMIT_EXCEEDED;

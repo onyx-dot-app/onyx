@@ -9,10 +9,10 @@ export default function ProductGatingWrapper({
 }: {
   children: React.ReactNode;
 }) {
-  const { settings, isLoading } = useSettings();
+  const settings = useSettings();
   const status = settings.application_status;
 
-  if (isLoading) return null;
+  if (settings.isLoading) return null;
 
   if (
     status === ApplicationStatus.GATED_ACCESS ||

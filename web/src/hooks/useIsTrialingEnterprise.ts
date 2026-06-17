@@ -16,7 +16,7 @@ import { useBillingInformation } from "@/hooks/useBillingInformation";
  * gating; use `useTierAtLeast` instead.
  */
 export function useIsTrialingEnterprise(): boolean {
-  const { settings } = useSettings();
+  const settings = useSettings();
   const { data } = useBillingInformation();
 
   if (settings.tier !== Tier.ENTERPRISE) return false;

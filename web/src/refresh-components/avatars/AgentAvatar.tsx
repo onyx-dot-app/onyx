@@ -3,7 +3,7 @@
 import { MinimalAgent } from "@/lib/agents/types";
 import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { SvgOnyxLogo } from "@opal/logos";
-import { useEnterpriseSettings } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { DEFAULT_AVATAR_SIZE_PX, DEFAULT_AGENT_ID } from "@/lib/constants";
 import CustomAgentAvatar from "@/refresh-components/avatars/CustomAgentAvatar";
 import Image from "next/image";
@@ -18,7 +18,7 @@ export default function AgentAvatar({
   size = DEFAULT_AVATAR_SIZE_PX,
   ...props
 }: AgentAvatarProps) {
-  const { enterpriseSettings } = useEnterpriseSettings();
+  const { enterprise: enterpriseSettings } = useSettings();
 
   if (agent.id === DEFAULT_AGENT_ID) {
     return enterpriseSettings?.use_custom_logo ? (

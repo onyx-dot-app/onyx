@@ -1,11 +1,11 @@
 "use client";
 
 import React from "react";
-import { useAppName } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import Text from "@/refresh-components/texts/Text";
 
 export default function LoginText() {
-  const appName = useAppName();
+  const { appName } = useSettings();
   return (
     <div className="w-full flex flex-col ">
       <Text as="p" headingH2 text05>

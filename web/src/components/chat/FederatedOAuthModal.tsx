@@ -4,7 +4,7 @@ import { useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { ValidSources } from "@/lib/types";
-import { useAppName } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { getSourceMetadata } from "@/lib/sources";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import { SvgLink } from "@opal/icons";
@@ -101,7 +101,7 @@ function useFederatedOauthModal() {
 }
 
 export default function FederatedOAuthModal() {
-  const applicationName = useAppName();
+  const { appName: applicationName } = useSettings();
 
   const {
     oAuthModalState: { hidden },

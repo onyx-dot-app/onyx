@@ -21,7 +21,7 @@ export default function AdminChrome({ children }: AdminChromeProps) {
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
-  const { settings, isLoading: settingsLoading } = useSettings();
+  const settings = useSettings();
 
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
@@ -31,7 +31,7 @@ export default function AdminChrome({ children }: AdminChromeProps) {
   const vectorDbEnabled = settings.vector_db_enabled !== false;
   let content = children;
   if (isVectorDbRequiredRoute(pathname)) {
-    if (settingsLoading) {
+    if (settings.isLoading) {
       content = (
         <Section padding={2}>
           <SvgSimpleLoader className="h-6 w-6" />

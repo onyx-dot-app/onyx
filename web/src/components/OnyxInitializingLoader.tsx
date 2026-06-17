@@ -1,10 +1,10 @@
 "use client";
 
 import Logo from "@/refresh-components/Logo";
-import { useAppName } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 
 export default function OnyxInitializingLoader() {
-  const appName = useAppName();
+  const { appName } = useSettings();
 
   return (
     <div className="mx-auto my-auto animate-pulse">

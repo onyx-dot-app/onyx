@@ -28,11 +28,7 @@ import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
-import {
-  useVectorDbEnabled,
-  useSettings,
-  useEnterpriseSettings,
-} from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -50,8 +46,8 @@ function SettingsPopover({
   undismissedCount,
 }: SettingsPopoverProps) {
   const { user } = useUser();
-  const { settings } = useSettings();
-  const { enterpriseSettings } = useEnterpriseSettings();
+  const settings = useSettings();
+  const enterpriseSettings = settings.enterprise;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -206,7 +202,7 @@ export default function AccountPopover({
   >(undefined);
   const { user } = useUser();
   const appFocus = useAppFocus();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = useSettings();
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
   const userDisplayName = getUserDisplayName(user);

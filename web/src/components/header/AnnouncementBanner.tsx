@@ -13,7 +13,7 @@ const DISMISSED_NOTIFICATION_COOKIE_PREFIX = "dismissed_notification_";
 const COOKIE_EXPIRY_DAYS = 1;
 
 export function AnnouncementBanner() {
-  const { settings } = useSettings();
+  const settings = useSettings();
   const { mutate } = useSWRConfig();
   const [localNotifications, setLocalNotifications] = useState(
     settings.notifications || []

@@ -12,7 +12,7 @@ import { Settings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 
 export default function InviteOnlyCard() {
-  const { settings } = useSettings();
+  const settings = useSettings();
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {

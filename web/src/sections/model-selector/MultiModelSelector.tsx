@@ -38,7 +38,7 @@ export default function MultiModelSelector({
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
 
-  const { settings } = useSettings();
+  const settings = useSettings();
   const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
 
   const isMultiModel = selectedModels.length > 1;

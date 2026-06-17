@@ -56,7 +56,7 @@ interface EditGroupPageProps {
 function EditGroupPage({ groupId }: EditGroupPageProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
-  const { settings } = useSettings();
+  const settings = useSettings();
   const isEnterpriseTier = tierAtLeast(settings.tier, Tier.ENTERPRISE);
   const tokenLimitsDisabledTooltip = markdown(
     "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only."

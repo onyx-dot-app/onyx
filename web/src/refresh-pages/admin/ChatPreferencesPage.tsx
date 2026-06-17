@@ -31,7 +31,7 @@ import {
   InputHorizontal,
   InputVertical,
 } from "@opal/layouts";
-import { useSettings, useVectorDbEnabled } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import { QueryHistoryType, Settings } from "@/lib/settings/types";
@@ -372,7 +372,7 @@ function FileSizeLimitFields({
 
 export default function ChatPreferencesPage() {
   const router = useRouter();
-  const { settings } = useSettings();
+  const settings = useSettings();
   const s = settings;
   // Search Mode toggle is Business+; Chat Retention is Enterprise-only.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
@@ -409,7 +409,7 @@ export default function ChatPreferencesPage() {
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = settings;
 
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID

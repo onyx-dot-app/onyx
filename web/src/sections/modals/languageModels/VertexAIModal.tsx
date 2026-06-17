@@ -63,7 +63,7 @@ function VertexAIModalInternals({
 }: VertexAIModalInternalsProps) {
   const formikProps = useFormikContext<VertexAIModalValues>();
   const authMethod = formikProps.values.custom_config?.vertex_auth_method;
-  const { settings } = useSettings();
+  const settings = useSettings();
   const isMultiTenant = !settings.hooks_enabled;
 
   useEffect(() => {

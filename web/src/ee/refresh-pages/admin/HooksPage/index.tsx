@@ -449,7 +449,7 @@ function ConnectedHookCard({
 
 export default function HooksPage() {
   const router = useRouter();
-  const { settings, isLoading: settingsLoading } = useSettings();
+  const settings = useSettings();
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const [connectSpec, setConnectSpec] = useState<HookPointMeta | null>(null);
@@ -507,7 +507,7 @@ export default function HooksPage() {
   }, [specs, hooksByPoint, search]);
 
   useEffect(() => {
-    if (settingsLoading) return;
+    if (settings.isLoading) return;
     if (!enterpriseTier) {
       toast.info("Hook Extensions require an Enterprise license.");
       router.replace("/");
@@ -515,9 +515,9 @@ export default function HooksPage() {
       toast.info("Hook Extensions are not enabled for this deployment.");
       router.replace("/");
     }
-  }, [settingsLoading, enterpriseTier, settings.hooks_enabled, router]);
+  }, [settings.isLoading, enterpriseTier, settings.hooks_enabled, router]);
 
-  if (settingsLoading || !enterpriseTier || !settings.hooks_enabled) {
+  if (settings.isLoading || !enterpriseTier || !settings.hooks_enabled) {
     return <SvgSimpleLoader />;
   }
 

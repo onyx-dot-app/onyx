@@ -72,7 +72,7 @@ export default function ChatSearchCommandMenu({
 
   // Data hooks
   const { projects } = useProjects();
-  const { settings } = useSettings();
+  const settings = useSettings();
   const currentAgent = useCurrentAgent();
   const createProjectModal = useCreateModal();
 

@@ -36,7 +36,14 @@ jest.mock("@/lib/settings/svc", () => ({
 
 describe("InviteOnlyCard", () => {
   beforeEach(() => {
-    mockUseSettings.mockReturnValue({ settings: baseSettings });
+    mockUseSettings.mockReturnValue({
+      ...baseSettings,
+      enterprise: null,
+      appName: "Onyx",
+      vectorDbEnabled: true,
+      isLoading: false,
+      error: undefined,
+    });
     mockMutate.mockImplementation(async (_key, fn) => {
       if (typeof fn === "function") return fn();
     });
@@ -57,7 +64,13 @@ describe("InviteOnlyCard", () => {
 
   test("reflects checked state when invite_only_enabled is true", () => {
     mockUseSettings.mockReturnValue({
-      settings: { ...baseSettings, invite_only_enabled: true },
+      ...baseSettings,
+      invite_only_enabled: true,
+      enterprise: null,
+      appName: "Onyx",
+      vectorDbEnabled: true,
+      isLoading: false,
+      error: undefined,
     });
     render(<InviteOnlyCard />);
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");

@@ -160,7 +160,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     new Map()
   );
   const route = useAppRouter();
-  const { settings: settingsData } = useSettings();
+  const settingsData = useSettings();
 
   // SWR-backed fetch for recent files. Deduplicates across all mounts and
   // handles React StrictMode double-invocation without firing duplicate requests.

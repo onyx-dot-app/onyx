@@ -10,11 +10,7 @@ import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import {
-  useSettings,
-  useAppName,
-  useVectorDbEnabled,
-} from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -150,8 +146,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
   // available in server-side components
-  const { settings } = useSettings();
-  const appName = useAppName();
+  const settings = useSettings();
+  const { appName } = settings;
 
   const appNameRef = useRef<string>("Onyx");
   useEffect(() => {
@@ -166,7 +162,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     };
   }, []);
 
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = settings;
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();

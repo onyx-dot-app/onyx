@@ -49,10 +49,7 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
-import {
-  useIsSearchModeAvailable,
-  useEnterpriseSettings,
-} from "@/lib/settings/hooks";
+import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -69,7 +66,7 @@ function Header() {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const isSearchModeAvailable = useIsSearchModeAvailable();
-  const { enterpriseSettings } = useEnterpriseSettings();
+  const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
   const [showShareModal, setShowShareModal] = useState(false);
@@ -94,7 +91,7 @@ function Header() {
     useChatSessions();
   const router = useRouter();
 
-  const customHeaderContent = enterpriseSettings?.custom_header_content;
+  const customHeaderContent = settings.enterprise?.custom_header_content;
   const pageWithHeaderContent =
     appFocus.isChat() || appFocus.isNewSession() || appFocus.isAgent();
 

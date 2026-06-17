@@ -149,7 +149,7 @@ export default function AddConnector({
   }, []);
 
   const router = useRouter();
-  const { settings } = useSettings();
+  const settings = useSettings();
   const defaultPruneFreqHours = settings.default_pruning_freq
     ? settings.default_pruning_freq / 3600
     : 600; // 25 days fallback until settings load

@@ -220,7 +220,7 @@ export function useAgentController(
   const searchParams = useSearchParams();
   const { agents: availableAgents } = useAgents();
   const { pinnedAgents } = usePinnedAgents();
-  const { settings } = useSettings();
+  const settings = useSettings();
 
   const defaultAgentIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
   const defaultAgentId = defaultAgentIdRaw

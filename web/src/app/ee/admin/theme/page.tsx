@@ -8,7 +8,7 @@ import {
   AppearanceThemeSettingsRef,
 } from "./AppearanceThemeSettings";
 import { useRef, useState } from "react";
-import { useEnterpriseSettings } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { toast } from "@/hooks/useToast";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
@@ -29,7 +29,8 @@ const CHAR_LIMITS = {
 };
 
 export default function ThemePage() {
-  const { enterpriseSettings } = useEnterpriseSettings();
+  const settings = useSettings();
+  const enterpriseSettings = settings.enterprise;
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const [logoVersion, setLogoVersion] = useState(0);
   const appearanceSettingsRef = useRef<AppearanceThemeSettingsRef>(null);

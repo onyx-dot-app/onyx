@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useAppName, useEnterpriseSettings } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 
 export default function DynamicMetadata() {
-  const appName = useAppName();
-  const { enterpriseSettings } = useEnterpriseSettings();
+  const settings = useSettings();
+  const { appName } = settings;
 
   useEffect(() => {
     if (document.title !== appName) {
@@ -17,10 +17,10 @@ export default function DynamicMetadata() {
   const cacheBuster = useMemo(
     () => Date.now(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [enterpriseSettings]
+    [settings.enterprise]
   );
 
-  const favicon = enterpriseSettings?.use_custom_logo
+  const favicon = settings.enterprise?.use_custom_logo
     ? `/api/enterprise-settings/logo?v=${cacheBuster}`
     : "/onyx.ico";
 

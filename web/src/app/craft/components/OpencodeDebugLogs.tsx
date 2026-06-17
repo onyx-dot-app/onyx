@@ -485,7 +485,7 @@ interface OpencodeDebugLogsButtonProps {
 export default function OpencodeDebugLogsButton({
   folded = false,
 }: OpencodeDebugLogsButtonProps) {
-  const { settings } = useSettings();
+  const settings = useSettings();
   const [open, setOpen] = useState(false);
 
   if (settings.opencode_debugging_enabled !== true) {

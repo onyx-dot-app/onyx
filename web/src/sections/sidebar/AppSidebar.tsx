@@ -199,7 +199,7 @@ function RecentsSection({
 const AppSidebar = memo(function AppSidebarInner() {
   const { folded } = useSidebarState();
   const router = useRouter();
-  const { settings: combinedSettingsData } = useSettings();
+  const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
   const { setAppMode, reset } = useQueryController();
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEnterpriseSettings } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   DEFAULT_LOGO_SIZE_PX,
   NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED,
@@ -27,7 +27,8 @@ export default function Logo({
   onyxBranded,
 }: LogoProps) {
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
-  const { enterpriseSettings } = useEnterpriseSettings();
+  const settings = useSettings();
+  const enterpriseSettings = settings.enterprise;
   const logoDisplayStyle = enterpriseSettings?.logo_display_style;
   const applicationName = enterpriseSettings?.application_name;
 

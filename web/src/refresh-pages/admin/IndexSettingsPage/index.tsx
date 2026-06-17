@@ -572,7 +572,7 @@ interface IndexSettingsFormValues {
 
 export default function IndexSettingsPage() {
   const router = useRouter();
-  const { settings } = useSettings();
+  const settings = useSettings();
   const editModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState(MODEL_TAB_CLOUD);

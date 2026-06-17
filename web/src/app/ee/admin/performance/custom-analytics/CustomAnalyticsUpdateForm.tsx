@@ -2,7 +2,7 @@
 
 import { Label, SubLabel } from "@/components/Field";
 import { toast } from "@/hooks/useToast";
-import { useCustomAnalyticsScript } from "@/lib/settings/hooks";
+import { useCustomAnalyticsScript } from "@/lib/analytics/shared";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useState } from "react";

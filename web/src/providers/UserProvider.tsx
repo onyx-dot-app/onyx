@@ -64,7 +64,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser } = useCurrentUser();
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
-  const { settings: updatedSettingsData } = useSettings();
+  const updatedSettingsData = useSettings();
   const posthog = usePostHog();
 
   // For auto_scroll and temperature_override_enabled:

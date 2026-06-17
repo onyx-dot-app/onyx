@@ -61,7 +61,7 @@ function OllamaModalInternals({
   setTab,
 }: OllamaModalInternalsProps) {
   const formikProps = useFormikContext<OllamaModalValues>();
-  const { settings } = useSettings();
+  const settings = useSettings();
 
   const isFetchDisabled = useMemo(
     () =>
@@ -172,7 +172,7 @@ export default function OllamaModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { settings } = useSettings();
+  const settings = useSettings();
   const defaultApiBase = settings.is_containerized
     ? "http://host.docker.internal:11434"
     : "http://127.0.0.1:11434";

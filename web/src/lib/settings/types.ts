@@ -148,3 +148,21 @@ export interface CombinedSettings {
   webDomain: string | null;
   appName: string;
 }
+
+/**
+ * The fully-derived application settings object returned by `useSettings()`.
+ *
+ * Extends `Settings` with enterprise data and pre-computed derived fields so
+ * callers never have to fetch enterprise settings separately or re-derive
+ * values like `appName`.
+ */
+export interface AppSettings extends Settings {
+  /** Raw enterprise settings — null when EE is disabled or not yet loaded. */
+  enterprise: EnterpriseSettings | null;
+  /** Resolved display name: enterprise.application_name || "Onyx". */
+  appName: string;
+  /** False when DISABLE_VECTOR_DB is set server-side. */
+  vectorDbEnabled: boolean;
+  isLoading: boolean;
+  error: Error | undefined;
+}

@@ -48,7 +48,7 @@ function LMStudioModalInternals({
   isOnboarding,
 }: LMStudioModalInternalsProps) {
   const formikProps = useFormikContext<LMStudioModalValues>();
-  const { settings } = useSettings();
+  const settings = useSettings();
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -124,7 +124,7 @@ export default function LMStudioModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { settings } = useSettings();
+  const settings = useSettings();
   const defaultApiBase = settings.is_containerized
     ? "http://host.docker.internal:1234"
     : "http://localhost:1234";

@@ -194,7 +194,7 @@ export default function AdminSidebar() {
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
-  const { settings } = useSettings();
+  const settings = useSettings();
   const tier = settings?.tier;
   const { data: billingData, isLoading: billingLoading } =
     useBillingInformation();

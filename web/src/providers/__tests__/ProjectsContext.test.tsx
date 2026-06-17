@@ -29,7 +29,10 @@ jest.mock("@/lib/hooks/useProjects", () => ({
 
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({
-    settings: { user_file_max_upload_size_mb: 1 },
+    user_file_max_upload_size_mb: 1,
+    enterprise: null,
+    appName: "Onyx",
+    vectorDbEnabled: true,
     isLoading: false,
     error: undefined,
   }),

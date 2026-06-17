@@ -169,7 +169,7 @@ function SubscriptionCard({
   const [isEndingTrial, setIsEndingTrial] = useState(false);
   const [endTrialError, setEndTrialError] = useState<string | null>(null);
 
-  const { settings } = useSettings();
+  const settings = useSettings();
   const tier = settings.tier;
   const isEnterprise = tier === Tier.ENTERPRISE || tier == null;
   const planName = isEnterprise ? "Enterprise Plan" : "Business Plan";

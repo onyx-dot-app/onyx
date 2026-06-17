@@ -125,7 +125,7 @@ export default function Page() {
   const searchTerm = useDeferredValue(rawSearchTerm);
 
   const { data: federatedConnectors } = useFederatedConnectors();
-  const { settings } = useSettings();
+  const settings = useSettings();
 
   // Fetch Slack credentials to determine navigation behavior
   const { data: slackCredentials } = useSWR<Credential<any>[]>(
