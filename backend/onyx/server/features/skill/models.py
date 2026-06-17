@@ -59,9 +59,23 @@ class CustomSkillResponse(BaseModel):
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
     granted_group_ids: list[int] = []
+    is_personal: bool
 
     @classmethod
-    def from_model(cls, skill: Skill, group_ids: list[int]) -> "CustomSkillResponse":
+    def from_model(
+        cls,
+        skill: Skill,
+        group_ids: list[int],
+        *,
+        has_grants: bool | None = None,
+    ) -> "CustomSkillResponse":
+        # Paths that withhold group ids from the response (user-facing) must
+        # still pass grant existence so grants-shared skills aren't marked
+        # personal.
+        grants_exist = bool(group_ids) if has_grants is None else has_grants
+        is_personal = (
+            skill.built_in_skill_id is None and not skill.is_public and not grants_exist
+        )
         return cls(
             id=skill.id,
             slug=skill.slug,
@@ -74,6 +88,7 @@ class CustomSkillResponse(BaseModel):
             created_at=skill.created_at,
             updated_at=skill.updated_at,
             granted_group_ids=group_ids,
+            is_personal=is_personal,
         )
 
 
@@ -98,6 +113,13 @@ class SkillPatchRequest(BaseModel):
 
     def to_domain(self) -> SkillPatch:
         return SkillPatch(**{f: getattr(self, f) for f in self.model_fields_set})
+
+
+class PersonalSkillPatchRequest(BaseModel):
+    """User-endpoint patch: ``enabled`` only. ``is_public`` is the promotion
+    seam and stays admin-only."""
+
+    enabled: bool
 
 
 class GrantsReplace(BaseModel):

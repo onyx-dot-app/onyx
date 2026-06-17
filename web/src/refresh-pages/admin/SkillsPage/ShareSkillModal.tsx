@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@opal/components";
+import { Button, MessageCard } from "@opal/components";
 import { SvgShare } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
@@ -105,6 +105,15 @@ export default function ShareSkillModal({
               groupIds={groupIds}
               onGroupIdsChange={setGroupIds}
             />
+            {skill.is_personal && (isPublic || groupIds.length > 0) && (
+              <MessageCard
+                variant="warning"
+                title="This is a personal skill"
+                description={`Sharing it removes it from ${
+                  skill.author_email ?? "its author"
+                }'s personal skills — they will no longer be able to manage it themselves.`}
+              />
+            )}
           </Section>
         </Modal.Body>
         <Modal.Footer>
