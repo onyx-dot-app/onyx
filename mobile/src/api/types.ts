@@ -22,3 +22,18 @@ export interface CurrentUser {
   role: UserRole;
   is_active: boolean;
 }
+
+// Mirrors the backend AuthType enum (backend/onyx/configs/constants.py).
+// `cloud` = Google OAuth + basic email/password.
+export type AuthType = "basic" | "google_oauth" | "oidc" | "saml" | "cloud";
+
+// Mirrors AuthTypeResponse (backend/onyx/server/manage/models.py) — only the
+// fields the mobile auth flow reads. Returned by the public `GET /api/auth/type`.
+export interface AuthTypeMetadata {
+  auth_type: AuthType;
+  requires_verification: boolean;
+  anonymous_user_enabled?: boolean | null;
+  password_min_length: number;
+  has_users: boolean;
+  oauth_enabled: boolean;
+}
