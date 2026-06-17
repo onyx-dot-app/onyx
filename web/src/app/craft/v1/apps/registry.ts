@@ -104,20 +104,6 @@ export interface ExternalAppUserResponse {
   authenticated: boolean;
 }
 
-export function findAppForType(
-  apps: ExternalAppAdminResponse[],
-  app_type: ExternalAppType
-): ExternalAppAdminResponse | null {
-  return apps.find((a) => a.app_type === app_type) ?? null;
-}
-
-export function findUserAppByName(
-  apps: ExternalAppUserResponse[],
-  name: string
-): ExternalAppUserResponse | null {
-  return apps.find((a) => a.name === name) ?? null;
-}
-
 /**
  * Built-in descriptors still available to add. Only one app per `app_type` is
  * allowed (server-enforced via the built-in skill's unique slug), so configured

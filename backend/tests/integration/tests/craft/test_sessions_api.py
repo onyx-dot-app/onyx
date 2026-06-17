@@ -276,35 +276,6 @@ def test_pre_provisioned_check_returns_invalid_after_first_message(
     assert payload["session_id"] is None
 
 
-def test_sandbox_reset_endpoint_returns_204(
-    admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
-) -> None:
-    """POST /build/sandbox/reset returns 204 when the caller has a sandbox."""
-    # Ensure a sandbox exists for the user.
-    _create_session(admin_user)
-
-    response = client.post(
-        f"{API_SERVER_URL}/build/sandbox/reset",
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
-    )
-    assert response.status_code == 204
-
-
-def test_sandbox_reset_404_when_no_sandbox(
-    admin_user: DATestUser,  # noqa: ARG001 — needed to ensure admin exists first
-) -> None:
-    """Calling reset before any sandbox has been provisioned returns 404."""
-    fresh_user = UserManager.create(name=f"nosandbox-{uuid.uuid4().hex[:8]}")
-    response = client.post(
-        f"{API_SERVER_URL}/build/sandbox/reset",
-        headers=fresh_user.headers,
-        cookies=fresh_user.cookies,
-    )
-    assert response.status_code == 404
-
-
 def test_rename_session_with_null_name_uses_llm_then_fallback_chain(
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001

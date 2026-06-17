@@ -29,7 +29,6 @@ from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.db.sandbox import get_sandbox_by_id
-from onyx.server.features.build.packet_logger import get_packet_logger
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
@@ -469,7 +468,6 @@ class _ServeMixin:
         """Stream sandbox events via the in-sandbox ``opencode serve``. Preflight
         ``opencode_session_id`` via :meth:`ensure_opencode_session` to avoid
         one orphan session per turn."""
-        packet_logger = get_packet_logger()
         session_path = self._session_directory(session_id)
         client = self._build_serve_client(sandbox_id, session_path)
         try:
@@ -504,7 +502,6 @@ class _ServeMixin:
                 resolved_session_id,
                 _API_SERVER_HOSTNAME,
             )
-            packet_logger.log_session_start(session_id, sandbox_id, message)
 
             events_count = 0
             got_prompt_response = False
@@ -528,9 +525,6 @@ class _ServeMixin:
                     events_count,
                     got_prompt_response,
                 )
-                packet_logger.log_session_end(
-                    session_id, success=True, events_count=events_count
-                )
             except GeneratorExit:
                 self._abort_and_log_turn_failure(
                     client=client,
@@ -538,7 +532,6 @@ class _ServeMixin:
                     resolved_session_id=resolved_session_id,
                     session_path=session_path,
                     events_count=events_count,
-                    packet_logger=packet_logger,
                     error="GeneratorExit",
                     log_level=logging.WARNING,
                 )
@@ -550,7 +543,6 @@ class _ServeMixin:
                     resolved_session_id=resolved_session_id,
                     session_path=session_path,
                     events_count=events_count,
-                    packet_logger=packet_logger,
                     error=f"Exception: {e}",
                     log_level=logging.ERROR,
                 )
@@ -583,7 +575,6 @@ class _ServeMixin:
         resolved_session_id: str,
         session_path: str,
         events_count: int,
-        packet_logger: Any,
         error: str,
         log_level: int,
     ) -> None:
@@ -602,12 +593,6 @@ class _ServeMixin:
             logger.warning(
                 "[SANDBOX-SERVE] abort failed during turn cleanup: %s", abort_err
             )
-        packet_logger.log_session_end(
-            session_id,
-            success=False,
-            error=error,
-            events_count=events_count,
-        )
 
     def send_subagent_message_via_serve(
         self,
@@ -629,7 +614,6 @@ class _ServeMixin:
         follow-up uses the same model as the parent (not the child session's
         own default).
         """
-        packet_logger = get_packet_logger()
         session_path = self._session_directory(parent_session_id)
         client = self._build_serve_client(sandbox_id, session_path)
         try:
@@ -640,7 +624,6 @@ class _ServeMixin:
                 subagent_opencode_session_id,
                 _API_SERVER_HOSTNAME,
             )
-            packet_logger.log_session_start(parent_session_id, sandbox_id, message)
 
             events_count = 0
             try:
@@ -653,9 +636,6 @@ class _ServeMixin:
                 ):
                     events_count += 1
                     yield event
-                packet_logger.log_session_end(
-                    parent_session_id, success=True, events_count=events_count
-                )
             except GeneratorExit:
                 self._abort_and_log_turn_failure(
                     client=client,
@@ -663,7 +643,6 @@ class _ServeMixin:
                     resolved_session_id=subagent_opencode_session_id,
                     session_path=session_path,
                     events_count=events_count,
-                    packet_logger=packet_logger,
                     error="GeneratorExit",
                     log_level=logging.WARNING,
                 )
@@ -675,7 +654,6 @@ class _ServeMixin:
                     resolved_session_id=subagent_opencode_session_id,
                     session_path=session_path,
                     events_count=events_count,
-                    packet_logger=packet_logger,
                     error=f"Exception: {e}",
                     log_level=logging.ERROR,
                 )

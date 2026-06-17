@@ -299,13 +299,11 @@ class StubSandboxManager(SandboxManager):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,
     ) -> None:
         self.cleanup_session_workspace_count += 1
         self.last_cleanup_session_workspace_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
-            "nextjs_port": nextjs_port,
         }
         if not self.cleanup_session_workspace_silent:
             raise _not_configured("cleanup_session_workspace")
@@ -350,7 +348,6 @@ class StubSandboxManager(SandboxManager):
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
@@ -360,7 +357,6 @@ class StubSandboxManager(SandboxManager):
             "sandbox_id": sandbox_id,
             "session_id": session_id,
             "snapshot_storage_path": snapshot_storage_path,
-            "tenant_id": tenant_id,
             "nextjs_port": nextjs_port,
             "llm_config": llm_config,
             "skills_section": skills_section,

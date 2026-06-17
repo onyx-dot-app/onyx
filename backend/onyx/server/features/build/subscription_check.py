@@ -1,7 +1,5 @@
 """Subscription detection for Build Mode rate limiting."""
 
-from sqlalchemy.orm import Session
-
 from onyx.configs.app_configs import DEV_MODE
 from onyx.db.models import User
 from onyx.server.usage_limits import is_tenant_on_trial_fn
@@ -12,7 +10,7 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-def is_user_subscribed(user: User, db_session: Session) -> bool:  # noqa: ARG001
+def is_user_subscribed(user: User) -> bool:
     """
     Check if a user has an active subscription.
 
@@ -26,7 +24,6 @@ def is_user_subscribed(user: User, db_session: Session) -> bool:  # noqa: ARG001
 
     Args:
         user: The user object (None for unauthenticated users)
-        db_session: Database session
 
     Returns:
         True if user has active subscription, False otherwise

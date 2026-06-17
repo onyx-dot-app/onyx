@@ -935,28 +935,6 @@ export async function createLibraryDirectory(
 }
 
 /**
- * Toggle sync status for a file/directory in the user library.
- */
-export async function toggleLibraryFileSync(
-  documentId: string,
-  enabled: boolean
-): Promise<void> {
-  const res = await fetch(
-    `${USER_LIBRARY_BASE}/files/${encodeURIComponent(
-      documentId
-    )}/toggle?enabled=${enabled}`,
-    {
-      method: "PATCH",
-    }
-  );
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to toggle sync: ${res.status}`);
-  }
-}
-
-/**
  * Delete a file/directory from the user library.
  */
 export async function deleteLibraryFile(documentId: string): Promise<void> {
