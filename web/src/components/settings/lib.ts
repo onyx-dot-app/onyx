@@ -128,6 +128,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       // SettingsProvider where connector data is available via useCCPairs.
       isSearchModeAvailable: settings.search_ui_enabled !== false,
       settingsLoading: false,
+      appName: enterpriseSettings?.application_name?.trim() || "Onyx",
     };
 
     return combinedSettings;

@@ -2,7 +2,7 @@
 
 import { Label, SubLabel } from "@/components/Field";
 import { toast } from "@/hooks/useToast";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Callout } from "@/components/ui/callout";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import {
   DEFAULT_LOGO_SIZE_PX,
   NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED,

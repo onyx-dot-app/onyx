@@ -29,7 +29,7 @@ import {
 import { fetchModels } from "@/lib/languageModels/svc";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 
 interface LMStudioModalValues extends BaseLLMModalValues {
   api_base: string;

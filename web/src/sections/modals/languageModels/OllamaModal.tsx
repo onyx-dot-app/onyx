@@ -32,7 +32,7 @@ import { Card, Tabs } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 const CLOUD_API_BASE = "https://ollama.com";
 
 enum Tab {

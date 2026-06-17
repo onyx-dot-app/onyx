@@ -4,7 +4,7 @@ import { useContext, useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { ValidSources } from "@/lib/types";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 import { getSourceMetadata } from "@/lib/sources";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import { SvgLink } from "@opal/icons";
@@ -117,8 +117,7 @@ export default function FederatedOAuthModal() {
     return null;
   }
 
-  const applicationName =
-    settings?.enterpriseSettings?.application_name || "Onyx";
+  const applicationName = settings?.appName || "Onyx";
 
   return (
     <Modal open>

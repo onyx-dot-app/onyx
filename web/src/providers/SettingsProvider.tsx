@@ -1,24 +1,106 @@
 "use client";
 
-import { CombinedSettings } from "@/interfaces/settings";
 import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useMemo,
-  JSX,
-} from "react";
+  ApplicationStatus,
+  CombinedSettings,
+  EnterpriseSettings,
+  QueryHistoryType,
+  Settings,
+} from "@/interfaces/settings";
+import { useEffect, useState, useMemo, JSX } from "react";
+import useSWR from "swr";
 import useCCPairs from "@/hooks/useCCPairs";
+import { SettingsContext } from "@/lib/settings/hooks";
 import {
-  useSettings,
-  useEnterpriseSettings,
-  useCustomAnalyticsScript,
-} from "@/hooks/useSettings";
-import { HOST_URL, NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+  EE_ENABLED,
+  HOST_URL,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+} from "@/lib/constants";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import ErrorPage from "@/components/errorPages/ErrorPage";
-import { FetchError } from "@/lib/fetcher";
+import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+
+// Longer retry delay for settings fetches — avoids rapid error→success flicker
+// in the error boundary during transient backend blips.
+const SETTINGS_ERROR_RETRY_INTERVAL = 5_000;
+
+const DEFAULT_SETTINGS = {
+  auto_scroll: true,
+  application_status: ApplicationStatus.ACTIVE,
+  gpu_enabled: false,
+  maximum_chat_retention_days: null,
+  notifications: [],
+  needs_reindexing: false,
+  anonymous_user_enabled: false,
+  invite_only_enabled: false,
+  deep_research_enabled: true,
+  multi_model_chat_enabled: true,
+  temperature_override_enabled: true,
+  query_history_type: QueryHistoryType.NORMAL,
+} satisfies Settings;
+
+function useSettings(): {
+  settings: Settings;
+  isLoading: boolean;
+  error: Error | undefined;
+} {
+  const { data, error, isLoading } = useSWR<Settings>(
+    SWR_KEYS.settings,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 30_000,
+      errorRetryInterval: SETTINGS_ERROR_RETRY_INTERVAL,
+    }
+  );
+  return { settings: data ?? DEFAULT_SETTINGS, isLoading, error };
+}
+
+function useEnterpriseSettings(eeEnabledRuntime: boolean): {
+  enterpriseSettings: EnterpriseSettings | null;
+  isLoading: boolean;
+  error: Error | undefined;
+} {
+  const shouldFetch = EE_ENABLED || eeEnabledRuntime;
+  const { data, error, isLoading } = useSWR<EnterpriseSettings>(
+    shouldFetch ? SWR_KEYS.enterpriseSettings : null,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 30_000,
+      errorRetryInterval: SETTINGS_ERROR_RETRY_INTERVAL,
+      // Referential equality instead of SWR's default deep compare.
+      // Logo can change without the JSON changing (same use_custom_logo: true),
+      // so mutate() must propagate a new reference for cache-busters.
+      compare: (a, b) => a === b,
+    }
+  );
+  return {
+    enterpriseSettings: data ?? null,
+    isLoading: shouldFetch ? isLoading : false,
+    error,
+  };
+}
+
+function useCustomAnalyticsScript(eeEnabledRuntime: boolean): string | null {
+  const shouldFetch = EE_ENABLED || eeEnabledRuntime;
+  const { data } = useSWR<string>(
+    shouldFetch ? SWR_KEYS.customAnalyticsScript : null,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 60_000,
+    }
+  );
+  return data ?? null;
+}
 
 export function SettingsProvider({
   children,
@@ -88,6 +170,7 @@ export function SettingsProvider({
       isMobile,
       isSearchModeAvailable,
       settingsLoading,
+      appName: enterpriseSettings?.application_name?.trim() || "Onyx",
     }),
     [
       settings,
@@ -117,21 +200,4 @@ export function SettingsProvider({
       {children}
     </SettingsContext.Provider>
   );
-}
-
-export const SettingsContext = createContext<CombinedSettings | null>(null);
-
-export function useSettingsContext() {
-  const context = useContext(SettingsContext);
-  if (context === null) {
-    throw new Error(
-      "useSettingsContext must be used within a SettingsProvider"
-    );
-  }
-  return context;
-}
-
-export function useVectorDbEnabled(): boolean {
-  const settings = useSettingsContext();
-  return settings.settings.vector_db_enabled !== false;
 }

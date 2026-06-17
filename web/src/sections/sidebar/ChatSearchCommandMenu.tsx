@@ -11,7 +11,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import { timeAgo } from "@opal/time";
 import { highlightMatch } from "@/lib/sidebar/utils";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { useCurrentAgent } from "@/lib/agents/hooks";
 import Text from "@/refresh-components/texts/Text";
 import useChatSearchOptimistic from "@/lib/sidebar/hooks";

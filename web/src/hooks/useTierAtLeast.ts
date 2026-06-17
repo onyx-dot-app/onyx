@@ -2,7 +2,7 @@
 
 import { Tier } from "@/interfaces/settings";
 import { tierAtLeast } from "@/lib/tiers";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 
 /**
  * True when the current tenant's tier is `required` or higher.

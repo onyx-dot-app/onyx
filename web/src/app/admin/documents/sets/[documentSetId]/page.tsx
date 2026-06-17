@@ -10,7 +10,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import CardSection from "@/components/admin/CardSection";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useRouter } from "next/navigation";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 

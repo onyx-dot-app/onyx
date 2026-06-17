@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useContext } from "react";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 import Text from "@/refresh-components/texts/Text";
 
 export default function LoginText() {
@@ -9,8 +9,7 @@ export default function LoginText() {
   return (
     <div className="w-full flex flex-col ">
       <Text as="p" headingH2 text05>
-        Welcome to{" "}
-        {(settings && settings?.enterpriseSettings?.application_name) || "Onyx"}
+        Welcome to {settings?.appName ?? "Onyx"}
       </Text>
       <Text as="p" text03 mainUiMuted>
         Your open source AI platform for work

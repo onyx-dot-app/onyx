@@ -31,10 +31,7 @@ import {
   InputHorizontal,
   InputVertical,
 } from "@opal/layouts";
-import {
-  useSettingsContext,
-  useVectorDbEnabled,
-} from "@/providers/SettingsProvider";
+import { useSettingsContext, useVectorDbEnabled } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import { QueryHistoryType, Settings } from "@/interfaces/settings";

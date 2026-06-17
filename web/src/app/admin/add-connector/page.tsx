@@ -23,7 +23,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { Credential } from "@/lib/connectors/credentials";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 import SourceTile from "@/components/SourceTile";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";

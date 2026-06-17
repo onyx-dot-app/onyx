@@ -29,7 +29,7 @@ import {
 } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
   DefaultModel,

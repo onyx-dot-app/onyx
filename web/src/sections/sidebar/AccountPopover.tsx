@@ -28,10 +28,7 @@ import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
-import {
-  useVectorDbEnabled,
-  useSettingsContext,
-} from "@/providers/SettingsProvider";
+import { useVectorDbEnabled, useSettingsContext } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";

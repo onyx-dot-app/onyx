@@ -155,4 +155,13 @@ export interface CombinedSettings {
    */
   isSearchModeAvailable: boolean;
   settingsLoading: boolean;
+
+  /**
+   * Resolved application name.
+   *
+   * Derived once in `SettingsProvider` as
+   * `enterpriseSettings?.application_name?.trim() || "Onyx"`. Use this
+   * instead of re-deriving the fallback at every call site.
+   */
+  appName: string;
 }

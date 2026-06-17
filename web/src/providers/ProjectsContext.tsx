@@ -45,7 +45,7 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import { ChatFileType } from "@/app/app/interfaces";
 import { toast } from "@/hooks/useToast";
 import { useProjects } from "@/lib/hooks/useProjects";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 
 export type { Project, ProjectFile } from "@/app/app/projects/projectsService";
 

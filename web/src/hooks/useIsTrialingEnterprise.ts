@@ -2,7 +2,7 @@
 
 import { Tier } from "@/interfaces/settings";
 import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { useBillingInformation } from "@/hooks/useBillingInformation";
 
 /**

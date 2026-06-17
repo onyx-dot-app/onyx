@@ -74,7 +74,7 @@ import {
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { Settings } from "@/interfaces/settings";
 import { toast } from "@/hooks/useToast";
 import {
@@ -82,7 +82,7 @@ import {
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
   useSecondarySearchSettings,
-} from "@/hooks/useSearchSettings";
+} from "@/lib/settings/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import useFilter from "@/hooks/useFilter";
 import ModelSelector from "@/sections/model-selector/ModelSelector";

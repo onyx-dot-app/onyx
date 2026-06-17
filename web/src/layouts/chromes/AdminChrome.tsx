@@ -2,7 +2,7 @@
 
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { ApplicationStatus } from "@/interfaces/settings";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";

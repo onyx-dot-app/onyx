@@ -25,7 +25,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { toast } from "@/hooks/useToast";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { Tier } from "@/interfaces/settings";
 import { tierAtLeast } from "@/lib/tiers";
 import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";

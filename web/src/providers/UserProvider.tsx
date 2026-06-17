@@ -16,7 +16,7 @@ import {
   ThemePreference,
 } from "@/lib/types";
 import { usePostHog } from "posthog-js/react";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {

@@ -11,7 +11,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, Suspense, type ReactElement } from "react";
 import { usePostHog } from "posthog-js/react";
 import { useReportWebVitals } from "next/web-vitals";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 
 // ─── WebVitals ─────────────────────────────────────────────────────────────
 

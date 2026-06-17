@@ -1,7 +1,7 @@
 "use client";
 
 import Modal from "@/refresh-components/Modal";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FormField } from "@/refresh-components/form/FormField";

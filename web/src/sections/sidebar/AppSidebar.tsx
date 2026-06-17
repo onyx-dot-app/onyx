@@ -3,7 +3,7 @@
 import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";

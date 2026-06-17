@@ -1,7 +1,7 @@
 "use client";
 
 import { ApplicationStatus } from "@/interfaces/settings";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import GatedContentWrapper from "@/components/GatedContentWrapper";
 
 export default function ProductGatingWrapper({

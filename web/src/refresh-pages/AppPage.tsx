@@ -10,10 +10,7 @@ import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import {
-  useSettingsContext,
-  useVectorDbEnabled,
-} from "@/providers/SettingsProvider";
+import { useSettingsContext, useVectorDbEnabled } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -151,12 +148,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const appNameRef = useRef<string>("Onyx");
   useEffect(() => {
-    const appName = settings.enterpriseSettings?.application_name || "Onyx";
-    appNameRef.current = appName;
+    appNameRef.current = settings.appName;
     document.title = currentChatSession?.name
-      ? `${currentChatSession.name} — ${appName}`
-      : appName;
-  }, [currentChatSession?.name, settings.enterpriseSettings?.application_name]);
+      ? `${currentChatSession.name} — ${settings.appName}`
+      : settings.appName;
+  }, [currentChatSession?.name, settings.appName]);
   useEffect(() => {
     return () => {
       document.title = appNameRef.current;

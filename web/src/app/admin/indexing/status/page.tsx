@@ -11,7 +11,7 @@ import { Spacer } from "@opal/components";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
 import { Button } from "@opal/components";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/lib/settings/hooks";
 import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";
 import { ValidSources } from "@/lib/types";

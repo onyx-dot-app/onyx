@@ -1,4 +1,4 @@
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { APP_SLOGAN } from "@/lib/constants";
 
 export function useCustomFooterContent(): string {

@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import { getModelIcon } from "@/lib/languageModels";
 import { Button, SelectButton, Popover, Divider } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { LLMOption } from "@/lib/languageModels/options";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 

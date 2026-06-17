@@ -26,10 +26,7 @@ import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
-import {
-  SettingsContext,
-  useVectorDbEnabled,
-} from "@/providers/SettingsProvider";
+import { SettingsContext, useVectorDbEnabled } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import {

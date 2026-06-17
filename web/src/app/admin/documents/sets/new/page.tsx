@@ -9,7 +9,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { useRouter } from "next/navigation";
 import { refreshDocumentSets } from "../hooks";
 import CardSection from "@/components/admin/CardSection";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 

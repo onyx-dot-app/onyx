@@ -11,7 +11,7 @@ import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
 import {
   QueryControllerContext,

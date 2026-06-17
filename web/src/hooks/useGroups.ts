@@ -4,7 +4,7 @@ import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { UserGroup } from "@/lib/types";
 import { useContext } from "react";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 /**

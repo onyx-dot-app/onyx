@@ -31,7 +31,7 @@ import {
 } from "@/sections/modals/languageModels/shared";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { toast } from "@/hooks/useToast";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 
 const VERTEXAI_DEFAULT_LOCATION = "global";
 

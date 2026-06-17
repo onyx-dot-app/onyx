@@ -5,7 +5,7 @@ import { mutate } from "swr";
 import { ContentAction } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Switch } from "@opal/components";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
 import { Settings } from "@/interfaces/settings";

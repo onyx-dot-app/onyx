@@ -8,7 +8,7 @@ import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { logout } from "@/lib/user";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useLicense } from "@/hooks/useLicense";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { ApplicationStatus } from "@/interfaces/settings";
 import Text from "@/refresh-components/texts/Text";
 import { SvgLock } from "@opal/icons";

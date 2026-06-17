@@ -2,7 +2,7 @@
 
 import { useContext } from "react";
 import Logo from "@/refresh-components/Logo";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 
 export default function OnyxInitializingLoader() {
   const settings = useContext(SettingsContext);
@@ -11,7 +11,7 @@ export default function OnyxInitializingLoader() {
     <div className="mx-auto my-auto animate-pulse">
       <Logo folded size={96} className="mx-auto mb-3" />
       <p className="text-lg text-text font-semibold">
-        Initializing {settings?.enterpriseSettings?.application_name ?? "Onyx"}
+        Initializing {settings?.appName ?? "Onyx"}
       </p>
     </div>
   );

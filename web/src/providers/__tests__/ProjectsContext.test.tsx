@@ -4,7 +4,7 @@ import {
   ProjectsProvider,
   useProjectsContext,
 } from "@/providers/ProjectsContext";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { SettingsContext } from "@/lib/settings/hooks";
 import { CombinedSettings } from "@/interfaces/settings";
 import type { ProjectFile } from "@/app/app/projects/projectsService";
 
@@ -69,6 +69,7 @@ const settingsValue: CombinedSettings = {
   webDomain: null,
   isSearchModeAvailable: true,
   settingsLoading: false,
+  appName: "Onyx",
 };
 
 const wrapper = ({ children }: PropsWithChildren) => (

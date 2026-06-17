@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import useSWRInfinite from "swr/infinite";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { errorHandlingFetcher } from "@/lib/fetcher";

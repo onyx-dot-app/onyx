@@ -11,7 +11,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { Button } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { useCustomFooterContent } from "@/lib/app/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";

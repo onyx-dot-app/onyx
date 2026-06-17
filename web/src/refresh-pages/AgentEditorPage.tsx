@@ -89,7 +89,7 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useVectorDbEnabled } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";

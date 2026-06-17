@@ -23,7 +23,7 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { CombinedSettings } from "@/interfaces/settings";
 import { ChatSession } from "@/app/app/interfaces";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettingsContext } from "@/lib/settings/hooks";
 import { MCPServersResponse } from "@/lib/tools/interfaces";
 import useChatSessions from "@/hooks/useChatSessions";
 import { buildUpdateAgentPreferenceUrl } from "./utils";
