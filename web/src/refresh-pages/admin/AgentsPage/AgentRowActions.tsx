@@ -36,7 +36,7 @@ import {
   updateAgentFeaturedStatus,
 } from "@/lib/agents/svc";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useUser } from "@/providers/UserProvider";
 
 // ---------------------------------------------------------------------------

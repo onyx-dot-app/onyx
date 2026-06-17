@@ -11,7 +11,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, Suspense, type ReactElement } from "react";
 import { usePostHog } from "posthog-js/react";
 import { useReportWebVitals } from "next/web-vitals";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
 
 // ─── WebVitals ─────────────────────────────────────────────────────────────
 
@@ -61,6 +61,7 @@ function PostHogPageTrackerInner(): null {
 
   return null;
 }
+
 export function PostHogPageTracker(): ReactElement {
   return (
     <Suspense fallback={null}>
@@ -75,16 +76,15 @@ export function PostHogPageTracker(): ReactElement {
  * Injects an admin-configured JS analytics snippet into `document.head`.
  *
  * Enterprise Edition feature. Reads a raw JavaScript string stored server-side
- * (fetched via `useSettingsContext`) and appends it as a `<script>` tag once
- * on mount. This gives EE customers a bring-your-own analytics escape hatch
- * (e.g. Segment, Heap, Mixpanel) without requiring a code change or
- * redeployment.
+ * and appends it as a `<script>` tag once on mount. This gives EE customers a
+ * bring-your-own analytics escape hatch (e.g. Segment, Heap, Mixpanel)
+ * without requiring a code change or redeployment.
  *
- * The injection is guarded by a ref so it only runs once, even if the context
- * value identity changes across re-renders.
+ * The injection is guarded by a ref so it only runs once, even if the value
+ * identity changes across re-renders.
  */
 export function CustomAnalyticsScript(): null {
-  const { customAnalyticsScript } = useSettingsContext();
+  const customAnalyticsScript = useCustomAnalyticsScript();
   const injectedRef = useRef(false);
 
   useEffect(() => {

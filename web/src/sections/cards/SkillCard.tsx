@@ -7,7 +7,7 @@ import { SvgBlocks, SvgTrash, SvgUploadCloud, SvgUser } from "@opal/icons";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 
 export type SkillCardSource = "builtin" | "custom";
 
@@ -53,8 +53,7 @@ export default function SkillCard({
   onToggleEnabled,
   busy = false,
 }: SkillCardProps) {
-  const { enterpriseSettings } = useSettingsContext();
-  const appName = enterpriseSettings?.application_name || "Onyx";
+  const { appName } = useSettings();
 
   const handleClick = useCallback(() => {
     onClick?.(item);

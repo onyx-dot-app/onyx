@@ -135,24 +135,49 @@ export interface EnterpriseSettings {
   hide_onyx_branding: boolean | null;
 }
 
+/**
+ * Combined settings shape returned by the server-side `fetchSettingsSS`
+ * helper in `components/settings/lib.ts`. Used only for SSR — client
+ * components access settings via the SWR hooks in `lib/settings/hooks.ts`.
+ */
 export interface CombinedSettings {
   settings: Settings;
   enterpriseSettings: EnterpriseSettings | null;
   customAnalyticsScript: string | null;
-  isMobile?: boolean;
   webVersion: string | null;
   webDomain: string | null;
+  appName: string;
+}
 
-  /**
-   * NOTE (@raunakab):
-   * Whether search mode is actually available to users.
-   *
-   * Prefer this over reading `settings.search_ui_enabled` directly.
-   * `search_ui_enabled` only reflects the admin's *preference* — it does not
-   * account for prerequisites like connectors being configured. This derived
-   * flag combines the admin setting with runtime checks (e.g. connectors
-   * exist) so consumers get a single, accurate boolean.
-   */
-  isSearchModeAvailable: boolean;
-  settingsLoading: boolean;
+/**
+ * Strip the derived/frontend-only fields from an `AppSettings` object,
+ * returning only the plain `Settings` slice safe to send to the backend.
+ */
+export function toSettings({
+  enterprise: _enterprise,
+  appName: _appName,
+  vectorDbEnabled: _vectorDbEnabled,
+  isLoading: _isLoading,
+  error: _error,
+  ...core
+}: AppSettings): Settings {
+  return core;
+}
+
+/**
+ * The fully-derived application settings object returned by `useSettings()`.
+ *
+ * Extends `Settings` with enterprise data and pre-computed derived fields so
+ * callers never have to fetch enterprise settings separately or re-derive
+ * values like `appName`.
+ */
+export interface AppSettings extends Settings {
+  /** Raw enterprise settings — null when EE is disabled or not yet loaded. */
+  enterprise: EnterpriseSettings | null;
+  /** Resolved display name: enterprise.application_name || "Onyx". */
+  appName: string;
+  /** False when DISABLE_VECTOR_DB is set server-side. */
+  vectorDbEnabled: boolean;
+  isLoading: boolean;
+  error: Error | undefined;
 }

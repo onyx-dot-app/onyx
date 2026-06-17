@@ -49,12 +49,12 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useCustomFooterContent } from "@/lib/app/hooks";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +65,8 @@ function Header() {
   const appFocus = useAppFocus();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
-  const settings = useSettingsContext();
+  const isSearchModeAvailable = useIsSearchModeAvailable();
+  const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
   const [showShareModal, setShowShareModal] = useState(false);
@@ -90,8 +91,7 @@ function Header() {
     useChatSessions();
   const router = useRouter();
 
-  const customHeaderContent =
-    settings?.enterpriseSettings?.custom_header_content;
+  const customHeaderContent = settings.enterprise?.custom_header_content;
   const pageWithHeaderContent =
     appFocus.isChat() || appFocus.isNewSession() || appFocus.isAgent();
 
@@ -301,7 +301,7 @@ function Header() {
                   />
                 )}
                 {businessTier &&
-                  settings.isSearchModeAvailable &&
+                  isSearchModeAvailable &&
                   appFocus.isNewSession() &&
                   state.phase === "idle" && (
                     <Popover
