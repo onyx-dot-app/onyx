@@ -2017,12 +2017,17 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
 
         logger.info("Listing directory %s in pod %s", target_path, pod_name)
 
-        # Use exec to list directory
-        # -L follows symlinks
+        # List the requested directory without dereferencing every child symlink.
+        # A dangling managed symlink should not make the whole directory look empty.
         exec_command = [
             "/bin/sh",
             "-c",
-            f"ls -laL --time-style=+%s {quoted_path} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
+            (
+                f"target={quoted_path}; "
+                'if [ -d "$target" ]; then '
+                'ls -la --time-style=+%s "$target"/ 2>/dev/null; '
+                "else echo 'ERROR_NOT_FOUND'; fi"
+            ),
         ]
 
         try:

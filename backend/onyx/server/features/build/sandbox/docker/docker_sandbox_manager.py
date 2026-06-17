@@ -1447,7 +1447,12 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
                 [
                     "/bin/sh",
                     "-c",
-                    f"ls -laL --time-style=+%s {quoted} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
+                    (
+                        f"target={quoted}; "
+                        'if [ -d "$target" ]; then '
+                        'ls -la --time-style=+%s "$target"/ 2>/dev/null; '
+                        "else echo 'ERROR_NOT_FOUND'; fi"
+                    ),
                 ],
                 check=False,
             )
@@ -1483,7 +1488,9 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
             if name in (".", ".."):
                 continue
 
-            is_directory = line.startswith("d")
+            # Managed workspace links point at directories. Keep them navigable
+            # when listing without -L, and let navigation fail if a target is gone.
+            is_directory = line.startswith("d") or is_symlink
             size_str = parts[4]
             try:
                 size = int(size_str) if not is_directory else None

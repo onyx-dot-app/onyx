@@ -42,6 +42,7 @@ from onyx.server.features.build.db.sandbox import update_sandbox_status__no_comm
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
+from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import ArtifactResponse
@@ -476,6 +477,15 @@ def restore_session(
                 except Exception:
                     logger.warning(
                         "Failed to push skills to sandbox %s",
+                        sandbox.id,
+                        exc_info=True,
+                    )
+
+                try:
+                    hydrate_user_library(sandbox.id, user.id, db_session)
+                except Exception:
+                    logger.warning(
+                        "Failed to push user library to sandbox %s",
                         sandbox.id,
                         exc_info=True,
                     )
