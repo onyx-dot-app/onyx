@@ -40,12 +40,12 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { APP_SLOGAN } from "@/lib/constants";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +65,8 @@ function HeaderInner({
 }) {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
-  const settings = useSettingsContext();
+  const isSearchModeAvailable = useIsSearchModeAvailable();
+  const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
   const [showShareModal, setShowShareModal] = useState(false);
@@ -90,9 +91,9 @@ function HeaderInner({
     useChatSessions();
   const router = useRouter();
 
-  const customHeaderContent =
-    settings?.enterpriseSettings?.custom_header_content;
-  const pageWithHeaderContent = appFocus.isChat() || appFocus.isNewSession();
+  const customHeaderContent = settings.enterprise?.custom_header_content;
+  const pageWithHeaderContent =
+    appFocus.isChat() || appFocus.isNewSession() || appFocus.isAgent();
 
   const effectiveMode: AppMode =
     appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
@@ -293,6 +294,7 @@ function HeaderInner({
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
+<<<<<<< HEAD:web/src/sections/app-chrome/AppChrome.tsx
         <div className="flex-1 flex flex-row items-center gap-2 h-[3.3rem]">
           {isMobile && (
             <Button
@@ -347,6 +349,71 @@ function HeaderInner({
               </Popover>
             )}
         </div>
+=======
+              <div className="flex-1 flex flex-row items-center gap-2">
+                {isMobile && (
+                  <Button
+                    prominence="internal"
+                    icon={SvgSidebar}
+                    onClick={() => setFolded(false)}
+                  />
+                )}
+                {businessTier &&
+                  isSearchModeAvailable &&
+                  appFocus.isNewSession() &&
+                  state.phase === "idle" && (
+                    <Popover
+                      open={modePopoverOpen}
+                      onOpenChange={setModePopoverOpen}
+                    >
+                      <Popover.Trigger asChild>
+                        <OpenButton
+                          aria-label="Change app mode"
+                          icon={
+                            effectiveMode === "search"
+                              ? SvgSearchMenu
+                              : SvgBubbleText
+                          }
+                        >
+                          {effectiveMode === "search" ? "Search" : "Chat"}
+                        </OpenButton>
+                      </Popover.Trigger>
+                      <Popover.Content align="start" width="lg">
+                        <Popover.Menu>
+                          <LineItemButton
+                            sizePreset="main-ui"
+                            rounding="sm"
+                            icon={SvgSearchMenu}
+                            state={
+                              effectiveMode === "search" ? "selected" : "empty"
+                            }
+                            title="Search"
+                            description="Quick search for documents"
+                            onClick={noProp(() => {
+                              setAppMode("search");
+                              setModePopoverOpen(false);
+                            })}
+                          />
+                          <LineItemButton
+                            sizePreset="main-ui"
+                            rounding="sm"
+                            icon={SvgBubbleText}
+                            state={
+                              effectiveMode === "chat" ? "selected" : "empty"
+                            }
+                            title="Chat"
+                            description="Conversation and research"
+                            onClick={noProp(() => {
+                              setAppMode("chat");
+                              setModePopoverOpen(false);
+                            })}
+                          />
+                        </Popover.Menu>
+                      </Popover.Content>
+                    </Popover>
+                  )}
+              </div>
+>>>>>>> ca2ea9d91b (refactor(settings): consolidate settings into a single useSettings() hook (#12155)):web/src/layouts/chromes/AppChrome.tsx
 
         {/*
           Center:

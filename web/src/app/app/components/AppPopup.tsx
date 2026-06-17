@@ -1,12 +1,12 @@
 "use client";
 
 import Modal from "@/refresh-components/Modal";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FormField } from "@/refresh-components/form/FormField";
 import { Checkbox } from "@opal/components";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { transformLinkUri } from "@/lib/utils";
@@ -37,27 +37,26 @@ export function AppPopup() {
     );
   }, []);
 
-  const settings = useContext(SettingsContext);
-  const enterpriseSettings = settings?.enterpriseSettings;
-  const isConsentScreen = enterpriseSettings?.enable_consent_screen;
+  const settings = useSettings();
+  const isConsentScreen = settings.enterprise?.enable_consent_screen;
 
   if (
-    !enterpriseSettings?.custom_popup_content ||
+    !settings.enterprise?.custom_popup_content ||
     completedFlow ||
-    !enterpriseSettings?.show_first_visit_notice
+    !settings.enterprise?.show_first_visit_notice
   ) {
     return null;
   }
 
-  const popupTitle = enterpriseSettings?.custom_popup_header;
+  const popupTitle = settings.enterprise?.custom_popup_header;
 
-  const popupContent = enterpriseSettings?.custom_popup_content;
+  const popupContent = settings.enterprise?.custom_popup_content;
 
   const hasApplicationName = Boolean(
-    enterpriseSettings?.application_name?.trim()
+    settings.enterprise?.application_name?.trim()
   );
-  const hasCustomLogo = Boolean(enterpriseSettings?.use_custom_logo);
-  const logoDisplayStyle = enterpriseSettings?.logo_display_style;
+  const hasCustomLogo = Boolean(settings.enterprise?.use_custom_logo);
+  const logoDisplayStyle = settings.enterprise?.logo_display_style;
 
   // Header icon rules:
   // - If neither app name nor custom logo exists -> show Onyx icon
@@ -116,7 +115,7 @@ export function AppPopup() {
             >
               {popupContent}
             </ReactMarkdown>
-            {isConsentScreen && enterpriseSettings?.consent_screen_prompt && (
+            {isConsentScreen && settings.enterprise?.consent_screen_prompt && (
               <FormField
                 state={showConsentError ? "error" : "idle"}
                 className="mt-6"
@@ -165,7 +164,7 @@ export function AppPopup() {
                       remarkPlugins={[remarkGfm]}
                       urlTransform={transformLinkUri}
                     >
-                      {enterpriseSettings.consent_screen_prompt}
+                      {settings.enterprise.consent_screen_prompt}
                     </ReactMarkdown>
                   </FormField.Label>
                 </div>

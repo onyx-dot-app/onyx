@@ -7,12 +7,12 @@ import {
   AppearanceThemeSettings,
   AppearanceThemeSettingsRef,
 } from "./AppearanceThemeSettings";
-import { useContext, useRef, useState } from "react";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useRef, useState } from "react";
+import { useSettings } from "@/lib/settings/hooks";
 import { toast } from "@/hooks/useToast";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { EnterpriseSettings } from "@/interfaces/settings";
+import { EnterpriseSettings } from "@/lib/settings/types";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -29,16 +29,11 @@ const CHAR_LIMITS = {
 };
 
 export default function ThemePage() {
-  const settings = useContext(SettingsContext);
+  const settings = useSettings();
+  const enterpriseSettings = settings.enterprise;
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
   const [logoVersion, setLogoVersion] = useState(0);
   const appearanceSettingsRef = useRef<AppearanceThemeSettingsRef>(null);
-
-  if (!settings) {
-    return null;
-  }
-
-  const enterpriseSettings = settings.enterpriseSettings;
 
   async function updateEnterpriseSettings(
     newValues: EnterpriseSettings

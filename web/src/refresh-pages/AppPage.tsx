@@ -10,10 +10,7 @@ import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import {
-  useSettingsContext,
-  useVectorDbEnabled,
-} from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -70,6 +67,7 @@ import { IllustrationContent, RootLayout } from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useSidebarState } from "@/layouts/sidebar-layouts";
+import useScreenSize from "@/hooks/useScreenSize";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
@@ -126,6 +124,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const router = useRouter();
   const appFocus = useAppFocus();
+  const { isMobile } = useScreenSize();
 
   useToastFromQuery({
     oauth_connected: {
@@ -147,8 +146,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
   // available in server-side components
-  const settings = useSettingsContext();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { appName, vectorDbEnabled } = useSettings();
+
+  const appNameRef = useRef<string>("Onyx");
+  useEffect(() => {
+    appNameRef.current = appName;
+    document.title = currentChatSession?.name
+      ? `${currentChatSession.name} — ${appName}`
+      : appName;
+  }, [currentChatSession?.name, appName]);
+  useEffect(() => {
+    return () => {
+      document.title = appNameRef.current;
+    };
+  }, []);
+
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -293,7 +305,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     liveAgent,
     currentChatSessionId,
     currentChatSession ?? undefined,
-    settings
+    settings.disable_default_assistant ?? false
   );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
@@ -728,7 +740,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     <>
       <AppPopup />
 
-      {retrievalEnabled && documentSidebarVisible && settings.isMobile && (
+      {retrievalEnabled && documentSidebarVisible && isMobile && (
         <div className="md:hidden">
           <Modal
             open
@@ -765,6 +777,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
+<<<<<<< HEAD
       <div className="flex flex-row w-full h-full overflow-hidden">
         <div className="flex-1 h-full overflow-hidden">
           <Dropzone
@@ -774,6 +787,39 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             noClick
           >
             {({ getRootProps }) => (
+=======
+      {!(noAgents && !isLoadingAgents) && retrievalEnabled && !isMobile && (
+        <RootLayout.RightPanel>
+          <div
+            className={cn(
+              "overflow-hidden transition-all duration-300 ease-in-out h-full",
+              documentSidebarVisible ? "w-100" : "w-0"
+            )}
+          >
+            <DocumentsSidebar
+              setPresentingDocument={setPresentingDocument}
+              modal={false}
+              closeSidebar={handleDesktopDocumentSidebarClose}
+              selectedDocuments={selectedDocuments}
+            />
+          </div>
+        </RootLayout.RightPanel>
+      )}
+
+      <div className="w-full h-full overflow-hidden">
+        <Dropzone
+          onDrop={(acceptedFiles) =>
+            handleMessageSpecificFileUpload(acceptedFiles)
+          }
+          noClick
+        >
+          {({ getRootProps }) => (
+            <div
+              className="h-full w-full flex flex-col items-center outline-hidden relative"
+              {...getRootProps({ tabIndex: -1 })}
+            >
+              {/* Main content grid — 3 rows, animated */}
+>>>>>>> ca2ea9d91b (refactor(settings): consolidate settings into a single useSettings() hook (#12155))
               <div
                 className="h-full w-full flex flex-col items-center outline-hidden relative"
                 {...getRootProps({ tabIndex: -1 })}

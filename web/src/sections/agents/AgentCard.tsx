@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { checkUserOwnsAgent } from "@/lib/agents/utils";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import {
   updateAgentSharedStatus,
   updateAgentFeaturedStatus,

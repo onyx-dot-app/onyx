@@ -32,7 +32,7 @@ import {
   Connector,
   ConnectorBase,
 } from "@/lib/connectors/connectors";
-import { useSettings } from "@/hooks/useSettings";
+import { useSettings } from "@/lib/settings/hooks";
 import Modal from "@/refresh-components/Modal";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
 import {
@@ -149,7 +149,7 @@ export default function AddConnector({
   }, []);
 
   const router = useRouter();
-  const { settings } = useSettings();
+  const settings = useSettings();
   const defaultPruneFreqHours = settings.default_pruning_freq
     ? settings.default_pruning_freq / 3600
     : 600; // 25 days fallback until settings load
