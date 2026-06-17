@@ -286,7 +286,7 @@ function Header() {
         isMobile) &&
         !appFocus.isSharedChat() && (
           <RootLayout.Header>
-            <div className="w-full h-full flex flex-row flex-wrap justify-center items-center px-4 py-2">
+            <div className="w-full h-full flex flex-row flex-wrap justify-center items-center p-2 sm:px-4">
               {/*
           Left:
           - (mobile) sidebar toggle
@@ -436,7 +436,7 @@ function Footer() {
     <RootLayout.Footer>
       <div
         className={cn(
-          "relative w-full flex flex-row justify-center items-center gap-2 px-4 mt-auto",
+          "relative w-full flex flex-row justify-center items-center gap-2 px-2 sm:px-4 mt-auto",
           // # Note (from @raunakab):
           //
           // The conditional rendering of vertical padding based on the current page is intentional.
