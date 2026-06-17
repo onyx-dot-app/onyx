@@ -8,7 +8,6 @@ import {
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { useMemo } from "react";
 import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
 
 export interface LogoProps {
@@ -28,20 +27,9 @@ export default function Logo({
 }: LogoProps) {
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
   const settings = useSettings();
-  const enterpriseSettings = settings.enterprise;
+  const { enterprise: enterpriseSettings, logoUrl } = settings;
   const logoDisplayStyle = enterpriseSettings?.logo_display_style;
   const applicationName = enterpriseSettings?.application_name;
-
-  // Cache-buster: the logo URL never changes (/api/enterprise-settings/logo)
-  // so the browser serves the in-memory cached image even after an admin
-  // uploads a new one. Generating a fresh timestamp each time enterprise
-  // settings are revalidated by SWR appends a unique query param to force
-  // the browser to re-fetch the image.
-  const logoBuster = useMemo(
-    () => Date.now(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [enterpriseSettings]
-  );
 
   if (onyxBranded) {
     return folded ? (
@@ -51,7 +39,7 @@ export default function Logo({
     );
   }
 
-  const logo = enterpriseSettings?.use_custom_logo ? (
+  const logo = logoUrl ? (
     <div
       className={cn(
         "aspect-square rounded-full overflow-hidden relative shrink-0",
@@ -62,7 +50,7 @@ export default function Logo({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         alt="Logo"
-        src={`/api/enterprise-settings/logo?v=${logoBuster}`}
+        src={logoUrl}
         className="object-cover object-center w-full h-full"
       />
     </div>
