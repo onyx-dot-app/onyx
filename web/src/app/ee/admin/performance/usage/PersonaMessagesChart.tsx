@@ -139,7 +139,7 @@ export function PersonaMessagesChart({
   let content;
   if (isLoading) {
     content = (
-      <div className="h-80 flex flex-col">
+      <div className="h-80 flex flex-col items-center justify-center">
         <OnyxLoader />
       </div>
     );

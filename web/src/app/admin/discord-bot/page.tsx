@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
@@ -51,7 +51,7 @@ function DiscordBotContent() {
   };
 
   if (isLoading) {
-    return <OnyxLoader />;
+    return <PageLoader />;
   }
 
   if (error || !guilds) {

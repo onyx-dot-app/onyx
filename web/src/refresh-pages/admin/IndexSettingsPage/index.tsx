@@ -5,7 +5,7 @@ import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
-import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -791,7 +791,7 @@ export default function IndexSettingsPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
         <SettingsLayouts.Body>
-          <OnyxLoader />
+          <PageLoader />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );

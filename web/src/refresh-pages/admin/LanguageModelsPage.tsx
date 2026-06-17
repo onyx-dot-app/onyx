@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
-import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
 import {
   Button,
@@ -319,7 +319,7 @@ export default function LanguageModelsPage() {
   }, [defaultText, existingLlmProviders]);
 
   if (!existingLlmProviders) {
-    return <OnyxLoader />;
+    return <PageLoader />;
   }
 
   const hasProviders = existingLlmProviders.length > 0;

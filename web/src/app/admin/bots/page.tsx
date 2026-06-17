@@ -1,7 +1,7 @@
 "use client";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";
@@ -21,7 +21,7 @@ function Main() {
   } = useSlackBots();
 
   if (isSlackBotsLoading) {
-    return <OnyxLoader />;
+    return <PageLoader />;
   }
 
   if (slackBotsError || !slackBots) {

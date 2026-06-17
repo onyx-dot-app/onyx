@@ -111,7 +111,7 @@ export function AgentStats({ agentId }: { agentId: number }) {
   let content;
   if (isLoading || !agent) {
     content = (
-      <div className="h-80 flex flex-col">
+      <div className="h-80 flex flex-col items-center justify-center">
         <OnyxLoader />
       </div>
     );

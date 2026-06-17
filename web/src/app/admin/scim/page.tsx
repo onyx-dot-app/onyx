@@ -8,7 +8,7 @@ import { useScimToken } from "@/hooks/useScimToken";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
-import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import { PageLoader } from "@/refresh-components/PageLoader";
 
 import type { ScimTokenCreatedResponse, ScimModalView } from "./interfaces";
 import { generateScimToken } from "./svc";
@@ -31,7 +31,7 @@ function ScimContent() {
   const isConnected = hasToken && token.last_used_at !== null;
 
   if (isLoading) {
-    return <OnyxLoader />;
+    return <PageLoader />;
   }
 
   if (tokenError) {

@@ -20,7 +20,7 @@ export function OnyxBotChart({
   let chart;
   if (isOnyxBotAnalyticsLoading) {
     chart = (
-      <div className="h-80 flex flex-col">
+      <div className="h-80 flex flex-col items-center justify-center">
         <OnyxLoader />
       </div>
     );

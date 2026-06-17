@@ -49,7 +49,7 @@ export function BotConfigCard() {
             Bot Token
           </Text>
         </Section>
-        <OnyxLoader />
+        <div className="flex justify-center"><OnyxLoader /></div>
       </Card>
     );
   }

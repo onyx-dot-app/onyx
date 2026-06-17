@@ -345,7 +345,7 @@ export function QueryHistoryTable() {
               <TableBody>
                 <TableRow>
                   <TableCell colSpan={6} className="text-center">
-                    <OnyxLoader />
+                    <div className="flex justify-center"><OnyxLoader /></div>
                   </TableCell>
                 </TableRow>
               </TableBody>

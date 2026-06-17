@@ -3,6 +3,7 @@
 import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@opal/utils";
 import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
@@ -65,7 +66,7 @@ function GuildDetailContent({
     useDiscordChannels(guildId);
 
   if (guildLoading) {
-    return <OnyxLoader />;
+    return <PageLoader />;
   }
 
   if (guildError || !guild) {
@@ -128,7 +129,9 @@ function GuildDetailContent({
             registered.
           </Text>
         ) : channelsLoading ? (
-          <OnyxLoader />
+          <div className="flex justify-center py-12">
+            <OnyxLoader />
+          </div>
         ) : channelsError ? (
           <ErrorCallout
             errorTitle="Failed to load channels"

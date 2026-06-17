@@ -207,7 +207,11 @@ export function Explorer({
           })}
         </div>
       )}
-      {isLoading && <OnyxLoader />}
+      {isLoading && (
+        <div className="flex justify-center py-12">
+          <OnyxLoader />
+        </div>
+      )}
     </div>
   );
 }

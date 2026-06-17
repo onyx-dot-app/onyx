@@ -1,0 +1,7 @@
+{
+  "enabledMcpjsonServers": [
+    "playwright",
+    "agent-wiki",
+    "linear"
+  ]
+}
