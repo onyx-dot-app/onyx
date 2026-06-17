@@ -2,7 +2,7 @@
 
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { getDatesList, useQueryAnalytics, useUserAnalytics } from "../lib";
-import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
 import Title from "@/components/ui/title";
 import { Text } from "@opal/components";
@@ -28,7 +28,7 @@ export function QueryPerformanceChart({
   if (isQueryAnalyticsLoading || isUserAnalyticsLoading) {
     chart = (
       <div className="h-80 flex flex-col items-center justify-center">
-        <OnyxLoader />
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   } else if (

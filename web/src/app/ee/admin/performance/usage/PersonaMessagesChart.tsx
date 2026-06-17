@@ -1,4 +1,4 @@
-import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { X, Search } from "lucide-react";
 import {
   getDatesList,
@@ -140,7 +140,7 @@ export function PersonaMessagesChart({
   if (isLoading) {
     content = (
       <div className="h-80 flex flex-col items-center justify-center">
-        <OnyxLoader />
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   } else if (!availablePersonas || hasError) {

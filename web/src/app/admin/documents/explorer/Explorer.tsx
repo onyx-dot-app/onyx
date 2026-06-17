@@ -19,7 +19,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
 import { InputTypeIn } from "@opal/components";
-import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 
 const DocumentDisplay = ({
   document,
@@ -209,7 +209,7 @@ export function Explorer({
       )}
       {isLoading && (
         <div className="flex justify-center py-12">
-          <OnyxLoader />
+          <SvgSimpleLoader className="h-6 w-6" />
         </div>
       )}
     </div>

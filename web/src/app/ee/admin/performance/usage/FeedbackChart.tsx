@@ -1,4 +1,4 @@
-import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { getDatesList, useQueryAnalytics } from "../lib";
 import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
@@ -22,7 +22,7 @@ export function FeedbackChart({
   if (isQueryAnalyticsLoading) {
     chart = (
       <div className="h-80 flex flex-col items-center justify-center">
-        <OnyxLoader />
+        <SvgSimpleLoader className="h-6 w-6" />
       </div>
     );
   } else if (

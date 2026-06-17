@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@opal/utils";
-import { OnyxLoader } from "@/refresh-components/OnyxLoader";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { PageLoader } from "@/refresh-components/PageLoader";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { toast } from "@/hooks/useToast";
@@ -130,7 +130,7 @@ function GuildDetailContent({
           </Text>
         ) : channelsLoading ? (
           <div className="flex justify-center py-12">
-            <OnyxLoader />
+            <SvgSimpleLoader className="h-6 w-6" />
           </div>
         ) : channelsError ? (
           <ErrorCallout
