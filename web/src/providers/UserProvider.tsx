@@ -70,6 +70,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // For auto_scroll and temperature_override_enabled:
   // - If user has a preference set, use that
   // - Otherwise, use the workspace setting if available
+  const wsAutoScroll = updatedSettingsData.auto_scroll;
+  const wsTemperatureOverride =
+    updatedSettingsData.temperature_override_enabled;
+
   const mergeUserPreferences = useCallback(
     (currentUser: User | null): User | null => {
       if (!currentUser) return null;
@@ -78,17 +82,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         preferences: {
           ...currentUser.preferences,
           auto_scroll:
-            currentUser.preferences?.auto_scroll ??
-            updatedSettingsData?.auto_scroll ??
-            false,
+            currentUser.preferences?.auto_scroll ?? wsAutoScroll ?? false,
           temperature_override_enabled:
             currentUser.preferences?.temperature_override_enabled ??
-            updatedSettingsData?.temperature_override_enabled ??
+            wsTemperatureOverride ??
             false,
         },
       };
     },
-    [updatedSettingsData]
+    [wsAutoScroll, wsTemperatureOverride]
   );
 
   const [upToDateUser, setUpToDateUser] = useState<User | null>(null);
