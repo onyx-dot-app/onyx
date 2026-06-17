@@ -35,6 +35,7 @@ from onyx.db.models import Persona
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import PersonaLabel
+from onyx.db.models import Skill
 from onyx.db.models import StarterMessage
 from onyx.db.models import Tool
 from onyx.db.models import User
@@ -45,6 +46,8 @@ from onyx.db.notification import create_notification
 from onyx.db.persona_sharing import get_persona_access_level
 from onyx.db.persona_sharing import get_user_group_ids_for_user
 from onyx.db.persona_sharing import persona_ownership_is_vacant
+from onyx.db.skill import fetch_skill_for_user
+from onyx.db.skill import filter_visible_skill_ids
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -404,6 +407,7 @@ def create_update_persona(
             commit=False,
             hierarchy_node_ids=create_persona_request.hierarchy_node_ids,
             document_ids=create_persona_request.document_ids,
+            skill_ids=create_persona_request.skill_ids,
         )
 
         versioned_update_persona_access = fetch_versioned_implementation(
@@ -434,10 +438,17 @@ def create_update_persona(
                 Persona__UserGroup.user_group
             ),
             selectinload(Persona.owner_group),
+            selectinload(Persona.skills),
         )
     ).one()
 
-    return FullPersonaSnapshot.from_model(persona)
+    # Mask attached skills the caller can't see, matching the GET/list paths.
+    visible_skill_ids = filter_visible_skill_ids(
+        [skill.id for skill in persona.skills], user, db_session
+    )
+    return FullPersonaSnapshot.from_model(
+        persona, visible_skill_ids=visible_skill_ids
+    )
 
 
 def update_persona_shared(
@@ -837,10 +848,15 @@ def get_persona_snapshots_for_user(
         selectinload(Persona.owner_group),
         selectinload(Persona.user_shares).selectinload(Persona__User.user),
         selectinload(Persona.group_shares).selectinload(Persona__UserGroup.user_group),
+        selectinload(Persona.skills),
     )
 
     results = db_session.scalars(stmt).all()
-    return [PersonaSnapshot.from_model(persona) for persona in results]
+    visible = _visible_skill_ids_across_personas(results, user, db_session)
+    return [
+        PersonaSnapshot.from_model(persona, visible_skill_ids=visible)
+        for persona in results
+    ]
 
 
 def get_persona_count_for_user(
@@ -1024,10 +1040,15 @@ def get_persona_snapshots_paginated(
         selectinload(Persona.owner_group),
         selectinload(Persona.user_shares).selectinload(Persona__User.user),
         selectinload(Persona.group_shares).selectinload(Persona__UserGroup.user_group),
+        selectinload(Persona.skills),
     )
 
     results = db_session.scalars(stmt).all()
-    return [PersonaSnapshot.from_model(persona) for persona in results]
+    visible = _visible_skill_ids_across_personas(results, user, db_session)
+    return [
+        PersonaSnapshot.from_model(persona, visible_skill_ids=visible)
+        for persona in results
+    ]
 
 
 def _get_paginated_persona_query(
@@ -1258,6 +1279,40 @@ def _mark_files_need_persona_sync(
     )
 
 
+def _visible_skill_ids_across_personas(
+    personas: Sequence[Persona], user: User, db_session: Session
+) -> set[UUID]:
+    """Skills (across all the given personas) the user can see, for masking
+    another editor's private skills out of a shared persona's snapshot."""
+    attached = {skill.id for persona in personas for skill in persona.skills}
+    return filter_visible_skill_ids(list(attached), user, db_session)
+
+
+def _resolve_attachable_skills(
+    skill_ids: list[UUID], user: User | None, db_session: Session
+) -> list[Skill]:
+    """Skills the persona may attach, deduped and order-preserving.
+
+    Each id is checked through the acting user's visibility filter
+    (``fetch_skill_for_user``); ids the user can't see are silently dropped so
+    a co-editor isn't blocked by another editor's private skill. With no acting
+    user (system upsert) every requested skill is attached.
+    """
+    resolved: list[Skill] = []
+    seen: set[UUID] = set()
+    for skill_id in skill_ids:
+        if skill_id in seen:
+            continue
+        seen.add(skill_id)
+        if user is None:
+            skill = db_session.get(Skill, skill_id)
+        else:
+            skill = fetch_skill_for_user(skill_id, user, db_session)
+        if skill is not None:
+            resolved.append(skill)
+    return resolved
+
+
 def upsert_persona(
     user: User | None,
     name: str,
@@ -1286,6 +1341,7 @@ def upsert_persona(
     user_file_ids: list[UUID] | None = None,
     hierarchy_node_ids: list[int] | None = None,
     document_ids: list[str] | None = None,
+    skill_ids: list[UUID] | None = None,
     replace_base_system_prompt: bool = False,
 ) -> Persona:
     """
@@ -1432,6 +1488,13 @@ def upsert_persona(
         if not attached_documents and document_ids:
             raise ValueError("documents not found or not accessible")
 
+    # Resolve attachable skills, silently dropping ids the acting user can't
+    # see. Co-editors of a shared persona must not be blocked by another
+    # editor's private skill, so an invisible id is a no-op, not a 403.
+    skills = None
+    if skill_ids is not None:
+        skills = _resolve_attachable_skills(skill_ids, user, db_session)
+
     # ensure all specified tools are valid
     if tools:
         validate_persona_tools(tools, db_session)
@@ -1491,6 +1554,19 @@ def upsert_persona(
         if tools is not None:
             existing_persona.tools = tools or []
 
+        if skills is not None:
+            # Preserve attached skills the acting user can't see (e.g. another
+            # editor's private skill): skill_ids came from a snapshot masked to
+            # the caller's visible set, so a wholesale replace would silently
+            # detach them. Reconcile only within the user's visible set.
+            visible_existing = filter_visible_skill_ids(
+                [s.id for s in existing_persona.skills], user, db_session
+            )
+            preserved = [
+                s for s in existing_persona.skills if s.id not in visible_existing
+            ]
+            existing_persona.skills = preserved + skills
+
         if user_file_ids is not None:
             old_file_ids = {uf.id for uf in existing_persona.user_files}
             new_file_ids = {uf.id for uf in (user_files or [])}
@@ -1531,6 +1607,7 @@ def upsert_persona(
             default_model_configuration_id=default_model_configuration_id,
             starter_messages=starter_messages,
             tools=tools or [],
+            skills=skills or [],
             uploaded_image_id=uploaded_image_id,
             icon_name=icon_name,
             display_priority=display_priority,

@@ -82,6 +82,8 @@ from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.projects import get_user_files_from_project
+from onyx.db.skill import fetch_persona_skills_visible_to_user
+from onyx.db.tools import get_builtin_tool
 from onyx.db.tools import get_tools
 from onyx.deep_research.dr_loop import run_deep_research_llm_loop
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -122,6 +124,7 @@ from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
+from onyx.skills.render import render_attached_skills_section
 from onyx.tools.constants import FILE_READER_TOOL_ID
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.models import ChatFile
@@ -130,6 +133,7 @@ from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import FileReaderToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_implementations.load_skill.load_skill_tool import LoadSkillTool
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
@@ -811,6 +815,30 @@ def build_chat_turn(
     # need it early for token reservation.
     custom_agent_prompt = get_custom_agent_prompt(persona, chat_session)
 
+    # Render the persona's attached skills into a prompt section for this acting
+    # user. Intersection-only: a private skill attached to a shared persona is
+    # silently dropped for anyone but the users who can see it (keyed to the
+    # acting user, never the persona owner). DB access stays here, out of the
+    # chat loop; the rendered text is threaded down as plain prompt text.
+    visible_skills = fetch_persona_skills_visible_to_user(persona, user, db_session)
+    system_prompt_additional_instructions = render_attached_skills_section(
+        visible_skills
+    )
+    # When the persona has visible attached skills, the model can pull a skill's
+    # full body on demand via LoadSkillTool (the prompt only carries the index).
+    # Resolve the seeded tool's DB id here so the per-model loop never hits the
+    # DB for it. None (and no tool offered) when there are no visible skills.
+    load_skill_tool_id: int | None = None
+    if visible_skills:
+        try:
+            load_skill_tool_id = get_builtin_tool(db_session, LoadSkillTool).id
+        except RuntimeError:
+            logger.warning(
+                "LoadSkillTool not found in the database. Run the latest "
+                "alembic migration to seed it; attached skills will not be "
+                "loadable this turn."
+            )
+
     # When use_memories is disabled, strip memories from the prompt context but keep
     # user info/preferences. The full context is still passed to the LLM loop for
     # memory tool persistence.
@@ -821,8 +849,10 @@ def build_chat_turn(
     )
 
     # ── Token reservation ────────────────────────────────────────────────────
-    max_reserved_system_prompt_tokens_str = (persona.system_prompt or "") + (
-        custom_agent_prompt or ""
+    max_reserved_system_prompt_tokens_str = (
+        (persona.system_prompt or "")
+        + (custom_agent_prompt or "")
+        + (system_prompt_additional_instructions or "")
     )
     reserved_token_count = calculate_reserved_tokens(
         db_session=db_session,
@@ -1014,6 +1044,9 @@ def build_chat_turn(
         files=files,
         chat_files_for_tools=chat_files_for_tools,
         custom_agent_prompt=custom_agent_prompt,
+        system_prompt_additional_instructions=system_prompt_additional_instructions,
+        visible_skills=visible_skills,
+        load_skill_tool_id=load_skill_tool_id,
         user_memory_context=user_memory_context,
         skip_clarification=skip_clarification,
         check_is_connected=check_is_connected,
@@ -1239,6 +1272,21 @@ def _run_models(
                 tool for tool_list in thread_tool_dict.values() for tool in tool_list
             ]
 
+            # Offer LoadSkillTool only when this turn has visible attached
+            # skills (and the tool row was seeded). The system prompt carries
+            # just the skill index; this tool lets the model pull a skill's full
+            # body on demand. Injected here rather than via Persona__Tool so it
+            # tracks the per-turn visible-skill set, not a persona association.
+            if setup.visible_skills and setup.load_skill_tool_id is not None:
+                model_tools.append(
+                    LoadSkillTool(
+                        tool_id=setup.load_skill_tool_id,
+                        emitter=model_emitter,
+                        available_skills=setup.visible_skills,
+                        user=user,
+                    )
+                )
+
             if setup.forced_tool_id and setup.forced_tool_id not in {
                 tool.id for tool in model_tools
             }:
@@ -1282,6 +1330,9 @@ def _run_models(
                     include_citations=setup.new_msg_req.include_citations,
                     all_injected_file_metadata=setup.all_injected_file_metadata,
                     inject_memories_in_prompt=user.use_memories,
+                    system_prompt_additional_instructions=(
+                        setup.system_prompt_additional_instructions
+                    ),
                 )
 
             model_succeeded[model_idx] = True

@@ -17,6 +17,7 @@ from onyx.db.memory import UserMemoryContext
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import Persona
+from onyx.db.models import Skill
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.onyxbot.slack.models import SlackContext
@@ -213,6 +214,19 @@ class ChatTurnSetup:
     files: list[ChatLoadedFile]
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
+    # Pre-rendered attached-skills section appended to the system prompt; already
+    # intersection-filtered to the acting user. None when the persona has no
+    # visible attached skills.
+    system_prompt_additional_instructions: str | None
+    # Acting-user-visible attached skills for this turn. When non-empty, a
+    # LoadSkillTool is injected so the model can pull a skill's full body on
+    # demand (the system prompt only carries the index). Only column attrs of
+    # these detached rows (slug/name/description/bundle_file_id/built_in_skill_id)
+    # may be read downstream — no lazy relationships.
+    visible_skills: list[Skill]
+    # Seeded LoadSkillTool DB row id, resolved during setup so the loop never
+    # touches the DB for it. None when there are no visible skills.
+    load_skill_tool_id: int | None
     user_memory_context: UserMemoryContext
     # For deep research: was the last assistant message a clarification request?
     skip_clarification: bool

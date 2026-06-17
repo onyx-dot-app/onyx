@@ -3717,6 +3717,13 @@ class Persona(Base):
         secondary=Persona__Tool.__table__,
         back_populates="personas",
     )
+    # Skills whose instructions a later PR injects into this persona's chats.
+    # Writable: the persona upsert owns this set (validated + silently filtered
+    # to the acting user's visible skills in onyx.db.persona).
+    skills: Mapped[list["Skill"]] = relationship(
+        "Skill",
+        secondary="persona__skill",
+    )
     # Owner
     user: Mapped[User | None] = relationship(
         "User", back_populates="personas", foreign_keys=[user_id]
@@ -4465,6 +4472,20 @@ class Skill__UserGroup(Base):
     user_group_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+
+class Persona__Skill(Base):
+    __tablename__ = "persona__skill"
+
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    skill_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("skill.id", ondelete="CASCADE"),
         primary_key=True,
     )
 
