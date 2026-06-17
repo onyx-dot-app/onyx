@@ -193,6 +193,8 @@ export const SWR_KEYS = {
 
   // ── MCP Server (per-ID) ───────────────────────────────────────────────────
   adminMcpServer: (id: number) => `/api/admin/mcp/servers/${id}`,
+  mcpServersAuthStatus: (assistantId: number) =>
+    `/api/mcp/servers/auth-status/${assistantId}`,
 
   // ── Document Processing ───────────────────────────────────────────────────
   unstructuredApiKeySet: "/api/search-settings/unstructured-api-key-set",

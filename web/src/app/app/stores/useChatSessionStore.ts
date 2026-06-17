@@ -48,9 +48,9 @@ interface ChatSessionData {
   // Queued messages
   queuedMessages: QueuedMessage[];
 
-  // MCP server ids that hit a 401 this session and need (re)auth. Fed by
-  // observed tool-call auth errors; read by the input-bar ActionsPopover.
-  // Client-only for now; a backend signal can prime it on load later.
+  // MCP server ids that need (re)auth this session. Extended at runtime by
+  // observed tool-call auth errors and unioned (in the input-bar
+  // ActionsPopover) with the GET /mcp/servers/auth-status load-time signal.
   mcpServersNeedingReauth: Set<number>;
 
   // True once the latest assistant message has fully rendered to the

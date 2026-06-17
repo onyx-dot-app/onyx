@@ -1,5 +1,8 @@
 "use client";
 
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   CODING_AGENT_TOOL_ID,
   FILE_READER_TOOL_ID,
@@ -267,6 +270,17 @@ export default function ActionsPopover({
   const mcpServersNeedingReauth = useCurrentMcpServersNeedingReauth();
   const clearMcpServerNeedingReauth = useChatSessionStore(
     (state) => state.clearCurrentMcpServerNeedingReauth
+  );
+  // Caller-scoped re-auth status for this agent's PER_USER servers, derived
+  // server-side from stored config. Seeds the badge on load instead of waiting
+  // for a runtime 401.
+  const { data: authStatusData, mutate: mutateAuthStatus } = useSWR<{
+    auth_statuses: { server_id: number; needs_reauth: boolean }[];
+  }>(
+    selectedAgent?.id != null
+      ? SWR_KEYS.mcpServersAuthStatus(selectedAgent.id)
+      : null,
+    errorHandlingFetcher
   );
 
   // Get the agent preference for this assistant
@@ -631,6 +645,8 @@ export default function ActionsPopover({
             },
           }));
           clearMcpServerNeedingReauth(server.id);
+          // Refresh the derived signal so the badge clears immediately.
+          mutateAuthStatus();
         },
         isAuthenticated: server.user_authenticated,
         existingCredentials: server.user_credentials,
@@ -656,17 +672,20 @@ export default function ActionsPopover({
     return server.name.toLowerCase().includes(searchLower);
   });
 
-  // Servers flagged by a session 401 that the user can actually re-auth.
-  const serversNeedingReauth = useMemo(
-    () =>
-      mcpServers.filter(
-        (server) =>
-          mcpServersNeedingReauth.has(server.id) &&
-          server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-          server.auth_type !== MCPAuthenticationType.NONE
-      ),
-    [mcpServers, mcpServersNeedingReauth]
-  );
+  // Servers the user can re-auth, flagged either by a runtime 401 this session
+  // (session store) or by the derived auth-status endpoint (lights on load).
+  const serversNeedingReauth = useMemo(() => {
+    const flagged = new Set<number>(mcpServersNeedingReauth);
+    authStatusData?.auth_statuses.forEach((status) => {
+      if (status.needs_reauth) flagged.add(status.server_id);
+    });
+    return mcpServers.filter(
+      (server) =>
+        flagged.has(server.id) &&
+        server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+        server.auth_type !== MCPAuthenticationType.NONE
+    );
+  }, [mcpServers, mcpServersNeedingReauth, authStatusData]);
 
   const selectedMcpServerId =
     secondaryView?.type === "mcp" ? secondaryView.serverId : null;
