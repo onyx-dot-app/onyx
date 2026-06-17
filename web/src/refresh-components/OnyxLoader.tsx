@@ -1,11 +1,9 @@
 import React from "react";
-import { cn } from "@opal/utils";
 import "./onyx-loader.css";
 
 interface OnyxLoaderProps {
   /** Size of the animated mark, in pixels. Default: 64 (matches the design). */
   size?: number;
-  className?: string;
 }
 
 // Onyx mark geometry (16-unit viewBox), matching the @opal/icons `onyx-octagon`
@@ -35,12 +33,12 @@ const MARK_PATHS = [
  * This is just the mark — for a full-page loading state with a "Loading …"
  * label, use `PageLoader`.
  */
-export function OnyxLoader({ size = 64, className }: OnyxLoaderProps) {
+export function OnyxLoader({ size = 64 }: OnyxLoaderProps) {
   return (
     <div
       role="status"
       aria-label="Loading"
-      className={cn("relative shrink-0 text-border-02", className)}
+      className="relative shrink-0 text-border-02"
       style={{ width: size, height: size }}
     >
       <div className="onyx-loader__rotator">
