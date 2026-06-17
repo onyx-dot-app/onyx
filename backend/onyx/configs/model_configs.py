@@ -70,6 +70,15 @@ GEN_AI_MODEL_FALLBACK_MAX_TOKENS = int(
     os.environ.get("GEN_AI_MODEL_FALLBACK_MAX_TOKENS") or 32000
 )
 
+# Fraction of a model's max_input_tokens to hold back when fitting chat history,
+# as headroom for token-count drift: Onyx estimates with tiktoken, but providers
+# (e.g. Anthropic/Vertex) tokenize differently and can count higher, so filling
+# right up to the limit risks a provider context-window rejection on long
+# threads. Truncating against (1 - margin) * max_input_tokens absorbs that drift.
+GEN_AI_INPUT_TOKEN_SAFETY_MARGIN = float(
+    os.environ.get("GEN_AI_INPUT_TOKEN_SAFETY_MARGIN") or 0.05
+)
+
 # This is used when computing how much context space is available for documents
 # ahead of time in order to let the user know if they can "select" more documents
 # It represents a maximum "expected" number of input tokens from the latest user

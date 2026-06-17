@@ -28,6 +28,7 @@ from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
+from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -669,8 +670,14 @@ def run_llm_loop(
             raw_answer=None,
         )
 
-        # Pass the total budget to construct_message_history, which will handle token allocation
-        available_tokens = llm.config.max_input_tokens
+        # Pass the budget to construct_message_history, which handles token
+        # allocation. Hold back a safety margin below the advertised limit:
+        # our tiktoken estimate can undercount vs the provider's real tokenizer,
+        # so fitting right up to max_input_tokens risks a context-window
+        # rejection on long threads.
+        available_tokens = int(
+            llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
+        )
         tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
         # Initialize gathered_documents with project files if present
         gathered_documents: list[SearchDoc] | None = (
