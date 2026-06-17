@@ -636,10 +636,14 @@ class ConfluenceConnector(
                     attachment["title"],
                     page["title"],
                 )
-                # Attachment document id: use the download URL for stable identity
+                # Build the download URL ourselves for a stable, filename-bearing link:
+                # `_links.download` is a token-only REST endpoint on Cloud and
+                # `_links.webui` points at the attachments viewer, not the file.
                 try:
                     object_url = build_confluence_document_id(
-                        self.wiki_base, attachment["_links"]["download"], self.is_cloud
+                        self.wiki_base,
+                        f"/download/attachments/{_get_page_id(page)}/{quote(attachment['title'])}",
+                        self.is_cloud,
                     )
                 except Exception as e:
                     logger.warning(
