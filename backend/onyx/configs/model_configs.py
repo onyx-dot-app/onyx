@@ -78,6 +78,14 @@ GEN_AI_MODEL_FALLBACK_MAX_TOKENS = int(
 GEN_AI_INPUT_TOKEN_SAFETY_MARGIN = float(
     os.environ.get("GEN_AI_INPUT_TOKEN_SAFETY_MARGIN") or 0.05
 )
+# Must be in [0, 1): a value >= 1 drives available_tokens to <= 0 (history
+# construction breaks), and a negative value silently expands the budget past
+# the model's real limit. Fail loudly on misconfiguration.
+if not 0.0 <= GEN_AI_INPUT_TOKEN_SAFETY_MARGIN < 1.0:
+    raise ValueError(
+        "GEN_AI_INPUT_TOKEN_SAFETY_MARGIN must be in [0, 1), got "
+        f"{GEN_AI_INPUT_TOKEN_SAFETY_MARGIN}"
+    )
 
 # This is used when computing how much context space is available for documents
 # ahead of time in order to let the user know if they can "select" more documents

@@ -1289,9 +1289,19 @@ def _run_models(
 
         except Exception as e:
             model_errored[model_idx] = True
-            model_error_info[model_idx] = litellm_exception_to_error_msg(
+            message, error_code, is_retryable = litellm_exception_to_error_msg(
                 e, model_llm, fallback_to_error_msg=True
             )
+            # Redact the API key at the source so every consumer of
+            # model_error_info is safe — both the streamed StreamingError and
+            # the message persisted to the DB in _save_errored_message. The
+            # fallback_to_error_msg path returns str(e) verbatim, which can
+            # embed the key for exceptions outside the classifier's branches.
+            if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
+                message = message.replace(
+                    model_llm.config.api_key, "[REDACTED_API_KEY]"
+                )
+            model_error_info[model_idx] = (message, error_code, is_retryable)
             merged_queue.put((model_idx, e))
 
         finally:
