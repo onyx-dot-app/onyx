@@ -86,7 +86,7 @@ jobs:
         "run-id=${{ github.run_id }}-build-backend-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     environment: ci-protected
 
     steps:
@@ -126,7 +126,7 @@ jobs:
         "run-id=${{ github.run_id }}-connectors-check",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 60
+    timeout-minutes: 40
     environment: ci-protected
 
     steps:

@@ -54,7 +54,7 @@ jobs:
       - runs-on
       - runner=2cpu-linux-arm64
       - "run-id=${{ github.run_id }}-database-tests"
-    timeout-minutes: 45
+    timeout-minutes: 12
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 

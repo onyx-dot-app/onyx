@@ -137,7 +137,7 @@ jobs:
         "run-id=${{ github.run_id }}-build-web-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -199,7 +199,7 @@ jobs:
         "run-id=${{ github.run_id }}-build-backend-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -261,7 +261,7 @@ jobs:
         "run-id=${{ github.run_id }}-build-model-server-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -325,7 +325,7 @@ jobs:
       - "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}-${{ matrix.shard }}"
       - "extras=ecr-cache"
       - volume=50gb
-    timeout-minutes: 45
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       # Each entry is one parallel runner. `admin` (the bulk of the suite) is
@@ -525,7 +525,7 @@ jobs:
       - "run-id=${{ github.run_id }}-playwright-tests-oauth-okta"
       - "extras=ecr-cache"
       - volume=50gb
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -683,7 +683,7 @@ jobs:
       - runner=4cpu-linux-arm64
       - "run-id=${{ github.run_id }}-playwright-tests-lite"
       - "extras=ecr-cache"
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -805,7 +805,7 @@ jobs:
       - runs-on
       - runner=2cpu-linux-arm64
       - "run-id=${{ github.run_id }}-visual-regression-${{ matrix.project }}"
-    timeout-minutes: 20
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
