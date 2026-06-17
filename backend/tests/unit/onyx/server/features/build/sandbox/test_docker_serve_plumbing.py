@@ -311,6 +311,8 @@ def test_provision_generates_fresh_password_and_injects_into_container_env(
     assert len(run_calls) == 1
     # Created stopped, then started explicitly after the (no-op) history restore.
     fake_container.start.assert_called_once()
+    # A successful provision must not remove the container it just started.
+    fake_container.remove.assert_not_called()
     env = run_calls[0]["environment"]
     assert set(env.keys()) == {
         "ONYX_PAT",
@@ -358,3 +360,86 @@ def test_terminate_closes_event_bus_and_tombstones_sandbox() -> None:
     assert all(k[0] != _SBX for k in mgr._event_buses)
     fake_bus_a.close.assert_called_once()
     fake_bus_b.close.assert_called_once()
+
+
+def test_reuse_existing_container_removes_created_state() -> None:
+    """A container stranded in 'created' state is an incomplete prior provision.
+    Reuse must remove it (not start it) so the retry re-creates and restores
+    opencode history -- starting it would skip the restore."""
+    mgr = _bare_manager()
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+
+    stranded = MagicMock()
+    stranded.name = "sandbox-12345678"
+    stranded.attrs = {"State": {"Status": "created"}}
+    mgr._docker.containers.get.return_value = stranded
+
+    result = mgr._reuse_existing_container(_SBX)
+
+    assert result is None, "A 'created' container must not be reused."
+    stranded.remove.assert_called_once_with(force=True)
+    stranded.start.assert_not_called()
+
+
+def test_reuse_existing_container_starts_exited() -> None:
+    """An 'exited' container ran before, so its writable-layer data home is
+    populated; reuse should start it rather than discard it."""
+    mgr = _bare_manager()
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+
+    exited = MagicMock()
+    exited.name = "sandbox-12345678"
+    exited.attrs = {"State": {"Status": "exited"}}
+    mgr._docker.containers.get.return_value = exited
+
+    result = mgr._reuse_existing_container(_SBX)
+
+    assert result is exited
+    exited.start.assert_called_once()
+    exited.remove.assert_not_called()
+
+
+def test_provision_removes_container_when_history_restore_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    llm_config: LLMProviderConfig,
+) -> None:
+    """If opencode-history restore fails on a fresh container, provision must
+    remove the half-provisioned container (so a retry re-creates + restores)
+    and propagate the failure -- it must not start opencode against an empty
+    data home."""
+    monkeypatch.setattr(dsm, "DEV_MODE", True)
+    monkeypatch.setattr(dsm, "SANDBOX_API_SERVER_URL", "https://onyx.example.com")
+
+    mgr = _bare_manager()
+    mgr._docker = MagicMock()  # type: ignore[attr-defined]
+    mgr._image = "onyxdotapp/sandbox:test"  # type: ignore[attr-defined]
+    mgr._network_name = "onyx_craft_sandbox"  # type: ignore[attr-defined]
+    mgr._memory_limit = "2g"  # type: ignore[attr-defined]
+    mgr._cpu_limit = 1.0  # type: ignore[attr-defined]
+    mgr._compose_project = None  # type: ignore[attr-defined]
+    mgr._docker.containers.get.side_effect = dsm.NotFound("none")
+    mgr._docker.networks.get.return_value = MagicMock()
+    mgr._docker.volumes.get.return_value = MagicMock()
+
+    # FileStore lookup blows up partway through the history restore.
+    mgr._snapshot_manager = MagicMock()  # type: ignore[attr-defined]
+    mgr._snapshot_manager.has_opencode_history_snapshot.side_effect = RuntimeError(
+        "filestore unavailable"
+    )
+
+    fake_container = MagicMock()
+    fake_container.name = "sandbox-12345678"
+    mgr._docker.containers.create.return_value = fake_container
+
+    with pytest.raises(RuntimeError):
+        mgr.provision(
+            sandbox_id=_SBX,
+            user_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            tenant_id="tenant-abc",
+            llm_config=llm_config,
+            onyx_pat="pat-redacted",
+        )
+
+    # Half-provisioned container is force-removed; opencode never started.
+    fake_container.remove.assert_called_once_with(force=True)
+    fake_container.start.assert_not_called()

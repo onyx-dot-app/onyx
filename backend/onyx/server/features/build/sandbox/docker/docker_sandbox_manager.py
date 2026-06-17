@@ -887,12 +887,20 @@ class DockerSandboxManager(SandboxManager):
             # starting the container, so entrypoint.sh's opencode-serve opens
             # the restored database instead of racing an extraction on top of a
             # live process. Mirrors the K8s init-sidecar restore handshake.
-            self._maybe_restore_opencode_history(container, sandbox_id, tenant_id)
+            #
+            # On any failure here, remove the half-provisioned container so it
+            # doesn't strand in 'created' state -- a retry's
+            # _reuse_existing_container would otherwise just start it and skip
+            # the restore, booting opencode against an empty data home while a
+            # good snapshot still sits in the FileStore. Restore failures are
+            # fatal (re-raised), matching the K8s fail-closed restore.
             try:
+                self._maybe_restore_opencode_history(container, sandbox_id, tenant_id)
                 container.start()
-            except APIError as e:
+            except Exception as e:
+                self._remove_incomplete_container(container)
                 raise RuntimeError(
-                    f"Failed to start sandbox container {container.name}: {e}"
+                    f"Failed to provision sandbox container {container.name}: {e}"
                 ) from e
 
         if not self._wait_for_container_running(container):
@@ -916,7 +924,19 @@ class DockerSandboxManager(SandboxManager):
         )
 
     def _reuse_existing_container(self, sandbox_id: UUID) -> Container | None:
-        """Returns a running/restarted container if one exists, else None."""
+        """Returns a reusable running/stopped container, else None.
+
+        A ``created`` container is never reusable: the only code that creates
+        without starting is ``provision``'s fresh-container path, so ``created``
+        always means a prior provision died mid-flight, before the opencode
+        history restore + start. Just starting it would skip the restore and
+        boot opencode against an empty data home while a good snapshot still
+        sits in the FileStore (which the next idle reap would then overwrite).
+        Remove it so the caller re-creates and restores cleanly; the per-sandbox
+        volume is left intact, so session workspaces survive -- only the empty
+        writable layer is dropped. This also covers a hard kill mid-provision,
+        which the provision-side cleanup can't.
+        """
         existing = self._get_container(sandbox_id)
         if existing is None:
             return None
@@ -925,11 +945,31 @@ class DockerSandboxManager(SandboxManager):
         if status == "running":
             logger.info("Reusing existing running sandbox %s.", sandbox_id)
             return existing
-        if status in ("exited", "created"):
+        if status == "exited":
             logger.info("Starting existing stopped sandbox %s.", existing.name)
             existing.start()
             return existing
+        if status == "created":
+            logger.warning(
+                "Sandbox %s container is in 'created' state (incomplete prior "
+                "provision); removing so it can be re-created and restored.",
+                sandbox_id,
+            )
+            self._remove_incomplete_container(existing)
+            return None
         return None
+
+    @staticmethod
+    def _remove_incomplete_container(container: Container) -> None:
+        """Best-effort force-remove of a container we failed to fully provision."""
+        try:
+            container.remove(force=True)
+        except (APIError, NotFound) as e:
+            logger.warning(
+                "Failed to remove incomplete sandbox container %s: %s",
+                container.name,
+                e,
+            )
 
     def _create_sandbox_container(
         self,
