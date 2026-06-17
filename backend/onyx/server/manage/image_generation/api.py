@@ -29,6 +29,7 @@ from onyx.server.manage.image_generation.models import TestImageGenerationReques
 from onyx.server.manage.llm.api import _validate_llm_provider_change
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -341,6 +342,7 @@ def create_config(
             is_default=config_create.is_default,
         )
         db_session.commit()
+        invalidate_provider_listing_cache()
         db_session.refresh(config)
         return ImageGenerationConfigView.from_model(config)
     except HTTPException:
@@ -467,6 +469,7 @@ def update_config(
         remove_llm_provider(db_session, old_llm_provider_id, commit=False)
 
         db_session.commit()
+        invalidate_provider_listing_cache()
         db_session.refresh(existing_config)
         return ImageGenerationConfigView.from_model(existing_config)
 
@@ -501,6 +504,7 @@ def delete_config(
         remove_llm_provider(db_session, llm_provider_id, commit=False)
 
         db_session.commit()
+        invalidate_provider_listing_cache()
     except HTTPException:
         raise
     except ValueError as e:

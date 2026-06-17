@@ -1,6 +1,6 @@
 "use client";
 
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import ImageGenerationContent from "@/refresh-pages/admin/ImageGenerationPage/ImageGenerationContent";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 

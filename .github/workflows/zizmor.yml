@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 45
     permissions:
+      contents: read # needed to checkout the repo on private repos (no-op on public)
       security-events: write # needed for SARIF uploads
     steps:
       - name: Checkout repository
@@ -29,8 +30,11 @@ jobs:
           enable-cache: false
           version: "0.9.9"
 
+      - name: Install zizmor from uv.lock
+        run: uv sync --frozen --no-install-project --only-group zizmor
+
       - name: Run zizmor
-        run: uv run --no-sync --with zizmor zizmor --format=sarif . > results.sarif
+        run: uv run --no-sync zizmor --format=sarif . > results.sarif
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

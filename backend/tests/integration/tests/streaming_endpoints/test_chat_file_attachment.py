@@ -1,9 +1,8 @@
 import mimetypes
 from typing import Any
 
-import requests
-
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -89,7 +88,7 @@ def test_send_message_with_text_file_attachment(admin_user: DATestUser) -> None:
 
 def _set_token_threshold(admin_user: DATestUser, threshold_k: int) -> None:
     """Set the file token count threshold via admin settings API."""
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/settings",
         json={"file_token_count_threshold_k": threshold_k},
         headers=admin_user.headers,
@@ -107,7 +106,7 @@ def _upload_raw(
     headers = user.headers.copy()
     headers.pop("Content-Type", None)
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/user/projects/file/upload",
         files=[("files", (filename, content, mime_type or "application/octet-stream"))],
         headers=headers,

@@ -1,4 +1,5 @@
 from sqlalchemy import delete
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
@@ -680,6 +681,29 @@ def remove_llm_provider(
 
     for persona in get_personas_using_provider(db_session, provider_id):
         persona.default_model_configuration_id = None
+
+    # Clear personal default models referencing this provider. They are stored
+    # as "<provider display name>__<provider type>__<model name>" strings, so
+    # they'd otherwise dangle forever and silently resolve to an arbitrary
+    # provider in the UI instead of the global default. Display names are not
+    # unique at the DB level, so include the provider type in the match.
+    # Nameless providers have been serialized with either an empty display
+    # name or the provider id depending on the frontend writer, so match both.
+    display_names = [provider.name] if provider.name else ["", str(provider.id)]
+    db_session.execute(
+        update(User)
+        .where(
+            or_(
+                *(
+                    User.default_model.startswith(
+                        f"{display_name}__{provider.provider}__", autoescape=True
+                    )
+                    for display_name in display_names
+                )
+            )
+        )
+        .values(default_model=None)
+    )
 
     db_session.execute(
         delete(LLMProvider__UserGroup).where(

@@ -514,7 +514,7 @@ func parseTraceSelection(input string, max int) []int {
 }
 
 // openTraces opens the selected traces with playwright show-trace,
-// running npx from the web/ directory to use the project's Playwright version.
+// running bunx from the web/ directory to use the project's Playwright version.
 func openTraces(traces []traceInfo) {
 	tracePaths := make([]string, len(traces))
 	for i, t := range traces {
@@ -524,7 +524,7 @@ func openTraces(traces []traceInfo) {
 	args := append([]string{"playwright", "show-trace"}, tracePaths...)
 
 	log.Infof("Opening %d trace(s) with playwright show-trace...", len(traces))
-	cmd := exec.Command("npx", args...)
+	cmd := exec.Command("bunx", args...)
 
 	// Run from web/ to pick up the locally-installed Playwright version
 	if root, err := paths.GitRoot(); err == nil {
@@ -543,7 +543,7 @@ func openTraces(traces []traceInfo) {
 			log.Debugf("playwright exited with code %d", exitErr.ExitCode())
 			return
 		}
-		log.Errorf("playwright show-trace failed: %v\nMake sure Playwright is installed (npx playwright install)", err)
+		log.Errorf("playwright show-trace failed: %v\nMake sure Playwright is installed (bunx playwright install)", err)
 	}
 }
 

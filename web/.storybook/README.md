@@ -2,7 +2,7 @@
 
 Storybook is an isolated development environment for UI components. It renders each component in a standalone "story" outside of the main app, so you can visually verify appearance, interact with props, and catch regressions without navigating through the full application.
 
-The Onyx Storybook covers the full component library — from low-level `@opal/core` primitives up through `refresh-components` — giving designers and engineers a shared reference for every visual state.
+The Onyx Storybook covers the full component library — from low-level `@opal/core` primitives up through `refresh-components`, and selected per-app feature components under `Apps/` — giving designers and engineers a shared reference for every visual state.
 
 **Production:** [onyx-storybook.vercel.app](https://onyx-storybook.vercel.app)
 
@@ -10,8 +10,8 @@ The Onyx Storybook covers the full component library — from low-level `@opal/c
 
 ```bash
 cd web
-npm run storybook        # dev server on http://localhost:6006
-npm run storybook:build  # static build to storybook-static/
+bun run storybook        # dev server on http://localhost:6006
+bun run storybook:build  # static build to storybook-static/
 ```
 
 The dev server hot-reloads when you edit a component or story file.
@@ -53,7 +53,7 @@ export const Default: Story = {
 
 ### Conventions
 
-- **Title format:** `Core/Name`, `Components/Name`, `Layouts/Name`, or `refresh-components/category/Name`
+- **Title format:** `Core/Name`, `Components/Name`, `Layouts/Name`, `refresh-components/category/Name`, or `Apps/<App>/<Category>/<Name>`
 - **Tags:** Add `tags: ["autodocs"]` to auto-generate a props docs page
 - **Decorators:** Components that use Radix tooltips need a `TooltipPrimitive.Provider` decorator
 - **Layout:** Use `parameters: { layout: "fullscreen" }` for modals/popovers that use portals
@@ -64,9 +64,9 @@ Use the theme toggle (paint roller icon) in the Storybook toolbar to switch betw
 
 ## Deployment
 
-The production Storybook is deployed as a static site on Vercel. The build runs `npm run storybook:build` which outputs to `storybook-static/`, and Vercel serves that directory.
+The production Storybook is deployed as a static site on Vercel. The build runs `bun run storybook:build` which outputs to `storybook-static/`, and Vercel serves that directory.
 
-Deploys are triggered on merges to `main` when files in `web/lib/opal/`, `web/src/refresh-components/`, or `web/.storybook/` change.
+Deploys are triggered on merges to `main` when files in `web/lib/opal/`, `web/src/refresh-components/`, `web/.storybook/`, or any `Apps/`-layer source path change.
 
 ## Component Layers
 
@@ -78,3 +78,13 @@ The sidebar organizes components by their layer in the design system:
 | **Components** | `lib/opal/src/components/` | Button, OpenButton, Tag |
 | **Layouts** | `lib/opal/src/layouts/` | Content, ContentAction, IllustrationContent |
 | **refresh-components** | `src/refresh-components/` | Inputs, tables, modals, text, cards, tiles, etc. |
+| **Apps** | `src/app/<app>/...` | Per-app feature components |
+
+### Apps layer
+
+The `Apps/` layer is a deliberately bounded extension of the catalog: feature components that have **multi-state visual contracts** (statuses, variants, kinds) and are **data-driven** (take props, don't fetch) earn a story. Components that orchestrate state — fetch data, manage SWR, own context — stay out of Storybook; they belong in the running app.
+
+Current coverage:
+- `Apps/Craft/` - components built specifically for Craft's UI
+
+Title format: `Apps/<App>/<Category>/<Name>`, e.g. `Apps/Craft/Tool Cards/Bash Body`.

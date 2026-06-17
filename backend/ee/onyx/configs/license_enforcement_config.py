@@ -12,6 +12,9 @@ Two related concerns live here, both consumed by the `tier_gate` middleware:
 
 Import these constants in both production code and tests to ensure
 consistency.
+
+Multi-tenant cloud gating lives in `multi_tenant_gating_config.py` and is
+deliberately separate — cloud uses subscriptions, not licenses.
 """
 
 from onyx.server.settings.models import Tier

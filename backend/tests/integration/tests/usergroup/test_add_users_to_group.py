@@ -2,9 +2,9 @@ import os
 from uuid import uuid4
 
 import pytest
-import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -15,9 +15,8 @@ from tests.integration.common_utils.test_models import DATestUserGroup
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
-def test_add_users_to_group(reset: None) -> None:  # noqa: ARG001
-    admin_user: DATestUser = UserManager.create(name="admin_for_add_user")
-    user_to_add: DATestUser = UserManager.create(name="basic_user_to_add")
+def test_add_users_to_group(admin_user: DATestUser) -> None:
+    user_to_add: DATestUser = UserManager.create()
 
     user_group: DATestUserGroup = UserGroupManager.create(
         name="add-user-test-group",
@@ -50,9 +49,7 @@ def test_add_users_to_group(reset: None) -> None:  # noqa: ARG001
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
-def test_add_users_to_group_invalid_user(reset: None) -> None:  # noqa: ARG001
-    admin_user: DATestUser = UserManager.create(name="admin_for_add_user_invalid")
-
+def test_add_users_to_group_invalid_user(admin_user: DATestUser) -> None:
     user_group: DATestUserGroup = UserGroupManager.create(
         name="add-user-invalid-test-group",
         user_ids=[admin_user.id],
@@ -60,7 +57,7 @@ def test_add_users_to_group_invalid_user(reset: None) -> None:  # noqa: ARG001
     )
 
     invalid_user_id = str(uuid4())
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/manage/admin/user-group/{user_group.id}/add-users",
         json={"user_ids": [invalid_user_id]},
         headers=admin_user.headers,

@@ -34,6 +34,9 @@ export interface Settings {
   temperature_override_enabled: boolean;
   query_history_type: QueryHistoryType;
 
+  // Visibility-only: hides the sidebar page; query-history APIs + recording stay on.
+  hide_query_history_from_admin_panel?: boolean;
+
   deep_research_enabled?: boolean;
   multi_model_chat_enabled?: boolean;
   search_ui_enabled?: boolean;
@@ -55,6 +58,12 @@ export interface Settings {
 
   // Onyx Craft (Build Mode) feature flag
   onyx_craft_enabled?: boolean;
+
+  // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
+  // button that streams the user's sandbox pod logs in real time. Backed
+  // by the ENABLE_OPENCODE_DEBUGGING env var on the server. Never set in
+  // production — the underlying SSE endpoint also gates on the env var.
+  opencode_debugging_enabled?: boolean;
 
   // Whether EE features are unlocked (user has a valid enterprise license).
   // Controls UI visibility of EE features like user groups, analytics, RBAC.

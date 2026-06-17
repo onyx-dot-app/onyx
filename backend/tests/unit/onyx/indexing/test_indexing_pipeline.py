@@ -239,15 +239,19 @@ def test_contextual_rag(
     assert "tag1" in chunks[0].metadata_suffix_keyword
     assert "tag2" in chunks[0].metadata_suffix_semantic
 
-    doc_summary = "Test1" if enable_contextual_rag else ""
-    chunk_context = ""
-    count = 2
-    for chunk in chunks:
-        if enable_contextual_rag:
-            chunk_context = f"Test{count}"
-            count += 1
-        assert chunk.doc_summary == doc_summary
-        assert chunk.chunk_context == chunk_context
+    # The doc summary is computed once (the first LLM call) and shared by every
+    # chunk. The per-chunk context calls then run in parallel
+    # (run_functions_tuples_in_parallel), so the mock's "TestN" counter is assigned
+    # to chunks in nondeterministic order — assert the SET of contexts rather than a
+    # per-chunk ordering.
+    if enable_contextual_rag:
+        assert all(chunk.doc_summary == "Test1" for chunk in chunks)
+        assert {chunk.chunk_context for chunk in chunks} == {
+            f"Test{n}" for n in range(2, 2 + len(chunks))
+        }
+    else:
+        assert all(chunk.doc_summary == "" for chunk in chunks)
+        assert all(chunk.chunk_context == "" for chunk in chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +318,23 @@ def _make_ctx() -> MagicMock:
     ctx.__enter__ = MagicMock(return_value=MagicMock())
     ctx.__exit__ = MagicMock(return_value=False)
     return ctx
+
+
+def test_document_push_skipped_when_from_beginning() -> None:
+    from onyx.indexing.indexing_pipeline import _maybe_push_documents
+
+    doc = _make_doc(doc_id="doc1")
+    with (
+        patch(_PATCH_MULTI_TENANT, False),
+        patch(_PATCH_EXECUTE_HOOK) as mock_hook,
+    ):
+        _maybe_push_documents(
+            _make_adapter(),
+            [doc],
+            _make_insertion_records(["doc1"]),
+            from_beginning=True,
+        )
+    mock_hook.assert_not_called()
 
 
 def test_document_push_skipped_in_multi_tenant_mode() -> None:

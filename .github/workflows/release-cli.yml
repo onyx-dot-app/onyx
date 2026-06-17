@@ -11,6 +11,7 @@ jobs:
     environment:
       name: release-cli
     permissions:
+      contents: read # needed to checkout the repo on private repos (no-op on public)
       id-token: write
     timeout-minutes: 10
     steps:
@@ -22,12 +23,29 @@ jobs:
           enable-cache: false
           version: "0.9.9"
       - run: |
-          for goos in linux windows darwin; do
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 uv build --wheel
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 ONYX_CLI_REUSE_BINARY=1 \
+            ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_x86_64 \
+            uv build --wheel
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 uv build --wheel
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 ONYX_CLI_REUSE_BINARY=1 \
+            ONYX_CLI_WHEEL_PLATFORM_TAG=musllinux_1_2_aarch64 \
+            uv build --wheel
+
+          for goos in windows darwin; do
             for goarch in amd64 arm64; do
               GOOS="$goos" GOARCH="$goarch" uv build --wheel
             done
           done
         working-directory: cli
+      - name: Upload built wheels
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: onyx-cli-wheels
+          path: cli/dist/*.whl
+          if-no-files-found: error
+          retention-days: 7
+
       - run: uv publish
         working-directory: cli
 
@@ -38,6 +56,7 @@ jobs:
       - run-id=${{ github.run_id }}-cli-amd64
     environment: deploy
     permissions:
+      contents: read # needed to checkout the repo on private repos (no-op on public)
       id-token: write
     timeout-minutes: 30
     outputs:
@@ -77,7 +96,7 @@ jobs:
 
       - name: Build and push AMD64
         id: build
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./cli
           file: ./cli/Dockerfile
@@ -93,6 +112,7 @@ jobs:
       - run-id=${{ github.run_id }}-cli-arm64
     environment: deploy
     permissions:
+      contents: read # needed to checkout the repo on private repos (no-op on public)
       id-token: write
     timeout-minutes: 30
     outputs:
@@ -132,7 +152,7 @@ jobs:
 
       - name: Build and push ARM64
         id: build
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./cli
           file: ./cli/Dockerfile
@@ -203,3 +223,93 @@ jobs:
               -t "${REGISTRY_IMAGE}:${SANITIZED_TAG}" \
               "${IMAGES[@]}"
           fi
+
+  govulncheck:
+    needs:
+      - pypi
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read # needed to download the wheel artifact from the release job
+      security-events: write # needed for SARIF uploads
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # ratchet:actions/download-artifact@v4
+        with:
+          name: onyx-cli-wheels
+          path: cli/dist
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: "1.26.4"
+          cache: false
+
+      - name: Install govulncheck
+        run: |
+          GOBIN="${RUNNER_TEMP}/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+          echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
+
+      - name: Run govulncheck on released wheel binaries
+        run: |
+          set -euo pipefail
+          scan_exit=0
+          mkdir -p wheel-binaries govulncheck-results/raw
+
+          for wheel in cli/dist/*.whl; do
+            wheel_name="$(basename "$wheel" .whl)"
+            if [[ "$wheel_name" == *-musllinux_* ]]; then
+              echo "Skipping duplicate static Linux binary scan for $wheel_name"
+              continue
+            fi
+
+            extract_dir="wheel-binaries/${wheel_name}"
+            sarif_file="govulncheck-results/raw/${wheel_name}.sarif"
+
+            unzip -q "$wheel" -d "$extract_dir"
+            binary="$(
+              find "$extract_dir" \
+                \( -path '*.data/scripts/onyx-cli' -o -path '*.data/scripts/onyx-cli.exe' \) \
+                -type f \
+                -print -quit
+            )"
+            if [ -z "$binary" ]; then
+              echo "No onyx-cli binary found in $wheel" >&2
+              exit 1
+            fi
+
+            if ! govulncheck -mode=binary -format=sarif "$binary" > "$sarif_file"; then
+              scan_exit=1
+            fi
+          done
+
+          python3 <<'PY'
+          import json
+          from pathlib import Path
+
+          raw_results_dir = Path("govulncheck-results/raw")
+          merged = {
+              "version": "2.1.0",
+              "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+              "runs": [],
+          }
+
+          for sarif_path in sorted(raw_results_dir.glob("*.sarif")):
+              data = json.loads(sarif_path.read_text())
+              for run in data.get("runs", []):
+                  run["automationDetails"] = {
+                      "id": f"onyx-cli-govulncheck/{sarif_path.stem}",
+                  }
+                  merged["runs"].append(run)
+
+          if not merged["runs"]:
+              raise SystemExit("No govulncheck SARIF runs were generated")
+
+          Path("govulncheck-results.sarif").write_text(json.dumps(merged))
+          PY
+
+          exit "$scan_exit"
+
+      - name: Upload govulncheck scan results to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab
+        with:
+          sarif_file: govulncheck-results.sarif

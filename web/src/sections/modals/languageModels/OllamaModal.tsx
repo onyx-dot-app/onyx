@@ -19,7 +19,7 @@ import {
   mergeFetchedModelConfigurations,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
@@ -28,8 +28,7 @@ import {
   ModalWrapper,
 } from "@/sections/modals/languageModels/shared";
 import { fetchOllamaModels } from "@/lib/languageModels/svc";
-import Tabs from "@/refresh-components/Tabs";
-import { Card } from "@opal/components";
+import { Card, Tabs } from "@opal/components";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -105,37 +104,39 @@ function OllamaModalInternals({
             </Tabs.Trigger>
             <Tabs.Trigger value={Tab.TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
           </Tabs.List>
-          <Tabs.Content value={Tab.TAB_SELF_HOSTED} padding={0}>
-            <InputVertical
-              withLabel="api_base"
-              title="API Base URL"
-              subDescription={
-                settings.is_containerized
-                  ? markdown(
-                      `The base URL for your Ollama instance. ${CONTAINERIZED_HOST_NOTE}`
-                    )
-                  : "The base URL for your Ollama instance."
-              }
-            >
-              <InputTypeInField
-                name="api_base"
-                placeholder="Your Ollama API base URL"
-              />
-            </InputVertical>
-          </Tabs.Content>
+          <div className="pt-4">
+            <Tabs.Content value={Tab.TAB_SELF_HOSTED}>
+              <InputVertical
+                withLabel="api_base"
+                title="API Base URL"
+                subDescription={
+                  settings.is_containerized
+                    ? markdown(
+                        `The base URL for your Ollama instance. ${CONTAINERIZED_HOST_NOTE}`
+                      )
+                    : "The base URL for your Ollama instance."
+                }
+              >
+                <InputTypeInField
+                  name="api_base"
+                  placeholder="Your Ollama API base URL"
+                />
+              </InputVertical>
+            </Tabs.Content>
 
-          <Tabs.Content value={Tab.TAB_CLOUD}>
-            <InputVertical
-              withLabel="custom_config.OLLAMA_API_KEY"
-              title="API Key"
-              subDescription="Your Ollama Cloud API key."
-            >
-              <PasswordInputTypeInField
-                name="custom_config.OLLAMA_API_KEY"
-                placeholder="API Key"
-              />
-            </InputVertical>
-          </Tabs.Content>
+            <Tabs.Content value={Tab.TAB_CLOUD}>
+              <InputVertical
+                withLabel="custom_config.OLLAMA_API_KEY"
+                title="API Key"
+                subDescription="Your Ollama Cloud API key."
+              >
+                <PasswordInputTypeInField
+                  name="custom_config.OLLAMA_API_KEY"
+                  placeholder="API Key"
+                />
+              </InputVertical>
+            </Tabs.Content>
+          </div>
         </Tabs>
       </Card>
 

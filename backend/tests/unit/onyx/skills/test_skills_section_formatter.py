@@ -1,52 +1,43 @@
 """Tests for the AGENTS.md skills section formatter."""
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
 from onyx.db.models import Skill
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_skills_section_from_data,
 )
-from onyx.skills.registry import BuiltinSkill
 
 
-def _builtin(slug: str, description: str = "desc") -> BuiltinSkill:
-    return BuiltinSkill(
-        slug=slug,
-        name=slug,
-        description=description,
-        source_dir=Path("/tmp/does-not-matter"),
-        has_template=False,
-    )
-
-
-def _custom(slug: str, description: str = "desc") -> Skill:
+def _row(slug: str, description: str = "desc") -> Skill:
     skill = MagicMock(spec=Skill)
     skill.slug = slug
     skill.description = description
     return skill
 
 
-def test_empty_inputs_render_no_skills_message() -> None:
-    assert build_skills_section_from_data([], []) == "No skills available."
+def test_empty_input_renders_no_skills_message() -> None:
+    assert build_skills_section_from_data([]) == "No skills available."
 
 
-def test_builtins_only_render_alphabetically() -> None:
-    section = build_skills_section_from_data([_builtin("zebra"), _builtin("alpha")], [])
-    lines = section.splitlines()
-    assert lines == [
+def test_rows_render_alphabetically_by_slug() -> None:
+    section = build_skills_section_from_data([_row("zebra"), _row("alpha")])
+    assert section.splitlines() == [
         "- **alpha**: desc",
         "- **zebra**: desc",
     ]
 
 
-def test_builtins_and_customs_interleaved_by_slug() -> None:
+def test_mixed_built_in_and_custom_rows_interleave_by_slug() -> None:
+    """Built-in and custom rows are indistinguishable in the section —
+    both contribute one bullet line via slug + truncated description."""
     section = build_skills_section_from_data(
-        [_builtin("pptx", "make decks")],
-        [_custom("aardvark", "find things"), _custom("zulu", "last")],
+        [
+            _row("pptx", "make decks"),
+            _row("aardvark", "find things"),
+            _row("zulu", "last"),
+        ]
     )
-    lines = section.splitlines()
-    assert lines == [
+    assert section.splitlines() == [
         "- **aardvark**: find things",
         "- **pptx**: make decks",
         "- **zulu**: last",
@@ -55,7 +46,7 @@ def test_builtins_and_customs_interleaved_by_slug() -> None:
 
 def test_long_descriptions_are_truncated() -> None:
     long = "x" * 200
-    section = build_skills_section_from_data([_builtin("s", long)], [])
+    section = build_skills_section_from_data([_row("s", long)])
     line = section.splitlines()[0]
     assert line.endswith("...")
     assert len(line) <= len("- **s**: ") + 120

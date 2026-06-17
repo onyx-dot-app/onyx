@@ -1,0 +1,19 @@
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+  ports:
+    - name: proxy
+      port: {{ include "onyx.sandboxProxyPort" . }}
+      targetPort: proxy
+      protocol: TCP
+{{- end }}

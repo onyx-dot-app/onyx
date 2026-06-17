@@ -22,6 +22,7 @@ from onyx.context.search.utils import sandbox_filename_for_document
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_or_create_root_message
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import is_kg_config_settings_enabled_valid
 from onyx.db.models import ChatMessage
@@ -142,7 +143,7 @@ def create_chat_session_from_request(
 
     persona_id = chat_session_request.persona_id
     if persona_id != DEFAULT_PERSONA_ID:
-        if not user_can_access_persona(
+        if not user.is_anonymous and not user_can_access_persona(
             db_session=db_session,
             persona_id=persona_id,
             user=user,
@@ -386,10 +387,15 @@ def _get_or_extract_plaintext(
     except Exception:
         logger.info("Cache miss for file with id=%s", file_id)
 
-    # Cache miss — extract and store.
+    # Cache miss — extract and store.  We cache the result unconditionally
+    # (including the empty string) so that files we cannot extract text from
+    # (e.g. .zip, or any extension without a handler in extract_file_text)
+    # don't get re-fetched from object storage and re-attempted on every
+    # subsequent chat turn.  Transient extraction errors surface as raised
+    # exceptions, not empty returns, so they propagate without poisoning the
+    # cache.
     content_text = extract_fn()
-    if content_text:
-        store_plaintext(file_id, content_text)
+    store_plaintext(file_id, content_text)
     return content_text
 
 
@@ -397,22 +403,38 @@ def _get_or_extract_plaintext(
 def load_chat_file(
     file_descriptor: FileDescriptor, db_session: Session
 ) -> ChatLoadedFile:
-    file_io = get_default_file_store().read_file(file_descriptor["id"], mode="b")
-    content = file_io.read()
+    """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
 
-    # Extract text content if it's a text file type (not an image)
-    content_text = None
+    Chat sessions accumulate hundreds of files over time, and a new message
+    sent in such a session previously triggered an unbounded parallel fan-out
+    of full-bytes-into-memory reads, the vast majority of which were
+    immediately discarded by chat-history truncation. We now defer the raw
+    bytes read until something downstream actually accesses ``.content`` —
+    typically only a handful of files survive truncation per turn.
+
+    ``content_text`` (used for LLM context injection) and ``token_count``
+    remain eager because they're cheap: the cached-plaintext store hit avoids
+    reading the original bytes entirely on the common path, and token_count
+    is a single DB lookup.
+    """
+    file_id = file_descriptor["id"]
     # `FileDescriptor` is often JSON-roundtripped (e.g. JSONB / API), so `type`
     # may arrive as a raw string value instead of a `ChatFileType`.
     file_type = ChatFileType(file_descriptor["type"])
+    filename = file_descriptor.get("name")
 
+    # Extract text content if it's a text file type (not an image). The
+    # cached-plaintext path avoids reading the original bytes on the steady
+    # state; only the cache miss branch opens the binary stream.
+    content_text: str | None = None
     if file_type.is_text_file():
-        file_id = file_descriptor["id"]
 
         def _extract() -> str:
+            # Only invoked on cache miss; bytes-read happens here, not upfront.
+            file_io = get_default_file_store().read_file(file_id, mode="b")
             return extract_file_text(
                 file=file_io,
-                file_name=file_descriptor.get("name") or "",
+                file_name=filename or "",
                 break_on_unprocessable=False,
             )
 
@@ -427,7 +449,7 @@ def load_chat_file(
         except Exception as e:
             logger.warning(
                 "Failed to retrieve content for file %s: %s",
-                file_descriptor["id"],
+                file_id,
                 str(e),
             )
 
@@ -443,25 +465,56 @@ def load_chat_file(
             if user_file and user_file.token_count:
                 token_count = user_file.token_count
         except (ValueError, TypeError) as e:
-            logger.warning(
-                "Failed to get token count for file %s: %s", file_descriptor["id"], e
-            )
+            logger.warning("Failed to get token count for file %s: %s", file_id, e)
 
-    return ChatLoadedFile(
-        file_id=file_descriptor["id"],
-        content=content,
+    def _load_content() -> bytes:
+        # Chat messages keep file references in their JSONB `files` column, but
+        # user-file deletion does not scrub those references — a file in the
+        # history may no longer exist in the file store. Since this loader runs
+        # lazily (on first `.content` access, often mid-LLM-flow), a raised
+        # exception here would kill the whole send-message request, so degrade
+        # to empty content instead. Deletion is expected and logs at warning;
+        # anything else (e.g. transient object-store failure) logs at error so
+        # outages remain distinguishable in alerting.
+        try:
+            return get_default_file_store().read_file(file_id, mode="b").read()
+        except FileRecordNotFoundError:
+            logger.warning(
+                "Chat file %s no longer exists (deleted after being referenced "
+                "in chat history); substituting empty content",
+                file_id,
+            )
+            return b""
+        except Exception:
+            logger.error(
+                "Unexpected error loading content for chat file %s; "
+                "substituting empty content",
+                file_id,
+                exc_info=True,
+            )
+            return b""
+
+    return ChatLoadedFile.lazy_loaded(
+        file_id=file_id,
         file_type=file_type,
-        filename=file_descriptor.get("name"),
+        filename=filename,
         content_text=content_text,
         token_count=token_count,
+        loader=_load_content,
     )
+
+
+_MAX_PARALLEL_CHAT_FILE_LOADS = 16
 
 
 def load_all_chat_files(
     chat_messages: list[ChatMessage],
     db_session: Session,
 ) -> list[ChatLoadedFile]:
-    # TODO There is likely a more efficient/standard way to load the files here.
+    # Returns lazy ChatLoadedFile instances — raw bytes are not read here.
+    # Defense-in-depth: even though per-file work is now cheap (DB lookup +
+    # optional cached-plaintext fetch), cap fan-out so no future regression
+    # can re-introduce a 500-thread storm.
     file_descriptors_for_history: list[FileDescriptor] = []
     for chat_message in chat_messages:
         if chat_message.files:
@@ -473,7 +526,8 @@ def load_all_chat_files(
             [
                 (load_chat_file, (file, db_session))
                 for file in file_descriptors_for_history
-            ]
+            ],
+            max_workers=_MAX_PARALLEL_CHAT_FILE_LOADS,
         ),
     )
     return files

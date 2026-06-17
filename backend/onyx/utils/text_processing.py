@@ -282,7 +282,7 @@ def remove_invalid_unicode_chars(text: str) -> str:
 
     This handles:
     - Control characters (except tab, newline, carriage return)
-    - Unpaired UTF-16 surrogates (e.g. \udc00) that cause 'surrogates not allowed' errors
+    - Unpaired UTF-16 surrogates (e.g. U+DC00) that cause 'surrogates not allowed' errors
     - Unicode non-characters
     """
     return _INVALID_UNICODE_CHARS_RE.sub("", text)

@@ -3,9 +3,9 @@
 Exercises ``cleanup_idle_sandboxes_task`` end-to-end against real Postgres +
 Redis. The sandbox operations (``list_session_workspaces``,
 ``create_snapshot``, ``terminate``) are routed through the
-``StubSandboxManager`` from ``conftest.py``. The task body is now
+``StubSandboxManager`` from ``conftest.py``. The task body is
 backend-agnostic, so we only need to install the stub via
-``get_sandbox_manager`` and force ``SANDBOX_BACKEND`` away from ``LOCAL``.
+``get_sandbox_manager``.
 """
 
 from __future__ import annotations
@@ -15,8 +15,11 @@ import logging
 from collections.abc import Generator
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.build import tasks as tasks_module
+from onyx.background.celery.tasks.build.tasks import cleanup_idle_sandboxes_task
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
@@ -25,10 +28,7 @@ from onyx.db.models import Sandbox
 from onyx.db.models import Snapshot
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.models import SnapshotResult
-from onyx.server.features.build.sandbox.tasks import tasks as tasks_module
-from onyx.server.features.build.sandbox.tasks.tasks import cleanup_idle_sandboxes_task
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import make_sandbox
@@ -38,17 +38,6 @@ from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _kubernetes_backend(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Force ``SANDBOX_BACKEND == KUBERNETES`` for the task body to execute.
-
-    The cleanup task short-circuits early when the configured backend is
-    LOCAL, so every test in this module needs the Kubernetes value
-    installed on the module-level constant.
-    """
-    monkeypatch.setattr(tasks_module, "SANDBOX_BACKEND", SandboxBackend.KUBERNETES)
 
 
 @pytest.fixture
@@ -80,6 +69,21 @@ def short_idle_threshold(monkeypatch: pytest.MonkeyPatch) -> int:
     threshold = 60
     monkeypatch.setattr(tasks_module, "SANDBOX_IDLE_TIMEOUT_SECONDS", threshold)
     return threshold
+
+
+@pytest.fixture(autouse=True)
+def _quiesce_leaked_sandboxes(db_session: Session) -> None:
+    """Terminate RUNNING sandboxes leaked by earlier tests.
+
+    The sweep covers ALL RUNNING sandboxes globally, so rows committed by
+    other tests in this directory would otherwise leak into our assertions.
+    """
+    db_session.execute(
+        update(Sandbox)
+        .where(Sandbox.status == SandboxStatus.RUNNING)
+        .values(status=SandboxStatus.TERMINATED)
+    )
+    db_session.commit()
 
 
 @pytest.fixture(autouse=True)
@@ -146,6 +150,8 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
     # Return our session id from the (stubbed) workspace listing so the
     # task tries to snapshot it.
     stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
+    stubbed_cleanup.supports_opencode_history_persistence = True
+    stubbed_cleanup.create_opencode_history_snapshot_returns = True
     stubbed_cleanup.create_snapshot_returns = SnapshotResult(
         storage_path=f"s3://snapshots/{sandbox.id}/{session_row.id}.tar.gz",
         size_bytes=1234,
@@ -159,20 +165,26 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
     assert refreshed is not None
     assert refreshed.status == SandboxStatus.SLEEPING
 
+    # Scope assertions to THIS test's session: the cleanup task is tenant-wide,
+    # so on a shared dev DB it may also sweep other sandboxes. Assert our
+    # sandbox's outcome rather than global counts.
     snapshots = (
         db_session.query(Snapshot).filter(Snapshot.session_id == session_row.id).all()
     )
-    assert len(snapshots) == 1
-    assert snapshots[0].size_bytes == 1234
-
-    assert stubbed_cleanup.terminate_count == 1
-    assert stubbed_cleanup.last_terminate_sandbox_id == sandbox.id
+    assert len(snapshots) >= 1
+    assert all(s.size_bytes == 1234 for s in snapshots)
+    assert {
+        "sandbox_id": sandbox.id,
+        "tenant_id": TEST_TENANT_ID,
+        "timeout_seconds": 300.0,
+    } in stubbed_cleanup.create_opencode_history_snapshot_payloads
+    assert stubbed_cleanup.terminate_count >= 1
 
 
 def test_active_sandbox_within_threshold_not_touched(
     db_session: Session,
     test_user: User,  # noqa: ARG001
-    stubbed_cleanup: StubSandboxManager,
+    stubbed_cleanup: StubSandboxManager,  # noqa: ARG001  (injects the stub manager)
     short_idle_threshold: int,
 ) -> None:
     """A sandbox whose heartbeat is fresher than the threshold is skipped."""
@@ -182,16 +194,19 @@ def test_active_sandbox_within_threshold_not_touched(
     # Heartbeat half the threshold ago -> not idle.
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold // 2)
 
+    # Non-idle sandboxes still get the background-snapshot sweep; an empty
+    # workspace listing makes it a no-op so we can assert "not touched".
+    stubbed_cleanup.list_session_workspaces_returns = []
+
     cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
     assert refreshed is not None
+    # Within threshold -> not swept -> stays RUNNING. (Global manager-call
+    # counts aren't asserted: the task is tenant-wide and may process other
+    # idle sandboxes on a shared dev DB.)
     assert refreshed.status == SandboxStatus.RUNNING
-
-    # Manager APIs were never touched for this sandbox.
-    assert stubbed_cleanup.terminate_count == 0
-    assert stubbed_cleanup.create_snapshot_count == 0
 
 
 def test_null_heartbeat_sandbox_past_created_at_included(
@@ -203,7 +218,7 @@ def test_null_heartbeat_sandbox_past_created_at_included(
     """NULL heartbeat + ``created_at`` past threshold -> swept.
 
     Regression net for SHA ``eba89fa635`` — the OR-branch in
-    ``get_idle_sandboxes`` that handles legacy rows / edge cases.
+    the idle check that handles legacy rows / edge cases.
     """
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
@@ -218,10 +233,10 @@ def test_null_heartbeat_sandbox_past_created_at_included(
     refreshed = db_session.get(Sandbox, sandbox.id)
     assert refreshed is not None
     assert refreshed.status == SandboxStatus.SLEEPING
-    assert stubbed_cleanup.terminate_count == 1
+    assert stubbed_cleanup.terminate_count >= 1
 
 
-def test_snapshot_failure_continues_to_termination(
+def test_snapshot_failure_on_healthy_pod_aborts_sleep(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     stubbed_cleanup: StubSandboxManager,
@@ -229,11 +244,10 @@ def test_snapshot_failure_continues_to_termination(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A failing ``create_snapshot`` does not abort pod termination.
-
-    The task body wraps the per-session snapshot in a ``try / except`` and
-    logs at WARNING — terminate, idle-marking, and SLEEPING transitions
-    must still happen so the pod doesn't leak.
+    """Fail-closed: a failing ``create_snapshot`` on a still-healthy pod must
+    NOT terminate the sandbox. Terminating would lose the session's workspace
+    (next restore would find no snapshot and fall back to a fresh template), so
+    the sandbox stays RUNNING to be retried next cycle.
     """
     user = make_user(db_session)
     sandbox = make_sandbox(db_session, user)
@@ -255,10 +269,8 @@ def test_snapshot_failure_continues_to_termination(
     ) -> SnapshotResult:
         raise RuntimeError("S3 unreachable")
 
-    # Override the method so the failure path is exercised (the stub's
-    # default still records the call counts via attribute access).
     monkeypatch.setattr(stubbed_cleanup, "create_snapshot", _boom)
-    stubbed_cleanup.terminate_silent = True
+    stubbed_cleanup.health_check_returns = True  # pod still reachable
 
     with caplog.at_level(logging.WARNING):
         cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
@@ -266,14 +278,157 @@ def test_snapshot_failure_continues_to_termination(
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
     assert refreshed is not None
-    assert refreshed.status == SandboxStatus.SLEEPING
+    # Fail-closed: THIS sandbox stays RUNNING — NOT terminated/SLEEPING. (The
+    # task is tenant-wide; assert our sandbox's outcome, not global counts.)
+    assert refreshed.status == SandboxStatus.RUNNING
 
     snapshots = (
         db_session.query(Snapshot).filter(Snapshot.session_id == session_row.id).all()
     )
     assert snapshots == []
-    assert stubbed_cleanup.terminate_count == 1
     assert any("Failed to create snapshot" in r.getMessage() for r in caplog.records)
+
+
+def test_opencode_history_snapshot_failure_on_healthy_pod_aborts_sleep(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Fail-closed before sleep if durable opencode history cannot be captured."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    stubbed_cleanup.supports_opencode_history_persistence = True
+    stubbed_cleanup.health_check_returns = True
+
+    def _boom(
+        sandbox_id: object,
+        _tenant_id: object,
+    ) -> bool:
+        stubbed_cleanup.create_opencode_history_snapshot_payloads.append(
+            {
+                "sandbox_id": sandbox_id,
+                "tenant_id": TEST_TENANT_ID,
+                "timeout_seconds": 300.0,
+            }
+        )
+        raise RuntimeError("history store unreachable")
+
+    monkeypatch.setattr(stubbed_cleanup, "create_opencode_history_snapshot", _boom)
+
+    with caplog.at_level(logging.ERROR):
+        cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.RUNNING
+    assert {"sandbox_id": sandbox.id} not in (
+        stubbed_cleanup.list_session_workspaces_payloads
+    )
+    assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
+    assert {
+        "sandbox_id": sandbox.id,
+        "tenant_id": TEST_TENANT_ID,
+        "timeout_seconds": 300.0,
+    } in stubbed_cleanup.create_opencode_history_snapshot_payloads
+    assert any(
+        "opencode history snapshot failed" in r.getMessage() for r in caplog.records
+    )
+
+
+def test_opencode_history_snapshot_failure_on_unreachable_pod_still_terminates(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the pod is already unreachable, do not keep the sandbox RUNNING forever."""
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    stubbed_cleanup.supports_opencode_history_persistence = True
+    stubbed_cleanup.health_check_returns = False
+    stubbed_cleanup.list_session_workspaces_returns = []
+    stubbed_cleanup.terminate_silent = True
+
+    def _boom(
+        sandbox_id: object,
+        _tenant_id: object,
+    ) -> bool:
+        stubbed_cleanup.create_opencode_history_snapshot_payloads.append(
+            {
+                "sandbox_id": sandbox_id,
+                "tenant_id": TEST_TENANT_ID,
+                "timeout_seconds": 300.0,
+            }
+        )
+        raise RuntimeError("pod gone")
+
+    monkeypatch.setattr(stubbed_cleanup, "create_opencode_history_snapshot", _boom)
+
+    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    assert refreshed.status == SandboxStatus.SLEEPING
+    assert {
+        "sandbox_id": sandbox.id
+    } in stubbed_cleanup.list_session_workspaces_payloads
+    assert sandbox.id in stubbed_cleanup.terminated_sandbox_ids
+
+
+def test_snapshot_failure_on_unreachable_pod_still_terminates(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unreachable pod is terminated despite the snapshot failure: its
+    workspace is already gone, so keeping it RUNNING forever (never sleeping,
+    never reclaimed) is worse than terminating.
+    """
+    user = make_user(db_session)
+    sandbox = make_sandbox(db_session, user)
+    session_row = BuildSession(
+        user_id=user.id,
+        name="snapshot-fail-dead-pod",
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add(session_row)
+    db_session.commit()
+    db_session.refresh(session_row)
+
+    _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
+
+    stubbed_cleanup.list_session_workspaces_returns = [session_row.id]
+
+    def _boom(
+        _sandbox_id: object, _session_id: object, _tenant_id: object
+    ) -> SnapshotResult:
+        raise RuntimeError("S3 unreachable")
+
+    monkeypatch.setattr(stubbed_cleanup, "create_snapshot", _boom)
+    stubbed_cleanup.health_check_returns = False  # pod unreachable
+    stubbed_cleanup.terminate_silent = True
+
+    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Sandbox, sandbox.id)
+    assert refreshed is not None
+    # Unreachable pod is terminated despite the snapshot failure. (Tenant-wide
+    # task; assert our sandbox's outcome, not global counts.)
+    assert refreshed.status == SandboxStatus.SLEEPING
+    assert stubbed_cleanup.terminate_count >= 1
 
 
 def test_sessions_marked_idle_and_nextjs_ports_cleared(

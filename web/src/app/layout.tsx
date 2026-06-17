@@ -2,22 +2,22 @@ import "./globals.css";
 
 import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
 import { Metadata } from "next";
-
 import AppProvider from "@/providers/AppProvider";
 import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
-import { Suspense } from "react";
-import PostHogPageView from "./PostHogPageView";
+import {
+  PostHogPageTracker,
+  CustomAnalyticsScript,
+  WebVitals,
+} from "@/lib/analytics/shared";
 import Script from "next/script";
 import { DM_Mono, Hanken_Grotesk } from "next/font/google";
-import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/AppHealthBanner";
 import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
-import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
 
@@ -61,11 +61,11 @@ export const metadata: Metadata = {
 // all data is fetched client-side via SWR in the provider tree.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
-  children,
-}: {
+interface LayoutProps {
   children: React.ReactNode;
-}) {
+}
+
+export default function Layout({ children }: LayoutProps) {
   return (
     <html
       lang="en"
@@ -111,9 +111,7 @@ export default function RootLayout({
                   <AppProvider>
                     <DynamicMetadata />
                     <CustomAnalyticsScript />
-                    <Suspense fallback={null}>
-                      <PostHogPageView />
-                    </Suspense>
+                    <PostHogPageTracker />
                     <div id={MODAL_ROOT_ID} className="h-screen w-screen">
                       <ProductGatingWrapper>{children}</ProductGatingWrapper>
                     </div>

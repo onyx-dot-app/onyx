@@ -27,7 +27,7 @@ ods dev up
 ods dev into
 
 # Run a command
-ods dev exec npm test
+ods dev exec bun run test
 
 # Stop the container
 ods dev stop
@@ -72,6 +72,18 @@ user has read/write access to the bind-mounted workspace:
 
   To override the auto-detection, set `DEVCONTAINER_REMOTE_USER` before running
   `ods dev up`.
+
+## Claude Code memory (devcontainer overlay)
+
+`.devcontainer/claude-code/CLAUDE.md` holds Claude Code instructions that apply **only inside
+the container** (e.g. service hostnames, "no Docker daemon in here"). It is bind-mounted
+read-only to `/etc/claude-code/CLAUDE.md` — Claude Code's managed-policy memory location — so it
+loads automatically alongside the project's root `CLAUDE.md`.
+
+Because it is a live bind mount, editing the file in the repo takes effect on the next Claude
+Code session — no image rebuild or container restart required. The directory (rather than the
+single file) is mounted so that atomic-save editors don't detach the mount, and so additional
+managed config (e.g. `managed-settings.json`) can be dropped in alongside it later.
 
 ## Firewall
 

@@ -7,6 +7,8 @@ export interface ModelConfiguration {
   max_input_tokens: number | null;
   supports_image_input: boolean;
   supports_reasoning: boolean;
+  /** True when this is the provider's recommended default model. */
+  is_recommended_default?: boolean;
   display_name?: string;
   /** Admin-set override that takes precedence over display_name everywhere in the UI. */
   custom_display_name?: string;
@@ -14,6 +16,13 @@ export interface ModelConfiguration {
   vendor?: string;
   version?: string;
   region?: string;
+  /**
+   * Frontend-derived. Always populated by the SWR hooks before data reaches
+   * any consumer. Resolution order: custom_display_name → display_name → name.
+   * Use this field everywhere a model name is rendered — never read
+   * custom_display_name / display_name / name directly for display purposes.
+   */
+  effectiveDisplayName: string;
 }
 
 export enum LLMProviderName {

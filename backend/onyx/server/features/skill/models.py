@@ -11,10 +11,18 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill
 from onyx.db.skill import SkillPatch
-from onyx.skills.registry import BuiltinSkill
+from onyx.skills.built_in import BuiltInSkillDefinition
 
 
 class BuiltinSkillResponse(BaseModel):
+    """A built-in skill — backed by a ``skill`` row whose
+    ``built_in_skill_id`` references a definition in
+    ``onyx.skills.built_in.BUILT_IN_SKILLS``. Display fields come from
+    the row; ``is_available`` / ``unavailable_reason`` come from the
+    codified definition. Built-ins are not admin-mutable, so lifecycle
+    fields (``enabled``, ``is_public``, group grants) are not part of
+    this response — they're row-level implementation detail."""
+
     source: Literal["builtin"] = "builtin"
     slug: str
     name: str
@@ -23,15 +31,18 @@ class BuiltinSkillResponse(BaseModel):
     unavailable_reason: str | None = None
 
     @classmethod
-    def from_builtin(
-        cls, skill: BuiltinSkill, db_session: Session
+    def from_row(
+        cls,
+        skill: Skill,
+        definition: BuiltInSkillDefinition,
+        db_session: Session,
     ) -> "BuiltinSkillResponse":
         return cls(
             slug=skill.slug,
             name=skill.name,
             description=skill.description,
-            is_available=skill.is_available(db_session),
-            unavailable_reason=skill.unavailable_reason,
+            is_available=definition.is_available(db_session),
+            unavailable_reason=definition.unavailable_reason,
         )
 
 
@@ -48,9 +59,23 @@ class CustomSkillResponse(BaseModel):
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
     granted_group_ids: list[int] = []
+    is_personal: bool
 
     @classmethod
-    def from_model(cls, skill: Skill, group_ids: list[int]) -> "CustomSkillResponse":
+    def from_model(
+        cls,
+        skill: Skill,
+        group_ids: list[int],
+        *,
+        has_grants: bool | None = None,
+    ) -> "CustomSkillResponse":
+        # Paths that withhold group ids from the response (user-facing) must
+        # still pass grant existence so grants-shared skills aren't marked
+        # personal.
+        grants_exist = bool(group_ids) if has_grants is None else has_grants
+        is_personal = (
+            skill.built_in_skill_id is None and not skill.is_public and not grants_exist
+        )
         return cls(
             id=skill.id,
             slug=skill.slug,
@@ -63,6 +88,7 @@ class CustomSkillResponse(BaseModel):
             created_at=skill.created_at,
             updated_at=skill.updated_at,
             granted_group_ids=group_ids,
+            is_personal=is_personal,
         )
 
 
@@ -87,6 +113,13 @@ class SkillPatchRequest(BaseModel):
 
     def to_domain(self) -> SkillPatch:
         return SkillPatch(**{f: getattr(self, f) for f in self.model_fields_set})
+
+
+class PersonalSkillPatchRequest(BaseModel):
+    """User-endpoint patch: ``enabled`` only. ``is_public`` is the promotion
+    seam and stays admin-only."""
+
+    enabled: bool
 
 
 class GrantsReplace(BaseModel):

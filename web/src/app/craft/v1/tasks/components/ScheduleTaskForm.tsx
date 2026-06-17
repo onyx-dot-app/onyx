@@ -2,20 +2,27 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { Button, Divider, InputTypeIn, Text } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
-import { Button, Divider } from "@opal/components";
-import Card from "@/refresh-components/cards/Card";
-import { Section } from "@/layouts/general-layouts";
+import { Disabled } from "@opal/core";
+import { SettingsLayouts, InputVertical } from "@opal/layouts";
+import * as GeneralLayouts from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
-import { compileToCron, computeNextRuns } from "@/app/craft/v1/tasks/schedule";
-import SkillPickerPopover from "@/sections/input/SkillPickerPopover";
+import PreApprovalPicker from "@/app/craft/v1/tasks/components/PreApprovalPicker";
+import {
+  compileLocalPayloadToUtcCron,
+  localPayloadToUtcPayload,
+} from "@/app/craft/v1/tasks/schedule";
+import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
-import { detectSlashTrigger, toPickerSkills } from "@/lib/skills/picker";
+import useUserExternalApps from "@/hooks/useUserExternalApps";
+import {
+  detectSlashTrigger,
+  toPickerSections,
+  type PickerEntry,
+} from "@/lib/skills/picker";
 import type {
   EditorMode,
   EditorPayload,
@@ -27,12 +34,6 @@ import {
   createScheduledTask,
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
-import {
-  formatAbsolute,
-  formatRelativeShort,
-  getBrowserTimezone,
-  getCommonTimezones,
-} from "@/app/craft/v1/tasks/utils";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
 
 export interface ScheduleTaskFormInitial {
@@ -42,32 +43,47 @@ export interface ScheduleTaskFormInitial {
   prompt: string;
   mode: EditorMode;
   payload: EditorPayload;
-  timezone: string;
+  preApprovedAppIds: number[];
 }
 
 interface ScheduleTaskFormProps {
   initial: ScheduleTaskFormInitial;
   /** Used to title the page / customize the submit button. */
   isEdit: boolean;
+  /** Title rendered in the settings header. */
+  title: string;
+  /** Optional sub-title rendered beneath the header title. */
+  description?: string;
+  /** Invoked when the back button is pressed. */
+  onBack: () => void;
 }
 
 export default function ScheduleTaskForm({
   initial,
   isEdit,
+  title,
+  description,
+  onBack,
 }: ScheduleTaskFormProps) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
-  const [timezone, setTimezone] = useState(initial.timezone);
+  const [preApprovedAppIds, setPreApprovedAppIds] = useState<number[]>(
+    initial.preApprovedAppIds
+  );
   const [saving, setSaving] = useState(false);
+  const [nameTouched, setNameTouched] = useState(false);
+  const [promptTouched, setPromptTouched] = useState(false);
 
-  // `/` skill picker state for the prompt field. Scoped to the trigger
-  // owner's accessible skills (same access query as `GET /skills`).
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
-  const pickerSkills = useMemo(() => toPickerSkills(skillsData), [skillsData]);
+  const { data: externalAppsData } = useUserExternalApps();
+  const pickerSections = useMemo(
+    () => toPickerSections(skillsData, externalAppsData),
+    [skillsData, externalAppsData]
+  );
   const [skillPicker, setSkillPicker] = useState<{
     open: boolean;
     anchorRect: DOMRect | null;
@@ -114,10 +130,15 @@ export default function ScheduleTaskForm({
   }, []);
 
   const handleSkillPickerSelect = useCallback(
-    (slug: string) => {
+    (entry: PickerEntry) => {
+      if (entry.kind === "app" && !entry.authenticated) {
+        setSkillPicker((s) => ({ ...s, open: false }));
+        router.push(`/craft/v1/apps?connect=${entry.slug}`);
+        return;
+      }
       setSkillPicker((prev) => {
         if (!prev.open) return prev;
-        const replacement = `/${slug} `;
+        const replacement = `/${entry.slug} `;
         const newPrompt =
           prompt.slice(0, prev.slashIndex) +
           replacement +
@@ -135,41 +156,46 @@ export default function ScheduleTaskForm({
         return { ...prev, open: false };
       });
     },
-    [prompt]
+    [prompt, router]
   );
 
-  const timezones = useMemo(() => getCommonTimezones(), []);
-  const compiled = compileToCron(mode, payload);
-
-  const nextRuns = useMemo(() => {
-    if (!compiled.ok) return [];
-    return computeNextRuns(compiled.cron, timezone, 3);
-  }, [compiled, timezone]);
+  const compiled = compileLocalPayloadToUtcCron(mode, payload);
 
   const trimmedName = name.trim();
   const trimmedPrompt = prompt.trim();
 
-  // Validation states surfaced to the user.
+  // Validation states. These gate submission regardless of interaction, but
+  // are only surfaced inline once the user has touched (blurred) the field so
+  // a pristine form doesn't render red on load.
   const nameError = trimmedName.length === 0 ? "Name is required." : null;
   const promptError = trimmedPrompt.length === 0 ? "Prompt is required." : null;
-  const tzError = !timezone ? "Timezone is required." : null;
   const scheduleError = !compiled.ok ? compiled.error : null;
 
-  const canSubmit =
-    !nameError && !promptError && !tzError && !scheduleError && !saving;
+  const shownNameError = nameTouched ? nameError : null;
+  const shownPromptError = promptTouched ? promptError : null;
+
+  const canSubmit = !nameError && !promptError && !scheduleError && !saving;
+
+  // Reason a submit button is blocked, surfaced via the `Disabled` wrapper's
+  // tooltip. A natively-disabled <button> is inert and never fires hover
+  // events, so the tooltip must live on the (interactive) wrapper instead.
+  const disabledReason = saving
+    ? "Saving..."
+    : (nameError ?? promptError ?? scheduleError ?? undefined);
 
   const submit = useCallback(
     async (runImmediately: boolean) => {
       if (!compiled.ok) return; // validation should already block, but typescript needs this
       setSaving(true);
       try {
+        const storagePayload = localPayloadToUtcPayload(mode, payload);
         if (isEdit && initial.taskId) {
           const body: ScheduledTaskPatchBody = {
             name: trimmedName,
             prompt: trimmedPrompt,
             editor_mode: mode,
-            editor_payload: payload,
-            timezone,
+            editor_payload: storagePayload,
+            pre_approved_app_ids: preApprovedAppIds,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
@@ -182,9 +208,9 @@ export default function ScheduleTaskForm({
             name: trimmedName,
             prompt: trimmedPrompt,
             editor_mode: mode,
-            editor_payload: payload,
-            timezone,
+            editor_payload: storagePayload,
             run_immediately: runImmediately,
+            pre_approved_app_ids: preApprovedAppIds,
           };
           await createScheduledTask(body);
           toast.success(
@@ -208,166 +234,152 @@ export default function ScheduleTaskForm({
       initial.taskId,
       mode,
       payload,
+      preApprovedAppIds,
       router,
-      timezone,
       trimmedName,
       trimmedPrompt,
     ]
   );
 
   return (
-    <Section gap={1}>
-      {/* Name */}
-      <Card>
-        <Text mainUiAction text05>
-          Name
-        </Text>
-        <InputTypeIn
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Weekly customer escalations digest"
-          data-testid="task-name-input"
-          variant={nameError ? "error" : undefined}
-        />
-        {nameError && (
-          <Text secondaryBody text03 className="text-status-error-05">
-            {nameError}
-          </Text>
-        )}
-      </Card>
+    <SettingsLayouts.Root>
+      <SettingsLayouts.Header
+        icon={SvgClock}
+        title={title}
+        description={description}
+        backButton={onBack}
+        divider
+        rightChildren={
+          <div className="flex gap-2 self-start">
+            <Button
+              variant="default"
+              prominence="secondary"
+              type="button"
+              onClick={() => router.push(TASKS_PATH)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            {!isEdit && (
+              <Disabled
+                disabled={!canSubmit}
+                tooltip={disabledReason}
+                tooltipSide="bottom"
+              >
+                <Button
+                  variant="default"
+                  prominence="secondary"
+                  type="button"
+                  disabled={!canSubmit}
+                  onClick={() => void submit(true)}
+                  data-testid="save-and-run-now"
+                >
+                  Save and run now
+                </Button>
+              </Disabled>
+            )}
+            <Disabled
+              disabled={!canSubmit}
+              tooltip={disabledReason}
+              tooltipSide="bottom"
+            >
+              <Button
+                variant="default"
+                prominence="primary"
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => void submit(false)}
+                data-testid="save-task"
+              >
+                {isEdit ? "Save changes" : "Save"}
+              </Button>
+            </Disabled>
+          </div>
+        }
+      />
 
-      {/* Prompt */}
-      <Card>
-        <Text mainUiAction text05>
-          Prompt
-        </Text>
-        <Text secondaryBody text03>
-          This message is sent to Craft each time the task fires.
-        </Text>
-        <InputTextArea
-          ref={promptTextareaRef}
-          value={prompt}
-          onChange={handlePromptChange}
-          onKeyUp={handlePromptCursorChange}
-          onClick={handlePromptCursorChange}
-          placeholder="Describe what Craft should do on each run..."
-          rows={6}
-          autoResize
-          maxRows={12}
-          data-testid="task-prompt-input"
-          variant={promptError ? "error" : undefined}
-        />
-        <SkillPickerPopover
-          open={skillPicker.open}
-          anchorRect={skillPicker.anchorRect}
-          query={skillPicker.query}
-          skills={pickerSkills}
-          onSelect={handleSkillPickerSelect}
-          onClose={closeSkillPicker}
-        />
-        {promptError && (
-          <Text secondaryBody text03 className="text-status-error-05">
-            {promptError}
-          </Text>
-        )}
-      </Card>
+      <SettingsLayouts.Body>
+        <GeneralLayouts.Section>
+          <InputVertical withLabel title="Name">
+            <InputTypeIn
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => setNameTouched(true)}
+              placeholder="e.g. Weekly customer escalations digest"
+              data-testid="task-name-input"
+              variant={shownNameError ? "error" : undefined}
+            />
+            {shownNameError && (
+              <Text font="secondary-body" color="status-error-05">
+                {shownNameError}
+              </Text>
+            )}
+          </InputVertical>
 
-      {/* Schedule */}
-      <Card>
-        <Text mainUiAction text05>
-          Schedule
-        </Text>
-        <ScheduleEditor
-          mode={mode}
-          onModeChange={setMode}
-          payload={payload}
-          onPayloadChange={setPayload}
-          error={scheduleError}
-        />
-        <Divider />
-        <Text mainUiAction text05>
-          Timezone
-        </Text>
-        <div className="w-full max-w-[28rem]">
-          <InputSelect value={timezone} onValueChange={setTimezone}>
-            <InputSelect.Trigger placeholder="Select a timezone..." />
-            <InputSelect.Content>
-              {timezones.map((tz) => (
-                <InputSelect.Item key={tz} value={tz}>
-                  {tz}
-                </InputSelect.Item>
-              ))}
-            </InputSelect.Content>
-          </InputSelect>
-        </div>
-        {tzError && (
-          <Text secondaryBody text03 className="text-status-error-05">
-            {tzError}
-          </Text>
-        )}
-      </Card>
-
-      {/* Next runs preview */}
-      <Card>
-        <div className="flex items-center gap-2">
-          <SvgClock size={16} className="text-text-03" />
-          <Text mainUiAction text05>
-            Next 3 runs
-          </Text>
-        </div>
-        {nextRuns.length === 0 ? (
-          <Text secondaryBody text03>
-            {scheduleError
-              ? "Fix the schedule above to preview future fires."
-              : "No upcoming fires for this expression."}
-          </Text>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {nextRuns.map((iso, idx) => (
-              <li key={iso} className="flex flex-col">
-                <Text mainUiBody text05>
-                  {idx + 1}. {formatAbsolute(iso)}
-                </Text>
-                <Text secondaryBody text03>
-                  {formatRelativeShort(iso)} ({timezone})
-                </Text>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <div className="flex items-center gap-2 justify-end">
-        <Button
-          variant="default"
-          prominence="secondary"
-          onClick={() => router.push(TASKS_PATH)}
-          disabled={saving}
-        >
-          Cancel
-        </Button>
-        {!isEdit && (
-          <Button
-            variant="default"
-            prominence="secondary"
-            disabled={!canSubmit}
-            onClick={() => void submit(true)}
-            data-testid="save-and-run-now"
+          <InputVertical
+            withLabel
+            title="Prompt"
+            description="This message is sent to Craft each time the task fires."
           >
-            Save and run now
-          </Button>
-        )}
-        <Button
-          variant="default"
-          prominence="primary"
-          disabled={!canSubmit}
-          onClick={() => void submit(false)}
-          data-testid="save-task"
-        >
-          {isEdit ? "Save changes" : "Save"}
-        </Button>
-      </div>
-    </Section>
+            <InputTextArea
+              ref={promptTextareaRef}
+              value={prompt}
+              onChange={handlePromptChange}
+              onKeyUp={handlePromptCursorChange}
+              onClick={handlePromptCursorChange}
+              onBlur={() => setPromptTouched(true)}
+              placeholder="Describe what Craft should do on each run..."
+              rows={6}
+              autoResize
+              maxRows={12}
+              data-testid="task-prompt-input"
+              variant={shownPromptError ? "error" : undefined}
+            />
+            <EntryPickerPopover
+              open={skillPicker.open}
+              anchorRect={skillPicker.anchorRect}
+              query={skillPicker.query}
+              sections={pickerSections}
+              onSelect={handleSkillPickerSelect}
+              onClose={closeSkillPicker}
+            />
+            {shownPromptError && (
+              <Text font="secondary-body" color="status-error-05">
+                {shownPromptError}
+              </Text>
+            )}
+          </InputVertical>
+        </GeneralLayouts.Section>
+
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+        <GeneralLayouts.Section>
+          <InputVertical title="Schedule">
+            <ScheduleEditor
+              mode={mode}
+              onModeChange={setMode}
+              payload={payload}
+              onPayloadChange={setPayload}
+              error={scheduleError}
+            />
+          </InputVertical>
+        </GeneralLayouts.Section>
+
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+        <GeneralLayouts.Section>
+          <InputVertical
+            title="Pre-approved apps"
+            description="Selected apps can act without pausing for approval while this task runs on its own. Note: an app you don't pre-approve will pause mid-run to ask for your approval. The run may stall or fail if you do not approve an action request."
+          >
+            <PreApprovalPicker
+              selectedIds={preApprovedAppIds}
+              onChange={setPreApprovedAppIds}
+            />
+          </InputVertical>
+        </GeneralLayouts.Section>
+      </SettingsLayouts.Body>
+    </SettingsLayouts.Root>
   );
 }
 
@@ -378,6 +390,6 @@ export function defaultFormInitial(): ScheduleTaskFormInitial {
     prompt: "",
     mode: "interval",
     payload: { unit: "hours", every: 1 },
-    timezone: getBrowserTimezone(),
+    preApprovedAppIds: [],
   };
 }

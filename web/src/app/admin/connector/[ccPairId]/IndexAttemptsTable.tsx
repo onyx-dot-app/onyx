@@ -15,7 +15,7 @@ import { CCPairFullInfo } from "./types";
 import { IndexAttemptSnapshot } from "@/lib/types";
 import { IndexAttemptStatus } from "@/components/Status";
 import { PageSelector } from "@/components/PageSelector";
-import { localizeAndPrettify } from "@/lib/time";
+import { localizeAndPrettify } from "@opal/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { SvgBarChartSmall, SvgClock, SvgInfo } from "@opal/icons";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";

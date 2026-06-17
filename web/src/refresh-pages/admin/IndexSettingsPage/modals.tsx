@@ -3,7 +3,7 @@
 import { Formik, useFormikContext } from "formik";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
-import { SvgArrowExchange } from "@opal/icons";
+import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Modal from "@/refresh-components/Modal";
@@ -25,7 +25,6 @@ import {
   modelSpecSchemaShape,
 } from "@/refresh-pages/admin/IndexSettingsPage/shared";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 // ---------------------------------------------------------------------------
 // Shared modal shell — reads `isValid`, `isSubmitting`, `submitForm` from the
@@ -73,7 +72,7 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
           <Button
             disabled={!isValid || !dirty || isSubmitting}
             onClick={submitForm}
-            icon={isSubmitting ? SimpleLoader : undefined}
+            icon={isSubmitting ? SvgSimpleLoader : undefined}
           >
             {isEditing ? "Update" : "Connect"}
           </Button>
@@ -264,10 +263,16 @@ interface AzureFormValues {
   apiKey: string;
   apiVersion: string;
   deploymentName: string;
+  modelName: string;
+  modelDim: number;
+  queryPrefix: string;
+  passagePrefix: string;
+  normalize: boolean;
 }
 function AzureProviderModal({
   provider,
   existingCredentials,
+  existingModel,
   onSubmit,
 }: ProviderModalProps) {
   const isEditing = !!existingCredentials;
@@ -283,6 +288,7 @@ function AzureProviderModal({
       : Yup.string().trim().required("API key is required"),
     apiVersion: Yup.string().trim().required("API version is required"),
     deploymentName: Yup.string().trim().required("Deployment name is required"),
+    ...modelSpecSchemaShape,
   });
 
   const initialValues: AzureFormValues = {
@@ -290,6 +296,11 @@ function AzureProviderModal({
     apiKey: maskedApiKey,
     apiVersion: existingCredentials?.api_version ?? "",
     deploymentName: existingCredentials?.deployment_name ?? "",
+    modelName: existingModel?.modelName ?? "",
+    modelDim: existingModel?.modelDim ?? 0,
+    queryPrefix: existingModel?.queryPrefix ?? "",
+    passagePrefix: existingModel?.passagePrefix ?? "",
+    normalize: existingModel?.normalize ?? false,
   };
 
   return (
@@ -309,7 +320,13 @@ function AzureProviderModal({
             deploymentName: values.deploymentName,
           })
         ) {
-          onSubmit();
+          onSubmit({
+            modelName: values.modelName.trim(),
+            modelDim: values.modelDim,
+            normalize: values.normalize,
+            queryPrefix: values.queryPrefix || null,
+            passagePrefix: values.passagePrefix || null,
+          });
         }
       }}
     >
@@ -331,6 +348,8 @@ function AzureProviderModal({
           placeholder="my-embedding-deployment"
           subDescription="The deployment name you configured for this embedding model in Azure."
         />
+
+        <ModelSpecFields modelNameSubDescription="A label for this model in Onyx. Azure routes requests by deployment name, so this only needs to be a unique identifier." />
       </ModalShell>
     </Formik>
   );

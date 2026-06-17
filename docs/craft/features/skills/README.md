@@ -8,6 +8,7 @@ Authoritative docs for the Skills feature live at this directory's top level. Ol
 2. `skills-db-layer-status.md` — snapshot of the DB layer already shipped on `whuang/skills-api`: tables, CRUD module, built-in registry, bundle validator, migration.
 3. `skills-api-plan.md` — implementation plan for the FastAPI layer that exposes the DB primitives. Routes, Pydantic models, write-path interface, tests, subagent decomposition.
 4. `manual-test-plan.md` — step-by-step verification for the `/` skill picker in the Craft chat input and the scheduled trigger prompt.
+5. `personal-skills.md` — the user-managed (personal) skills slice built on top of the admin feature: derived "personal" predicate, user API surface, ownership gating, per-user cap, promotion lifecycle, frontend, tests, and decisions/open questions for future work.
 
 ## Archived (`archive/`)
 

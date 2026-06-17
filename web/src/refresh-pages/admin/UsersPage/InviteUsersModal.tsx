@@ -2,12 +2,14 @@
 
 import { useState, useCallback } from "react";
 import { Button } from "@opal/components";
-import { SvgUsers, SvgAlertTriangle } from "@opal/icons";
+import { SvgUsers, SvgAlertTriangle, SvgLoader } from "@opal/icons";
 import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import type { ChipItem } from "@/refresh-components/inputs/InputChipField";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
+import { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { inviteUsers } from "./svc";
 
 // ---------------------------------------------------------------------------
@@ -116,6 +118,15 @@ export default function InviteUsersModal({
     setIsSubmitting(true);
     try {
       await inviteUsers(validEmails);
+      // Fire-and-forget revalidation so the invitee shows up immediately rather
+      // than only on the next SWR focus revalidation. Not awaited: the invite
+      // already succeeded, so a failing revalidation GET must not fall into the
+      // catch below and surface an error toast / keep the modal open.
+      void Promise.all([
+        mutate(SWR_KEYS.invitedUsers),
+        mutate(SWR_KEYS.acceptedUsers),
+        mutate(SWR_KEYS.userCounts),
+      ]).catch(() => {});
       toast.success(
         `Invited ${validEmails.length} user${validEmails.length > 1 ? "s" : ""}`
       );
@@ -175,6 +186,11 @@ export default function InviteUsersModal({
             submit={
               <Button
                 disabled={isSubmitting || chips.every((c) => c.error)}
+                icon={
+                  isSubmitting
+                    ? () => <SvgLoader size={16} className="animate-spin" />
+                    : undefined
+                }
                 onClick={handleInvite}
               >
                 Invite

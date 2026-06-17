@@ -49,6 +49,9 @@ interface ContentMdProps {
   /** Optional description text below the title. */
   description?: string | RichStr;
 
+  /** Clamp the description to N lines. Maps to Text's maxLines prop. */
+  descriptionMaxLines?: number;
+
   /** Enable inline editing of the title. */
   editable?: boolean;
 
@@ -129,6 +132,7 @@ function ContentMd({
   icon: Icon,
   title,
   description,
+  descriptionMaxLines,
   editable,
   onTitleChange,
   suffix,
@@ -270,7 +274,12 @@ function ContentMd({
           className="opal-content-md-description"
           style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
         >
-          <Text font="secondary-body" color="text-03" as="p">
+          <Text
+            font="secondary-body"
+            color="text-03"
+            as="p"
+            maxLines={descriptionMaxLines}
+          >
             {description}
           </Text>
         </div>

@@ -60,7 +60,7 @@ repos:
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
         name: Check lazy imports
-        args: ["--with=onyx-devtools", "ods", "check-lazy-imports"]
+        args: ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -69,7 +69,13 @@ repos:
         args: ["ty", "check"]
         pass_filenames: true
         types_or: [python]
-        exclude: ^backend/onyx/server/features/build/sandbox/kubernetes/docker/sandbox_daemon/
+        # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
+        # are sandbox-only scripts importing deps absent from the backend venv
+        # (lxml, PIL, office.*). loadtest/ is a standalone uv project with its
+        # own venv (locust). All are excluded from the full ty run via
+        # [tool.ty.src] in pyproject; repeat here because pre-commit passes
+        # explicit filenames, which bypass that discovery-time exclude.
+        exclude: ^(backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)|loadtest/)
       - id: uv-run
         alias: ruff
         name: ruff
@@ -82,6 +88,19 @@ repos:
         args: ["ruff", "format"]
         pass_filenames: true
         types_or: [python]
+      - id: uv-run
+        alias: zizmor
+        name: zizmor
+        # Run zizmor in an isolated overlay (`--no-project --with`) so the hook
+        # never resyncs the dev `.venv` or pulls in the backend toolchain — the
+        # same dependency-isolation goal as .github/workflows/zizmor.yml (which
+        # uses `uv sync --only-group zizmor`). `--offline` keeps it fast and
+        # token-free locally; CI runs the online audits. Keep the pinned version
+        # in sync with the `zizmor` dependency group in pyproject.toml.
+        args:
+          ["--no-project", "--with=zizmor==1.25.2", "zizmor", "--offline"]
+        pass_filenames: true
+        files: ^\.github/(workflows/.+\.ya?ml|actions/.+/action\.ya?ml)$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
@@ -89,6 +108,16 @@ repos:
       - id: check-added-large-files
         name: Check for added large files
         args: ["--maxkb=1500"]
+      - id: check-yaml
+        name: Check YAML
+        # --unsafe relaxes check-yaml to syntax-only, so it accepts the
+        # non-standard YAML this repo uses on purpose: custom tags
+        # (CloudFormation `!Ref`, docker-compose `!reset`) and multi-document
+        # files (e.g. vendored CRDs). Helm chart templates are excluded instead —
+        # their Go templating (`{{ ... }}`) isn't parseable as YAML at all.
+        args: ["--unsafe"]
+        exclude: >-
+          (?x)^deployment/helm/charts/onyx/(templates|templates_disabled)/
 
   - repo: https://github.com/rhysd/actionlint
     rev: a443f344ff32813837fa49f7aa6cbc478d770e62 # frozen: v1.7.9
@@ -101,16 +130,14 @@ repos:
       - id: shellcheck
         exclude: >-
           (?x)^(
-            backend/scripts/setup_craft_templates\.sh|
-            deployment/docker_compose/init-letsencrypt\.sh|
-            deployment/docker_compose/install\.sh
+            deployment/docker_compose/init-letsencrypt\.sh
           )$
 
   - repo: https://github.com/golangci/golangci-lint
     rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
     hooks:
       - id: golangci-lint
-        language_version: "1.26.1"
+        language_version: "1.26.4"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/sirwart/ripsecrets
@@ -130,42 +157,148 @@ repos:
 
   - repo: local
     hooks:
-      - id: npm-install
-        name: npm install
-        description: "Automatically run 'npm install' after a checkout, pull or rebase"
+      - id: bun-install
+        name: bun install
+        description: "Automatically run 'bun install' after a checkout, pull or rebase"
         language: system
-        entry: bash -c 'cd web && npm install --no-save'
+        entry: bash -c 'cd web && bun install'
         pass_filenames: false
-        files: ^web/(package(-lock)?\.json|lib/opal/package\.json)$
+        files: ^web/(package\.json|bun\.lock|lib/opal/package\.json)$
         stages: [post-checkout, post-merge, post-rewrite]
-      - id: npm-install-check
-        name: npm install --package-lock-only
-        description: "Check the 'web/package-lock.json' is updated"
+      - id: bun-install-check
+        name: bun install
+        description: "Check the 'web/bun.lock' is updated"
         language: system
-        entry: bash -c 'cd web && npm install --package-lock-only'
+        entry: bash -c 'cd web && bun install'
         pass_filenames: false
-        files: ^web/(package(-lock)?\.json|lib/opal/package\.json)$
+        files: ^web/(package\.json|bun\.lock|lib/opal/package\.json)$
+
+      # `bun install` won't rebuild an already-linked file: dep's gitignored `dist`, so
+      # token / opal-CSS changes from a pull leave opal/dist/root.css stale → the web dev
+      # server serves old radius/spacing/colors (a "boxy" UI). Regenerate it explicitly.
+      # `bun install --frozen-lockfile` first guards the clean-tree case (this hook's file
+      # set is disjoint from bun-install's, so it can fire before node_modules exists).
+      - id: opal-css-rebuild
+        name: rebuild opal token CSS
+        description: "Rebuild opal dist CSS after checkout/pull/rebase so dev gets fresh design tokens"
+        language: system
+        entry: bash -c 'cd web && bun install --frozen-lockfile && bun run --cwd lib/shared build:tokens && bun lib/opal/scripts/bundle-css.mjs'
+        pass_filenames: false
+        files: ^web/lib/(opal/src/.*\.css|opal/scripts/bundle-css\.mjs|shared/(tokens/.*\.json|style-dictionary\.config\.mjs))$
+        stages: [post-checkout, post-merge, post-rewrite]
+
+      - id: root-bun-install
+        name: root bun install
+        description: "Automatically run 'bun install' at the repo root after a checkout, pull or rebase"
+        language: system
+        entry: bun install
+        pass_filenames: false
+        files: ^(package\.json|bun\.lock|(widget|examples/widget|desktop)/package\.json)$
+        stages: [post-checkout, post-merge, post-rewrite]
+      - id: root-bun-install-check
+        name: root bun install
+        description: "Check the root 'bun.lock' is updated"
+        language: system
+        entry: bun install
+        pass_filenames: false
+        files: ^(package\.json|bun\.lock|(widget|examples/widget|desktop)/package\.json)$
 
       - id: oxfmt
         name: oxfmt
-        entry: npx --prefix web oxfmt
+        entry: bash -c 'cd web && bunx oxfmt "${@#web/}"' _
         language: system
+        files: ^web/
         types_or: [html, css, javascript, ts, tsx]
 
       - id: oxlint
         name: oxlint
-        entry: bash -c 'cd web && npx oxlint'
+        entry: bash -c 'cd web && bunx oxlint'
         language: system
         pass_filenames: false
         types_or: [javascript, ts, tsx]
 
       # Uses tsgo (TypeScript's native Go compiler) for ~10x faster type checking.
       # This is a preview package - if it breaks:
-      #   1. Try updating: cd web && npm update @typescript/native-preview
+      #   1. Try updating: cd web && bun update @typescript/native-preview
       #   2. Or fallback to tsc: replace 'tsgo' with 'tsc' below
       - id: typescript-check
         name: TypeScript type check
-        entry: bash -c 'cd web && npx tsgo --noEmit --project tsconfig.types.json'
+        entry: bash -c 'cd web && bunx tsgo --noEmit --project tsconfig.types.json'
         language: system
         pass_filenames: false
         files: ^web/.*\.(ts|tsx)$
+
+      - id: widget-typescript-check
+        name: widget TypeScript type check
+        entry: bash -c 'cd widget && bunx tsgo --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^(bun\.lock|widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
+
+      - id: examples-widget-typescript-check
+        name: examples/widget TypeScript type check
+        entry: bash -c 'cd examples/widget && bunx tsgo --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^(bun\.lock|examples/widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
+
+      - id: shared-typescript-check
+        name: shared TypeScript type check
+        entry: bash -c 'cd web/lib/shared && bunx tsgo --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^web/lib/shared/(.*\.(ts|tsx)|package\.json|tsconfig.*\.json)$
+
+      # mobile/ is a standalone Expo (SDK 56) app with its own bun.lock — it is NOT
+      # part of the root bun workspace, so it gets its own install + lockfile-check
+      # hooks. Lint/format use the Expo-native toolchain (ESLint flat config +
+      # Prettier) rather than web's oxlint/oxfmt: eslint-config-expo gives RN-aware
+      # rules and prettier-plugin-tailwindcss sorts NativeWind classes.
+      #
+      # The typecheck/lint/format hooks below each run `bun install --frozen-lockfile`
+      # first: prek runs only on changed files, so a mobile change that doesn't touch
+      # package.json/bun.lock skips the install-check hook, leaving mobile/node_modules
+      # absent in CI (the auto-install hook only fires on post-checkout/merge/rewrite).
+      - id: mobile-bun-install
+        name: mobile bun install
+        description: "Automatically run 'bun install' in mobile/ after a checkout, pull or rebase"
+        language: system
+        entry: bash -c 'cd mobile && bun install'
+        pass_filenames: false
+        files: ^mobile/(package\.json|bun\.lock)$
+        stages: [post-checkout, post-merge, post-rewrite]
+      - id: mobile-bun-install-check
+        name: mobile bun install check
+        description: "Check the 'mobile/bun.lock' is updated"
+        language: system
+        entry: bash -c 'cd mobile && bun install'
+        pass_filenames: false
+        files: ^mobile/(package\.json|bun\.lock)$
+
+      # Uses tsc (not tsgo) because mobile is standalone and types against Expo/RN
+      # (tsconfig extends expo/tsconfig.base); the native-preview compiler isn't
+      # wired in here.
+      - id: mobile-typescript-check
+        name: mobile TypeScript type check
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bunx tsc --noEmit'
+        language: system
+        pass_filenames: false
+        files: ^mobile/(.*\.(ts|tsx)|package\.json|tsconfig\.json|bun\.lock)$
+
+      - id: mobile-lint
+        name: mobile lint
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bunx expo lint'
+        language: system
+        pass_filenames: false
+        files: ^mobile/.*\.(ts|tsx|js|jsx)$
+
+      - id: mobile-format
+        name: mobile format
+        # pass_filenames: false so this runs as a single invocation (like the
+        # mobile lint/typecheck hooks above). Passing filenames makes pre-commit
+        # split them into multiple batches that each re-run `bun install`, which
+        # race on bun's cache (EEXIST locally / FileNotFound on CI).
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bun run format'
+        language: system
+        pass_filenames: false
+        files: ^mobile/.*\.(ts|tsx|js|jsx|json|css)$

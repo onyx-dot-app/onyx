@@ -95,6 +95,17 @@
         "group": "1"
       },
       "stopAll": true
+    },
+    {
+      "name": "Web Server + Shared Watch",
+      "configurations": [
+        "Web Server",
+        "Shared Watch (rebuild dist)"
+      ],
+      "presentation": {
+        "group": "1"
+      },
+      "stopAll": true
     }
   ],
   "configurations": [
@@ -112,7 +123,7 @@
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceRoot}/web",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "bun",
       "envFile": "${workspaceFolder}/.vscode/.env.web",
       "runtimeArgs": [
         "run",
@@ -123,6 +134,22 @@
       },
       "console": "integratedTerminal",
       "consoleTitle": "Web Server Console"
+    },
+    {
+      "name": "Shared Watch (rebuild dist)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceRoot}/web/lib/shared",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "presentation": {
+        "group": "2"
+      },
+      "console": "integratedTerminal",
+      "consoleTitle": "Shared Watch Console"
     },
     {
       "name": "Model Server",
@@ -139,6 +166,8 @@
       "args": [
         "model_server.main:app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
         "--port",
         "9000"
       ],
@@ -154,6 +183,7 @@
       "request": "launch",
       "module": "uvicorn",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -162,6 +192,10 @@
       "args": [
         "onyx.main:app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/server/features/build/sandbox/image",
         "--port",
         "8080"
       ],
@@ -188,6 +222,10 @@
       "args": [
         "onyx.main:app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/server/features/build/sandbox/image",
         "--port",
         "8080"
       ],
@@ -251,6 +289,8 @@
       "args": [
         "onyx.mcp_server.api:mcp_app",
         "--reload",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/skills/builtin",
         "--port",
         "8090",
         "--timeout-graceful-shutdown",
@@ -268,6 +308,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -299,6 +340,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -330,6 +372,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -362,6 +405,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -393,6 +437,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -425,6 +470,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "INFO",
@@ -457,6 +503,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -488,6 +535,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "ENABLE_MULTIPASS_INDEXING": "false",
@@ -520,6 +568,7 @@
       "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py",
       "subProcess": true,
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",
@@ -880,13 +929,12 @@
       }
     },
     {
-      "name": "Clear and Restart External Volumes and Containers",
+      "name": "Start External Infrastructure Containers",
       "type": "node",
       "request": "launch",
+      "preLaunchTask": "ods-compose-dev-infra",
       "runtimeExecutable": "bash",
-      "runtimeArgs": [
-        "${workspaceFolder}/backend/scripts/restart_containers.sh"
-      ],
+      "runtimeArgs": ["-c", "true"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "presentation": {
@@ -922,6 +970,7 @@
       "request": "launch",
       "program": "scripts/dev_run_background_jobs.py",
       "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "ods-env",
       "envFile": "${workspaceFolder}/.vscode/.env",
       "env": {
         "LOG_LEVEL": "DEBUG",

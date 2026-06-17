@@ -15,7 +15,6 @@ import boto3
 import puremagic
 from botocore.config import Config
 from botocore.exceptions import ClientError
-from mypy_boto3_s3 import S3Client
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AWS_REGION_NAME
@@ -42,6 +41,8 @@ from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
+
     from onyx.file_store.gcs_file_store import GCSBackedFileStore
 
 logger = setup_logger()
@@ -187,7 +188,7 @@ class S3BackedFileStore(FileStore):
         s3_prefix: str | None = None,
         s3_verify_ssl: bool = True,
     ) -> None:
-        self._s3_client: S3Client | None = None
+        self._s3_client: "S3Client | None" = None
         self._bucket_name = bucket_name
         self._aws_access_key_id = aws_access_key_id
         self._aws_secret_access_key = aws_secret_access_key
@@ -196,7 +197,7 @@ class S3BackedFileStore(FileStore):
         self._s3_prefix = s3_prefix or "onyx-files"
         self._s3_verify_ssl = s3_verify_ssl
 
-    def _get_s3_client(self) -> S3Client:
+    def _get_s3_client(self) -> "S3Client":
         """Initialize S3 client if not already done"""
         if self._s3_client is None:
             try:
@@ -299,7 +300,7 @@ class S3BackedFileStore(FileStore):
             elif error_code == "403":
                 # Bucket exists but we don't have permission to access it
                 logger.warning(
-                    f"S3 bucket '{bucket_name}' exists but access is forbidden"
+                    "S3 bucket '%s' exists but access is forbidden", bucket_name
                 )
                 raise RuntimeError(
                     f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."

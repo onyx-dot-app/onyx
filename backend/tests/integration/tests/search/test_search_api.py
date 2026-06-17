@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import os
 
+import httpx
 import pytest
-import requests
 
 from onyx.db.enums import AccessType
+from onyx.db.enums import Permission
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
+from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -26,8 +29,8 @@ def _search(
     query: str,
     user: DATestUser,
     **kwargs: object,
-) -> requests.Response:
-    return requests.post(
+) -> httpx.Response:
+    return client.post(
         SEARCH_URL,
         json={"query": query, **kwargs},
         headers=user.headers,
@@ -35,7 +38,6 @@ def _search(
 
 
 def test_basic_search_returns_results(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -58,7 +60,6 @@ def test_basic_search_returns_results(
 
 
 def test_document_set_filtering(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -97,7 +98,6 @@ def test_document_set_filtering(
     reason="User group permissions are Enterprise-only",
 )
 def test_acl_enforcement(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -138,7 +138,6 @@ def test_acl_enforcement(
 
 
 def test_persona_scoped_search(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
     api_key: DATestAPIKey,
@@ -178,7 +177,6 @@ def test_persona_scoped_search(
 
 
 def test_invalid_persona_returns_404(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
@@ -186,11 +184,35 @@ def test_invalid_persona_returns_404(
     assert resp.status_code == 404
 
 
-def test_unauthenticated_returns_401(
-    reset: None,  # noqa: ARG001
-) -> None:
-    resp = requests.post(
+def test_unauthenticated_returns_401() -> None:
+    resp = client.post(
         SEARCH_URL,
         json={"query": "test"},
     )
     assert resp.status_code == 403
+
+
+def test_read_search_scoped_pat_can_search(
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    doc_content = "scoped pat search api unique document"
+    DocumentManager.seed_doc_with_content(cc_pair, doc_content, api_key)
+
+    raw_token = PATManager.create_scoped(
+        name="search-scoped-pat",
+        expiration_days=7,
+        user_performing_action=admin_user,
+        scopes=[Permission.READ_SEARCH],
+    )
+    resp = client.post(
+        SEARCH_URL,
+        json={"query": doc_content},
+        headers=PATManager.get_auth_headers(raw_token),
+    )
+    assert resp.status_code == 200
+
+    matches = [r for r in resp.json()["results"] if doc_content in r["content"]]
+    assert len(matches) == 1

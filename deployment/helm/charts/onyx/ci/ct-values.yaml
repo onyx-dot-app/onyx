@@ -7,3 +7,10 @@ auth:
   userauth:
     values:
       user_auth_secret: "placeholder-for-ci-testing"
+  # values.yaml ships no objectstorage defaults (fail closed), so ct must supply them.
+  objectstorage:
+    values:
+      s3_aws_access_key_id: "placeholder"
+      s3_aws_secret_access_key: "placeholder"
+      rootUser: "placeholder"
+      rootPassword: "placeholder"

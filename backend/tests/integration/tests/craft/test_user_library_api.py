@@ -1,7 +1,7 @@
 """User library tests.
 
 Integration tests for the user-library HTTP endpoints in
-``onyx.server.features.build.api.user_library``. Each test hits the real
+``onyx.server.features.build.user_library.api``. Each test hits the real
 backend and either asserts the response shape or verifies the resulting
 document row + storage blob via the tree-listing endpoint.
 """
@@ -14,10 +14,11 @@ from collections.abc import Iterable
 from typing import Any
 from uuid import uuid4
 
+import httpx
 import pytest
-import requests
 
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 # ---------------------------------------------------------------------------
@@ -38,7 +39,7 @@ def _upload(
     user: DATestUser,
     files: Iterable[tuple[str, bytes, str | None]],
     path: str = "/",
-) -> requests.Response:
+) -> httpx.Response:
     multipart = [
         (
             "files",
@@ -46,7 +47,7 @@ def _upload(
         )
         for name, content, content_type in files
     ]
-    return requests.post(
+    return client.post(
         _url("upload"),
         files=multipart,
         data={"path": path},
@@ -60,8 +61,8 @@ def _upload_zip(
     zip_bytes: bytes,
     path: str = "/",
     filename: str = "bundle.zip",
-) -> requests.Response:
-    return requests.post(
+) -> httpx.Response:
+    return client.post(
         _url("upload-zip"),
         files={"file": (filename, io.BytesIO(zip_bytes), "application/zip")},
         data={"path": path},
@@ -71,7 +72,7 @@ def _upload_zip(
 
 
 def _tree(user: DATestUser) -> list[dict[str, Any]]:
-    response = requests.get(
+    response = client.get(
         _url("tree"),
         headers=user.headers,
         cookies=user.cookies,
@@ -82,8 +83,8 @@ def _tree(user: DATestUser) -> list[dict[str, Any]]:
     return body
 
 
-def _toggle(user: DATestUser, document_id: str, enabled: bool) -> requests.Response:
-    return requests.patch(
+def _toggle(user: DATestUser, document_id: str, enabled: bool) -> httpx.Response:
+    return client.patch(
         _url("files", document_id, "toggle"),
         params={"enabled": str(enabled).lower()},
         headers=user.headers,
@@ -91,8 +92,8 @@ def _toggle(user: DATestUser, document_id: str, enabled: bool) -> requests.Respo
     )
 
 
-def _delete(user: DATestUser, document_id: str) -> requests.Response:
-    return requests.delete(
+def _delete(user: DATestUser, document_id: str) -> httpx.Response:
+    return client.delete(
         _url("files", document_id),
         headers=user.headers,
         cookies=user.cookies,

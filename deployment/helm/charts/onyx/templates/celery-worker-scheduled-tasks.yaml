@@ -1,8 +1,8 @@
-{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0) }}
+{{- if and .Values.vectorDB.enabled (gt (int .Values.celery_worker_scheduled_tasks.replicaCount) 0) (eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-scheduled-tasks
+  name: {{ include "onyx.resourceName" (list . "celery-worker-scheduled-tasks") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.celery_worker_scheduled_tasks.deploymentLabels }}
@@ -61,6 +61,9 @@ spec:
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
             [
+              {{- with include "onyx.customCACerts.commandPrefix" . }}
+              {{- . | nindent 14 }}
+              {{- end }}
               "celery",
               "-A",
               "onyx.background.celery.versioned_apps.scheduled_tasks",
@@ -81,14 +84,21 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- include "onyx.envSecretsRestricted" . | nindent 12}}
+            {{- with include "onyx.customCACerts.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with .Values.celery_worker_scheduled_tasks.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with .Values.celery_worker_scheduled_tasks.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.celery_worker_scheduled_tasks.volumeMounts) }}
+          {{- . | nindent 10 }}
           {{- end }}
           startupProbe:
             {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
@@ -112,8 +122,7 @@ spec:
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
                     --filename /tmp/onyx_k8s_scheduledtasks_liveness.txt
-      {{- with .Values.celery_worker_scheduled_tasks.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.celery_worker_scheduled_tasks.volumes) }}
+      {{- . | nindent 6 }}
       {{- end }}
 {{- end }}

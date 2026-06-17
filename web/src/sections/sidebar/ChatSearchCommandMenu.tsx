@@ -8,18 +8,13 @@ import CommandMenu, {
 } from "@/refresh-components/commandmenu/CommandMenu";
 import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import CreateProjectModal from "@/components/modals/CreateProjectModal";
-import {
-  formatDisplayTime,
-  highlightMatch,
-} from "@/sections/sidebar/chatSearchUtils";
+import CreateProjectModal from "@/sections/modals/CreateProjectModal";
+import { timeAgo } from "@opal/time";
+import { highlightMatch } from "@/lib/sidebar/utils";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { useCurrentAgent } from "@/lib/agents/hooks";
 import Text from "@/refresh-components/texts/Text";
-import {
-  useChatSearchOptimistic,
-  FilterableChat,
-} from "./useChatSearchOptimistic";
+import useChatSearchOptimistic from "@/lib/sidebar/hooks";
 import {
   SvgEditBig,
   SvgFolder,
@@ -269,8 +264,12 @@ export default function ChatSearchCommandMenu({
                             ↵
                           </Text>
                         ) : (
-                          <Text secondaryBody text03>
-                            {formatDisplayTime(chat.time)}
+                          <Text
+                            secondaryBody
+                            text03
+                            data-testid="command-menu-timestamp"
+                          >
+                            {timeAgo(chat.time)}
                           </Text>
                         )
                       }
@@ -326,8 +325,12 @@ export default function ChatSearchCommandMenu({
                           ↵
                         </Text>
                       ) : (
-                        <Text secondaryBody text03>
-                          {formatDisplayTime(project.time)}
+                        <Text
+                          secondaryBody
+                          text03
+                          data-testid="command-menu-timestamp"
+                        >
+                          {timeAgo(project.time)}
                         </Text>
                       )
                     }

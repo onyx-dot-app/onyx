@@ -13,10 +13,11 @@ from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
 
-import requests
+import httpx
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -31,13 +32,13 @@ def _build_url(*parts: str) -> str:
     return f"{API_SERVER_URL}/build/" + "/".join(parts)
 
 
-def _parse_sse_lines(response: requests.Response) -> Iterator[dict[str, Any]]:
+def _parse_sse_lines(response: httpx.Response) -> Iterator[dict[str, Any]]:
     """Yield decoded JSON payloads from an SSE stream.
 
     The send-message endpoint emits Server-Sent Events: ``data: {...}\\n\\n``.
     Lines without a ``data:`` prefix (comments, retry hints) are skipped.
     """
-    for raw_line in response.iter_lines(decode_unicode=True):
+    for raw_line in response.iter_lines():
         if not raw_line:
             continue
         if raw_line.startswith("data:"):
@@ -61,35 +62,35 @@ class BuildSessionManager:
         # one exists. Tests need isolation per call, so delete any existing
         # empty session before creating fresh.
         body: dict[str, Any] = {"headless": headless, **kwargs}
-        pre = requests.post(
+        pre = client.post(
             _sessions_url(),
             json=body,
             headers=user.headers,
             cookies=user.cookies,
         )
-        if pre.ok:
-            requests.delete(
+        if not pre.is_error:
+            client.delete(
                 f"{_sessions_url()}/{pre.json()['id']}",
                 headers=user.headers,
                 cookies=user.cookies,
             )
 
-        response = requests.post(
+        response = client.post(
             _sessions_url(),
             json=body,
             headers=user.headers,
             cookies=user.cookies,
         )
-        if not response.ok:
+        if response.is_error:
             raise AssertionError(
-                f"POST /build/sessions failed: {response.status_code} {response.reason} "
+                f"POST /build/sessions failed: {response.status_code} {response.reason_phrase} "
                 f"— body: {response.text!r} (user_id={user.id}, role={user.role})"
             )
         return response.json()
 
     @staticmethod
     def list_sessions(user: DATestUser) -> list[dict[str, Any]]:
-        response = requests.get(
+        response = client.get(
             _sessions_url(),
             headers=user.headers,
             cookies=user.cookies,
@@ -107,7 +108,7 @@ class BuildSessionManager:
 
     @staticmethod
     def get(user: DATestUser, session_id: UUID) -> dict[str, Any]:
-        response = requests.get(
+        response = client.get(
             _sessions_url(str(session_id)),
             headers=user.headers,
             cookies=user.cookies,
@@ -117,7 +118,7 @@ class BuildSessionManager:
 
     @staticmethod
     def delete(user: DATestUser, session_id: UUID) -> None:
-        response = requests.delete(
+        response = client.delete(
             _sessions_url(str(session_id)),
             headers=user.headers,
             cookies=user.cookies,
@@ -126,7 +127,7 @@ class BuildSessionManager:
 
     @staticmethod
     def restore(user: DATestUser, session_id: UUID) -> dict[str, Any]:
-        response = requests.post(
+        response = client.post(
             _sessions_url(str(session_id), "restore"),
             headers=user.headers,
             cookies=user.cookies,
@@ -140,19 +141,73 @@ class BuildSessionManager:
         session_id: UUID,
         content: str,
     ) -> Iterator[dict[str, Any]]:
-        # send-message lives under /build/sessions/{id}/send-message but is
-        # registered on the messages_router which mounts at /build (the
-        # router itself declares the /sessions/... prefix).
+        turn = BuildSessionManager.start_turn(user, session_id, content)
+        yield from BuildSessionManager.stream_turn_events(
+            user,
+            session_id,
+            UUID(turn["turn_id"]),
+        )
+
+    @staticmethod
+    def start_turn(
+        user: DATestUser,
+        session_id: UUID,
+        content: str,
+        *,
+        client_request_id: str | None = None,
+    ) -> dict[str, Any]:
         url = _build_url("sessions", str(session_id), "send-message")
-        with requests.post(
+        body: dict[str, Any] = {"content": content}
+        if client_request_id is not None:
+            body["client_request_id"] = client_request_id
+        response = client.post(
             url,
-            json={"content": content},
+            json=body,
             headers=user.headers,
             cookies=user.cookies,
-            stream=True,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
+    def get_active_turn(
+        user: DATestUser,
+        session_id: UUID,
+    ) -> dict[str, Any] | None:
+        response = client.get(
+            _build_url("sessions", str(session_id), "turns", "active"),
+            headers=user.headers,
+            cookies=user.cookies,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
+    def stream_turn_events(
+        user: DATestUser,
+        session_id: UUID,
+        turn_id: UUID,
+    ) -> Iterator[dict[str, Any]]:
+        with client.stream(
+            "GET",
+            _build_url("sessions", str(session_id), "turns", str(turn_id), "events"),
+            headers=user.headers,
+            cookies=user.cookies,
         ) as response:
+            if response.status_code in (404, 409):
+                return
             response.raise_for_status()
             yield from _parse_sse_lines(response)
+
+    @staticmethod
+    def list_messages(user: DATestUser, session_id: UUID) -> list[dict[str, Any]]:
+        response = client.get(
+            _build_url("sessions", str(session_id), "messages"),
+            headers=user.headers,
+            cookies=user.cookies,
+        )
+        response.raise_for_status()
+        return response.json()["messages"]
 
     @staticmethod
     def upload_file(
@@ -164,7 +219,7 @@ class BuildSessionManager:
         # File-upload endpoints require multipart; the session cookie still
         # works but Content-Type must be left to ``requests``.
         headers = {k: v for k, v in user.headers.items() if k.lower() != "content-type"}
-        response = requests.post(
+        response = client.post(
             _sessions_url(str(session_id), "upload"),
             files={"file": (filename, content, "application/octet-stream")},
             headers=headers,
@@ -179,7 +234,7 @@ class BuildSessionManager:
         session_id: UUID,
         path: str,
     ) -> None:
-        response = requests.delete(
+        response = client.delete(
             _sessions_url(str(session_id), "files", path),
             headers=user.headers,
             cookies=user.cookies,
@@ -192,7 +247,7 @@ class BuildSessionManager:
         session_id: UUID,
         path: str = "",
     ) -> dict[str, Any]:
-        response = requests.get(
+        response = client.get(
             _sessions_url(str(session_id), "files"),
             params={"path": path} if path else None,
             headers=user.headers,
@@ -207,7 +262,7 @@ class BuildSessionManager:
         session_id: UUID,
         path: str,
     ) -> bytes:
-        response = requests.get(
+        response = client.get(
             _sessions_url(str(session_id), "artifacts", path),
             headers=user.headers,
             cookies=user.cookies,
@@ -221,7 +276,7 @@ class BuildSessionManager:
         session_id: UUID,
         scope: SharingScope,
     ) -> None:
-        response = requests.patch(
+        response = client.patch(
             _sessions_url(str(session_id), "public"),
             json={"sharing_scope": scope.value},
             headers=user.headers,

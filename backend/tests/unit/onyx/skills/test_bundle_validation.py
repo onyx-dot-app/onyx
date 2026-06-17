@@ -19,7 +19,6 @@ from onyx.skills.bundle import compute_bundle_sha256
 from onyx.skills.bundle import parse_skill_md_metadata
 from onyx.skills.bundle import slug_from_filename
 from onyx.skills.bundle import validate_custom_bundle
-from onyx.skills.registry import BuiltinSkillRegistry
 
 
 def _build_zip(
@@ -132,12 +131,9 @@ def test_validator_rejects_invalid_slug(bad_slug: str) -> None:
         validate_custom_bundle(_valid_bundle(), slug=bad_slug)
 
 
-def test_validator_rejects_reserved_slug(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        BuiltinSkillRegistry.instance(),
-        "reserved_slugs",
-        lambda: {"pptx", "image-generation"},
-    )
+def test_validator_rejects_reserved_slug() -> None:
+    """``pptx`` is a codified built-in — bundle uploads using that slug
+    are rejected so custom uploads can't shadow a built-in row."""
     with pytest.raises(OnyxError, match="reserved"):
         validate_custom_bundle(_valid_bundle(), slug="pptx")
 

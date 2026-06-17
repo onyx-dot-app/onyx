@@ -13,52 +13,58 @@ export async function* handleSSEStream<T extends PacketType>(
       reader?.cancel();
     });
   }
-  while (true) {
-    const rawChunk = await reader?.read();
-    if (!rawChunk) {
-      throw new Error("Unable to process chunk");
-    }
-    const { done, value } = rawChunk;
-    if (done) {
-      break;
-    }
+  try {
+    while (true) {
+      const rawChunk = await reader?.read();
+      if (!rawChunk) {
+        throw new Error("Unable to process chunk");
+      }
+      const { done, value } = rawChunk;
+      if (done) {
+        break;
+      }
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-    for (const line of lines) {
-      if (line.trim() === "") continue;
+      for (const line of lines) {
+        if (line.trim() === "") continue;
 
-      try {
-        const data = JSON.parse(line) as T;
-        yield data;
-      } catch (error) {
-        console.error("Error parsing SSE data:", error);
+        try {
+          const data = JSON.parse(line) as T;
+          yield data;
+        } catch (error) {
+          console.error("Error parsing SSE data:", error);
 
-        // Detect JSON objects (ie. check if parseable json has been accumulated)
-        const jsonObjects = line.match(/\{[^{}]*\}/g);
-        if (jsonObjects) {
-          for (const jsonObj of jsonObjects) {
-            try {
-              const data = JSON.parse(jsonObj) as T;
-              yield data;
-            } catch (innerError) {
-              console.error("Error parsing extracted JSON:", innerError);
+          // Detect JSON objects (ie. check if parseable json has been accumulated)
+          const jsonObjects = line.match(/\{[^{}]*\}/g);
+          if (jsonObjects) {
+            for (const jsonObj of jsonObjects) {
+              try {
+                const data = JSON.parse(jsonObj) as T;
+                yield data;
+              } catch (innerError) {
+                console.error("Error parsing extracted JSON:", innerError);
+              }
             }
           }
         }
       }
     }
-  }
 
-  // Process any remaining data in the buffer
-  if (buffer.trim() !== "") {
-    try {
-      const data = JSON.parse(buffer) as T;
-      yield data;
-    } catch (error) {
-      console.error("Error parsing remaining buffer:", error);
+    // Process any remaining data in the buffer
+    if (buffer.trim() !== "") {
+      try {
+        const data = JSON.parse(buffer) as T;
+        yield data;
+      } catch (error) {
+        console.error("Error parsing remaining buffer:", error);
+      }
     }
+  } finally {
+    // Abandoning the generator (early return/break in a consumer's for-await)
+    // must release the connection, not just stop reading it.
+    void reader?.cancel().catch(() => {});
   }
 }

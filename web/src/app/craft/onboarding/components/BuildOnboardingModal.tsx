@@ -5,65 +5,31 @@ import {
   track,
   AnalyticsEvent,
   LLMProviderConfiguredSource,
-} from "@/lib/analytics";
+} from "@/lib/analytics/utils";
 import { SvgArrowRight, SvgArrowLeft, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import {
-  BuildUserInfo,
   OnboardingModalMode,
   OnboardingStep,
 } from "@/app/craft/onboarding/types";
-import {
-  WorkArea,
-  Level,
-  WORK_AREAS_REQUIRING_LEVEL,
-  setBuildLlmSelection,
-  getBuildLlmSelection,
-  getDefaultLlmSelection,
-} from "@/app/craft/onboarding/constants";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { testApiKeyHelper } from "@/sections/modals/languageModels/svc";
 import OnboardingInfoPages from "@/app/craft/onboarding/components/OnboardingInfoPages";
-import OnboardingUserInfo from "@/app/craft/onboarding/components/OnboardingUserInfo";
 import OnboardingLlmSetup, {
-  PROVIDERS,
   type ProviderKey,
 } from "@/app/craft/onboarding/components/OnboardingLlmSetup";
-
-/**
- * Auto-select the best available LLM based on priority order.
- * Used when user completes onboarding without going through LLM setup step.
- */
-function autoSelectBestLlm(
-  llmProviders: LLMProviderDescriptor[] | undefined
-): void {
-  // Don't override if user already has a selection
-  if (getBuildLlmSelection()) return;
-
-  const selection = getDefaultLlmSelection(llmProviders);
-  if (selection) {
-    setBuildLlmSelection(selection);
-  }
-}
-
-interface InitialValues {
-  firstName: string;
-  lastName: string;
-  workArea: WorkArea | undefined;
-  level: Level | undefined;
-}
+import { craftModelName } from "@/app/craft/onboarding/constants";
+import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
+import { getProvider } from "@/lib/languageModels";
 
 interface BuildOnboardingModalProps {
   mode: OnboardingModalMode;
   llmProviders?: LLMProviderDescriptor[];
-  initialValues: InitialValues;
   isAdmin: boolean;
-  hasUserInfo: boolean;
-  allProvidersConfigured: boolean;
   hasAnyProvider: boolean;
-  onComplete: (info: BuildUserInfo) => Promise<void>;
+  onComplete: () => Promise<void>;
   onLlmComplete: () => Promise<void>;
   onClose: () => void;
 }
@@ -72,26 +38,19 @@ interface BuildOnboardingModalProps {
 function getStepsForMode(
   mode: OnboardingModalMode,
   isAdmin: boolean,
-  allProvidersConfigured: boolean,
-  hasUserInfo: boolean
+  hasAnyProvider: boolean
 ): OnboardingStep[] {
   switch (mode.type) {
-    case "initial-onboarding":
-      // Full flow: page1 → llm-setup (if admin + not all configured) → user-info
+    case "initial-onboarding": {
+      // Full flow: page1 → llm-setup (if admin + no provider yet)
       const steps: OnboardingStep[] = ["page1"];
 
-      if (isAdmin && !allProvidersConfigured) {
+      if (isAdmin && !hasAnyProvider) {
         steps.push("llm-setup");
       }
 
-      if (!hasUserInfo) {
-        steps.push("user-info");
-      }
-
       return steps;
-
-    case "edit-user-info":
-      return ["user-info"];
+    }
 
     case "add-llm":
       return ["llm-setup"];
@@ -104,10 +63,7 @@ function getStepsForMode(
 export default function BuildOnboardingModal({
   mode,
   llmProviders,
-  initialValues,
   isAdmin,
-  hasUserInfo,
-  allProvidersConfigured,
   hasAnyProvider,
   onComplete,
   onLlmComplete,
@@ -115,14 +71,14 @@ export default function BuildOnboardingModal({
 }: BuildOnboardingModalProps) {
   // Compute steps based on mode
   const steps = useMemo(
-    () => getStepsForMode(mode, isAdmin, allProvidersConfigured, hasUserInfo),
-    [mode, isAdmin, allProvidersConfigured, hasUserInfo]
+    () => getStepsForMode(mode, isAdmin, hasAnyProvider),
+    [mode, isAdmin, hasAnyProvider]
   );
 
   // Determine initial step based on mode
   const initialStep = useMemo((): OnboardingStep => {
     if (mode.type === "add-llm") return "llm-setup";
-    return steps[0] || "user-info";
+    return steps[0] || "page1";
   }, [mode.type, steps]);
 
   // Navigation state
@@ -135,63 +91,53 @@ export default function BuildOnboardingModal({
     }
   }, [mode.type, initialStep]);
 
-  // User info state - pre-fill from initialValues
-  const [firstName, setFirstName] = useState(initialValues.firstName);
-  const [lastName, setLastName] = useState(initialValues.lastName);
-  const [workArea, setWorkArea] = useState(initialValues.workArea);
-  const [level, setLevel] = useState(initialValues.level);
-
-  // Update form values when initialValues changes
-  useEffect(() => {
-    setFirstName(initialValues.firstName);
-    setLastName(initialValues.lastName);
-    setWorkArea(initialValues.workArea);
-    setLevel(initialValues.level);
-  }, [initialValues]);
-
   // Determine initial provider for add-llm mode
   const initialProvider = mode.type === "add-llm" ? mode.provider : undefined;
+
+  const { llmProviderOptions } = useLLMProviderOptions();
+
+  const knownModelsFor = (providerType: string) =>
+    llmProviderOptions?.find((o) => o.name === providerType)?.known_models ??
+    [];
 
   // LLM setup state
   const [selectedProvider, setSelectedProvider] = useState<ProviderKey>(
     (initialProvider as ProviderKey) || "anthropic"
   );
-  const [selectedModel, setSelectedModel] = useState<string>(
-    PROVIDERS.find((p) => p.key === (initialProvider || "anthropic"))?.models[0]
-      ?.name || ""
-  );
+  const [selectedModel, setSelectedModel] = useState<string>("");
   const [apiKey, setApiKey] = useState("");
   const [connectionStatus, setConnectionStatus] = useState<
     "idle" | "testing" | "success" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Reset LLM state when mode changes to add-llm with a specific provider
+  // Seed the default model once options load; skip if the user chose one.
+  useEffect(() => {
+    if (selectedModel) return;
+    const def = craftModelName(knownModelsFor(selectedProvider));
+    if (def) setSelectedModel(def);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [llmProviderOptions, selectedProvider, selectedModel]);
+
+  // Reset LLM state on add-llm mode change; the seed effect above fills the
+  // model for the new provider (clearing it triggers that effect).
   useEffect(() => {
     if (mode.type === "add-llm" && mode.provider) {
-      const providerConfig = PROVIDERS.find(
-        (p) => p.key === (mode.provider as ProviderKey)
-      );
-      if (providerConfig) {
-        setSelectedProvider(providerConfig.key);
-        setSelectedModel(providerConfig.models[0]?.name || "");
-        setApiKey("");
-        setConnectionStatus("idle");
-        setErrorMessage("");
-      }
+      setSelectedProvider(mode.provider as ProviderKey);
+      setSelectedModel("");
+      setApiKey("");
+      setConnectionStatus("idle");
+      setErrorMessage("");
     }
   }, [mode]);
 
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const requiresLevel =
-    workArea !== undefined && WORK_AREAS_REQUIRING_LEVEL.includes(workArea);
-  const isUserInfoValid = workArea && (!requiresLevel || level);
-
-  const currentProviderConfig = PROVIDERS.find(
-    (p) => p.key === selectedProvider
-  )!;
+  const currentProviderLabel = getProvider(selectedProvider).companyName;
+  const currentProviderModels = knownModelsFor(selectedProvider).filter(
+    (m) => m.is_visible
+  );
   const isLlmValid = apiKey.trim() && selectedModel;
 
   // Calculate step navigation
@@ -220,13 +166,13 @@ export default function BuildOnboardingModal({
     setConnectionStatus("testing");
     setErrorMessage("");
 
-    const providerName = `build-mode-${currentProviderConfig.providerName}`;
+    const providerName = currentProviderLabel;
     const payload = {
       name: providerName,
-      provider: currentProviderConfig.providerName,
+      provider: selectedProvider,
       api_key: apiKey,
       default_model_name: selectedModel,
-      model_configurations: currentProviderConfig.models.map((m) => ({
+      model_configurations: currentProviderModels.map((m) => ({
         name: m.name,
         is_visible: true,
         max_input_tokens: null,
@@ -235,8 +181,10 @@ export default function BuildOnboardingModal({
     };
 
     const testResult = await testApiKeyHelper(
-      currentProviderConfig.providerName,
-      payload
+      selectedProvider,
+      payload,
+      apiKey,
+      selectedModel
     );
 
     if (!testResult.ok) {
@@ -258,8 +206,18 @@ export default function BuildOnboardingModal({
       );
 
       if (!response.ok) {
+        // Surface the backend detail (e.g. a name collision) so the user gets
+        // an actionable message instead of a generic failure.
+        const detail = await response
+          .json()
+          .then((b) => (typeof b?.detail === "string" ? b.detail : null))
+          .catch(() => null);
+        const isConflict = response.status === 409 || response.status === 400;
         setErrorMessage(
-          "There was an issue creating the provider. Please try again."
+          detail ??
+            (isConflict
+              ? `A provider named "${providerName}" already exists — remove or rename it in Admin → LLM Providers, then retry.`
+              : "There was an issue creating the provider. Please try again.")
         );
         setConnectionStatus("error");
         return;
@@ -277,14 +235,8 @@ export default function BuildOnboardingModal({
         }
       }
 
-      setBuildLlmSelection({
-        providerName: providerName,
-        provider: currentProviderConfig.providerName,
-        modelName: selectedModel,
-      });
-
       track(AnalyticsEvent.CONFIGURED_LLM_PROVIDER, {
-        provider: currentProviderConfig.providerName,
+        provider: selectedProvider,
         is_creation: true,
         source: LLMProviderConfiguredSource.CRAFT_ONBOARDING,
       });
@@ -309,8 +261,8 @@ export default function BuildOnboardingModal({
       return;
     }
 
-    if (!isUserInfoValid) return;
-    // If LLM setup was part of the flow and user has no providers (can't skip), require completion
+    // Initial onboarding completion. If LLM setup was part of the flow and the
+    // user has no providers (can't skip), require a successful connection.
     if (
       steps.includes("llm-setup") &&
       !hasAnyProvider &&
@@ -326,32 +278,7 @@ export default function BuildOnboardingModal({
         await onLlmComplete();
       }
 
-      // Auto-select best available LLM if user didn't go through LLM setup
-      // (e.g., non-admin users or when all providers already configured)
-      autoSelectBestLlm(llmProviders);
-
-      // Validate workArea is provided before submission
-      if (!workArea) {
-        setErrorMessage("Please select a work area.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      const requiresLevel = WORK_AREAS_REQUIRING_LEVEL.includes(workArea);
-
-      // Validate level if required
-      if (requiresLevel && !level) {
-        setErrorMessage("Please select a level.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      await onComplete({
-        firstName: firstName.trim(),
-        lastName: lastName.trim() || undefined,
-        workArea,
-        level: level || undefined,
-      });
+      await onComplete();
 
       track(AnalyticsEvent.COMPLETED_CRAFT_ONBOARDING);
       onClose();
@@ -367,7 +294,6 @@ export default function BuildOnboardingModal({
 
   if (mode.type === "closed") return null;
 
-  const canProceedUserInfo = isUserInfoValid;
   const isConnecting = connectionStatus === "testing";
   const canTestConnection = isLlmValid && !isConnecting;
   const isLastStep = currentStepIndex === steps.length - 1;
@@ -391,20 +317,6 @@ export default function BuildOnboardingModal({
           </button>
         )}
         <div className="p-6 flex flex-col gap-6 min-h-[600px]">
-          {/* User Info Step */}
-          {currentStep === "user-info" && (
-            <OnboardingUserInfo
-              firstName={firstName}
-              lastName={lastName}
-              workArea={workArea}
-              level={level}
-              onFirstNameChange={setFirstName}
-              onLastNameChange={setLastName}
-              onWorkAreaChange={setWorkArea}
-              onLevelChange={setLevel}
-            />
-          )}
-
           {/* LLM Setup Step */}
           {currentStep === "llm-setup" && (
             <OnboardingLlmSetup
@@ -436,7 +348,9 @@ export default function BuildOnboardingModal({
                   className="flex items-center gap-1.5 px-4 py-2 rounded-12 border border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-02 transition-colors"
                 >
                   <SvgArrowLeft className="w-4 h-4" />
-                  <Text mainUiAction>Back</Text>
+                  <Text font="main-ui-action" color="text-05">
+                    Back
+                  </Text>
                 </button>
               )}
             </div>
@@ -461,37 +375,21 @@ export default function BuildOnboardingModal({
             )}
 
             {/* Action buttons */}
-            {currentStep === "user-info" && (
+            {currentStep === "page1" && (
               <button
                 type="button"
-                onClick={() => {
-                  track(AnalyticsEvent.COMPLETED_CRAFT_USER_INFO, {
-                    first_name: firstName.trim(),
-                    last_name: lastName.trim() || undefined,
-                    work_area: workArea,
-                    level: level,
-                  });
-                  if (isLastStep) {
-                    handleSubmit();
-                  } else {
-                    handleNext();
-                  }
-                }}
-                disabled={!canProceedUserInfo || isSubmitting}
+                onClick={isLastStep ? handleSubmit : handleNext}
+                disabled={isSubmitting}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors",
-                  canProceedUserInfo && !isSubmitting
+                  !isSubmitting
                     ? "bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
                     : "bg-background-neutral-01 text-text-02 cursor-not-allowed"
                 )}
               >
                 <Text
-                  mainUiAction
-                  className={cn(
-                    canProceedUserInfo && !isSubmitting
-                      ? "text-white dark:text-black"
-                      : "text-text-02"
-                  )}
+                  font="main-ui-action"
+                  color={!isSubmitting ? "text-inverted-05" : "text-02"}
                 >
                   {isLastStep
                     ? isSubmitting
@@ -500,28 +398,8 @@ export default function BuildOnboardingModal({
                     : "Continue"}
                 </Text>
                 {!isLastStep && (
-                  <SvgArrowRight
-                    className={cn(
-                      "w-4 h-4",
-                      canProceedUserInfo && !isSubmitting
-                        ? "text-white dark:text-black"
-                        : "text-text-02"
-                    )}
-                  />
+                  <SvgArrowRight className="w-4 h-4 text-white dark:text-black" />
                 )}
-              </button>
-            )}
-
-            {currentStep === "page1" && (
-              <button
-                type="button"
-                onClick={handleNext}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-12 transition-colors bg-black dark:bg-white text-white dark:text-black hover:opacity-90"
-              >
-                <Text mainUiAction className="text-white dark:text-black">
-                  Continue
-                </Text>
-                <SvgArrowRight className="w-4 h-4 text-white dark:text-black" />
               </button>
             )}
 
@@ -535,7 +413,9 @@ export default function BuildOnboardingModal({
                     disabled={isConnecting}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-12 border border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-02 transition-colors"
                   >
-                    <Text mainUiAction>Skip</Text>
+                    <Text font="main-ui-action" color="text-05">
+                      Skip
+                    </Text>
                     <SvgArrowRight className="w-4 h-4" />
                   </button>
                 )}
@@ -552,12 +432,12 @@ export default function BuildOnboardingModal({
                   )}
                 >
                   <Text
-                    mainUiAction
-                    className={cn(
+                    font="main-ui-action"
+                    color={
                       canTestConnection && !isConnecting
-                        ? "text-white dark:text-black"
-                        : "text-text-02"
-                    )}
+                        ? "text-inverted-05"
+                        : "text-02"
+                    }
                   >
                     {isConnecting ? "Connecting..." : "Connect"}
                   </Text>
@@ -571,7 +451,7 @@ export default function BuildOnboardingModal({
                 onClick={isLastStep ? handleSubmit : handleNext}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-12 bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-colors"
               >
-                <Text mainUiAction className="text-white dark:text-black">
+                <Text font="main-ui-action" color="text-inverted-05">
                   {isLastStep ? "Done" : "Continue"}
                 </Text>
                 {!isLastStep && (

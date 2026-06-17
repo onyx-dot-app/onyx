@@ -236,11 +236,22 @@ def drop_multitenant_postgres_task(dbname: str) -> None:
 
 
 def reset_postgres(
-    database: str = "postgres",
     config_name: str = "alembic",
     setup_onyx: bool = True,
 ) -> None:
-    """Reset the Postgres database."""
+    """Reset the Postgres database.
+
+    The target database name is read from the POSTGRES_DB env var. If
+    POSTGRES_DB is unset or empty this function raises rather than silently
+    falling back to a default.
+    """
+    database = os.environ.get("POSTGRES_DB", "").strip()
+    if not database:
+        raise RuntimeError(
+            "reset_postgres requires POSTGRES_DB to be set. Refusing to "
+            "operate without an explicit target database to avoid wiping "
+            "shared infrastructure."
+        )
     # this seems to hang due to locking issues, so run with a timeout with a few retries
     NUM_TRIES = 10
     TIMEOUT = 40

@@ -5,6 +5,9 @@ These tests require a pre-built CLI binary passed via the ONYX_CLI_BINARY
 env var. In CI, the workflow builds the binary and mounts it into the test
 container. The tests are skipped when ONYX_CLI_BINARY is not set.
 
+LLM responses are mocked for the whole suite (see conftest), so the ``ask``
+tests assert on MOCK_LLM_TOKEN rather than calling a real provider.
+
 To run locally (requires Go toolchain + all Onyx services running):
 
     cd cli && go build -o /tmp/onyx-cli-test .
@@ -20,25 +23,24 @@ Test Suite:
 4.  test_ask_plain_text - Answer contains expected content
 5.  test_ask_json - NDJSON stream has correct event types
 6.  test_ask_quiet - Buffered output contains answer
-7.  test_ask_stdin_pipe - Piped context is used in the answer
-8.  test_ask_truncation - Output truncated with temp file path
-9.  test_ask_agent_id - Routes question to a specific persona
-10. test_ask_no_truncation - --max-output 0 disables truncation
-11. test_ask_not_configured - Missing PAT returns exit code 3
-12. test_configure_non_tty - Non-TTY returns exit code 2
-13. test_agents_list - Seeded persona appears in table output
-14. test_agents_json - Seeded persona appears in JSON output
-15. test_help_non_tty - No subcommand prints help, exits 0
-16. test_version_flag - Prints client and server version
-17. test_experiments - Lists feature flags
-18. test_search_returns_results - Search returns seeded document content
-19. test_search_raw - --raw outputs full SearchResponse as JSON
-20. test_search_truncation - --max-output truncates with temp file path
-21. test_search_no_query - No query returns exit code 2
-22. test_search_bad_pat - Invalid PAT returns exit code 4
-23. test_search_not_configured - Missing PAT returns exit code 3
-24. test_search_source_filter - --source filters results to matching source types
-25. test_search_agent_id - --agent-id scopes search to a persona's document sets
+7.  test_ask_truncation - Output truncated with temp file path
+8.  test_ask_agent_id - Routes question to a specific persona
+9.  test_ask_no_truncation - --max-output 0 disables truncation
+10. test_ask_not_configured - Missing PAT returns exit code 3
+11. test_configure_non_tty - Non-TTY returns exit code 2
+12. test_agents_list - Seeded persona appears in table output
+13. test_agents_json - Seeded persona appears in JSON output
+14. test_help_non_tty - No subcommand prints help, exits 0
+15. test_version_flag - Prints client and server version
+16. test_experiments - Lists feature flags
+17. test_search_returns_results - Search returns seeded document content
+18. test_search_raw - --raw outputs full SearchResponse as JSON
+19. test_search_truncation - --max-output truncates with temp file path
+20. test_search_no_query - No query returns exit code 2
+21. test_search_bad_pat - Invalid PAT returns exit code 4
+22. test_search_not_configured - Missing PAT returns exit code 3
+23. test_search_source_filter - --source filters results to matching source types
+24. test_search_agent_id - --agent-id scopes search to a persona's document sets
 """
 
 import json
@@ -60,6 +62,7 @@ from tests.integration.common_utils.test_models import DATestAPIKey
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestPersona
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.cli.conftest import MOCK_LLM_TOKEN
 
 _CLI_BINARY = os.environ.get("ONYX_CLI_BINARY")
 
@@ -179,12 +182,12 @@ def test_ask_plain_text(
     """Ask a question using the default persona (most common usage)."""
     result = run_cli(
         cli_binary,
-        ["ask", 'Respond with exactly the word "pineapple" and nothing else'],
+        ["ask", "Say the magic word"],
         pat=pat_token,
     )
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
-    assert "pineapple" in result.stdout.lower()
+    assert MOCK_LLM_TOKEN in result.stdout.lower()
 
 
 def test_ask_json(
@@ -225,29 +228,12 @@ def test_ask_quiet(
     """Quiet mode buffers output and prints once."""
     result = run_cli(
         cli_binary,
-        ["ask", "--quiet", 'Respond with exactly "quiet_ok"'],
+        ["ask", "--quiet", "Answer the question"],
         pat=pat_token,
     )
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
-    assert "quiet_ok" in result.stdout.lower()
-
-
-def test_ask_stdin_pipe(
-    cli_binary: Path,
-    pat_token: str,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
-) -> None:
-    """Piped stdin content is used as context in the answer."""
-    result = run_cli(
-        cli_binary,
-        ["ask", "--prompt", "What is the secret code in the context below?"],
-        pat=pat_token,
-        stdin_data="The secret code is XRAY42.",
-    )
-
-    assert result.returncode == 0, f"stderr: {result.stderr}"
-    assert "XRAY42" in result.stdout
+    assert MOCK_LLM_TOKEN in result.stdout.lower()
 
 
 def test_ask_truncation(
@@ -402,7 +388,6 @@ def test_search_returns_results(
 
 
 def test_search_raw(
-    reset: None,  # noqa: ARG001
     cli_binary: Path,
     pat_token: str,
     admin_user: DATestUser,
@@ -420,9 +405,6 @@ def test_search_raw(
 
     assert result.returncode == 0, f"stderr: {result.stderr}"
 
-    # ``reset`` only wipes Postgres; OpenSearch is shared across tests, so docs
-    # seeded by prior tests may still match. Find the seeded doc by content
-    # rather than asserting on result count.
     data = json.loads(result.stdout)
     matches = [r for r in data["results"] if phrase in r["content"]]
     assert len(matches) == 1

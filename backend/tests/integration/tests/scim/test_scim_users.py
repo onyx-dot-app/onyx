@@ -24,9 +24,9 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import httpx
 import pytest
 import redis
-import requests
 
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
@@ -162,7 +162,7 @@ def _create_scim_user(
     email: str,
     external_id: str,
     idp_style: str = "okta",
-) -> requests.Response:
+) -> httpx.Response:
     return ScimClient.post(
         "/Users",
         token,

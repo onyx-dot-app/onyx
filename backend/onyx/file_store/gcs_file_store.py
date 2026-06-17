@@ -98,10 +98,10 @@ class GCSBackedFileStore(FileStore):
                     self._gcs_client = storage.Client(**client_kwargs)
 
             except ImportError as e:
-                logger.error(f"Failed to import google-cloud-storage: {e}")
+                logger.error("Failed to import google-cloud-storage: %s", e)
                 raise
             except Exception as e:
-                logger.error(f"Failed to initialize GCS client: {e}")
+                logger.error("Failed to initialize GCS client: %s", e)
                 raise RuntimeError(f"Failed to initialize GCS client: {e}") from e
 
         return self._gcs_client
@@ -119,7 +119,7 @@ class GCSBackedFileStore(FileStore):
             max_key_length=1024,
         )
         if len(key) == 1024:
-            logger.info(f"File name was too long and was truncated: {file_name}")
+            logger.info("File name was too long and was truncated: %s", file_name)
         return key
 
     def initialize(self) -> None:
@@ -130,14 +130,14 @@ class GCSBackedFileStore(FileStore):
         client = self._get_gcs_client()
         try:
             client.get_bucket(self._bucket_name)
-            logger.info(f"GCS bucket '{self._bucket_name}' already exists")
+            logger.info("GCS bucket '%s' already exists", self._bucket_name)
         except NotFound:
-            logger.info(f"Creating GCS bucket '{self._bucket_name}'")
+            logger.info("Creating GCS bucket '%s'", self._bucket_name)
             client.create_bucket(self._bucket_name)
-            logger.info(f"Successfully created GCS bucket '{self._bucket_name}'")
+            logger.info("Successfully created GCS bucket '%s'", self._bucket_name)
         except Forbidden:
             logger.warning(
-                f"GCS bucket '{self._bucket_name}' exists but access is forbidden"
+                "GCS bucket '%s' exists but access is forbidden", self._bucket_name
             )
             raise RuntimeError(
                 f"Access denied to GCS bucket '{self._bucket_name}'. Check permissions."
@@ -206,8 +206,11 @@ class GCSBackedFileStore(FileStore):
                 blob.delete()
             except Exception:
                 logger.warning(
-                    f"Failed to clean up orphaned GCS blob {self._bucket_name}/{object_key} "
-                    f"after DB persistence failure for file {file_id}",
+                    "Failed to clean up orphaned GCS blob %s/%s "
+                    "after DB persistence failure for file %s",
+                    self._bucket_name,
+                    object_key,
+                    file_id,
                     exc_info=True,
                 )
             raise
@@ -264,7 +267,7 @@ class GCSBackedFileStore(FileStore):
             blob.reload()
             return blob.size
         except Exception as e:
-            logger.warning(f"Error getting file size for {file_id}: {e}")
+            logger.warning("Error getting file size for %s: %s", file_id, e)
             return None
 
     def delete_file(
@@ -286,8 +289,10 @@ class GCSBackedFileStore(FileStore):
                     return
                 if not file_record.bucket_name:
                     logger.error(
-                        f"File record {file_id} with key {file_record.object_key} "  # noqa: S608 - log message, not SQL
-                        "has no bucket name, cannot delete from filestore"
+                        "File record %s with key %s "  # noqa: S608 - log message, not SQL
+                        "has no bucket name, cannot delete from filestore",
+                        file_id,
+                        file_record.object_key,
                     )
                     delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
                     db_session.commit()
@@ -302,9 +307,10 @@ class GCSBackedFileStore(FileStore):
                     blob.delete()
                 except NotFound:
                     logger.warning(
-                        f"delete_file: File {file_id} not found in GCS "
-                        f"(key: {file_record.object_key}), "
-                        "cleaning up database record."
+                        "delete_file: File %s not found in GCS "
+                        "(key: %s), cleaning up database record.",
+                        file_id,
+                        file_record.object_key,
                     )
 
                 delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
@@ -357,15 +363,20 @@ class GCSBackedFileStore(FileStore):
                     source_blob.delete()
                 except Exception:
                     logger.warning(
-                        f"Failed to delete old GCS blob after changing file ID from "
-                        f"{old_file_id} to {new_file_id}; blob may be orphaned",
+                        "Failed to delete old GCS blob after changing file ID from "
+                        "%s to %s; blob may be orphaned",
+                        old_file_id,
+                        new_file_id,
                         exc_info=True,
                     )
 
             except Exception as e:
                 db_session.rollback()
                 logger.exception(
-                    f"Failed to change file ID from {old_file_id} to {new_file_id}: {e}"
+                    "Failed to change file ID from %s to %s: %s",
+                    old_file_id,
+                    new_file_id,
+                    e,
                 )
                 raise
 

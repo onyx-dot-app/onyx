@@ -3,46 +3,11 @@
  */
 
 import { formatDistanceToNowStrict, formatRelative } from "date-fns";
-import type { ScheduledRunSummary } from "@/app/craft/v1/tasks/interfaces";
-
-export function getBrowserTimezone(): string {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return tz || "UTC";
-  } catch {
-    return "UTC";
-  }
-}
-
-export function getCommonTimezones(): string[] {
-  // Use ``supportedValuesOf`` when available; fall back to a curated list.
-  type ExtendedIntl = typeof Intl & {
-    supportedValuesOf?: (key: string) => string[];
-  };
-  const ext = Intl as ExtendedIntl;
-  if (typeof ext.supportedValuesOf === "function") {
-    try {
-      const all = ext.supportedValuesOf("timeZone");
-      if (Array.isArray(all) && all.length > 0) return all;
-    } catch {
-      // fall through
-    }
-  }
-  return [
-    "UTC",
-    "America/Los_Angeles",
-    "America/Denver",
-    "America/Chicago",
-    "America/New_York",
-    "Europe/London",
-    "Europe/Berlin",
-    "Europe/Paris",
-    "Asia/Kolkata",
-    "Asia/Singapore",
-    "Asia/Tokyo",
-    "Australia/Sydney",
-  ];
-}
+import type {
+  ScheduledRunContextResponse,
+  ScheduledRunSummary,
+  ScheduledTaskRunStatus,
+} from "@/app/craft/v1/tasks/interfaces";
 
 export function formatRelativeShort(isoOrDate: string | Date | null): string {
   if (!isoOrDate) return "—";
@@ -90,25 +55,36 @@ export function formatRunDuration(
  * Returns a human-readable reason a run row can't be opened as a session,
  * or `null` when the row is clickable.
  *
- * A row is clickable only when the run reached a terminal state (`SUCCEEDED`
- * or `FAILED`) AND has an associated session — every other state means the
- * session view would be missing or mid-flight.
+ * A row is clickable once there is a session to open. Queued rows have not
+ * created one yet; skipped rows deliberately never create one.
  */
 export function getNonClickableReason(run: ScheduledRunSummary): string | null {
+  if (
+    run.status === "RUNNING" ||
+    run.status === "AWAITING_APPROVAL" ||
+    run.status === "SUCCEEDED" ||
+    run.status === "FAILED"
+  ) {
+    return run.session_id ? null : "This run has not created a session yet.";
+  }
+
   switch (run.status) {
     case "QUEUED":
       return "This run hasn't started yet — no session to open.";
-    case "RUNNING":
-      return "Run still in progress — open it once it finishes.";
-    case "AWAITING_APPROVAL":
-      return "Run is paused awaiting approval — open it once it resumes.";
     case "SKIPPED":
       return "This run was skipped because a prior run was still in flight — no session was created.";
-    case "SUCCEEDED":
-    case "FAILED":
-      if (!run.session_id) {
-        return "This run ended before a session was created.";
-      }
-      return null;
   }
+  return null;
+}
+
+export function isScheduledRunInFlight(
+  status: ScheduledTaskRunStatus
+): boolean {
+  return status === "RUNNING" || status === "AWAITING_APPROVAL";
+}
+
+export function isScheduledRunContextInFlight(
+  context: ScheduledRunContextResponse | null | undefined
+): boolean {
+  return context ? isScheduledRunInFlight(context.status) : false;
 }

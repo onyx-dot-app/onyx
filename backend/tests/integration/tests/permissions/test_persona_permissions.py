@@ -7,8 +7,8 @@ This file tests the permissions for creating and editing personas for different 
 
 import os
 
+import httpx
 import pytest
-from requests.exceptions import HTTPError
 
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import DATestUser
@@ -113,7 +113,7 @@ def test_persona_permissions(reset: None) -> None:  # noqa: ARG001
     PersonaManager.verify(basic_user_persona, user_performing_action=basic_user)
 
     # Basic user cannot edit other's personas
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         PersonaManager.edit(
             persona=curator_persona,
             description="Invalid edit by basic user",
@@ -130,7 +130,7 @@ def test_persona_permissions(reset: None) -> None:  # noqa: ARG001
     PersonaManager.verify(admin_persona_group_1, user_performing_action=curator)
 
     # Curator cannot edit personas in groups they don't curate
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         PersonaManager.edit(
             persona=admin_persona_group_2,
             description="Invalid edit by curator",
@@ -138,7 +138,7 @@ def test_persona_permissions(reset: None) -> None:  # noqa: ARG001
         )
 
     # Curator cannot edit personas that belong to multiple groups, even if they curate one
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         PersonaManager.edit(
             persona=admin_persona_both_groups,
             description="Invalid edit by curator",

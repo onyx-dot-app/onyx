@@ -10,8 +10,8 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
 import { MultiModelResponse } from "@/app/app/message/interfaces";
-import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
-import { buildLlmOptions } from "@/refresh-components/popovers/llmUtils";
+import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
+import { buildLlmOptions } from "@/lib/languageModels/options";
 import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
   useCurrentMessageHistory,

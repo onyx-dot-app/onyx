@@ -1,6 +1,8 @@
 # Recent chart changes (0.5.0)
 
-If you are upgrading from an earlier 0.4.x release, note:
+If you are upgrading from an earlier 0.4.x release, **read [MIGRATION.md](./MIGRATION.md) first.** The 0.5.0 release dropped the bundled Vespa subchart; chart 0.5.6 ships a guard that fails `helm upgrade` if the legacy `da-vespa` StatefulSet is still in the namespace so you don't lose the indexed data silently.
+
+Other 0.5.0 changes:
 
 * **Redis** — the chart now bundles the `redis-operator` subchart alongside the
   `redis` subchart. The operator installs the CRD that the Redis CR binds to,
@@ -44,6 +46,22 @@ If you don't want the bundled Redis (recommended for production environments usi
 managed Redis like AWS ElastiCache), see [Using an external Redis](#using-an-external-redis)
 below and set `redis.enabled: false` to skip the operator entirely.
 
+## Onyx Craft with Kubernetes sandboxes
+
+When `configMap.ENABLE_CRAFT="true"`, the target cluster must run Kubernetes
+`>= 1.33`. Craft Helm deployments provision Kubernetes sandbox pods; Docker
+is not a Helm deployment backend for Craft and `configMap.SANDBOX_BACKEND` is
+not a bypass for this requirement.
+
+Craft sandbox pods use native restartable init sidecar containers:
+`sandbox-init` runs and completes first, `sidecar` starts next as an
+`initContainers` entry with `restartPolicy: Always`, and the main `sandbox` app
+container starts after the sidecar's startup restore gate is ready.
+
+The chart fails during render/install on older clusters so the incompatibility
+is caught before sandbox provisioning. This guard does not apply to non-Craft
+installs.
+
 ## Using an external Redis
 
 To point Onyx at an externally-managed Redis (e.g. AWS ElastiCache) and skip
@@ -70,6 +88,83 @@ auth:
     secretKeys:
       REDIS_PASSWORD: redis_password
 ```
+
+## Sourcing secrets from an external secret manager (ESO)
+
+The chart can render an `ExternalSecret` CR that has [External Secrets
+Operator](https://external-secrets.io/) materialize a single Kubernetes Secret
+from an upstream provider (AWS Secrets Manager, GCP Secret Manager, Vault,
+etc.). All `auth.*` sections then read their per-section keys from that
+materialized Secret, and any loose env-var secrets are projected into pods
+via `envFrom`.
+
+**Prerequisite:** the chart does *not* install ESO. Install it separately and
+create a `SecretStore` or `ClusterSecretStore` (e.g. `aws-secrets-manager`)
+before enabling `externalSecret`. See https://external-secrets.io/ for setup.
+
+The upstream secret should be a JSON object whose top-level keys map 1:1 to
+the keys the chart expects in the materialized Secret (the union of every
+`auth.<section>.secretKeys` value plus any loose env-var names you project via
+`extraEnvFromSecret`).
+
+```yaml
+externalSecret:
+  enabled: true
+  # Identifier of the upstream secret (e.g. AWS Secrets Manager secret name).
+  refPath: "onyx/<customer>/app-secrets"
+  # Name of the materialized k8s Secret. Point auth.*.existingSecret here.
+  secretName: onyx-app-secrets
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  refreshInterval: 1h
+
+# Inject every key from onyx-app-secrets as an env var on backend pods.
+# Use for secrets that today live as plaintext in `configMap:` blocks.
+extraEnvFromSecret: onyx-app-secrets
+
+auth:
+  postgresql:
+    existingSecret: onyx-app-secrets
+    secretKeys:
+      POSTGRES_USER: postgres_user
+      POSTGRES_PASSWORD: postgres_password
+  redis:
+    existingSecret: onyx-app-secrets
+    secretKeys:
+      REDIS_PASSWORD: redis_password
+  # ...repeat for any other auth section that should read from the shared Secret.
+```
+
+When `externalSecret.enabled: false` (the default) the chart renders exactly
+as before — no `ExternalSecret` CR is created and `envFrom` is unchanged.
+
+### First-install reconciliation window
+
+The Helm release renders both the `ExternalSecret` CR and the Deployments that
+reference the materialized Secret in the same apply. ESO reconciles the CR
+asynchronously, typically within a few seconds. During that brief window,
+backend pods will be in `CreateContainerConfigError` because their
+`envFrom: secretRef` references a Secret that does not yet exist. The kubelet
+retries pod creation automatically; once ESO materializes the Secret, pods
+transition to `Running` without manual intervention.
+
+We intentionally leave the `secretRef` non-optional. Marking it optional would
+allow pods to boot with empty env vars and fail later in a way that is harder
+to diagnose; the brief `CreateContainerConfigError` is the clearer failure
+mode if anything is misconfigured (wrong SM path, missing IRSA permissions,
+missing keys in the upstream blob).
+
+If you need pods to be `Ready` before traffic is routed, rely on the existing
+readiness probes — they will not pass until the env vars are present.
+
+### Model-server pods
+
+`indexing-model-deployment` and `inference-model-deployment` deliberately do
+**not** consume `extraEnvFromSecret`. Model servers only need model-config
+env vars (already in the chart's `configMap`), so injecting application-level
+secrets like `POSTGRES_PASSWORD` would needlessly widen their secret-exposure
+surface.
 
 # Values that come from docker-compose (do not copy them)
 
@@ -118,6 +213,11 @@ Other docker-compose-style values you should set deliberately:
 ## Output template to file and inspect
 * cd charts/onyx
 * helm template test-output . --set auth.opensearch.values.opensearch_admin_password='StrongPassword123!' > test-output.yaml
+* Craft Kubernetes sandbox version guard check:
+  * expect failure:
+    `helm template test-output . -f values-ci.yaml --kube-version 1.32.0 --show-only templates/craft-kubernetes-version-check.yaml`
+  * expect success:
+    `helm template test-output . -f values-ci.yaml --kube-version 1.33.0 --show-only templates/craft-kubernetes-version-check.yaml`
 
 ## Test the entire cluster manually
 * cd charts/onyx

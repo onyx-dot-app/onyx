@@ -2,9 +2,9 @@
 
 import { useEffect } from "react";
 import { motion } from "motion/react";
-import { track, AnalyticsEvent } from "@/lib/analytics";
+import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { OnyxLogoTypeIcon } from "@/components/icons/icons";
-import Text from "@/refresh-components/texts/Text";
+import RefreshText from "@/refresh-components/texts/Text";
 import BigButton from "@/app/craft/components/BigButton";
 
 interface BuildModeIntroContentProps {
@@ -41,7 +41,7 @@ export default function BuildModeIntroContent({
                 style={{ transform: "translateX(-0.6em)" }}
               >
                 <span className="relative inline-block leading-[3.5]">
-                  <Text
+                  <RefreshText
                     headingH1
                     className="text-9xl! text-white! relative inline-block"
                     style={{
@@ -50,7 +50,7 @@ export default function BuildModeIntroContent({
                     }}
                   >
                     Craft
-                  </Text>
+                  </RefreshText>
                 </span>
                 <span
                   className="pointer-events-none absolute top-3 -right-14 text-[1em] uppercase tracking-[0.2em] text-white!"

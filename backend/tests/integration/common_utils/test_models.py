@@ -39,6 +39,7 @@ class DATestPAT(BaseModel):
     created_at: str
     expires_at: str | None = None
     last_used_at: str | None = None
+    scopes: list[str] | None = None
 
 
 class DATestScimToken(BaseModel):
@@ -325,3 +326,4 @@ class DATestSkill(BaseModel):
     is_public: bool = False
     enabled: bool = True
     granted_group_ids: list[int] = Field(default_factory=list)
+    is_personal: bool = False

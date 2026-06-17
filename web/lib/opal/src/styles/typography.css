@@ -1,0 +1,28 @@
+/**
+ * @opal/typography — web-only font plumbing.
+ *
+ * Covers:
+ *   - KH Teka @font-face declaration (loads the web font file)
+ *   - The `.font-main-content-body strong` weight override
+ *
+ * The typography PRESETS (the `@utility font-*` blocks) are now design tokens in
+ * @onyx-ai/shared and are generated into `@onyx-ai/shared/typography.css`, imported
+ * via _reference.css (which leads the bundle). The font-family CSS variables and the
+ * height metrics they reference also live in @onyx-ai/shared (tokens.css).
+ *
+ * Automatically included when consumers import `@onyx-ai/opal/root.css`.
+ */
+
+@layer base {
+  @font-face {
+    font-family: "KH Teka";
+    src: url("/fonts/KHTeka-Medium.otf") format("opentype");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+  }
+}
+
+.font-main-content-body strong {
+  font-weight: 700;
+}

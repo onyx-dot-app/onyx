@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Popover, PopoverMenu } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import UserFilesModal from "@/components/modals/UserFilesModal";
+import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import {
   ProjectFile,

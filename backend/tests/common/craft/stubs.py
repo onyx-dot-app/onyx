@@ -19,7 +19,7 @@ Rationale
 3. **Enables fault injection.** Several attributes
    (``write_files_to_sandbox_raises_for``, ``send_message_events``, ...) let
    tests inject the rare-but-load-bearing failures (RetriableWriteError,
-   FatalWriteError, ACP event sequences) without reaching for ``MagicMock``.
+   FatalWriteError, sandbox event sequences) without reaching for ``MagicMock``.
 
 Observable state (P1: assert behaviour, not implementation)
 ----------------------------------------------------------
@@ -49,19 +49,22 @@ Usage
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterable
 from typing import Any
 from typing import cast
 from uuid import UUID
 
-from onyx.server.features.build.sandbox.base import ACPEvent
+from onyx.server.features.build.sandbox.base import SandboxEvent
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 
 _UNSET = object()
 
@@ -85,10 +88,12 @@ class StubSandboxManager(SandboxManager):
     - ``health_check_returns``: bool returned by ``health_check``.
     - ``session_workspace_exists_returns``: bool returned by
       ``session_workspace_exists``.
-    - ``send_message_events``: iterable of ACP events yielded by
+    - ``send_message_events``: iterable of sandbox events yielded by
       ``send_message``. The iterable is **snapshotted to a list on
       assignment** so the same stub can be re-driven across multiple
       ``send_message`` calls.
+    - ``subscribe_to_opencode_session_events``: iterable of ACP events yielded
+      by ``subscribe_to_opencode_session``.
     - ``create_snapshot_returns``: ``SnapshotResult | None`` returned by
       ``create_snapshot``.
     - ``list_directory_returns``, ``read_file_returns``,
@@ -119,18 +124,28 @@ class StubSandboxManager(SandboxManager):
     """
 
     def __init__(self) -> None:
+        # Tests hitting prompt_slot / list_subagents need the mixin state.
+        self._init_serve_state()
+
         # Return-value hooks.
         self.provision_returns: SandboxInfo | None = None
         self.health_check_returns: bool | None = None
         self.session_workspace_exists_returns: bool | None = None
         self.create_snapshot_returns: SnapshotResult | None | object = _UNSET
+        self.create_opencode_history_snapshot_returns: bool | object = _UNSET
         self.list_directory_returns: list[FilesystemEntry] | None = None
         self.read_file_returns: bytes | None = None
         self.upload_file_returns: str | None = None
         self.delete_file_returns: bool | None = None
+        self.delete_opencode_session_returns: bool | Exception = True
+        self.prompt_slot_returns: bool = True
         self.get_upload_stats_returns: tuple[int, int] | None = None
         self.get_webapp_url_returns: str | None = None
         self.generate_pptx_preview_returns: tuple[list[str], bool] | None = None
+        # Preflight session id. Defaulted (not _not_configured) so send_message
+        # tests don't each have to wire it; the real _ServeMixin override POSTs
+        # /session over HTTP, which has no pod to reach under the stub.
+        self.ensure_opencode_session_returns: str | None = "stub-opencode-session"
 
         # Silent no-op opt-ins for methods that legitimately return None.
         self.terminate_silent: bool = False
@@ -145,25 +160,34 @@ class StubSandboxManager(SandboxManager):
 
         # ``send_message_events`` is stored via the property below so it is
         # materialised at assignment time (see __setattr__-like setter).
-        self._send_message_events: list[ACPEvent] | None = None
+        self._send_message_events: list[SandboxEvent] | None = None
+        self._subscribe_to_opencode_session_events: list[SandboxEvent] | None = None
 
         # Observable state: scoped counters and last-payload snapshots.
         self.provision_count: int = 0
         self.terminate_count: int = 0
+        self.terminated_sandbox_ids: list[UUID] = []
         self.setup_session_workspace_count: int = 0
         self.cleanup_session_workspace_count: int = 0
         self.create_snapshot_count: int = 0
+        self.create_opencode_history_snapshot_count: int = 0
         self.restore_snapshot_count: int = 0
         self.session_workspace_exists_count: int = 0
         self.list_session_workspaces_count: int = 0
         self.list_session_workspaces_returns: list[UUID] | None = None
+        self.list_session_workspaces_payloads: list[dict[str, Any]] = []
         self.last_list_session_workspaces_payload: dict[str, Any] | None = None
         self.health_check_count: int = 0
+        self.ensure_opencode_session_count: int = 0
+        self.last_ensure_opencode_session_payload: dict[str, Any] | None = None
         self.send_message_count: int = 0
+        self.subscribe_to_opencode_session_count: int = 0
         self.list_directory_count: int = 0
         self.read_file_count: int = 0
         self.upload_file_count: int = 0
         self.delete_file_count: int = 0
+        self.delete_opencode_session_count: int = 0
+        self.prompt_slot_count: int = 0
         self.write_sandbox_file_count: int = 0
         self.get_upload_stats_count: int = 0
         self.write_files_to_sandbox_count: int = 0
@@ -175,14 +199,19 @@ class StubSandboxManager(SandboxManager):
         self.last_setup_session_workspace_payload: dict[str, Any] | None = None
         self.last_cleanup_session_workspace_payload: dict[str, Any] | None = None
         self.last_create_snapshot_payload: dict[str, Any] | None = None
+        self.last_create_opencode_history_snapshot_payload: dict[str, Any] | None = None
+        self.create_opencode_history_snapshot_payloads: list[dict[str, Any]] = []
         self.last_restore_snapshot_payload: dict[str, Any] | None = None
         self.last_session_workspace_exists_payload: dict[str, Any] | None = None
         self.last_health_check_payload: dict[str, Any] | None = None
         self.last_send_message_payload: dict[str, Any] | None = None
+        self.last_subscribe_to_opencode_session_payload: dict[str, Any] | None = None
         self.last_list_directory_payload: dict[str, Any] | None = None
         self.last_read_file_payload: dict[str, Any] | None = None
         self.last_upload_file_payload: dict[str, Any] | None = None
         self.last_delete_file_payload: dict[str, Any] | None = None
+        self.last_delete_opencode_session_payload: dict[str, Any] | None = None
+        self.last_prompt_slot_payload: dict[str, Any] | None = None
         self.last_write_sandbox_file_payload: dict[str, Any] | None = None
         self.last_get_upload_stats_payload: dict[str, Any] | None = None
         self.last_write_files_to_sandbox_payload: dict[str, Any] | None = None
@@ -196,12 +225,24 @@ class StubSandboxManager(SandboxManager):
     # ------------------------------------------------------------------
 
     @property
-    def send_message_events(self) -> list[ACPEvent] | None:
+    def send_message_events(self) -> list[SandboxEvent] | None:
         return self._send_message_events
 
     @send_message_events.setter
-    def send_message_events(self, value: Iterable[ACPEvent] | None) -> None:
+    def send_message_events(self, value: Iterable[SandboxEvent] | None) -> None:
         self._send_message_events = None if value is None else list(value)
+
+    @property
+    def subscribe_to_opencode_session_events(self) -> list[SandboxEvent] | None:
+        return self._subscribe_to_opencode_session_events
+
+    @subscribe_to_opencode_session_events.setter
+    def subscribe_to_opencode_session_events(
+        self, value: Iterable[SandboxEvent] | None
+    ) -> None:
+        self._subscribe_to_opencode_session_events = (
+            None if value is None else list(value)
+        )
 
     def provision(
         self,
@@ -210,6 +251,8 @@ class StubSandboxManager(SandboxManager):
         tenant_id: str,
         llm_config: LLMProviderConfig,
         onyx_pat: str | None = None,
+        *,
+        all_llm_configs: list[LLMProviderConfig] | None = None,
     ) -> SandboxInfo:
         self.provision_count += 1
         self.last_provision_payload = {
@@ -218,6 +261,7 @@ class StubSandboxManager(SandboxManager):
             "tenant_id": tenant_id,
             "llm_config": llm_config,
             "onyx_pat": onyx_pat,
+            "all_llm_configs": all_llm_configs,
         }
         if self.provision_returns is None:
             raise _not_configured("provision")
@@ -226,6 +270,7 @@ class StubSandboxManager(SandboxManager):
     def terminate(self, sandbox_id: UUID) -> None:
         self.terminate_count += 1
         self.last_terminate_sandbox_id = sandbox_id
+        self.terminated_sandbox_ids.append(sandbox_id)
         if not self.terminate_silent:
             raise _not_configured("terminate")
 
@@ -236,11 +281,7 @@ class StubSandboxManager(SandboxManager):
         llm_config: LLMProviderConfig,
         nextjs_port: int | None,
         skills_section: str,
-        snapshot_path: str | None = None,
         user_name: str | None = None,
-        user_role: str | None = None,
-        user_work_area: str | None = None,
-        user_level: str | None = None,
     ) -> None:
         self.setup_session_workspace_count += 1
         self.last_setup_session_workspace_payload = {
@@ -249,11 +290,7 @@ class StubSandboxManager(SandboxManager):
             "llm_config": llm_config,
             "nextjs_port": nextjs_port,
             "skills_section": skills_section,
-            "snapshot_path": snapshot_path,
             "user_name": user_name,
-            "user_role": user_role,
-            "user_work_area": user_work_area,
-            "user_level": user_level,
         }
         if not self.setup_session_workspace_silent:
             raise _not_configured("setup_session_workspace")
@@ -288,6 +325,25 @@ class StubSandboxManager(SandboxManager):
         if self.create_snapshot_returns is _UNSET:
             raise _not_configured("create_snapshot")
         return cast("SnapshotResult | None", self.create_snapshot_returns)
+
+    def create_opencode_history_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,
+    ) -> bool:
+        self.create_opencode_history_snapshot_count += 1
+        self.last_create_opencode_history_snapshot_payload = {
+            "sandbox_id": sandbox_id,
+            "tenant_id": tenant_id,
+            "timeout_seconds": timeout_seconds,
+        }
+        self.create_opencode_history_snapshot_payloads.append(
+            self.last_create_opencode_history_snapshot_payload
+        )
+        if self.create_opencode_history_snapshot_returns is _UNSET:
+            raise _not_configured("create_opencode_history_snapshot")
+        return cast(bool, self.create_opencode_history_snapshot_returns)
 
     def restore_snapshot(
         self,
@@ -329,6 +385,9 @@ class StubSandboxManager(SandboxManager):
     def list_session_workspaces(self, sandbox_id: UUID) -> list[UUID]:
         self.list_session_workspaces_count += 1
         self.last_list_session_workspaces_payload = {"sandbox_id": sandbox_id}
+        self.list_session_workspaces_payloads.append(
+            self.last_list_session_workspaces_payload
+        )
         if self.list_session_workspaces_returns is None:
             raise _not_configured("list_session_workspaces")
         return list(self.list_session_workspaces_returns)
@@ -343,22 +402,81 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("health_check")
         return self.health_check_returns
 
+    @contextlib.contextmanager
+    def prompt_slot(
+        self,
+        sandbox_id: UUID,
+        build_session_id: UUID,
+    ) -> Generator[bool, None, None]:
+        self.prompt_slot_count += 1
+        self.last_prompt_slot_payload = {
+            "sandbox_id": sandbox_id,
+            "build_session_id": build_session_id,
+        }
+        yield self.prompt_slot_returns
+
+    def ensure_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str | None = None,
+    ) -> str | None:
+        # Override the real _ServeMixin preflight (which POSTs /session over
+        # HTTP to a pod) so send_message tests run fully in-memory.
+        self.ensure_opencode_session_count += 1
+        self.last_ensure_opencode_session_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+            "opencode_session_id": opencode_session_id,
+        }
+        return self.ensure_opencode_session_returns
+
     def send_message(
         self,
         sandbox_id: UUID,
         session_id: UUID,
         message: str,
-    ) -> Generator[ACPEvent, None, None]:
+        *,
+        opencode_session_id: str | None = None,
+        agent_provider: str | None = None,
+        agent_model: str | None = None,
+        on_opencode_session_resolved: Callable[[str], None] | None = None,
+        should_interrupt: Callable[[], bool] | None = None,
+    ) -> Generator[SandboxEvent, None, None]:
         self.send_message_count += 1
         self.last_send_message_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
             "message": message,
+            "opencode_session_id": opencode_session_id,
+            "agent_provider": agent_provider,
+            "agent_model": agent_model,
+            "on_opencode_session_resolved": on_opencode_session_resolved,
+            "should_interrupt": should_interrupt,
         }
         if self._send_message_events is None:
             raise _not_configured("send_message")
         # Iterate over the snapshot — re-driveable across calls.
         yield from self._send_message_events
+
+    def subscribe_to_opencode_session(
+        self,
+        sandbox_id: UUID,
+        opencode_session_id: str,
+        *,
+        directory: str,
+        keepalive_seconds: float = 15.0,
+    ) -> Generator[SandboxEvent, None, None]:
+        self.subscribe_to_opencode_session_count += 1
+        self.last_subscribe_to_opencode_session_payload = {
+            "sandbox_id": sandbox_id,
+            "opencode_session_id": opencode_session_id,
+            "directory": directory,
+            "keepalive_seconds": keepalive_seconds,
+        }
+        if self._subscribe_to_opencode_session_events is None:
+            raise _not_configured("subscribe_to_opencode_session")
+        yield from self._subscribe_to_opencode_session_events
 
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
@@ -418,6 +536,22 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("delete_file")
         return self.delete_file_returns
 
+    def delete_opencode_session(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        opencode_session_id: str,
+    ) -> bool:
+        self.delete_opencode_session_count += 1
+        self.last_delete_opencode_session_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+            "opencode_session_id": opencode_session_id,
+        }
+        if isinstance(self.delete_opencode_session_returns, Exception):
+            raise self.delete_opencode_session_returns
+        return self.delete_opencode_session_returns
+
     def write_sandbox_file(
         self,
         sandbox_id: UUID,
@@ -446,6 +580,17 @@ class StubSandboxManager(SandboxManager):
         if self.get_upload_stats_returns is None:
             raise _not_configured("get_upload_stats")
         return self.get_upload_stats_returns
+
+    def _load_serve_connection_info(
+        self, sandbox_id: UUID
+    ) -> ServeConnectionInfo | None:
+        # Stub doesn't drive a real opencode-serve — return a deterministic
+        # URL + no password so any code path that touches the cache gets a
+        # reasonable value.
+        return ServeConnectionInfo(
+            base_url=f"http://stub-{str(sandbox_id)[:8]}:4096",
+            password=None,
+        )
 
     def write_files_to_sandbox(
         self,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import cached_property
 from typing import Any
 from typing import Generic
 from typing import TYPE_CHECKING
@@ -72,21 +73,31 @@ class LLMProviderDescriptor(BaseModel):
         llm_provider_model: "LLMProviderModel",
     ) -> "LLMProviderDescriptor":
         from onyx.llm.well_known_providers.llm_provider_options import (
+            fetch_default_model_for_provider,
+        )
+        from onyx.llm.well_known_providers.llm_provider_options import (
             get_provider_display_name,
         )
 
         provider = llm_provider_model.provider
+
+        model_configurations = filter_model_configurations(
+            llm_provider_model.model_configurations,
+            provider,
+            use_stored_display_name=llm_provider_model.custom_config is not None,
+        )
+        default_model = fetch_default_model_for_provider(provider)
+        for model_configuration in model_configurations:
+            model_configuration.is_recommended_default = (
+                model_configuration.name == default_model
+            )
 
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
             provider=provider,
             provider_display_name=get_provider_display_name(provider),
-            model_configurations=filter_model_configurations(
-                llm_provider_model.model_configurations,
-                provider,
-                use_stored_display_name=llm_provider_model.custom_config is not None,
-            ),
+            model_configurations=model_configurations,
         )
 
 
@@ -144,15 +155,27 @@ class LLMProviderView(LLMProvider):
 
         provider = llm_provider_model.provider
 
+        api_key: str | None = None
+        if llm_provider_model.api_key:
+            # NOTE: this decrypts the stored LLM provider key (chat hot path).
+            # No user is in scope here, so attribution relies on
+            # request_id / client_ip context. Audit is best-effort and never
+            # raises into this read path.
+            from onyx.utils.credential_audit import emit_credential_access
+
+            emit_credential_access(
+                credential_type="llm_provider",
+                provider=provider,
+                row_id=llm_provider_model.id,
+                user_id=None,
+            )
+            api_key = llm_provider_model.api_key.get_value(apply_mask=False)
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
             provider=provider,
-            api_key=(
-                llm_provider_model.api_key.get_value(apply_mask=False)
-                if llm_provider_model.api_key
-                else None
-            ),
+            api_key=api_key,
             api_base=llm_provider_model.api_base,
             api_version=llm_provider_model.api_version,
             custom_config=llm_provider_model.custom_config,
@@ -203,6 +226,8 @@ class ModelConfigurationView(BaseModel):
     max_input_tokens: int | None = None
     supports_image_input: bool
     supports_reasoning: bool = False
+    # True when this is the provider's recommended default model.
+    is_recommended_default: bool = False
     display_name: str | None = None
     custom_display_name: str | None = None
     provider_display_name: str | None = None
@@ -232,9 +257,17 @@ class ModelConfigurationView(BaseModel):
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
+                # Custom-config providers (LiteLLM Proxy, etc.) under-report
+                # vision; fall back to the LiteLLM cost map when no VISION flow.
                 supports_image_input=(
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types
+                    or (
+                        use_stored_display_name
+                        and litellm_thinks_model_supports_image_input(
+                            model_configuration_model.name, provider_name
+                        )
+                    )
                 ),
                 # Prefer the stored REASONING flow; fall back to a substring
                 # heuristic on model name/display name for legacy rows that
@@ -354,6 +387,8 @@ class OllamaModelDetails(BaseModel):
 
     model_info: dict[str, Any]
     capabilities: list[str] = []
+    # Newline-delimited "<key>  <value>" pairs from the Modelfile.
+    parameters: str | None = None
 
     def supports_completion(self) -> bool:
         """Check if this model supports completion/chat"""
@@ -362,6 +397,26 @@ class OllamaModelDetails(BaseModel):
     def supports_image_input(self) -> bool:
         """Check if this model supports image input"""
         return "vision" in self.capabilities
+
+    @cached_property
+    def _parsed_parameters(self) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        for line in (self.parameters or "").splitlines():
+            tokens = line.split(maxsplit=1)
+            if len(tokens) == 2:
+                parsed[tokens[0]] = tokens[1].strip()
+        return parsed
+
+    @property
+    def num_ctx(self) -> int | None:
+        raw = self._parsed_parameters.get("num_ctx")
+        if raw is None:
+            return None
+        try:
+            value = int(raw)
+        except ValueError:
+            return None
+        return value if value > 0 else None
 
 
 # OpenRouter dynamic models fetch

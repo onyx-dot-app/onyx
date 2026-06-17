@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
@@ -15,7 +15,6 @@ import {
   useCreateModal,
   useModalClose,
 } from "@/refresh-components/contexts/ModalContext";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import { Button, LinkButton, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
 import { markdown } from "@opal/utils";
@@ -32,10 +31,11 @@ import {
   SvgSettings,
   SvgTrash,
   SvgUnplug,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { SvgNoResult, SvgEmpty } from "@opal/illustrations";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import HookFormModal from "@/ee/refresh-pages/admin/HooksPage/HookFormModal";
 import HookStatusPopover from "@/ee/refresh-pages/admin/HooksPage/HookStatusPopover";
 import {
@@ -518,7 +518,7 @@ export default function HooksPage() {
   }, [settingsLoading, enterpriseTier, settings.hooks_enabled, router]);
 
   if (settingsLoading || !enterpriseTier || !settings.hooks_enabled) {
-    return <SimpleLoader />;
+    return <SvgSimpleLoader />;
   }
 
   const isLoading = specsLoading || hooksLoading;
@@ -584,7 +584,7 @@ export default function HooksPage() {
         />
         <SettingsLayouts.Body>
           {isLoading ? (
-            <SimpleLoader />
+            <SvgSimpleLoader />
           ) : specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {`Failed to load${
@@ -598,7 +598,7 @@ export default function HooksPage() {
                   placeholder="Search hooks..."
                   value={search}
                   variant="internal"
-                  leftSearchIcon
+                  searchIcon
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>

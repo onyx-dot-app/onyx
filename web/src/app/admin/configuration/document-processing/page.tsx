@@ -3,11 +3,11 @@
 import { useState } from "react";
 import CardSection from "@/components/admin/CardSection";
 import { Button } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ThreeDotsLoader } from "@/components/Loading";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 import { SvgLock } from "@opal/icons";

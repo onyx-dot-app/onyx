@@ -11,11 +11,11 @@ import threading
 import uuid
 from typing import Any
 
-import pytest
-import requests
+import httpx
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -36,16 +36,16 @@ def _create_session(user: DATestUser) -> dict[str, Any]:
 def _send_one_message(user: DATestUser, session_id: uuid.UUID) -> None:
     """Send a message and wait only until the USER row is persisted.
 
-    The send-message endpoint commits the USER message row BEFORE the SSE
-    stream yields its first ``data:`` packet, so we break out as soon as
-    we receive one packet. Tests using this helper must not depend on
-    assistant-message rows being persisted.
+    The background-turn endpoint commits the USER message row before returning
+    turn metadata. Tests using this helper must not depend on assistant-message
+    rows being persisted.
     """
-    try:
-        for _ in BuildSessionManager.send_message(user, session_id, "hello"):
-            break
-    except requests.exceptions.ChunkedEncodingError:
-        pass
+    BuildSessionManager.start_turn(
+        user,
+        session_id,
+        "hello",
+        client_request_id=f"session-list-{uuid.uuid4()}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ def _send_one_message(user: DATestUser, session_id: uuid.UUID) -> None:
 
 def test_create_session_requires_auth() -> None:
     """POST /build/sessions without an auth cookie/header is rejected."""
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/build/sessions",
         json={},
         headers={"Content-Type": "application/json"},
@@ -88,22 +88,6 @@ def test_create_session_returns_201_with_session_and_sandbox_shape(
     assert body["artifacts"] == [] or isinstance(body["artifacts"], list)
 
 
-@pytest.mark.skip(
-    reason=(
-        "Subscription cap path is gated on MULTI_TENANT mode "
-        "(SessionManager.create_session__no_commit only checks "
-        "SANDBOX_MAX_CONCURRENT_PER_ORG when MULTI_TENANT=true). "
-        "Multi-tenant integration tests live under "
-        "backend/tests/integration/multitenant_tests/ and require the "
-        "schema_private alembic head; this HTTP-half file runs against the "
-        "single-tenant deployment and cannot reach the 429 branch."
-    )
-)
-def test_create_session_blocked_by_subscription_cap() -> None:
-    """In a multi-tenant deployment at the subscription cap, POST returns 429."""
-    pass
-
-
 def test_get_session_404_for_other_users_session(
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
@@ -112,7 +96,7 @@ def test_get_session_404_for_other_users_session(
     owner_session = _create_session(admin_user)
 
     other_user = UserManager.create(name=f"other-{uuid.uuid4().hex[:8]}")
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/build/sessions/{owner_session['id']}",
         headers=other_user.headers,
         cookies=other_user.cookies,
@@ -151,14 +135,14 @@ def test_delete_session_returns_204_and_actually_deletes(
     body = _create_session(admin_user)
     session_id = body["id"]
 
-    response = requests.delete(
+    response = client.delete(
         f"{API_SERVER_URL}/build/sessions/{session_id}",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
     )
     assert response.status_code == 204
 
-    follow_up = requests.get(
+    follow_up = client.get(
         f"{API_SERVER_URL}/build/sessions/{session_id}",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -168,31 +152,47 @@ def test_delete_session_returns_204_and_actually_deletes(
 
 def test_set_sharing_scope_changes_webapp_visibility(
     admin_user: DATestUser,
+    basic_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
-    """PATCH to public_global flips the webapp from auth-required to anon-accessible.
+    """PATCH to public_org opens the webapp to other org members.
 
-    We don't assert a 200 from the unauthenticated webapp call — the local
-    sandbox typically has no Next.js dev server running, so the proxy hands
-    back the branded "offline" 503 page. What matters is that the auth gate
-    stops being applied: the unauthenticated call no longer redirects to
-    ``/auth/login`` (which is what private sessions do).
+    With the default ``private`` scope, only the session owner can hit the
+    webapp; another org user gets the auth-gate response (302/401/403/404).
+    Flipping the scope to ``public_org`` via the PATCH endpoint must
+    propagate to ``_check_webapp_access`` so the same other-user call now
+    reaches the proxy. We don't pin a 200 from that call — the local
+    sandbox has no Next.js dev server running and the proxy returns the
+    offline page (status 5xx HTML), which still proves the auth gate is
+    no longer applied.
     """
     body = _create_session(admin_user)
     session_id = body["id"]
     webapp_url = f"{API_SERVER_URL}/build/sessions/{session_id}/webapp"
 
-    # Private (default): unauthenticated call is redirected to /auth/login.
-    private_response = requests.get(webapp_url, allow_redirects=False)
-    assert private_response.status_code in (302, 401, 403)
+    # Private (default): an authenticated non-owner gets 404 (existence-hiding).
+    private_response = client.get(
+        webapp_url,
+        headers=basic_user.headers,
+        cookies=basic_user.cookies,
+        follow_redirects=False,
+    )
+    assert private_response.status_code == 404
 
     BuildSessionManager.set_sharing(
-        admin_user, uuid.UUID(session_id), SharingScope.PUBLIC_GLOBAL
+        admin_user, uuid.UUID(session_id), SharingScope.PUBLIC_ORG
     )
 
-    # Public global: no auth challenge — request reaches the proxy.
-    public_response = requests.get(webapp_url, allow_redirects=False)
-    assert public_response.status_code not in (302, 401, 403)
+    # public_org: same other org user reaches the proxy; with no upstream
+    # Next.js dev server, the proxy returns the branded offline HTML (5xx).
+    public_response = client.get(
+        webapp_url,
+        headers=basic_user.headers,
+        cookies=basic_user.cookies,
+        follow_redirects=False,
+    )
+    assert public_response.status_code in (200, 502, 503, 504)
+    assert "text/html" in public_response.headers.get("content-type", "").lower()
 
 
 def test_restore_session_returns_409_when_lock_held(
@@ -213,13 +213,13 @@ def test_restore_session_returns_409_when_lock_held(
 
     def _restore() -> None:
         try:
-            r = requests.post(
+            r = client.post(
                 f"{API_SERVER_URL}/build/sessions/{session_id}/restore",
                 headers=admin_user.headers,
                 cookies=admin_user.cookies,
             )
             results.append(r.status_code)
-        except requests.RequestException:
+        except httpx.RequestError:
             results.append(-1)
 
     threads = [threading.Thread(target=_restore) for _ in range(2)]
@@ -244,7 +244,7 @@ def test_pre_provisioned_check_returns_valid_for_empty_session(
     body = _create_session(admin_user)
     session_id = body["id"]
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/build/sessions/{session_id}/pre-provisioned-check",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -265,7 +265,7 @@ def test_pre_provisioned_check_returns_invalid_after_first_message(
 
     _send_one_message(admin_user, uuid.UUID(session_id))
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/build/sessions/{session_id}/pre-provisioned-check",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -284,7 +284,7 @@ def test_sandbox_reset_endpoint_returns_204(
     # Ensure a sandbox exists for the user.
     _create_session(admin_user)
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/build/sandbox/reset",
         headers=admin_user.headers,
         cookies=admin_user.cookies,
@@ -297,46 +297,12 @@ def test_sandbox_reset_404_when_no_sandbox(
 ) -> None:
     """Calling reset before any sandbox has been provisioned returns 404."""
     fresh_user = UserManager.create(name=f"nosandbox-{uuid.uuid4().hex[:8]}")
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/build/sandbox/reset",
         headers=fresh_user.headers,
         cookies=fresh_user.cookies,
     )
     assert response.status_code == 404
-
-
-def test_generate_suggestions_returns_empty_on_llm_parse_failure(
-    admin_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
-) -> None:
-    """The suggestions endpoint never 500s — bad LLM output yields ``[]``.
-
-    ``SessionManager.generate_followup_suggestions`` is wrapped in a broad
-    ``try/except`` and ``_parse_suggestions`` returns ``[]`` for unparseable
-    output. Both code paths funnel into "endpoint returns 200 with a list".
-    We exercise the endpoint with deliberately unstructured input so the
-    LLM is unlikely to produce well-formed JSON; even if it does, the
-    response must still be a 200 with a list (never a 500). This pins the
-    invariant from ``manager.py:_parse_suggestions``.
-    """
-    body = _create_session(admin_user)
-    session_id = body["id"]
-
-    response = requests.post(
-        f"{API_SERVER_URL}/build/sessions/{session_id}/generate-suggestions",
-        json={
-            # Deliberately content-free; LLMs typically respond with prose
-            # rather than the requested JSON array.
-            "user_message": "?",
-            "assistant_message": ".",
-        },
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
-    )
-    assert response.status_code == 200
-    payload = response.json()
-    assert "suggestions" in payload
-    assert isinstance(payload["suggestions"], list)
 
 
 def test_rename_session_with_null_name_uses_llm_then_fallback_chain(
@@ -357,7 +323,7 @@ def test_rename_session_with_null_name_uses_llm_then_fallback_chain(
     body = _create_session(admin_user)
     session_id = body["id"]
 
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/build/sessions/{session_id}/name",
         json={"name": None},
         headers=admin_user.headers,
@@ -392,7 +358,7 @@ def test_limited_role_check_uses_account_type_not_permission_flags(
 
     anon_user = UserManager.get_anonymous_user()
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/build/sessions",
         json={},
         headers=anon_user.headers,

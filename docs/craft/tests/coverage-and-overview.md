@@ -44,12 +44,12 @@ Craft is Onyx's sandboxed build environment — per-user pods running an AI agen
 - **PAT lifecycle** — mint, reuse, hash-mismatch revocation, multi-stale cleanup, expiry remint.
 - **Push retry + error mapping** — retry on retriable errors, give up after 3, no retry on fatal, daemon 5xx/4xx/timeout classification.
 - **In-pod push daemon** — Ed25519 signature verification, timestamp drift, SHA mismatch, size cap, mount-path prefix.
-- **Snapshot/restore** (K8s only) — inclusion/exclusion rules, restore re-pushes skills, traversal blocked.
+- **Snapshot/restore** (K8s only) — inclusion/exclusion rules, restore re-pushes skills, traversal blocked, streamed archive checksum validation.
 - **Feature gating** — env-var fallback, PostHog flag override.
 
 ## What we don't test
 
-- **Pod-side skill scripts** (`docker/skills/pptx/scripts/*.py`) — run inside the sandbox image, not reachable from the backend Python path.
+- **Pod-side skill scripts** (`onyx/skills/builtin/pptx/scripts/*.py`) — run inside the sandbox, not reachable from the backend Python path.
 - **Celery dispatch shims** — the thin `@shared_task` wrappers are covered transitively by executor tests.
 - **Frontend Craft E2E** — no Playwright tests for build mode yet.
 - **Sidecar regressions** (`/exec` pipe-deadlock, `/files/read` TOCTOU) — different deployment shape.
@@ -60,7 +60,6 @@ Craft is Onyx's sandboxed build environment — per-user pods running an AI agen
 |---|---|
 | `test_pod_name_uses_full_uuid_not_first_8_chars` | `_get_pod_name` truncates to 8 hex chars (32 bits). Birthday collision at ~77k sandboxes; current failure is K8s 409, not data leak. |
 | `test_pat_refreshes_on_reprovision_after_expiry` | No background PAT refresh on long-lived sandboxes. Masked by 1h idle cleanup. |
-| `test_snapshot_corruption_detected_on_restore` | No checksum validation on snapshot tarballs. Partial S3 write → opaque restore failure. |
 
 ## Where to find things
 
@@ -74,4 +73,3 @@ Craft is Onyx's sandboxed build environment — per-user pods running an AI agen
 | Stub sandbox manager | `backend/tests/common/craft/stubs.py` |
 | Shared helpers | `backend/tests/external_dependency_unit/craft/_test_helpers.py` |
 | Integration HTTP wrappers | `backend/tests/integration/common_utils/managers/skill.py` and `build_session.py` |
-

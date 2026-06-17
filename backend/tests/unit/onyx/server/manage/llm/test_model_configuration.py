@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.db.enums import LLMModelFlowType
+from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -76,6 +77,81 @@ class TestModelConfigurationViewFromModelDynamic:
         view = ModelConfigurationView.from_model(mc, self.DYNAMIC_PROVIDER)
 
         assert view.supports_reasoning is True
+
+
+# ModelConfigurationView.from_model — vision fallback (custom-config providers)
+
+
+class TestModelConfigurationViewVisionFallback:
+    """supports_image_input resolution in the dynamic/custom-config branch."""
+
+    # In DYNAMIC_LLM_PROVIDERS
+    STRICT_DYNAMIC_PROVIDER = "lm_studio"
+    # NOT in DYNAMIC_LLM_PROVIDERS — reached via use_stored_display_name
+    CUSTOM_CONFIG_PROVIDER = "litellm_proxy"
+
+    def _view(
+        self,
+        mc: MagicMock,
+        provider: str,
+        use_stored_display_name: bool,
+        litellm_vision: bool,
+    ) -> ModelConfigurationView:
+        with patch(
+            "onyx.server.manage.llm.models.litellm_thinks_model_supports_image_input",
+            return_value=litellm_vision,
+        ):
+            return ModelConfigurationView.from_model(
+                mc, provider, use_stored_display_name=use_stored_display_name
+            )
+
+    def test_stored_vision_flow_wins(self) -> None:
+        """Stored VISION flow → True without consulting the cost map."""
+        mc = _make_model_config(
+            name="gpt-4o",
+            display_name="GPT-4o",
+            flow_types=[LLMModelFlowType.CHAT, LLMModelFlowType.VISION],
+        )
+
+        view = self._view(mc, self.CUSTOM_CONFIG_PROVIDER, True, litellm_vision=False)
+
+        assert view.supports_image_input is True
+
+    def test_custom_config_falls_back_to_cost_map(self) -> None:
+        """No VISION flow but cost map knows the model → True (the fix)."""
+        mc = _make_model_config(
+            name="gpt-4o",
+            display_name="GPT-4o",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.CUSTOM_CONFIG_PROVIDER, True, litellm_vision=True)
+
+        assert view.supports_image_input is True
+
+    def test_strict_dynamic_provider_does_not_fall_back(self) -> None:
+        """Strict dynamic providers trust the synced flow — no cost-map fallback."""
+        mc = _make_model_config(
+            name="gpt-4o",
+            display_name="GPT-4o",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.STRICT_DYNAMIC_PROVIDER, False, litellm_vision=True)
+
+        assert view.supports_image_input is False
+
+    def test_custom_config_false_when_cost_map_unaware(self) -> None:
+        """No VISION flow and cost map doesn't know the model → False."""
+        mc = _make_model_config(
+            name="my-internal-model",
+            display_name="My Internal Model",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.CUSTOM_CONFIG_PROVIDER, True, litellm_vision=False)
+
+        assert view.supports_image_input is False
 
 
 # ModelConfigurationView.from_model — static provider branch
@@ -191,6 +267,72 @@ class TestModelConfigurationUpsertRequestFromModel:
         req = ModelConfigurationUpsertRequest.from_model(mc)
 
         assert req.supports_reasoning is False
+
+
+# LLMProviderDescriptor.from_model — is_recommended_default marking
+#
+# This flag is the only signal the (non-admin) Craft model picker uses to badge
+# and default-select the provider's recommended model on /llm/provider, so it
+# must be set on exactly the recommended-default model.
+
+
+class TestLLMProviderDescriptorRecommendedDefault:
+    @staticmethod
+    def _provider_model(provider: str = "anthropic") -> MagicMock:
+        m = MagicMock()
+        m.id = 1
+        m.name = provider.title()
+        m.provider = provider
+        m.custom_config = None
+        return m
+
+    @staticmethod
+    def _view(name: str) -> ModelConfigurationView:
+        return ModelConfigurationView(
+            name=name, is_visible=True, supports_image_input=False
+        )
+
+    def _from_model(
+        self,
+        provider_model: MagicMock,
+        views: list[ModelConfigurationView],
+        default: str,
+    ) -> LLMProviderDescriptor:
+        with (
+            patch(
+                "onyx.server.manage.llm.models.filter_model_configurations",
+                return_value=views,
+            ),
+            patch(
+                "onyx.llm.well_known_providers.llm_provider_options."
+                "fetch_default_model_for_provider",
+                return_value=default,
+            ),
+        ):
+            return LLMProviderDescriptor.from_model(provider_model)
+
+    def test_marks_only_the_recommended_default_model(self) -> None:
+        descriptor = self._from_model(
+            self._provider_model(),
+            [self._view("claude-opus-4-8"), self._view("claude-sonnet-4-6")],
+            default="claude-opus-4-8",
+        )
+        flags = {
+            m.name: m.is_recommended_default for m in descriptor.model_configurations
+        }
+        assert flags == {"claude-opus-4-8": True, "claude-sonnet-4-6": False}
+
+    def test_nothing_flagged_when_default_not_among_configured_models(self) -> None:
+        # The recommended default isn't configured → no model flagged (the picker
+        # falls back to the first visible model).
+        descriptor = self._from_model(
+            self._provider_model(),
+            [self._view("claude-sonnet-4-6")],
+            default="claude-opus-4-8",
+        )
+        assert all(
+            not m.is_recommended_default for m in descriptor.model_configurations
+        )
 
 
 def _make_model_config(

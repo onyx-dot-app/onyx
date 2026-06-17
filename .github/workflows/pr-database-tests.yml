@@ -20,6 +20,10 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       db: ${{ steps.filter.outputs.db || 'true' }}
     steps:
@@ -28,7 +32,7 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
         id: filter
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
@@ -41,6 +45,7 @@ jobs:
               - 'deployment/docker_compose/docker-compose.dev.yml'
               - '.github/workflows/pr-database-tests.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
 
   database-tests:
     needs: changes
@@ -74,13 +79,10 @@ jobs:
         run: |
           ods openapi all
 
-      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Start Docker containers
         working-directory: ./deployment/docker_compose
@@ -90,4 +92,4 @@ jobs:
 
       - name: Run Database Tests
         working-directory: ./backend
-        run: pytest -m alembic tests/integration/tests/migrations/
+        run: pytest tests/integration/tests/migrations/

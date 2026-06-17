@@ -2,11 +2,11 @@
 
 import { use } from "react";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { SvgSimpleLoader } from "@opal/icons";
 import SlackChannelConfigsTable from "./SlackChannelConfigsTable";
 import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
 import { ExistingSlackBotForm } from "../SlackBotUpdateForm";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { SvgSlack } from "@opal/logos";
 import { getErrorMsg } from "@/lib/error";
 
@@ -26,7 +26,7 @@ function SlackBotEditContent({ botId }: { botId: string }) {
   } = useSlackChannelConfigsByBot(Number(botId));
 
   if (isSlackBotLoading || isSlackChannelConfigsLoading) {
-    return <SimpleLoader />;
+    return <SvgSimpleLoader />;
   }
 
   if (slackBotError || !slackBot) {

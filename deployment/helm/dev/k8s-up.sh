@@ -23,6 +23,7 @@ NAMESPACE="onyx"
 OPENSEARCH_PASSWORD=""
 SKIP_CLUSTER_CREATE=0
 SKIP_HELM=0
+KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.33.1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "$SCRIPT_DIR/../charts/onyx" && pwd)"
@@ -65,8 +66,8 @@ if [[ "$SKIP_CLUSTER_CREATE" -eq 0 ]]; then
   if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
     echo "kind cluster '$CLUSTER_NAME' already exists; skipping create"
   else
-    echo "creating kind cluster '$CLUSTER_NAME' ..."
-    kind create cluster --name "$CLUSTER_NAME"
+    echo "creating kind cluster '$CLUSTER_NAME' with node image '$KIND_NODE_IMAGE' ..."
+    kind create cluster --name "$CLUSTER_NAME" --image "$KIND_NODE_IMAGE"
   fi
 fi
 
@@ -92,10 +93,15 @@ fi
 
 kubectl get namespace "$NAMESPACE" >/dev/null 2>&1 \
   || kubectl create namespace "$NAMESPACE"
+# The chart also templates the onyx-sandboxes namespace (see
+# templates/sandbox-namespace.yaml). We pre-create it here so local setup can
+# label nodes before helm install runs, but we must stamp Helm ownership
+# metadata or `helm install` refuses to adopt the namespace.
 kubectl get namespace onyx-sandboxes >/dev/null 2>&1 \
   || kubectl create namespace onyx-sandboxes
-kubectl -n onyx-sandboxes get serviceaccount sandbox-file-sync >/dev/null 2>&1 \
-  || kubectl -n onyx-sandboxes create serviceaccount sandbox-file-sync
+kubectl label   namespace onyx-sandboxes app.kubernetes.io/managed-by=Helm --overwrite >/dev/null
+kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-name=onyx --overwrite >/dev/null
+kubectl annotate namespace onyx-sandboxes meta.helm.sh/release-namespace="$NAMESPACE" --overwrite >/dev/null
 kubectl label node --all onyx.app/workload=sandbox --overwrite >/dev/null 2>&1
 
 # Use an isolated helm repo config: helm matches chart deps by repo NAME, so a
@@ -137,12 +143,64 @@ fi
 echo "helm upgrade --install onyx ..."
 # ${PW_FLAG[@]+"${PW_FLAG[@]}"} expands to nothing when empty; bare
 # "${PW_FLAG[@]}" errors under `set -u` on subsequent runs.
-helm upgrade --install onyx "$CHART_DIR" \
-  -n "$NAMESPACE" \
-  -f "$VALUES_OVERLAY" \
-  ${PW_FLAG[@]+"${PW_FLAG[@]}"}
+#
+# On a fresh cluster the CNPG operator pod isn't ready when we submit the
+# postgres Cluster CR, so its mutating webhook returns "connection refused"
+# and helm install fails. The operator becomes ready within ~15s, and a
+# `helm upgrade --install` reconciles the failed release cleanly. Retry
+# transparently to keep the OOB experience one-shot.
+HELM_ATTEMPTS=3
+for attempt in $(seq 1 "$HELM_ATTEMPTS"); do
+  if helm upgrade --install onyx "$CHART_DIR" \
+      -n "$NAMESPACE" \
+      -f "$VALUES_OVERLAY" \
+      ${PW_FLAG[@]+"${PW_FLAG[@]}"}; then
+    break
+  fi
+  if [[ "$attempt" -lt "$HELM_ATTEMPTS" ]]; then
+    echo "helm install failed (attempt $attempt/$HELM_ATTEMPTS) — waiting 20s for operators to be ready, then retrying ..."
+    sleep 20
+  else
+    echo "helm install failed after $HELM_ATTEMPTS attempts" >&2
+    exit 1
+  fi
+done
 
-# ---- 3. next steps ----
+# ---- 3. telepresence traffic-manager (one-time per cluster) ----
+
+# The vscode (k8s) launch profiles intercept api_server via telepresence,
+# which requires a traffic-manager deployment in the cluster. This is
+# cluster-scoped and idempotent — re-running on a cluster that already has
+# it installed is a no-op.
+if command -v telepresence >/dev/null 2>&1; then
+  if ! kubectl -n ambassador get deployment traffic-manager >/dev/null 2>&1; then
+    echo "installing telepresence traffic-manager (one-time per cluster) ..."
+    # On a freshly-installed cluster the default 30s helm timeout inside
+    # telepresence is often too tight (CRD webhook bootstraps, image pulls).
+    # Retry transparently — same pattern as the chart install above.
+    TP_ATTEMPTS=3
+    for tp_attempt in $(seq 1 "$TP_ATTEMPTS"); do
+      if telepresence helm install \
+          --kubeconfig "${KUBECONFIG:-$HOME/.kube/config}" \
+          --context "kind-$CLUSTER_NAME" >/dev/null 2>&1; then
+        echo "  traffic-manager installed."
+        break
+      fi
+      if [[ "$tp_attempt" -lt "$TP_ATTEMPTS" ]]; then
+        echo "  install attempt $tp_attempt/$TP_ATTEMPTS timed out — waiting 20s and retrying ..."
+        sleep 20
+      else
+        echo "  traffic-manager install failed after $TP_ATTEMPTS attempts; run manually:" >&2
+        echo "    telepresence helm install --context kind-$CLUSTER_NAME" >&2
+      fi
+    done
+  fi
+else
+  echo "note: telepresence CLI not found; skipping traffic-manager install."
+  echo "  install with: brew install datawire/blackbird/telepresence-oss"
+fi
+
+# ---- 4. next steps ----
 
 cat <<EOF
 
@@ -155,18 +213,19 @@ next steps:
        kubectl -n $NAMESPACE get pods -w
 
   2. (optional) connect your host to cluster DNS so you can run api_server
-     locally and have it reach in-cluster services:
-       telepresence helm install        # one-time, installs traffic-manager
+     locally and have it reach in-cluster services. Traffic-manager was
+     installed above; just connect:
        telepresence connect -n $NAMESPACE
 
   3. for features that depend on api_server-source pod identity (e.g.
      NetworkPolicies, in-pod auth via injected env), intercept instead:
        telepresence intercept onyx-api-server \\
          --namespace $NAMESPACE \\
-         --port 8080:8080 \\
-         --env-file .vscode/.env.k8s
+         --port 8080:8080
 
   4. open vscode and run the "Run All Onyx Services" launch profile.
+     Before first run, copy .vscode/.env.k8s.template to .vscode/.env.k8s
+     and fill in the <REPLACE THIS> values.
 
 teardown:
   deployment/helm/dev/k8s-down.sh

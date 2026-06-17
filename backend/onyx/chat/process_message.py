@@ -9,11 +9,14 @@ import os
 import queue
 import re
 import threading
+import time
 import traceback
 from collections.abc import Callable
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import Token
+from enum import Enum
+from typing import cast
 from typing import Final
 from uuid import UUID
 
@@ -55,8 +58,10 @@ from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
 from onyx.chat.stop_signal_checker import reset_cancel_status
+from onyx.chat.stream_buffer import StreamBufferWriter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
+from onyx.configs.chat_configs import CHAT_HEARTBEAT_INTERVAL_S
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
@@ -112,9 +117,11 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import AgentResponseDelta
 from onyx.server.query_and_chat.streaming_models import AgentResponseStart
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import heartbeat_packet
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
+from onyx.server.utils import get_json_line
 from onyx.tools.constants import FILE_READER_TOOL_ID
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.models import ChatFile
@@ -192,21 +199,26 @@ def _convert_loaded_files_to_chat_files(
 ) -> list[ChatFile]:
     """Convert ChatLoadedFile objects to ChatFile for tool usage (e.g., PythonTool).
 
-    Args:
-        loaded_files: List of ChatLoadedFile objects from the chat history
-
-    Returns:
-        List of ChatFile objects that can be passed to tools
+    Returns lazy ChatFile objects: ``.content`` materializes via the underlying
+    ``loaded_file.content`` only when a tool actually accesses it. Previously
+    this function gated on ``len(loaded_file.content) > 0`` to filter out
+    zero-byte files, but evaluating ``len(content)`` would force every lazy
+    file to materialize and defeat the OOM fix. The guard is dropped; tools
+    receive zero-byte content for empty files, which PythonTool handles fine
+    (sha256 of empty bytes + upload of an empty body — the LLM will see the
+    empty result and react).
     """
-    chat_files = []
+    chat_files: list[ChatFile] = []
     for loaded_file in loaded_files:
-        if len(loaded_file.content) > 0:
-            chat_files.append(
-                ChatFile(
-                    filename=loaded_file.filename or f"file_{loaded_file.file_id}",
-                    content=loaded_file.content,
-                )
+        filename = loaded_file.filename or f"file_{loaded_file.file_id}"
+        # Pull content via a closure so the bytes only flow through one
+        # materialization (the ChatLoadedFile's loader), then ride along.
+        chat_files.append(
+            ChatFile.lazy_from_filename(
+                filename=filename,
+                loader=lambda lf=loaded_file: lf.content,
             )
+        )
     return chat_files
 
 
@@ -225,11 +237,17 @@ def _load_context_user_files_for_tools(
     user_files: list[UserFile],
     existing_filenames: set[str],
 ) -> list[ChatFile]:
-    """Load raw tabular project/persona files for code-interpreter staging."""
+    """Stage tabular project/persona files for code-interpreter as lazy
+    ChatFile instances.
+
+    Raw bytes are not read here; each ChatFile carries a loader closure that
+    pulls from the file store only when PythonTool actually accesses
+    ``.content`` during staging. This avoids loading every project/persona
+    file into RAM for chats that never invoke the Python tool.
+    """
     if not user_files:
         return []
 
-    file_store = None
     chat_files: list[ChatFile] = []
     seen_file_ids: set[str] = set()
 
@@ -241,24 +259,30 @@ def _load_context_user_files_for_tools(
         if not mime_type_to_chat_file_type(user_file.file_type).use_metadata_only():
             continue
 
-        try:
-            if file_store is None:
-                file_store = get_default_file_store()
-            content = file_store.read_file(user_file.file_id, mode="b").read()
-        except Exception as e:
-            logger.warning(
-                "Failed to load context file %s for Python execution: %s",
-                user_file.id,
-                e,
-            )
-            continue
-
         filename = _deduped_filename(
             user_file.name or f"file_{user_file.id}",
             existing_filenames,
             str(user_file.id),
         )
-        chat_files.append(ChatFile(filename=filename, content=content))
+
+        def _load(
+            file_id: str = user_file.file_id, user_file_id: UUID = user_file.id
+        ) -> bytes:
+            # Preserve the pre-lazy degraded-but-functional behavior: if the
+            # underlying file is gone or temporarily unreachable, log it and
+            # hand PythonTool an empty payload instead of letting the
+            # exception propagate out of ChatFile.__getattribute__.
+            try:
+                return get_default_file_store().read_file(file_id, mode="b").read()
+            except Exception as e:
+                logger.warning(
+                    "Failed to load context file %s for Python execution: %s",
+                    user_file_id,
+                    e,
+                )
+                return b""
+
+        chat_files.append(ChatFile.lazy_from_filename(filename=filename, loader=_load))
 
     return chat_files
 
@@ -656,12 +680,8 @@ def build_chat_turn(
             llm_provider_api_key=llm.config.api_key,
         )
         llms.append(llm)
-        model_display_names.append(_build_model_display_name(override))
+        model_display_names.append(_build_model_display_name(override, llm))
     token_counter = get_llm_token_counter(llms[0])
-
-    # not sure why we do this, but to maintain parity with previous code:
-    if not is_multi:
-        model_display_names = [""]
 
     # Verify that the user-specified files actually belong to the user
     verify_user_files(
@@ -895,12 +915,14 @@ def build_chat_turn(
             chat_session_id=chat_session.id,
             parent_message=user_message.id,
             message_type=MessageType.ASSISTANT,
+            model_display_name=model_display_names[0],
         )
         reserved_messages = [assistant_response]
         yield MessageResponseIDInfo(
             user_message_id=user_message.id,
             reserved_assistant_message_id=assistant_response.id,
         )
+    processing_run_id = user_message.id if is_multi else reserved_messages[0].id
 
     # Convert the chat history into a simple format that is free of any DB objects
     # and is easy to parse for the agent loop.
@@ -959,6 +981,7 @@ def build_chat_turn(
         chat_session_id=chat_session.id,
         cache=cache,
         value=True,
+        run_id=processing_run_id,
     )
 
     # Release any read transaction before the long-running LLM stream.
@@ -981,6 +1004,7 @@ def build_chat_turn(
         simple_chat_history=simple_chat_history,
         extracted_context_files=extracted_context_files,
         reserved_messages=reserved_messages,
+        processing_run_id=processing_run_id,
         reserved_token_count=reserved_token_count,
         search_params=search_params,
         all_injected_file_metadata=all_injected_file_metadata,
@@ -1004,14 +1028,30 @@ def build_chat_turn(
 # Sentinel placed on the merged queue when a model thread finishes.
 _MODEL_DONE = object()
 
+# Sentinel placed on the reader tee when the stream writer has fully finished.
+_STREAM_DONE = object()
+
+
+# Which exit path persisted a model's outcome — for log attribution.
+class _PersistContext(Enum):
+    WORKER = "worker"
+    STOP_BUTTON = "stop-button"
+    NORMAL = "normal"
+    POST_STEPS = "post-steps"
+
+
 # How often the drain loop polls for user-initiated cancellation (stop button).
 _CANCEL_POLL_INTERVAL_S: Final[float] = 0.05
+
+# How often the writer re-arms the processing fence (FENCE_TTL is 30 min).
+_FENCE_REFRESH_INTERVAL_S: Final[float] = 60.0
 
 
 def _run_models(
     setup: ChatTurnSetup,
     user: User,
     external_state_container: ChatStateContainer | None = None,
+    stream_buffer: StreamBufferWriter | None = None,
 ) -> AnswerStream:
     """Stream packets from one or more LLM loops running in parallel worker threads.
 
@@ -1034,9 +1074,15 @@ def _run_models(
             Used by evals and the non-streaming API path so the caller can inspect
             accumulated state (tool calls, answer tokens, citations) after the stream
             is consumed. When ``None`` a fresh container is created automatically.
+        stream_buffer: Optional durable stream buffer writer for the run. When
+            present, each outbound packet/error is serialized once and appended
+            for replay while also being teed to the live reader.
+
+    Worker threads and the writer thread start before this function returns; the
+    returned reader generator only tails the stream and can be dropped freely.
 
     Returns:
-        Generator yielding ``Packet`` objects as they arrive from worker threads —
+        Reader generator yielding ``Packet`` objects as they arrive from worker threads —
         answer tokens, tool output, citations — followed by a terminal ``Packet``
         containing ``OverallStop`` once all models complete (or one containing
         ``OverallStop(stop_reason="user_cancelled")`` if the connection drops).
@@ -1057,10 +1103,90 @@ def _run_models(
     # Set to True when a model raises an exception (distinct from "still running").
     # Used in the stop-button path to avoid calling completion for errored models.
     model_errored: list[bool] = [False] * n_models
+    persist_lock = threading.Lock()
+    persisted: list[bool] = [False] * n_models
+    post_steps_done = threading.Event()
 
-    # Set when the drain loop exits early (HTTP disconnect / GeneratorExit).
-    # Signals emitters to skip future puts so workers exit promptly.
+    # Set only on stop-button: workers can't be interrupted, so their remaining
+    # emits are discarded. Client disconnects do NOT set this — the writer keeps
+    # consuming and buffering to the very end.
     drain_done = threading.Event()
+
+    # Writer-thread → reader-generator hand-off. The writer is the run's
+    # lifeline and always runs to completion; the reader can die freely.
+    tee: queue.Queue[Packet | StreamingError | object] = queue.Queue()
+    # Set when the reader detaches; stops the tee from accumulating items
+    # nobody will consume.
+    reader_gone = threading.Event()
+
+    def _persist_model_outcome(
+        model_idx: int,
+        context: _PersistContext,
+        *,
+        stop_button: bool = False,
+    ) -> None:
+        """Persist one model's outcome exactly once, from any thread.
+
+        The LLM loops never observe the stop signal, so a worker that returns
+        non-errored always holds a complete answer. Partial content exists only
+        when the stop-button path snapshots a still-running model mid-loop —
+        that call forces a claim (``stop_button=True``) so the in-flight state
+        is saved with the stopped-by-user annotation and the worker's later
+        call becomes a no-op."""
+        with persist_lock:
+            if persisted[model_idx]:
+                return
+            succeeded = model_succeeded[model_idx]
+            errored = model_errored[model_idx]
+            if not succeeded and not errored and not stop_button:
+                return
+            persisted[model_idx] = True
+
+        if errored:
+            _save_errored_message(model_idx, context)
+            return
+
+        completed_normally = succeeded if stop_button else True
+
+        def _is_connected(value: bool = completed_normally) -> bool:
+            return value
+
+        try:
+            llm_loop_completion_handle(
+                state_container=state_containers[model_idx],
+                is_connected=_is_connected,
+                assistant_message=setup.reserved_messages[model_idx],
+                llm=setup.llms[model_idx],
+                reserved_tokens=setup.reserved_token_count,
+            )
+        except Exception:
+            logger.exception(
+                "%s completion failed for model %d (%s)",
+                context.value,
+                model_idx,
+                setup.model_display_names[model_idx],
+            )
+
+    def _run_post_steps() -> None:
+        with persist_lock:
+            if post_steps_done.is_set():
+                return
+            post_steps_done.set()
+
+        for i in range(n_models):
+            _persist_model_outcome(i, _PersistContext.POST_STEPS)
+
+        # The writer thread is the run's authoritative end — it owns the fence
+        # reset so the session never sticks at (or prematurely leaves)
+        # "processing", whatever happened to the request generator.
+        try:
+            set_processing_status(
+                chat_session_id=setup.chat_session.id,
+                cache=setup.cache,
+                value=False,
+            )
+        except Exception:
+            logger.exception("post-steps processing status reset failed")
 
     def _run_model(model_idx: int) -> None:
         """Run one LLM loop inside a worker thread, writing packets to ``merged_queue``."""
@@ -1162,9 +1288,10 @@ def _run_models(
             merged_queue.put((model_idx, e))
 
         finally:
+            _persist_model_outcome(model_idx, _PersistContext.WORKER)
             merged_queue.put((model_idx, _MODEL_DONE))
 
-    def _save_errored_message(model_idx: int, context: str) -> None:
+    def _save_errored_message(model_idx: int, context: _PersistContext) -> None:
         """Save an error message to a reserved ChatMessage that failed during execution."""
         try:
             with get_session_with_current_tenant() as save_db_session:
@@ -1182,72 +1309,77 @@ def _run_models(
         except Exception:
             logger.exception(
                 "%s error save failed for model %d (%s)",
-                context,
+                context.value,
                 model_idx,
                 setup.model_display_names[model_idx],
             )
 
-    # Each worker thread needs its own Context copy — a single Context object
-    # cannot be entered concurrently by multiple threads (RuntimeError).
-    executor = ThreadPoolExecutor(
-        max_workers=n_models, thread_name_prefix="multi-model"
-    )
-    completion_persisted: bool = False
-    try:
-        for i in range(n_models):
-            ctx = contextvars.copy_context()
-            executor.submit(ctx.run, _run_model, i)
-
-        # ── Main thread: merge and yield packets ────────────────────────────
-        models_remaining = n_models
-        while models_remaining > 0:
+    def _publish(item: Packet | StreamingError) -> None:
+        """Fan one outbound item to the stream buffer and, while attached, the reader."""
+        if stream_buffer is not None:
             try:
-                model_idx, item = merged_queue.get(timeout=_CANCEL_POLL_INTERVAL_S)
-            except queue.Empty:
-                # Check for user-initiated cancellation every 50 ms.
-                if not setup.check_is_connected():
-                    # Save state for every model before exiting.
-                    # - Succeeded models: full answer (is_connected=True).
-                    # - Still-in-flight models: partial answer + "stopped by user".
-                    # - Errored models: delete the orphaned reserved message; do NOT
-                    #   save "stopped by user" for a model that actually threw an exception.
-                    for i in range(n_models):
-                        if model_errored[i]:
-                            _save_errored_message(i, "stop-button")
-                            continue
-                        try:
-                            succeeded = model_succeeded[i]
+                stream_buffer.append_line(get_json_line(item.model_dump()))
+            except Exception:
+                logger.exception("stream buffer append failed")
+        # Non-blocking put: a slow reader can't stall the writer.
+        if not reader_gone.is_set():
+            tee.put(item)
 
-                            def _stop_button_is_connected(s: bool = succeeded) -> bool:
-                                return s
-
-                            llm_loop_completion_handle(
-                                state_container=state_containers[i],
-                                is_connected=_stop_button_is_connected,
-                                assistant_message=setup.reserved_messages[i],
-                                llm=setup.llms[i],
-                                reserved_tokens=setup.reserved_token_count,
+    def _drain_to_completion() -> None:
+        """Writer: consume worker output to the very end regardless of client state."""
+        models_remaining = n_models
+        last_fence_refresh = time.monotonic()
+        try:
+            while models_remaining > 0:
+                # Runs can outlive FENCE_TTL; a lapsed fence reads as a dead
+                # writer to resume readers and unblocks concurrent sends.
+                now = time.monotonic()
+                if now - last_fence_refresh >= _FENCE_REFRESH_INTERVAL_S:
+                    last_fence_refresh = now
+                    try:
+                        set_processing_status(
+                            chat_session_id=setup.chat_session.id,
+                            cache=setup.cache,
+                            value=True,
+                            run_id=setup.processing_run_id,
+                        )
+                    except Exception:
+                        # Worst case the fence lapses early; never kill the
+                        # run over a refresh.
+                        logger.exception("processing fence refresh failed")
+                try:
+                    model_idx, item = merged_queue.get(timeout=_CANCEL_POLL_INTERVAL_S)
+                except queue.Empty:
+                    if stream_buffer is not None:
+                        stream_buffer.flush()
+                    # Check for user-initiated cancellation every 50 ms.
+                    if not setup.check_is_connected():
+                        for i in range(n_models):
+                            # Snapshot every model now: finished loops save
+                            # complete, in-flight ones save partial + stopped.
+                            _persist_model_outcome(
+                                i, _PersistContext.STOP_BUTTON, stop_button=True
                             )
-                        except Exception:
-                            logger.exception(
-                                "stop-button completion failed for model %d (%s)",
-                                i,
-                                setup.model_display_names[i],
+                        _publish(
+                            Packet(
+                                placement=Placement(turn_index=0),
+                                obj=OverallStop(
+                                    type="stop", stop_reason="user_cancelled"
+                                ),
                             )
-                    yield Packet(
-                        placement=Placement(turn_index=0),
-                        obj=OverallStop(type="stop", stop_reason="user_cancelled"),
-                    )
-                    completion_persisted = True
-                    return
-                continue
-            else:
+                        )
+                        # Workers can't be interrupted; discard their remaining
+                        # output via the Emitter no-op.
+                        drain_done.set()
+                        return
+                    continue
                 if item is _MODEL_DONE:
                     models_remaining -= 1
                 elif isinstance(item, Exception):
-                    # Yield a tagged error for this model but keep the other models running.
-                    # Do NOT decrement models_remaining — _run_model's finally always posts
-                    # _MODEL_DONE, which is the sole completion signal.
+                    # Publish a tagged error for this model but keep the other
+                    # models running. Do NOT decrement models_remaining —
+                    # _run_model's finally always posts _MODEL_DONE, which is
+                    # the sole completion signal.
                     error_msg = str(item)
                     stack_trace = "".join(
                         traceback.format_exception(type(item), item, item.__traceback__)
@@ -1260,86 +1392,93 @@ def _run_models(
                         stack_trace = stack_trace.replace(
                             model_llm.config.api_key, "[REDACTED_API_KEY]"
                         )
-                    yield StreamingError(
-                        error=error_msg,
-                        stack_trace=stack_trace,
-                        error_code="MODEL_ERROR",
-                        is_retryable=True,
-                        details={
-                            "model": model_llm.config.model_name,
-                            "provider": model_llm.config.model_provider,
-                            "model_index": model_idx,
-                        },
+                    _publish(
+                        StreamingError(
+                            error=error_msg,
+                            stack_trace=stack_trace,
+                            error_code="MODEL_ERROR",
+                            is_retryable=True,
+                            details={
+                                "model": model_llm.config.model_name,
+                                "provider": model_llm.config.model_provider,
+                                "model_index": model_idx,
+                            },
+                        )
                     )
                 elif isinstance(item, Packet):
-                    # model_index already embedded by the model's Emitter in _run_model
-                    yield item
+                    # model_index already embedded by the model's Emitter
+                    _publish(item)
 
-        # ── Completion: save each successful model's response ───────────────
-        # All model loops have completed (run_llm_loop returned) — no more writes
-        # to state_containers. Each model's completion runs inside its own
-        # short-lived DB session so no connection is held across the loop.
-        for i in range(n_models):
-            if not model_succeeded[i]:
-                # Model errored — delete its orphaned reserved message.
-                _save_errored_message(i, "normal")
-                continue
-            try:
-                llm_loop_completion_handle(
-                    state_container=state_containers[i],
-                    is_connected=setup.check_is_connected,
-                    assistant_message=setup.reserved_messages[i],
-                    llm=setup.llms[i],
-                    reserved_tokens=setup.reserved_token_count,
-                )
-            except Exception:
-                logger.exception(
-                    "normal completion failed for model %d (%s)",
-                    i,
-                    setup.model_display_names[i],
-                )
-        completion_persisted = True
-
-    finally:
-        if completion_persisted:
-            # Normal exit or stop-button exit: completion already persisted.
-            # Threads are done (normal path) or can finish in the background (stop-button).
-            executor.shutdown(wait=False)
-        else:
-            # Early exit (GeneratorExit from raw HTTP disconnect, or unhandled
-            # exception in the drain loop).
-            # 1. Signal emitters to stop — future emit() calls return immediately,
-            #    so workers exit their LLM loops promptly.
-            drain_done.set()
-            # 2. Wait for all workers to finish. Once drain_done is set the Emitter
-            #    short-circuits, so workers should exit quickly.
-            executor.shutdown(wait=True)
-            # 3. All workers are done — complete from the main thread only.
             for i in range(n_models):
-                if model_succeeded[i]:
-                    try:
-                        llm_loop_completion_handle(
-                            state_container=state_containers[i],
-                            # Model already finished — persist full response.
-                            is_connected=lambda: True,
-                            assistant_message=setup.reserved_messages[i],
-                            llm=setup.llms[i],
-                            reserved_tokens=setup.reserved_token_count,
-                        )
-                    except Exception:
-                        logger.exception(
-                            "disconnect completion failed for model %d (%s)",
-                            i,
-                            setup.model_display_names[i],
-                        )
-                elif model_errored[i]:
-                    _save_errored_message(i, "disconnect")
-            # 4. Drain buffered packets from memory — no consumer is running.
-            while not merged_queue.empty():
+                _persist_model_outcome(i, _PersistContext.NORMAL)
+        except Exception:
+            logger.exception("chat stream writer crashed")
+            # With the writer dead, merged_queue has no consumer — flip the
+            # emitters to discard so workers can't grow it unbounded.
+            drain_done.set()
+            # Generic message: the raw exception may embed provider API keys.
+            _publish(
+                StreamingError(
+                    error="The response stream ended unexpectedly. Please try again.",
+                    error_code="STREAM_WRITER_ERROR",
+                    is_retryable=True,
+                )
+            )
+        finally:
+            # Mark done before _run_post_steps clears the fence so resume
+            # readers never see a fence-less, not-done buffer and drop the tail.
+            if stream_buffer is not None:
+                stream_buffer.mark_done()
+            _run_post_steps()
+            tee.put(_STREAM_DONE)
+            executor.shutdown(wait=False)
+
+    # Each worker thread needs its own Context copy — a single Context object
+    # cannot be entered concurrently by multiple threads (RuntimeError).
+    executor = ThreadPoolExecutor(
+        max_workers=n_models, thread_name_prefix="multi-model"
+    )
+    for i in range(n_models):
+        ctx = contextvars.copy_context()
+        executor.submit(ctx.run, _run_model, i)
+
+    writer_thread = threading.Thread(
+        target=contextvars.copy_context().run,
+        args=(_drain_to_completion,),
+        name="chat-stream-writer",
+    )
+    writer_thread.start()
+
+    def _read_stream() -> AnswerStream:
+        # ── Reader: tail the tee while the client is attached ────────────────
+        stream_done = False
+        try:
+            last_packet_yield: float = time.monotonic()
+            while True:
                 try:
-                    merged_queue.get_nowait()
+                    item = tee.get(timeout=_CANCEL_POLL_INTERVAL_S)
                 except queue.Empty:
-                    break
+                    now = time.monotonic()
+                    if now - last_packet_yield >= CHAT_HEARTBEAT_INTERVAL_S:
+                        yield heartbeat_packet()
+                        last_packet_yield = now
+                    continue
+                if item is _STREAM_DONE:
+                    stream_done = True
+                    return
+                yield cast(Packet | StreamingError, item)
+                last_packet_yield = time.monotonic()
+        finally:
+            reader_gone.set()
+            if not stream_done:
+                # GeneratorExit (client disconnect): the reader stops here while
+                # the writer thread keeps draining to completion in the background.
+                logger.info(
+                    "chat stream reader detached; writer continues for session %s",
+                    setup.chat_session.id,
+                )
+
+    return _read_stream()
 
 
 def _stream_chat_turn(
@@ -1393,12 +1532,15 @@ def _stream_chat_turn(
 
     mock_response_token: Token[str | None] | None = None
     setup: ChatTurnSetup | None = None
+    pre_run_packets: list[AnswerStreamPart] = []
+    run_started = False
 
     try:
         with get_session_with_current_tenant() as setup_db_session:
             try:
                 if (
                     not bypass_acl
+                    and not user.is_anonymous
                     and new_msg_req.internal_search_filters is not None
                     and new_msg_req.internal_search_filters.document_set is not None
                 ):
@@ -1423,7 +1565,9 @@ def _stream_chat_turn(
                             % unauthorized,
                         )
 
-                setup = yield from build_chat_turn(
+                # Capture setup-phase packets (session/message IDs) so they can
+                # be replayed to a resuming client alongside the run's stream.
+                build_gen = build_chat_turn(
                     new_msg_req=new_msg_req,
                     user=user,
                     db_session=setup_db_session,
@@ -1435,6 +1579,14 @@ def _stream_chat_turn(
                     slack_context=slack_context,
                     additional_context=additional_context,
                 )
+                while True:
+                    try:
+                        pre_run_packet = next(build_gen)
+                    except StopIteration as build_done:
+                        setup = build_done.value
+                        break
+                    pre_run_packets.append(pre_run_packet)
+                    yield pre_run_packet
                 setup_db_session.expunge_all()
             except Exception:
                 setup_db_session.rollback()
@@ -1446,11 +1598,23 @@ def _stream_chat_turn(
         assert setup is not None, (
             "build_chat_turn must complete before _run_models is called"
         )
-        yield from _run_models(
+        stream_buffer = StreamBufferWriter(
+            cache=setup.cache,
+            chat_session_id=setup.chat_session.id,
+            run_id=setup.processing_run_id,
+        )
+        for pre_run_packet in pre_run_packets:
+            stream_buffer.append_line(get_json_line(pre_run_packet.model_dump()))
+        # _run_models starts the writer thread before returning; from that point
+        # the writer owns the fence reset.
+        run_stream = _run_models(
             setup=setup,
             user=user,
             external_state_container=external_state_container,
+            stream_buffer=stream_buffer,
         )
+        run_started = True
+        yield from run_stream
 
     except OnyxError as e:
         if e.error_code is not OnyxErrorCode.QUERY_REJECTED:
@@ -1529,7 +1693,9 @@ def _stream_chat_turn(
         if mock_response_token is not None:
             reset_llm_mock_response(mock_response_token)
         try:
-            if setup is not None:
+            # Once _run_models started, its writer thread owns the fence — the
+            # run may still be in flight after this generator is closed.
+            if setup is not None and not run_started:
                 set_processing_status(
                     chat_session_id=setup.chat_session.id,
                     cache=setup.cache,
@@ -1565,11 +1731,18 @@ def handle_stream_message_objects(
     )
 
 
-def _build_model_display_name(override: LLMOverride | None) -> str:
-    """Build a human-readable display name from an LLM override."""
-    if override is None:
-        return "unknown"
-    return override.display_name or override.model_version or "unknown"
+def _build_model_display_name(override: LLMOverride | None, llm: LLM) -> str:
+    """Build a human-readable display name for the LLM that will answer.
+
+    Falls back to the configured ``llm.config.model_name`` when no override is
+    set (default persona LLM) so the usage-metrics export always records the
+    actual model used, not an "unknown" sentinel or empty string.
+    """
+    if override is not None:
+        chosen = override.display_name or override.model_version
+        if chosen:
+            return chosen
+    return llm.config.model_name
 
 
 def handle_multi_model_stream(
