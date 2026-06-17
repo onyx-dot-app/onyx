@@ -307,7 +307,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     liveAgent,
     currentChatSessionId,
     currentChatSession ?? undefined,
-    { settings }
+    settings.disable_default_assistant ?? false
   );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);

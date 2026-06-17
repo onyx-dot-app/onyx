@@ -34,7 +34,7 @@ import {
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
-import { QueryHistoryType, Settings } from "@/lib/settings/types";
+import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
@@ -524,7 +524,10 @@ export default function ChatPreferencesPage() {
       const currentSettings = settings;
       if (!currentSettings) return;
 
-      const newSettings = { ...currentSettings, ...updates };
+      const newSettings: Settings = {
+        ...toSettings(currentSettings),
+        ...updates,
+      };
 
       try {
         const response = await fetch("/api/admin/settings", {

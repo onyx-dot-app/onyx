@@ -150,6 +150,21 @@ export interface CombinedSettings {
 }
 
 /**
+ * Strip the derived/frontend-only fields from an `AppSettings` object,
+ * returning only the plain `Settings` slice safe to send to the backend.
+ */
+export function toSettings({
+  enterprise: _enterprise,
+  appName: _appName,
+  vectorDbEnabled: _vectorDbEnabled,
+  isLoading: _isLoading,
+  error: _error,
+  ...core
+}: AppSettings): Settings {
+  return core;
+}
+
+/**
  * The fully-derived application settings object returned by `useSettings()`.
  *
  * Extends `Settings` with enterprise data and pre-computed derived fields so

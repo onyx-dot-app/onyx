@@ -161,6 +161,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   );
   const route = useAppRouter();
   const settingsData = useSettings();
+  const userFileMaxUploadSizeMb = settingsData.user_file_max_upload_size_mb;
 
   // SWR-backed fetch for recent files. Deduplicates across all mounts and
   // handles React StrictMode double-invocation without firing duplicate requests.
@@ -350,7 +351,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       onSuccess?: (uploaded: CategorizedFiles) => void,
       onFailure?: (failedTempIds: string[]) => void
     ): Promise<ProjectFile[]> => {
-      const rawMax = settingsData?.user_file_max_upload_size_mb;
+      const rawMax = userFileMaxUploadSizeMb;
 
       const oversizedFiles =
         rawMax && rawMax > 0
@@ -482,7 +483,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       refreshCurrentProjectDetails,
       refreshRecentFiles,
       removeOptimisticFilesByTempIds,
-      settingsData,
+      userFileMaxUploadSizeMb,
     ]
   );
 

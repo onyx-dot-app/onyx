@@ -75,7 +75,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { useSettings } from "@/lib/settings/hooks";
-import { Settings } from "@/lib/settings/types";
+import { Settings, toSettings } from "@/lib/settings/types";
 import { toast } from "@/hooks/useToast";
 import {
   useConfiguredEmbeddingProviders,
@@ -615,7 +615,7 @@ export default function IndexSettingsPage() {
       if (!settings) return;
 
       try {
-        await saveAdminSettings({ ...settings, ...updates });
+        await saveAdminSettings({ ...toSettings(settings), ...updates });
         router.refresh();
         await mutate(SWR_KEYS.settings);
         toast.success("Settings updated");
