@@ -11,7 +11,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { Button } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { useCustomFooterContent } from "@/lib/app/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
@@ -62,7 +62,7 @@ const footerMarkdownComponents = {
 export default function NRFChrome() {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
-  const settings = useSettingsContext();
+  const isSearchModeAvailable = useIsSearchModeAvailable();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
   const appFocus = useAppFocus();
@@ -75,7 +75,7 @@ export default function NRFChrome() {
 
   const showModeToggle =
     businessTier &&
-    settings.isSearchModeAvailable &&
+    isSearchModeAvailable &&
     appFocus.isNewSession() &&
     state.phase === "idle";
 

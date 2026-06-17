@@ -2,7 +2,7 @@
 
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { ApplicationStatus } from "@/interfaces/settings";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
@@ -21,17 +21,17 @@ export default function AdminChrome({ children }: AdminChromeProps) {
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
-  const settings = useSettingsContext();
+  const { settings, isLoading: settingsLoading } = useSettings();
 
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
   const hasCustomSidebar = pathname.startsWith("/admin/connectors");
 
   // Lite mode (no vector DB): connector/indexing pages can't run, show a notice.
-  const vectorDbEnabled = settings.settings.vector_db_enabled !== false;
+  const vectorDbEnabled = settings.vector_db_enabled !== false;
   let content = children;
   if (isVectorDbRequiredRoute(pathname)) {
-    if (settings.settingsLoading) {
+    if (settingsLoading) {
       content = (
         <Section padding={2}>
           <SvgSimpleLoader className="h-6 w-6" />
@@ -44,8 +44,7 @@ export default function AdminChrome({ children }: AdminChromeProps) {
 
   return (
     <RootLayout.Root>
-      {settings.settings.application_status ===
-        ApplicationStatus.PAYMENT_REMINDER && (
+      {settings.application_status === ApplicationStatus.PAYMENT_REMINDER && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 bg-status-warning-01 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
           <Text font="main-ui-body" color="text-05">
             {markdown(

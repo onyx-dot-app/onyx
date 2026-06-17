@@ -16,7 +16,7 @@ import {
   ThemePreference,
 } from "@/lib/types";
 import { usePostHog } from "posthog-js/react";
-import { SettingsContext } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
@@ -64,7 +64,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser } = useCurrentUser();
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
-  const updatedSettings = useContext(SettingsContext);
+  const { settings: updatedSettingsData } = useSettings();
   const posthog = usePostHog();
 
   // For auto_scroll and temperature_override_enabled:
@@ -79,16 +79,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           ...currentUser.preferences,
           auto_scroll:
             currentUser.preferences?.auto_scroll ??
-            updatedSettings?.settings?.auto_scroll ??
+            updatedSettingsData?.auto_scroll ??
             false,
           temperature_override_enabled:
             currentUser.preferences?.temperature_override_enabled ??
-            updatedSettings?.settings?.temperature_override_enabled ??
+            updatedSettingsData?.temperature_override_enabled ??
             false,
         },
       };
     },
-    [updatedSettings]
+    [updatedSettingsData]
   );
 
   const [upToDateUser, setUpToDateUser] = useState<User | null>(null);

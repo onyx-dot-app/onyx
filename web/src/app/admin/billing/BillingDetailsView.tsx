@@ -37,7 +37,7 @@ import {
 import { formatDateShort } from "@/lib/dateUtils";
 import { humanReadableFormatShort } from "@opal/time";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/interfaces/settings";
 import useUsers from "@/hooks/useUsers";
 
@@ -169,8 +169,8 @@ function SubscriptionCard({
   const [isEndingTrial, setIsEndingTrial] = useState(false);
   const [endTrialError, setEndTrialError] = useState<string | null>(null);
 
-  const settings = useSettingsContext();
-  const tier = settings?.settings.tier;
+  const { settings } = useSettings();
+  const tier = settings.tier;
   const isEnterprise = tier === Tier.ENTERPRISE || tier == null;
   const planName = isEnterprise ? "Enterprise Plan" : "Business Plan";
   const PlanIcon = isEnterprise ? SvgOrganization : SvgUsers;

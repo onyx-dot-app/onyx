@@ -13,14 +13,7 @@ import {
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import {
@@ -29,7 +22,7 @@ import {
 } from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
-import { SettingsContext } from "@/lib/settings/hooks";
+import { useSettings, useEnterpriseSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
   DefaultModel,
@@ -890,12 +883,11 @@ export const useUserGroups = (): {
   error: string;
   refreshUserGroups: () => void;
 } => {
-  const combinedSettings = useContext(SettingsContext);
-  const isLoading = combinedSettings?.settingsLoading ?? false;
+  const { isLoading: settingsLoading } = useSettings();
+  const { enterpriseSettings } = useEnterpriseSettings();
+  const isLoading = settingsLoading;
   const isPaidEnterpriseFeaturesEnabled =
-    !isLoading &&
-    combinedSettings &&
-    combinedSettings.enterpriseSettings !== null;
+    !isLoading && enterpriseSettings !== null;
 
   const swrResponse = useSWR<UserGroup[]>(
     isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,

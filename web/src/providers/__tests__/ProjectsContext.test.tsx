@@ -4,8 +4,6 @@ import {
   ProjectsProvider,
   useProjectsContext,
 } from "@/providers/ProjectsContext";
-import { SettingsContext } from "@/lib/settings/hooks";
-import { CombinedSettings } from "@/interfaces/settings";
 import type { ProjectFile } from "@/app/app/projects/projectsService";
 
 const mockUploadFiles = jest.fn();
@@ -26,6 +24,14 @@ jest.mock("@/lib/hooks/useProjects", () => ({
   useProjects: () => ({
     projects: [],
     refreshProjects: jest.fn().mockResolvedValue([]),
+  }),
+}));
+
+jest.mock("@/lib/settings/hooks", () => ({
+  useSettings: () => ({
+    settings: { user_file_max_upload_size_mb: 1 },
+    isLoading: false,
+    error: undefined,
   }),
 }));
 
@@ -59,23 +65,8 @@ jest.mock("@/app/app/projects/projectsService", () => {
   };
 });
 
-const settingsValue: CombinedSettings = {
-  settings: {
-    user_file_max_upload_size_mb: 1,
-  } as CombinedSettings["settings"],
-  enterpriseSettings: null,
-  customAnalyticsScript: null,
-  webVersion: null,
-  webDomain: null,
-  isSearchModeAvailable: true,
-  settingsLoading: false,
-  appName: "Onyx",
-};
-
 const wrapper = ({ children }: PropsWithChildren) => (
-  <SettingsContext.Provider value={settingsValue}>
-    <ProjectsProvider>{children}</ProjectsProvider>
-  </SettingsContext.Provider>
+  <ProjectsProvider>{children}</ProjectsProvider>
 );
 
 describe("ProjectsContext beginUpload size precheck", () => {

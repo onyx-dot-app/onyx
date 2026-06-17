@@ -135,33 +135,16 @@ export interface EnterpriseSettings {
   hide_onyx_branding: boolean | null;
 }
 
+/**
+ * Combined settings shape returned by the server-side `fetchSettingsSS`
+ * helper in `components/settings/lib.ts`. Used only for SSR — client
+ * components access settings via the SWR hooks in `lib/settings/hooks.ts`.
+ */
 export interface CombinedSettings {
   settings: Settings;
   enterpriseSettings: EnterpriseSettings | null;
   customAnalyticsScript: string | null;
-  isMobile?: boolean;
   webVersion: string | null;
   webDomain: string | null;
-
-  /**
-   * NOTE (@raunakab):
-   * Whether search mode is actually available to users.
-   *
-   * Prefer this over reading `settings.search_ui_enabled` directly.
-   * `search_ui_enabled` only reflects the admin's *preference* — it does not
-   * account for prerequisites like connectors being configured. This derived
-   * flag combines the admin setting with runtime checks (e.g. connectors
-   * exist) so consumers get a single, accurate boolean.
-   */
-  isSearchModeAvailable: boolean;
-  settingsLoading: boolean;
-
-  /**
-   * Resolved application name.
-   *
-   * Derived once in `SettingsProvider` as
-   * `enterpriseSettings?.application_name?.trim() || "Onyx"`. Use this
-   * instead of re-deriving the fallback at every call site.
-   */
   appName: string;
 }

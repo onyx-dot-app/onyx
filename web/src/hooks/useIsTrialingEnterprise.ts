@@ -2,7 +2,7 @@
 
 import { Tier } from "@/interfaces/settings";
 import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { useBillingInformation } from "@/hooks/useBillingInformation";
 
 /**
@@ -16,10 +16,10 @@ import { useBillingInformation } from "@/hooks/useBillingInformation";
  * gating; use `useTierAtLeast` instead.
  */
 export function useIsTrialingEnterprise(): boolean {
-  const settings = useSettingsContext();
+  const { settings } = useSettings();
   const { data } = useBillingInformation();
 
-  if (settings?.settings.tier !== Tier.ENTERPRISE) return false;
+  if (settings.tier !== Tier.ENTERPRISE) return false;
   if (!data || !hasActiveSubscription(data)) return false;
   return data.status === BillingStatus.TRIALING;
 }

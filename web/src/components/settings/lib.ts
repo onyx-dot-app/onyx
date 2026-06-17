@@ -124,10 +124,6 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       customAnalyticsScript,
       webVersion: settings.version ?? getWebVersion(),
       webDomain: HOST_URL,
-      // Server-side default; the real value is computed client-side in
-      // SettingsProvider where connector data is available via useCCPairs.
-      isSearchModeAvailable: settings.search_ui_enabled !== false,
-      settingsLoading: false,
       appName: enterpriseSettings?.application_name?.trim() || "Onyx",
     };
 

@@ -7,7 +7,7 @@ import { SvgBlocks, SvgUser } from "@opal/icons";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useAppName } from "@/lib/settings/hooks";
 
 export type SkillCardSource = "builtin" | "custom";
 
@@ -36,7 +36,7 @@ export interface SkillCardProps {
 }
 
 export default function SkillCard({ item, onClick }: SkillCardProps) {
-  const { appName } = useSettingsContext();
+  const appName = useAppName();
 
   const handleClick = useCallback(() => {
     onClick?.(item);

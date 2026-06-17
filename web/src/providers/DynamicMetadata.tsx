@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useAppName, useEnterpriseSettings } from "@/lib/settings/hooks";
 
 export default function DynamicMetadata() {
-  const { appName, enterpriseSettings } = useSettingsContext();
+  const appName = useAppName();
+  const { enterpriseSettings } = useEnterpriseSettings();
 
   useEffect(() => {
     if (document.title !== appName) {

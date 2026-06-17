@@ -2,7 +2,7 @@
 
 import { Tier } from "@/interfaces/settings";
 import { tierAtLeast } from "@/lib/tiers";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 
 /**
  * True when the current tenant's tier is `required` or higher.
@@ -13,6 +13,6 @@ import { useSettingsContext } from "@/lib/settings/hooks";
  * Returns false when the tier is undefined (loading, no license).
  */
 export function useTierAtLeast(required: Tier): boolean {
-  const settings = useSettingsContext();
-  return tierAtLeast(settings?.settings.tier, required);
+  const { settings } = useSettings();
+  return tierAtLeast(settings.tier, required);
 }

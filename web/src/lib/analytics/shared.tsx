@@ -11,7 +11,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, Suspense, type ReactElement } from "react";
 import { usePostHog } from "posthog-js/react";
 import { useReportWebVitals } from "next/web-vitals";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useCustomAnalyticsScript } from "@/lib/settings/hooks";
 
 // ─── WebVitals ─────────────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ export function PostHogPageTracker(): ReactElement {
  * value identity changes across re-renders.
  */
 export function CustomAnalyticsScript(): null {
-  const { customAnalyticsScript } = useSettingsContext();
+  const customAnalyticsScript = useCustomAnalyticsScript();
   const injectedRef = useRef(false);
 
   useEffect(() => {

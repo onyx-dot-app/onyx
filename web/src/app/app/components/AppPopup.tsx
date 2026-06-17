@@ -1,12 +1,12 @@
 "use client";
 
 import Modal from "@/refresh-components/Modal";
-import { SettingsContext } from "@/lib/settings/hooks";
+import { useEnterpriseSettings } from "@/lib/settings/hooks";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { FormField } from "@/refresh-components/form/FormField";
 import { Checkbox } from "@opal/components";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { transformLinkUri } from "@/lib/utils";
@@ -37,8 +37,7 @@ export function AppPopup() {
     );
   }, []);
 
-  const settings = useContext(SettingsContext);
-  const enterpriseSettings = settings?.enterpriseSettings;
+  const { enterpriseSettings } = useEnterpriseSettings();
   const isConsentScreen = enterpriseSettings?.enable_consent_screen;
 
   if (

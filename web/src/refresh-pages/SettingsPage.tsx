@@ -66,7 +66,7 @@ import { cn } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
@@ -953,8 +953,7 @@ function ChatPreferencesSettings() {
     updateUserVoiceSettings,
   } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const settings = useSettingsContext();
-  const { isSearchModeAvailable: searchUiEnabled } = settings;
+  const searchUiEnabled = useIsSearchModeAvailable();
   const llmManager = useLlmManager();
   const {
     enabled: smoothStreamingEnabled,

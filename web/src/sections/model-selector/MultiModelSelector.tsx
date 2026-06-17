@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import { getModelIcon } from "@/lib/languageModels";
 import { Button, SelectButton, Popover, Divider } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { LLMOption } from "@/lib/languageModels/options";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 
@@ -38,9 +38,8 @@ export default function MultiModelSelector({
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
 
-  const settings = useSettingsContext();
-  const multiModelAllowed =
-    settings?.settings?.multi_model_chat_enabled ?? true;
+  const { settings } = useSettings();
+  const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
 
   const isMultiModel = selectedModels.length > 1;
   const atMax = selectedModels.length >= MAX_MODELS || !multiModelAllowed;

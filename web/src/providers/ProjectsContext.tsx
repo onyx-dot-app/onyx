@@ -45,7 +45,7 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import { ChatFileType } from "@/app/app/interfaces";
 import { toast } from "@/hooks/useToast";
 import { useProjects } from "@/lib/hooks/useProjects";
-import { SettingsContext } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 
 export type { Project, ProjectFile } from "@/app/app/projects/projectsService";
 
@@ -160,7 +160,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     new Map()
   );
   const route = useAppRouter();
-  const settingsContext = useContext(SettingsContext);
+  const { settings: settingsData } = useSettings();
 
   // SWR-backed fetch for recent files. Deduplicates across all mounts and
   // handles React StrictMode double-invocation without firing duplicate requests.
@@ -350,7 +350,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       onSuccess?: (uploaded: CategorizedFiles) => void,
       onFailure?: (failedTempIds: string[]) => void
     ): Promise<ProjectFile[]> => {
-      const rawMax = settingsContext?.settings?.user_file_max_upload_size_mb;
+      const rawMax = settingsData?.user_file_max_upload_size_mb;
 
       const oversizedFiles =
         rawMax && rawMax > 0
@@ -482,7 +482,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       refreshCurrentProjectDetails,
       refreshRecentFiles,
       removeOptimisticFilesByTempIds,
-      settingsContext,
+      settingsData,
     ]
   );
 

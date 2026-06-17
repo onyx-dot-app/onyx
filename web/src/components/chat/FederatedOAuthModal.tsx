@@ -1,10 +1,10 @@
 "use client";
 
-import { useContext, useState } from "react";
+import { useState } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
 import { ValidSources } from "@/lib/types";
-import { SettingsContext } from "@/lib/settings/hooks";
+import { useAppName } from "@/lib/settings/hooks";
 import { getSourceMetadata } from "@/lib/sources";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import { SvgLink } from "@opal/icons";
@@ -101,7 +101,7 @@ function useFederatedOauthModal() {
 }
 
 export default function FederatedOAuthModal() {
-  const settings = useContext(SettingsContext);
+  const applicationName = useAppName();
 
   const {
     oAuthModalState: { hidden },
@@ -116,8 +116,6 @@ export default function FederatedOAuthModal() {
   if (needsAuth.length === 0 || hidden || !hasUnauthenticatedConnectors) {
     return null;
   }
-
-  const applicationName = settings?.appName || "Onyx";
 
   return (
     <Modal open>

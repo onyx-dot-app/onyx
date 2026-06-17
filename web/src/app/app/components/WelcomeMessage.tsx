@@ -9,7 +9,7 @@ import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalAgent } from "@/lib/agents/types";
 import { useState, useEffect } from "react";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useEnterpriseSettings } from "@/lib/settings/hooks";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import { Section } from "@/layouts/general-layouts";
 
@@ -22,8 +22,7 @@ export default function WelcomeMessage({
   agent,
   isDefaultAgent,
 }: WelcomeMessageProps) {
-  const settings = useSettingsContext();
-  const enterpriseSettings = settings?.enterpriseSettings;
+  const { enterpriseSettings } = useEnterpriseSettings();
 
   // Use a stable default for SSR, then randomize on client after hydration
   const [greeting, setGreeting] = useState(GREETING_MESSAGES[0]);

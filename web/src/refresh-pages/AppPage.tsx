@@ -10,7 +10,11 @@ import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { useSettingsContext, useVectorDbEnabled } from "@/lib/settings/hooks";
+import {
+  useSettings,
+  useAppName,
+  useVectorDbEnabled,
+} from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -66,6 +70,7 @@ import { Button, Spacer } from "@opal/components";
 import { IllustrationContent, RootLayout } from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
 import useAppFocus from "@/hooks/useAppFocus";
+import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
@@ -123,6 +128,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const router = useRouter();
   const appFocus = useAppFocus();
+  const { isMobile } = useScreenSize();
 
   useToastFromQuery({
     oauth_connected: {
@@ -144,15 +150,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
   // available in server-side components
-  const settings = useSettingsContext();
+  const { settings } = useSettings();
+  const appName = useAppName();
 
   const appNameRef = useRef<string>("Onyx");
   useEffect(() => {
-    appNameRef.current = settings.appName;
+    appNameRef.current = appName;
     document.title = currentChatSession?.name
-      ? `${currentChatSession.name} — ${settings.appName}`
-      : settings.appName;
-  }, [currentChatSession?.name, settings.appName]);
+      ? `${currentChatSession.name} — ${appName}`
+      : appName;
+  }, [currentChatSession?.name, appName]);
   useEffect(() => {
     return () => {
       document.title = appNameRef.current;
@@ -304,7 +311,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     liveAgent,
     currentChatSessionId,
     currentChatSession ?? undefined,
-    settings
+    { settings }
   );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
@@ -720,7 +727,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     <>
       <AppPopup />
 
-      {retrievalEnabled && documentSidebarVisible && settings.isMobile && (
+      {retrievalEnabled && documentSidebarVisible && isMobile && (
         <div className="md:hidden">
           <Modal
             open
@@ -757,25 +764,23 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      {!(noAgents && !isLoadingAgents) &&
-        retrievalEnabled &&
-        !settings.isMobile && (
-          <RootLayout.RightPanel>
-            <div
-              className={cn(
-                "overflow-hidden transition-all duration-300 ease-in-out h-full",
-                documentSidebarVisible ? "w-100" : "w-0"
-              )}
-            >
-              <DocumentsSidebar
-                setPresentingDocument={setPresentingDocument}
-                modal={false}
-                closeSidebar={handleDesktopDocumentSidebarClose}
-                selectedDocuments={selectedDocuments}
-              />
-            </div>
-          </RootLayout.RightPanel>
-        )}
+      {!(noAgents && !isLoadingAgents) && retrievalEnabled && !isMobile && (
+        <RootLayout.RightPanel>
+          <div
+            className={cn(
+              "overflow-hidden transition-all duration-300 ease-in-out h-full",
+              documentSidebarVisible ? "w-100" : "w-0"
+            )}
+          >
+            <DocumentsSidebar
+              setPresentingDocument={setPresentingDocument}
+              modal={false}
+              closeSidebar={handleDesktopDocumentSidebarClose}
+              selectedDocuments={selectedDocuments}
+            />
+          </div>
+        </RootLayout.RightPanel>
+      )}
 
       <div className="w-full h-full overflow-hidden">
         <Dropzone

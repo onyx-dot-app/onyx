@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useSettingsContext } from "@/lib/settings/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/interfaces/settings";
 import { useHookSpecs } from "@/ee/hooks/useHookSpecs";
@@ -449,7 +449,7 @@ function ConnectedHookCard({
 
 export default function HooksPage() {
   const router = useRouter();
-  const { settings, settingsLoading } = useSettingsContext();
+  const { settings, isLoading: settingsLoading } = useSettings();
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const [connectSpec, setConnectSpec] = useState<HookPointMeta | null>(null);
