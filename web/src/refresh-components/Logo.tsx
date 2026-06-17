@@ -26,10 +26,9 @@ export default function Logo({
   onyxBranded,
 }: LogoProps) {
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
-  const settings = useSettings();
-  const { enterprise: enterpriseSettings, logoUrl } = settings;
-  const logoDisplayStyle = enterpriseSettings?.logo_display_style;
-  const applicationName = enterpriseSettings?.application_name;
+  const { enterprise, logoUrl } = useSettings();
+  const logoDisplayStyle = enterprise?.logo_display_style;
+  const applicationName = enterprise?.application_name;
 
   if (onyxBranded) {
     return folded ? (
@@ -72,7 +71,7 @@ export default function Logo({
               <Truncated headingH3>{applicationName}</Truncated>
             )}
             {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED &&
-              !enterpriseSettings?.hide_onyx_branding && (
+              !enterprise?.hide_onyx_branding && (
                 <Text
                   secondaryBody
                   text03
