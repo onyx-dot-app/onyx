@@ -432,7 +432,10 @@ class TestRunModels:
 
         errors = [p for p in packets if isinstance(p, StreamingError)]
         assert len(errors) == 1
-        assert errors[0].error_code == "MODEL_ERROR"
+        # The worker error is now classified via litellm_exception_to_error_msg
+        # rather than hardcoded to MODEL_ERROR; a generic (non-litellm) exception
+        # maps to UNKNOWN_ERROR while preserving the original message.
+        assert errors[0].error_code == "UNKNOWN_ERROR"
         assert "intentional test failure" in errors[0].error
 
     def test_one_model_error_does_not_stop_other_models(self) -> None:
