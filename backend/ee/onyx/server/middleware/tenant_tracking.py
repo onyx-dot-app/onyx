@@ -24,6 +24,10 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
+# Unauthenticated, non-tenant-scoped endpoints (LB/Prometheus probes, API docs),
+# so tenant resolution is skipped for them.
+TENANT_RESOLUTION_SKIP_PATHS = frozenset({"/health", "/metrics", "/openapi.json"})
+
 
 def add_api_server_tenant_id_middleware(
     app: FastAPI, logger: logging.LoggerAdapter
@@ -38,6 +42,10 @@ def add_api_server_tenant_id_middleware(
         to use elsewhere.
         """
         try:
+            if request.url.path in TENANT_RESOLUTION_SKIP_PATHS:
+                CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
+                return await call_next(request)
+
             if MULTI_TENANT:
                 tenant_id = await _get_tenant_id_from_request(request, logger)
             else:
