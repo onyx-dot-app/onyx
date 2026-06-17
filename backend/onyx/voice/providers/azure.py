@@ -160,13 +160,23 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         def on_canceled(evt: Any) -> None:
             # Surfaces Azure-side failures that were previously swallowed:
             # auth errors, region/endpoint mismatch, quota, blocked outbound
-            # connection to Azure, or bad audio format.
+            # connection to Azure, or bad audio format. The diagnostic fields
+            # live on evt.cancellation_details (code is a CancellationErrorCode),
+            # not on evt itself.
+            details = getattr(evt, "cancellation_details", None)
             transcriber._logger.error(
-                "Azure STT canceled: reason=%s error_code=%s details=%s",
-                getattr(evt, "reason", None),
-                getattr(evt, "error_code", None),
-                getattr(evt, "error_details", None),
+                "Azure STT canceled: reason=%s code=%s details=%s",
+                getattr(details, "reason", None),
+                getattr(details, "code", None),
+                getattr(details, "error_details", None),
             )
+            # A cancel is terminal — no more transcripts will arrive. Signal
+            # end-of-stream so the consumer loop stops polling instead of
+            # spinning on empty results forever.
+            if transcriber._loop and not transcriber._closed:
+                transcriber._loop.call_soon_threadsafe(
+                    transcriber._transcript_queue.put_nowait, None
+                )
 
         def on_session_stopped(_evt: Any) -> None:
             transcriber._logger.info("Azure STT: session stopped")
