@@ -1,4 +1,3 @@
-import base64
 import hashlib
 import json
 import os
@@ -82,7 +81,11 @@ from onyx.auth.email_utils import send_user_verification_email
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
+from onyx.auth.mobile_sso.sso_completion import apply_mobile_state
+from onyx.auth.mobile_sso.sso_completion import complete_mobile_sso
+from onyx.auth.mobile_sso.sso_completion import is_mobile_sso
 from onyx.auth.pat import get_hashed_pat_from_request
+from onyx.auth.pkce import compute_s256_challenge
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
@@ -2187,14 +2190,9 @@ def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def _base64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
 def generate_pkce_pair() -> tuple[str, str]:
     verifier = secrets.token_urlsafe(64)
-    challenge = _base64url_encode(hashlib.sha256(verifier.encode("ascii")).digest())
-    return verifier, challenge
+    return verifier, compute_s256_challenge(verifier)
 
 
 def get_pkce_cookie_name(state: str) -> str:
@@ -2276,6 +2274,11 @@ def get_oauth_router(
         response: Response,
         redirect: bool = Query(False),
         scopes: List[str] = Query(None),
+        # Native-mobile SSO params (guarded/optional). Present => folded into the
+        # signed state so the callback returns a PKCE one-time code, not a cookie.
+        mobile_redirect_uri: str | None = Query(None),
+        app_state: str | None = Query(None),
+        app_code_challenge: str | None = Query(None),
     ) -> Response | OAuth2AuthorizeResponse:
         referral_source = request.cookies.get("referral_source", None)
 
@@ -2295,6 +2298,10 @@ def get_oauth_router(
             "referral_source": referral_source or "default_referral",
             CSRF_TOKEN_KEY: csrf_token,
         }
+        # No-op for web; for mobile, marks the signed state for complete_mobile_sso.
+        apply_mobile_state(
+            state_data, mobile_redirect_uri, app_state, app_code_challenge
+        )
         state = generate_state_token(state_data, state_secret)
         pkce_cookie: tuple[str, str] | None = None
 
@@ -2591,6 +2598,18 @@ def get_oauth_router(
                     OnyxErrorCode.VALIDATION_ERROR,
                     ErrorCode.LOGIN_BAD_CREDENTIALS,
                 )
+
+            # Mobile clients get a PKCE one-time code over a deep link, not a web
+            # cookie. Guarded on the signed-state marker, so the web path below is
+            # byte-for-byte unchanged.
+            if is_mobile_sso(state_data):
+                redirect_response = await complete_mobile_sso(
+                    user, state_data, strategy
+                )
+                # Fire analytics like the web/bearer-login paths (PostHog
+                # identify). No web response here, so its anon-cookie cleanup no-ops.
+                await user_manager.on_after_login(user, request)
+                return redirect_response
 
             # Login user
             response = await backend.login(strategy, user)

@@ -264,6 +264,30 @@ OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
 
+# Native mobile (Expo / React Native) SSO bridge. The app completes OAuth in the
+# system browser (reusing the existing registered IdP callback), then the backend
+# returns a single-use, PKCE-bound one-time code over a custom-scheme deep link —
+# never a token. The app swaps the code for the session token at
+# /auth/mobile/sso/exchange.
+MOBILE_SSO_CODE_PREFIX = "mobile_sso_code:"
+# Lifetime of the one-time code; intentionally short — it only has to survive the
+# system-browser -> app handoff plus the immediate exchange call.
+MOBILE_SSO_CODE_TTL_SECONDS = int(os.environ.get("MOBILE_SSO_CODE_TTL_SECONDS") or 60)
+# Deep-link URIs the SSO completion is allowed to 302 to. Defaults to the app's
+# custom scheme; override (comma-separated) to add Universal/App Links later.
+_MOBILE_ALLOWED_REDIRECT_URIS_STR = os.environ.get(
+    "MOBILE_ALLOWED_REDIRECT_URIS", ""
+).strip()
+MOBILE_ALLOWED_REDIRECT_URIS: frozenset[str] = (
+    frozenset(
+        uri.strip()
+        for uri in _MOBILE_ALLOWED_REDIRECT_URIS_STR.split(",")
+        if uri.strip()
+    )
+    if _MOBILE_ALLOWED_REDIRECT_URIS_STR
+    else frozenset({"onyx://auth/callback"})
+)
+
 # JWT Public Key URL for JWT token verification
 JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
