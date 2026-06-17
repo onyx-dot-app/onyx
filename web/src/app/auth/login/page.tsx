@@ -7,9 +7,10 @@ import {
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
-import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
+import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
 import LoginPage from "./LoginPage";
 import { AuthType } from "@/lib/constants";
+import { markdown } from "@opal/utils";
 
 export interface PageProps {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -26,9 +27,6 @@ export default async function Page(props: PageProps) {
   const verified = searchParams?.verified === "true";
   const isFirstUser = searchParams?.first_user === "true";
 
-  // catch cases where the backend is completely unreachable here
-  // without try / catch, will just raise an exception and the page
-  // will not render
   let authTypeMetadata: AuthTypeMetadata | null = null;
   let currentUser: User | null = null;
   try {
@@ -40,8 +38,6 @@ export default async function Page(props: PageProps) {
     console.log(`Some fetch failed for the login page - ${e}`);
   }
 
-  // if there are no users, redirect to signup page for initial setup
-  // (only for auth types that support self-service signup)
   if (
     authTypeMetadata &&
     !authTypeMetadata.hasUsers &&
@@ -51,7 +47,6 @@ export default async function Page(props: PageProps) {
     return redirect("/auth/signup");
   }
 
-  // if user is already logged in, take them to the main app page
   if (currentUser && currentUser.is_active && !currentUser.is_anonymous_user) {
     console.log("Login page: User is logged in, redirecting to chat", {
       userId: currentUser.id,
@@ -63,12 +58,9 @@ export default async function Page(props: PageProps) {
       return redirect("/auth/waiting-on-verification");
     }
 
-    // Add a query parameter to indicate this is a redirect from login
-    // This will help prevent redirect loops
     return redirect("/app?from=login");
   }
 
-  // get where to send the user to authenticate
   let authUrl: string | null = null;
   if (authTypeMetadata) {
     try {
@@ -82,29 +74,29 @@ export default async function Page(props: PageProps) {
     return redirect(authUrl as Route);
   }
 
-  const ssoLoginFooterContent =
-    authTypeMetadata &&
-    (authTypeMetadata.authType === AuthType.GOOGLE_OAUTH ||
-      authTypeMetadata.authType === AuthType.OIDC ||
-      authTypeMetadata.authType === AuthType.SAML) ? (
-      <>Need access? Reach out to your IT admin to get access.</>
-    ) : undefined;
+  const isSso =
+    authTypeMetadata?.authType === AuthType.GOOGLE_OAUTH ||
+    authTypeMetadata?.authType === AuthType.OIDC ||
+    authTypeMetadata?.authType === AuthType.SAML;
+
+  const bottomPrompt = isSso
+    ? "Need access? Reach out to your IT admin to get access."
+    : markdown("New to Onyx? [Create an Account](/auth/signup)");
 
   return (
-    <div className="flex flex-col ">
-      <AuthFlowContainer
-        authState="login"
-        footerContent={ssoLoginFooterContent}
-      >
-        <LoginPage
-          authUrl={authUrl}
-          authTypeMetadata={authTypeMetadata}
-          nextUrl={nextUrl}
-          hidePageRedirect={true}
-          verified={verified}
-          isFirstUser={isFirstUser}
-        />
-      </AuthFlowContainer>
-    </div>
+    <AuthFlowContainer
+      title="Sign in"
+      description="Welcome back"
+      bottomPrompt={bottomPrompt}
+    >
+      <LoginPage
+        authUrl={authUrl}
+        authTypeMetadata={authTypeMetadata}
+        nextUrl={nextUrl}
+        hidePageRedirect={true}
+        verified={verified}
+        isFirstUser={isFirstUser}
+      />
+    </AuthFlowContainer>
   );
 }

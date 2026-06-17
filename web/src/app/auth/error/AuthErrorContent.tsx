@@ -1,13 +1,10 @@
 "use client";
 
-import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
+import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
-
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
-// Maps raw IdP/OAuth error codes to user-friendly messages.
-// If the message is a known code, we replace it; otherwise show it as-is.
 const ERROR_CODE_MESSAGES: Record<string, string> = {
   access_denied: "Access was denied by your identity provider.",
   login_required: "You need to log in with your identity provider first.",
@@ -34,14 +31,11 @@ interface AuthErrorContentProps {
 function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
   const message = resolveMessage(rawMessage);
   return (
-    <AuthFlowContainer>
-      <div className="flex flex-col items-center gap-4">
-        <Text headingH2 text05>
-          Authentication Error
-        </Text>
-        <Text mainContentBody text03>
-          There was a problem with your login attempt.
-        </Text>
+    <AuthFlowContainer
+      title="Authentication Error"
+      description="There was a problem with your login attempt."
+    >
+      <div className="flex flex-col gap-4">
         {/* TODO: Error card component */}
         <div className="w-full rounded-12 border border-status-error-05 bg-status-error-00 p-4">
           {message ? (

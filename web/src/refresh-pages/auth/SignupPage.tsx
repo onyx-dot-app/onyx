@@ -38,11 +38,16 @@ export default function SignupPage() {
     }
   }, [user, authTypeMetadata, router]);
 
+  const bottomPrompt = markdown(
+    "Already have an account? [Sign In](/auth/login?autoRedirectToSignup=false)"
+  );
+
   if (isSignupDisabled) {
     return (
       <AuthFlowContainer
         title="Create account"
         description="Get started with Onyx"
+        bottomPrompt={bottomPrompt}
       >
         <MessageCard
           title="New account creation unavailable."
@@ -58,6 +63,7 @@ export default function SignupPage() {
     <AuthFlowContainer
       title="Create account"
       description="Get started with Onyx"
+      bottomPrompt={bottomPrompt}
     >
       <AuthErrorDisplay
         searchParams={Object.fromEntries(searchParams.entries())}

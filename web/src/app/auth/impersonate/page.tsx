@@ -1,7 +1,6 @@
 "use client";
 
-import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-
+import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
 import { useUser } from "@/providers/UserProvider";
 import { redirect, useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -60,49 +59,41 @@ export default function ImpersonatePage() {
   };
 
   return (
-    <AuthFlowContainer>
-      <div className="flex flex-col w-full justify-center">
-        <div className="w-full flex flex-col items-center justify-center">
-          <Text as="p" headingH3 className="mb-6 text-center">
-            Impersonate User
-          </Text>
-        </div>
-
-        <Formik
-          initialValues={{ email: "", apiKey: "" }}
-          validationSchema={ImpersonateSchema}
-          onSubmit={(values, helpers) => handleImpersonate(values, helpers)}
-        >
-          {({ isSubmitting }) => (
-            <Form className="flex flex-col gap-4">
-              <TextFormField
-                name="email"
-                type="email"
-                label="Email"
-                placeholder="email@yourcompany.com"
-              />
-
-              <TextFormField
-                name="apiKey"
-                type="password"
-                label="API Key"
-                placeholder="Enter API Key"
-              />
-
-              <Button disabled={isSubmitting} type="submit" width="full">
-                Impersonate User
-              </Button>
-            </Form>
-          )}
-        </Formik>
-
-        <Text
-          as="p"
-          mainUiMuted
-          text03
-          className="mt-4 text-center px-4"
-        >{`Note: This feature is only available for @onyx.app administrators`}</Text>
-      </div>
+    <AuthFlowContainer
+      title="Impersonate User"
+      description="Cloud superuser access only."
+    >
+      <Formik
+        initialValues={{ email: "", apiKey: "" }}
+        validationSchema={ImpersonateSchema}
+        onSubmit={(values, helpers) => handleImpersonate(values, helpers)}
+      >
+        {({ isSubmitting }) => (
+          <Form className="flex flex-col gap-4">
+            <TextFormField
+              name="email"
+              type="email"
+              label="Email"
+              placeholder="email@yourcompany.com"
+            />
+            <TextFormField
+              name="apiKey"
+              type="password"
+              label="API Key"
+              placeholder="Enter API Key"
+            />
+            <Button disabled={isSubmitting} type="submit" width="full">
+              Impersonate User
+            </Button>
+          </Form>
+        )}
+      </Formik>
+      <Text
+        as="p"
+        mainUiMuted
+        text03
+        className="mt-4 text-center px-4"
+      >{`Note: This feature is only available for @onyx.app administrators`}</Text>
     </AuthFlowContainer>
   );
 }
