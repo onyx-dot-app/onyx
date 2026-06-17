@@ -113,12 +113,10 @@ jobs:
             exit 0
           fi
 
-          # Auto-increment only the sandbox-internal v0.* stream. App release
-          # tags such as v4.1.3 are published manually and must not seed
-          # future nightly versions.
+          # Query Docker Hub for the latest versioned tag
           LATEST_TAG=$(curl -s "https://hub.docker.com/v2/repositories/onyxdotapp/sandbox/tags?page_size=100" \
             | jq -r '.results[].name' \
-            | grep -E '^v0\.[0-9]+\.[0-9]+$' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | sort -V \
             | tail -n 1)
 
