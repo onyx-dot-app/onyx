@@ -196,16 +196,6 @@ _OPENCODE_HISTORY_CREATE_SCRIPT = (
     "sys.stdout.write('' if p is None else str(p))"
 )
 
-# In-container opencode-history archive builder: reuses the sandbox_daemon
-# helper (sqlite-safe backup + symlink guards) and prints the temp archive path,
-# or nothing when there's no history. Exec it with OPENCODE_DATA_HOME set.
-_OPENCODE_HISTORY_CREATE_SCRIPT = (
-    "import sys; "
-    "from sandbox_daemon.opencode_history import create_opencode_history_archive_file; "
-    "p = create_opencode_history_archive_file(); "
-    "sys.stdout.write('' if p is None else str(p))"
-)
-
 
 def _run_in_container_as_sandbox_user(
     container: Container,
