@@ -12,14 +12,12 @@ import SvgNoResult from "@opal/illustrations/no-result";
 import {
   SvgDownload,
   SvgKey,
-  SvgLock,
   SvgMoreHorizontal,
   SvgRefreshCw,
   SvgTrash,
-  SvgUser,
   SvgUserEdit,
   SvgUserKey,
-  SvgUserManage,
+  SvgUsers,
   SvgSimpleLoader,
 } from "@opal/icons";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
@@ -41,8 +39,12 @@ import {
   updateApiKey,
 } from "@/refresh-pages/admin/ServiceAccountsPage/svc";
 import type { APIKey } from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
-import { DISCORD_SERVICE_API_KEY_NAME } from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
+import {
+  DISCORD_SERVICE_API_KEY_NAME,
+  SERVICE_ACCOUNT_ROLE_OPTIONS,
+} from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
 import ApiKeyFormModal from "@/refresh-pages/admin/ServiceAccountsPage/ApiKeyFormModal";
+import EditServiceAccountModal from "@/refresh-pages/admin/ServiceAccountsPage/EditServiceAccountModal";
 import { Table } from "@opal/components";
 import { createTableColumns } from "@opal/components/table/columns";
 import { Section } from "@/layouts/general-layouts";
@@ -75,6 +77,9 @@ export default function ServiceAccountsPage() {
   const [search, setSearch] = useState("");
   const [regenerateTarget, setRegenerateTarget] = useState<APIKey | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<APIKey | null>(null);
+  const [groupsRolesTarget, setGroupsRolesTarget] = useState<APIKey | null>(
+    null
+  );
 
   const visibleApiKeys = (apiKeys ?? []).filter(
     (key) => key.api_key_name !== DISCORD_SERVICE_API_KEY_NAME
@@ -174,27 +179,16 @@ export default function ServiceAccountsPage() {
           >
             <InputSelect.Trigger />
             <InputSelect.Content>
-              <InputSelect.Item
-                value={UserRole.ADMIN.toString()}
-                icon={SvgUserManage}
-                description="Unrestricted admin access to all endpoints."
-              >
-                {USER_ROLE_LABELS[UserRole.ADMIN]}
-              </InputSelect.Item>
-              <InputSelect.Item
-                value={UserRole.BASIC.toString()}
-                icon={SvgUser}
-                description="Standard user-level access to non-admin endpoints."
-              >
-                {USER_ROLE_LABELS[UserRole.BASIC]}
-              </InputSelect.Item>
-              <InputSelect.Item
-                value={UserRole.LIMITED.toString()}
-                icon={SvgLock}
-                description="For agents: chat posting and read-only access to other endpoints."
-              >
-                {USER_ROLE_LABELS[UserRole.LIMITED]}
-              </InputSelect.Item>
+              {SERVICE_ACCOUNT_ROLE_OPTIONS.map((opt) => (
+                <InputSelect.Item
+                  key={opt.role}
+                  value={opt.role.toString()}
+                  icon={opt.icon}
+                  description={opt.description}
+                >
+                  {USER_ROLE_LABELS[opt.role]}
+                </InputSelect.Item>
+              ))}
             </InputSelect.Content>
           </InputSelect>
         ),
@@ -218,6 +212,12 @@ export default function ServiceAccountsPage() {
               </Popover.Trigger>
               <Popover.Content side="bottom" align="end" width="md">
                 <PopoverMenu>
+                  <LineItem
+                    icon={SvgUsers}
+                    onClick={() => setGroupsRolesTarget(row)}
+                  >
+                    Groups &amp; Roles
+                  </LineItem>
                   <LineItem
                     icon={SvgUserEdit}
                     onClick={() => {
@@ -387,6 +387,14 @@ export default function ServiceAccountsPage() {
             mutate(API_KEY_SWR_KEY);
           }}
           apiKey={selectedApiKey}
+        />
+      )}
+
+      {groupsRolesTarget && (
+        <EditServiceAccountModal
+          apiKey={groupsRolesTarget}
+          onClose={() => setGroupsRolesTarget(null)}
+          onMutate={() => mutate(API_KEY_SWR_KEY)}
         />
       )}
 
