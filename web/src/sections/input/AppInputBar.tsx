@@ -280,6 +280,9 @@ const AppInputBar = React.memo(
       );
     }, [currentMessageFiles]);
 
+    // A file isn't queryable until indexing completes, so gate send on it.
+    const hasIndexingFiles = currentIndexingFiles.length > 0;
+
     // Convert ProjectFile to MinimalOnyxDocument format for viewing
     const handleFileClick = useCallback(
       (file: ProjectFile) => {
@@ -456,6 +459,14 @@ const AppInputBar = React.memo(
     // Determine if we should hide processing state based on context limits
     const hideProcessingState = useMemo(() => {
       if (currentMessageFiles.length > 0 && currentIndexingFiles.length > 0) {
+        // token_count is null until indexing finishes; don't hide the
+        // processing indicator while a file's size is still unknown.
+        const allTokenCountsKnown = currentIndexingFiles.every(
+          (file) => (file.token_count ?? 0) > 0
+        );
+        if (!allTokenCountsKnown) {
+          return false;
+        }
         const currentFilesTokenTotal = currentMessageFiles.reduce(
           (acc, file) => acc + (file.token_count || 0),
           0
@@ -702,7 +713,13 @@ const AppInputBar = React.memo(
                 !isVoicePlaybackControllable &&
                 !message) ||
               hasUploadingFiles ||
+              hasIndexingFiles ||
               isClassifying
+            }
+            tooltip={
+              hasUploadingFiles || hasIndexingFiles
+                ? "Waiting for attached file(s) to finish processing"
+                : undefined
             }
             id="onyx-chat-input-send-button"
             icon={
