@@ -61,6 +61,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
+  SvgBookOpen,
   SvgDevKit,
   SvgEditBig,
   SvgFolderPlus,
@@ -533,6 +534,21 @@ const AppSidebar = memo(function AppSidebarInner() {
     ),
     [folded]
   );
+  const brandKnowledgeButton = useMemo(
+    () => (
+      <div data-testid="AppSidebar/brand-knowledge">
+        <SidebarTab
+          icon={SvgBookOpen}
+          folded={folded}
+          href="/app/brand-knowledge"
+          selected={activeSidebarTab.isBrandKnowledge()}
+        >
+          Brand Knowledge
+        </SidebarTab>
+      </div>
+    ),
+    [folded, activeSidebarTab]
+  );
   const moreAgentsButton = useMemo(
     () => (
       <div data-testid="AppSidebar/more-agents">
@@ -668,6 +684,7 @@ const AppSidebar = memo(function AppSidebarInner() {
           <div className="flex flex-col">
             {newSessionButton}
             {searchChatsButton}
+            {brandKnowledgeButton}
             {isOnyxCraftEnabled && buildButton}
             {folded && moreAgentsButton}
             {folded && newProjectButton}

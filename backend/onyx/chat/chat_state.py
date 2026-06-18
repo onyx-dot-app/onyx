@@ -206,6 +206,7 @@ class ChatTurnSetup:
     processing_run_id: int
     reserved_token_count: int
     search_params: SearchParams
+    dynamic_search_document_ids: list[str]
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles
     tool_id_to_name_map: dict[int, str]
