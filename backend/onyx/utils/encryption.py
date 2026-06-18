@@ -1,6 +1,10 @@
 from typing import Any
+from urllib.parse import urlparse
+from urllib.parse import urlunparse
 
 from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
+from onyx.configs.constants import MASK_CREDENTIAL_CHAR
+from onyx.configs.constants import MASK_CREDENTIAL_LONG_RE
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
 )
@@ -40,6 +44,108 @@ def mask_string(sensitive_str: str) -> str:
         return "••••••••••••"
 
     return f"{sensitive_str[:visible_start]}...{sensitive_str[-visible_end:]}"
+
+
+# Exact env-var keys whose values are non-sensitive and worth seeing in logs
+_UNMASKED_ENV_KEYS = {
+    "AWS_REGION",
+    "AWS_REGION_NAME",
+    "VERTEX_LOCATION",
+}
+
+# Key suffixes for provider base URLs (e.g. ANTHROPIC_BASE_URL, OLLAMA_API_BASE).
+# Every provider tends to have its own <PROVIDER>_API_BASE / <PROVIDER>_BASE_URL,
+# so match by suffix rather than enumerating each one.
+_UNMASKED_ENV_KEY_SUFFIXES = (
+    "_API_BASE",
+    "_BASE_URL",
+)
+
+
+def _is_unmasked_env_key(key: str) -> bool:
+    upper = key.upper()
+    return upper in _UNMASKED_ENV_KEYS or upper.endswith(_UNMASKED_ENV_KEY_SUFFIXES)
+
+
+def _sanitize_url_for_logging(value: str) -> str:
+    """Return a URL with any embedded userinfo (user:pass@) stripped.
+
+    Falls back to fully masking if credentials are present, so they never reach
+    the logs even when the host itself is safe to show.
+    """
+    parsed = urlparse(value)
+    if parsed.username or parsed.password:
+        return mask_string(value)
+    netloc = parsed.hostname or ""
+    try:
+        port: int | None = parsed.port
+    except ValueError:
+        return mask_string(value)
+    if port is not None:
+        netloc = f"{netloc}:{port}"
+    return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, "", ""))
+
+
+def mask_env_value_for_logging(key: str, value: str) -> str:
+    """Mask env values, leaving only explicitly-allowlisted keys readable.
+
+    Allowlisted keys (provider base URLs via the _API_BASE / _BASE_URL suffixes,
+    plus a few exact keys like AWS_REGION) are logged so overrides like
+    ANTHROPIC_BASE_URL or OLLAMA_API_BASE are visible; if such a value is a URL we
+    still strip any embedded userinfo defensively. Every other key is masked,
+    regardless of what its value looks like.
+    """
+    if not _is_unmasked_env_key(key):
+        return mask_string(value)
+    if value.lower().startswith(("http://", "https://")):
+        return _sanitize_url_for_logging(value)
+    return value
+
+
+def is_masked_credential(value: str) -> bool:
+    """Return True if the string looks like a `mask_string` placeholder.
+
+    `mask_string` has two output formats:
+    - Short strings (< 14 chars): "••••••••••••" (U+2022 BULLET)
+    - Long strings (>= 14 chars): "abcd...wxyz" (first4 + "..." + last4)
+    """
+    return MASK_CREDENTIAL_CHAR in value or bool(MASK_CREDENTIAL_LONG_RE.match(value))
+
+
+def reject_masked_credentials(credentials: dict[str, Any]) -> None:
+    """Raise if any credential string value contains mask placeholder characters.
+
+    Used as a defensive net at write boundaries so that masked values
+    round-tripped from `mask_string` are never persisted as real credentials.
+
+    Recurses into nested dicts and lists to stay symmetric with
+    `mask_credential_dict`, which masks nested string values. The error
+    message includes a dotted path like `oauth.client_secret` or
+    `keys[2]` so callers can pinpoint the offending field.
+    """
+    _reject_masked_in_dict(credentials, path="")
+
+
+def _reject_masked_in_dict(credentials: dict[str, Any], path: str) -> None:
+    for key, val in credentials.items():
+        field_path = f"{path}.{key}" if path else key
+        _reject_masked_in_value(val, field_path)
+
+
+def _reject_masked_in_value(val: Any, path: str) -> None:
+    if isinstance(val, str):
+        if is_masked_credential(val):
+            raise ValueError(
+                f"Credential field '{path}' contains masked placeholder "
+                "characters. Please provide the actual credential value."
+            )
+        return
+    if isinstance(val, dict):
+        _reject_masked_in_dict(val, path=path)
+        return
+    if isinstance(val, list):
+        for index, item in enumerate(val):
+            _reject_masked_in_value(item, f"{path}[{index}]")
 
 
 MASK_CREDENTIALS_WHITELIST = {

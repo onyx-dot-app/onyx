@@ -8,14 +8,14 @@ import { Button } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
 import { ThreeDotsLoader } from "@/components/Loading";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import {
   useDiscordBotConfig,
   useDiscordGuilds,
 } from "@/app/admin/discord-bot/hooks";
 import { createBotConfig, deleteBotConfig } from "@/app/admin/discord-bot/lib";
 import { toast } from "@/hooks/useToast";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import { getFormattedDateTime } from "@/lib/dateUtils";
 
 export function BotConfigCard() {
@@ -119,11 +119,10 @@ export function BotConfigCard() {
             )}
           </Section>
           {isConfigured && (
-            <SimpleTooltip
+            <Tooltip
               tooltip={
                 hasServerConfigs ? "Delete server configs first" : undefined
               }
-              disabled={!hasServerConfigs}
             >
               <Button
                 disabled={isSubmitting || hasServerConfigs}
@@ -132,7 +131,7 @@ export function BotConfigCard() {
               >
                 Delete Discord Token
               </Button>
-            </SimpleTooltip>
+            </Tooltip>
           )}
         </Section>
 
@@ -163,7 +162,6 @@ export function BotConfigCard() {
                 onChange={(e) => setBotToken(e.target.value)}
                 placeholder="Enter bot token..."
                 disabled={isSubmitting}
-                className="flex-1"
               />
               <Button
                 disabled={isSubmitting || !botToken.trim()}

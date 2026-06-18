@@ -2,16 +2,16 @@
 
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
-import Spacer from "@/refresh-components/Spacer";
+import { Spacer } from "@opal/components";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { useToastFromQuery } from "@/hooks/useToast";
 import { Button } from "@opal/components";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { useState, useRef, useMemo, RefObject } from "react";
 import { FilterOptions } from "./FilterComponent";
 import { ValidSources } from "@/lib/types";
@@ -23,7 +23,7 @@ import { IndexingStatusRequest } from "@/lib/types";
 const route = ADMIN_ROUTES.INDEXING_STATUS;
 
 function Main() {
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = useSettings();
 
   // State for filter management
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
@@ -224,7 +224,7 @@ export default function Status() {
         rightChildren={
           <Button href="/admin/add-connector">Add Connector</Button>
         }
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <Main />

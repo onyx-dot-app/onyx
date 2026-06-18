@@ -35,7 +35,9 @@ class MockContentProvider(WebContentProvider, ContentProviderController):
     def __init__(self) -> None:
         self._contents: list[MockWebContent] = []
 
-    def add_content(self, web_content: MockWebContent) -> None:
+    def add_content(  # ty: ignore[invalid-method-override]
+        self, web_content: MockWebContent
+    ) -> None:
         self._contents.append(web_content)
 
     def contents(self, urls: Sequence[str]) -> list[WebContent]:

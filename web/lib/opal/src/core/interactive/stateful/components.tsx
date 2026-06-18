@@ -15,6 +15,7 @@ type InteractiveStatefulVariant =
   | "select-heavy"
   | "select-card"
   | "select-tinted"
+  | "select-input"
   | "select-filter"
   | "sidebar-heavy"
   | "sidebar-light";
@@ -24,8 +25,9 @@ type InteractiveStatefulInteraction = "rest" | "hover" | "active";
 /**
  * Props for {@link InteractiveStateful}.
  */
-interface InteractiveStatefulProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLElement>> {
+interface InteractiveStatefulProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLElement>
+> {
   ref?: React.Ref<HTMLElement>;
 
   /**
@@ -35,6 +37,7 @@ interface InteractiveStatefulProps
    * - `"select-heavy"` — tinted selected background (for list rows, model pickers)
    * - `"select-card"` — like select-heavy but filled state has a visible background (for cards/larger surfaces)
    * - `"select-tinted"` — like select-heavy but with a tinted rest background
+   * - `"select-input"` — rests at neutral-00 (matches input bar), hover/open shows neutral-03 + border-01
    * - `"select-filter"` — like select-tinted for empty/filled; selected state uses inverted tint backgrounds and inverted text (for filter buttons)
    * - `"sidebar-heavy"` — sidebar navigation items: muted when unselected (text-03/text-02), bold when selected (text-04/text-03)
    * - `"sidebar-light"` — sidebar navigation items: uniformly muted across all states (text-02/text-02)
@@ -124,7 +127,7 @@ function InteractiveStateful({
   // so Radix Slot-injected handlers don't bypass this guard.
   const classes = cn(
     "interactive",
-    !props.onClick && !href && !type && "!cursor-default !select-auto",
+    !props.onClick && !href && !type && "cursor-default! select-auto!",
     group
   );
 

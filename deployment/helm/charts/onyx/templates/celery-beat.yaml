@@ -59,22 +59,36 @@ spec:
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
             [
+              {{- with include "onyx.customCACerts.commandPrefix" . }}
+              {{- . | nindent 14 }}
+              {{- end }}
               "celery",
               "-A",
               "onyx.background.celery.versioned_apps.beat",
               "beat",
-              {{ printf "--loglevel=%s" .Values.celery_beat.logLevel | quote }},
+              {{- with .Values.celery_beat.logLevel }}
+              {{ printf "--loglevel=%s" . | quote }},
+              {{- end }}
             ]
           resources:
             {{- toYaml .Values.celery_beat.resources | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
-          {{- with .Values.celery_beat.volumeMounts }}
-          volumeMounts:
+            {{- with include "onyx.customCACerts.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.celery_beat.extraEnv }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.celery_beat.volumeMounts) }}
+          {{- . | nindent 10 }}
           {{- end }}
           startupProbe:
             {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
@@ -98,8 +112,7 @@ spec:
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
                     --filename /tmp/onyx_k8s_beat_liveness.txt
-      {{- with .Values.celery_beat.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.celery_beat.volumes) }}
+      {{- . | nindent 6 }}
       {{- end }}
 {{- end }}

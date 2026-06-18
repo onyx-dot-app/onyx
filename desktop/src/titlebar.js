@@ -228,7 +228,7 @@
     if (viewportHeight) {
       document.documentElement.style.setProperty(
         VIEWPORT_VAR,
-        `${viewportHeight}px`,
+        `${viewportHeight}px`
       );
     }
   }

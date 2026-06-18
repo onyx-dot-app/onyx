@@ -1,6 +1,6 @@
 "use client";
 
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import OpenApiPageContent from "@/sections/actions/OpenApiPageContent";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
@@ -13,7 +13,7 @@ export default function Main() {
         icon={route.icon}
         title={route.title}
         description="Connect OpenAPI servers to add custom actions and tools for your agents."
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <OpenApiPageContent />

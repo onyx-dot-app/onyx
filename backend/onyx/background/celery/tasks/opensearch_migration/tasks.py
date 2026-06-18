@@ -172,6 +172,10 @@ def migrate_chunks_from_vespa_to_opensearch_task(
             search_settings = get_current_search_settings(db_session)
             indexing_setting = IndexingSetting.from_db_model(search_settings)
 
+            task_logger.debug(
+                "Verified tenant info, migration record, and search settings."
+            )
+
             # 2.e. Build sanitized to original doc ID mapping to check for
             # conflicts in the event we sanitize a doc ID to an
             # already-existing doc ID.
@@ -325,6 +329,7 @@ def migrate_chunks_from_vespa_to_opensearch_task(
     finally:
         if lock.owned():
             lock.release()
+            task_logger.debug("Released the OpenSearch migration lock.")
         else:
             task_logger.warning(
                 "The OpenSearch migration lock was not owned on completion of the migration task."

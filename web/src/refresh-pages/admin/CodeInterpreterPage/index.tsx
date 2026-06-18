@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgCheckCircle,
@@ -9,18 +9,19 @@ import {
   SvgTerminal,
   SvgUnplug,
   SvgXOctagon,
+  SvgSimpleLoader,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Section } from "@/layouts/general-layouts";
 import { Button, SelectCard } from "@opal/components";
-import { CardHeaderLayout } from "@opal/layouts";
+import { Card, Content, ContentAction } from "@opal/layouts";
 import { Disabled, Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import useCodeInterpreter from "@/hooks/useCodeInterpreter";
 import { updateCodeInterpreter } from "@/refresh-pages/admin/CodeInterpreterPage/svc";
 import { toast } from "@/hooks/useToast";
+import { cn } from "@opal/utils";
 
 const route = ADMIN_ROUTES.CODE_INTERPRETER;
 
@@ -40,7 +41,7 @@ function CheckingStatus() {
       <Text mainUiAction text03>
         Checking...
       </Text>
-      <SimpleLoader />
+      <SvgSimpleLoader />
     </Section>
   );
 }
@@ -57,21 +58,23 @@ function ConnectionStatus({ healthy, isLoading }: ConnectionStatusProps) {
 
   const label = healthy ? "Connected" : "Connection Lost";
   const Icon = healthy ? SvgCheckCircle : SvgXOctagon;
-  const iconColor = healthy ? "text-status-success-05" : "text-status-error-05";
+  const iconColor = healthy
+    ? "text-status-success-05!"
+    : "text-status-error-05!";
 
   return (
-    <Section
-      flexDirection="row"
-      justifyContent="end"
-      alignItems="center"
-      gap={0.25}
-      padding={0.5}
-    >
-      <Text mainUiAction text03>
-        {label}
-      </Text>
-      <Icon size={16} className={iconColor} />
-    </Section>
+    <div className="p-2">
+      <Content
+        title={label}
+        icon={(props) => (
+          <Icon {...props} className={cn(props.className, iconColor)} />
+        )}
+        sizePreset="main-ui"
+        variant="body"
+        orientation="reverse"
+        color="muted"
+      />
+    </div>
   );
 }
 
@@ -106,52 +109,61 @@ export default function CodeInterpreterPage() {
         icon={route.icon}
         title={route.title}
         description="Safe and sandboxed Python runtime available to your LLM. See docs for more details."
-        separator
+        divider
       />
 
       <SettingsLayouts.Body>
         {isEnabled || isLoading ? (
-          <Hoverable.Root group="code-interpreter/Card">
+          <Hoverable.Root
+            group="code-interpreter/Card"
+            interaction={showDisconnectModal ? "hover" : "rest"}
+          >
             <SelectCard state="filled" padding="sm" rounding="lg">
-              <CardHeaderLayout
-                sizePreset="main-ui"
-                variant="section"
-                icon={SvgTerminal}
-                title="Code Interpreter"
-                description="Built-in Python runtime"
-                rightChildren={
-                  <ConnectionStatus healthy={isHealthy} isLoading={isLoading} />
-                }
-                bottomRightChildren={
-                  <Section
-                    flexDirection="row"
-                    justifyContent="end"
-                    alignItems="center"
-                    gap={0.25}
-                    padding={0.25}
-                  >
-                    <Disabled disabled={isLoading}>
-                      <Hoverable.Item group="code-interpreter/Card">
-                        <Button
-                          prominence="tertiary"
-                          size="sm"
-                          icon={SvgUnplug}
-                          onClick={() => setShowDisconnectModal(true)}
-                          tooltip="Disconnect"
-                        />
-                      </Hoverable.Item>
-                    </Disabled>
-                    <Button
-                      disabled={isLoading}
-                      prominence="tertiary"
-                      size="sm"
-                      icon={SvgRefreshCw}
-                      onClick={refetch}
-                      tooltip="Refresh"
-                    />
-                  </Section>
-                }
-              />
+              <Card.Header>
+                <ContentAction
+                  sizePreset="main-ui"
+                  variant="section"
+                  icon={SvgTerminal}
+                  title="Code Interpreter"
+                  description="Built-in Python runtime"
+                  padding="lg"
+                  rightChildren={
+                    <Section alignItems="end" gap={0}>
+                      <ConnectionStatus
+                        healthy={isHealthy}
+                        isLoading={isLoading}
+                      />
+                      <div className="px-1 pb-1">
+                        <Section
+                          flexDirection="row"
+                          justifyContent="end"
+                          gap={0.25}
+                        >
+                          <Disabled disabled={isLoading}>
+                            <Hoverable.Item group="code-interpreter/Card">
+                              <Button
+                                prominence="tertiary"
+                                size="md"
+                                icon={SvgUnplug}
+                                onClick={() => setShowDisconnectModal(true)}
+                                tooltip="Disconnect"
+                              />
+                            </Hoverable.Item>
+                          </Disabled>
+                          <Button
+                            disabled={isLoading}
+                            prominence="tertiary"
+                            size="md"
+                            icon={SvgRefreshCw}
+                            onClick={refetch}
+                            tooltip="Refresh"
+                          />
+                        </Section>
+                      </div>
+                    </Section>
+                  }
+                />
+              </Card.Header>
             </SelectCard>
           </Hoverable.Root>
         ) : (
@@ -161,29 +173,28 @@ export default function CodeInterpreterPage() {
             rounding="lg"
             onClick={() => handleToggle(true)}
           >
-            <CardHeaderLayout
+            <ContentAction
               sizePreset="main-ui"
               variant="section"
               icon={SvgTerminal}
               title="Code Interpreter (Disconnected)"
               description="Built-in Python runtime"
+              padding="lg"
               rightChildren={
-                <Section flexDirection="row" alignItems="center" padding={0.5}>
-                  {isReconnecting ? (
-                    <CheckingStatus />
-                  ) : (
-                    <Button
-                      prominence="tertiary"
-                      rightIcon={SvgArrowExchange}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggle(true);
-                      }}
-                    >
-                      Reconnect
-                    </Button>
-                  )}
-                </Section>
+                isReconnecting ? (
+                  <CheckingStatus />
+                ) : (
+                  <Button
+                    prominence="tertiary"
+                    rightIcon={SvgArrowExchange}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggle(true);
+                    }}
+                  >
+                    Reconnect
+                  </Button>
+                )
               }
             />
           </SelectCard>

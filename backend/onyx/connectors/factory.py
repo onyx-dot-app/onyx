@@ -22,6 +22,8 @@ from onyx.db.credentials import backend_update_credential_json
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.enums import AccessType
 from onyx.db.models import Credential
+from onyx.file_store.staging import RawFileCallback
+from onyx.utils.credential_audit import emit_credential_access
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -107,6 +109,7 @@ def instantiate_connector(
     input_type: InputType,
     connector_specific_config: dict[str, Any],
     credential: Credential,
+    raw_file_callback: RawFileCallback | None = None,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
 
@@ -118,6 +121,15 @@ def instantiate_connector(
         )
         connector.set_credentials_provider(provider)
     else:
+        if credential.credential_json:
+            # Distinct decrypt site from OnyxDBCredentialsProvider (static /
+            # non-dynamic connectors load creds directly here), so this is not
+            # double-logged. Audit is best-effort and never raises.
+            emit_credential_access(
+                credential_type="connector",
+                provider=str(source),
+                row_id=credential.id,
+            )
         credential_json = (
             credential.credential_json.get_value(apply_mask=False)
             if credential.credential_json
@@ -129,6 +141,9 @@ def instantiate_connector(
             backend_update_credential_json(credential, new_credentials, db_session)
 
     connector.set_allow_images(get_image_extraction_and_analysis_enabled())
+
+    if raw_file_callback is not None:
+        connector.set_raw_file_callback(raw_file_callback)
 
     return connector
 

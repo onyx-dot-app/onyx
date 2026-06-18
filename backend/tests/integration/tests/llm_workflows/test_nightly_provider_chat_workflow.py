@@ -4,7 +4,6 @@ import time
 from uuid import uuid4
 
 import pytest
-import requests
 from pydantic import BaseModel
 from pydantic import ConfigDict
 
@@ -12,12 +11,12 @@ from onyx.configs import app_configs
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.test_models import ToolName
-
 
 _ENV_PROVIDER = "NIGHTLY_LLM_PROVIDER"
 _ENV_MODELS = "NIGHTLY_LLM_MODELS"
@@ -240,9 +239,9 @@ def _validate_provider_config(config: NightlyProviderConfig) -> None:
 
 
 def _assert_integration_mode_enabled() -> None:
-    assert (
-        app_configs.INTEGRATION_TESTS_MODE is True
-    ), "Integration tests require INTEGRATION_TESTS_MODE=true."
+    assert app_configs.INTEGRATION_TESTS_MODE is True, (
+        "Integration tests require INTEGRATION_TESTS_MODE=true."
+    )
 
 
 def _seed_connector_for_search_tool(admin_user: DATestUser) -> None:
@@ -302,19 +301,19 @@ def _create_provider_payload(
 def _ensure_provider_is_default(
     provider_id: int, model_name: str, admin_user: DATestUser
 ) -> None:
-    list_response = requests.get(
+    list_response = client.get(
         f"{API_SERVER_URL}/admin/llm/provider",
         headers=admin_user.headers,
     )
     list_response.raise_for_status()
     default_text = list_response.json().get("default_text")
     assert default_text is not None, "Expected a default provider after setting default"
-    assert (
-        default_text.get("provider_id") == provider_id
-    ), f"Expected provider {provider_id} to be default, found {default_text.get('provider_id')}"
-    assert (
-        default_text.get("model_name") == model_name
-    ), f"Expected default model {model_name}, found {default_text.get('model_name')}"
+    assert default_text.get("provider_id") == provider_id, (
+        f"Expected provider {provider_id} to be default, found {default_text.get('provider_id')}"
+    )
+    assert default_text.get("model_name") == model_name, (
+        f"Expected default model {model_name}, found {default_text.get('model_name')}"
+    )
 
 
 def _run_chat_assertions(
@@ -389,7 +388,7 @@ def _create_and_test_provider_for_model(
         custom_config=config.custom_config,
     )
 
-    test_response = requests.post(
+    test_response = client.post(
         f"{API_SERVER_URL}/admin/llm/test",
         headers=admin_user.headers,
         json=provider_payload,
@@ -399,7 +398,7 @@ def _create_and_test_provider_for_model(
         f"model={model_name}: {test_response.status_code} {test_response.text}"
     )
 
-    create_response = requests.put(
+    create_response = client.put(
         f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
         headers=admin_user.headers,
         json=provider_payload,
@@ -411,7 +410,7 @@ def _create_and_test_provider_for_model(
     provider_id = create_response.json()["id"]
 
     try:
-        set_default_response = requests.post(
+        set_default_response = client.post(
             f"{API_SERVER_URL}/admin/llm/default",
             headers=admin_user.headers,
             json={"provider_id": provider_id, "model_name": model_name},
@@ -432,7 +431,7 @@ def _create_and_test_provider_for_model(
             model_name=model_name,
         )
     finally:
-        requests.delete(
+        client.delete(
             f"{API_SERVER_URL}/admin/llm/provider/{provider_id}",
             headers=admin_user.headers,
         )

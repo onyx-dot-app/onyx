@@ -1,23 +1,13 @@
 // Package models defines API request/response types for the Onyx CLI.
 package models
 
-import "time"
-
 // AgentSummary represents an agent from the API.
 type AgentSummary struct {
 	ID               int    `json:"id"`
 	Name             string `json:"name"`
 	Description      string `json:"description"`
 	IsDefaultPersona bool   `json:"is_default_persona"`
-	IsVisible        bool   `json:"is_visible"`
-}
-
-// ChatSessionSummary is a brief session listing.
-type ChatSessionSummary struct {
-	ID        string    `json:"id"`
-	Name      *string   `json:"name"`
-	AgentID *int      `json:"persona_id"`
-	Created   time.Time `json:"time_created"`
+	IsVisible        bool   `json:"is_listed"`
 }
 
 // ChatSessionDetails is a session with timestamps as strings.
@@ -109,4 +99,36 @@ type Placement struct {
 	TurnIndex    int  `json:"turn_index"`
 	TabIndex     int  `json:"tab_index"`
 	SubTurnIndex *int `json:"sub_turn_index"`
+}
+
+// SearchRequest is the request body for POST /api/search.
+type SearchRequest struct {
+	Query        string   `json:"query"`
+	Sources      []string `json:"sources,omitempty"`
+	DocumentSets []string `json:"document_sets,omitempty"`
+	// TimeCutoff is an ISO 8601 timestamp. Only documents updated on or after
+	// this moment are returned; naive (timezone-less) values are treated as
+	// UTC server-side.
+	TimeCutoff         *string `json:"time_cutoff,omitempty"`
+	PersonaID          *int    `json:"persona_id,omitempty"`
+	SkipQueryExpansion bool    `json:"skip_query_expansion,omitempty"`
+}
+
+// SearchResult is a single document result from the search API.
+//
+// Content is the full chunk text the LLM saw for this section. Multiple
+// results may share a CitationID when the LLM selected multiple
+// non-overlapping sections of the same document.
+type SearchResult struct {
+	CitationID *int    `json:"citation_id"`
+	Title      string  `json:"title"`
+	Content    string  `json:"content"`
+	Link       *string `json:"link"`
+	SourceType string  `json:"source_type"`
+	UpdatedAt  *string `json:"updated_at"`
+}
+
+// SearchResponse is the response from POST /api/search.
+type SearchResponse struct {
+	Results []SearchResult `json:"results"`
 }

@@ -5,8 +5,7 @@ from typing import Literal
 from typing import TypedDict
 from uuid import UUID
 
-import requests
-from requests.models import Response
+import httpx
 
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc
@@ -17,6 +16,7 @@ from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestChatMessage
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
@@ -83,7 +83,7 @@ class ChatSessionManager:
             description=description,
             project_id=project_id,
         )
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/chat/create-chat-session",
             json=chat_session_creation_req.model_dump(),
             headers=user_performing_action.headers,
@@ -124,15 +124,14 @@ class ChatSessionManager:
             llm_override=llm_override,
         )
 
-        response = requests.post(
+        with client.stream(
+            "POST",
             f"{API_SERVER_URL}/chat/send-chat-message",
             json=chat_message_req.model_dump(mode="json"),
             headers=user_performing_action.headers,
-            stream=True,
             cookies=user_performing_action.cookies,
-        )
-
-        streamed_response = ChatSessionManager.analyze_response(response)
+        ) as response:
+            streamed_response = ChatSessionManager.analyze_response(response)
 
         if not chat_session:
             return streamed_response
@@ -201,11 +200,11 @@ class ChatSessionManager:
 
         packets_received = 0
 
-        with requests.post(
+        with client.stream(
+            "POST",
             f"{API_SERVER_URL}/chat/send-chat-message",
             json=chat_message_req.model_dump(mode="json"),
             headers=user_performing_action.headers,
-            stream=True,
             cookies=user_performing_action.cookies,
         ) as response:
             for line in response.iter_lines():
@@ -219,14 +218,10 @@ class ChatSessionManager:
         return None
 
     @staticmethod
-    def analyze_response(response: Response) -> StreamedResponse:
+    def analyze_response(response: httpx.Response) -> StreamedResponse:
         response_data = cast(
             list[StreamPacketData],
-            [
-                json.loads(line.decode("utf-8"))
-                for line in response.iter_lines()
-                if line
-            ],
+            [json.loads(line) for line in response.iter_lines() if line],
         )
         ind_to_tool_use: dict[int, ToolResult] = {}
         tool_call_debug: list[ToolCallDebug] = []
@@ -269,7 +264,9 @@ class ChatSessionManager:
                 )
                 is not None
             ):
-                packet_type_str = str(packet_type)
+                packet_type_str = str(
+                    packet_type  # ty: ignore[possibly-unresolved-reference]
+                )
                 if packet_type_str == StreamingType.MESSAGE_START.value:
                     final_docs = data_obj.get("final_documents")
                     if isinstance(final_docs, list):
@@ -283,12 +280,16 @@ class ChatSessionManager:
                         if data_obj.get("is_internet_search", False)
                         else ToolName.INTERNAL_SEARCH
                     )
-                    ind_to_tool_use[ind] = ToolResult(
-                        tool_name=tool_name,
+                    ind_to_tool_use[ind] = (  # type: ignore
+                        ToolResult(
+                            tool_name=tool_name,
+                        )
                     )
                 elif packet_type_str == StreamingType.IMAGE_GENERATION_START.value:
-                    ind_to_tool_use[ind] = ToolResult(
-                        tool_name=ToolName.IMAGE_GENERATION,
+                    ind_to_tool_use[ind] = (  # type: ignore
+                        ToolResult(
+                            tool_name=ToolName.IMAGE_GENERATION,
+                        )
                     )
                 elif packet_type_str == StreamingType.IMAGE_GENERATION_HEARTBEAT.value:
                     # Track heartbeat packets for debugging/testing
@@ -299,11 +300,13 @@ class ChatSessionManager:
                     )
 
                     images = data_obj.get("images", [])
-                    ind_to_tool_use[ind].images.extend(
-                        [GeneratedImage(**img) for img in images]
-                    )
+                    ind_to_tool_use[
+                        ind  # ty: ignore[possibly-unresolved-reference]
+                    ].images.extend([GeneratedImage(**img) for img in images])
                 elif packet_type_str == StreamingType.SEARCH_TOOL_QUERIES_DELTA.value:
-                    ind_to_tool_use[ind].queries.extend(data_obj.get("queries", []))
+                    ind_to_tool_use[
+                        ind  # ty: ignore[possibly-unresolved-reference]
+                    ].queries.extend(data_obj.get("queries", []))
                 elif packet_type_str == StreamingType.SEARCH_TOOL_DOCUMENTS_DELTA.value:
                     docs = []
                     for doc in data_obj.get("documents", []):
@@ -316,7 +319,9 @@ class ChatSessionManager:
                             docs.append(
                                 SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
                             )
-                    ind_to_tool_use[ind].documents.extend(docs)
+                    ind_to_tool_use[
+                        ind  # ty: ignore[possibly-unresolved-reference]
+                    ].documents.extend(docs)
                 elif packet_type_str == StreamingType.TOOL_CALL_DEBUG.value:
                     tool_call_debug.append(
                         ToolCallDebug(
@@ -336,7 +341,10 @@ class ChatSessionManager:
             top_documents=top_documents,
             used_tools=list(ind_to_tool_use.values()),
             tool_call_debug=tool_call_debug,
-            heartbeat_packets=[dict(packet) for packet in heartbeat_packets],
+            heartbeat_packets=[
+                dict(packet)  # ty: ignore[no-matching-overload]
+                for packet in heartbeat_packets
+            ],
             error=error,
         )
 
@@ -345,7 +353,7 @@ class ChatSessionManager:
         chat_session: DATestChatSession,
         user_performing_action: DATestUser,
     ) -> list[DATestChatMessage]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
             headers=user_performing_action.headers,
         )
@@ -371,7 +379,7 @@ class ChatSessionManager:
         feedback_text: str | None = None,
         predefined_feedback: str | None = None,
     ) -> None:
-        response = requests.post(
+        response = client.post(
             url=f"{API_SERVER_URL}/chat/create-chat-message-feedback",
             json={
                 "chat_message_id": message_id,
@@ -394,11 +402,11 @@ class ChatSessionManager:
 
         Returns True if deletion was successful, False otherwise.
         """
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}",
             headers=user_performing_action.headers,
         )
-        return response.ok
+        return not response.is_error
 
     @staticmethod
     def soft_delete(
@@ -412,11 +420,11 @@ class ChatSessionManager:
         """
         # Since there's no direct API for soft delete, we'll use a query parameter approach
         # or make a direct call with hard_delete=False parameter via a new endpoint
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=false",
             headers=user_performing_action.headers,
         )
-        return response.ok
+        return not response.is_error
 
     @staticmethod
     def hard_delete(
@@ -428,11 +436,11 @@ class ChatSessionManager:
 
         Returns True if deletion was successful, False otherwise.
         """
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=true",
             headers=user_performing_action.headers,
         )
-        return response.ok
+        return not response.is_error
 
     @staticmethod
     def verify_deleted(
@@ -444,7 +452,7 @@ class ChatSessionManager:
 
         Returns True if the chat session is confirmed deleted, False if it still exists.
         """
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
             headers=user_performing_action.headers,
         )
@@ -462,7 +470,7 @@ class ChatSessionManager:
         Returns True if the chat session is soft deleted, False otherwise.
         """
         # Try to get the chat session with include_deleted=true
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
             headers=user_performing_action.headers,
         )
@@ -484,7 +492,7 @@ class ChatSessionManager:
         Returns True if the chat session is hard deleted, False otherwise.
         """
         # Try to get the chat session with include_deleted=true
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
             headers=user_performing_action.headers,
         )

@@ -13,6 +13,7 @@ Key features tested:
 - Edge cases (unicode, code blocks, invalid citations, etc.)
 """
 
+import time
 from datetime import datetime
 
 import pytest
@@ -23,7 +24,6 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-
 
 # ============================================================================
 # Helper Functions and Fixtures
@@ -2420,3 +2420,87 @@ class TestKeepMarkersEdgeCases:
         assert len(citations) == 0
         # Should not be in seen citations
         assert 99 not in processor.get_seen_citations()
+
+
+class TestPossibleCitationPatternReDoS:
+    """Regression tests for catastrophic backtracking (ReDoS) in the
+    `possible_citation_pattern` used to hold back partial citations.
+
+    The original pattern `([\\[【［]+(?:\\d+,? ?)*$)` nested an unbounded `\\d+`
+    inside an unbounded `(?:...)*` with optional separators. A long run of digits
+    that fails the trailing `$` anchor (e.g. an opening bracket followed by many
+    digits and then a non-citation character) forced the engine to backtrack
+    through O(2^n) ways of splitting the digits, pinning a CPU core. An LLM can
+    emit such a token stream, so this is a remotely-triggerable DoS.
+    """
+
+    def test_long_digit_run_does_not_hang(self) -> None:
+        """A bracket followed by a long digit run + trailing junk must match
+        in well under a second. With the vulnerable pattern this took many
+        seconds and grew exponentially with the number of digits."""
+        processor = DynamicCitationProcessor()
+        # Opening bracket, 60 digits, then a char that defeats the `$` anchor.
+        # 60 digits => 2^59 paths for the vulnerable regex (effectively never
+        # finishes); the fixed regex is linear.
+        malicious = "[" + "1" * 60 + "!"
+
+        start = time.perf_counter()
+        match = processor.possible_citation_pattern.search(malicious)
+        elapsed = time.perf_counter() - start
+
+        # The fixed pattern resolves in microseconds; allow generous headroom
+        # for slow CI while still catching exponential blowup.
+        assert elapsed < 1.0, f"regex took {elapsed:.3f}s (possible ReDoS)"
+        # Trailing '!' means this is not a (closeable) partial citation.
+        assert match is None
+
+    def test_long_digit_run_in_token_stream_does_not_hang(self) -> None:
+        """End-to-end: feeding the malicious sequence through process_token
+        (which calls the regex on the accumulated segment) stays fast."""
+        processor = DynamicCitationProcessor()
+        tokens: list[str | None] = ["[" + "9" * 60 + "!"]
+
+        start = time.perf_counter()
+        output, citations = process_tokens(processor, tokens)
+        elapsed = time.perf_counter() - start
+
+        assert elapsed < 1.0, f"processing took {elapsed:.3f}s (possible ReDoS)"
+        # Not a real citation, so the text passes through unchanged.
+        assert output == "[" + "9" * 60 + "!"
+        assert citations == []
+
+    def test_partial_citations_still_detected(self) -> None:
+        """The fix must not regress detection of genuine partial citations
+        (the ones that could still be completed into a real citation)."""
+        partials = [
+            "text [",
+            "text [[",
+            "text [1",
+            "text [[1",
+            "text [1,",
+            "text [1, ",
+            "text [1, 2",
+            "text [12, 34, 5",
+            "text 【",
+            "text 【1",
+            "text ［1",
+        ]
+        for segment in partials:
+            assert (
+                DynamicCitationProcessor().possible_citation_pattern.search(segment)
+                is not None
+            ), f"expected {segment!r} to be treated as a possible citation"
+
+    def test_non_citations_not_matched(self) -> None:
+        """Text that can never become a citation must not be held back."""
+        non_partials = [
+            "no citation here",
+            "ends with a number 5",
+            "[1]",  # already complete, handled by citation_pattern
+            "[1, 2]",
+        ]
+        for segment in non_partials:
+            assert (
+                DynamicCitationProcessor().possible_citation_pattern.search(segment)
+                is None
+            ), f"expected {segment!r} to NOT be treated as a possible citation"

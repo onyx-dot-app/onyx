@@ -3,7 +3,7 @@ from abc import ABC
 from abc import abstractmethod
 from copy import copy
 
-from tokenizers import Encoding  # type: ignore[import-untyped]
+from tokenizers import Encoding
 from tokenizers import Tokenizer
 
 from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
@@ -57,7 +57,10 @@ class TiktokenTokenizer(BaseTokenizer):
 
         if len(decoded) != len(encoded):
             logger.warning(
-                f"OpenAI tokenized length {len(decoded)} does not match encoded length {len(encoded)} for string: {string}"
+                "OpenAI tokenized length %s does not match encoded length %s for string: %s",
+                len(decoded),
+                len(encoded),
+                string,
             )
 
         return decoded
@@ -74,7 +77,7 @@ class HuggingFaceTokenizer(BaseTokenizer):
         """
         Encode a string using the HuggingFaceTokenizer, but if it fails,
         encode the string as ASCII and decode it back to a string. This helps
-        in cases where the string has weird characters like \udeb4.
+        in cases where the string has weird characters like U+DEB4.
         """
         try:
             return self.encoder.encode(string, add_special_tokens=False)
@@ -111,7 +114,8 @@ def _check_tokenizer_cache(
 
         if not tokenizer:
             logger.info(
-                f"Falling back to default embedding model tokenizer: {DOCUMENT_ENCODER_MODEL}"
+                "Falling back to default embedding model tokenizer: %s",
+                DOCUMENT_ENCODER_MODEL,
             )
             tokenizer = _get_default_tokenizer()
 
@@ -129,21 +133,25 @@ def _try_initialize_tokenizer(
         # Try using TiktokenTokenizer first if model_provider exists
         try:
             tokenizer = TiktokenTokenizer(model_name)
-            logger.info(f"Initialized TiktokenTokenizer for: {model_name}")
+            logger.info("Initialized TiktokenTokenizer for: %s", model_name)
             return tokenizer
         except Exception as tiktoken_error:
             logger.debug(
-                f"TiktokenTokenizer not available for model {model_name}: {tiktoken_error}"
+                "TiktokenTokenizer not available for model %s: %s",
+                model_name,
+                tiktoken_error,
             )
     else:
         # If no provider specified, try HuggingFaceTokenizer
         try:
             tokenizer = HuggingFaceTokenizer(model_name)
-            logger.info(f"Initialized HuggingFaceTokenizer for: {model_name}")
+            logger.info("Initialized HuggingFaceTokenizer for: %s", model_name)
             return tokenizer
         except Exception as hf_error:
             logger.warning(
-                f"Failed to initialize HuggingFaceTokenizer for {model_name}: {hf_error}"
+                "Failed to initialize HuggingFaceTokenizer for %s: %s",
+                model_name,
+                hf_error,
             )
 
     # If both initializations fail, return None
@@ -169,7 +177,8 @@ def get_tokenizer(
             provider_type = EmbeddingProvider(provider_type)
         except ValueError:
             logger.debug(
-                f"Invalid provider_type '{provider_type}'. Falling back to default tokenizer."
+                "Invalid provider_type '%s'. Falling back to default tokenizer.",
+                provider_type,
             )
             return _get_default_tokenizer()
     return _check_tokenizer_cache(provider_type, model_name)
@@ -199,6 +208,33 @@ def count_tokens(
         if token_limit is not None and total > token_limit:
             return total  # Already over — skip remaining chunks
     return total
+
+
+def split_text_by_tokens(
+    text: str,
+    tokenizer: BaseTokenizer,
+    max_tokens: int,
+) -> list[str]:
+    """Split ``text`` into pieces of ≤ ``max_tokens`` tokens each, via
+    encode/decode at token-id boundaries.
+
+    Note: the returned pieces are not strictly guaranteed to re-tokenize to
+    ≤ max_tokens. BPE merges at window boundaries may drift by a few tokens,
+    and cuts landing mid-multi-byte-UTF-8-character produce replacement
+    characters on decode. Good enough for "best-effort" splitting of
+    oversized content, not for hard limit enforcement.
+    """
+    if not text:
+        return []
+
+    token_ids: list[int] = []
+    for start in range(0, len(text), _ENCODE_CHUNK_SIZE):
+        token_ids.extend(tokenizer.encode(text[start : start + _ENCODE_CHUNK_SIZE]))
+
+    return [
+        tokenizer.decode(token_ids[start : start + max_tokens])
+        for start in range(0, len(token_ids), max_tokens)
+    ]
 
 
 def tokenizer_trim_content(

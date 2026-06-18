@@ -1,16 +1,16 @@
 "use client";
 
 import { useField } from "formik";
-import InputTypeIn, {
-  InputTypeInProps,
-} from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgMinusCircle } from "@opal/icons";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
 import { Section } from "@/layouts/general-layouts";
 
-export interface InputTypeInElementFieldProps
-  extends Omit<InputTypeInProps, "value" | "onClear"> {
+export interface InputTypeInElementFieldProps extends Omit<
+  InputTypeInProps,
+  "value"
+> {
   name: string;
   onRemove?: () => void;
 }
@@ -48,7 +48,6 @@ export default function InputTypeInElementField({
               ? "error"
               : inputProps.variant
         }
-        showClearButton={false}
       />
       <Button
         disabled={!onRemove || isEmpty}

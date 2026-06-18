@@ -67,18 +67,16 @@ def test_single_quote_escaping() -> None:
     # Verify the filter: single quote should be escaped to '' for OData syntax
     filter_arg = mock_get_query.filter.call_args[0][0]
     expected_filter = "displayName eq 'Team''s Group'"
-    assert (
-        filter_arg == expected_filter
-    ), f"Expected: {expected_filter}, Got: {filter_arg}"
+    assert filter_arg == expected_filter, (
+        f"Expected: {expected_filter}, Got: {filter_arg}"
+    )
 
 
 def test_helper_functions() -> None:
     """Test the helper functions for team name processing."""
-    from onyx.connectors.teams.connector import (
-        _escape_odata_string,
-        _has_odata_incompatible_chars,
-        _can_use_odata_filter,
-    )
+    from onyx.connectors.teams.connector import _can_use_odata_filter
+    from onyx.connectors.teams.connector import _escape_odata_string
+    from onyx.connectors.teams.connector import _has_odata_incompatible_chars
 
     # Test OData string escaping
     assert _escape_odata_string("Team's Group") == "Team''s Group"

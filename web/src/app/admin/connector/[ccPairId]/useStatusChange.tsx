@@ -5,7 +5,7 @@ import { mutate } from "swr";
 import { buildCCPairInfoUrl } from "./lib";
 import { setCCPairStatus } from "@/lib/ccPair";
 import { useState } from "react";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
 // Export the status change functionality separately
 export function useStatusChange(ccPair: CCPairFullInfo | null) {

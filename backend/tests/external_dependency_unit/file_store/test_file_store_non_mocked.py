@@ -57,10 +57,8 @@ class WorkerResult(TypedDict):
 
 def _get_all_backend_configs() -> List[BackendConfig]:
     """Get configurations for all available backends"""
-    from onyx.configs.app_configs import (
-        S3_ENDPOINT_URL,
-        AWS_REGION_NAME,
-    )
+    from onyx.configs.app_configs import AWS_REGION_NAME
+    from onyx.configs.app_configs import S3_ENDPOINT_URL
 
     s3_aws_access_key_id = os.environ.get("S3_AWS_ACCESS_KEY_ID_FOR_TEST")
     s3_aws_secret_access_key = os.environ.get("S3_AWS_SECRET_ACCESS_KEY_FOR_TEST")
@@ -97,7 +95,8 @@ def _get_all_backend_configs() -> List[BackendConfig]:
 
     if not configs:
         pytest.skip(
-            "No backend configurations available - set MinIO or AWS S3 credentials"
+            "No backend configurations available - set MinIO or AWS S3 credentials",
+            allow_module_level=True,
         )
 
     return configs
@@ -130,7 +129,9 @@ def file_store(
     # Initialize the store and ensure bucket exists
     store.initialize()
     logger.info(
-        f"Successfully initialized {backend_config['backend_name']} file store with bucket {TEST_BUCKET_NAME}"
+        "Successfully initialized %s file store with bucket %s",
+        backend_config["backend_name"],
+        TEST_BUCKET_NAME,
     )
 
     yield store
@@ -149,13 +150,15 @@ def file_store(
             objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
             s3_client.delete_objects(
                 Bucket=actual_bucket_name,
-                Delete={"Objects": objects_to_delete},  # type: ignore[typeddict-item]
+                Delete={"Objects": objects_to_delete},
             )
             logger.info(
-                f"Cleaned up {len(objects_to_delete)} test objects from {backend_config['backend_name']}"
+                "Cleaned up %s test objects from %s",
+                len(objects_to_delete),
+                backend_config["backend_name"],
             )
     except Exception as e:
-        logger.warning(f"Failed to cleanup test objects: {e}")
+        logger.warning("Failed to cleanup test objects: %s", e)
 
 
 class TestS3BackedFileStore:
@@ -211,6 +214,45 @@ class TestS3BackedFileStore:
         # The object key should include the tenant ID
         expected_object_key = f"{file_store._s3_prefix}/{TEST_TENANT_ID}/{file_id}"
         assert file_record.object_key == expected_object_key
+
+    def test_change_file_id_is_metadata_only(
+        self, file_store: S3BackedFileStore
+    ) -> None:
+        """Renaming a file repoints the DB record without moving the S3 object."""
+        old_id = f"{uuid.uuid4()}.txt"
+        new_id = f"{uuid.uuid4()}.txt"
+        content = b"rename me without copying"
+
+        file_store.save_file(
+            content=BytesIO(content),
+            display_name="rename.txt",
+            file_origin=FileOrigin.OTHER,
+            file_type="text/plain",
+            file_id=old_id,
+        )
+        original_object_key = file_store.read_file_record(old_id).object_key
+
+        file_store.change_file_id(old_id, new_id)
+
+        # Old id is gone; new id resolves to the same content.
+        assert not file_store.has_file(old_id, FileOrigin.OTHER, "text/plain")
+        assert file_store.has_file(new_id, FileOrigin.OTHER, "text/plain")
+        assert file_store.read_file(new_id).read() == content
+
+        # The S3 object never moved: the new record still points at the
+        # original object key (derived from the OLD file_id), not a new one.
+        new_record = file_store.read_file_record(new_id)
+        assert new_record.object_key == original_object_key
+        assert new_record.object_key.endswith(old_id)
+
+        # And nothing was copied to the key the new file_id would derive —
+        # guards against a "copy AND repoint" regression that leaks an object.
+        with pytest.raises(ClientError) as exc_info:
+            file_store._get_s3_client().head_object(
+                Bucket=file_store._get_bucket_name(),
+                Key=file_store._get_s3_key(new_id),
+            )
+        assert exc_info.value.response["Error"]["Code"] in ("404", "NoSuchKey")
 
     def test_save_and_read_binary_file(self, file_store: S3BackedFileStore) -> None:
         """Test saving and reading a binary file"""
@@ -870,9 +912,9 @@ class TestS3BackedFileStore:
 
         # Verify all operations completed successfully
         assert len(errors) == 0, f"Concurrent operations had errors: {errors}"
-        assert (
-            len(results) == 10
-        ), f"Expected 10 successful operations, got {len(results)}"
+        assert len(results) == 10, (
+            f"Expected 10 successful operations, got {len(results)}"
+        )
 
         # Verify all files were saved correctly
         for file_id, expected_content in results:
@@ -943,15 +985,15 @@ class TestS3BackedFileStore:
 
         # Verify all prefixed files are returned
         for expected_file_id in prefixed_files:
-            assert (
-                expected_file_id in returned_file_ids
-            ), f"File '{expected_file_id}' should be in results but was not found. Returned files: {returned_file_ids}"
+            assert expected_file_id in returned_file_ids, (
+                f"File '{expected_file_id}' should be in results but was not found. Returned files: {returned_file_ids}"
+            )
 
         # Verify no non-prefixed files are returned
         for unexpected_file_id in non_prefixed_files:
-            assert (
-                unexpected_file_id not in returned_file_ids
-            ), f"File '{unexpected_file_id}' should NOT be in results but was found. Returned files: {returned_file_ids}"
+            assert unexpected_file_id not in returned_file_ids, (
+                f"File '{unexpected_file_id}' should NOT be in results but was found. Returned files: {returned_file_ids}"
+            )
 
         # Verify the returned records have correct properties
         for record in prefix_results:
@@ -967,15 +1009,15 @@ class TestS3BackedFileStore:
 
         # Should include all our test files
         for file_id in saved_file_ids:
-            assert (
-                file_id in all_returned_ids
-            ), f"File '{file_id}' should be in results for empty prefix"
+            assert file_id in all_returned_ids, (
+                f"File '{file_id}' should be in results for empty prefix"
+            )
 
         # Test with non-existent prefix
         nonexistent_results = file_store.list_files_by_prefix("nonexistent-prefix-")
-        assert (
-            len(nonexistent_results) == 0
-        ), "Should return empty list for non-existent prefix"
+        assert len(nonexistent_results) == 0, (
+            "Should return empty list for non-existent prefix"
+        )
 
     def test_get_file_size(self, file_store: S3BackedFileStore) -> None:
         """Test getting file size from S3"""

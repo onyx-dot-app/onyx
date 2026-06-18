@@ -1,10 +1,34 @@
 name: Connector Tests
+
+# Connector tests run INSIDE the production backend image (backend/Dockerfile)
+# rather than on a bare runner. A bare runner installs Playwright with
+# `--with-deps`, so it never exercises the system libraries actually shipped in
+# the image -- which let an image-only regression slip through (a missing
+# `libnss3.so`, chrome-headless-shell failing to load shared libraries after the
+# Dockerfile's apt autoremove cascade). Running in-image catches those.
+#
+# These tests run on presubmit but are non-blocking, so the extra image build +
+# in-container setup is an acceptable cost for the added correctness. The build
+# is registry-cached: PRs that don't touch the Dockerfile or requirements get a
+# near-instant cached build.
+
 concurrency:
   group: Connector-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
   cancel-in-progress: true
 
 on:
-  merge_group:
+  # Connector tests are non-blocking (not a required status check) and exercise
+  # real external connector APIs, so they don't belong in the merge queue.
+  # Running on `merge_group` only exposed them to the ephemeral
+  # `gh-readonly-queue/*` branch-deletion race in paths-filter -- when an entry
+  # ahead in the queue fails and GitHub tears down/recreates the queue branches
+  # mid-run, paths-filter's fetch of the head ref by name fails and the whole job
+  # goes red for a reason unrelated to the change under test -- without gating any
+  # merge. Run on PRs for pre-merge signal and on push-to-main for post-merge
+  # detection of whatever actually landed; `main` is a permanent ref so the race
+  # can't happen. The daily schedule stays the full-coverage safety net. `paths`
+  # is not evaluated for tag pushes, so the `v*.*.*` release trigger below still
+  # fires regardless of changed files.
   pull_request:
     branches: [main]
     paths:
@@ -12,9 +36,18 @@ on:
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/pr-python-connector-tests.yml"
-      - ".github/actions/setup-python-and-install-dependencies/**"
-      - ".github/actions/setup-playwright/**"
+      - ".github/actions/build-backend-image/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
   push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/pr-python-connector-tests.yml"
+      - ".github/actions/build-backend-image/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
     tags:
       - "v*.*.*"
   schedule:
@@ -22,7 +55,6 @@ on:
     - cron: "0 16 * * *"
 
 permissions:
-  id-token: write # Required for OIDC-based AWS credential exchange
   contents: read
 
 env:
@@ -45,39 +77,75 @@ env:
   BITBUCKET_EMAIL: ${{ vars.BITBUCKET_EMAIL }}
 
 jobs:
-  connectors-check:
+  build-backend-image:
     # See https://runs-on.com/runners/linux/
     runs-on:
       [
         runs-on,
         runner=8cpu-linux-x64,
-        "run-id=${{ github.run_id }}-connectors-check",
-        "extras=s3-cache",
+        "run-id=${{ github.run_id }}-build-backend-image",
+        "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     environment: ci-protected
 
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Setup Python and Install Dependencies
-        uses: ./.github/actions/setup-python-and-install-dependencies
+      - name: Build backend image
+        uses: ./.github/actions/build-backend-image
         with:
-          requirements: |
-            backend/requirements/default.txt
-            backend/requirements/dev.txt
+          runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
+          ref-name: ${{ github.ref_name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          github-sha: ${{ github.sha }}
+          run-id: ${{ github.run_id }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+          docker-no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' && 'true' || 'false' }}
 
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
+  connectors-check:
+    needs: build-backend-image
+    # id-token scoped to this job only -- it's the sole job that exchanges OIDC for AWS
+    # credentials (to fetch connector secrets); build-backend-image authenticates to ECR via
+    # the runner instance role instead.
+    permissions:
+      id-token: write
+      contents: read
+      # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+      pull-requests: read
+    # See https://runs-on.com/runners/linux/
+    runs-on:
+      [
+        runs-on,
+        runner=8cpu-linux-x64,
+        "run-id=${{ github.run_id }}-connectors-check",
+        "extras=ecr-cache",
+      ]
+    timeout-minutes: 40
+    environment: ci-protected
+
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # ratchet:aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
 
       - name: Detect Connector changes
         id: changes
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # ratchet:dorny/paths-filter@v3
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
         with:
           filters: |
             hubspot:
@@ -96,120 +164,130 @@ jobs:
               - 'backend/onyx/file_processing/**'
               - 'uv.lock'
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # ratchet:aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
+      - name: Pull production backend image
+        env:
+          PROD_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:nightly-llm-it-backend-${{ github.run_id }}
+        run: docker pull "${PROD_IMAGE}"
 
-      - name: Get connector test secrets from AWS Secrets Manager
-        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802 # ratchet:aws-actions/aws-secretsmanager-get-secrets@v2
-        with:
-          parse-json-secrets: false
-          secret-ids: |
-            AWS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS, test/aws-access-key-id
-            AWS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS, test/aws-secret-access-key
-            R2_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS, test/r2-access-key-id
-            R2_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS, test/r2-secret-access-key
-            GCS_ACCESS_KEY_ID_DAILY_CONNECTOR_TESTS, test/gcs-access-key-id
-            GCS_SECRET_ACCESS_KEY_DAILY_CONNECTOR_TESTS, test/gcs-secret-access-key
-            CONFLUENCE_ACCESS_TOKEN, test/confluence-access-token
-            CONFLUENCE_ACCESS_TOKEN_SCOPED, test/confluence-access-token-scoped
-            JIRA_BASE_URL, test/jira-base-url
-            JIRA_USER_EMAIL, test/jira-user-email
-            JIRA_API_TOKEN, test/jira-api-token
-            JIRA_API_TOKEN_SCOPED, test/jira-api-token-scoped
-            GONG_ACCESS_KEY, test/gong-access-key
-            GONG_ACCESS_KEY_SECRET, test/gong-access-key-secret
-            GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR, test/google-drive-service-account-json
-            GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR_TEST_USER_1, test/google-drive-oauth-creds-test-user-1
-            GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR, test/google-drive-oauth-creds
-            GOOGLE_GMAIL_SERVICE_ACCOUNT_JSON_STR, test/google-gmail-service-account-json
-            GOOGLE_GMAIL_OAUTH_CREDENTIALS_JSON_STR, test/google-gmail-oauth-creds
-            SLAB_BOT_TOKEN, test/slab-bot-token
-            ZENDESK_SUBDOMAIN, test/zendesk-subdomain
-            ZENDESK_EMAIL, test/zendesk-email
-            ZENDESK_TOKEN, test/zendesk-token
-            SF_PASSWORD, test/sf-password
-            SF_SECURITY_TOKEN, test/sf-security-token
-            HUBSPOT_ACCESS_TOKEN, test/hubspot-access-token
-            IMAP_PASSWORD, test/imap-password
-            AIRTABLE_ACCESS_TOKEN, test/airtable-access-token
-            SHAREPOINT_CLIENT_SECRET, test/sharepoint-client-secret
-            PERM_SYNC_SHAREPOINT_CLIENT_ID, test/perm-sync-sharepoint-client-id
-            PERM_SYNC_SHAREPOINT_PRIVATE_KEY, test/perm-sync-sharepoint-private-key
-            PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD, test/perm-sync-sharepoint-cert-password
-            PERM_SYNC_SHAREPOINT_DIRECTORY_ID, test/perm-sync-sharepoint-directory-id
-            ACCESS_TOKEN_GITHUB, test/github-access-token
-            GITLAB_ACCESS_TOKEN, test/gitlab-access-token
-            GITBOOK_SPACE_ID, test/gitbook-space-id
-            GITBOOK_API_KEY, test/gitbook-api-key
-            NOTION_INTEGRATION_TOKEN, test/notion-integration-token
-            HIGHSPOT_KEY, test/highspot-key
-            HIGHSPOT_SECRET, test/highspot-secret
-            SLACK_BOT_TOKEN, test/slack-bot-token
-            DISCORD_CONNECTOR_BOT_TOKEN, test/discord-bot-token
-            TEAMS_APPLICATION_ID, test/teams-application-id
-            TEAMS_DIRECTORY_ID, test/teams-directory-id
-            TEAMS_SECRET, test/teams-secret
-            BITBUCKET_WORKSPACE, test/bitbucket-workspace
-            BITBUCKET_API_TOKEN, test/bitbucket-api-token
-            FIREFLIES_API_KEY, test/fireflies-api-key
+      # Start a long-lived container from the production image and layer in the
+      # test-only deps (pytest, etc.) that aren't baked into it -- the prod image
+      # installs only default.txt + ee.txt and does not COPY ./tests. We install
+      # against the system interpreter (where the image's deps already live) and
+      # bind-mount the checked-out workspace for the test files. The Playwright
+      # browser binary and the system libraries it links against (libnss3, etc.)
+      # come from the image -- that is the thing under test. AWS credentials are
+      # baked into the container env so the pytest_secrets fixture can batch-fetch
+      # connector credentials from Secrets Manager.
+      - name: Start test container
+        env:
+          PROD_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:nightly-llm-it-backend-${{ github.run_id }}
+        run: |
+          docker run -d --name onyx-connector-tests --user root \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e PYTHONPATH=./backend \
+            -e DISABLE_TELEMETRY \
+            -e AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY \
+            -e AWS_SESSION_TOKEN \
+            -e AWS_REGION \
+            -e AWS_DEFAULT_REGION \
+            -e R2_ACCOUNT_ID_DAILY_CONNECTOR_TESTS \
+            -e CONFLUENCE_TEST_SPACE_URL \
+            -e CONFLUENCE_TEST_SPACE \
+            -e CONFLUENCE_USER_NAME \
+            -e SF_USERNAME \
+            -e IMAP_HOST \
+            -e IMAP_USERNAME \
+            -e IMAP_MAILBOXES \
+            -e AIRTABLE_TEST_BASE_ID \
+            -e AIRTABLE_TEST_TABLE_ID \
+            -e AIRTABLE_TEST_TABLE_NAME \
+            -e SHAREPOINT_CLIENT_ID \
+            -e SHAREPOINT_CLIENT_DIRECTORY_ID \
+            -e SHAREPOINT_SITE \
+            -e BITBUCKET_EMAIL \
+            "${PROD_IMAGE}" sleep infinity
+          # The prod image no longer ships uv, so install the test-only deps
+          # (pytest, etc.) with the image's own pip against the system
+          # interpreter, where the image's deps already live. pip ignores
+          # pyproject.toml's [tool.uv] overrides, so --require-hashes resolves
+          # directly without uv's --no-config workaround.
+          docker exec onyx-connector-tests bash -c '
+            set -euo pipefail
+            python -m pip install --no-deps --require-hashes \
+              -r backend/requirements/default.txt \
+              -r backend/requirements/dev.txt
+          '
 
+      # The prod image has no uv or .venv; run pytest with the system
+      # interpreter directly, where the deps installed above live.
       - name: Run Tests (excluding HubSpot, Salesforce, GitHub, and Coda)
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          py.test \
-            -n 8 \
-            --dist loadfile \
-            --durations=8 \
-            -o junit_family=xunit2 \
-            -xv \
-            --ff \
-            backend/tests/daily/connectors \
-            --ignore backend/tests/daily/connectors/hubspot \
-            --ignore backend/tests/daily/connectors/salesforce \
-            --ignore backend/tests/daily/connectors/github \
-            --ignore backend/tests/daily/connectors/coda
+          docker exec onyx-connector-tests bash -c '
+            python -m pytest \
+              -n 8 \
+              --dist loadfile \
+              --durations=8 \
+              -o junit_family=xunit2 \
+              -xv \
+              --ff \
+              backend/tests/daily/connectors \
+              --ignore backend/tests/daily/connectors/hubspot \
+              --ignore backend/tests/daily/connectors/salesforce \
+              --ignore backend/tests/daily/connectors/github \
+              --ignore backend/tests/daily/connectors/coda
+          '
 
       - name: Run HubSpot Connector Tests
         if: ${{ github.event_name == 'schedule' || steps.changes.outputs.hubspot == 'true' || steps.changes.outputs.file_processing == 'true' }}
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          py.test \
-            -n 8 \
-            --dist loadfile \
-            --durations=8 \
-            -o junit_family=xunit2 \
-            -xv \
-            --ff \
-            backend/tests/daily/connectors/hubspot
+          docker exec onyx-connector-tests bash -c '
+            python -m pytest \
+              -n 8 \
+              --dist loadfile \
+              --durations=8 \
+              -o junit_family=xunit2 \
+              -xv \
+              --ff \
+              backend/tests/daily/connectors/hubspot
+          '
 
       - name: Run Salesforce Connector Tests
         if: ${{ github.event_name == 'schedule' || steps.changes.outputs.salesforce == 'true' || steps.changes.outputs.file_processing == 'true' }}
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          py.test \
-            -n 8 \
-            --dist loadfile \
-            --durations=8 \
-            -o junit_family=xunit2 \
-            -xv \
-            --ff \
-            backend/tests/daily/connectors/salesforce
+          docker exec onyx-connector-tests bash -c '
+            python -m pytest \
+              -n 8 \
+              --dist loadfile \
+              --durations=8 \
+              -o junit_family=xunit2 \
+              -xv \
+              --ff \
+              backend/tests/daily/connectors/salesforce
+          '
 
       - name: Run GitHub Connector Tests
         if: ${{ github.event_name == 'schedule' || steps.changes.outputs.github == 'true' || steps.changes.outputs.file_processing == 'true' }}
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
-          py.test \
-            -n 8 \
-            --dist loadfile \
-            --durations=8 \
-            -o junit_family=xunit2 \
-            -xv \
-            --ff \
-            backend/tests/daily/connectors/github
+          docker exec onyx-connector-tests bash -c '
+            python -m pytest \
+              -n 8 \
+              --dist loadfile \
+              --durations=8 \
+              -o junit_family=xunit2 \
+              -xv \
+              --ff \
+              backend/tests/daily/connectors/github
+          '
+
+      - name: Stop test container
+        if: always()
+        run: docker rm -f onyx-connector-tests || true
 
       - name: Alert on Failure
         if: failure() && github.event_name == 'schedule'

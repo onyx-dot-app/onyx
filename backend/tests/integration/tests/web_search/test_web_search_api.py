@@ -1,11 +1,11 @@
 import os
 
 import pytest
-import requests
 
 from shared_configs.enums import WebContentProviderType
 from shared_configs.enums import WebSearchProviderType
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -20,7 +20,7 @@ class TestOnyxWebCrawler:
     @pytest.mark.skip(reason="Temporarily disabled")
     def test_fetches_public_url_successfully(self, admin_user: DATestUser) -> None:
         """Test that the crawler can fetch content from a public URL."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["https://example.com/"]},
             headers=admin_user.headers,
@@ -44,7 +44,7 @@ class TestOnyxWebCrawler:
     @pytest.mark.skip(reason="Temporarily disabled")
     def test_fetches_multiple_urls(self, admin_user: DATestUser) -> None:
         """Test that the crawler can fetch multiple URLs in one request."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={
                 "urls": [
@@ -65,7 +65,7 @@ class TestOnyxWebCrawler:
 
     def test_handles_nonexistent_domain(self, admin_user: DATestUser) -> None:
         """Test that the crawler handles non-existent domains gracefully."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["https://this-domain-definitely-does-not-exist-12345.com/"]},
             headers=admin_user.headers,
@@ -79,23 +79,32 @@ class TestOnyxWebCrawler:
         assert data["results"] == []
 
     def test_handles_404_page(self, admin_user: DATestUser) -> None:
-        """Test that the crawler handles 404 responses gracefully."""
-        response = requests.post(
+        """Test that the crawler surfaces a 404 page's body to the LLM.
+
+        Some "soft 404" pages (like example.com's, which returns HTTP 404 but
+        still serves the standard Example Domain HTML body) carry useful
+        signal. We deliberately surface the parsed content so the LLM can see
+        what the URL actually returned, rather than silently dropping it.
+        """
+        url = "https://example.com/this-page-does-not-exist-12345"
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
-            json={"urls": ["https://example.com/this-page-does-not-exist-12345"]},
+            json={"urls": [url]},
             headers=admin_user.headers,
         )
         assert response.status_code == 200, response.text
         data = response.json()
 
         assert data["provider_type"] == WebContentProviderType.ONYX_WEB_CRAWLER.value
+        assert len(data["results"]) == 1
 
-        # Non-200 responses are treated as non-content and filtered out
-        assert data["results"] == []
+        result = data["results"][0]
+        assert result["unique_identifier_to_strip_away"] == url
+        assert result["content"].strip(), "Expected non-empty content for soft-404 page"
 
     def test_https_url_with_path(self, admin_user: DATestUser) -> None:
         """Test that the crawler handles HTTPS URLs with paths correctly."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["https://www.iana.org/about"]},
             headers=admin_user.headers,
@@ -120,7 +129,7 @@ class TestSsrfProtection:
 
     def test_blocks_localhost_ip(self, admin_user: DATestUser) -> None:
         """Test that requests to localhost (127.0.0.1) are blocked."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://127.0.0.1/"]},
             headers=admin_user.headers,
@@ -132,7 +141,7 @@ class TestSsrfProtection:
 
     def test_blocks_private_ip_10_network(self, admin_user: DATestUser) -> None:
         """Test that requests to 10.x.x.x private network are blocked."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://10.0.0.1/"]},
             headers=admin_user.headers,
@@ -143,7 +152,7 @@ class TestSsrfProtection:
 
     def test_blocks_private_ip_192_168_network(self, admin_user: DATestUser) -> None:
         """Test that requests to 192.168.x.x private network are blocked."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://192.168.1.1/"]},
             headers=admin_user.headers,
@@ -154,7 +163,7 @@ class TestSsrfProtection:
 
     def test_blocks_private_ip_172_network(self, admin_user: DATestUser) -> None:
         """Test that requests to 172.16-31.x.x private network are blocked."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://172.16.0.1/"]},
             headers=admin_user.headers,
@@ -165,7 +174,7 @@ class TestSsrfProtection:
 
     def test_blocks_aws_metadata_endpoint(self, admin_user: DATestUser) -> None:
         """Test that requests to AWS metadata endpoint (169.254.169.254) are blocked."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://169.254.169.254/latest/meta-data/"]},
             headers=admin_user.headers,
@@ -176,7 +185,7 @@ class TestSsrfProtection:
 
     def test_blocks_kubernetes_metadata_hostname(self, admin_user: DATestUser) -> None:
         """Test that requests to Kubernetes internal hostname are blocked."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://kubernetes.default.svc.cluster.local/"]},
             headers=admin_user.headers,
@@ -187,7 +196,7 @@ class TestSsrfProtection:
 
     def test_blocks_google_metadata_hostname(self, admin_user: DATestUser) -> None:
         """Test that requests to Google Cloud metadata hostname are blocked."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://metadata.google.internal/"]},
             headers=admin_user.headers,
@@ -198,7 +207,7 @@ class TestSsrfProtection:
 
     def test_blocks_localhost_with_port(self, admin_user: DATestUser) -> None:
         """Test that requests to localhost with custom port are blocked."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={"urls": ["http://127.0.0.1:8080/metrics"]},
             headers=admin_user.headers,
@@ -209,7 +218,7 @@ class TestSsrfProtection:
 
     def test_multiple_urls_filters_internal(self, admin_user: DATestUser) -> None:
         """Test that internal URLs are filtered while external URLs are processed."""
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/web-search/open-urls",
             json={
                 "urls": [
@@ -241,7 +250,7 @@ pytestmark_exa = pytest.mark.skipif(
 
 
 def _activate_exa_provider(admin_user: DATestUser) -> int:
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/admin/web-search/search-providers",
         json={
             "id": None,
@@ -267,7 +276,6 @@ def _activate_exa_provider(admin_user: DATestUser) -> int:
 @pytestmark_exa
 @pytest.mark.skip(reason="Temporarily disabled")
 def test_web_search_endpoints_with_exa(
-    reset: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> None:
     provider_id = _activate_exa_provider(admin_user)
@@ -275,7 +283,7 @@ def test_web_search_endpoints_with_exa(
 
     search_request = {"queries": ["wikipedia python programming"], "max_results": 3}
 
-    lite_response = requests.post(
+    lite_response = client.post(
         f"{API_SERVER_URL}/web-search/search-lite",
         json=search_request,
         headers=admin_user.headers,
@@ -289,7 +297,7 @@ def test_web_search_endpoints_with_exa(
     urls = [result["url"] for result in lite_data["results"] if result.get("url")][:2]
     assert urls, "Web search should return at least one URL"
 
-    open_response = requests.post(
+    open_response = client.post(
         f"{API_SERVER_URL}/web-search/open-urls",
         json={"urls": urls},
         headers=admin_user.headers,
@@ -301,7 +309,7 @@ def test_web_search_endpoints_with_exa(
     assert len(open_data["results"]) == len(urls)
     assert all("content" in result for result in open_data["results"])
 
-    combined_response = requests.post(
+    combined_response = client.post(
         f"{API_SERVER_URL}/web-search/search",
         json=search_request,
         headers=admin_user.headers,

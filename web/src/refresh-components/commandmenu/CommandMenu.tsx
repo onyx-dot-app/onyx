@@ -11,9 +11,9 @@ import React, {
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Button } from "@opal/components";
@@ -398,7 +398,7 @@ const CommandMenuContent = React.forwardRef<
           "fixed top-[72px]",
           hasContainerCenter ? "-translate-x-1/2" : "inset-x-0 mx-auto",
           "z-modal",
-          "bg-background-tint-00 border rounded-16 shadow-2xl outline-none",
+          "bg-background-tint-00 border rounded-16 shadow-2xl outline-hidden",
           "flex flex-col overflow-hidden",
           "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-144px)]",
           "data-[state=open]:animate-in data-[state=closed]:animate-out",
@@ -406,8 +406,8 @@ const CommandMenuContent = React.forwardRef<
           "data-[state=open]:slide-in-from-bottom data-[state=open]:slide-in-from-left-0",
           "data-[state=closed]:slide-out-to-bottom data-[state=closed]:slide-out-to-left-0",
           "duration-200",
-          "w-[32rem]",
-          "min-h-[15rem]"
+          "w-128",
+          "min-h-60"
         )}
       >
         <VisuallyHidden.Root asChild>
@@ -455,7 +455,7 @@ function CommandMenuHeader({
   );
 
   return (
-    <div className="flex-shrink-0">
+    <div className="shrink-0">
       {/* Top row: Search icon, filters, close button */}
       <div className="px-3 pt-3 flex flex-row justify-between items-center">
         <Section
@@ -493,13 +493,12 @@ function CommandMenuHeader({
       {/* Search input - arrow/enter keys bubble up to Content for centralized handling */}
       <div className="px-2 pb-2 pt-0.5">
         <InputTypeIn
+          variant="internal"
           placeholder={placeholder}
           value={value}
           onChange={(e) => onValueChange?.(e.target.value)}
           onKeyDown={handleInputKeyDown}
           autoFocus
-          className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
-          showClearButton={false}
         />
       </div>
     </div>
@@ -745,7 +744,7 @@ function CommandMenuAction({
  */
 function CommandMenuFooter({ leftActions }: CommandMenuFooterProps) {
   return (
-    <div className="flex-shrink-0">
+    <div className="shrink-0">
       <Section
         flexDirection="row"
         justifyContent="start"
@@ -773,10 +772,7 @@ function CommandMenuFooterAction({
 }: CommandMenuFooterActionProps) {
   return (
     <div className="flex items-center gap-1" aria-label={label}>
-      <Icon
-        className="w-[0.875rem] h-[0.875rem] stroke-text-02"
-        aria-hidden="true"
-      />
+      <Icon className="w-3.5 h-3.5 stroke-text-02" aria-hidden="true" />
       <Text mainUiBody text03>
         {label}
       </Text>

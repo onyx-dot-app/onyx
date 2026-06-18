@@ -1,0 +1,22 @@
+/**
+ * @opal/root — Entry point for the Opal design system.
+ *
+ * Imports all Opal stylesheets: colors, typography, design tokens, and
+ * component styles. Consumers should import `@onyx-ai/opal/root.css` exactly
+ * once at the top of the application to pull in the full design system.
+ *
+ * The bundler (`scripts/bundle-css.mjs`) concatenates all CSS files in src/
+ * into dist/root.css; these @import statements are stripped during that step
+ * (files are already inlined) but serve as the canonical source of truth for
+ * what the design system includes and in what order.
+ *
+ * Design tokens (colors, spacing, radius, z-index, typography metrics) live in
+ * @onyx-ai/shared and are pulled in via `@import "@onyx-ai/shared/tokens.css"` in
+ * _reference.css (which leads the bundle). Layout tokens (container widths, page
+ * widths, etc.) are library-owned and live in sizes.css — app-specific overrides
+ * should be applied in the app's own CSS.
+ */
+
+@import "./styles/sizes.css";
+@import "./styles/typography.css";
+@import "./styles/z-index.css";

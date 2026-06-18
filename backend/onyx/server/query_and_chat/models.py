@@ -19,7 +19,6 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import Packet
 
-
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
 
 
@@ -232,8 +231,14 @@ class ChatMessageDetail(BaseModel):
     preferred_response_id: int | None = None
     model_display_name: str | None = None
 
-    def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
-        initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
+    def model_dump(  # ty: ignore[invalid-method-override]
+        self, *args: list, **kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        initial_dict = super().model_dump(
+            mode="json",
+            *args,
+            **kwargs,  # ty: ignore[invalid-argument-type]
+        )
         initial_dict["time_sent"] = self.time_sent.isoformat()
         return initial_dict
 
@@ -241,6 +246,12 @@ class ChatMessageDetail(BaseModel):
 class SetPreferredResponseRequest(BaseModel):
     user_message_id: int
     preferred_response_id: int
+
+
+class CurrentRunInfo(BaseModel):
+    """In-flight run whose stream buffer can be replayed/tailed."""
+
+    run_id: int
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -257,6 +268,9 @@ class ChatSessionDetailResponse(BaseModel):
     deleted: bool = False
     owner_name: str | None = None
     packets: list[list[Packet]]
+    # Set while a run is in flight and resumable: cursor-0 replay+tail is
+    # available at /chat-session/{id}/resume-stream.
+    current_run: CurrentRunInfo | None = None
 
 
 class AdminSearchRequest(BaseModel):

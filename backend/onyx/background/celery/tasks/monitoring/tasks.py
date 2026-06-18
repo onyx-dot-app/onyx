@@ -30,6 +30,7 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
+from onyx.db.engine.tenant_utils import validate_tenant_id
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import SyncStatus
@@ -42,7 +43,9 @@ from onyx.db.models import UserGroup
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
-from onyx.utils.logger import is_running_in_container
+from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.utils.platform_utils import is_running_in_container
+from onyx.utils.platform_utils import is_running_in_kubernetes
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from shared_configs.configs import MULTI_TENANT
@@ -71,12 +74,12 @@ _SYNC_START_TIME_KEY_FMT = "sync_start_time:{sync_type}:{entity_id}:{sync_record
 _SYNC_END_TIME_KEY_FMT = "sync_end_time:{sync_type}:{entity_id}:{sync_record_id}"
 
 
-def _mark_metric_as_emitted(redis_std: Redis, key: str) -> None:
+def _mark_metric_as_emitted(redis_std: TenantRedisClient, key: str) -> None:
     """Mark a metric as having been emitted by setting a Redis key with expiration"""
     redis_std.set(key, "1", ex=24 * 60 * 60)  # Expire after 1 day
 
 
-def _has_metric_been_emitted(redis_std: Redis, key: str) -> bool:
+def _has_metric_been_emitted(redis_std: TenantRedisClient, key: str) -> bool:
     """Check if a metric has been emitted by checking for existence of Redis key"""
     return bool(redis_std.exists(key))
 
@@ -184,7 +187,7 @@ def _build_connector_start_latency_metric(
     cc_pair: ConnectorCredentialPair,
     recent_attempt: IndexAttempt,
     second_most_recent_attempt: IndexAttempt | None,
-    redis_std: Redis,
+    redis_std: TenantRedisClient,
 ) -> Metric | None:
     if not recent_attempt.time_started:
         return None
@@ -242,7 +245,7 @@ def _build_connector_start_latency_metric(
 def _build_connector_final_metrics(
     cc_pair: ConnectorCredentialPair,
     recent_attempts: list[IndexAttempt],
-    redis_std: Redis,
+    redis_std: TenantRedisClient,
 ) -> list[Metric]:
     """
     Final metrics for connector index attempts:
@@ -330,7 +333,9 @@ def _build_connector_final_metrics(
     return metrics
 
 
-def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Metric]:
+def _collect_connector_metrics(
+    db_session: Session, redis_std: TenantRedisClient
+) -> list[Metric]:
     """Collect metrics about connector runs from the past hour"""
     one_hour_ago = get_db_current_time(db_session) - timedelta(hours=1)
 
@@ -349,6 +354,7 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
                 .filter(
                     IndexAttempt.connector_credential_pair_id == cc_pair.id,
                     IndexAttempt.search_settings_id == search_settings.id,
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
                 )
                 .order_by(IndexAttempt.time_created.desc())
                 .limit(2)
@@ -429,7 +435,9 @@ def _collect_connector_metrics(db_session: Session, redis_std: Redis) -> list[Me
     return metrics
 
 
-def _collect_sync_metrics(db_session: Session, redis_std: Redis) -> list[Metric]:
+def _collect_sync_metrics(
+    db_session: Session, redis_std: TenantRedisClient
+) -> list[Metric]:
     """
     Collect metrics for document set and group syncing:
       - Success/failure status
@@ -784,10 +792,20 @@ def cloud_check_alembic() -> bool | None:
             if tenant_id is None:
                 continue
 
+            # Defense in depth: get_all_tenant_ids() already filters with this
+            # regex, but PostgreSQL cannot bind a schema identifier, so we
+            # re-check at the interpolation site to keep the SQL string safe
+            # even if upstream filtering ever loosens.
+            if not validate_tenant_id(tenant_id):
+                task_logger.warning(
+                    "Skipping tenant with malformed schema name: %s", tenant_id
+                )
+                continue
+
             with get_session_with_shared_schema() as session:
                 try:
                     result = session.execute(
-                        text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')
+                        text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')  # noqa: S608
                     )
                     result_scalar: str | None = result.scalar_one_or_none()
                     if result_scalar is None:
@@ -1002,6 +1020,11 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:  # noqa: ARG0
 
     # Skip memory monitoring if not in container
     if not is_running_in_container():
+        return
+
+    # In k8s each worker runs in its own pod with an isolated pid namespace,
+    # so psutil.process_iter() only sees the local worker.
+    if is_running_in_kubernetes():
         return
 
     try:

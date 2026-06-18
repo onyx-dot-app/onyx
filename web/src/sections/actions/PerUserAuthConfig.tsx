@@ -5,9 +5,9 @@ import { FormField } from "@/refresh-components/form/FormField";
 import InputKeyValue, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import Separator from "@/refresh-components/Separator";
+import { Divider } from "@opal/components";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/MCPAuthenticationModal";
 import { SvgUser } from "@opal/icons";
 
@@ -134,7 +134,7 @@ export function PerUserAuthConfig({
       {/* Only show user credentials section if there are required fields */}
       {requiredFields.length > 0 && (
         <>
-          <Separator className="-my-2" />
+          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
 
           <div className="flex flex-col gap-4">
             <div className="flex items-start gap-1">
@@ -179,7 +179,6 @@ export function PerUserAuthConfig({
                           updateUserCredential(field, e.target.value)
                         }
                         placeholder={`Enter ${field.replace(/_/g, " ")}`}
-                        showClearButton={false}
                       />
                     </FormField.Control>
                   </FormField>

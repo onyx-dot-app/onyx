@@ -5,8 +5,8 @@ This module provides a proper MCP client that follows the JSON-RPC 2.0 specifica
 and handles connection initialization, session management, and protocol communication.
 """
 
-from collections.abc import Awaitable
 from collections.abc import Callable
+from collections.abc import Coroutine
 from enum import Enum
 from typing import Any
 from typing import Dict
@@ -23,7 +23,9 @@ from mcp.types import TextResourceContents
 from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel
 
+from onyx.configs.app_configs import MCP_TOOL_CALL_TIMEOUT_SECONDS
 from onyx.db.enums import MCPTransport
+from onyx.tools.tool_implementations.mcp.mcp_ssrf import mcp_ssrf_httpx_client_factory
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 
@@ -31,7 +33,7 @@ logger = setup_logger()
 
 T = TypeVar("T", covariant=True)
 
-MCPClientFunction = Callable[[ClientSession], Awaitable[T]]
+MCPClientFunction = Callable[[ClientSession], Coroutine[Any, Any, T]]
 
 
 class MCPMessageType(str, Enum):
@@ -120,13 +122,13 @@ class MCPMessage(BaseModel):
 
 
 def _create_mcp_client_function_runner(
-    function: Callable[[ClientSession], Awaitable[T]],
+    function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
     auth: OAuthClientProvider | None = None,  # TODO: maybe used this for all auth types
     **kwargs: Any,
-) -> Callable[[], Awaitable[T]]:
+) -> Callable[[], Coroutine[Any, Any, T]]:
     auth_headers = connection_headers or {}
     # WARNING: httpx.Auth with requires_response_body=True (as in the MCP OAuth
     # provider) forces httpx to fully read the response body. That is incompatible
@@ -142,13 +144,16 @@ def _create_mcp_client_function_runner(
 
     async def run_client_function() -> T:
         async with client_func(
-            server_url, headers=auth_headers, auth=auth_for_request
+            server_url,
+            headers=auth_headers,
+            auth=auth_for_request,
+            httpx_client_factory=mcp_ssrf_httpx_client_factory,
         ) as client_tuple:
             if len(client_tuple) == 3:
                 read, write, _ = client_tuple
             elif len(client_tuple) == 2:
                 assert isinstance(client_tuple, tuple)  # mypy
-                read, write = client_tuple
+                read, write = client_tuple  # ty: ignore[invalid-assignment]
             else:
                 raise ValueError(
                     f"Unexpected number of client tuple elements: {len(client_tuple)}"
@@ -156,7 +161,9 @@ def _create_mcp_client_function_runner(
             from datetime import timedelta
 
             async with ClientSession(
-                read, write, read_timeout_seconds=timedelta(seconds=300)
+                read,
+                write,
+                read_timeout_seconds=timedelta(seconds=MCP_TOOL_CALL_TIMEOUT_SECONDS),
             ) as session:
                 return await function(session, **kwargs)
 
@@ -177,7 +184,7 @@ def log_exception_group(e: ExceptionGroup) -> Exception | None:
 
 
 def _call_mcp_client_function_sync(
-    function: Callable[[ClientSession], Awaitable[T]],
+    function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
@@ -190,7 +197,7 @@ def _call_mcp_client_function_sync(
     try:
         return run_async_sync_no_cancel(run_client_function())
     except Exception as e:
-        logger.error(f"Failed to call MCP client function: {e}")
+        logger.error("Failed to call MCP client function: %s", e)
         if isinstance(e, ExceptionGroup):
             original_exception = e
             saved_e = log_exception_group(e)
@@ -201,7 +208,7 @@ def _call_mcp_client_function_sync(
 
 
 async def _call_mcp_client_function_async(
-    function: Callable[[ClientSession], Awaitable[T]],
+    function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
@@ -220,14 +227,20 @@ def process_mcp_result(call_tool_result: CallToolResult) -> str:
     parts = []
     for content_block in call_tool_result.content:
         if content_block.type == ContentBlockTypes.TEXT.value:
-            parts.append(content_block.text or "")
+            parts.append(content_block.text or "")  # ty: ignore[unresolved-attribute]
         if content_block.type == ContentBlockTypes.RESOURCE.value:
-            if isinstance(content_block.resource, TextResourceContents):
-                parts.append(content_block.resource.text or "")
+            if isinstance(
+                content_block.resource,  # ty: ignore[unresolved-attribute]
+                TextResourceContents,
+            ):
+                parts.append(
+                    content_block.resource.text  # ty: ignore[unresolved-attribute]
+                    or ""
+                )
             # TODO: handle blob resource content
         if content_block.type == ContentBlockTypes.RESOURCE_LINK.value:
             parts.append(
-                f"link: {content_block.uri} title: {content_block.title} description: {content_block.description}"
+                f"link: {content_block.uri} title: {content_block.title} description: {content_block.description}"  # ty: ignore[unresolved-attribute]
             )
         # TODO: handle other content block types
 
@@ -282,12 +295,12 @@ async def _discover_mcp_tools(session: ClientSession) -> list[MCPLibTool]:
 
     t1 = time.time()
     init_result = await session.initialize()  # sends JSON-RPC "initialize"
-    logger.info(f"Initialized with server: {init_result.serverInfo}")
-    logger.info(f"Initialized with server time: {time.time() - t1}")
+    logger.info("Initialized with server: %s", init_result.serverInfo)
+    logger.info("Initialized with server time: %s", time.time() - t1)
     # 2) tools/list
     t2 = time.time()
     tools_response = await session.list_tools()  # sends JSON-RPC "tools/list"
-    logger.info(f"Listed tools with server time: {time.time() - t2}")
+    logger.info("Listed tools with server time: %s", time.time() - t2)
     return tools_response.tools
 
 

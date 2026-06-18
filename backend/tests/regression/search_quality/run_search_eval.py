@@ -19,7 +19,8 @@ from dotenv import load_dotenv
 from matplotlib.patches import Patch
 from pydantic import ValidationError
 from requests.exceptions import RequestException
-from retry import retry
+
+from onyx.utils.retry_wrapper import retry_builder
 
 # add onyx/backend to path (since this isn't done automatically when running as a script)
 current_dir = Path(__file__).parent
@@ -415,7 +416,7 @@ class SearchAnswerAnalyzer:
 
         return dataset
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _perform_search(self, query: str) -> OneshotQAResult:
         """Perform a document search query against the Onyx API and time it."""
         # create the search request

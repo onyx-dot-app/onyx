@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { FieldContext } from "./FieldContext";
 import {
   ControlProps,

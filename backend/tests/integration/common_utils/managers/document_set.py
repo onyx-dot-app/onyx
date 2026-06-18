@@ -3,10 +3,9 @@ from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
-import requests
-
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import MAX_DELAY
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestDocumentSet
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -36,7 +35,7 @@ class DocumentSetManager:
             "federated_connectors": federated_connectors or [],
         }
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/manage/admin/document-set",
             json=doc_set_creation_request,
             headers=user_performing_action.headers,
@@ -62,6 +61,7 @@ class DocumentSetManager:
     ) -> bool:
         doc_set_update_request = {
             "id": document_set.id,
+            "name": document_set.name,
             "description": document_set.description,
             "cc_pair_ids": document_set.cc_pair_ids,
             "is_public": document_set.is_public,
@@ -69,7 +69,7 @@ class DocumentSetManager:
             "groups": document_set.groups,
             "federated_connectors": document_set.federated_connectors,
         }
-        response = requests.patch(
+        response = client.patch(
             f"{API_SERVER_URL}/manage/admin/document-set",
             json=doc_set_update_request,
             headers=user_performing_action.headers,
@@ -82,7 +82,7 @@ class DocumentSetManager:
         document_set: DATestDocumentSet,
         user_performing_action: DATestUser,
     ) -> bool:
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/manage/admin/document-set/{document_set.id}",
             headers=user_performing_action.headers,
         )
@@ -93,7 +93,7 @@ class DocumentSetManager:
     def get_all(
         user_performing_action: DATestUser,
     ) -> list[DATestDocumentSet]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/manage/document-set",
             headers=user_performing_action.headers,
         )

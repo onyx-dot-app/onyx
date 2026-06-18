@@ -1,3 +1,4 @@
+import mimetypes
 import os
 import time
 from collections.abc import Mapping
@@ -7,6 +8,7 @@ from io import BytesIO
 from numbers import Integral
 from typing import Any
 from typing import Optional
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 import boto3
@@ -16,7 +18,6 @@ from botocore.exceptions import ClientError
 from botocore.exceptions import NoCredentialsError
 from botocore.exceptions import PartialCredentialsError
 from botocore.session import get_session
-from mypy_boto3_s3 import S3Client
 
 from onyx.configs.app_configs import BLOB_STORAGE_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -25,6 +26,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     process_onyx_metadata,
+)
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    extract_and_stage_tabular_file,
+)
+from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
+from onyx.connectors.cross_connector_utils.tabular_section_utils import (
+    tabular_file_to_sections,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -38,12 +46,16 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
 
 logger = setup_logger()
 
@@ -60,20 +72,29 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         prefix: str = "",
         batch_size: int = INDEX_BATCH_SIZE,
         european_residency: bool = False,
+        region_name: str | None = None,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
         self.bucket_name = bucket_name.strip()
         self.prefix = prefix if not prefix or prefix.endswith("/") else prefix + "/"
         self.batch_size = batch_size
-        self.s3_client: Optional[S3Client] = None
+        self.s3_client: Optional["S3Client"] = None
         self._allow_images: bool | None = None
         self.size_threshold: int | None = BLOB_STORAGE_SIZE_THRESHOLD
         self.bucket_region: Optional[str] = None
         self.european_residency: bool = european_residency
+        # Explicit AWS region for the S3 (and STS) clients. Required for buckets in
+        # non-default partitions (e.g. GovCloud's us-gov-west-1) — without it boto3
+        # falls back to the commercial partition and credentials fail to validate.
+        self.region_name: str | None = (
+            region_name.strip() if region_name and region_name.strip() else None
+        )
 
-    def set_allow_images(self, allow_images: bool) -> None:
+    def set_allow_images(  # ty: ignore[invalid-method-override]
+        self, allow_images: bool
+    ) -> None:
         """Set whether to process images in this connector."""
-        logger.info(f"Setting allow_images to {allow_images}.")
+        logger.info("Setting allow_images to %s.", allow_images)
         self._allow_images = allow_images
 
     def _detect_bucket_region(self) -> None:
@@ -92,11 +113,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             ).get("HTTPHeaders", {}).get("x-amz-bucket-region")
 
             if self.bucket_region:
-                logger.debug(f"Detected bucket region: {self.bucket_region}")
+                logger.debug("Detected bucket region: %s", self.bucket_region)
             else:
                 logger.warning("Bucket region not found in head_bucket response")
         except Exception as e:
-            logger.warning(f"Failed to detect bucket region via head_bucket: {e}")
+            logger.warning("Failed to detect bucket region via head_bucket: %s", e)
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Checks for boto3 credentials based on the bucket type.
@@ -116,7 +137,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         """
 
         logger.debug(
-            f"Loading credentials for {self.bucket_name} or type {self.bucket_type}"
+            "Loading credentials for %s or type %s", self.bucket_name, self.bucket_type
         )
 
         if self.bucket_type == BlobType.R2:
@@ -145,7 +166,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 "authentication_method", "access_key"
             )
             logger.debug(
-                f"Using authentication method: {authentication_method} for S3 bucket."
+                "Using authentication method: %s for S3 bucket.", authentication_method
             )
             if authentication_method == "access_key":
                 logger.debug("Using access key authentication for S3 bucket.")
@@ -159,7 +180,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     aws_access_key_id=credentials["aws_access_key_id"],
                     aws_secret_access_key=credentials["aws_secret_access_key"],
                 )
-                self.s3_client = session.client("s3")
+                self.s3_client = session.client("s3", region_name=self.region_name)
             elif authentication_method == "iam_role":
                 # If using IAM roles, we assume the role and let boto3 handle the credentials.
                 role_arn = credentials.get("aws_role_arn")
@@ -171,7 +192,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
                 def _refresh_credentials() -> dict[str, str]:
                     """Refreshes the credentials for the assumed role."""
-                    sts_client = boto3.client("sts")
+                    # STS endpoints are partition-specific, so the region must be
+                    # forwarded here as well or GovCloud role assumption fails.
+                    sts_client = boto3.client("sts", region_name=self.region_name)
                     assumed_role_object = sts_client.assume_role(
                         RoleArn=role_arn,
                         RoleSessionName=f"onyx_blob_storage_{int(time.time())}",
@@ -190,13 +213,15 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     method="sts-assume-role",
                 )
                 botocore_session = get_session()
-                botocore_session._credentials = refreshable  # type: ignore[attr-defined]
+                botocore_session._credentials = (  # ty: ignore[unresolved-attribute]
+                    refreshable
+                )
                 session = boto3.Session(botocore_session=botocore_session)
-                self.s3_client = session.client("s3")
+                self.s3_client = session.client("s3", region_name=self.region_name)
             elif authentication_method == "assume_role":
                 # We will assume the instance role to access S3.
                 logger.debug("Using instance role authentication for S3 bucket.")
-                self.s3_client = boto3.client("s3")
+                self.s3_client = boto3.client("s3", region_name=self.region_name)
             else:
                 raise ConnectorValidationError("Invalid authentication method for S3. ")
 
@@ -270,7 +295,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
             if bytes_read > self.size_threshold + SIZE_THRESHOLD_BUFFER:
                 logger.warning(
-                    f"{key} exceeds size threshold of {self.size_threshold}. Skipping."
+                    "%s exceeds size threshold of %s. Skipping.",
+                    key,
+                    self.size_threshold,
                 )
                 return None
 
@@ -308,6 +335,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
         elif self.bucket_type == BlobType.S3:
             region = self.bucket_region or self.s3_client.meta.region_name
+            # GovCloud has its own console domain
+            if region and region.startswith("us-gov-"):
+                return f"https://console.amazonaws-us-gov.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
             return f"https://s3.console.aws.amazon.com/s3/object/{self.bucket_name}?region={region}&prefix={encoded_key}"
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
@@ -405,7 +435,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     and size_bytes > self.size_threshold
                 ):
                     logger.warning(
-                        f"{file_name} exceeds size threshold of {self.size_threshold}. Skipping."
+                        "%s exceeds size threshold of %s. Skipping.",
+                        file_name,
+                        self.size_threshold,
                     )
                     continue
 
@@ -413,7 +445,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 if file_ext in OnyxFileExtensions.IMAGE_EXTENSIONS:
                     if not self._allow_images:
                         logger.debug(
-                            f"Skipping image file: {key} (image processing not enabled)"
+                            "Skipping image file: %s (image processing not enabled)",
+                            key,
                         )
                         continue
 
@@ -448,7 +481,56 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                             yield batch
                             batch = []
                     except Exception:
-                        logger.exception(f"Error processing image {key}")
+                        logger.exception("Error processing image %s", key)
+                    continue
+
+                # Handle tabular files (xlsx, csv, tsv) — produce one
+                # TabularSection per sheet (or per file for csv/tsv)
+                # instead of a flat TextSection.
+                if is_tabular_file(file_name):
+                    try:
+                        downloaded_file = self._download_object(key)
+                        if downloaded_file is None:
+                            continue
+                        tabular_sections: list[TabularSection] = []
+                        staged_file_id: str | None = None
+                        if self.raw_file_callback is not None:
+                            content_type, _ = mimetypes.guess_type(file_name)
+                            result = extract_and_stage_tabular_file(
+                                file=BytesIO(downloaded_file),
+                                file_name=file_name,
+                                content_type=content_type or "application/octet-stream",
+                                raw_file_callback=self.raw_file_callback,
+                                link=link,
+                            )
+                            tabular_sections = result.sections
+                            staged_file_id = result.staged_file_id
+                        else:
+                            tabular_sections = tabular_file_to_sections(
+                                BytesIO(downloaded_file),
+                                file_name=file_name,
+                                link=link,
+                            )
+                        batch.append(
+                            Document(
+                                id=f"{self.bucket_type}:{self.bucket_name}:{key}",
+                                sections=(
+                                    tabular_sections
+                                    if tabular_sections
+                                    else [TabularSection(link=link, text="")]
+                                ),
+                                source=DocumentSource(self.bucket_type.value),
+                                semantic_identifier=file_name,
+                                doc_updated_at=last_modified,
+                                metadata={},
+                                file_id=staged_file_id,
+                            )
+                        )
+                        if len(batch) == self.batch_size:
+                            yield batch
+                            batch = []
+                    except Exception:
+                        logger.exception("Error processing tabular file %s", key)
                     continue
 
                 # Handle text and document files
@@ -475,7 +557,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     sections: list[TextSection | ImageSection] = []
                     if extraction_result.text_content.strip():
                         logger.debug(
-                            f"Creating TextSection for {file_name} with link: {link}"
+                            "Creating TextSection for %s with link: %s", file_name, link
                         )
                         sections.append(
                             TextSection(
@@ -505,7 +587,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                         batch = []
 
                 except Exception:
-                    logger.exception(f"Error decoding object {key} as UTF-8")
+                    logger.exception("Error decoding object %s as UTF-8", key)
         if batch:
             yield batch
 
@@ -560,10 +642,20 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             error_code = e.response["Error"].get("Code", "")
             status_code = e.response["ResponseMetadata"].get("HTTPStatusCode")
 
+            # Credential rejections. These commonly mean the request reached the
+            # wrong AWS partition (e.g. a GovCloud bucket addressed through the
+            # commercial endpoint due to a missing/incorrect region) rather than
+            # a bucket-policy problem, so don't lump them in with AccessDenied.
+            if error_code in ["InvalidAccessKeyId", "InvalidToken"]:
+                raise CredentialExpiredError(
+                    f"Blob storage credentials were rejected (code={error_code}). "
+                    "Verify the credentials and that the configured AWS region matches "
+                    "the bucket's partition (e.g. us-gov-west-1 for GovCloud buckets)."
+                )
+
             # Most common S3 error cases
             if error_code in [
                 "AccessDenied",
-                "InvalidAccessKeyId",
                 "SignatureDoesNotMatch",
             ]:
                 if status_code == 403 or error_code == "AccessDenied":

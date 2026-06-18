@@ -1,0 +1,28 @@
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+# Ingress restricted to the sandbox namespace. The proxy has no
+# authentication on its port; this is the K8s-level control that keeps
+# unrelated pods from connecting and getting their flows logged as
+# `unidentified_egress`.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sandbox-proxy
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $sandboxNs }}
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.sandboxProxyPort" . }}
+{{- end }}

@@ -1,6 +1,7 @@
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import FileContent
 
 
@@ -10,7 +11,7 @@ def get_file_content_by_file_id(
 ) -> FileContent:
     record = db_session.query(FileContent).filter_by(file_id=file_id).first()
     if not record:
-        raise RuntimeError(
+        raise FileRecordNotFoundError(
             f"File content for file_id {file_id} does not exist or was deleted"
         )
     return record
@@ -46,7 +47,7 @@ def upsert_file_content(
     db_session.execute(stmt)
 
     # Return the merged ORM instance so callers can inspect the result
-    return db_session.get(FileContent, file_id)  # type: ignore[return-value]
+    return db_session.get(FileContent, file_id)  # ty: ignore[invalid-return-type]
 
 
 def transfer_file_content_file_id(

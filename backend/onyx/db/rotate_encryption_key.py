@@ -57,9 +57,9 @@ def _discover_encrypted_columns() -> list[tuple[type, str, list[str], bool]]:
         for prop in mapper.column_attrs:
             for col in prop.columns:
                 if isinstance(col.type, EncryptedJson):
-                    results.append((model_cls, prop.key, pk_names, True))
+                    results.append((model_cls, prop.key, pk_names, True))  # ty: ignore[invalid-argument-type]
                 elif isinstance(col.type, EncryptedString):
-                    results.append((model_cls, prop.key, pk_names, False))
+                    results.append((model_cls, prop.key, pk_names, False))  # ty: ignore[invalid-argument-type]
 
     return results
 
@@ -96,7 +96,7 @@ def rotate_encryption_key(
     totals: dict[str, int] = {}
 
     for model_cls, col_name, pk_names, is_json in encrypted_columns:
-        table_name: str = model_cls.__tablename__  # type: ignore[attr-defined]
+        table_name: str = model_cls.__tablename__  # ty: ignore[unresolved-attribute]
         col_attr = getattr(model_cls, col_name)
         pk_attrs = [getattr(model_cls, pk) for pk in pk_names]
 
@@ -128,7 +128,11 @@ def rotate_encryption_key(
             except (ValueError, UnicodeDecodeError) as e:
                 pk_vals = [row[i] for i in range(len(pk_names))]
                 logger.warning(
-                    f"Could not decrypt/parse {table_name}.{col_name} row {pk_vals} — skipping: {e}"
+                    "Could not decrypt/parse %s.%s row %s — skipping: %s",
+                    table_name,
+                    col_name,
+                    pk_vals,
+                    e,
                 )
                 continue
 
@@ -152,7 +156,11 @@ def rotate_encryption_key(
         if reencrypted > 0:
             totals[f"{table_name}.{col_name}"] = reencrypted
             logger.info(
-                f"{'[DRY RUN] Would re-encrypt' if dry_run else 'Re-encrypted'} {reencrypted} value(s) in {table_name}.{col_name}"
+                "%s %s value(s) in %s.%s",
+                "[DRY RUN] Would re-encrypt" if dry_run else "Re-encrypted",
+                reencrypted,
+                table_name,
+                col_name,
             )
 
     return totals

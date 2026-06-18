@@ -9,7 +9,7 @@ import { sendMessage, startNewChat } from "@tests/e2e/utils/chatActions";
 async function setAutoScroll(page: Page, enabled: boolean) {
   // Open user dropdown menu (same pattern as other tests)
   await page.locator("#onyx-user-dropdown").click();
-  await page.getByText("User Settings").first().click();
+  await page.getByText("Settings").first().click();
   // Wait for dialog to appear
   await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
@@ -59,10 +59,6 @@ test.describe("Chat Scroll Behavior", () => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
     await page.goto("/app");
-    const nameInput = page.getByPlaceholder("Your name");
-    await nameInput.waitFor();
-    await nameInput.fill("Playwright Tester");
-    await page.getByText("Save").click();
     await Promise.all([
       // Wait for sidebar navigation to be visible to indicate page is loaded
       page.getByText("Agents").first().waitFor(),
@@ -152,10 +148,6 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
     await page.goto("/app");
-    const nameInput = page.getByPlaceholder("Your name");
-    await nameInput.waitFor();
-    await nameInput.fill("Playwright Tester");
-    await page.getByText("Save").click();
     await Promise.all([
       page.getByText("Agents").first().waitFor(),
       page.getByText("Projects").first().waitFor(),

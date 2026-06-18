@@ -24,9 +24,9 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
+import httpx
 import pytest
 import redis
-import requests
 
 from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.server.license.models import LicenseSource
@@ -45,7 +45,6 @@ from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
-
 
 SCIM_USER_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:User"
 SCIM_ENTERPRISE_USER_SCHEMA = (
@@ -163,7 +162,7 @@ def _create_scim_user(
     email: str,
     external_id: str,
     idp_style: str = "okta",
-) -> requests.Response:
+) -> httpx.Response:
     return ScimClient.post(
         "/Users",
         token,
@@ -253,12 +252,12 @@ def test_create_user_default_group_and_account_type(
     )
     assert page.total_items >= 1
     scim_user_snapshot = next((u for u in page.items if u.email == email), None)
-    assert (
-        scim_user_snapshot is not None
-    ), f"SCIM user {email} not found in user listing"
-    assert (
-        scim_user_snapshot.account_type == AccountType.STANDARD
-    ), f"Expected STANDARD, got {scim_user_snapshot.account_type}"
+    assert scim_user_snapshot is not None, (
+        f"SCIM user {email} not found in user listing"
+    )
+    assert scim_user_snapshot.account_type == AccountType.STANDARD, (
+        f"Expected STANDARD, got {scim_user_snapshot.account_type}"
+    )
 
 
 def test_get_user(scim_token: str, idp_style: str) -> None:

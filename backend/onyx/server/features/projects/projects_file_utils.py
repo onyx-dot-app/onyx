@@ -9,7 +9,12 @@ from pydantic import ConfigDict
 from pydantic import Field
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
+from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_UPLOAD
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.db.llm import fetch_default_llm_model
+from onyx.file_processing.extract_file_text import count_docx_embedded_images
+from onyx.file_processing.extract_file_text import count_pdf_embedded_images
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -18,7 +23,6 @@ from onyx.natural_language_processing.utils import count_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 UNKNOWN_FILENAME = "[unknown_file]"  # More descriptive than empty string
@@ -45,9 +49,10 @@ def get_upload_size_bytes(upload: UploadFile) -> int | None:
         return size
     except Exception as e:
         logger.warning(
-            "Could not determine upload size via stream seek "
-            f"(filename='{get_safe_filename(upload)}', "
-            f"error_type={type(e).__name__}, error={e})"
+            "Could not determine upload size via stream seek (filename='%s', error_type=%s, error=%s)",
+            get_safe_filename(upload),
+            type(e).__name__,
+            e,
         )
         return None
 
@@ -57,7 +62,8 @@ def is_upload_too_large(upload: UploadFile, max_bytes: int) -> bool:
     size_bytes = get_upload_size_bytes(upload)
     if size_bytes is None:
         logger.warning(
-            f"Could not determine upload size; skipping size-limit check for '{get_safe_filename(upload)}'"
+            "Could not determine upload size; skipping size-limit check for '%s'",
+            get_safe_filename(upload),
         )
         return False
     return size_bytes > max_bytes
@@ -190,6 +196,14 @@ def categorize_uploaded_files(
         token_threshold_k * 1000 if token_threshold_k else None
     )  # 0 → None = no limit
 
+    # Running total of embedded images across PDFs in this batch. Once the
+    # aggregate cap is reached, subsequent PDFs in the same upload are
+    # rejected even if they'd individually fit under MAX_EMBEDDED_IMAGES_PER_FILE.
+    batch_image_total = 0
+
+    # Hoisted out of the loop to avoid a KV-store lookup per file.
+    image_extraction_enabled = get_image_extraction_and_analysis_enabled()
+
     for upload in files:
         try:
             filename = get_safe_filename(upload)
@@ -214,7 +228,7 @@ def categorize_uploaded_files(
                     token_count = estimate_image_tokens_for_upload(upload)
                 except (UnidentifiedImageError, OSError) as e:
                     logger.warning(
-                        f"Failed to process image file '{filename}': {str(e)}"
+                        "Failed to process image file '%s': %s", filename, str(e)
                     )
                     results.rejected.append(
                         RejectedFile(
@@ -244,13 +258,59 @@ def categorize_uploaded_files(
                     file_name=filename,
                     extension=extension,
                 ):
-                    logger.warning(f"{filename} is password protected")
+                    logger.warning("%s is password protected", filename)
                     results.rejected.append(
                         RejectedFile(
                             filename=filename, reason="Document is password protected"
                         )
                     )
                     continue
+
+                # Reject documents with an unreasonable number of embedded
+                # images (either per-file or accumulated across this upload
+                # batch). A file with thousands of embedded images can OOM the
+                # user-file-processing celery worker because every image is
+                # decoded with PIL and then sent to the vision LLM.
+                count: int = 0
+                image_bearing_ext = extension in (".pdf", ".docx")
+                if image_bearing_ext:
+                    file_cap = MAX_EMBEDDED_IMAGES_PER_FILE
+                    batch_cap = MAX_EMBEDDED_IMAGES_PER_UPLOAD
+                    # Use the larger of the two caps as the short-circuit
+                    # threshold so we get a useful count for both checks.
+                    # These helpers restore the stream position.
+                    counter = (
+                        count_pdf_embedded_images
+                        if extension == ".pdf"
+                        else count_docx_embedded_images
+                    )
+                    count = counter(upload.file, max(file_cap, batch_cap))
+                    if count > file_cap:
+                        results.rejected.append(
+                            RejectedFile(
+                                filename=filename,
+                                reason=(
+                                    f"Document contains too many embedded "
+                                    f"images (more than {file_cap}). Try "
+                                    f"splitting it into smaller files."
+                                ),
+                            )
+                        )
+                        continue
+                    if batch_image_total + count > batch_cap:
+                        results.rejected.append(
+                            RejectedFile(
+                                filename=filename,
+                                reason=(
+                                    f"Upload would exceed the "
+                                    f"{batch_cap}-image limit across all "
+                                    f"files in this batch. Try uploading "
+                                    f"fewer image-heavy files at once."
+                                ),
+                            )
+                        )
+                        continue
+                    batch_image_total += count
 
                 text_content = extract_file_text(
                     file=upload.file,
@@ -259,7 +319,24 @@ def categorize_uploaded_files(
                     extension=extension,
                 )
                 if not text_content:
-                    logger.warning(f"No text content extracted from '{filename}'")
+                    # Documents with embedded images (e.g. scans) have no
+                    # extractable text but can still be indexed via the
+                    # vision-LLM captioning path when image analysis is
+                    # enabled.
+                    if image_bearing_ext and count > 0 and image_extraction_enabled:
+                        results.acceptable.append(upload)
+                        results.acceptable_file_to_token_count[filename] = 0
+                        try:
+                            upload.file.seek(0)
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to reset file pointer for '%s': %s",
+                                filename,
+                                str(e),
+                            )
+                        continue
+
+                    logger.warning("No text content extracted from '%s'", filename)
                     results.rejected.append(
                         RejectedFile(
                             filename=filename,
@@ -297,11 +374,14 @@ def categorize_uploaded_files(
                     upload.file.seek(0)
                 except Exception as e:
                     logger.warning(
-                        f"Failed to reset file pointer for '{filename}': {str(e)}"
+                        "Failed to reset file pointer for '%s': %s", filename, str(e)
                     )
         except Exception as e:
             logger.warning(
-                f"Failed to process uploaded file '{get_safe_filename(upload)}' (error_type={type(e).__name__}, error={str(e)})"
+                "Failed to process uploaded file '%s' (error_type=%s, error=%s)",
+                get_safe_filename(upload),
+                type(e).__name__,
+                str(e),
             )
             results.rejected.append(
                 RejectedFile(

@@ -1,7 +1,7 @@
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 
@@ -85,7 +85,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
         icon={route.icon}
         title="Edit Standard Answer"
         backButton
-        separator
+        divider
       />
       <SettingsLayouts.Body>
         <Main id={params.id} />

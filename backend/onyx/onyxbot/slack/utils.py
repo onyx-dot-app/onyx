@@ -1,4 +1,3 @@
-import logging
 import random
 import re
 import string
@@ -10,7 +9,6 @@ from contextlib import contextmanager
 from typing import Any
 from typing import cast
 
-from retry import retry
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models.blocks import Block
@@ -25,12 +23,8 @@ from onyx.configs.onyxbot_configs import ONYX_BOT_FEEDBACK_VISIBILITY
 from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_QPM
 from onyx.configs.onyxbot_configs import ONYX_BOT_MAX_WAIT_TIME
 from onyx.configs.onyxbot_configs import ONYX_BOT_NUM_RETRIES
-from onyx.configs.onyxbot_configs import (
-    ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
-)
-from onyx.configs.onyxbot_configs import (
-    ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
-)
+from onyx.configs.onyxbot_configs import ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD
+from onyx.configs.onyxbot_configs import ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
@@ -38,6 +32,7 @@ from onyx.onyxbot.slack.constants import FeedbackVisibility
 from onyx.onyxbot.slack.models import ChannelType
 from onyx.onyxbot.slack.models import ThreadMessage
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.text_processing import replace_whitespaces_w_space
@@ -45,8 +40,8 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
-slack_token_user_ids: dict[str, str | None] = {}
-slack_token_bot_ids: dict[str, str | None] = {}
+slack_token_user_ids: dict[tuple[str, int], str | None] = {}
+slack_token_bot_ids: dict[tuple[str, int], str | None] = {}
 slack_token_lock = threading.Lock()
 
 _ONYX_BOT_MESSAGE_COUNT: int = 0
@@ -54,9 +49,14 @@ _ONYX_BOT_COUNT_START_TIME: float = time.time()
 
 
 def get_onyx_bot_auth_ids(
-    tenant_id: str, web_client: WebClient
+    tenant_id: str, slack_bot_id: int, web_client: WebClient
 ) -> tuple[str | None, str | None]:
-    """Returns a tuple of user_id and bot_id."""
+    """Returns a tuple of user_id and bot_id for the given (tenant, slack_bot).
+
+    The cache must be keyed by (tenant_id, slack_bot_id) — multiple Slack apps
+    in the same tenant have distinct user/bot IDs and previously collided on
+    a tenant-only key.
+    """
 
     user_id: str | None
     bot_id: str | None
@@ -64,17 +64,23 @@ def get_onyx_bot_auth_ids(
     global slack_token_user_ids
     global slack_token_bot_ids
 
+    cache_key = (tenant_id, slack_bot_id)
+
     with slack_token_lock:
-        user_id = slack_token_user_ids.get(tenant_id)
-        bot_id = slack_token_bot_ids.get(tenant_id)
+        user_id = slack_token_user_ids.get(cache_key)
+        bot_id = slack_token_bot_ids.get(cache_key)
 
     if user_id is None or bot_id is None:
+        # Network I/O happens outside the lock so that an in-flight or slow
+        # auth_test() for one (tenant, bot) does not block cache reads for
+        # other keys. A rare duplicate auth_test() on cold-start for the
+        # same key returns identical values and is harmless.
         response = web_client.auth_test()
         user_id = response.get("user_id")
         bot_id = response.get("bot_id")
         with slack_token_lock:
-            slack_token_user_ids[tenant_id] = user_id
-            slack_token_bot_ids[tenant_id] = bot_id
+            slack_token_user_ids[cache_key] = user_id
+            slack_token_bot_ids[cache_key] = bot_id
 
     return user_id, bot_id
 
@@ -99,15 +105,18 @@ def get_channel_type_from_id(web_client: WebClient, channel_id: str) -> ChannelT
                 return ChannelType.PUBLIC_CHANNEL  # Public channel
             else:
                 logger.warning(
-                    f"Could not determine channel type for {channel_id}, defaulting to unknown"
+                    "Could not determine channel type for %s, defaulting to unknown",
+                    channel_id,
                 )
                 return ChannelType.UNKNOWN
         else:
-            logger.warning(f"Invalid channel info response for {channel_id}")
+            logger.warning("Invalid channel info response for %s", channel_id)
             return ChannelType.UNKNOWN
     except Exception as e:
         logger.warning(
-            f"Error getting channel info for {channel_id}, defaulting to unknown: {e}"
+            "Error getting channel info for %s, defaulting to unknown: %s",
+            channel_id,
+            e,
         )
         return ChannelType.UNKNOWN
 
@@ -128,9 +137,11 @@ def check_message_limit() -> bool:
         _ONYX_BOT_COUNT_START_TIME = time.time()
     if (_ONYX_BOT_MESSAGE_COUNT + 1) > ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD:
         logger.error(
-            f"OnyxBot has reached the message limit {ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD}"
-            f" for the time period {ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS} seconds."
-            " These limits are configurable in backend/onyx/configs/onyxbot_configs.py"
+            "OnyxBot has reached the message limit %s"
+            " for the time period %s seconds."
+            " These limits are configurable in backend/onyx/configs/onyxbot_configs.py",
+            ONYX_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD,
+            ONYX_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
         )
         return False
     _ONYX_BOT_MESSAGE_COUNT += 1
@@ -146,7 +157,11 @@ def update_emote_react(
 ) -> None:
     if not message_ts:
         action = "remove" if remove else "add"
-        logger.error(f"update_emote_react - no message specified: {channel=} {action=}")
+        logger.error(
+            "update_emote_react - no message specified: channel=%s action=%s",
+            channel,
+            action,
+        )
         return
 
     if remove:
@@ -157,7 +172,7 @@ def update_emote_react(
                 timestamp=message_ts,
             )
         except SlackApiError as e:
-            logger.error(f"Failed to remove Reaction due to: {e}")
+            logger.error("Failed to remove Reaction due to: %s", e)
 
         return
 
@@ -168,13 +183,17 @@ def update_emote_react(
             timestamp=message_ts,
         )
     except SlackApiError as e:
-        logger.error(f"Was not able to react to user message due to: {e}")
+        logger.error("Was not able to react to user message due to: %s", e)
 
     return
 
 
-def remove_onyx_bot_tag(tenant_id: str, message_str: str, client: WebClient) -> str:
-    bot_token_user_id, _ = get_onyx_bot_auth_ids(tenant_id, web_client=client)
+def remove_onyx_bot_tag(
+    tenant_id: str, slack_bot_id: int, message_str: str, client: WebClient
+) -> str:
+    bot_token_user_id, _ = get_onyx_bot_auth_ids(
+        tenant_id, slack_bot_id, web_client=client
+    )
     return re.sub(rf"<@{bot_token_user_id}>\s*", "", message_str)
 
 
@@ -212,11 +231,10 @@ def _build_error_block(error_message: str) -> Block:
     return SectionBlock(text=display_text)
 
 
-@retry(
+@retry_builder(
     tries=ONYX_BOT_NUM_RETRIES,
     delay=0.25,
     backoff=2,
-    logger=cast(logging.Logger, logger),
 )
 def respond_in_thread_or_channel(
     client: WebClient,
@@ -246,7 +264,7 @@ def respond_in_thread_or_channel(
             )
         except Exception as e:
             blocks_str = str(blocks)[:1024]  # truncate block logging
-            logger.warning(f"Failed to post message: {e} \n blocks: {blocks_str}")
+            logger.warning("Failed to post message: %s \n blocks: %s", e, blocks_str)
             logger.warning("Trying again without blocks that have urls")
 
             if not blocks:
@@ -284,7 +302,9 @@ def respond_in_thread_or_channel(
                 )
             except Exception as e:
                 blocks_str = str(blocks)[:1024]  # truncate block logging
-                logger.warning(f"Failed to post message: {e} \n blocks: {blocks_str}")
+                logger.warning(
+                    "Failed to post message: %s \n blocks: %s", e, blocks_str
+                )
                 logger.warning("Trying again without blocks that have urls")
 
                 if not blocks:
@@ -439,7 +459,7 @@ def get_channel_name_from_id(
         is_dm = any([channel_info.get("is_im"), channel_info.get("is_mpim")])
         return name, is_dm
     except SlackApiError as e:
-        logger.exception(f"Couldn't fetch channel name from id: {channel_id}")
+        logger.exception("Couldn't fetch channel name from id: %s", channel_id)
         raise e
 
 
@@ -451,9 +471,11 @@ def fetch_slack_user_ids_from_emails(
     for email in user_emails:
         try:
             user = client.users_lookupByEmail(email=email)
-            user_ids.append(user.data["user"]["id"])  # type: ignore
+            user_ids.append(
+                user.data["user"]["id"]  # ty: ignore[invalid-argument-type]
+            )
         except Exception:
-            logger.error(f"Was not able to find slack user by email: {email}")
+            logger.error("Was not able to find slack user by email: %s", email)
             failed_to_find.append(email)
 
     return user_ids, failed_to_find
@@ -487,10 +509,10 @@ def fetch_user_ids_from_groups(
                 else:
                     failed_to_find.append(given_name)
             except Exception as e:
-                logger.error(f"Error fetching user group ids: {str(e)}")
+                logger.error("Error fetching user group ids: %s", e)
                 failed_to_find.append(given_name)
     except Exception as e:
-        logger.error(f"Error fetching user groups: {str(e)}")
+        logger.error("Error fetching user groups: %s", e)
         failed_to_find = given_names
 
     return user_ids, failed_to_find
@@ -522,7 +544,7 @@ def fetch_group_ids_from_names(
                 failed_to_find.append(given_name)
     except Exception as e:
         failed_to_find = given_names
-        logger.error(f"Error fetching user groups: {str(e)}")
+        logger.error("Error fetching user groups: %s", e)
 
     return group_data, failed_to_find
 
@@ -547,7 +569,11 @@ def fetch_user_semantic_id_from_id(
 
 
 def read_slack_thread(
-    tenant_id: str, channel: str, thread: str, client: WebClient
+    tenant_id: str,
+    slack_bot_id: int,
+    channel: str,
+    thread: str,
+    client: WebClient,
 ) -> list[ThreadMessage]:
     thread_messages: list[ThreadMessage] = []
     response = client.conversations_replies(channel=channel, ts=thread)
@@ -568,7 +594,7 @@ def read_slack_thread(
             reply_bot_id = reply.get("bot_id")
 
             self_slack_bot_user_id, self_slack_bot_bot_id = get_onyx_bot_auth_ids(
-                tenant_id, client
+                tenant_id, slack_bot_id, client
             )
             if reply_user is not None and reply_user == self_slack_bot_user_id:
                 is_onyx_bot_response = True
@@ -586,7 +612,7 @@ def read_slack_thread(
                 # auto-detected filters
                 blocks = reply.get("blocks")
                 if not blocks:
-                    logger.warning(f"OnyxBot response has no blocks: {reply}")
+                    logger.warning("OnyxBot response has no blocks: %s", reply)
                     continue
 
                 message = blocks[0].get("text", {}).get("text")
@@ -595,7 +621,7 @@ def read_slack_thread(
                 # The first block is the auto-detected filters
                 if message is not None and message.startswith("_Filters"):
                     if len(blocks) < 2:
-                        logger.warning(f"Only filter blocks found: {reply}")
+                        logger.warning("Only filter blocks found: %s", reply)
                         continue
                     # This is the OnyxBot answer format, if there is a change to how we respond,
                     # this will need to be updated to get the correct "answer" portion
@@ -612,13 +638,17 @@ def read_slack_thread(
                 # useful portion is
                 message = reply.get("text")
                 if not message:
-                    message = blocks[0].get("text", {}).get("text")
+                    message = (
+                        blocks[0]  # ty: ignore[possibly-unresolved-reference]
+                        .get("text", {})
+                        .get("text")
+                    )
 
             if not message:
                 logger.warning("Skipping Slack thread message, no text found")
                 continue
 
-        message = remove_onyx_bot_tag(tenant_id, message, client=client)
+        message = remove_onyx_bot_tag(tenant_id, slack_bot_id, message, client=client)
         thread_messages.append(
             ThreadMessage(message=message, sender=user_sem_id, role=message_type)
         )
@@ -633,7 +663,8 @@ def slack_usage_report(action: str, sender_id: str | None, client: WebClient) ->
     onyx_user = None
     sender_email = None
     try:
-        sender_email = client.users_info(user=sender_id).data["user"]["profile"]["email"]  # type: ignore
+        resp = client.users_info(user=sender_id)  # ty: ignore[invalid-argument-type]
+        sender_email = resp.data["user"]["profile"]["email"]  # type: ignore
     except Exception:
         logger.warning("Unable to find sender email")
 
@@ -717,10 +748,15 @@ def get_feedback_visibility() -> FeedbackVisibility:
 
 class TenantSocketModeClient(SocketModeClient):
     def __init__(self, tenant_id: str, slack_bot_id: int, *args: Any, **kwargs: Any):
-        super().__init__(*args, **kwargs)
+        # Set these BEFORE calling super().__init__ — the base class starts
+        # the message_processor IntervalRunner thread during init, which can
+        # race into our overridden process_message/enqueue_message methods
+        # before these attributes exist (ONYX-BACKEND-1: AttributeError on
+        # _tenant_id).
         self._tenant_id = tenant_id
         self.slack_bot_id = slack_bot_id
         self.bot_name: str = "Unnamed"
+        super().__init__(*args, **kwargs)
 
     @contextmanager
     def _set_tenant_context(self) -> Generator[None, None, None]:

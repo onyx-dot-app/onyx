@@ -34,7 +34,9 @@ async function createFreshAdmin(
 ): Promise<{ email: string; password: string }> {
   // First, log in as the existing admin so we can promote the new user
   await page.context().clearCookies();
-  const { email, password } = await loginAsRandomUser(page);
+  const { email, password } = await loginAsRandomUser(page, {
+    setDisplayName: false,
+  });
 
   // Now promote the new user to admin via the existing admin
   await page.context().clearCookies();
@@ -53,7 +55,7 @@ async function createFreshUser(
   page: Page
 ): Promise<{ email: string; password: string }> {
   await page.context().clearCookies();
-  return await loginAsRandomUser(page);
+  return await loginAsRandomUser(page, { setDisplayName: false });
 }
 
 test.describe("Onboarding Flow @exclusive", () => {
@@ -104,7 +106,13 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).toHaveAttribute("aria-disabled", "true");
+      await expect(chatInput).toBeVisible();
+      // Disabled wrapper is the parent div with data-opal-disabled
+      const disabledWrapper = chatInput.locator("..");
+      await expect(disabledWrapper).toHaveAttribute(
+        "data-opal-disabled",
+        "true"
+      );
 
       await expectElementScreenshot(chatInput, {
         name: "onboarding-chat-disabled",
@@ -187,7 +195,11 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).not.toHaveAttribute("aria-disabled", "true");
+      const chatInputParent = chatInput.locator("..");
+      await expect(chatInputParent).not.toHaveAttribute(
+        "aria-disabled",
+        "true"
+      );
     });
   });
 
@@ -239,7 +251,12 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).toHaveAttribute("aria-disabled", "true");
+      // Disabled wrapper is the parent div with data-opal-disabled
+      const disabledWrapper = chatInput.locator("..");
+      await expect(disabledWrapper).toHaveAttribute(
+        "data-opal-disabled",
+        "true"
+      );
     });
 
     test("can save name and see confirmation", async ({ page }) => {
@@ -284,7 +301,11 @@ test.describe("Onboarding Flow @exclusive", () => {
       });
 
       const chatInput = page.locator("#onyx-chat-input");
-      await expect(chatInput).not.toHaveAttribute("aria-disabled", "true");
+      const chatInputParent = chatInput.locator("..");
+      await expect(chatInputParent).not.toHaveAttribute(
+        "aria-disabled",
+        "true"
+      );
     });
 
     test("after setting name, shows confirmation then no onboarding UI", async ({

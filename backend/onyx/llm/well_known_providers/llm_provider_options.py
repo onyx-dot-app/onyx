@@ -19,6 +19,7 @@ from onyx.llm.well_known_providers.constants import BIFROST_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LITELLM_PROXY_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LM_STUDIO_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import OPENAI_COMPATIBLE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENROUTER_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import VERTEXAI_PROVIDER_NAME
@@ -51,6 +52,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OPENROUTER_PROVIDER_NAME: [],  # Dynamic - fetched from OpenRouter API
         LITELLM_PROXY_PROVIDER_NAME: [],  # Dynamic - fetched from LiteLLM proxy API
         BIFROST_PROVIDER_NAME: [],  # Dynamic - fetched from Bifrost API
+        OPENAI_COMPATIBLE_PROVIDER_NAME: [],  # Dynamic - fetched from OpenAI-compatible API
     }
 
 
@@ -136,6 +138,7 @@ def is_obsolete_model(model_name: str, provider: str) -> bool:
 def get_openai_model_names() -> list[str]:
     """Get OpenAI model names dynamically from litellm."""
     import re
+
     import litellm
 
     # TODO: remove these lists once we have a comprehensive model configuration page
@@ -249,6 +252,11 @@ def model_configurations_for_provider(
 ) -> list[ModelConfigurationView]:
     recommended_visible_models = llm_recommendations.get_visible_models(provider_name)
     recommended_visible_models_names = [m.name for m in recommended_visible_models]
+    display_name_by_name = {
+        m.name: m.display_name for m in recommended_visible_models if m.display_name
+    }
+    default_model = llm_recommendations.get_default_model(provider_name)
+    default_model_name = default_model.name if default_model else None
 
     # Preserve provider-defined ordering while de-duplicating.
     model_names: list[str] = []
@@ -270,8 +278,10 @@ def model_configurations_for_provider(
         ModelConfigurationView(
             name=model_name,
             is_visible=model_name in recommended_visible_models_names,
+            is_recommended_default=model_name == default_model_name,
             max_input_tokens=get_max_input_tokens(model_name, provider_name),
             supports_image_input=model_supports_image_input(model_name, provider_name),
+            display_name=display_name_by_name.get(model_name),
         )
         for model_name in model_names
     ]
@@ -336,6 +346,7 @@ def get_provider_display_name(provider_name: str) -> str:
         VERTEXAI_PROVIDER_NAME: "Google Vertex AI",
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
         LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",
+        OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI-Compatible",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

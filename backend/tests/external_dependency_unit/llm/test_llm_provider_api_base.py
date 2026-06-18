@@ -601,18 +601,18 @@ def test_upload_with_custom_config_then_change(
             assert len(captured_llms) == 2, "test_llm should have been called 2 times"
 
             for llm in captured_llms:
-                assert (
-                    llm.config.custom_config == custom_config
-                ), f"Expected custom_config {custom_config}, but got {llm.config.custom_config}"
+                assert llm.config.custom_config == custom_config, (
+                    f"Expected custom_config {custom_config}, but got {llm.config.custom_config}"
+                )
 
             # Check inside the database and check that custom_config is the same as the original
             db_provider = fetch_existing_llm_provider(name=name, db_session=db_session)
             if not db_provider:
                 assert False, "Provider not found in the database"
 
-            assert (
-                db_provider.custom_config == custom_config
-            ), f"Expected custom_config {custom_config}, but got {db_provider.custom_config}"
+            assert db_provider.custom_config == custom_config, (
+                f"Expected custom_config {custom_config}, but got {db_provider.custom_config}"
+            )
     finally:
         db_session.rollback()
         _cleanup_provider(db_session, name)
@@ -752,6 +752,178 @@ def test_preserves_masked_sensitive_custom_config_on_test_request(
             == original_custom_config["vertex_credentials"]
         )
         assert captured_llms[0].config.custom_config["vertex_location"] == "us-central1"
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, name)
+
+
+def test_vertex_workload_identity_provider_create(
+    db_session: Session,
+) -> None:
+    """Creating a Vertex provider with Workload Identity auth should succeed with
+    just vertex_project and drop any stray vertex_credentials from the payload."""
+    name = f"test-provider-vertex-wif-{uuid4().hex[:8]}"
+    provider = LlmProviderNames.VERTEX_AI.value
+    default_model_name = "gemini-2.5-pro"
+    captured_llms: list[LLM] = []
+
+    def capture_test_llm(llm: LLM) -> str:
+        captured_llms.append(llm)
+        return ""
+
+    try:
+        put_llm_provider(
+            llm_provider_upsert_request=LLMProviderUpsertRequest(
+                name=name,
+                provider=provider,
+                custom_config={
+                    "vertex_auth_method": "workload_identity",
+                    "vertex_project": "my-gcp-project",
+                    "vertex_location": "us-central1",
+                    # Stray credentials blob should be stripped server-side.
+                    "vertex_credentials": "{}",
+                },
+                model_configurations=[
+                    ModelConfigurationUpsertRequest(
+                        name=default_model_name, is_visible=True
+                    )
+                ],
+                api_key_changed=False,
+                custom_config_changed=True,
+                is_auto_mode=False,
+            ),
+            is_creation=True,
+            _=_create_mock_admin(),
+            db_session=db_session,
+        )
+
+        stored = fetch_existing_llm_provider(name=name, db_session=db_session)
+        assert stored is not None
+        assert stored.custom_config is not None
+        assert stored.custom_config.get("vertex_auth_method") == "workload_identity"
+        assert stored.custom_config.get("vertex_project") == "my-gcp-project"
+        assert stored.custom_config.get("vertex_location") == "us-central1"
+        assert "vertex_credentials" not in stored.custom_config
+
+        # The LLM built for this provider must not forward vertex_credentials to LiteLLM.
+        with patch("onyx.server.manage.llm.api.test_llm", side_effect=capture_test_llm):
+            run_llm_config_test(
+                LLMTestRequest(
+                    id=stored.id,
+                    provider=provider,
+                    model=default_model_name,
+                    api_key_changed=False,
+                    custom_config_changed=False,
+                ),
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+        assert len(captured_llms) == 1
+        model_kwargs = getattr(captured_llms[0], "_model_kwargs", {})
+        assert "vertex_credentials" not in model_kwargs
+        assert model_kwargs.get("vertex_project") == "my-gcp-project"
+        assert model_kwargs.get("vertex_location") == "us-central1"
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, name)
+
+
+def test_vertex_workload_identity_rejects_missing_project(
+    db_session: Session,
+) -> None:
+    """WIF mode without an explicit vertex_project must be rejected at upsert."""
+    name = f"test-provider-vertex-wif-missing-{uuid4().hex[:8]}"
+    provider = LlmProviderNames.VERTEX_AI.value
+    default_model_name = "gemini-2.5-pro"
+
+    try:
+        with pytest.raises(OnyxError) as excinfo:
+            put_llm_provider(
+                llm_provider_upsert_request=LLMProviderUpsertRequest(
+                    name=name,
+                    provider=provider,
+                    custom_config={
+                        "vertex_auth_method": "workload_identity",
+                        "vertex_location": "global",
+                    },
+                    model_configurations=[
+                        ModelConfigurationUpsertRequest(
+                            name=default_model_name, is_visible=True
+                        )
+                    ],
+                    api_key_changed=False,
+                    custom_config_changed=True,
+                    is_auto_mode=False,
+                ),
+                is_creation=True,
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+        assert excinfo.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, name)
+
+
+def test_vertex_service_account_backwards_compat_routes_credentials(
+    db_session: Session,
+) -> None:
+    """An existing provider stored without vertex_auth_method (the pre-WIF shape)
+    must continue to forward vertex_credentials to LiteLLM unchanged."""
+    name = f"test-provider-vertex-compat-{uuid4().hex[:8]}"
+    provider = LlmProviderNames.VERTEX_AI.value
+    default_model_name = "gemini-2.5-pro"
+    original_custom_config = {
+        "vertex_credentials": '{"type":"service_account","private_key":"REAL_PRIVATE_KEY"}',
+        "vertex_location": "global",
+    }
+    captured_llms: list[LLM] = []
+
+    def capture_test_llm(llm: LLM) -> str:
+        captured_llms.append(llm)
+        return ""
+
+    try:
+        stored = put_llm_provider(
+            llm_provider_upsert_request=LLMProviderUpsertRequest(
+                name=name,
+                provider=provider,
+                custom_config=original_custom_config,
+                model_configurations=[
+                    ModelConfigurationUpsertRequest(
+                        name=default_model_name, is_visible=True
+                    )
+                ],
+                api_key_changed=False,
+                custom_config_changed=True,
+                is_auto_mode=False,
+            ),
+            is_creation=True,
+            _=_create_mock_admin(),
+            db_session=db_session,
+        )
+
+        with patch("onyx.server.manage.llm.api.test_llm", side_effect=capture_test_llm):
+            run_llm_config_test(
+                LLMTestRequest(
+                    id=stored.id,
+                    provider=provider,
+                    model=default_model_name,
+                    api_key_changed=False,
+                    custom_config_changed=False,
+                ),
+                _=_create_mock_admin(),
+                db_session=db_session,
+            )
+
+        assert len(captured_llms) == 1
+        model_kwargs = getattr(captured_llms[0], "_model_kwargs", {})
+        assert (
+            model_kwargs.get("vertex_credentials")
+            == original_custom_config["vertex_credentials"]
+        )
+        assert model_kwargs.get("vertex_location") == "global"
     finally:
         db_session.rollback()
         _cleanup_provider(db_session, name)

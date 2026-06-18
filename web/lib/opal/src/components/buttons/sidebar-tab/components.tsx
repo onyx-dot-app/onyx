@@ -1,14 +1,12 @@
 "use client";
 
 import React from "react";
-import type { ButtonType, IconFunctionComponent } from "@opal/types";
+import type { ButtonType, IconFunctionComponent, RichStr } from "@opal/types";
 import type { Route } from "next";
 import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
-import { Text } from "@opal/components";
+import { Text, Tooltip } from "@opal/components";
 import Link from "next/link";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import "@opal/components/tooltip.css";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +42,9 @@ interface SidebarTabProps {
 
   /** Content rendered on the right side (e.g. action buttons). */
   rightChildren?: React.ReactNode;
+
+  /** Tooltip shown on hover. Takes precedence over the folded-name tooltip. */
+  tooltip?: string | RichStr;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +70,7 @@ function SidebarTab({
   type,
   icon,
   rightChildren,
+  tooltip,
   children,
 }: SidebarTabProps) {
   const Icon =
@@ -95,23 +97,18 @@ function SidebarTab({
         type="button"
         group="group/SidebarTab"
       >
-        <Interactive.Container
-          roundingVariant="sm"
-          heightVariant="lg"
-          widthVariant="full"
-          type={type}
-        >
+        <Interactive.Container rounding="sm" size="lg" width="full" type={type}>
           {href && !disabled && (
             <Link
               href={href as Route}
               scroll={false}
-              className="absolute z-[99] inset-0 rounded-08"
+              className="absolute z-99 inset-0 rounded-08"
               tabIndex={-1}
             />
           )}
 
           {!folded && rightChildren && (
-            <div className="absolute z-[100] right-1.5 top-0 bottom-0 flex flex-col justify-center items-center pointer-events-auto">
+            <div className="absolute z-100 right-1.5 top-0 bottom-0 flex flex-col justify-center items-center pointer-events-auto">
               {rightChildren}
             </div>
           )}
@@ -122,15 +119,16 @@ function SidebarTab({
               title={folded ? "" : children}
               sizePreset="main-ui"
               variant="body"
-              widthVariant="full"
-              paddingVariant="fit"
+              color="interactive"
+              width="full"
+              padding="fit"
               rightChildren={truncationSpacer}
             />
           ) : (
-            <div className="flex flex-row items-center gap-2 flex-1">
+            <div className="flex flex-row items-center gap-2 w-full">
               {Icon && (
                 <div className="flex items-center justify-center p-0.5">
-                  <Icon className="h-[1rem] w-[1rem] text-text-03" />
+                  <Icon className="h-4 w-4 text-text-03" />
                 </div>
               )}
               {children}
@@ -142,21 +140,22 @@ function SidebarTab({
     </div>
   );
 
-  if (typeof children !== "string") return content;
-  if (folded) {
+  if (typeof children !== "string") {
+    if (tooltip) {
+      return (
+        <Tooltip tooltip={tooltip} side="right">
+          {content}
+        </Tooltip>
+      );
+    }
+    return content;
+  }
+  const resolvedTooltip = tooltip ?? (folded ? children : undefined);
+  if (resolvedTooltip) {
     return (
-      <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild>{content}</TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content
-            className="opal-tooltip"
-            side="right"
-            sideOffset={4}
-          >
-            <Text>{children}</Text>
-          </TooltipPrimitive.Content>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
+      <Tooltip tooltip={resolvedTooltip} side="right">
+        {content}
+      </Tooltip>
     );
   }
   return content;

@@ -19,7 +19,7 @@ from onyx.context.search.pipeline import search_pipeline
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.llm.factory import get_default_llm
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.tools.tool_implementations.search.search_utils import (
@@ -94,10 +94,11 @@ def stream_search_query(
             )
             if keyword_expansions:
                 logger.debug(
-                    f"Query expansion generated {len(keyword_expansions)} keyword queries"
+                    "Query expansion generated %s keyword queries",
+                    len(keyword_expansions),
                 )
         except Exception as e:
-            logger.warning(f"Query expansion failed: {e}; using original query only.")
+            logger.warning("Query expansion failed: %s; using original query only.", e)
             keyword_expansions = []
 
     # Build list of all executed queries for tracking
@@ -218,12 +219,14 @@ def stream_search_query(
                 )
             )
             logger.debug(
-                f"LLM document selection evaluated {len(sections_to_evaluate)} sections, "
-                f"selected {len(selected_sections)} sections with doc IDs: {llm_selected_doc_ids}"
+                "LLM document selection evaluated %s sections, selected %s sections with doc IDs: %s",
+                len(sections_to_evaluate),
+                len(selected_sections),
+                llm_selected_doc_ids,
             )
         except Exception as e:
             # Allowing a blanket exception here as this step is not critical and the rest of the results are still valid
-            logger.warning(f"LLM document selection failed: {e}")
+            logger.warning("LLM document selection failed: %s", e)
             llm_selection_failed = True
     elif run_llm_selection and not sections:
         # LLM selection requested but no sections to evaluate

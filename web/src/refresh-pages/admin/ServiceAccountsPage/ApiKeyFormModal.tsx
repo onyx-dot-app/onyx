@@ -9,10 +9,10 @@ import {
 import type { APIKey } from "@/refresh-pages/admin/ServiceAccountsPage/interfaces";
 import Modal from "@/refresh-components/Modal";
 import { Button } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { Vertical as VerticalInput } from "@/layouts/input-layouts";
+import { InputVertical } from "@opal/layouts";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { SvgKey, SvgLock, SvgUser, SvgUserManage } from "@opal/icons";
 
@@ -93,31 +93,16 @@ export default function ApiKeyFormModal({
           {({ isSubmitting, values }) => (
             <Form className="w-full overflow-visible">
               <Modal.Body>
-                <VerticalInput
-                  name="name"
-                  title="Name"
-                  nonInteractive
-                  sizePreset="main-ui"
-                >
+                <InputVertical withLabel="name" title="Name">
                   <FormikField<string>
                     name="name"
                     render={(field, helper) => (
-                      <InputTypeIn
-                        {...field}
-                        placeholder="Enter a name"
-                        onClear={() => helper.setValue("")}
-                        showClearButton={false}
-                      />
+                      <InputTypeIn {...field} placeholder="Enter a name" />
                     )}
                   />
-                </VerticalInput>
+                </InputVertical>
 
-                <VerticalInput
-                  name="role"
-                  title="Account Permissions"
-                  nonInteractive
-                  sizePreset="main-ui"
-                >
+                <InputVertical withLabel="role" title="Account Permissions">
                   <FormikField<string>
                     name="role"
                     render={(field, helper) => (
@@ -152,7 +137,7 @@ export default function ApiKeyFormModal({
                       </InputSelect>
                     )}
                   />
-                </VerticalInput>
+                </InputVertical>
               </Modal.Body>
 
               <Modal.Footer>

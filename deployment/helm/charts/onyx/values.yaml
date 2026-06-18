@@ -1,6 +1,11 @@
 # Default values for onyx.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
+#
+# Companion overlays in this directory:
+#   - values-lite.yaml      Minimal deploy (no vector DB / Redis / model servers).
+#   - values-localdev.yaml  Laptop-sized overlay for kind/minikube; see
+#                           /docs/dev/local-kubernetes.md for the full workflow.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
@@ -10,12 +15,32 @@ global:
   # Host for all Onyx components
   host: "0.0.0.0"
 
+# -- Custom (private/internal) CA certificates for outbound TLS.
+# When enabled, every pod that makes outbound TLS connections (api server,
+# celery workers, bots, MCP server, model servers) mounts the referenced
+# Secret/ConfigMap at /usr/local/share/ca-certificates, runs
+# `update-ca-certificates` at startup, and sets REQUESTS_CA_BUNDLE /
+# SSL_CERT_FILE so Python HTTP clients trust the updated bundle.
+# Keys must be PEM certs ending in `.crt`.
+# NOTE: requires the containers to run as root (the chart default);
+# incompatible with runAsNonRoot overrides.
+customCACerts:
+  enabled: false
+  # Exactly one of secretName / configMapName must be set when enabled.
+  secretName: ""
+  configMapName: ""
+
 postgresql:
   enabled: true
   # IMPORTANT: This nameOverride is required for the CloudNativePG operator to find itself.
   # The operator looks for a deployment with label app.kubernetes.io/name=cloudnative-pg,
   # but since the subchart is aliased as "postgresql", Helm defaults to that name.
   nameOverride: cloudnative-pg
+  # CRDs are shipped in our chart's crds/ directory (pre-installed before
+  # templates). Disable the subchart's own CRD template to avoid ownership
+  # conflicts between the two copies.
+  crds:
+    create: false
   cluster:
     instances: 1
     storage:
@@ -31,49 +56,10 @@ postgresql:
 #   - Skips ALL celery worker deployments (beat, primary, light, heavy,
 #     monitoring, user-file-processing, docprocessing, docfetching) — the
 #     API server handles background work via FastAPI BackgroundTasks
-#   - You should also set vespa.enabled=false and opensearch.enabled=false
-#     to prevent those subcharts from deploying
+#   - You should also set opensearch.enabled=false to prevent that subchart from
+#     deploying
 vectorDB:
   enabled: true
-
-vespa:
-  name: da-vespa-0
-  service:
-    name: vespa-service
-  volumeClaimTemplates:
-    - metadata:
-        name: vespa-storage
-      spec:
-        accessModes:
-          - ReadWriteOnce
-        resources:
-          requests:
-            storage: 30Gi
-        storageClassName: ""
-  enabled: true
-  replicaCount: 1
-  image:
-    repository: vespa
-    tag: "8.609.39"
-  podAnnotations: {}
-  podLabels:
-    app: vespa
-    app.kubernetes.io/instance: onyx
-    app.kubernetes.io/name: vespa
-  securityContext:
-    privileged: true
-    runAsUser: 0
-  resources:
-    # The Vespa Helm chart specifies default resources, which are quite modest. We override
-    # them here to increase chances of the chart running successfully. If you plan to index at
-    # scale, you will likely need to increase these limits further.
-    # At large scale, it is recommended to use a dedicated Vespa cluster / Vespa cloud.
-    requests:
-      cpu: 4000m
-      memory: 8000Mi
-    limits:
-      cpu: 8000m
-      memory: 32000Mi
 
 opensearch:
   # Enabled by default. Override to false and set the appropriate env vars in
@@ -138,6 +124,9 @@ autoscaling:
   engine: hpa
 
 inferenceCapability:
+  extraEnv: []
+  volumes: []
+  volumeMounts: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -192,6 +181,9 @@ inferenceCapability:
 
 
 indexCapability:
+  extraEnv: []
+  volumes: []
+  volumeMounts: []
   service:
     portName: modelserver
     type: ClusterIP
@@ -264,7 +256,7 @@ monitoring:
       # The sidecar must be configured with label selector: grafana_dashboard=1
       enabled: false
   serviceMonitors:
-    # -- Set to true to deploy ServiceMonitor resources for Celery worker metrics endpoints.
+    # -- Set to true to deploy ServiceMonitor resources for API server and Celery worker metrics endpoints.
     # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
     # Use `labels` to match your Prometheus CR's serviceMonitorSelector (e.g. release: onyx-monitoring).
     enabled: false
@@ -284,10 +276,13 @@ serviceAccount:
 nginx:
   enabled: true
   # Nginx proxy timeout settings (in seconds)
+  # These apply to both the internal nginx proxy AND the ingress-nginx annotations.
+  # Must be high enough to cover deep research (30+ min sessions) and LLM TTFT
+  # for large prompts (70K+ tokens). 900s matches the craft/build timeout in production.
   timeouts:
     connect: 300  # Time to establish connection with upstream server
-    send: 300     # Time to send request to upstream server
-    read: 300     # Time to read response from upstream server
+    send: 900     # Time to send request to upstream server
+    read: 900     # Time to read response from upstream server
   controller:
     containerPort:
       http: 1024
@@ -296,7 +291,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "3"
+      onyx.app/nginx-config-version: "4"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -329,6 +324,7 @@ nginx:
         http: http
 
 webserver:
+  extraEnv: []
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-web-server
@@ -416,6 +412,7 @@ webserver:
   affinity: {}
 
 api:
+  extraEnv: []
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
@@ -504,6 +501,20 @@ api:
   tolerations: []
   affinity: {}
 
+  # Run update-ca-certificates before starting the server.
+  # DEPRECATED: prefer the top-level customCACerts block, which covers all
+  # outbound-TLS pods. This flag only affects the API server; useful when
+  # mounting custom CA certificates manually via api.volumes/api.volumeMounts.
+  # NOTE: Requires the container to run as root (runAsUser: 0).
+  # CA certificate files must be mounted under /usr/local/share/ca-certificates/
+  # with a .crt extension (e.g. /usr/local/share/ca-certificates/my-ca.crt).
+  # NOTE: Python HTTP clients (requests, httpx) use certifi's bundle by default
+  # and will not pick up the system CA store automatically. Set the following
+  # environment variables via configMap values (loaded through envFrom) to make them use the updated system bundle:
+  #   REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+  #   SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+  runUpdateCaCertificates: false
+
 
 ######################################################################
 #
@@ -541,8 +552,13 @@ celery_shared:
     runAsUser: 0
 
 celery_beat:
+  extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global
+  # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
+  # this worker only — this becomes `--loglevel=<value>` on the celery worker
+  # command and takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
@@ -562,8 +578,13 @@ celery_beat:
   affinity: {}
 
 celery_worker_heavy:
+  extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global
+  # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
+  # this worker only — this becomes `--loglevel=<value>` on the celery worker
+  # command and takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -596,8 +617,13 @@ celery_worker_heavy:
   affinity: {}
 
 celery_worker_docprocessing:
+  extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global
+  # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
+  # this worker only — this becomes `--loglevel=<value>` on the celery worker
+  # command and takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -630,8 +656,13 @@ celery_worker_docprocessing:
   affinity: {}
 
 celery_worker_light:
+  extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global
+  # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
+  # this worker only — this becomes `--loglevel=<value>` on the celery worker
+  # command and takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -664,8 +695,13 @@ celery_worker_light:
   affinity: {}
 
 celery_worker_monitoring:
+  extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global
+  # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
+  # this worker only — this becomes `--loglevel=<value>` on the celery worker
+  # command and takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -698,8 +734,13 @@ celery_worker_monitoring:
   affinity: {}
 
 celery_worker_primary:
+  extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global
+  # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
+  # this worker only — this becomes `--loglevel=<value>` on the celery worker
+  # command and takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -732,8 +773,13 @@ celery_worker_primary:
   affinity: {}
 
 celery_worker_user_file_processing:
+  extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global
+  # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
+  # this worker only — this becomes `--loglevel=<value>` on the celery worker
+  # command and takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -765,9 +811,54 @@ celery_worker_user_file_processing:
   tolerations: []
   affinity: {}
 
+# Dedicated worker for Craft scheduled-task headless executor fires.
+# Isolated from `heavy` because each fire is long-running (LLM + tool calls
+# in a sandbox) and would otherwise starve pruning / perms-sync / csv-export
+# of worker slots. The dispatcher and stuck-run sweeper are lightweight
+# DB-only coordination tasks and run on the primary queue instead.
+celery_worker_scheduled_tasks:
+  extraEnv: []
+  replicaCount: 1
+  # Per-worker log level override. Empty (default) means use the global
+  # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
+  # this worker only — this becomes `--loglevel=<value>` on the celery worker
+  # command and takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+    # KEDA specific configurations
+    pollingInterval: 30  # seconds
+    cooldownPeriod: 300  # seconds
+    failureThreshold: 3  # number of failures before fallback
+    fallbackReplicas: 1  # replicas to maintain on failure
+    # Custom triggers for advanced KEDA configurations
+    customTriggers: []
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+  deploymentLabels:
+    app: celery-worker-scheduled-tasks
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 # Discord bot for Onyx
 # The bot offloads message processing to scalable API pods via HTTP requests.
 discordbot:
+  extraEnv: []
   enabled: false  # Disabled by default - requires bot token configuration
   # Bot token can be provided directly or via a Kubernetes secret
   # Option 1: Direct token (not recommended for production)
@@ -803,6 +894,7 @@ discordbot:
   affinity: {}
 
 slackbot:
+  extraEnv: []
   enabled: true
   replicaCount: 1
   image:
@@ -831,6 +923,7 @@ slackbot:
 # Onyx Model Context Protocol (MCP) Server
 # Allows LLMs to use Onyx like invoking tools or accessing resources
 mcpServer:
+  extraEnv: []
   enabled: false  # Disabled by default
   replicaCount: 1
   image:
@@ -877,8 +970,13 @@ mcpServer:
   affinity: {}
 
 celery_worker_docfetching:
+  extraEnv: []
   replicaCount: 1
-  logLevel: INFO
+  # Per-worker log level override. Empty (default) means use the global
+  # LOG_LEVEL env var. Set to INFO/DEBUG/WARNING/etc. to override LOG_LEVEL for
+  # this worker only — this becomes `--loglevel=<value>` on the celery worker
+  # command and takes precedence over LOG_LEVEL inside the worker process.
+  logLevel: ""
   autoscaling:
     enabled: false
     minReplicas: 1
@@ -915,6 +1013,12 @@ celery_worker_docfetching:
 # End background workers section
 #
 ######################################################################
+
+# Uncomment to skip the bundled redis-operator and let an existing cluster-wide
+# operator reconcile the Redis CR below (keep redis.enabled: true). Your operator
+# must provide the redis.redis.opstreelabs.in/v1beta2 CRDs. Unset = follow redis.enabled.
+# redisOperator:
+#   enabled: false
 
 redis:
   enabled: true
@@ -1081,6 +1185,48 @@ letsencrypt:
   enabled: false
   email: "abc@abc.com"
 
+# -- Sync secret material from an external secret manager (AWS Secrets Manager,
+# GCP Secret Manager, Vault, ...) via External Secrets Operator. When enabled,
+# the chart renders a single ExternalSecret CR that materializes one Kubernetes
+# Secret containing all keys from the upstream blob. Point each auth.<X>.existingSecret
+# at externalSecret.secretName so the chart's per-section secretKeys mappings
+# read from the materialized Secret. Loose env-var secrets (those that today
+# live in configMap blocks) can be projected into pods via extraEnvFromSecret.
+#
+# PREREQUISITE: External Secrets Operator and a matching SecretStore /
+# ClusterSecretStore must exist in the cluster before enabling this. The chart
+# does NOT install ESO.
+externalSecret:
+  enabled: false
+  # -- Path/ID of the secret in the upstream provider (e.g. AWS Secrets Manager
+  # secret name "onyx/<customer>/app-secrets"). Required when enabled=true.
+  refPath: ""
+  # -- Name of the materialized Kubernetes Secret. Point auth.<X>.existingSecret
+  # and extraEnvFromSecret at this name.
+  secretName: onyx-app-secrets
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  refreshInterval: 1h
+
+# -- If set, adds `envFrom: - secretRef: name: <value>` to every backend
+# deployment so all keys in the named Secret are injected as env vars. Intended
+# for secrets that today live in plaintext under the `configMap:` block and
+# should move into a Secret (e.g. LINEAR_CLIENT_SECRET, BRAINTRUST_API_KEY).
+# Typically set to the same value as externalSecret.secretName.
+extraEnvFromSecret: ""
+
+# -- Safeguards against destructive upgrades from chart 0.4.x. Chart 0.5.0
+# removed the bundled Vespa subchart; the check below fails `helm upgrade`
+# if the legacy `da-vespa` StatefulSet is still in the namespace, so
+# the StatefulSet and its Vespa data volume are not silently deleted.
+# Set `acknowledged: true` once you've migrated to external Vespa, or
+# `enabled: false` to disable the check entirely.
+# See deployment/helm/MIGRATION.md.
+legacyVespaCheck:
+  enabled: true
+  acknowledged: false
+
 # -- Governs all Secrets created or used by this chart. Values set by this chart will be base64 encoded in the k8s cluster.
 auth:
   postgresql:
@@ -1124,11 +1270,14 @@ auth:
       S3_AWS_ACCESS_KEY_ID: s3_aws_access_key_id
       S3_AWS_SECRET_ACCESS_KEY: s3_aws_secret_access_key
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
+    # SECURITY: no defaults shipped — empty values fail closed (see
+    # auth-secrets.yaml) so prod can't run on minioadmin. Set these, or better,
+    # use existingSecret/externalSecret above. Keep s3_aws_* == rootUser/rootPassword.
     values:
-      s3_aws_access_key_id: "minioadmin"
-      s3_aws_secret_access_key: "minioadmin"
-      rootUser: "minioadmin"
-      rootPassword: "minioadmin"
+      s3_aws_access_key_id: ""
+      s3_aws_secret_access_key: ""
+      rootUser: ""
+      rootPassword: ""
   oauth:
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: false
@@ -1217,8 +1366,61 @@ auth:
     # If not set, helm install/upgrade will fail when auth.userauth.enabled=true.
     values:
       user_auth_secret: ""
+  metricsAuth:
+    # -- Bearer token guarding the API server's /metrics endpoint. /metrics
+    # returns 401 by default until you either enable this (provide a token) or
+    # explicitly opt out via configMap.DISABLE_METRICS_AUTH="true". When enabled,
+    # scrapers must send the token as `Authorization: Bearer <token>` (Prometheus
+    # scrape config: `authorization`), and the api ServiceMonitor below is wired
+    # to send it automatically.
+    enabled: false
+    # -- Only inject the token into pods that serve the protected /metrics (the
+    # API server), not every backend pod. Routes through onyx.envSecretsRestricted.
+    allPods: false
+    # -- Overwrite the default secret name, ignored if existingSecret is defined
+    secretName: 'onyx-metrics-auth'
+    # -- Use a secret specified elsewhere
+    existingSecret: ""
+    # -- This defines the env var to secret map
+    secretKeys:
+      METRICS_AUTH_TOKEN: metrics_auth_token
+    # -- Secret value. Required when this secret is enabled - generate with: openssl rand -hex 32
+    # If not set, helm install/upgrade will fail when auth.metricsAuth.enabled=true.
+    values:
+      metrics_auth_token: ""
+  # Ed25519 private key for sandbox push auth (only the public key reaches sandbox pods).
+  # Generate with: python3 -c "import base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as K; from cryptography.hazmat.primitives.serialization import *; print(base64.b64encode(K.generate().private_bytes(Encoding.Raw,PrivateFormat.Raw,NoEncryption())).decode())"
+  sandboxPushSecret:
+    enabled: false
+    allPods: false  # Restricted: only injected into pods that provision sandboxes (API server + scheduled-tasks worker)
+    secretName: 'onyx-sandbox-push-secret'
+    existingSecret: ""
+    secretKeys:
+      ONYX_SANDBOX_PUSH_PRIVATE_KEY: private_key
+    values:
+      private_key: ""
+
+# NetworkPolicy for the per-sandbox push daemon (port 8731).
+# In prod the strict default is correct: only api_server pods can push.
+# Local-dev enables `allowTelepresenceAmbassador` via values-localdev.yaml so
+# that traffic intercepted from a developer's laptop (which enters the cluster
+# as the telepresence traffic-manager pod) is also permitted.
+sandboxPushPolicy:
+  allowTelepresenceAmbassador: false
 
 configMap:
+  # WARNING: do NOT copy hostname keys from a docker-compose .env into this
+  # block. The compose stack uses underscored service names (e.g. `api_server`,
+  # `cache`, `inference_model_server`) which are invalid in K8s DNS labels and
+  # break inter-pod traffic in ways that look like a hung service.
+  # In particular, avoid copying these compose-only hostnames:
+  #   REDIS_HOST, INTERNAL_URL, API_SERVER_HOST,
+  #   MODEL_SERVER_HOST, INDEXING_MODEL_SERVER_HOST
+  # Leave SANDBOX_PROXY_PORT unset; the chart owns the internal proxy port.
+  # SANDBOX_PROXY_HOST defaults to the chart-managed Service DNS name and may be
+  # overridden only if sandboxes must reach a different proxy host.
+  # See deployment/helm/README.md for the external-Redis / ElastiCache path.
+
   # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
   # UPGRADE NOTE: Default changed from "disabled" to "basic" in 0.4.34.
   # Set auth.userauth.enabled=true and provide auth.userauth.values.user_auth_secret
@@ -1230,6 +1432,14 @@ configMap:
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
   VALID_EMAIL_DOMAINS: ""
+  # /metrics requires a bearer token by default and returns 401 until one is set
+  # (enable auth.metricsAuth) OR you explicitly opt out here. Set to "true" to
+  # expose /metrics with NO authentication.
+  DISABLE_METRICS_AUTH: ""
+  # The interactive API docs and schema (/openapi.json, /docs, /redoc) are off by
+  # default and the routes are not registered (404). Set to "true" to expose them
+  # publicly with NO authentication.
+  ENABLE_PUBLIC_DOCS: ""
   # For sending verification emails, true or false
   REQUIRE_EMAIL_VERIFICATION: ""
   # If unspecified then defaults to 'smtp.gmail.com'
@@ -1242,6 +1452,8 @@ configMap:
   # SMTP_PASS: ""
   # 'your-email@company.com' SMTP_USER missing used instead
   EMAIL_FROM: ""
+  # Optional comma-separated BCC archive recipients for all emails
+  EMAIL_ARCHIVE_BCC_ADDRESSES: ""
   # MinIO/S3 Configuration override
   S3_ENDPOINT_URL: ""  # only used if minio is not enabled
   S3_FILE_STORE_BUCKET_NAME: ""
@@ -1263,8 +1475,11 @@ configMap:
   MODEL_SERVER_PORT: ""
   MIN_THREADS_ML_MODELS: ""
   # Indexing Configs
-  VESPA_SEARCHER_THREADS: ""
   NUM_INDEXING_WORKERS: ""
+  # Fail an indexing attempt when its worker exceeds this RSS (MB) instead of
+  # letting the pod get OOM-killed; "" = disabled
+  INDEXING_WORKER_MEMORY_LIMIT_MB: ""
+  INDEXING_WORKER_TRACEMALLOC: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
   DASK_JOB_CLIENT_ENABLED: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""
@@ -1289,10 +1504,16 @@ configMap:
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   DISABLE_TELEMETRY: ""
+  # LOG_LEVEL is the global knob for log verbosity across every Onyx process —
+  # api_server, model_server, slack/discord bots, AND all Celery workers. Empty
+  # (default) -> Python falls back to "info" for the api/model/etc processes;
+  # Celery workers also pick up "" -> info via this same env var. Per-worker
+  # overrides: set `.celery_worker_X.logLevel` below to an explicit value
+  # (INFO/DEBUG/etc.) — that will render `--loglevel=<value>` into the worker
+  # command and take precedence over LOG_LEVEL for that worker only.
   LOG_LEVEL: ""
   LOG_ALL_MODEL_INTERACTIONS: ""
   LOG_ONYX_MODEL_INTERACTIONS: ""
-  LOG_VESPA_TIMING_INFORMATION: ""
   # Shared or Non-backend Related
   WEB_DOMAIN: "http://localhost:3000"
   # DOMAIN used by nginx
@@ -1301,3 +1522,76 @@ configMap:
   HARD_DELETE_CHATS: ""
   MAX_ALLOWED_UPLOAD_SIZE_MB: ""
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
+  # Sandbox config — always "kubernetes" for Helm deployments
+  SANDBOX_BACKEND: "kubernetes"
+  SANDBOX_NAMESPACE: "onyx-sandboxes"
+  SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
+  SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
+  SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
+
+# -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).
+craft:
+  # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
+  extraBoundServiceAccounts: []
+
+# -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
+# Image/resources/ports come from the configMap.SANDBOX_* keys.
+sandboxPod:
+  nodeSelector:
+    onyx.app/workload: sandbox
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: sandbox
+      effect: NoSchedule
+
+# -- Sandbox egress proxy.
+sandboxProxy:
+  replicaCount: 2
+  terminationGracePeriodSeconds: 200
+  progressDeadlineSeconds: 300
+  confdirSizeLimit: 100Mi
+  caSecretName: "sandbox-proxy-ca"
+  caConfigMapName: "sandbox-proxy-ca-bundle"
+  podAnnotations: {}
+  serviceAccount:
+    # Set IRSA annotations here when the sandbox proxy uses IAM-backed services,
+    # such as RDS IAM auth.
+    annotations: {}
+    automount: true
+  # Matches the `onyx` user (uid 1001) baked into the backend image.
+  runAsUser: 1001
+  fsGroup: 1001
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -- Additional arbitrary manifests to render as part of the release. Each entry
+# may be either a YAML mapping (a single Kubernetes object) or a multi-line
+# string that will be passed through `tpl` so it can reference release values.
+# Useful for injecting resources not covered by the chart (e.g. NetworkPolicies,
+# ExternalSecrets, custom CRs) without forking the chart.
+extraManifests: []
+# extraManifests:
+#   - apiVersion: v1
+#     kind: ConfigMap
+#     metadata:
+#       name: my-extra-config
+#     data:
+#       key: value
+#   - |
+#     apiVersion: networking.k8s.io/v1
+#     kind: NetworkPolicy
+#     metadata:
+#       name: {{ include "onyx.fullname" . }}-extra
+#     spec:
+#       podSelector: {}
+#       policyTypes:
+#         - Ingress

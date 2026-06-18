@@ -8,7 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
+from onyx.db.constants import UNSET
+from onyx.db.constants import UnsetType
 from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.db.enums import MCPServerStatus
 from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPAuthenticationType
@@ -81,7 +84,9 @@ def get_mcp_servers_accessible_to_user(
     user_id: UUID, db_session: Session
 ) -> list[MCPServer]:
     """Get all MCP servers accessible to a user (directly or through groups)"""
-    user = db_session.scalar(select(User).where(User.id == user_id))  # type: ignore
+    user = db_session.scalar(
+        select(User).where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+    )
     if not user:
         return []
     user = cast(User, user)
@@ -102,6 +107,11 @@ def create_mcp_server__no_commit(
     transport: MCPTransport | None,
     auth_performer: MCPAuthenticationPerformer | None,
     db_session: Session,
+    oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY,
+    oauth_authorization_endpoint: str | None = None,
+    oauth_token_endpoint: str | None = None,
+    oauth_scopes_override: list[str] | None = None,
+    oauth_additional_auth_params: dict[str, str] | None = None,
     admin_connection_config_id: int | None = None,
 ) -> MCPServer:
     """Create a new MCP server"""
@@ -113,6 +123,11 @@ def create_mcp_server__no_commit(
         transport=transport,
         auth_type=auth_type,
         auth_performer=auth_performer,
+        oauth_provider_mode=oauth_provider_mode,
+        oauth_authorization_endpoint=oauth_authorization_endpoint,
+        oauth_token_endpoint=oauth_token_endpoint,
+        oauth_scopes_override=oauth_scopes_override,
+        oauth_additional_auth_params=oauth_additional_auth_params,
         admin_connection_config_id=admin_connection_config_id,
     )
     db_session.add(new_server)
@@ -129,6 +144,11 @@ def update_mcp_server__no_commit(
     auth_type: MCPAuthenticationType | None = None,
     admin_connection_config_id: int | None = None,
     auth_performer: MCPAuthenticationPerformer | None = None,
+    oauth_provider_mode: MCPOAuthProviderMode | None = None,
+    oauth_authorization_endpoint: str | None | UnsetType = UNSET,
+    oauth_token_endpoint: str | None | UnsetType = UNSET,
+    oauth_scopes_override: list[str] | None | UnsetType = UNSET,
+    oauth_additional_auth_params: dict[str, str] | None | UnsetType = UNSET,
     transport: MCPTransport | None = None,
     status: MCPServerStatus | None = None,
     last_refreshed_at: datetime.datetime | None = None,
@@ -148,6 +168,16 @@ def update_mcp_server__no_commit(
         server.admin_connection_config_id = admin_connection_config_id
     if auth_performer is not None:
         server.auth_performer = auth_performer
+    if oauth_provider_mode is not None:
+        server.oauth_provider_mode = oauth_provider_mode
+    if not isinstance(oauth_authorization_endpoint, UnsetType):
+        server.oauth_authorization_endpoint = oauth_authorization_endpoint
+    if not isinstance(oauth_token_endpoint, UnsetType):
+        server.oauth_token_endpoint = oauth_token_endpoint
+    if not isinstance(oauth_scopes_override, UnsetType):
+        server.oauth_scopes_override = oauth_scopes_override
+    if not isinstance(oauth_additional_auth_params, UnsetType):
+        server.oauth_additional_auth_params = oauth_additional_auth_params
     if transport is not None:
         server.transport = transport
     if status is not None:
@@ -165,12 +195,14 @@ def delete_mcp_server(server_id: int, db_session: Session) -> None:
 
     # Count tools that will be deleted
     tools_count = db_session.query(Tool).filter(Tool.mcp_server_id == server_id).count()
-    logger.info(f"Deleting MCP server {server_id} with {tools_count} associated tools")
+    logger.info(
+        "Deleting MCP server %s with %s associated tools", server_id, tools_count
+    )
 
     db_session.delete(server)
     db_session.commit()
 
-    logger.info(f"Successfully deleted MCP server {server_id} and its tools")
+    logger.info("Successfully deleted MCP server %s and its tools", server_id)
 
 
 def get_all_mcp_tools_for_server(server_id: int, db_session: Session) -> list[Tool]:
@@ -183,7 +215,9 @@ def get_all_mcp_tools_for_server(server_id: int, db_session: Session) -> list[To
 def add_user_to_mcp_server(server_id: int, user_id: UUID, db_session: Session) -> None:
     """Grant a user access to an MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
-    user = db_session.scalar(select(User).where(User.id == user_id))  # type: ignore
+    user = db_session.scalar(
+        select(User).where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+    )
     if not user:
         raise ValueError("User not found")
 
@@ -197,7 +231,9 @@ def remove_user_from_mcp_server(
 ) -> None:
     """Remove a user's access to an MCP server"""
     server = get_mcp_server_by_id(server_id, db_session)
-    user = db_session.scalar(select(User).where(User.id == user_id))  # type: ignore
+    user = db_session.scalar(
+        select(User).where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+    )
     if not user:
         raise ValueError("User not found")
 
@@ -287,7 +323,7 @@ def update_connection_config(
     config = get_connection_config_by_id(config_id, db_session)
 
     if config_data is not None:
-        config.config = config_data  # type: ignore[assignment]
+        config.config = config_data  # ty: ignore[invalid-assignment]
         # Force SQLAlchemy to detect the change by marking the field as modified
         flag_modified(config, "config")
 
@@ -305,7 +341,7 @@ def upsert_user_connection_config(
     existing_config = get_user_connection_config(server_id, user_email, db_session)
 
     if existing_config:
-        existing_config.config = config_data  # type: ignore[assignment]
+        existing_config.config = config_data  # ty: ignore[invalid-assignment]
         db_session.flush()  # Don't commit yet, let caller decide when to commit
         return existing_config
     else:

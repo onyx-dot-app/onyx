@@ -1,11 +1,9 @@
 from uuid import uuid4
 
+import httpx
 import pytest
-from requests.exceptions import HTTPError
 
-from tests.integration.common_utils.managers.persona import (
-    PersonaLabelManager,
-)
+from tests.integration.common_utils.managers.persona import PersonaLabelManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestPersonaLabel
 from tests.integration.common_utils.test_models import DATestUser
@@ -35,7 +33,7 @@ def test_persona_label_management(reset: None) -> None:  # noqa: ARG001
         id=persona_label.id,
         name=f"Updated {persona_label.name}",
     )
-    with pytest.raises(HTTPError) as exc_info:
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
         PersonaLabelManager.update(
             label=updated_persona_label,
             user_performing_action=regular_user,
@@ -52,9 +50,9 @@ def test_persona_label_management(reset: None) -> None:  # noqa: ARG001
         label=persona_label,
         user_performing_action=regular_user,
     )
-    assert (
-        result is False
-    ), "Regular user should not be able to delete the persona label"
+    assert result is False, (
+        "Regular user should not be able to delete the persona label"
+    )
 
     assert PersonaLabelManager.verify(
         label=persona_label,

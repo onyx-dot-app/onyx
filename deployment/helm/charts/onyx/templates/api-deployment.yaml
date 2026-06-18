@@ -67,6 +67,9 @@ spec:
             - "/bin/sh"
             - "-c"
             - |
+              {{- if or .Values.api.runUpdateCaCertificates (include "onyx.customCACerts.enabled" .) }}
+              update-ca-certificates &&
+              {{- end }}
               alembic upgrade head &&
               echo "Starting Onyx Api Server" &&
               uvicorn onyx.main:app --host {{ .Values.global.host }} --port {{ .Values.api.containerPorts.server }}
@@ -91,8 +94,19 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
+            {{- with .Values.extraEnvFromSecret }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- include "onyx.envSecretsRestricted" . | nindent 12}}
+            {{- with include "onyx.customCACerts.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.api.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- $apiVolumeMounts := include "onyx.renderVolumeMounts" (dict "ctx" . "volumeMounts" .Values.api.volumeMounts) }}
           {{- if $apiVolumeMounts }}
           {{- $apiVolumeMounts | nindent 10 }}

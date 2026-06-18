@@ -1,0 +1,53 @@
+{
+  "name": "@onyx-ai/shared",
+  "version": "0.1.0",
+  "description": "Platform-agnostic shared design tokens, types, contracts, and utilities for Onyx web + mobile.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "import": "./dist/contracts/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.js"
+    },
+    "./tokens.css": "./dist/tokens.css",
+    "./typography.css": "./dist/typography.css",
+    "./nativewind-theme": "./dist/nativewind-theme.cjs",
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "import": "./dist/native.js",
+      "default": "./dist/native.js"
+    }
+  },
+  "scripts": {
+    "build:tokens": "node style-dictionary.config.mjs",
+    "build:ts": "tsc -p tsconfig.build.json",
+    "build": "bun run build:tokens && bun run build:ts",
+    "verify:tokens": "node scripts/verify-opal-parity.mjs",
+    "dev": "node scripts/watch.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist",
+    "prepare": "bun run build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "style-dictionary": "^4.0.0",
+    "typescript": "^5.9.3"
+  }
+}

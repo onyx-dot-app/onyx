@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { SvgUser, SvgUserPlus } from "@opal/icons";
-import { Button } from "@opal/components";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SvgExternalLink, SvgUser, SvgUserPlus } from "@opal/icons";
+import { Button, MessageCard } from "@opal/components";
+import { SettingsLayouts } from "@opal/layouts";
 import { useScimToken } from "@/hooks/useScimToken";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 import useUserCounts from "@/hooks/useUserCounts";
 import { UserStatus } from "@/lib/types";
 import type { StatusFilter } from "./interfaces";
@@ -19,10 +20,10 @@ import InviteUsersModal from "./InviteUsersModal";
 // ---------------------------------------------------------------------------
 
 function UsersContent() {
-  const isEe = usePaidEnterpriseFeaturesEnabled();
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const { data: scimToken } = useScimToken();
-  const showScim = isEe && !!scimToken;
+  const showScim = enterpriseTier && !!scimToken;
 
   const { activeCount, invitedCount, pendingCount, roleCounts, statusCounts } =
     useUserCounts();
@@ -76,7 +77,27 @@ export default function UsersPage() {
             Invite Users
           </Button>
         }
-      />
+      >
+        <MessageCard
+          variant="info"
+          title="Upcoming changes to permissions"
+          description="Onyx is transitioning to group-based permissions for more granular access control. Curator and Global Curator roles will be replaced by configurable group permissions. We recommend reviewing current role assignments to ensure a smooth transition."
+          rightChildren={
+            <Button
+              icon={SvgExternalLink}
+              onClick={() =>
+                window.open(
+                  "https://docs.onyx.app/admins/permissions/whats_changing",
+                  "_blank",
+                  "noopener,noreferrer"
+                )
+              }
+            >
+              Learn more
+            </Button>
+          }
+        />
+      </SettingsLayouts.Header>
       <SettingsLayouts.Body>
         <UsersContent />
       </SettingsLayouts.Body>

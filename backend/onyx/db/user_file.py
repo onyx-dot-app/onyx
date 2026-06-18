@@ -109,6 +109,12 @@ def update_last_accessed_at_for_user_files(
 
 
 def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str | None:
+    """Resolve a `UserFile.id` to its underlying `FileRecord.file_id`.
+
+    Returns None when the input is not a known `UserFile.id` (e.g. when the
+    caller is already passing a storage `file_id`), so the caller can fall
+    through to a direct file-store lookup.
+    """
     user_file = db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
     if user_file:
         return user_file.file_id

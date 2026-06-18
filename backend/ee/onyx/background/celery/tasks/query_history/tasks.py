@@ -10,7 +10,6 @@ from ee.onyx.server.query_history.api import ONYX_ANONYMIZED_EMAIL
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import FileType
 from onyx.configs.constants import OnyxCeleryTask
@@ -20,8 +19,9 @@ from onyx.db.tasks import delete_task_with_id
 from onyx.db.tasks import mark_task_as_finished_with_id
 from onyx.db.tasks import mark_task_as_started_with_id
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.settings.store import load_settings
+from onyx.utils.csv_utils import sanitize_csv_row
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -66,19 +66,22 @@ def export_query_history_task(
                 end=end,
             )
 
+            query_history_type = load_settings().query_history_type
             for snapshot in snapshot_generator:
-                if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
+                if query_history_type == QueryHistoryType.ANONYMIZED:
                     snapshot.user_email = ONYX_ANONYMIZED_EMAIL
 
                 writer.writerows(
-                    qa_pair.to_json()
+                    # Sanitize to prevent CSV/formula injection against
+                    # whoever opens the export in a spreadsheet (ON-008).
+                    sanitize_csv_row(qa_pair.to_json())
                     for qa_pair in QuestionAnswerPairSnapshot.from_chat_session_snapshot(
                         snapshot
                     )
                 )
 
         except Exception:
-            logger.exception(f"Failed to export query history with {task_id=}")
+            logger.exception("Failed to export query history with task_id=%r", task_id)
             mark_task_as_finished_with_id(
                 db_session=db_session,
                 task_id=task_id,
@@ -109,7 +112,7 @@ def export_query_history_task(
             )
         except Exception:
             logger.exception(
-                f"Failed to save query history export file; {report_name=}"
+                "Failed to save query history export file; report_name=%r", report_name
             )
             mark_task_as_finished_with_id(
                 db_session=db_session,

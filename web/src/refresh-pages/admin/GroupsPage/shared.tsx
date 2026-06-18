@@ -1,6 +1,7 @@
 import { createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
-import { SvgUser, SvgUserManage, SvgGlobe, SvgSlack } from "@opal/icons";
+import { SvgUser, SvgUserManage, SvgGlobe } from "@opal/icons";
+import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { UserRole, UserStatus, USER_ROLE_LABELS } from "@/lib/types";
@@ -46,13 +47,14 @@ const ROLE_ICONS: Partial<Record<UserRole, IconFunctionComponent>> = {
 // Column renderers
 // ---------------------------------------------------------------------------
 
-function renderNameColumn(email: string, row: MemberRow) {
+function renderNameColumn(_searchValue: unknown, row: MemberRow) {
+  const { email, personal_name } = row;
   return (
     <Content
       sizePreset="main-ui"
       variant="section"
-      title={row.personal_name ?? email}
-      description={row.personal_name ? email : undefined}
+      title={personal_name ?? email}
+      description={personal_name ? email : undefined}
     />
   );
 }
@@ -63,7 +65,7 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
     <div className="flex flex-row items-center gap-1">
       <Icon className="w-4 h-4 text-text-03" />
       <Text as="span" mainUiBody text03>
-        {row.role ? USER_ROLE_LABELS[row.role] ?? row.role : "\u2014"}
+        {row.role ? (USER_ROLE_LABELS[row.role] ?? row.role) : "\u2014"}
       </Text>
     </div>
   );
@@ -77,7 +79,10 @@ export const tc = createTableColumns<MemberRow>();
 
 export const baseColumns = [
   tc.qualifier(),
-  tc.column("email", {
+  // Search/sort by a name+email composite so service accounts — whose email is a
+  // "Service Account" placeholder — are findable by their API-key name.
+  tc.column((row) => [row.personal_name, row.email].filter(Boolean).join(" "), {
+    id: "name",
     header: "Name",
     weight: 25,
     cell: renderNameColumn,

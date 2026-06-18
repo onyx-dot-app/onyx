@@ -1,0 +1,42 @@
+{
+  "name": "Onyx Dev Sandbox",
+  "image": "onyxdotapp/onyx-devcontainer@sha256:6d62918d6ddcc5e1fca5d5d010a5bb9c3c4c5d8890ead6c6d395e929494555b4",
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--network=onyx_default"
+  ],
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/home/dev/.claude,type=bind",
+    "source=${localEnv:HOME}/.claude.json,target=/home/dev/.claude.json,type=bind",
+    "source=${localWorkspaceFolder}/.devcontainer/claude-code,target=/etc/claude-code,type=bind,readonly",
+    "source=${localEnv:HOME}/.zshrc,target=/home/dev/.zshrc.host,type=bind,readonly",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/dev/.gitconfig,type=bind,readonly",
+    "source=${localEnv:HOME}/.config/nvim,target=/home/dev/.config/nvim,type=bind,readonly",
+    "source=onyx-devcontainer-cache,target=/home/dev/.cache,type=volume",
+    "source=onyx-devcontainer-local,target=/home/dev/.local,type=volume",
+    "source=onyx-devcontainer-venv,target=/workspace/.venv,type=volume",
+    "source=onyx-devcontainer-web-node-modules,target=/workspace/web/node_modules,type=volume",
+    "source=onyx-devcontainer-web-next,target=/workspace/web/.next,type=volume"
+  ],
+  "containerEnv": {
+    "COLORTERM": "truecolor",
+    "GH_TOKEN": "${localEnv:GH_TOKEN}",
+    "MODEL_SERVER_HOST": "inference_model_server",
+    "ONYX_DEVCONTAINER_FIREWALL": "${localEnv:ONYX_DEVCONTAINER_FIREWALL}",
+    "OPENSEARCH_HOST": "opensearch",
+    "POSTGRES_HOST": "relational_db",
+    "REDIS_HOST": "cache",
+    "S3_ENDPOINT_URL": "http://minio:9000",
+    "SSH_AUTH_SOCK": "/tmp/ssh-agent.sock",
+    "UV_LINK_MODE": "copy",
+    "VESPA_HOST": "index"
+  },
+  "remoteUser": "${localEnv:DEVCONTAINER_REMOTE_USER:dev}",
+  "updateRemoteUserUID": false,
+  "initializeCommand": "docker network create onyx_default 2>/dev/null || true",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+  "workspaceFolder": "/workspace",
+  "postStartCommand": "sudo bash /workspace/.devcontainer/init-dev-user.sh && if [ \"${ONYX_DEVCONTAINER_FIREWALL:-}\" = \"1\" ]; then sudo bash /workspace/.devcontainer/init-firewall.sh; else echo 'Devcontainer firewall disabled. Set ONYX_DEVCONTAINER_FIREWALL=1 on the host before starting the container to enable it.'; fi",
+  "waitFor": "postStartCommand"
+}

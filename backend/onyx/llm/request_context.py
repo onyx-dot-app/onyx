@@ -1,6 +1,5 @@
 import contextvars
 
-
 _LLM_MOCK_RESPONSE_CONTEXTVAR: contextvars.ContextVar[str | None] = (
     contextvars.ContextVar("llm_mock_response", default=None)
 )

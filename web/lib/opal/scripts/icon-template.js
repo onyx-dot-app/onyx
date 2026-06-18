@@ -1,4 +1,3 @@
-// Template for SVGR to generate icon components with size prop support
 const template = (variables, { tpl }) => {
   return tpl`
 import type { IconProps } from "@opal/types";
@@ -11,4 +10,4 @@ ${variables.exports};
 `;
 };
 
-module.exports = template;
+export default template;

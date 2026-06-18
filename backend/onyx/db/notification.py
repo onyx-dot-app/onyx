@@ -4,15 +4,32 @@ from uuid import UUID
 
 from sqlalchemy import cast
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
+from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
 from onyx.db.models import Notification
 from onyx.db.models import User
+
+
+def _notification_filters(
+    user: User | None,
+    notif_type: NotificationType | None = None,
+    include_dismissed: bool = True,
+) -> list[ColumnElement[bool]]:
+    filters = [
+        Notification.user_id == user.id if user else Notification.user_id.is_(None)
+    ]
+    if not include_dismissed:
+        filters.append(Notification.dismissed.is_(False))
+    if notif_type:
+        filters.append(Notification.notif_type == notif_type)
+    return filters
 
 
 def create_notification(
@@ -23,6 +40,7 @@ def create_notification(
     description: str | None = None,
     additional_data: dict | None = None,
     autocommit: bool = True,
+    refresh_existing: bool = True,
 ) -> Notification:
     # Previously, we only matched the first identical, undismissed notification
     # Now, we assume some uniqueness to notifications
@@ -44,8 +62,9 @@ def create_notification(
     )
 
     if existing_notification:
-        # Update the last_shown timestamp if the notification is not dismissed
-        if not existing_notification.dismissed:
+        # Read-triggered ensure paths should not mutate existing rows: changing
+        # last_shown makes notification GET responses differ on every request.
+        if refresh_existing and not existing_notification.dismissed:
             existing_notification.last_shown = func.now()
             if autocommit:
                 db_session.commit()
@@ -89,20 +108,43 @@ def get_notifications(
     db_session: Session,
     notif_type: NotificationType | None = None,
     include_dismissed: bool = True,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> list[Notification]:
     query = select(Notification).where(
-        Notification.user_id == user.id if user else Notification.user_id.is_(None)
+        *_notification_filters(
+            user=user,
+            notif_type=notif_type,
+            include_dismissed=include_dismissed,
+        )
     )
-    if not include_dismissed:
-        query = query.where(Notification.dismissed.is_(False))
-    if notif_type:
-        query = query.where(Notification.notif_type == notif_type)
     # Sort: undismissed first, then by date (newest first)
     query = query.order_by(
         Notification.dismissed.asc(),
         Notification.first_shown.desc(),
+        Notification.id.desc(),
     )
+    if limit is not None:
+        query = query.limit(limit).offset(offset)
     return list(db_session.execute(query).scalars().all())
+
+
+def count_notifications(
+    user: User | None,
+    db_session: Session,
+    notif_type: NotificationType | None = None,
+) -> tuple[int, int]:
+    query = select(
+        func.count(Notification.id),
+        func.count(Notification.id).filter(Notification.dismissed.is_(False)),
+    ).where(
+        *_notification_filters(
+            user=user,
+            notif_type=notif_type,
+        )
+    )
+    total_items, undismissed_count = db_session.execute(query).one()
+    return total_items or 0, undismissed_count or 0
 
 
 def dismiss_all_notifications(
@@ -112,6 +154,27 @@ def dismiss_all_notifications(
     db_session.query(Notification).filter(Notification.notif_type == notif_type).update(
         {"dismissed": True}
     )
+    db_session.commit()
+
+
+def dismiss_user_notifications(
+    user: User,
+    db_session: Session,
+    notif_type: NotificationType | None = None,
+) -> None:
+    stmt = (
+        update(Notification)
+        .where(
+            *_notification_filters(
+                user=user,
+                notif_type=notif_type,
+                include_dismissed=False,
+            )
+        )
+        .values(dismissed=True)
+        .execution_options(synchronize_session=False)
+    )
+    db_session.execute(stmt)
     db_session.commit()
 
 
@@ -136,28 +199,29 @@ def batch_create_notifications(
     title: str,
     description: str | None = None,
     additional_data: dict | None = None,
-) -> int:
+) -> set[UUID]:
     """
     Create notifications for multiple users in a single batch operation.
     Uses ON CONFLICT DO NOTHING for atomic idempotent inserts - if a user already
     has a notification with the same (user_id, notif_type, additional_data), the
     insert is silently skipped.
 
-    Returns the number of notifications created.
+    Returns the set of user_ids whose row was newly inserted (excludes conflicts).
+    Callers that need to fire side effects only on fresh inserts (emails, webhooks)
+    can iterate the returned set without re-triggering on idempotent retries.
 
     Relies on unique index on (user_id, notif_type, COALESCE(additional_data, '{}'))
     """
     if not user_ids:
-        return 0
+        return set()
 
     now = datetime.now(timezone.utc)
-    # Use empty dict instead of None to match COALESCE behavior in the unique index
     additional_data_normalized = additional_data if additional_data is not None else {}
 
     values = [
         {
             "user_id": uid,
-            "notif_type": notif_type.value,
+            "notif_type": notif_type,
             "title": title,
             "description": description,
             "dismissed": False,
@@ -168,13 +232,16 @@ def batch_create_notifications(
         for uid in user_ids
     ]
 
-    stmt = insert(Notification).values(values).on_conflict_do_nothing()
+    stmt = (
+        insert(Notification)
+        .values(values)
+        .on_conflict_do_nothing()
+        .returning(Notification.user_id)
+    )
     result = db_session.execute(stmt)
+    inserted_ids = set(result.scalars())
     db_session.commit()
-
-    # rowcount returns number of rows inserted (excludes conflicts)
-    # CursorResult has rowcount but session.execute type hints are too broad
-    return result.rowcount if result.rowcount >= 0 else 0  # type: ignore[attr-defined]
+    return inserted_ids  # ty: ignore[invalid-return-type]
 
 
 def update_notification_last_shown(

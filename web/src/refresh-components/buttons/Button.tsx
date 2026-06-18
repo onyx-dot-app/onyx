@@ -1,14 +1,13 @@
 "use client";
 
 import React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import Link from "next/link";
 import type { Route } from "next";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   // Button variants:
   main?: boolean;
   action?: boolean;
@@ -127,8 +126,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {LeftIcon && (
-          <div className="w-[1rem] h-[1rem] flex flex-col items-center justify-center">
-            <LeftIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
+          <div className="w-4 h-4 flex flex-col items-center justify-center">
+            <LeftIcon className={cn("w-4 h-4", iconClass)} />
           </div>
         )}
         {/* Buttons may conditionally pass text as children (e.g. responsive
@@ -150,8 +149,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           </div>
         )}
         {RightIcon && (
-          <div className="w-[1rem] h-[1rem]">
-            <RightIcon className={cn("w-[1rem] h-[1rem]", iconClass)} />
+          <div className="w-4 h-4">
+            <RightIcon className={cn("w-4 h-4", iconClass)} />
           </div>
         )}
       </button>

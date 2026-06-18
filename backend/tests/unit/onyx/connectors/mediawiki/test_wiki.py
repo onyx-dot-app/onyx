@@ -5,7 +5,7 @@ import tempfile
 from collections.abc import Iterable
 
 import pytest
-import pywikibot  # type: ignore[import-untyped]
+import pywikibot.config
 from pytest_mock import MockFixture
 
 from onyx.connectors.mediawiki import wiki
@@ -16,7 +16,7 @@ pywikibot.config.base_dir = tempfile.TemporaryDirectory().name
 
 
 @pytest.fixture
-def site() -> pywikibot.Site:
+def site() -> pywikibot.Site:  # ty: ignore[invalid-type-form]
     return pywikibot.Site("en", "wikipedia")
 
 
@@ -37,7 +37,10 @@ def test_pywikibot_timestamp_to_utc_datetime() -> None:
 
 class MockPage(pywikibot.Page):
     def __init__(
-        self, site: pywikibot.Site, title: str, _has_categories: bool = False
+        self,
+        site: pywikibot.Site,  # ty: ignore[invalid-type-form]
+        title: str,
+        _has_categories: bool = False,
     ) -> None:
         super().__init__(site, title)
         self._has_categories = _has_categories
@@ -86,7 +89,9 @@ class MockPage(pywikibot.Page):
 
 
 @pytest.mark.skip(reason="Test disabled")
-def test_get_doc_from_page(site: pywikibot.Site) -> None:
+def test_get_doc_from_page(
+    site: pywikibot.Site,  # ty: ignore[invalid-type-form]
+) -> None:
     test_page = MockPage(site, "Test Page", _has_categories=True)
     doc = wiki.get_doc_from_page(test_page, site, wiki.DocumentSource.MEDIAWIKI)
     assert doc.source == wiki.DocumentSource.MEDIAWIKI

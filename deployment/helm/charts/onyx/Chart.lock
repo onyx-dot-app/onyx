@@ -2,15 +2,15 @@ dependencies:
 - name: cloudnative-pg
   repository: https://cloudnative-pg.github.io/charts
   version: 0.26.0
-- name: vespa
-  repository: https://onyx-dot-app.github.io/vespa-helm-charts
-  version: 0.2.25
 - name: opensearch
   repository: https://opensearch-project.github.io/helm-charts
-  version: 3.4.0
+  version: 3.6.0
 - name: ingress-nginx
   repository: https://kubernetes.github.io/ingress-nginx
   version: 4.13.3
+- name: redis-operator
+  repository: https://ot-container-kit.github.io/helm-charts
+  version: 0.24.0
 - name: redis
   repository: https://ot-container-kit.github.io/helm-charts
   version: 0.16.6
@@ -19,6 +19,6 @@ dependencies:
   version: 5.4.0
 - name: code-interpreter
   repository: https://onyx-dot-app.github.io/python-sandbox/
-  version: 0.3.1
-digest: sha256:4965b6ea3674c37163832a2192cd3bc8004f2228729fca170af0b9f457e8f987
-generated: "2026-03-02T15:29:39.632344-08:00"
+  version: 0.4.3
+digest: sha256:e3a28faa3b9274e7d70cbcb2d7e45685b028db6bad1b24425d4959ece89d7ca8
+generated: "2026-06-02T15:43:42.285202-07:00"

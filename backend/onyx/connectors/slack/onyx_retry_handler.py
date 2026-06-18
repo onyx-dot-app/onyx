@@ -1,14 +1,14 @@
 import random
-from typing import cast
 from typing import Optional
 
-from redis import Redis
 from slack_sdk.http_retry.handler import RetryHandler
 from slack_sdk.http_retry.request import HttpRequest
 from slack_sdk.http_retry.response import HttpResponse
 from slack_sdk.http_retry.state import RetryState
 
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -35,14 +35,14 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         self,
         max_retry_count: int,
         delay_key: str,
-        r: Redis,
+        r: TenantRedisClient,
     ):
         """
         delay_lock: the redis key to use with RedisLock (to synchronize access to delay_key)
         delay_key: the redis key containing a shared TTL
         """
         super().__init__(max_retry_count=max_retry_count)
-        self._redis: Redis = r
+        self._redis: TenantRedisClient = r
         self._delay_key = delay_key
 
     def _can_retry(
@@ -116,26 +116,29 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
                 else retry_after_header_value
             )
 
-            retry_after_value_int = int(
-                retry_after_value
-            )  # will raise ValueError if somehow we can't convert to int
-            jitter = retry_after_value_int * 0.25 * random.random()
-            duration_s = retry_after_value_int + jitter
+            parsed_retry_after = parse_retry_after_seconds(retry_after_value)
+            if parsed_retry_after is None:
+                raise ValueError(
+                    "OnyxRedisSlackRetryHandler.prepare_for_next_attempt: "
+                    "could not parse retry-after value"
+                )
+            jitter = parsed_retry_after * 0.25 * random.random()
+            duration_s = parsed_retry_after + jitter
         except ValueError:
             duration_s += random.random()
 
         # Read and extend the ttl
-        ttl_ms = cast(int, self._redis.pttl(self._delay_key))
+        ttl_ms = self._redis.pttl(self._delay_key)
         if ttl_ms < 0:  # negative values are error status codes ... see docs
             ttl_ms = 0
         ttl_ms_new = ttl_ms + int(duration_s * 1000.0)
         self._redis.set(self._delay_key, "1", px=ttl_ms_new)
 
         logger.warning(
-            f"OnyxRedisSlackRetryHandler.prepare_for_next_attempt setting delay: "
-            f"current_attempt={state.current_attempt} "
-            f"retry-after={retry_after_value} "
-            f"{ttl_ms_new=}"
+            "OnyxRedisSlackRetryHandler.prepare_for_next_attempt setting delay: current_attempt=%s retry-after=%s ttl_ms_new=%r",
+            state.current_attempt,
+            retry_after_value,
+            ttl_ms_new,
         )
 
         state.increment_current_attempt()

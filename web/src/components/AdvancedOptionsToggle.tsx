@@ -1,5 +1,5 @@
 import Button from "@/refresh-components/buttons/Button";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { SvgChevronRight } from "@opal/icons";
 interface AdvancedOptionsToggleProps {
   showAdvancedOptions: boolean;

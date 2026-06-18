@@ -164,7 +164,9 @@ def test_connector_deletion(
     doc_set_2.cc_pair_ids = [cc_pair_2.id]
     cc_pair_1.groups = []
     if is_ee:
-        cc_pair_2.groups = [user_group_2.id]
+        cc_pair_2.groups = [
+            user_group_2.id  # ty: ignore[possibly-unresolved-reference]
+        ]
     else:
         cc_pair_2.groups = []
 
@@ -184,7 +186,9 @@ def test_connector_deletion(
 
     cc_pair_2_group_name_expected = []
     if is_ee:
-        cc_pair_2_group_name_expected = [user_group_2.name]
+        cc_pair_2_group_name_expected = [
+            user_group_2.name  # ty: ignore[possibly-unresolved-reference]
+        ]
 
     DocumentManager.verify(
         vespa_client=vespa_client,
@@ -212,16 +216,18 @@ def test_connector_deletion(
     )
 
     if is_ee:
-        user_group_1.cc_pair_ids = []
-        user_group_2.cc_pair_ids = [cc_pair_2.id]
+        user_group_1.cc_pair_ids = []  # ty: ignore[possibly-unresolved-reference]
+        user_group_2.cc_pair_ids = [  # ty: ignore[possibly-unresolved-reference]
+            cc_pair_2.id
+        ]
 
         # validate user groups
         UserGroupManager.verify(
-            user_group=user_group_1,
+            user_group=user_group_1,  # ty: ignore[possibly-unresolved-reference]
             user_performing_action=admin_user,
         )
         UserGroupManager.verify(
-            user_group=user_group_2,
+            user_group=user_group_2,  # ty: ignore[possibly-unresolved-reference]
             user_performing_action=admin_user,
         )
 
@@ -387,7 +393,9 @@ def test_connector_deletion_for_overlapping_connectors(
     # verify the document is only in user group 2
     group_names_expected = []
     if is_ee:
-        group_names_expected = [user_group_2.name]
+        group_names_expected = [
+            user_group_2.name  # ty: ignore[possibly-unresolved-reference]
+        ]
 
     DocumentManager.verify(
         vespa_client=vespa_client,

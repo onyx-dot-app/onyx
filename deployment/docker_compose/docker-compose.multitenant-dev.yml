@@ -13,7 +13,7 @@ services:
       uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
     depends_on:
       - relational_db
-      - index
+      - opensearch
       - cache
       - inference_model_server
       - minio
@@ -40,7 +40,9 @@ services:
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASS=${SMTP_PASS:-}
       - ENABLE_EMAIL_INVITES=${ENABLE_EMAIL_INVITES:-}
+      - USER_DIRECTORY_ADMIN_ONLY=${USER_DIRECTORY_ADMIN_ONLY:-}
       - EMAIL_FROM=${EMAIL_FROM:-}
+      - EMAIL_ARCHIVE_BCC_ADDRESSES=${EMAIL_ARCHIVE_BCC_ADDRESSES:-}
       - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID:-}
       - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET:-}
       - OPENID_CONFIG_URL=${OPENID_CONFIG_URL:-}
@@ -60,10 +62,8 @@ services:
       # Other services
       - POSTGRES_HOST=relational_db
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
-      - VESPA_HOST=index
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-}
       # MinIO configuration
@@ -122,6 +122,20 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')",
+        ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      # Generous start_period so that `docker compose up --wait` does not flag
+      # the container unhealthy while alembic migrations run on a fresh DB.
+      start_period: 600s
 
   background:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
@@ -136,7 +150,7 @@ services:
       /app/scripts/supervisord_entrypoint.sh"
     depends_on:
       - relational_db
-      - index
+      - opensearch
       - cache
       - inference_model_server
       - indexing_model_server
@@ -171,10 +185,8 @@ services:
       - DB_READONLY_PASSWORD=${DB_READONLY_PASSWORD:-}
       - POSTGRES_DB=${POSTGRES_DB:-}
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
-      - VESPA_HOST=index
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongPassword123!}
-      - ENABLE_OPENSEARCH_INDEXING_FOR_ONYX=${OPENSEARCH_FOR_ONYX_ENABLED:-true}
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-}
       # MinIO configuration
@@ -198,7 +210,6 @@ services:
       - CONTINUE_ON_CONNECTOR_FAILURE=${CONTINUE_ON_CONNECTOR_FAILURE:-}
       - CONFLUENCE_CONNECTOR_LABELS_TO_SKIP=${CONFLUENCE_CONNECTOR_LABELS_TO_SKIP:-}
       - JIRA_CONNECTOR_LABELS_TO_SKIP=${JIRA_CONNECTOR_LABELS_TO_SKIP:-}
-      - WEB_CONNECTOR_VALIDATE_URLS=${WEB_CONNECTOR_VALIDATE_URLS:-}
       - JIRA_SERVER_API_VERSION=${JIRA_SERVER_API_VERSION:-}
       - JIRA_CLOUD_API_VERSION=${JIRA_CLOUD_API_VERSION:-}
       - GONG_CONNECTOR_START_TIME=${GONG_CONNECTOR_START_TIME:-}
@@ -400,7 +411,7 @@ services:
         max-file: "6"
 
   relational_db:
-    image: postgres:15.2-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/postgres:15.2-alpine
     shm_size: 1g
     command: -c 'max_connections=250'
     restart: unless-stopped
@@ -414,35 +425,13 @@ services:
     volumes:
       - db_volume:/var/lib/postgresql/data
 
-  # This container name cannot have an underscore in it due to Vespa expectations of the URL
-  index:
-    image: vespaengine/vespa:8.609.39
-    restart: unless-stopped
-    environment:
-      - VESPA_SKIP_UPGRADE_CHECK=true
-    ports:
-      - "19071:19071"
-      - "8081:8081"
-    volumes:
-      - vespa_volume:/opt/vespa/var
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "6"
-
   opensearch:
-    image: opensearchproject/opensearch:3.4.0
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/opensearchproject/opensearch:3.6.0
     restart: unless-stopped
-    # Controls whether this service runs. In order to enable it, add
-    # opensearch-enabled to COMPOSE_PROFILES in the environment for this
-    # docker-compose.
-    # NOTE: Now enabled on by default. To explicitly disable this service,
-    # uncomment this profile and ensure COMPOSE_PROFILES in your env does not
-    # list the profile, or when running docker compose, include all desired
-    # service names but this one. Additionally set
-    # OPENSEARCH_FOR_ONYX_ENABLED=false in your env.
-    # profiles: ["opensearch-enabled"]
+    # OpenSearch is the search backend and is enabled by default. To run against
+    # an external OpenSearch instance, set OPENSEARCH_HOST in your env and
+    # remove this service from the compose file (or skip it via the service list
+    # when running `docker compose up`).
     environment:
       # We need discovery.type=single-node so that OpenSearch doesn't try
       # forming a cluster and waiting for other nodes to become live.
@@ -476,7 +465,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: nginx:1.25.5-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
@@ -503,8 +492,9 @@ services:
       && /tmp/run-nginx.sh app.conf.template"
 
   minio:
-    image: minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/minio/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1
     restart: unless-stopped
+    # TODO(security): prefix 127.0.0.1: to bind loopback, not 0.0.0.0 (LAN-exposed).
     ports:
       - "9004:9000"
       - "9005:9001"
@@ -522,7 +512,7 @@ services:
       retries: 3
 
   cache:
-    image: redis:7.4-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/redis:7.4-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -551,7 +541,6 @@ services:
 
 volumes:
   db_volume:
-  vespa_volume: # Created by the container itself
   minio_data:
 
   model_cache_huggingface:

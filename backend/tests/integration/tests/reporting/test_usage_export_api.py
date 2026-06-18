@@ -10,12 +10,12 @@ from uuid import UUID
 from zipfile import ZipFile
 
 import pytest
-import requests
 
 from ee.onyx.db.usage_export import UsageReportMetadata
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.seeding.chat_history_seeding import seed_chat_history
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -26,7 +26,6 @@ from tests.integration.common_utils.test_models import DATestUser
 class TestUsageExportAPI:
     def test_generate_usage_report(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Seed some chat history data for the report
@@ -39,7 +38,7 @@ class TestUsageExportAPI:
         )
 
         # Get initial list of reports
-        initial_response = requests.get(
+        initial_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
         )
@@ -48,7 +47,7 @@ class TestUsageExportAPI:
         initial_count = len(initial_reports)
 
         # Test generating a report without date filters (all time)
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=admin_user.headers,
@@ -61,7 +60,7 @@ class TestUsageExportAPI:
         current_reports = initial_reports
 
         while time.time() - start_time < max_wait_time:
-            check_response = requests.get(
+            check_response = client.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
             )
@@ -84,7 +83,6 @@ class TestUsageExportAPI:
 
     def test_generate_usage_report_with_date_range(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Seed some chat history data
@@ -97,7 +95,7 @@ class TestUsageExportAPI:
         )
 
         # Get initial list of reports
-        initial_response = requests.get(
+        initial_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
         )
@@ -109,7 +107,7 @@ class TestUsageExportAPI:
         period_to = datetime.now(tz=timezone.utc)
         period_from = period_to - timedelta(days=30)
 
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={
                 "period_from": period_from.isoformat(),
@@ -125,7 +123,7 @@ class TestUsageExportAPI:
         current_reports = initial_reports
 
         while time.time() - start_time < max_wait_time:
-            check_response = requests.get(
+            check_response = client.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
             )
@@ -150,11 +148,10 @@ class TestUsageExportAPI:
 
     def test_generate_usage_report_invalid_dates(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Test with invalid date format
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={
                 "period_from": "not-a-date",
@@ -166,7 +163,6 @@ class TestUsageExportAPI:
 
     def test_fetch_usage_reports(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # First generate a report to ensure we have at least one
@@ -179,7 +175,7 @@ class TestUsageExportAPI:
         )
 
         # Get initial count
-        initial_response = requests.get(
+        initial_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
         )
@@ -187,7 +183,7 @@ class TestUsageExportAPI:
         initial_count = len(initial_response.json())
 
         # Generate a report
-        generate_response = requests.post(
+        generate_response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=admin_user.headers,
@@ -200,7 +196,7 @@ class TestUsageExportAPI:
         reports = []
 
         while time.time() - start_time < max_wait_time:
-            response = requests.get(
+            response = client.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
             )
@@ -243,14 +239,14 @@ class TestUsageExportAPI:
         )
 
         # Get initial reports count
-        initial_response = requests.get(
+        initial_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
         )
         assert initial_response.status_code == 200
         initial_count = len(initial_response.json())
 
-        generate_response = requests.post(
+        generate_response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=admin_user.headers,
@@ -263,7 +259,7 @@ class TestUsageExportAPI:
         reports = []
 
         while time.time() - start_time < max_wait_time:
-            list_response = requests.get(
+            list_response = client.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
             )
@@ -280,10 +276,9 @@ class TestUsageExportAPI:
         report_name = reports[0]["report_name"]
 
         # Download the report
-        download_response = requests.get(
+        download_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report/{report_name}",
             headers=admin_user.headers,
-            stream=True,
         )
         assert download_response.status_code == 200
         assert download_response.headers["Content-Type"] == "application/zip"
@@ -315,11 +310,12 @@ class TestUsageExportAPI:
                     "assistant_name",
                     "user_email",
                     "number_of_tokens",
+                    "llm_model",
                 }
                 actual_columns = set(csv_reader.fieldnames or [])
-                assert (
-                    expected_columns == actual_columns
-                ), f"Expected columns {expected_columns}, but got {actual_columns}"
+                assert expected_columns == actual_columns, (
+                    f"Expected columns {expected_columns}, but got {actual_columns}"
+                )
 
                 # Verify there's at least one row of data
                 rows = list(csv_reader)
@@ -329,27 +325,29 @@ class TestUsageExportAPI:
                 first_row = rows[0]
                 for column in expected_columns:
                     assert column in first_row, f"Column {column} not found in row"
-                    assert first_row[
-                        column
-                    ], f"Column {column} has empty value in first row"
+                    assert first_row[column], (
+                        f"Column {column} has empty value in first row"
+                    )
 
                 # Verify specific new fields have appropriate values
                 assert first_row["assistant_name"], "assistant_name should not be empty"
                 assert first_row["user_email"], "user_email should not be empty"
-                assert first_row[
-                    "number_of_tokens"
-                ].isdigit(), "number_of_tokens should be a numeric value"
-                assert (
-                    int(first_row["number_of_tokens"]) >= 0
-                ), "number_of_tokens should be non-negative"
+                assert first_row["number_of_tokens"].isdigit(), (
+                    "number_of_tokens should be a numeric value"
+                )
+                assert int(first_row["number_of_tokens"]) >= 0, (
+                    "number_of_tokens should be non-negative"
+                )
+                assert first_row["llm_model"] == "pytest-model", (
+                    "llm_model should reflect the assistant reply's model"
+                )
 
     def test_read_nonexistent_report(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to download a report that doesn't exist
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/usage-report/nonexistent_report.zip",
             headers=admin_user.headers,
         )
@@ -357,11 +355,10 @@ class TestUsageExportAPI:
 
     def test_non_admin_cannot_generate_report(
         self,
-        reset: None,  # noqa: ARG002
         basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to generate a report as non-admin
-        response = requests.post(
+        response = client.post(
             f"{API_SERVER_URL}/admin/usage-report",
             json={},
             headers=basic_user.headers,
@@ -370,11 +367,10 @@ class TestUsageExportAPI:
 
     def test_non_admin_cannot_fetch_reports(
         self,
-        reset: None,  # noqa: ARG002
         basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to fetch reports as non-admin
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=basic_user.headers,
         )
@@ -382,11 +378,10 @@ class TestUsageExportAPI:
 
     def test_non_admin_cannot_download_report(
         self,
-        reset: None,  # noqa: ARG002
         basic_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Try to download a report as non-admin
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/usage-report/some_report.zip",
             headers=basic_user.headers,
         )
@@ -394,7 +389,6 @@ class TestUsageExportAPI:
 
     def test_concurrent_report_generation(
         self,
-        reset: None,  # noqa: ARG002
         admin_user: DATestUser,  # noqa: ARG002
     ) -> None:
         # Seed some data
@@ -407,7 +401,7 @@ class TestUsageExportAPI:
         )
 
         # Get initial count of reports
-        initial_response = requests.get(
+        initial_response = client.get(
             f"{API_SERVER_URL}/admin/usage-report",
             headers=admin_user.headers,
         )
@@ -417,7 +411,7 @@ class TestUsageExportAPI:
         # Generate multiple reports concurrently
         num_reports = 3
         for i in range(num_reports):
-            response = requests.post(
+            response = client.post(
                 f"{API_SERVER_URL}/admin/usage-report",
                 json={},
                 headers=admin_user.headers,
@@ -430,7 +424,7 @@ class TestUsageExportAPI:
         reports = []
 
         while time.time() - start_time < max_wait_time:
-            response = requests.get(
+            response = client.get(
                 f"{API_SERVER_URL}/admin/usage-report",
                 headers=admin_user.headers,
             )

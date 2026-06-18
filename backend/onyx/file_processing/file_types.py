@@ -53,11 +53,14 @@ class OnyxMimeTypes:
 
 
 class OnyxFileExtensions:
+    SPREADSHEET_EXTENSIONS = {
+        ".xlsx",
+        ".xlsm",
+    }
     TABULAR_EXTENSIONS = {
         ".csv",
         ".tsv",
-        ".xlsx",
-    }
+    } | SPREADSHEET_EXTENSIONS
     PLAIN_TEXT_EXTENSIONS = {
         ".txt",
         ".md",
@@ -76,11 +79,10 @@ class OnyxFileExtensions:
         ".pdf",
         ".docx",
         ".pptx",
-        ".xlsx",
         ".eml",
         ".epub",
         ".html",
-    }
+    } | SPREADSHEET_EXTENSIONS
     IMAGE_EXTENSIONS = {
         ".png",
         ".jpg",

@@ -9,7 +9,6 @@ Create Date: 2026-01-11 17:54:40.135777
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "d25168c2beee"
 down_revision = "8405ca81cc83"
@@ -51,13 +50,11 @@ def upgrade() -> None:
     # Update the name column for each tool based on its in_code_tool_id
     for in_code_tool_id, expected_name in tool_name_mapping.items():
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 UPDATE tool
                 SET name = :expected_name
                 WHERE in_code_tool_id = :in_code_tool_id
-                """
-            ),
+                """),
             {
                 "expected_name": expected_name,
                 "in_code_tool_id": in_code_tool_id,
@@ -72,13 +69,11 @@ def downgrade() -> None:
     # This matches the original pattern where name was the class name
     for in_code_tool_id in CURRENT_TOOL_NAME_MAPPING:
         conn.execute(
-            sa.text(
-                """
+            sa.text("""
                 UPDATE tool
                 SET name = :current_name
                 WHERE in_code_tool_id = :in_code_tool_id
-                """
-            ),
+                """),
             {
                 "current_name": in_code_tool_id,
                 "in_code_tool_id": in_code_tool_id,

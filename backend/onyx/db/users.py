@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
@@ -6,8 +7,10 @@ from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import case
 from sqlalchemy import func
+from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement
@@ -34,9 +37,27 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 
+def is_limited_user(user: User) -> bool:
+    """Check if a user is effectively limited — i.e. should be denied
+    access by ``current_user`` and should not receive default-group
+    membership.
+
+    A user is limited when they are:
+    * an anonymous user, or
+    * a service account with no effective permissions (no group membership).
+    """
+    if user.account_type == AccountType.ANONYMOUS:
+        return True
+    if (
+        user.account_type == AccountType.SERVICE_ACCOUNT
+        and not user.effective_permissions
+    ):
+        return True
+    return False
+
+
 def validate_user_role_update(
     requested_role: UserRole,
-    current_role: UserRole,
     current_account_type: AccountType,
     explicit_override: bool = False,
 ) -> None:
@@ -50,7 +71,7 @@ def validate_user_role_update(
     - requested role is a limited user
     - current account type is BOT (slack user)
     - current account type is EXT_PERM_USER
-    - current role is a limited user
+    - current account type is ANONYMOUS or SERVICE_ACCOUNT
     """
 
     if current_account_type == AccountType.BOT:
@@ -65,10 +86,10 @@ def validate_user_role_update(
             detail="To change an External Permissioned User's role, they must first login to Onyx via the web app.",
         )
 
-    if current_role == UserRole.LIMITED:
+    if current_account_type in (AccountType.ANONYMOUS, AccountType.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=400,
-            detail="To change a Limited User's role, they must first login to Onyx via the web app.",
+            detail="Cannot change the role of an anonymous or service account user.",
         )
 
     if explicit_override:
@@ -123,14 +144,22 @@ def get_all_users(
     stmt = select(User)
 
     # Exclude system users (anonymous user, no-auth placeholder)
-    stmt = stmt.where(User.email != ANONYMOUS_USER_EMAIL)  # type: ignore
-    stmt = stmt.where(User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL)  # type: ignore
+    stmt = stmt.where(
+        User.email != ANONYMOUS_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
+    stmt = stmt.where(
+        User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
 
     if not include_external:
         stmt = stmt.where(User.role != UserRole.EXT_PERM_USER)
 
     if email_filter_string is not None:
-        stmt = stmt.where(User.email.ilike(f"%{email_filter_string}%"))  # type: ignore
+        stmt = stmt.where(
+            User.email.ilike(  # ty: ignore[unresolved-attribute]
+                f"%{email_filter_string}%"
+            )
+        )
 
     return db_session.scalars(stmt).unique().all()
 
@@ -293,7 +322,11 @@ def get_user_by_email(email: str, db_session: Session) -> User | None:
 
 
 def fetch_user_by_id(db_session: Session, user_id: UUID) -> User | None:
-    return db_session.query(User).filter(User.id == user_id).first()  # type: ignore
+    return (
+        db_session.query(User)
+        .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .first()
+    )
 
 
 def _generate_slack_user(email: str) -> User:
@@ -308,17 +341,32 @@ def _generate_slack_user(email: str) -> User:
     )
 
 
-def add_slack_user_if_not_exists(db_session: Session, email: str) -> User:
+def add_slack_user_if_not_exists(
+    db_session: Session,
+    email: str,
+    enforce_seat_check: Callable[[Session, int], None] | None = None,
+) -> User:
+    """Look up or create the Slack-bot user for ``email``.
+
+    ``enforce_seat_check`` (optional): invoked inside this function's
+    transaction whenever the call would consume a seat — i.e. on
+    brand-new BOT creation OR on EXT_PERM_USER (uncounted) -> BOT
+    (counted) promotion. Must raise on overage.
+    """
     email = email.lower()
     user = get_user_by_email(email, db_session)
     if user is not None:
         # If the user is an external permissioned user, we update it to a slack user
         if user.account_type == AccountType.EXT_PERM_USER:
+            if enforce_seat_check is not None:
+                enforce_seat_check(db_session, 1)
             user.role = UserRole.SLACK_USER
             user.account_type = AccountType.BOT
             db_session.commit()
         return user
 
+    if enforce_seat_check is not None:
+        enforce_seat_check(db_session, 1)
     user = _generate_slack_user(email=email)
     db_session.add(user)
     db_session.commit()
@@ -456,7 +504,18 @@ def assign_user_to_default_groups__no_commit(
 
     recompute_user_permissions__no_commit(user.id, db_session)
 
-    logger.info(f"Assigned user {user.email} to default group '{default_group.name}'")
+    logger.info(
+        "Assigned user %s to default group '%s'", user.email, default_group.name
+    )
+
+
+def get_active_admin_count(db_session: Session) -> int:
+    """Count for the share dialog's Admins row — same filter set as
+    get_active_admin_users (no API-key dummies or system placeholders).
+    Runs on the hot GET /persona/{id} path, so count in SQL rather than
+    materializing every admin row."""
+    stmt = select(func.count()).select_from(_active_admin_user_stmt().subquery())
+    return db_session.execute(stmt).scalar_one()
 
 
 def delete_user_from_db(
@@ -476,14 +535,30 @@ def delete_user_from_db(
     db_session.query(SamlAccount).filter(
         SamlAccount.user_id == user_to_delete.id
     ).delete()
-    # Null out ownership on document sets and personas so they're
-    # preserved for other users instead of being cascade-deleted
+    # Null out ownership on document sets so they're preserved for other
+    # users instead of being cascade-deleted
     db_session.query(DocumentSet).filter(
         DocumentSet.user_id == user_to_delete.id
     ).update({DocumentSet.user_id: None})
-    db_session.query(Persona).filter(Persona.user_id == user_to_delete.id).update(
-        {Persona.user_id: None}
+    # Personas: private ones die with their owner; shared/public ones are
+    # orphaned (ownerless ⇒ managed by admins until transferred away)
+    owned_personas = (
+        db_session.query(Persona)
+        .options(
+            selectinload(Persona.user_shares),
+            selectinload(Persona.group_shares),
+        )
+        .filter(Persona.user_id == user_to_delete.id)
+        .all()
     )
+    for persona in owned_personas:
+        if (
+            not persona.is_public
+            and not persona.user_shares
+            and not persona.group_shares
+        ):
+            persona.deleted = True
+        persona.user_id = None
 
     db_session.query(DocumentSet__User).filter(
         DocumentSet__User.user_id == user_to_delete.id
@@ -530,3 +605,26 @@ def batch_get_user_groups(
     for user_id, group_id, group_name in rows:
         result[user_id].append((group_id, group_name))
     return result
+
+
+def _active_admin_user_stmt() -> Select[tuple[User]]:
+    """Active human admins, excluding API-key dummy users and system placeholders.
+
+    Mirrors `_add_live_user_count_where_clause(only_admin_users=True)` in
+    `onyx/db/auth.py` so callers that email or surface UI to admins reuse
+    the same filter set.
+    """
+    email_col: KeyedColumnElement[Any] = User.__table__.c.email
+    is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
+
+    return select(User).where(
+        is_active_col.is_(True),
+        User.role == UserRole.ADMIN,
+        expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
+        email_col != ANONYMOUS_USER_EMAIL,
+        email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
+    )
+
+
+def get_active_admin_users(db_session: Session) -> list[User]:
+    return list(db_session.execute(_active_admin_user_stmt()).unique().scalars().all())

@@ -17,8 +17,6 @@ env:
 
   # API keys for testing
   COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-  LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
-  LITELLM_API_URL: ${{ secrets.LITELLM_API_URL }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
   AZURE_API_URL: ${{ vars.AZURE_API_URL }}
@@ -32,7 +30,7 @@ jobs:
       - "run-id=${{ github.run_id }}-model-check"
       - "extras=ecr-cache"
     environment: ci-protected
-    timeout-minutes: 45
+    timeout-minutes: 20
 
     env:
       PYTHONPATH: ./backend
@@ -64,17 +62,16 @@ jobs:
           fi
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Build and load
-        uses: docker/bake-action@82490499d2e5613fcead7e128237ef0b0ea210f7 # ratchet:docker/bake-action@v7.0.0
+        uses: docker/bake-action@6614cfa25eff9a0b2b2697efb0b6159e7680d584 # ratchet:docker/bake-action@v7.2.0
         env:
           TAG: model-server-${{ github.run_id }}
         with:
@@ -84,7 +81,7 @@ jobs:
             model-server.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }}
             model-server.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
             model-server.cache-from=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
-            model-server.cache-from=type=registry,ref=onyxdotapp/onyx-model-server:latest
+            model-server.cache-from=type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-model-server:latest
             model-server.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
             model-server.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
             model-server.cache-to=type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache,mode=max
@@ -103,7 +100,6 @@ jobs:
 
       - name: Run Tests
         run: |
-          py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/llm
           py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/embedding
 
       - name: Alert on Failure
@@ -123,7 +119,7 @@ jobs:
 
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: docker-all-logs
           path: ${{ github.workspace }}/docker-compose.log

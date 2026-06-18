@@ -1,6 +1,6 @@
 from collections.abc import Iterator
 
-from googleapiclient.discovery import Resource  # type: ignore
+from googleapiclient.discovery import Resource
 
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.permission_retrieval import (
@@ -38,7 +38,7 @@ def get_folder_permissions_by_ids(
         A list of permissions matching the provided permission IDs
     """
     return get_permissions_by_ids(
-        drive_service=service,
+        drive_service=service,  # ty: ignore[invalid-argument-type]
         doc_id=folder_id,
         permission_ids=permission_ids,
     )
@@ -68,7 +68,7 @@ def get_modified_folders(
 
     # Retrieve and yield folders
     for folder in execute_paginated_retrieval(
-        retrieval_function=service.files().list,
+        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
         list_key="files",
         continue_on_404_or_403=True,
         corpora="allDrives",

@@ -1,6 +1,6 @@
 "use client";
 
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Explorer } from "./Explorer";
 import { Connector } from "@/lib/connectors/connectors";
@@ -21,7 +21,7 @@ export default function DocumentExplorerPage({
 }: DocumentExplorerPageProps) {
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} separator />
+      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
 
       <SettingsLayouts.Body>
         <Explorer

@@ -19,3 +19,4 @@ class OpenSearchRetrievalStatusRequest(BaseModel):
 class OpenSearchRetrievalStatusResponse(BaseModel):
     model_config = {"frozen": True}
     enable_opensearch_retrieval: bool
+    toggling_retrieval_is_disabled: bool = False

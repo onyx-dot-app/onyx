@@ -9,6 +9,7 @@ from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import Credential
 from onyx.redis.redis_pool import get_redis_client
+from onyx.utils.credential_audit import emit_credential_access
 
 
 class OnyxDBCredentialsProvider(
@@ -67,6 +68,13 @@ class OnyxDBCredentialsProvider(
 
             if credential.credential_json is None:
                 return {}
+
+            # Audit the connector credential decrypt (best-effort, never raises).
+            emit_credential_access(
+                credential_type="connector",
+                provider=self._connector_name,
+                row_id=self._credential_id,
+            )
             return credential.credential_json.get_value(apply_mask=False)
 
     def set_credentials(self, credential_json: dict[str, Any]) -> None:
@@ -83,7 +91,9 @@ class OnyxDBCredentialsProvider(
                         f"No credential found: credential={self._credential_id}"
                     )
 
-                credential.credential_json = credential_json  # type: ignore[assignment]
+                credential.credential_json = (  # ty: ignore[invalid-assignment]
+                    credential_json
+                )
                 db_session.commit()
             except Exception:
                 db_session.rollback()

@@ -5,12 +5,20 @@ import useSWR, { KeyedMutator } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import Modal from "@/refresh-components/Modal";
+import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Section } from "@/layouts/general-layouts";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import {
+  Button,
+  CopyButton,
+  Divider,
+  InputTypeIn,
+  MessageCard,
+  Tabs,
+} from "@opal/components";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { Button } from "@opal/components";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { markdown } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
@@ -18,16 +26,14 @@ import { useModal } from "@/refresh-components/contexts/ModalContext";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
+  MCPOAuthProviderMode,
   MCPTransportType,
   MCPServerStatus,
   MCPServer,
   MCPServersResponse,
 } from "@/lib/tools/interfaces";
-import Separator from "@/refresh-components/Separator";
-import Tabs from "@/refresh-components/Tabs";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
 import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
-import Message from "@/refresh-components/messages/Message";
 import { toast } from "@/hooks/useToast";
 import { SvgArrowExchange } from "@opal/icons";
 import { useAuthType } from "@/lib/hooks";
@@ -54,7 +60,16 @@ export interface MCPAuthFormValues {
   user_credentials: Record<string, string>;
   oauth_client_id: string;
   oauth_client_secret: string;
+  oauth_provider_mode: MCPOAuthProviderMode;
+  oauth_authorization_endpoint: string;
+  oauth_token_endpoint: string;
+  oauth_scopes_override: string;
+  oauth_additional_auth_params: string;
 }
+
+const GOOGLE_AUTHORIZATION_ENDPOINT_HINT =
+  "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_ENDPOINT_HINT = "https://oauth2.googleapis.com/token";
 
 const validationSchema = Yup.object().shape({
   transport: Yup.string()
@@ -96,6 +111,30 @@ const validationSchema = Yup.object().shape({
     then: (schema) => schema.notRequired(),
     otherwise: (schema) => schema.notRequired(),
   }),
+  oauth_authorization_endpoint: Yup.string().when(
+    ["auth_type", "oauth_provider_mode"],
+    {
+      is: (authType: string, providerMode: string) =>
+        authType === MCPAuthenticationType.OAUTH &&
+        providerMode === MCPOAuthProviderMode.KNOWN_PROVIDER,
+      then: (schema) =>
+        schema.required(
+          "Authorization endpoint is required in known-provider mode"
+        ),
+      otherwise: (schema) => schema.notRequired(),
+    }
+  ),
+  oauth_token_endpoint: Yup.string().when(
+    ["auth_type", "oauth_provider_mode"],
+    {
+      is: (authType: string, providerMode: string) =>
+        authType === MCPAuthenticationType.OAUTH &&
+        providerMode === MCPOAuthProviderMode.KNOWN_PROVIDER,
+      then: (schema) =>
+        schema.required("Token endpoint is required in known-provider mode"),
+      otherwise: (schema) => schema.notRequired(),
+    }
+  ),
 });
 
 export default function MCPAuthenticationModal({
@@ -109,6 +148,8 @@ export default function MCPAuthenticationModal({
     "per-user"
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Open the Advanced (known-provider) section by default when configured.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Check if OAuth is enabled for the Onyx instance
   const authType = useAuthType();
@@ -139,6 +180,9 @@ export default function MCPAuthenticationModal({
       } else {
         setActiveAuthTab("per-user");
       }
+      setAdvancedOpen(
+        fullServer.oauth_provider_mode === MCPOAuthProviderMode.KNOWN_PROVIDER
+      );
     }
   }, [fullServer]);
 
@@ -170,6 +214,11 @@ export default function MCPAuthenticationModal({
         user_credentials: {},
         oauth_client_id: "",
         oauth_client_secret: "",
+        oauth_provider_mode: MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_authorization_endpoint: "",
+        oauth_token_endpoint: "",
+        oauth_scopes_override: "",
+        oauth_additional_auth_params: "",
       };
     }
 
@@ -189,6 +238,17 @@ export default function MCPAuthenticationModal({
       // OAuth Credentials
       oauth_client_id: fullServer.admin_credentials?.client_id || "",
       oauth_client_secret: fullServer.admin_credentials?.client_secret || "",
+      oauth_provider_mode:
+        fullServer.oauth_provider_mode || MCPOAuthProviderMode.AUTO_DISCOVERY,
+      oauth_authorization_endpoint:
+        fullServer.oauth_authorization_endpoint || "",
+      oauth_token_endpoint: fullServer.oauth_token_endpoint || "",
+      oauth_scopes_override: fullServer.oauth_scopes_override
+        ? fullServer.oauth_scopes_override.join(", ")
+        : "",
+      oauth_additional_auth_params: fullServer.oauth_additional_auth_params
+        ? JSON.stringify(fullServer.oauth_additional_auth_params)
+        : "",
       // Auth Template
       auth_template: (fullServer.auth_template as MCPAuthTemplate) || {
         headers: { Authorization: "Bearer {api_key}" },
@@ -200,9 +260,84 @@ export default function MCPAuthenticationModal({
     };
   }, [fullServer, mcpServer?.server_url]);
 
+  // Mirrors the LLM-provider `api_key_changed` pattern in
+  // `web/src/sections/modals/languageModels/svc.ts`. The backend uses these flags
+  // to decide whether to overwrite the stored OAuth credentials or to leave
+  // them untouched, which prevents masked placeholders sent back from the
+  // GET response from accidentally wiping out the real stored values.
+  const computeOAuthChangedFlags = (values: MCPAuthFormValues) => {
+    if (values.auth_type !== MCPAuthenticationType.OAUTH) {
+      return {
+        oauth_client_id_changed: false,
+        oauth_client_secret_changed: false,
+      };
+    }
+    return {
+      oauth_client_id_changed:
+        values.oauth_client_id !== initialValues.oauth_client_id,
+      oauth_client_secret_changed:
+        values.oauth_client_secret !== initialValues.oauth_client_secret,
+    };
+  };
+
+  // Per-key analogue of `computeOAuthChangedFlags` for the
+  // `admin_credentials` dict (per-user API_TOKEN only).
+  const computeAdminCredentialsChangedFlags = (
+    values: MCPAuthFormValues
+  ): Record<string, boolean> => {
+    if (
+      values.auth_type !== MCPAuthenticationType.API_TOKEN ||
+      values.auth_performer !== MCPAuthenticationPerformer.PER_USER
+    ) {
+      return {};
+    }
+    const current = values.user_credentials || {};
+    const initial = initialValues.user_credentials || {};
+    const flags: Record<string, boolean> = {};
+    for (const key of Object.keys(current)) {
+      flags[key] = current[key] !== initial[key];
+    }
+    return flags;
+  };
+
   const constructServerData = (values: MCPAuthFormValues) => {
     if (!mcpServer) return null;
     const authType = values.auth_type;
+    const oauthChangedFlags = computeOAuthChangedFlags(values);
+    const isPerUserApiToken =
+      values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+      authType === MCPAuthenticationType.API_TOKEN;
+    const isKnownProviderOauth =
+      authType === MCPAuthenticationType.OAUTH &&
+      values.oauth_provider_mode === MCPOAuthProviderMode.KNOWN_PROVIDER;
+
+    const parsedScopes = values.oauth_scopes_override
+      .split(",")
+      .map((scope) => scope.trim())
+      .filter(Boolean);
+
+    let parsedAdditionalAuthParams: Record<string, string> | undefined;
+    if (
+      isKnownProviderOauth &&
+      values.oauth_additional_auth_params &&
+      values.oauth_additional_auth_params.trim()
+    ) {
+      try {
+        const parsed = JSON.parse(values.oauth_additional_auth_params);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("Additional auth params must be a JSON object");
+        }
+        parsedAdditionalAuthParams = Object.fromEntries(
+          Object.entries(parsed).map(([key, value]) => [key, String(value)])
+        );
+      } catch (error) {
+        throw new Error(
+          error instanceof Error
+            ? `Invalid additional auth params JSON: ${error.message}`
+            : "Invalid additional auth params JSON"
+        );
+      }
+    }
 
     return {
       name: mcpServer.name,
@@ -216,16 +351,13 @@ export default function MCPAuthenticationModal({
         values.auth_performer === MCPAuthenticationPerformer.ADMIN
           ? values.api_token
           : undefined,
-      auth_template:
-        values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-        authType === MCPAuthenticationType.API_TOKEN
-          ? values.auth_template
-          : undefined,
-      admin_credentials:
-        values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-        authType === MCPAuthenticationType.API_TOKEN
-          ? values.user_credentials || {}
-          : undefined,
+      auth_template: isPerUserApiToken ? values.auth_template : undefined,
+      admin_credentials: isPerUserApiToken
+        ? values.user_credentials || {}
+        : undefined,
+      admin_credentials_changed: isPerUserApiToken
+        ? computeAdminCredentialsChangedFlags(values)
+        : undefined,
       oauth_client_id:
         authType === MCPAuthenticationType.OAUTH
           ? values.oauth_client_id
@@ -234,17 +366,40 @@ export default function MCPAuthenticationModal({
         authType === MCPAuthenticationType.OAUTH
           ? values.oauth_client_secret
           : undefined,
+      oauth_provider_mode:
+        authType === MCPAuthenticationType.OAUTH
+          ? values.oauth_provider_mode
+          : undefined,
+      oauth_authorization_endpoint: isKnownProviderOauth
+        ? values.oauth_authorization_endpoint
+        : undefined,
+      oauth_token_endpoint: isKnownProviderOauth
+        ? values.oauth_token_endpoint
+        : undefined,
+      oauth_scopes_override:
+        isKnownProviderOauth && parsedScopes.length > 0
+          ? parsedScopes
+          : undefined,
+      oauth_additional_auth_params:
+        isKnownProviderOauth && parsedAdditionalAuthParams
+          ? parsedAdditionalAuthParams
+          : undefined,
+      ...oauthChangedFlags,
       existing_server_id: mcpServer.id,
     };
   };
 
   const handleSubmit = async (values: MCPAuthFormValues) => {
-    const serverData = constructServerData(values);
-    if (!serverData || !mcpServer) return;
+    if (!mcpServer) return;
 
     setIsSubmitting(true);
 
     try {
+      // constructServerData throws on invalid oauth_additional_auth_params JSON;
+      // keep it inside the try so the catch surfaces a toast.
+      const serverData = constructServerData(values);
+      if (!serverData) return;
+
       const authType = values.auth_type;
       // Step 1: Save the authentication configuration to the MCP server
       const { data: serverResult, error: serverError } =
@@ -264,6 +419,7 @@ export default function MCPAuthenticationModal({
 
       // Step 3: For OAuth, initiate the OAuth flow
       if (authType === MCPAuthenticationType.OAUTH) {
+        const oauthChangedFlags = computeOAuthChangedFlags(values);
         const oauthResponse = await fetch("/api/admin/mcp/oauth/connect", {
           method: "POST",
           headers: {
@@ -273,6 +429,7 @@ export default function MCPAuthenticationModal({
             server_id: mcpServer.id.toString(),
             oauth_client_id: values.oauth_client_id,
             oauth_client_secret: values.oauth_client_secret,
+            ...oauthChangedFlags,
             return_path: `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`,
             include_resource_param: true,
           }),
@@ -317,7 +474,11 @@ export default function MCPAuthenticationModal({
       <Modal.Content width="sm" height="lg" skipOverlay={skipOverlay}>
         <Modal.Header
           icon={SvgArrowExchange}
-          title={`Authenticate ${mcpServer?.name || "MCP Server"}`}
+          title={
+            mcpServer
+              ? markdown(`Authenticate *${mcpServer.name}*`)
+              : "Authenticate MCP Server"
+          }
           description="Authenticate your connection to start using the MCP server."
         />
 
@@ -365,6 +526,12 @@ export default function MCPAuthenticationModal({
                           value={values.auth_type}
                           onValueChange={(value) => {
                             setFieldValue("auth_type", value);
+                            if (value !== MCPAuthenticationType.OAUTH) {
+                              setFieldValue(
+                                "oauth_provider_mode",
+                                MCPOAuthProviderMode.AUTO_DISCOVERY
+                              );
+                            }
                             // For OAuth + OAuth pass-through, we only support per-user auth
                             if (
                               value === MCPAuthenticationType.OAUTH ||
@@ -427,7 +594,7 @@ export default function MCPAuthenticationModal({
                         }}
                       />
                     </FormField>
-                    <Separator className="py-0" />
+                    <Divider paddingPerpendicular="fit" />
                   </div>
 
                   {/* OAuth Section */}
@@ -451,7 +618,6 @@ export default function MCPAuthenticationModal({
                             value={values.oauth_client_id}
                             onChange={handleChange}
                             placeholder=" "
-                            showClearButton={false}
                           />
                         </FormField.Control>
                         <FormField.Message
@@ -481,7 +647,6 @@ export default function MCPAuthenticationModal({
                             value={values.oauth_client_secret}
                             onChange={handleChange}
                             placeholder=" "
-                            showClearButton={false}
                           />
                         </FormField.Control>
                         <FormField.Message
@@ -503,7 +668,6 @@ export default function MCPAuthenticationModal({
                           these credentials first. Make sure to grant Onyx
                           necessary scopes/permissions for your actions.
                         </Text>
-
                         {/* Redirect URI */}
                         <div className="flex items-center gap-1 w-full">
                           <Text
@@ -525,7 +689,7 @@ export default function MCPAuthenticationModal({
                           >
                             {redirectUri}
                           </Text>
-                          <CopyIconButton
+                          <CopyButton
                             getCopyText={() => redirectUri}
                             tooltip="Copy redirect URI"
                             prominence="tertiary"
@@ -533,6 +697,167 @@ export default function MCPAuthenticationModal({
                           />
                         </div>
                       </div>
+
+                      <SimpleCollapsible
+                        open={advancedOpen}
+                        onOpenChange={setAdvancedOpen}
+                      >
+                        <SimpleCollapsible.Header
+                          title="Advanced"
+                          description="Configure a known OAuth provider with explicit authorization and token endpoints instead of automatic discovery."
+                        />
+                        <SimpleCollapsible.Content>
+                          <Section alignItems="stretch" height="auto">
+                            <FormField
+                              name="oauth_provider_mode"
+                              state={
+                                errors.oauth_provider_mode &&
+                                touched.oauth_provider_mode
+                                  ? "error"
+                                  : touched.oauth_provider_mode
+                                    ? "success"
+                                    : "idle"
+                              }
+                            >
+                              <FormField.Label>Provider Mode</FormField.Label>
+                              <FormField.Control asChild>
+                                <InputSelect
+                                  value={values.oauth_provider_mode}
+                                  onValueChange={(value) => {
+                                    setFieldValue("oauth_provider_mode", value);
+                                  }}
+                                >
+                                  <InputSelect.Trigger placeholder="Select mode" />
+                                  <InputSelect.Content>
+                                    <InputSelect.Item
+                                      value={
+                                        MCPOAuthProviderMode.AUTO_DISCOVERY
+                                      }
+                                      description="Use MCP SDK challenge/discovery flow (default)."
+                                    >
+                                      Auto Discovery
+                                    </InputSelect.Item>
+                                    <InputSelect.Item
+                                      value={
+                                        MCPOAuthProviderMode.KNOWN_PROVIDER
+                                      }
+                                      description="Use configured authorization/token endpoints."
+                                    >
+                                      Known Provider
+                                    </InputSelect.Item>
+                                  </InputSelect.Content>
+                                </InputSelect>
+                              </FormField.Control>
+                            </FormField>
+
+                            {values.oauth_provider_mode ===
+                              MCPOAuthProviderMode.KNOWN_PROVIDER && (
+                              <>
+                                <FormField
+                                  name="oauth_authorization_endpoint"
+                                  state={
+                                    errors.oauth_authorization_endpoint &&
+                                    touched.oauth_authorization_endpoint
+                                      ? "error"
+                                      : touched.oauth_authorization_endpoint
+                                        ? "success"
+                                        : "idle"
+                                  }
+                                >
+                                  <FormField.Label>
+                                    Authorization Endpoint
+                                  </FormField.Label>
+                                  <FormField.Control asChild>
+                                    <InputTypeIn
+                                      name="oauth_authorization_endpoint"
+                                      value={
+                                        values.oauth_authorization_endpoint
+                                      }
+                                      onChange={handleChange}
+                                      placeholder={
+                                        GOOGLE_AUTHORIZATION_ENDPOINT_HINT
+                                      }
+                                    />
+                                  </FormField.Control>
+                                  <FormField.Message
+                                    messages={{
+                                      error:
+                                        errors.oauth_authorization_endpoint,
+                                    }}
+                                  />
+                                </FormField>
+
+                                <FormField
+                                  name="oauth_token_endpoint"
+                                  state={
+                                    errors.oauth_token_endpoint &&
+                                    touched.oauth_token_endpoint
+                                      ? "error"
+                                      : touched.oauth_token_endpoint
+                                        ? "success"
+                                        : "idle"
+                                  }
+                                >
+                                  <FormField.Label>
+                                    Token Endpoint
+                                  </FormField.Label>
+                                  <FormField.Control asChild>
+                                    <InputTypeIn
+                                      name="oauth_token_endpoint"
+                                      value={values.oauth_token_endpoint}
+                                      onChange={handleChange}
+                                      placeholder={GOOGLE_TOKEN_ENDPOINT_HINT}
+                                    />
+                                  </FormField.Control>
+                                  <FormField.Message
+                                    messages={{
+                                      error: errors.oauth_token_endpoint,
+                                    }}
+                                  />
+                                </FormField>
+
+                                <FormField name="oauth_scopes_override">
+                                  <FormField.Label optional>
+                                    Scopes Override (comma-separated)
+                                  </FormField.Label>
+                                  <FormField.Control asChild>
+                                    <InputTypeIn
+                                      name="oauth_scopes_override"
+                                      value={values.oauth_scopes_override}
+                                      onChange={handleChange}
+                                      placeholder="https://www.googleapis.com/auth/logging.read"
+                                    />
+                                  </FormField.Control>
+                                </FormField>
+
+                                <FormField name="oauth_additional_auth_params">
+                                  <FormField.Label optional>
+                                    Additional Auth Params (JSON)
+                                  </FormField.Label>
+                                  <FormField.Control asChild>
+                                    <InputTypeIn
+                                      name="oauth_additional_auth_params"
+                                      value={
+                                        values.oauth_additional_auth_params
+                                      }
+                                      onChange={handleChange}
+                                      placeholder='{"access_type":"offline","prompt":"consent"}'
+                                    />
+                                  </FormField.Control>
+                                </FormField>
+
+                                <Text as="p" text03 secondaryBody>
+                                  Known-provider mode requires endpoint
+                                  configuration. Google reference endpoints:
+                                  authorization{" "}
+                                  {GOOGLE_AUTHORIZATION_ENDPOINT_HINT} and token{" "}
+                                  {GOOGLE_TOKEN_ENDPOINT_HINT}.
+                                </Text>
+                              </>
+                            )}
+                          </Section>
+                        </SimpleCollapsible.Content>
+                      </SimpleCollapsible>
                     </div>
                   )}
 
@@ -589,7 +914,6 @@ export default function MCPAuthenticationModal({
                                   value={values.api_token}
                                   onChange={handleChange}
                                   placeholder="Shared API key for your organization"
-                                  showClearButton={false}
                                 />
                               </FormField.Control>
                               <FormField.Description>
@@ -609,25 +933,15 @@ export default function MCPAuthenticationModal({
                     </div>
                   )}
                   {values.auth_type === MCPAuthenticationType.NONE && (
-                    <Message
-                      text="No authentication for this MCP server"
+                    <MessageCard
+                      title="No authentication for this MCP server"
                       description="No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection."
-                      default
-                      medium
-                      static
-                      className="w-full"
-                      close={false}
                     />
                   )}
                   {values.auth_type === MCPAuthenticationType.PT_OAUTH && (
-                    <Message
-                      text="Use pass-through for services with shared identity provider."
+                    <MessageCard
+                      title="Use pass-through for services with shared identity provider."
                       description="Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider."
-                      default
-                      medium
-                      static
-                      className="w-full"
-                      close={false}
                     />
                   )}
                 </Modal.Body>

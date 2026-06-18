@@ -50,7 +50,7 @@ class MockImageGenerationProvider(
         return True
 
     @classmethod
-    def _build_from_credentials(
+    def _build_from_credentials(  # ty: ignore[invalid-method-override]
         cls,
         _: ImageGenerationProviderCredentials,
     ) -> ImageGenerationProvider:
@@ -107,9 +107,9 @@ def _create_mock_image_generation_llm_config() -> LLMConfig:
 
 
 @contextmanager
-def use_mock_image_generation_provider() -> (
-    Generator[ImageGenerationProviderController, None, None]
-):
+def use_mock_image_generation_provider() -> Generator[
+    ImageGenerationProviderController, None, None
+]:
     image_gen_provider = MockImageGenerationProvider()
 
     with (

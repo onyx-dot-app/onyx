@@ -13,7 +13,7 @@ from fastapi import Response
 from fastapi import status
 from fastapi_users import exceptions
 from fastapi_users.authentication import Strategy
-from onelogin.saml2.auth import OneLogin_Saml2_Auth  # type: ignore
+from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from pydantic import BaseModel
 
 from onyx.auth.schemas import UserCreate
@@ -30,7 +30,6 @@ from onyx.db.auth import get_user_db
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 router = APIRouter(prefix="/auth/saml")
@@ -60,7 +59,7 @@ async def upsert_saml_user(email: str) -> User:
     SAML users never use this password directly as they authenticate via their
     Identity Provider, but we need a valid password to satisfy system requirements.
     """
-    logger.debug(f"Attempting to upsert SAML user with email: {email}")
+    logger.debug("Attempting to upsert SAML user with email: %s", email)
     get_user_db_context = contextlib.asynccontextmanager(get_user_db)
     get_user_manager_context = contextlib.asynccontextmanager(get_user_manager)
 

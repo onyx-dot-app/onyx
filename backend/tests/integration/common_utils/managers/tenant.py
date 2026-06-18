@@ -1,21 +1,22 @@
 from datetime import datetime
 from datetime import timedelta
+from datetime import timezone
 
 import jwt
-import requests
 
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
 
 
 def generate_auth_token() -> str:
     payload = {
         "iss": "control_plane",
-        "exp": datetime.utcnow() + timedelta(minutes=5),
-        "iat": datetime.utcnow(),
+        "exp": datetime.now(tz=timezone.utc) + timedelta(minutes=5),
+        "iat": datetime.now(tz=timezone.utc),
         "scope": "tenant:create",
     }
     token = jwt.encode(payload, "", algorithm="HS256")
@@ -27,7 +28,7 @@ class TenantManager:
     def get_all_users(
         user_performing_action: DATestUser,
     ) -> AllUsersResponse:
-        response = requests.get(
+        response = client.get(
             url=f"{API_SERVER_URL}/manage/users",
             headers=user_performing_action.headers,
         )

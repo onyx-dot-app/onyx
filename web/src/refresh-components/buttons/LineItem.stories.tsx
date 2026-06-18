@@ -105,6 +105,16 @@ export const WithRightChildren: Story = {
   },
 };
 
+export const WithWrappedDescription: Story = {
+  args: {
+    icon: SvgSettings,
+    children: "Re-index All Connectors",
+    description:
+      "Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt.",
+    wrapDescription: true,
+  },
+};
+
 export const MenuExample: Story = {
   render: () => (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>

@@ -1,5 +1,7 @@
 import hashlib
 import mimetypes
+import os
+import re
 from io import BytesIO
 from typing import Any
 from typing import cast
@@ -40,33 +42,47 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     StreamResultEvent,
 )
+from onyx.tools.tool_implementations.utils import truncate_output as _truncate_output
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
 CODE_FIELD = "code"
+CODE_INTERPRETER_DEFAULT_FILENAME = "file"
+CODE_INTERPRETER_FILENAME_MAX_LENGTH = 200
+CODE_INTERPRETER_UNSAFE_FILENAME_CHARS = re.compile(r"[\x00-\x1f/\\:\*\?\"<>\|]+")
 
 
-def _truncate_output(output: str, max_length: int, label: str = "output") -> str:
-    """
-    Truncate output string to max_length and append truncation message if needed.
+def _safe_code_interpreter_filename(filename: str) -> str:
+    sanitized = CODE_INTERPRETER_UNSAFE_FILENAME_CHARS.sub("_", filename)
+    sanitized = sanitized.strip().strip(".")
+    if not sanitized:
+        return CODE_INTERPRETER_DEFAULT_FILENAME
 
-    Args:
-        output: The original output string to truncate
-        max_length: Maximum length before truncation
-        label: Label for logging (e.g., "stdout", "stderr")
+    base, ext = os.path.splitext(sanitized)
+    if not base:
+        base = CODE_INTERPRETER_DEFAULT_FILENAME
 
-    Returns:
-        Truncated string with truncation message appended if truncated
-    """
-    truncated = output[:max_length]
-    if len(output) > max_length:
-        truncated += (
-            f"\n... [output truncated, {len(output) - max_length} characters omitted]"
-        )
-        logger.debug(f"Truncated {label}: {truncated}")
-    return truncated
+    max_base_len = max(1, CODE_INTERPRETER_FILENAME_MAX_LENGTH - len(ext))
+    return f"{base[:max_base_len]}{ext}"
+
+
+def _dedupe_code_interpreter_filename(
+    filename: str,
+    seen_filenames: set[str],
+    fallback_id: str,
+) -> str:
+    safe_filename = _safe_code_interpreter_filename(filename)
+    if safe_filename not in seen_filenames:
+        seen_filenames.add(safe_filename)
+        return safe_filename
+
+    base, ext = os.path.splitext(safe_filename)
+    suffix = f"_{fallback_id}{ext}"
+    max_base_len = max(1, CODE_INTERPRETER_FILENAME_MAX_LENGTH - len(suffix))
+    deduped_filename = f"{base[:max_base_len]}{suffix}"
+    seen_filenames.add(deduped_filename)
+    return deduped_filename
 
 
 class PythonTool(Tool[PythonToolOverrideKwargs]):
@@ -119,7 +135,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
             return False
 
         with CodeInterpreterClient() as client:
-            return client.health(use_cache=True)
+            return client.health(use_cache=True).healthy
 
     def tool_definition(self) -> dict:
         return {
@@ -188,8 +204,13 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         with CodeInterpreterClient() as client:
             # Stage chat files for execution
             files_to_stage: list[FileInput] = []
+            seen_filenames: set[str] = set()
             for ind, chat_file in enumerate(chat_files):
-                file_name = chat_file.filename or f"file_{ind}"
+                file_name = _dedupe_code_interpreter_filename(
+                    chat_file.filename,
+                    seen_filenames,
+                    str(ind),
+                )
                 try:
                     content_hash = hashlib.sha256(chat_file.content).hexdigest()
                     cache_key = (file_name, content_hash)
@@ -202,13 +223,13 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                     # Stage for execution
                     files_to_stage.append({"path": file_name, "file_id": ci_file_id})
 
-                    logger.info(f"Staged file for Python execution: {file_name}")
+                    logger.info("Staged file for Python execution: %s", file_name)
 
                 except Exception as e:
-                    logger.warning(f"Failed to stage file {file_name}: {e}")
+                    logger.warning("Failed to stage file %s: %s", file_name, e)
 
             try:
-                logger.debug(f"Executing code: {code}")
+                logger.debug("Executing code: %s", code)
 
                 # Execute code with streaming (falls back to batch if unavailable)
                 stdout_parts: list[str] = []
@@ -284,7 +305,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         onyx_file_id = file_store.save_file(
                             content=BytesIO(file_content),
                             display_name=filename,
-                            file_origin=FileOrigin.CHAT_UPLOAD,
+                            file_origin=FileOrigin.CHAT_IMAGE_GEN,
                             file_type=mime_type,
                         )
 
@@ -301,7 +322,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
 
                     except Exception as e:
                         logger.error(
-                            f"Failed to handle generated file {workspace_file.path}: {e}"
+                            "Failed to handle generated file %s: %s",
+                            workspace_file.path,
+                            e,
                         )
 
                 # Cleanup Code Interpreter files (generated files)
@@ -310,7 +333,9 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                         client.delete_file(ci_file_id)
                     except Exception as e:
                         logger.error(
-                            f"Failed to delete Code Interpreter generated file {ci_file_id}: {e}"
+                            "Failed to delete Code Interpreter generated file %s: %s",
+                            ci_file_id,
+                            e,
                         )
 
                 # Note: staged input files are intentionally not deleted here because
@@ -349,7 +374,7 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
                 )
 
             except Exception as e:
-                logger.error(f"Python execution failed: {e}")
+                logger.error("Python execution failed: %s", e)
                 error_msg = str(e)
 
                 # Emit error delta

@@ -30,6 +30,13 @@ export const NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED =
 
 export const TENANT_ID_COOKIE_NAME = "onyx_tid";
 
+// Name of the FastAPI-Users auth cookie. Configurable via env (shared with the
+// backend's AUTH_COOKIE_NAME) so deployments sharing a hostname — e.g. parallel
+// local worktrees on different ports of localhost — keep separate auth cookies.
+// Server-side only: read in middleware, route handlers, and server components.
+export const SERVER_SIDE_ONLY__AUTH_COOKIE_NAME =
+  process.env.AUTH_COOKIE_NAME || "fastapiusersauth";
+
 export const SEARCH_TYPE_COOKIE_NAME = "search_type";
 export const AGENTIC_SEARCH_TYPE_COOKIE_NAME = "agentic_type";
 
@@ -81,6 +88,10 @@ export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
 
+// Cookie controlling the per-character typewriter reveal in chat.
+// "false" disables smooth streaming — chunks render as they arrive.
+export const SMOOTH_STREAMING_COOKIE_NAME = "smoothStreamingEnabled";
+
 export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
   process.env.NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK?.toLowerCase() ===
   "true";
@@ -121,10 +132,12 @@ export const ART_ASSISTANT_ID = -3;
 // The rest will be hidden behind an "All Recent Files" button.
 export const MAX_FILES_TO_SHOW = 3;
 
-// SIZES
-export const MOBILE_SIDEBAR_BREAKPOINT_PX = 640;
-export const DESKTOP_SMALL_BREAKPOINT_PX = 912;
-export const DESKTOP_MEDIUM_BREAKPOINT_PX = 1232;
+// SIZES — sidebar breakpoints are canonical in Opal; imported here for app consumers
+export {
+  MOBILE_SIDEBAR_BREAKPOINT_PX,
+  DESKTOP_SMALL_BREAKPOINT_PX,
+  DESKTOP_MEDIUM_BREAKPOINT_PX,
+} from "@opal/constants";
 export const DEFAULT_AVATAR_SIZE_PX = 18;
 export const HORIZON_DISTANCE_PX = 800;
 export const DEFAULT_LOGO_SIZE_PX = 24;
@@ -133,3 +146,5 @@ export const DEFAULT_CONTEXT_TOKENS = 120_000;
 export const MAX_CHUNKS_FED_TO_CHAT = 25;
 
 export const APP_SLOGAN = "Open Source AI Platform";
+
+export const DEFAULT_PAGE_SIZE = 10;

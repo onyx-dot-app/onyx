@@ -4,7 +4,8 @@ import { memo, useCallback, useState } from "react";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { cn, noProp } from "@/lib/utils";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import {
   SvgArrowExchange,
@@ -12,7 +13,7 @@ import {
   SvgServer,
   SvgSettings,
 } from "@opal/icons";
-import { ProviderIcon } from "@/app/admin/configuration/llm/ProviderIcon";
+import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
 
 export interface LLMProviderCardProps {
   title: string;
@@ -40,7 +41,7 @@ function LLMProviderCardInner({
 
     if (isConnected) {
       // If connected, redirect to admin page
-      window.location.href = "/admin/configuration/llm";
+      window.location.href = "/admin/configuration/language-models";
       return;
     }
 
@@ -49,7 +50,9 @@ function LLMProviderCardInner({
   }, [disabled, isConnected, onClick]);
 
   const handleSettingsClick = useCallback(
-    noProp(() => (window.location.href = "/admin/configuration/llm")),
+    noProp(
+      () => (window.location.href = "/admin/configuration/language-models")
+    ),
     []
   );
 
@@ -75,7 +78,7 @@ function LLMProviderCardInner({
         <div className="flex gap-1 p-1 flex-1 min-w-0">
           <div className="flex items-start h-full pt-0.5">
             {providerName ? (
-              <ProviderIcon provider={providerName} size={16} className="" />
+              <ModelIcon provider={providerName} size={16} className="" />
             ) : (
               <SvgServer className="w-4 h-4 stroke-text-04" />
             )}

@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import { SvgPlayCircle, SvgStop } from "@opal/icons";
+import { SvgPlayCircle, SvgStop, SvgSimpleLoader } from "@opal/icons";
 import { Button } from "@opal/components";
 import { useVoicePlayback } from "@/hooks/useVoicePlayback";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { toast } from "@/hooks/useToast";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 interface TTSButtonProps {
   text: string;
@@ -59,13 +58,12 @@ function TTSButton({ text, voice, speed }: TTSButtonProps) {
   // Surface streaming voice playback errors to the user via toast
   useEffect(() => {
     if (error) {
-      console.error("Voice playback error:", error);
       toast.error(error);
     }
   }, [error]);
 
   const icon = isButtonLoading
-    ? SimpleLoader
+    ? SvgSimpleLoader
     : isButtonPlaying
       ? SvgStop
       : SvgPlayCircle;

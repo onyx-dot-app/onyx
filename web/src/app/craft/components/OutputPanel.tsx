@@ -7,38 +7,54 @@ import {
   useSession,
   useWebappNeedsRefresh,
   useBuildSessionStore,
-  useFilePreviewTabs,
+  usePanelTabs,
   useActiveOutputTab,
-  useActiveFilePreviewPath,
+  useActivePanelTabId,
   usePreProvisionedSessionId,
   useIsPreProvisioning,
   useTabHistory,
   OutputTabType,
 } from "@/app/craft/hooks/useBuildSessionStore";
+import { type PanelTab, panelTabId } from "@/app/craft/types/displayTypes";
 import {
   fetchWebappInfo,
   fetchArtifacts,
   exportDocx,
 } from "@/app/craft/services/apiServices";
-import { cn, getFileIcon } from "@/lib/utils";
-import Text from "@/refresh-components/texts/Text";
-import {
-  SvgGlobe,
-  SvgHardDrive,
-  SvgFiles,
-  SvgX,
-  SvgMinus,
-  SvgMaximize2,
-} from "@opal/icons";
+import { getFileIcon } from "@/lib/utils";
+import { cn } from "@opal/utils";
+import { Text } from "@opal/components";
+import { SvgGlobe, SvgHardDrive, SvgFiles, SvgX } from "@opal/icons";
 import { IconProps } from "@opal/types";
 import CraftingLoader from "@/app/craft/components/CraftingLoader";
 
-// Output panel sub-components
+// Output panel sub-components. UrlBar is the always-visible chrome and stays
+// static; the heavy tab bodies (preview iframe, file browser, artifact list,
+// and the file preview → markdown/pdf/pptx viewers) are dynamically imported
+// so they're split out of the first-load bundle and only fetched when the
+// panel opens.
+import dynamic from "next/dynamic";
 import UrlBar from "@/app/craft/components/output-panel/UrlBar";
-import PreviewTab from "@/app/craft/components/output-panel/PreviewTab";
-import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
-import FilesTab from "@/app/craft/components/output-panel/FilesTab";
-import ArtifactsTab from "@/app/craft/components/output-panel/ArtifactsTab";
+
+const PreviewTab = dynamic(
+  () => import("@/app/craft/components/output-panel/PreviewTab"),
+  { ssr: false }
+);
+const FilesTab = dynamic(
+  () => import("@/app/craft/components/output-panel/FilesTab"),
+  { ssr: false }
+);
+const ArtifactsTab = dynamic(
+  () => import("@/app/craft/components/output-panel/ArtifactsTab"),
+  { ssr: false }
+);
+const FilePreviewContent = dynamic(
+  () =>
+    import("@/app/craft/components/output-panel/FilePreviewContent").then(
+      (m) => m.FilePreviewContent
+    ),
+  { ssr: false }
+);
 
 type TabValue = OutputTabType;
 
@@ -49,7 +65,6 @@ const tabs: { value: TabValue; label: string; icon: React.FC<IconProps> }[] = [
 ];
 
 interface BuildOutputPanelProps {
-  onClose: () => void;
   isOpen: boolean;
 }
 
@@ -62,15 +77,15 @@ interface BuildOutputPanelProps {
  * - File browser for exploring sandbox filesystem
  * - Artifact list with download/view options
  */
-const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
+const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const session = useSession();
   const preProvisionedSessionId = usePreProvisionedSessionId();
   const isPreProvisioning = useIsPreProvisioning();
 
   // Get active tab state from store
   const activeOutputTab = useActiveOutputTab();
-  const activeFilePreviewPath = useActiveFilePreviewPath();
-  const filePreviewTabs = useFilePreviewTabs();
+  const activePanelTabId = useActivePanelTabId();
+  const panelTabs = usePanelTabs();
 
   // Store actions
   const setActiveOutputTab = useBuildSessionStore(
@@ -85,8 +100,9 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   const closeFilePreview = useBuildSessionStore(
     (state) => state.closeFilePreview
   );
-  const setActiveFilePreviewPath = useBuildSessionStore(
-    (state) => state.setActiveFilePreviewPath
+  const closePanelTab = useBuildSessionStore((state) => state.closePanelTab);
+  const setActivePanelTabId = useBuildSessionStore(
+    (state) => state.setActivePanelTabId
   );
 
   // Store actions for refresh
@@ -99,7 +115,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   const [filePreviewRefreshKey, setFilePreviewRefreshKey] = useState(0);
 
   // Determine which tab is visually active
-  const isFilePreviewActive = activeFilePreviewPath !== null;
+  const isFilePreviewActive = activePanelTabId !== null;
   const activeTab = isFilePreviewActive ? null : activeOutputTab;
 
   const handlePinnedTabClick = (tab: TabValue) => {
@@ -111,18 +127,26 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   };
 
-  const handlePreviewTabClick = (path: string) => {
-    if (session?.id) {
-      setActiveFilePreviewPath(session.id, path);
-    }
-  };
+  const handlePanelTabClick = useCallback(
+    (tabId: string) => {
+      if (!session?.id) return;
+      setActivePanelTabId(session.id, tabId);
+    },
+    [session?.id, setActivePanelTabId]
+  );
 
-  const handlePreviewTabClose = (e: React.MouseEvent, path: string) => {
-    e.stopPropagation(); // Don't trigger tab click
-    if (session?.id) {
-      closeFilePreview(session.id, path);
-    }
-  };
+  const handlePanelTabClose = useCallback(
+    (e: React.MouseEvent, tab: PanelTab) => {
+      e.stopPropagation();
+      if (!session?.id) return;
+      if (tab.kind === "file") {
+        closeFilePreview(session.id, tab.path);
+      } else {
+        closePanelTab(session.id, panelTabId(tab));
+      }
+    },
+    [session?.id, closeFilePreview, closePanelTab]
+  );
 
   const handleFileClick = (path: string, fileName: string) => {
     if (session?.id) {
@@ -130,16 +154,10 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   };
 
-  const handleMaximize = () => {
-    setIsMaximized((prev) => !prev);
-  };
-
   // Track when panel animation completes (defer fetch until fully open)
   const [isFullyOpen, setIsFullyOpen] = useState(false);
   // Track when content should unmount (delayed on close for animation)
   const [shouldRenderContent, setShouldRenderContent] = useState(false);
-  // Track if panel is maximized
-  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -228,12 +246,15 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [webappInfo?.webapp_url, session?.id, cachedForSessionId]);
 
-  // Refresh when web/ file changes or after restore
+  // Refresh when web/ file changes or after restore.
   // webappNeedsRefresh is a counter that increments on each edit/restore,
-  // ensuring each triggers a new refresh even if the panel is already open
+  // ensuring each triggers a new refresh even if the panel is already open.
+  // Also bump previewRefreshKey so the iframe actually remounts — SWR
+  // re-fetching webapp-info isn't enough when the URL stays the same.
   useEffect(() => {
     if (webappNeedsRefresh > 0 && isFullyOpen && session?.id) {
       mutate();
+      setPreviewRefreshKey((k) => k + 1);
     }
   }, [webappNeedsRefresh, isFullyOpen, mutate, session?.id]);
 
@@ -268,31 +289,30 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     }
   }, [session?.id, navigateTabForward]);
 
+  // Resolve the active transient tab object (if any)
+  const activePanel: PanelTab | undefined = panelTabs.find(
+    (t) => panelTabId(t) === activePanelTabId
+  );
+  const activeFilePath = activePanel?.kind === "file" ? activePanel.path : null;
+
   // Determine if the active file preview is a markdown or pptx file (for download buttons)
   const isMarkdownPreview =
-    isFilePreviewActive &&
-    activeFilePreviewPath &&
-    /\.md$/i.test(activeFilePreviewPath);
+    isFilePreviewActive && activeFilePath && /\.md$/i.test(activeFilePath);
 
   const isPptxPreview =
-    isFilePreviewActive &&
-    activeFilePreviewPath &&
-    /\.pptx$/i.test(activeFilePreviewPath);
+    isFilePreviewActive && activeFilePath && /\.pptx$/i.test(activeFilePath);
 
   const isPdfPreview =
-    isFilePreviewActive &&
-    activeFilePreviewPath &&
-    /\.pdf$/i.test(activeFilePreviewPath);
+    isFilePreviewActive && activeFilePath && /\.pdf$/i.test(activeFilePath);
 
   const [isExportingDocx, setIsExportingDocx] = useState(false);
 
   const handleDocxDownload = useCallback(async () => {
-    if (!session?.id || !activeFilePreviewPath) return;
+    if (!session?.id || !activeFilePath) return;
     setIsExportingDocx(true);
     try {
-      const blob = await exportDocx(session.id, activeFilePreviewPath);
-      const fileName =
-        activeFilePreviewPath.split("/").pop() || activeFilePreviewPath;
+      const blob = await exportDocx(session.id, activeFilePath);
+      const fileName = activeFilePath.split("/").pop() || activeFilePath;
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -306,27 +326,26 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
     } finally {
       setIsExportingDocx(false);
     }
-  }, [session?.id, activeFilePreviewPath]);
+  }, [session?.id, activeFilePath]);
 
   const handleRawFileDownload = useCallback(() => {
-    if (!session?.id || !activeFilePreviewPath) return;
-    const encodedPath = activeFilePreviewPath
+    if (!session?.id || !activeFilePath) return;
+    const encodedPath = activeFilePath
       .split("/")
       .map((s) => encodeURIComponent(s))
       .join("/");
     const link = document.createElement("a");
     link.href = `/api/build/sessions/${session.id}/artifacts/${encodedPath}`;
-    link.download =
-      activeFilePreviewPath.split("/").pop() || activeFilePreviewPath;
+    link.download = activeFilePath.split("/").pop() || activeFilePath;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [session?.id, activeFilePreviewPath]);
+  }, [session?.id, activeFilePath]);
 
   // Unified refresh handler — dispatches based on the active tab/preview
   const handleRefresh = useCallback(() => {
-    if (isFilePreviewActive && activeFilePreviewPath) {
-      // File preview tab: bump key to reload standalone + content previews
+    if (isFilePreviewActive) {
+      // Transient panel tab: bump key to reload standalone + content previews
       setFilePreviewRefreshKey((k) => k + 1);
     } else if (activeOutputTab === "preview") {
       // Web preview tab: remount the iframe
@@ -335,13 +354,7 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       // Files tab: clear cache and re-fetch directory listing
       triggerFilesRefresh(session.id);
     }
-  }, [
-    isFilePreviewActive,
-    activeFilePreviewPath,
-    activeOutputTab,
-    session?.id,
-    triggerFilesRefresh,
-  ]);
+  }, [isFilePreviewActive, activeOutputTab, session?.id, triggerFilesRefresh]);
 
   // Fetch artifacts - poll every 5 seconds when on artifacts tab
   const shouldFetchArtifacts =
@@ -365,63 +378,16 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
   return (
     <div
       className={cn(
-        "absolute z-20 flex flex-col border rounded-12 border-border-01 bg-background-neutral-00 overflow-hidden transition-all duration-300 ease-in-out",
-        isMaximized
-          ? "top-4 right-16 bottom-4 w-[calc(100%-8rem)]"
-          : "top-4 right-4 bottom-4 w-[calc(50%-2rem)]",
-        isOpen
-          ? "opacity-100 translate-x-0"
-          : "opacity-0 translate-x-full pointer-events-none"
+        "absolute z-20 inset-y-0 right-0 w-1/2 flex flex-col border-l border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
+        isOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
       )}
-      style={{
-        boxShadow: "0 8px 60px 30px rgba(0, 0, 0, 0.07)",
-      }}
     >
       {/* Tab List - Chrome-style tabs */}
       <div className="flex flex-col w-full">
         {/* Tabs row */}
-        <div className="flex items-end w-full pt-1.5 bg-background-tint-03">
-          {/* macOS-style window controls - sticky on left */}
-          <div className="group flex items-center gap-2.5 pl-4 pr-2 py-3 flex-shrink-0">
-            <button
-              onClick={onClose}
-              className="relative w-3.5 h-3.5 rounded-full bg-[#ff5f57] hover:bg-[#ff3b30] transition-colors flex-shrink-0 flex items-center justify-center"
-              aria-label="No action"
-            >
-              <SvgX
-                size={12}
-                strokeWidth={4}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ stroke: "#8a2e2a" }}
-              />
-            </button>
-            <button
-              onClick={onClose}
-              className="relative w-3.5 h-3.5 rounded-full bg-[#ffbd2e] hover:bg-[#ffa000] transition-colors flex-shrink-0 flex items-center justify-center"
-              aria-label="Close panel"
-            >
-              <SvgMinus
-                size={12}
-                strokeWidth={3}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ stroke: "#8a6618" }}
-              />
-            </button>
-            <button
-              onClick={handleMaximize}
-              className="relative w-3.5 h-3.5 rounded-full bg-[#28ca42] hover:bg-[#1fb832] transition-colors flex-shrink-0 flex items-center justify-center"
-              aria-label="Maximize panel"
-            >
-              <SvgMaximize2
-                size={8}
-                strokeWidth={2.5}
-                className="opacity-0 group-hover:opacity-90 rotate-90 transition-opacity"
-                style={{ stroke: "#155c24" }}
-              />
-            </button>
-          </div>
+        <div className="flex items-end w-full pt-1 bg-background-tint-03">
           {/* Scrollable tabs container */}
-          <div className="flex items-end gap-1.5 flex-1 pl-3 pr-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="flex items-end flex-1 pl-2 pr-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {/* Pinned tabs */}
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -439,31 +405,31 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                       : undefined
                   }
                   className={cn(
-                    "relative inline-flex items-center justify-center gap-2 px-5",
+                    "relative inline-flex items-center justify-center gap-2 px-5 py-1.5 rounded-t-lg",
                     "max-w-[15%] min-w-fit",
                     isDisabled
-                      ? "text-text-02 bg-transparent cursor-not-allowed py-1 mb-1"
+                      ? "text-text-02 bg-transparent cursor-not-allowed"
                       : isActive
-                        ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
-                        : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
+                        ? "bg-background-neutral-00 text-text-04 z-10"
+                        : "text-text-03 bg-transparent hover:bg-background-tint-02"
                   )}
                 >
-                  {/* Left curved joint */}
+                  {/* Left curved joint — bleeds active tab into the row */}
                   {isActive && (
                     <div
-                      className="absolute -left-3 bottom-0 w-3 h-3 bg-background-neutral-00"
+                      className="absolute -left-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
                       style={{
                         maskImage:
-                          "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
+                          "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
                         WebkitMaskImage:
-                          "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
+                          "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
                       }}
                     />
                   )}
                   <Icon
                     size={16}
                     className={cn(
-                      "stroke-current flex-shrink-0",
+                      "stroke-current shrink-0",
                       isDisabled
                         ? "stroke-text-02"
                         : isActive
@@ -471,20 +437,18 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
                           : "stroke-text-03"
                     )}
                   />
-                  <Text
-                    className={cn("truncate", isDisabled && "text-text-02")}
-                  >
+                  <Text color={isDisabled ? "text-02" : "text-05"} maxLines={1}>
                     {tab.label}
                   </Text>
                   {/* Right curved joint */}
                   {isActive && (
                     <div
-                      className="absolute -right-3 bottom-0 w-3 h-3 bg-background-neutral-00"
+                      className="absolute -right-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
                       style={{
                         maskImage:
-                          "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
+                          "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
                         WebkitMaskImage:
-                          "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
+                          "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
                       }}
                     />
                   )}
@@ -492,76 +456,80 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
               );
             })}
 
-            {/* Separator between pinned and preview tabs */}
-            {filePreviewTabs.length > 0 && (
+            {/* Separator between pinned and transient tabs */}
+            {panelTabs.length > 0 && (
               <div className="w-px h-5 bg-border-02 mx-2 mb-1 self-center" />
             )}
 
-            {/* Preview tabs */}
-            {filePreviewTabs.map((previewTab) => {
-              const isActive = activeFilePreviewPath === previewTab.path;
-              const TabIcon = getFileIcon(previewTab.fileName);
-              return (
-                <button
-                  key={previewTab.path}
-                  onClick={() => handlePreviewTabClick(previewTab.path)}
-                  className={cn(
-                    "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2",
-                    "max-w-[150px] min-w-fit",
-                    isActive
-                      ? "bg-background-neutral-00 text-text-04 rounded-t-lg py-2"
-                      : "text-text-03 bg-transparent hover:bg-background-tint-02 rounded-full py-1 mb-1"
-                  )}
-                >
-                  {/* Left curved joint */}
-                  {isActive && (
-                    <div
-                      className="absolute -left-3 bottom-0 w-3 h-3 bg-background-neutral-00"
-                      style={{
-                        maskImage:
-                          "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
-                        WebkitMaskImage:
-                          "radial-gradient(circle at 0 0, transparent 12px, black 12px)",
-                      }}
-                    />
-                  )}
-                  <TabIcon
-                    size={14}
-                    className={cn(
-                      "stroke-current flex-shrink-0",
-                      isActive ? "stroke-text-04" : "stroke-text-03"
-                    )}
-                  />
-                  <Text className="truncate text-sm">
-                    {previewTab.fileName}
-                  </Text>
-                  {/* Close button */}
-                  <button
-                    onClick={(e) => handlePreviewTabClose(e, previewTab.path)}
-                    className={cn(
-                      "flex-shrink-0 p-0.5 rounded hover:bg-background-tint-03 transition-colors",
-                      isActive
-                        ? "opacity-100"
-                        : "opacity-0 group-hover:opacity-100"
-                    )}
-                    aria-label={`Close ${previewTab.fileName}`}
-                  >
-                    <SvgX size={12} className="stroke-text-03" />
-                  </button>
-                  {/* Right curved joint */}
-                  {isActive && (
-                    <div
-                      className="absolute -right-3 bottom-0 w-3 h-3 bg-background-neutral-00"
-                      style={{
-                        maskImage:
-                          "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
-                        WebkitMaskImage:
-                          "radial-gradient(circle at 100% 0, transparent 12px, black 12px)",
-                      }}
-                    />
-                  )}
-                </button>
-              );
+            {/* Transient panel tabs */}
+            {panelTabs.map((tab) => {
+              const id = panelTabId(tab);
+              const isActive = activePanelTabId === id;
+
+              switch (tab.kind) {
+                case "file": {
+                  const TabIcon = getFileIcon(tab.fileName);
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => handlePanelTabClick(id)}
+                      className={cn(
+                        "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2 py-1.5 rounded-t-lg",
+                        "max-w-[150px] min-w-fit",
+                        isActive
+                          ? "bg-background-neutral-00 text-text-04 z-10"
+                          : "text-text-03 bg-transparent hover:bg-background-tint-02"
+                      )}
+                    >
+                      {isActive && (
+                        <div
+                          className="absolute -left-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                          style={{
+                            maskImage:
+                              "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
+                            WebkitMaskImage:
+                              "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
+                          }}
+                        />
+                      )}
+                      <TabIcon
+                        size={14}
+                        className={cn(
+                          "stroke-current shrink-0",
+                          isActive ? "stroke-text-04" : "stroke-text-03"
+                        )}
+                      />
+                      <Text font="secondary-body" color="text-05" maxLines={1}>
+                        {tab.fileName}
+                      </Text>
+                      {/* Close button */}
+                      <button
+                        onClick={(e) => handlePanelTabClose(e, tab)}
+                        className={cn(
+                          "shrink-0 p-0.5 rounded-sm hover:bg-background-tint-03 transition-colors",
+                          isActive
+                            ? "opacity-100"
+                            : "opacity-0 group-hover:opacity-100"
+                        )}
+                        aria-label={`Close ${tab.fileName}`}
+                      >
+                        <SvgX size={12} className="stroke-text-03" />
+                      </button>
+                      {isActive && (
+                        <div
+                          className="absolute -right-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                          style={{
+                            maskImage:
+                              "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
+                            WebkitMaskImage:
+                              "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
+                          }}
+                        />
+                      )}
+                    </button>
+                  );
+                }
+              }
             })}
           </div>
         </div>
@@ -572,8 +540,8 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
       {/* URL Bar - Chrome-style */}
       <UrlBar
         displayUrl={
-          isFilePreviewActive && activeFilePreviewPath
-            ? `sandbox://${activeFilePreviewPath}`
+          isFilePreviewActive && activeFilePath
+            ? `sandbox://${activeFilePath}`
             : activeOutputTab === "preview"
               ? session
                 ? displayUrl || "Loading..."
@@ -630,11 +598,11 @@ const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden rounded-b-08">
-        {/* File preview content - shown when a preview tab is active */}
-        {isFilePreviewActive && activeFilePreviewPath && session?.id && (
+        {/* Transient panel tab content - shown when a panel tab is active */}
+        {isFilePreviewActive && activePanel?.kind === "file" && session?.id && (
           <FilePreviewContent
             sessionId={session.id}
-            filePath={activeFilePreviewPath}
+            filePath={activePanel.path}
             refreshKey={filePreviewRefreshKey}
           />
         )}

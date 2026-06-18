@@ -11,6 +11,7 @@ import {
   ToolSnapshot,
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
+  MCPOAuthProviderMode,
 } from "@/lib/tools/interfaces";
 export interface ToolStatusUpdateRequest {
   tool_ids: number[];
@@ -170,6 +171,11 @@ interface UpsertMCPServerResponse {
   server_url: string;
   auth_type: string;
   auth_performer: string;
+  oauth_provider_mode?: MCPOAuthProviderMode;
+  oauth_authorization_endpoint?: string;
+  oauth_token_endpoint?: string;
+  oauth_scopes_override?: string[];
+  oauth_additional_auth_params?: Record<string, string>;
   is_authenticated: boolean;
 }
 
@@ -183,8 +189,20 @@ export async function upsertMCPServer(serverData: {
   api_token?: string;
   oauth_client_id?: string;
   oauth_client_secret?: string;
+  oauth_provider_mode?: MCPOAuthProviderMode;
+  oauth_authorization_endpoint?: string;
+  oauth_token_endpoint?: string;
+  oauth_scopes_override?: string[];
+  oauth_additional_auth_params?: Record<string, string>;
+  // Mirrors the LLM-provider `api_key_changed` pattern: explicitly signal
+  // whether the OAuth credential fields were edited so the backend doesn't
+  // overwrite stored values with masked placeholders on resubmit.
+  oauth_client_id_changed?: boolean;
+  oauth_client_secret_changed?: boolean;
   auth_template?: any;
   admin_credentials?: Record<string, string>;
+  // Per-key analogue of `oauth_client_*_changed` for `admin_credentials`.
+  admin_credentials_changed?: Record<string, boolean>;
   existing_server_id?: number;
 }): Promise<ApiResponse<UpsertMCPServerResponse>> {
   try {

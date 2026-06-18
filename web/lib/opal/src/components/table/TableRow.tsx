@@ -2,7 +2,7 @@
 
 import { cn } from "@opal/utils";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
-import type { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { SvgHandle } from "@opal/icons";
@@ -11,8 +11,9 @@ import { SvgHandle } from "@opal/icons";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface TableRowProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLTableRowElement>> {
+export interface TableRowProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLTableRowElement>
+> {
   ref?: React.Ref<HTMLTableRowElement>;
   selected?: boolean;
   /** Disables interaction and applies disabled styling */
@@ -79,7 +80,7 @@ function SortableTableRow({
             className={cn(
               "absolute right-0 top-1/2 -translate-y-1/2 cursor-grab",
               "opacity-0 group-hover/row:opacity-100 transition-opacity",
-              "flex items-center justify-center rounded"
+              "flex items-center justify-center rounded-sm"
             )}
             aria-label="Drag to reorder"
             onMouseDown={(e) => e.preventDefault()}

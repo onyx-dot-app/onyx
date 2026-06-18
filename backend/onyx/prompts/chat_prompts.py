@@ -2,7 +2,6 @@
 
 from onyx.prompts.constants import REMINDER_TAG_NO_HEADER
 
-
 DATETIME_REPLACEMENT_PAT = "{{CURRENT_DATETIME}}"
 CITATION_GUIDANCE_REPLACEMENT_PAT = "{{CITATION_GUIDANCE}}"
 REMINDER_TAG_REPLACEMENT_PAT = "{{REMINDER_TAG_DESCRIPTION}}"
@@ -72,6 +71,13 @@ Very briefly describe the image(s) generated. Do not include any links or attach
 FILE_REMINDER = """
 Your code execution generated file(s) with download links.
 If you reference or share these files, use the exact markdown format [filename](file_link) with the file_link from the execution result.
+""".strip()
+
+
+# Wrapped in <system-reminder> tags by translate_history_to_llm_format when
+# the per-request image cap drops images from the outgoing request.
+IMAGE_DROP_REMINDER = """
+{dropped_count} earlier image(s) attached to this conversation were omitted to fit the model's per-request image limit.
 """.strip()
 
 

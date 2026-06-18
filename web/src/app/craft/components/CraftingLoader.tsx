@@ -93,8 +93,8 @@ export default function CraftingLoader() {
   const hasCurrentText = currentText.length > 0;
 
   return (
-    <div className="h-full bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-sm overflow-hidden shadow-2xl border-2 border-neutral-700">
+    <div className="h-full bg-linear-to-br from-neutral-950 via-neutral-900 to-neutral-950 flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-xs overflow-hidden shadow-2xl border-2 border-neutral-700">
         <div className="bg-neutral-800 px-4 py-3 flex items-center gap-2 border-b-2 border-neutral-700">
           <div className="w-3 h-3 rounded-none bg-red-500" />
           <div className="w-3 h-3 rounded-none bg-yellow-500" />

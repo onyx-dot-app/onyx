@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // entryKind is the type of chat entry.
@@ -24,10 +25,9 @@ const (
 
 // chatEntry is a single rendered entry in the chat history.
 type chatEntry struct {
-	kind      entryKind
-	content   string   // raw content (for agent: the markdown source)
-	rendered  string   // pre-rendered output
-	citations []string // citation lines (for citation entries)
+	kind     entryKind
+	content  string // raw content (for agent: the markdown source)
+	rendered string // pre-rendered output
 }
 
 // pickerKind distinguishes what the picker is selecting.
@@ -44,6 +44,9 @@ type pickerItem struct {
 	label string
 }
 
+// streamRenderInterval is the minimum time between markdown re-renders during streaming.
+const streamRenderInterval = 100 * time.Millisecond
+
 // viewport manages the chat display.
 type viewport struct {
 	entries      []chatEntry
@@ -57,6 +60,12 @@ type viewport struct {
 	pickerIndex  int
 	pickerType   pickerKind
 	scrollOffset int // lines scrolled up from bottom (0 = pinned to bottom)
+
+	// Progressive markdown rendering during streaming
+	streamMarkdown bool   // feature flag: render markdown while streaming
+	streamRendered string // cached rendered output during streaming
+	lastRenderTime time.Time
+	lastRenderLen  int // length of streamBuf at last render (skip if unchanged)
 }
 
 // newMarkdownRenderer creates a Glamour renderer with zero left margin.
@@ -71,10 +80,11 @@ func newMarkdownRenderer(width int) *glamour.TermRenderer {
 	return r
 }
 
-func newViewport(width int) *viewport {
+func newViewport(width int, streamMarkdown bool) *viewport {
 	return &viewport{
-		width:    width,
-		renderer: newMarkdownRenderer(width),
+		width:          width,
+		renderer:       newMarkdownRenderer(width),
+		streamMarkdown: streamMarkdown,
 	}
 }
 
@@ -108,12 +118,27 @@ func (v *viewport) addUserMessage(msg string) {
 func (v *viewport) startAgent() {
 	v.streaming = true
 	v.streamBuf = ""
+	v.streamRendered = ""
+	v.lastRenderLen = 0
+	v.lastRenderTime = time.Time{}
 	// Add a blank-line spacer entry before the agent message
 	v.entries = append(v.entries, chatEntry{kind: entryInfo, rendered: ""})
 }
 
 func (v *viewport) appendToken(token string) {
 	v.streamBuf += token
+
+	if !v.streamMarkdown {
+		return
+	}
+
+	now := time.Now()
+	bufLen := len(v.streamBuf)
+	if bufLen != v.lastRenderLen && now.Sub(v.lastRenderTime) >= streamRenderInterval {
+		v.streamRendered = v.renderAgentContent(v.streamBuf)
+		v.lastRenderTime = now
+		v.lastRenderLen = bufLen
+	}
 }
 
 func (v *viewport) finishAgent() {
@@ -135,6 +160,8 @@ func (v *viewport) finishAgent() {
 	})
 	v.streaming = false
 	v.streamBuf = ""
+	v.streamRendered = ""
+	v.lastRenderLen = 0
 }
 
 func (v *viewport) renderAgentContent(content string) string {
@@ -203,14 +230,11 @@ func (v *viewport) addCitations(citations map[int]string) {
 		parts = append(parts, fmt.Sprintf("[%d] %s", num, citations[num]))
 	}
 	text := fmt.Sprintf("Sources (%d): %s", len(citations), strings.Join(parts, "  "))
-	var citLines []string
-	citLines = append(citLines, text)
 
 	v.entries = append(v.entries, chatEntry{
-		kind:      entryCitation,
-		content:   text,
-		rendered:  citationStyle.Render("● "+text),
-		citations: citLines,
+		kind:     entryCitation,
+		content:  text,
+		rendered: citationStyle.Render("● " + text),
 	})
 }
 
@@ -358,6 +382,22 @@ func (v *viewport) renderPicker(width, height int) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel)
 }
 
+// streamingContent returns the display content for the in-progress stream.
+func (v *viewport) streamingContent() string {
+	if v.streamMarkdown && v.streamRendered != "" {
+		return v.streamRendered
+	}
+	// Fall back to raw text with agent dot prefix
+	bufLines := strings.Split(v.streamBuf, "\n")
+	if len(bufLines) > 0 {
+		bufLines[0] = agentDot + " " + bufLines[0]
+		for i := 1; i < len(bufLines); i++ {
+			bufLines[i] = "  " + bufLines[i]
+		}
+	}
+	return strings.Join(bufLines, "\n")
+}
+
 // totalLines computes the total number of rendered content lines.
 func (v *viewport) totalLines() int {
 	var lines []string
@@ -368,14 +408,7 @@ func (v *viewport) totalLines() int {
 		lines = append(lines, e.rendered)
 	}
 	if v.streaming && v.streamBuf != "" {
-		bufLines := strings.Split(v.streamBuf, "\n")
-		if len(bufLines) > 0 {
-			bufLines[0] = agentDot + " " + bufLines[0]
-			for i := 1; i < len(bufLines); i++ {
-				bufLines[i] = "  " + bufLines[i]
-			}
-		}
-		lines = append(lines, strings.Join(bufLines, "\n"))
+		lines = append(lines, v.streamingContent())
 	} else if v.streaming {
 		lines = append(lines, agentDot+" ")
 	}
@@ -399,16 +432,9 @@ func (v *viewport) view(height int) string {
 		lines = append(lines, e.rendered)
 	}
 
-	// Streaming buffer (plain text, not markdown)
+	// Streaming buffer
 	if v.streaming && v.streamBuf != "" {
-		bufLines := strings.Split(v.streamBuf, "\n")
-		if len(bufLines) > 0 {
-			bufLines[0] = agentDot + " " + bufLines[0]
-			for i := 1; i < len(bufLines); i++ {
-				bufLines[i] = "  " + bufLines[i]
-			}
-		}
-		lines = append(lines, strings.Join(bufLines, "\n"))
+		lines = append(lines, v.streamingContent())
 	} else if v.streaming {
 		lines = append(lines, agentDot+" ")
 	}
@@ -445,4 +471,3 @@ func (v *viewport) view(height int) string {
 
 	return strings.Join(contentLines, "\n")
 }
-

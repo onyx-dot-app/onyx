@@ -8,7 +8,7 @@ import React, {
   JSX,
 } from "react";
 import { createPortal } from "react-dom";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 
 // Create a context for the tooltip group
 const TooltipGroupContext = createContext<{
@@ -136,7 +136,7 @@ export const CustomTooltip = ({
         createPortal(
           <div
             className={cn(
-              "fixed z-[1000] overflow-hidden rounded-md text-neutral-50",
+              "fixed z-1000 overflow-hidden rounded-md text-neutral-50",
               "transform -translate-x-1/2 text-xs",
               "px-2 py-1.5 shadow-md animate-in fade-in-0 zoom-in-95",
               "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",

@@ -10,7 +10,7 @@ Parameters:
     Default: onyx
   VpcID:
     Type: String
-    Default: vpc-098cfa79d637dabff
+    Description: "The ID of the VPC to deploy into"
 
 Resources:
   ECSCluster:

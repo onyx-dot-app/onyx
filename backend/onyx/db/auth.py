@@ -55,11 +55,17 @@ def _add_live_user_count_where_clause(
     - System users (anonymous user, no-auth placeholder)
     - External permission users (unless only_admin_users is True)
     """
-    select_stmt = select_stmt.where(~User.email.endswith(get_api_key_email_pattern()))  # type: ignore
+    select_stmt = select_stmt.where(
+        ~User.email.endswith(get_api_key_email_pattern())  # ty: ignore[invalid-argument-type]
+    )
 
     # Exclude system users (anonymous user, no-auth placeholder)
-    select_stmt = select_stmt.where(User.email != ANONYMOUS_USER_EMAIL)  # type: ignore
-    select_stmt = select_stmt.where(User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL)  # type: ignore
+    select_stmt = select_stmt.where(
+        User.email != ANONYMOUS_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
+    select_stmt = select_stmt.where(
+        User.email != NO_AUTH_PLACEHOLDER_USER_EMAIL  # ty: ignore[invalid-argument-type]
+    )
 
     if only_admin_users:
         return select_stmt.where(User.role == UserRole.ADMIN)
@@ -75,7 +81,7 @@ def get_live_users_count(db_session: Session) -> int:
     This does NOT include invited users, "users" pulled in
     from external connectors, or API keys.
     """
-    count_stmt = func.count(User.id)
+    count_stmt = func.count(User.id)  # ty: ignore[invalid-argument-type]
     select_stmt = select(count_stmt)
     select_stmt_w_filters = _add_live_user_count_where_clause(select_stmt, False)
     user_count = db_session.scalar(select_stmt_w_filters)
@@ -86,7 +92,7 @@ def get_live_users_count(db_session: Session) -> int:
 
 async def get_user_count(only_admin_users: bool = False) -> int:
     async with get_async_session_context_manager() as session:
-        count_stmt = func.count(User.id)
+        count_stmt = func.count(User.id)  # ty: ignore[invalid-argument-type]
         stmt = select(count_stmt)
         stmt_w_filters = _add_live_user_count_where_clause(stmt, only_admin_users)
         user_count = await session.scalar(stmt_w_filters)

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
-import { CheckmarkIcon, TriangleAlertIcon } from "@/components/icons/icons";
+import { SvgCheck, SvgAlertTriangle } from "@opal/icons";
 import CardSection from "@/components/admin/CardSection";
 import { Button } from "@opal/components";
 
@@ -51,6 +51,10 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
   );
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
+  // State + auth code are single-use; block duplicate POSTs (StrictMode
+  // double-invoke or re-renders) that race the first request and 400.
+  const hasProcessedRef = useRef(false);
+
   // Extract query parameters
   const code = searchParams?.get("code");
   const state = searchParams?.get("state");
@@ -86,7 +90,8 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
   ]);
 
   useEffect(() => {
-    const controller = new AbortController();
+    if (hasProcessedRef.current) return;
+    hasProcessedRef.current = true;
 
     const handleOAuthCallback = async () => {
       // Handle OAuth error from provider
@@ -124,7 +129,6 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
             "Content-Type": "application/json",
           },
           credentials: "include",
-          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -191,7 +195,6 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
         setIsError(false);
         setIsLoading(false);
       } catch (error) {
-        if (controller.signal.aborted) return;
         console.error("OAuth callback error:", error);
         setStatusMessage(config.errorMessage || "Something Went Wrong");
         setStatusDetails(
@@ -205,8 +208,9 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     };
 
     handleOAuthCallback();
-    return () => controller.abort();
-  }, [code, state, error, errorDescription, searchParams, config]);
+    // Run once; the single-use callback must not re-fire (see hasProcessedRef).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const getStatusIcon = () => {
     if (isLoading) {
@@ -216,7 +220,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     }
     if (isSuccess) {
       return (
-        <CheckmarkIcon
+        <SvgCheck
           size={64}
           className="text-green-500 dark:text-green-400 mx-auto mb-4"
         />
@@ -224,7 +228,7 @@ export default function OAuthCallbackPage({ config }: OAuthCallbackPageProps) {
     }
     if (isError) {
       return (
-        <TriangleAlertIcon
+        <SvgAlertTriangle
           size={64}
           className="text-red-500 dark:text-red-400 mx-auto mb-4"
         />

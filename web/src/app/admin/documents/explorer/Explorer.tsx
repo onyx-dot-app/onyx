@@ -5,7 +5,7 @@ import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useState, useEffect, useCallback } from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import Checkbox from "@/refresh-components/inputs/Checkbox";
+import { Checkbox } from "@opal/components";
 import { updateHiddenStatus } from "../lib";
 import { toast } from "@/hooks/useToast";
 import { getErrorMsg } from "@/lib/fetchUtils";
@@ -18,7 +18,7 @@ import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import { ThreeDotsLoader } from "@/components/Loading";
 
 const DocumentDisplay = ({
@@ -50,7 +50,7 @@ const DocumentDisplay = ({
         </a>
       </div>
       <div className="flex flex-wrap gap-x-2 mt-1 text-xs">
-        <div className="px-1 py-0.5 bg-accent-background-hovered rounded flex">
+        <div className="px-1 py-0.5 bg-accent-background-hovered rounded-sm flex">
           <p className="mr-1 my-auto">Boost:</p>
           <ScoreSection
             documentId={document.document_id}
@@ -73,7 +73,7 @@ const DocumentDisplay = ({
               );
             }
           }}
-          className="px-1 py-0.5 bg-accent-background-hovered hover:bg-accent-background rounded flex cursor-pointer select-none"
+          className="px-1 py-0.5 bg-accent-background-hovered hover:bg-accent-background rounded-sm flex cursor-pointer select-none"
         >
           <div className="my-auto">
             {document.hidden ? (
@@ -92,7 +92,7 @@ const DocumentDisplay = ({
           <DocumentUpdatedAtBadge updatedAt={document.updated_at} />
         </div>
       )}
-      <p className="pl-1 pt-2 pb-3 break-words">
+      <p className="pl-1 pt-2 pb-3 wrap-break-word">
         {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
       </p>
     </div>

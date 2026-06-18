@@ -5,7 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import count_error_rows_for_index_attempt
 from onyx.db.index_attempt import create_index_attempt
@@ -14,8 +13,6 @@ from onyx.db.models import IndexAttempt
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-INDEXING_PROGRESS_TIMEOUT_HOURS = 6
 
 
 class CoordinationStatus(BaseModel):
@@ -50,7 +47,10 @@ class IndexingCoordination:
         and transactions to prevent duplicate attempts.
         """
         try:
-            # Check for existing active attempts (this is the "fence" check)
+            # Check for existing active full-run attempts (the "fence" check).
+            # Targeted reindex attempts are allowed to overlap with a full crawl
+            # by design (per-doc row-locks handle write conflicts), so they're
+            # excluded here.
             existing_attempt = db_session.execute(
                 select(IndexAttempt)
                 .where(
@@ -59,16 +59,17 @@ class IndexingCoordination:
                     IndexAttempt.status.in_(
                         [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
                     ),
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
                 )
                 .with_for_update(nowait=True)
             ).first()
 
             if existing_attempt:
                 logger.info(
-                    f"Indexing already in progress: "
-                    f"cc_pair={cc_pair_id} "
-                    f"search_settings={search_settings_id} "
-                    f"existing_attempt={existing_attempt[0].id}"
+                    "Indexing already in progress: cc_pair=%s search_settings=%s existing_attempt=%s",
+                    cc_pair_id,
+                    search_settings_id,
+                    existing_attempt[0].id,
                 )
                 return None
 
@@ -82,21 +83,21 @@ class IndexingCoordination:
             )
 
             logger.info(
-                f"Created Index Attempt: "
-                f"cc_pair={cc_pair_id} "
-                f"search_settings={search_settings_id} "
-                f"attempt_id={attempt_id} "
-                f"celery_task_id={celery_task_id}"
+                "Created Index Attempt: cc_pair=%s search_settings=%s attempt_id=%s celery_task_id=%s",
+                cc_pair_id,
+                search_settings_id,
+                attempt_id,
+                celery_task_id,
             )
 
             return attempt_id
 
         except SQLAlchemyError as e:
             logger.info(
-                f"Failed to create index attempt (likely race condition): "
-                f"cc_pair={cc_pair_id} "
-                f"search_settings={search_settings_id} "
-                f"error={str(e)}"
+                "Failed to create index attempt (likely race condition): cc_pair=%s search_settings=%s error=%s",
+                cc_pair_id,
+                search_settings_id,
+                str(e),
             )
             db_session.rollback()
             return None
@@ -127,7 +128,7 @@ class IndexingCoordination:
             attempt.cancellation_requested = True
             db_session.commit()
 
-            logger.info(f"Requested cancellation for attempt {index_attempt_id}")
+            logger.info("Requested cancellation for attempt %s", index_attempt_id)
 
     @staticmethod
     def set_total_batches(
@@ -145,7 +146,9 @@ class IndexingCoordination:
             db_session.commit()
 
             logger.info(
-                f"Set total batches: attempt={index_attempt_id} total={total_batches}"
+                "Set total batches: attempt=%s total=%s",
+                index_attempt_id,
+                total_batches,
             )
 
     @staticmethod
@@ -183,11 +186,11 @@ class IndexingCoordination:
             db_session.commit()
 
             logger.info(
-                f"Updated batch completion: "
-                f"attempt={index_attempt_id} "
-                f"completed={attempt.completed_batches} "
-                f"total={attempt.total_batches} "
-                f"docs={total_docs_indexed} "
+                "Updated batch completion: attempt=%s completed=%s total=%s docs=%s ",
+                index_attempt_id,
+                attempt.completed_batches,
+                attempt.total_batches,
+                total_docs_indexed,
             )
 
             return attempt.completed_batches, attempt.total_batches
@@ -195,7 +198,7 @@ class IndexingCoordination:
         except Exception:
             db_session.rollback()
             logger.exception(
-                f"Failed to update batch completion for attempt {index_attempt_id}"
+                "Failed to update batch completion for attempt %s", index_attempt_id
             )
             raise
 
@@ -260,50 +263,3 @@ class IndexingCoordination:
         )
 
         return [attempt.id for attempt in active_attempts]
-
-    @staticmethod
-    def update_progress_tracking(
-        db_session: Session,
-        index_attempt_id: int,
-        current_batches_completed: int,
-        timeout_hours: int = INDEXING_PROGRESS_TIMEOUT_HOURS,
-        force_update_progress: bool = False,
-    ) -> bool:
-        """
-        Update progress tracking for stall detection.
-        Returns True if sufficient progress was made, False if stalled.
-        """
-
-        attempt = get_index_attempt(db_session, index_attempt_id)
-        if not attempt:
-            logger.error(f"Index attempt {index_attempt_id} not found in database")
-            return False
-
-        current_time = get_db_current_time(db_session)
-
-        # No progress - check if this is the first time tracking
-        # or if the caller wants to simulate guaranteed progress
-        if attempt.last_progress_time is None or force_update_progress:
-            # First time tracking - initialize
-            attempt.last_progress_time = current_time
-            attempt.last_batches_completed_count = current_batches_completed
-            db_session.commit()
-            return True
-
-        time_elapsed = (current_time - attempt.last_progress_time).total_seconds()
-        # only actually write to db every timeout_hours/2
-        # this ensure thats at most timeout_hours will pass with no activity
-        if time_elapsed < timeout_hours * 1800:
-            return True
-
-        # Check if progress has been made
-        if current_batches_completed <= attempt.last_batches_completed_count:
-            # if between timeout_hours/2 and timeout_hours has passed
-            # without an update, we consider the attempt stalled
-            return False
-
-        # Progress made - update tracking
-        attempt.last_progress_time = current_time
-        attempt.last_batches_completed_count = current_batches_completed
-        db_session.commit()
-        return True

@@ -2,6 +2,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from onyx.auth.permissions import Permission
 from onyx.db.models import UserGroup as UserGroupModel
 from onyx.server.documents.models import ConnectorCredentialPairDescriptor
 from onyx.server.documents.models import ConnectorSnapshot
@@ -25,7 +26,12 @@ class UserGroup(BaseModel):
     is_default: bool
 
     @classmethod
-    def from_model(cls, user_group_model: UserGroupModel) -> "UserGroup":
+    def from_model(
+        cls,
+        user_group_model: UserGroupModel,
+        *,
+        mask_credential_prefix: bool,
+    ) -> "UserGroup":
         return cls(
             id=user_group_model.id,
             name=user_group_model.name,
@@ -58,7 +64,8 @@ class UserGroup(BaseModel):
                         credential_ids=[cc_pair_relationship.cc_pair.credential_id],
                     ),
                     credential=CredentialSnapshot.from_credential_db_model(
-                        cc_pair_relationship.cc_pair.credential
+                        cc_pair_relationship.cc_pair.credential,
+                        mask_credential_prefix=mask_credential_prefix,
                     ),
                     access_type=cc_pair_relationship.cc_pair.access_type,
                 )
@@ -66,7 +73,10 @@ class UserGroup(BaseModel):
                 if cc_pair_relationship.is_current
             ],
             document_sets=[
-                DocumentSet.from_model(ds) for ds in user_group_model.document_sets
+                DocumentSet.from_model(
+                    ds, mask_credential_prefix=mask_credential_prefix
+                )
+                for ds in user_group_model.document_sets
             ],
             personas=[
                 PersonaSnapshot.from_model(persona)
@@ -121,3 +131,13 @@ class SetCuratorRequest(BaseModel):
 class UpdateGroupAgentsRequest(BaseModel):
     added_agent_ids: list[int]
     removed_agent_ids: list[int]
+
+
+class SetPermissionRequest(BaseModel):
+    permission: Permission
+    enabled: bool
+
+
+class SetPermissionResponse(BaseModel):
+    permission: Permission
+    enabled: bool

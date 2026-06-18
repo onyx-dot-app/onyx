@@ -1,6 +1,9 @@
 import copy
 import re
+import threading
+import time
 from collections.abc import Callable
+from collections.abc import Iterable
 from functools import lru_cache
 from typing import Any
 from typing import cast
@@ -29,7 +32,7 @@ from onyx.prompts.contextual_retrieval import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.contextual_retrieval import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
-
+from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
     from onyx.server.manage.llm.models import LLMProviderView
@@ -133,7 +136,7 @@ def _unwrap_nested_exception(error: Exception) -> Exception:
 
 def litellm_exception_to_error_msg(
     e: Exception,
-    llm: LLM,
+    llm: LLM | None,
     fallback_to_error_msg: bool = False,
     custom_error_msg_mappings: (
         dict[str, str] | None
@@ -147,19 +150,19 @@ def litellm_exception_to_error_msg(
             - error_code: Categorized error code for frontend display
             - is_retryable: Whether the user should try again
     """
-    from litellm.exceptions import BadRequestError
-    from litellm.exceptions import AuthenticationError
-    from litellm.exceptions import PermissionDeniedError
-    from litellm.exceptions import NotFoundError
-    from litellm.exceptions import UnprocessableEntityError
-    from litellm.exceptions import RateLimitError
-    from litellm.exceptions import ContextWindowExceededError
     from litellm.exceptions import APIConnectionError
     from litellm.exceptions import APIError
-    from litellm.exceptions import Timeout
-    from litellm.exceptions import ContentPolicyViolationError
+    from litellm.exceptions import AuthenticationError
+    from litellm.exceptions import BadRequestError
     from litellm.exceptions import BudgetExceededError
+    from litellm.exceptions import ContentPolicyViolationError
+    from litellm.exceptions import ContextWindowExceededError
+    from litellm.exceptions import NotFoundError
+    from litellm.exceptions import PermissionDeniedError
+    from litellm.exceptions import RateLimitError
     from litellm.exceptions import ServiceUnavailableError
+    from litellm.exceptions import Timeout
+    from litellm.exceptions import UnprocessableEntityError
 
     core_exception = _unwrap_nested_exception(e)
     error_msg = str(core_exception)
@@ -171,7 +174,30 @@ def litellm_exception_to_error_msg(
             if error_msg_pattern in error_msg:
                 return custom_error_msg, "CUSTOM_ERROR", True
 
-    if isinstance(core_exception, BadRequestError):
+    # Both subclass BadRequestError, so they must precede the BadRequestError
+    # branch or they'd be misclassified as BAD_REQUEST.
+    if isinstance(core_exception, ContextWindowExceededError):
+        error_msg = (
+            "Context window exceeded: Your input is too long for the model to process."
+        )
+        if llm is not None:
+            try:
+                max_context = get_max_input_tokens(
+                    model_name=llm.config.model_name,
+                    model_provider=llm.config.model_provider,
+                )
+                error_msg += f" Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}."
+            except Exception:
+                logger.warning(
+                    "Unable to get maximum input token for LiteLLM exception handling"
+                )
+        error_code = "CONTEXT_TOO_LONG"
+        is_retryable = False
+    elif isinstance(core_exception, ContentPolicyViolationError):
+        error_msg = "Content policy violation: Your request violates the content policy. Please revise your input."
+        error_code = "CONTENT_POLICY"
+        is_retryable = False
+    elif isinstance(core_exception, BadRequestError):
         error_msg = "Bad request: The server couldn't process your request. Please check your input."
         error_code = "BAD_REQUEST"
         is_retryable = True
@@ -208,9 +234,9 @@ def litellm_exception_to_error_msg(
             api_error = core_exception.api_error
             if isinstance(api_error, dict):
                 upstream_detail = (
-                    api_error.get("message")
-                    or api_error.get("detail")
-                    or api_error.get("error")
+                    api_error.get("message")  # ty: ignore[invalid-argument-type]
+                    or api_error.get("detail")  # ty: ignore[invalid-argument-type]
+                    or api_error.get("error")  # ty: ignore[invalid-argument-type]
                 )
         if not upstream_detail:
             upstream_detail = str(core_exception)
@@ -258,27 +284,6 @@ def litellm_exception_to_error_msg(
             error_msg = f"{provider_name} service error: {str(core_exception)}"
         error_code = "SERVICE_UNAVAILABLE"
         is_retryable = True
-    elif isinstance(core_exception, ContextWindowExceededError):
-        error_msg = (
-            "Context window exceeded: Your input is too long for the model to process."
-        )
-        if llm is not None:
-            try:
-                max_context = get_max_input_tokens(
-                    model_name=llm.config.model_name,
-                    model_provider=llm.config.model_provider,
-                )
-                error_msg += f" Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}."
-            except Exception:
-                logger.warning(
-                    "Unable to get maximum input token for LiteLLM exception handling"
-                )
-        error_code = "CONTEXT_TOO_LONG"
-        is_retryable = False
-    elif isinstance(core_exception, ContentPolicyViolationError):
-        error_msg = "Content policy violation: Your request violates the content policy. Please revise your input."
-        error_code = "CONTENT_POLICY"
-        is_retryable = False
     elif isinstance(core_exception, APIConnectionError):
         error_msg = "API connection error: Failed to connect to the API. Please check your internet connection."
         error_code = "CONNECTION_ERROR"
@@ -327,16 +332,105 @@ def check_number_of_tokens(
     return len(encode_fn(text))
 
 
+# Substrings that mark a `custom_config` key as containing credential material.
+# Source of truth shared by:
+#   - response masking in `onyx.server.manage.llm.api`
+#   - error-message scrubbing in `scrub_sensitive_values` (below)
+SENSITIVE_CUSTOM_CONFIG_KEY_FRAGMENTS: frozenset[str] = frozenset(
+    {
+        "vertex_credentials",
+        "aws_secret_access_key",
+        "aws_access_key_id",
+        "aws_bearer_token_bedrock",
+        "private_key",
+        "api_key",
+        "secret",
+        "password",
+        "token",
+        "credential",
+    }
+)
+
+
+def is_sensitive_custom_config_key(key: str) -> bool:
+    """True when `key` looks like a credential-bearing custom_config field."""
+    key_lower = key.lower()
+    return any(
+        fragment in key_lower for fragment in SENSITIVE_CUSTOM_CONFIG_KEY_FRAGMENTS
+    )
+
+
+_SCRUB_PLACEHOLDER = "[REDACTED]"
+
+
+def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
+    """Replace every literal secret in `message` with `[REDACTED]`.
+
+    Defense in depth on top of `litellm_exception_to_error_msg` — that helper
+    already maps known LiteLLM exception types to friendly messages and
+    swallows unknown ones, but a few branches (`RateLimitError`, `APIError`,
+    `ServiceUnavailableError`) still embed `str(core_exception)`. This pass
+    strips any credential we already know about (typically the values pulled
+    off `llm.config` via `collect_llm_credential_values`) before the message
+    is surfaced to a client.
+
+    Short / empty secrets are ignored so we don't accidentally eat common
+    substrings.
+    """
+    if not message:
+        return message
+
+    scrubbed = message
+    for secret in secrets:
+        if not secret or len(secret) < 4:
+            continue
+        scrubbed = scrubbed.replace(secret, _SCRUB_PLACEHOLDER)
+
+    return scrubbed
+
+
+def collect_llm_credential_values(llm: LLM | None) -> list[str]:
+    """Pull every credential-looking value out of an LLM's config.
+
+    Used to build the `secrets` argument for `scrub_sensitive_values`.
+    """
+    if llm is None:
+        return []
+    config_secrets: list[str] = []
+    if llm.config.api_key:
+        config_secrets.append(llm.config.api_key)
+    custom_config = llm.config.custom_config or {}
+    for key, value in custom_config.items():
+        if isinstance(value, str) and value and is_sensitive_custom_config_key(key):
+            config_secrets.append(value)
+    return config_secrets
+
+
 def test_llm(llm: LLM) -> str | None:
+    """Probe an LLM and return either `None` (success) or a sanitized error.
+
+    The returned message is intended to be safe to surface to admin callers:
+    raw upstream exception text is *not* echoed verbatim. Known LiteLLM
+    exception types are mapped to friendly messages via
+    `litellm_exception_to_error_msg`, and the result is then scrubbed of any
+    credential values pulled from `llm.config` plus common header/JSON
+    credential patterns.
+
+    The full raw error is still logged at WARNING for ops debugging.
+    """
+    secrets = collect_llm_credential_values(llm)
+    error_msg: str | None = None
     # try for up to 2 timeouts (e.g. 10 seconds in total)
-    error_msg = None
     for _ in range(2):
         try:
             llm.invoke(UserMessage(content="Do not respond"), max_tokens=50)
             return None
         except Exception as e:
-            error_msg = str(e)
-            logger.warning(f"Failed to call LLM with the following error: {error_msg}")
+            logger.warning("Failed to call LLM with the following error: %s", e)
+            safe_msg, _, _ = litellm_exception_to_error_msg(
+                e, llm, fallback_to_error_msg=False
+            )
+            error_msg = scrub_sensitive_values(safe_msg, secrets)
 
     return error_msg
 
@@ -499,9 +593,8 @@ def get_llm_contextual_cost(
         )
     except Exception:
         logger.exception(
-            "An unexpected error occurred while calculating cost for model "
-            f"{llm.config.model_name} (potentially due to malformed name). "
-            "Assuming cost is 0."
+            "An unexpected error occurred while calculating cost for model %s (potentially due to malformed name). Assuming cost is 0.",
+            llm.config.model_name,
         )
         return 0
 
@@ -517,7 +610,7 @@ def llm_max_input_tokens(
     """Best effort attempt to get the max input tokens for the LLM."""
     if GEN_AI_MAX_TOKENS:
         # This is an override, so always return this
-        logger.info(f"Using override GEN_AI_MAX_TOKENS: {GEN_AI_MAX_TOKENS}")
+        logger.info("Using override GEN_AI_MAX_TOKENS: %s", GEN_AI_MAX_TOKENS)
         return GEN_AI_MAX_TOKENS
 
     model_obj = find_model_obj(
@@ -527,18 +620,24 @@ def llm_max_input_tokens(
     )
     if not model_obj:
         logger.warning(
-            f"Model '{model_name}' not found in LiteLLM. Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
+            "Model '%s' not found in LiteLLM. Falling back to %s tokens.",
+            model_name,
+            GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
         )
         return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
-    if "max_input_tokens" in model_obj:
-        return model_obj["max_input_tokens"]
+    max_input_tokens = model_obj.get("max_input_tokens")
+    if max_input_tokens is not None:
+        return max_input_tokens
 
-    if "max_tokens" in model_obj:
-        return model_obj["max_tokens"]
+    max_tokens = model_obj.get("max_tokens")
+    if max_tokens is not None:
+        return max_tokens
 
     logger.warning(
-        f"No max tokens found for '{model_name}'. Falling back to {GEN_AI_MODEL_FALLBACK_MAX_TOKENS} tokens."
+        "No max tokens found for '%s'. Falling back to %s tokens.",
+        model_name,
+        GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
     )
     return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
@@ -557,19 +656,25 @@ def get_llm_max_output_tokens(
 
     if not model_obj:
         logger.warning(
-            f"Model '{model_name}' not found in LiteLLM. Falling back to {default_output_tokens} output tokens."
+            "Model '%s' not found in LiteLLM. Falling back to %s output tokens.",
+            model_name,
+            default_output_tokens,
         )
         return default_output_tokens
 
-    if "max_output_tokens" in model_obj:
-        return model_obj["max_output_tokens"]
+    max_output_tokens = model_obj.get("max_output_tokens")
+    if max_output_tokens is not None:
+        return max_output_tokens
 
     # Fallback to a fraction of max_tokens if max_output_tokens is not specified
-    if "max_tokens" in model_obj:
-        return int(model_obj["max_tokens"] * 0.1)
+    max_tokens = model_obj.get("max_tokens")
+    if max_tokens is not None:
+        return int(max_tokens * 0.1)
 
     logger.warning(
-        f"No max output tokens found for '{model_name}'. Falling back to {default_output_tokens} output tokens."
+        "No max output tokens found for '%s'. Falling back to %s output tokens.",
+        model_name,
+        default_output_tokens,
     )
     return default_output_tokens
 
@@ -627,7 +732,7 @@ def get_max_input_tokens_from_llm_provider(
         max_input_tokens
         if max_input_tokens
         else get_max_input_tokens(
-            model_provider=llm_provider.name,
+            model_provider=llm_provider.provider,
             model_name=model_name,
         )
     )
@@ -663,10 +768,12 @@ def get_bedrock_token_limit(model_id: str) -> int:
         for key in [f"bedrock/{model_id}", model_id]:
             if key in model_map:
                 model_info = model_map[key]
-                if "max_input_tokens" in model_info:
-                    return model_info["max_input_tokens"]
-                if "max_tokens" in model_info:
-                    return model_info["max_tokens"]
+                max_input_tokens = model_info.get("max_input_tokens")
+                if max_input_tokens is not None:
+                    return max_input_tokens
+                max_tokens = model_info.get("max_tokens")
+                if max_tokens is not None:
+                    return max_tokens
     except Exception:
         pass  # Fall through to mapping
 
@@ -703,7 +810,10 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
                 return True
     except Exception as e:
         logger.warning(
-            f"Failed to query database for {model_provider} model {model_name} image support: {e}"
+            "Failed to query database for %s model %s image support: %s",
+            model_provider,
+            model_name,
+            e,
         )
 
     # Fallback to looking up the model in the litellm model_cost dict
@@ -720,21 +830,84 @@ def litellm_thinks_model_supports_image_input(
         model_obj = find_model_obj(get_model_map(), model_provider, model_name)
         if not model_obj:
             logger.warning(
-                f"No litellm entry found for {model_provider}/{model_name}, this model may or may not support image input."
+                "No litellm entry found for %s/%s, this model may or may not support image input.",
+                model_provider,
+                model_name,
             )
             return False
         # The or False here is because sometimes the dict contains the key but the value is None
         return model_obj.get("supports_vision", False) or False
     except Exception:
         logger.exception(
-            f"Failed to get model object for {model_provider}/{model_name}"
+            "Failed to get model object for %s/%s", model_provider, model_name
         )
         return False
 
 
-def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
-    import litellm
+_REASONING_PROBE_FAILURE_TTL_SECONDS = 300
 
+# keyed per (tenant, model): tenants can define the same custom model name for
+# different models, so probe results must never cross tenant boundaries.
+# (result, expires_at): None expiry = permanent probe result (static metadata);
+# float = failure placeholder that re-probes once the TTL passes
+_LITELLM_SUPPORTS_REASONING_CACHE: dict[str, tuple[bool, float | None]] = {}
+
+# per-(tenant, model) locks so concurrent cold misses probe once; a single
+# shared lock would serialize unrelated models behind one slow host
+_REASONING_PROBE_LOCKS: dict[str, threading.Lock] = {}
+_REASONING_PROBE_LOCKS_GUARD = threading.Lock()
+
+
+def _reasoning_cache_key(full_model_name: str) -> str:
+    return f"{get_current_tenant_id()}:{full_model_name}"
+
+
+def _cached_reasoning_result(cache_key: str) -> bool | None:
+    entry = _LITELLM_SUPPORTS_REASONING_CACHE.get(cache_key)
+    if entry is None:
+        return None
+    result, expires_at = entry
+    if expires_at is None or time.monotonic() < expires_at:
+        return result
+    return None
+
+
+def _litellm_supports_reasoning(full_model_name: str) -> bool:
+    """Single-flight, process-lifetime, tenant-scoped cache around
+    litellm.supports_reasoning, which can fetch model info over the network
+    (e.g. Ollama hosts). Successful probes cache permanently; failures cache as
+    False with a short TTL so an unreachable host isn't probed per-request but
+    recovers without a restart (a stuck False silently downgrades reasoning
+    models)."""
+    cache_key = _reasoning_cache_key(full_model_name)
+    cached = _cached_reasoning_result(cache_key)
+    if cached is not None:
+        return cached
+
+    with _REASONING_PROBE_LOCKS_GUARD:
+        key_lock = _REASONING_PROBE_LOCKS.setdefault(cache_key, threading.Lock())
+
+    with key_lock:
+        cached = _cached_reasoning_result(cache_key)
+        if cached is not None:
+            return cached
+
+        import litellm
+
+        expires_at = None
+        try:
+            result = bool(litellm.supports_reasoning(model=full_model_name))
+        except Exception:
+            logger.exception(
+                "Failed to check if %s supports reasoning", full_model_name
+            )
+            result = False
+            expires_at = time.monotonic() + _REASONING_PROBE_FAILURE_TTL_SECONDS
+        _LITELLM_SUPPORTS_REASONING_CACHE[cache_key] = (result, expires_at)
+        return result
+
+
+def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
     model_map = get_model_map()
     try:
         model_obj = find_model_obj(
@@ -743,26 +916,26 @@ def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
             model_name,
         )
         if model_obj and "supports_reasoning" in model_obj:
-            return model_obj["supports_reasoning"]
+            reasoning = model_obj["supports_reasoning"]
+            if reasoning is not None:
+                return reasoning
+            logger.error(
+                "Cannot find reasoning for name=%s and provider=%s",
+                model_name,
+                model_provider,
+            )
 
-        # Fallback: try using litellm.supports_reasoning() for newer models
-        try:
-            # logger.debug("Falling back to `litellm.supports_reasoning`")
-            full_model_name = (
-                f"{model_provider}/{model_name}"
-                if model_provider not in model_name
-                else model_name
-            )
-            return litellm.supports_reasoning(model=full_model_name)
-        except Exception:
-            logger.exception(
-                f"Failed to check if {model_provider}/{model_name} supports reasoning"
-            )
-            return False
+        # Fallback for newer models missing from the local model map
+        full_model_name = (
+            f"{model_provider}/{model_name}"
+            if model_provider not in model_name
+            else model_name
+        )
+        return _litellm_supports_reasoning(full_model_name)
 
     except Exception:
         logger.exception(
-            f"Failed to get model object for {model_provider}/{model_name}"
+            "Failed to get model object for %s/%s", model_provider, model_name
         )
         return False
 
@@ -810,7 +983,9 @@ def is_true_openai_model(model_provider: str, model_name: str) -> bool:
 
     except Exception:
         logger.exception(
-            f"Failed to determine if {model_provider}/{model_name} is a true OpenAI model"
+            "Failed to determine if %s/%s is a true OpenAI model",
+            model_provider,
+            model_name,
         )
         return False
 

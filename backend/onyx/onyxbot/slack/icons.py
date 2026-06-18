@@ -51,9 +51,6 @@ def source_to_github_img_link(source: DocumentSource) -> str | None:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Loopio.png"
     if source == DocumentSource.SHAREPOINT.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Sharepoint.png"
-    if source == DocumentSource.REQUESTTRACKER.value:
-        # just use file icon for now
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/File.png"
     if source == DocumentSource.INGESTION_API.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/File.png"
 

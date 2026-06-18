@@ -33,14 +33,19 @@ def is_pdf_protected(file: IO[Any]) -> bool:
 
     with preserve_position(file):
         reader = PdfReader(file)
-
         if not reader.is_encrypted:
             return False
 
+        # PDFs with only an owner password (permission restrictions like
+        # print/copy disabled) use an empty user password — any viewer can open
+        # them without prompting.  decrypt("") returns 0 only when a real user
+        # password is required.  See https://github.com/onyx-dot-app/onyx/issues/9754
         try:
-            result = reader.decrypt("")
-            return result == 0
+            return reader.decrypt("") == 0
         except Exception:
+            logger.exception(
+                "Failed to evaluate PDF encryption; treating as password protected"
+            )
             return True
 
 
@@ -57,7 +62,7 @@ def is_xlsx_protected(file: IO[Any]) -> bool:
 
 
 def is_office_file_protected(file: IO[Any]) -> bool:
-    import msoffcrypto  # type: ignore[import-untyped]
+    import msoffcrypto
 
     with preserve_position(file):
         office = msoffcrypto.OfficeFile(file)
@@ -85,7 +90,7 @@ def is_file_password_protected(
 
     if extension not in extension_to_function:
         logger.warning(
-            f"Extension={extension} can be password protected, but no function found"
+            "Extension=%s can be password protected, but no function found", extension
         )
         return False
 

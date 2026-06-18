@@ -37,8 +37,8 @@ export async function sendMessage(page: Page, message: string) {
     .locator('[data-testid="onyx-ai-message"]')
     .count();
 
-  await page.locator("#onyx-chat-input-textarea").click();
-  await page.locator("#onyx-chat-input-textarea").fill(message);
+  await page.locator("#onyx-chat-input-textbox").click();
+  await page.locator("#onyx-chat-input-textbox").fill(message);
   await page.locator("#onyx-chat-input-send-button").click();
 
   // Wait for a NEW AI message to appear (count should increase)
@@ -55,10 +55,15 @@ export async function sendMessage(page: Page, message: string) {
   );
 }
 
+/** Get the model selector trigger (the pill showing the current model name). */
+function getModelSelectorTrigger(page: Page) {
+  // Target the model pill (last button), not the "+" add button (first button).
+  // The pill shows the current model name and opens in replace mode on click.
+  return page.getByTestId("model-selector").locator("button").last();
+}
+
 export async function verifyCurrentModel(page: Page, modelName: string) {
-  const text = await page
-    .getByTestId("AppInputBar/llm-popover-trigger")
-    .textContent();
+  const text = await getModelSelectorTrigger(page).textContent();
   expect(text).toContain(modelName);
 }
 
@@ -66,12 +71,10 @@ export async function selectModelFromInputPopover(
   page: Page,
   preferredModels: string[]
 ): Promise<string> {
-  const currentModelText =
-    (
-      await page.getByTestId("AppInputBar/llm-popover-trigger").textContent()
-    )?.trim() ?? "";
+  const trigger = getModelSelectorTrigger(page);
+  const currentModelText = (await trigger.textContent())?.trim() ?? "";
 
-  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+  await trigger.click();
   await page.waitForSelector('[role="dialog"]', {
     state: "visible",
     timeout: 10000,
@@ -82,8 +85,10 @@ export async function selectModelFromInputPopover(
 
   for (const modelName of preferredModels) {
     await searchInput.fill(modelName);
-    const modelOptions = dialog.locator("[data-selected]");
-    const nonSelectedOptions = dialog.locator('[data-selected="false"]');
+    const modelOptions = dialog.locator("[data-interactive-state]");
+    const nonSelectedOptions = dialog.locator(
+      '[data-interactive-state="empty"]'
+    );
 
     if ((await modelOptions.count()) > 0) {
       const candidate =
@@ -94,14 +99,10 @@ export async function selectModelFromInputPopover(
       await candidate.click();
       await page.waitForSelector('[role="dialog"]', { state: "hidden" });
       const selectedText =
-        (
-          await page
-            .getByTestId("AppInputBar/llm-popover-trigger")
-            .textContent()
-        )?.trim() ?? "";
+        (await getModelSelectorTrigger(page).textContent())?.trim() ?? "";
       if (!selectedText) {
         throw new Error(
-          "Failed to read selected model text from input trigger"
+          "Failed to read selected model text from model selector"
         );
       }
       return selectedText;
@@ -111,7 +112,7 @@ export async function selectModelFromInputPopover(
   // Reset search so fallback sees all available models.
   await searchInput.fill("");
 
-  const nonSelectedOptions = dialog.locator('[data-selected="false"]');
+  const nonSelectedOptions = dialog.locator('[data-interactive-state="empty"]');
   if ((await nonSelectedOptions.count()) > 0) {
     const fallback = nonSelectedOptions.first();
     await expect(fallback).toBeVisible();
@@ -119,11 +120,9 @@ export async function selectModelFromInputPopover(
     await page.waitForSelector('[role="dialog"]', { state: "hidden" });
 
     const selectedText =
-      (
-        await page.getByTestId("AppInputBar/llm-popover-trigger").textContent()
-      )?.trim() ?? "";
+      (await getModelSelectorTrigger(page).textContent())?.trim() ?? "";
     if (!selectedText) {
-      throw new Error("Failed to read selected model text from input trigger");
+      throw new Error("Failed to read selected model text from model selector");
     }
     return selectedText;
   }
@@ -141,14 +140,14 @@ export async function selectModelFromInputPopover(
 }
 
 export async function switchModel(page: Page, modelName: string) {
-  await page.getByTestId("AppInputBar/llm-popover-trigger").click();
+  await getModelSelectorTrigger(page).click();
 
   // Wait for the popover to open
   await page.waitForSelector('[role="dialog"]', { state: "visible" });
 
   const modelButton = page
     .locator('[role="dialog"]')
-    .locator('[role="button"]')
+    .getByRole("button")
     .filter({ hasText: modelName })
     .first();
 
@@ -161,4 +160,20 @@ export async function switchModel(page: Page, modelName: string) {
 export async function startNewChat(page: Page) {
   await page.getByTestId("AppSidebar/new-session").click();
   await expect(page.getByTestId("chat-intro")).toBeVisible();
+}
+
+/**
+ * Mark onboarding as complete by setting a display name, so the onboarding
+ * prompt doesn't block subsequent chat interactions. Reloads so the cleared
+ * onboarding state takes effect.
+ */
+export async function ensureOnboardingComplete(page: Page): Promise<void> {
+  await page.request
+    .patch("/api/user/personalization", { data: { name: "Playwright User" } })
+    .catch((error) => {
+      // Best-effort, but surface the failure so a broken setup is visible.
+      console.warn(`Failed to set display name during onboarding: ${error}`);
+    });
+  await page.reload();
+  await page.waitForLoadState("networkidle");
 }

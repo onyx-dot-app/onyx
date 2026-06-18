@@ -84,7 +84,10 @@ def generate_oauth_state(
     cache.set(cache_key, json.dumps(session.to_dict()), ex=ttl)
 
     logger.info(
-        f"Generated OAuth state for federated_connector_id={federated_connector_id}, user_id={user_id}, state={state_b64}"
+        "Generated OAuth state for federated_connector_id=%s, user_id=%s, state=%s",
+        federated_connector_id,
+        user_id,
+        state_b64,
     )
 
     return state_b64

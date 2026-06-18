@@ -1,7 +1,4 @@
-import { JSX } from "react";
-import { FiCircle, FiList, FiTool, FiXCircle } from "react-icons/fi";
-import { BrainIcon } from "@/components/icons/icons";
-
+import { FiCircle, FiList, FiTool } from "react-icons/fi";
 import {
   Packet,
   PacketType,
@@ -17,6 +14,9 @@ import {
   SvgUser,
   SvgCircle,
   SvgBookOpen,
+  SvgSlowTime,
+  SvgXCircle,
+  SvgCode,
 } from "@opal/icons";
 
 /**
@@ -47,6 +47,17 @@ export function isToolComplete(packets: Packet[]): boolean {
     );
   }
 
+  // For coding agents, the CodingAgentFinal packet (or an error) marks completion.
+  // Nested BashTool packets are part of the same group and don't indicate the
+  // agent is done.
+  if (firstPacket.obj.type === PacketType.CODING_AGENT_START) {
+    return packets.some(
+      (p) =>
+        p.obj.type === PacketType.CODING_AGENT_FINAL ||
+        p.obj.type === PacketType.ERROR
+    );
+  }
+
   // For other tools, any SECTION_END or ERROR indicates completion
   return packets.some(
     (p) =>
@@ -57,8 +68,8 @@ export function isToolComplete(packets: Packet[]): boolean {
 /**
  * Get an error icon for failed tools
  */
-export function getToolErrorIcon(): JSX.Element {
-  return <FiXCircle className="w-3.5 h-3.5 text-error" />;
+export function getToolErrorIcon(): React.ReactNode {
+  return <SvgXCircle className="w-3.5 h-3.5 text-error" />;
 }
 
 export function getToolKey(turn_index: number, tab_index: number): string {
@@ -101,6 +112,8 @@ export function getToolName(packets: Packet[]): string {
       return "Generate plan";
     case PacketType.RESEARCH_AGENT_START:
       return "Research agent";
+    case PacketType.CODING_AGENT_START:
+      return "Coding agent";
     case PacketType.REASONING_START:
       return "Thinking";
     case PacketType.MEMORY_TOOL_START:
@@ -111,7 +124,7 @@ export function getToolName(packets: Packet[]): string {
   }
 }
 
-export function getToolIcon(packets: Packet[]): JSX.Element {
+export function getToolIcon(packets: Packet[]): React.ReactNode {
   const firstPacket = packets[0];
   if (!firstPacket) return <FiCircle className="w-3.5 h-3.5" />;
 
@@ -138,8 +151,10 @@ export function getToolIcon(packets: Packet[]): JSX.Element {
       return <FiList className="w-3.5 h-3.5" />;
     case PacketType.RESEARCH_AGENT_START:
       return <SvgUser className="w-3.5 h-3.5" />;
+    case PacketType.CODING_AGENT_START:
+      return <SvgCode className="w-3.5 h-3.5" />;
     case PacketType.REASONING_START:
-      return <BrainIcon className="w-3.5 h-3.5" />;
+      return <SvgSlowTime className="w-3.5 h-3.5" />;
     case PacketType.MEMORY_TOOL_START:
     case PacketType.MEMORY_TOOL_NO_ACCESS:
       return <SvgBookOpen className="w-3.5 h-3.5" />;

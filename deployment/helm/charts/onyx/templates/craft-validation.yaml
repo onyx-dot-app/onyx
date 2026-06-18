@@ -1,0 +1,19 @@
+{{- $craftEnabled := eq (include "onyx.craftEnabled" .) "true" }}
+{{- if $craftEnabled }}
+{{- /* Empty SANDBOX_BACKEND is intentional: absent/null/"" uses the backend's Kubernetes default. */}}
+{{- $sandboxBackend := lower (toString (index .Values.configMap "SANDBOX_BACKEND" | default "")) }}
+{{- if and $sandboxBackend (ne $sandboxBackend "kubernetes") }}
+{{- fail "configMap.SANDBOX_BACKEND must be \"kubernetes\" when configMap.ENABLE_CRAFT is enabled in the Helm chart" }}
+{{- end }}
+{{- if not (index .Values.configMap "SANDBOX_API_SERVER_URL") }}
+{{- fail "configMap.SANDBOX_API_SERVER_URL must be set when configMap.ENABLE_CRAFT is enabled" }}
+{{- end }}
+{{- $auth := .Values.auth | default dict }}
+{{- $sandboxPushSecret := (index $auth "sandboxPushSecret") | default dict }}
+{{- if ne (toString (dig "enabled" false $sandboxPushSecret)) "true" }}
+{{- fail "auth.sandboxPushSecret.enabled must be true when configMap.ENABLE_CRAFT is enabled" }}
+{{- end }}
+# Craft chart validation passed.
+{{- else }}
+# Craft chart validation skipped.
+{{- end }}

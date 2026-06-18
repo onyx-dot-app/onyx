@@ -1,4 +1,7 @@
-import { INTERNAL_URL } from "@/lib/constants";
+import {
+  INTERNAL_URL,
+  SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
+} from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
 
 /* NextJS is annoying and makes use use a separate function for
@@ -94,9 +97,9 @@ async function handleRequest(request: NextRequest, path: string[]) {
       process.env.NODE_ENV === "development"
     ) {
       // Inject the debug auth cookie for local development against remote backend
-      // Get from cloud site: DevTools → Application → Cookies → fastapiusersauth
+      // Get from cloud site: DevTools → Application → Cookies → <AUTH_COOKIE_NAME, default: fastapiusersauth>
       const existingCookies = headers.get("cookie") || "";
-      const debugCookie = `fastapiusersauth=${process.env.DEBUG_AUTH_COOKIE}`;
+      const debugCookie = `${SERVER_SIDE_ONLY__AUTH_COOKIE_NAME}=${process.env.DEBUG_AUTH_COOKIE}`;
       headers.set(
         "cookie",
         existingCookies ? `${existingCookies}; ${debugCookie}` : debugCookie
@@ -128,11 +131,11 @@ async function handleRequest(request: NextRequest, path: string[]) {
       response.headers.get("Transfer-Encoding") === "chunked" ||
       response.headers.get("Content-Type")?.includes("stream")
     ) {
-      // If it's a stream, create a TransformStream to pass the data through
-      const { readable, writable } = new TransformStream();
-      response.body?.pipeTo(writable);
+      responseHeaders.set("Cache-Control", "no-cache, no-transform");
+      responseHeaders.set("X-Accel-Buffering", "no");
+      responseHeaders.delete("content-length");
 
-      const proxyResponse = new NextResponse(readable, {
+      const proxyResponse = new NextResponse(response.body, {
         status: response.status,
         headers: responseHeaders,
       });

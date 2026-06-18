@@ -1,11 +1,11 @@
 apiVersion: v2
 name: onyx
-description: A Helm chart for Kubernetes
+description: Onyx application and Craft sandbox deployment chart
 home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.4.39
+version: 0.6.3
 appVersion: latest
 annotations:
   category: Productivity
@@ -15,20 +15,19 @@ annotations:
       image: docker.io/onyxdotapp/onyx-web-server:latest
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
-    - name: vespa
-      image: vespaengine/vespa:8.609.39
+  artifacthub.io/changes: |
+    - kind: changed
+      description: Allow the heavy Celery worker to reach sandbox sidecars so
+        Craft opencode-history snapshots are created on clusters that enforce
+        NetworkPolicy.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
     repository: https://cloudnative-pg.github.io/charts
     condition: postgresql.enabled
     alias: postgresql
-  - name: vespa
-    version: 0.2.25
-    repository: https://onyx-dot-app.github.io/vespa-helm-charts
-    condition: vespa.enabled
   - name: opensearch
-    version: 3.4.0
+    version: 3.6.0
     repository: https://opensearch-project.github.io/helm-charts
     condition: opensearch.enabled
   - name: ingress-nginx
@@ -36,6 +35,13 @@ dependencies:
     repository: https://kubernetes.github.io/ingress-nginx
     condition: nginx.enabled
     alias: nginx
+  # Helm uses the first condition path that exists: `redisOperator.enabled` is
+  # unset by default, so this falls through to `redis.enabled`. Set it false to
+  # skip the bundled operator and reuse an existing one (see values.yaml).
+  - name: redis-operator
+    version: 0.24.0
+    repository: https://ot-container-kit.github.io/helm-charts
+    condition: redisOperator.enabled,redis.enabled
   - name: redis
     version: 0.16.6
     repository: https://ot-container-kit.github.io/helm-charts
@@ -45,6 +51,6 @@ dependencies:
     repository: https://charts.min.io/
     condition: minio.enabled
   - name: code-interpreter
-    version: 0.3.1
+    version: 0.4.3
     repository: https://onyx-dot-app.github.io/python-sandbox/
     condition: codeInterpreter.enabled

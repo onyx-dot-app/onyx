@@ -1,6 +1,15 @@
 import { expect, Page, test } from "@playwright/test";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
+import {
+  buildMockSearchStream,
+  buildMockStream,
+  mockChatEndpoint,
+  mockChatEndpointSequence,
+  type MockDocument,
+  resetTurnCounter,
+} from "@tests/e2e/utils/chatMock";
 import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
@@ -112,216 +121,13 @@ And this LaTeX source should remain a code block:
 \\int_0^1 x^2 \\, dx = \\frac{1}{3}
 \`\`\``;
 
-interface MockDocument {
-  document_id: string;
-  semantic_identifier: string;
-  link: string;
-  source_type: string;
-  blurb: string;
-  is_internet: boolean;
-}
-
-interface SearchMockOptions {
-  content: string;
-  queries: string[];
-  documents: MockDocument[];
-  /** Maps citation number -> document_id */
-  citations: Record<number, string>;
-  isInternetSearch?: boolean;
-}
-
-let turnCounter = 0;
-
-function buildMockStream(content: string): string {
-  turnCounter += 1;
-  const userMessageId = turnCounter * 100 + 1;
-  const agentMessageId = turnCounter * 100 + 2;
-
-  const packets = [
-    {
-      user_message_id: userMessageId,
-      reserved_assistant_message_id: agentMessageId,
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: {
-        type: "message_start",
-        id: `mock-${agentMessageId}`,
-        content,
-        final_documents: null,
-      },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "stop", stop_reason: "finished" },
-    },
-    {
-      message_id: agentMessageId,
-      citations: {},
-      files: [],
-    },
-  ];
-
-  return `${packets.map((p) => JSON.stringify(p)).join("\n")}\n`;
-}
-
-function buildMockSearchStream(options: SearchMockOptions): string {
-  turnCounter += 1;
-  const userMessageId = turnCounter * 100 + 1;
-  const agentMessageId = turnCounter * 100 + 2;
-
-  const fullDocs = options.documents.map((doc) => ({
-    ...doc,
-    boost: 0,
-    hidden: false,
-    score: 0.95,
-    chunk_ind: 0,
-    match_highlights: [],
-    metadata: {},
-    updated_at: null,
-  }));
-
-  // Turn 0: search tool
-  // Turn 1: answer + citations
-  const packets: Record<string, unknown>[] = [
-    {
-      user_message_id: userMessageId,
-      reserved_assistant_message_id: agentMessageId,
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: {
-        type: "search_tool_start",
-        ...(options.isInternetSearch !== undefined && {
-          is_internet_search: options.isInternetSearch,
-        }),
-      },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "search_tool_queries_delta", queries: options.queries },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "search_tool_documents_delta", documents: fullDocs },
-    },
-    {
-      placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "section_end" },
-    },
-    {
-      placement: { turn_index: 1, tab_index: 0 },
-      obj: {
-        type: "message_start",
-        id: `mock-${agentMessageId}`,
-        content: options.content,
-        final_documents: fullDocs,
-      },
-    },
-    ...Object.entries(options.citations).map(([num, docId]) => ({
-      placement: { turn_index: 1, tab_index: 0 },
-      obj: {
-        type: "citation_info",
-        citation_number: Number(num),
-        document_id: docId,
-      },
-    })),
-    {
-      placement: { turn_index: 1, tab_index: 0 },
-      obj: { type: "stop", stop_reason: "finished" },
-    },
-    {
-      message_id: agentMessageId,
-      citations: options.citations,
-      files: [],
-    },
-  ];
-
-  return `${packets.map((p) => JSON.stringify(p)).join("\n")}\n`;
-}
-
-async function openChat(page: Page): Promise<void> {
-  await page.goto("/app");
-  await page.waitForLoadState("networkidle");
-  await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 15000 });
-}
-
-async function mockChatEndpoint(
-  page: Page,
-  responseContent: string
-): Promise<void> {
-  await page.route("**/api/chat/send-chat-message", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "text/plain",
-      body: buildMockStream(responseContent),
-    });
-  });
-}
-
-async function mockChatEndpointSequence(
-  page: Page,
-  responses: string[]
-): Promise<void> {
-  let callIndex = 0;
-  await page.route("**/api/chat/send-chat-message", async (route) => {
-    const content =
-      responses[Math.min(callIndex, responses.length - 1)] ??
-      responses[responses.length - 1]!;
-    callIndex += 1;
-    await route.fulfill({
-      status: 200,
-      contentType: "text/plain",
-      body: buildMockStream(content),
-    });
-  });
-}
-
-async function scrollChatTo(
-  page: Page,
-  position: "top" | "bottom"
-): Promise<void> {
-  const scrollContainer = page.getByTestId("chat-scroll-container");
-  await scrollContainer.evaluate(async (el, pos) => {
-    el.scrollTo({ top: pos === "top" ? 0 : el.scrollHeight });
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-  }, position);
-}
-
-async function screenshotChatContainer(
-  page: Page,
-  name: string
-): Promise<void> {
-  const container = page.locator("[data-main-container]");
-  await expect(container).toBeVisible();
-  await scrollChatTo(page, "bottom");
-  await expectElementScreenshot(container, { name });
-}
-
-/**
- * Captures two screenshots of the chat container for long-content tests:
- * one scrolled to the top and one scrolled to the bottom. Both are captured
- * for the current theme, ensuring consistent scroll positions regardless of
- * whether the page was just navigated to (top) or just finished streaming (bottom).
- */
-async function screenshotChatContainerTopAndBottom(
-  page: Page,
-  name: string
-): Promise<void> {
-  const container = page.locator("[data-main-container]");
-  await expect(container).toBeVisible();
-
-  await scrollChatTo(page, "top");
-  await expectElementScreenshot(container, { name: `${name}-top` });
-
-  await scrollChatTo(page, "bottom");
-  await expectElementScreenshot(container, { name: `${name}-bottom` });
-}
-
 for (const theme of THEMES) {
   test.describe(`Chat Message Rendering (${theme} mode)`, () => {
+    let chat: ChatPage;
+
     test.beforeEach(async ({ page }, testInfo) => {
-      turnCounter = 0;
+      resetTurnCounter();
+      chat = new ChatPage(page);
       await page.context().clearCookies();
       await setThemeBeforeNavigation(page, theme);
       await loginAsWorkerUser(page, testInfo.workerIndex);
@@ -331,8 +137,8 @@ for (const theme of THEMES) {
       test("short user message with short AI response renders correctly", async ({
         page,
       }) => {
-        await openChat(page);
-        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
         await sendMessage(page, SHORT_USER_MESSAGE);
 
@@ -342,8 +148,7 @@ for (const theme of THEMES) {
         const aiMessage = page.getByTestId("onyx-ai-message").first();
         await expect(aiMessage).toContainText("open-source AI-powered");
 
-        await screenshotChatContainer(
-          page,
+        await chat.screenshotContainer(
           `chat-short-message-short-response-${theme}`
         );
       });
@@ -351,8 +156,8 @@ for (const theme of THEMES) {
 
     test.describe("Long Messages", () => {
       test("long user message renders without truncation", async ({ page }) => {
-        await openChat(page);
-        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
         await sendMessage(page, LONG_USER_MESSAGE);
 
@@ -362,8 +167,7 @@ for (const theme of THEMES) {
         await expect(userMessage).toContainText("real-time or near-real-time");
         await expect(userMessage).toContainText("architecture of the AI chat");
 
-        await screenshotChatContainer(
-          page,
+        await chat.screenshotContainer(
           `chat-long-user-message-short-response-${theme}`
         );
       });
@@ -371,8 +175,8 @@ for (const theme of THEMES) {
       test("long AI response with markdown renders correctly", async ({
         page,
       }) => {
-        await openChat(page);
-        await mockChatEndpoint(page, LONG_AI_RESPONSE);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(LONG_AI_RESPONSE));
 
         await sendMessage(page, SHORT_USER_MESSAGE);
 
@@ -382,8 +186,7 @@ for (const theme of THEMES) {
         await expect(aiMessage).toContainText("Indexing Latency");
         await expect(aiMessage).toContainText("AI Chat Architecture");
 
-        await screenshotChatContainerTopAndBottom(
-          page,
+        await chat.screenshotContainerTopAndBottom(
           `chat-short-message-long-response-${theme}`
         );
       });
@@ -391,18 +194,15 @@ for (const theme of THEMES) {
       test("user message with very long words wraps without overflowing", async ({
         page,
       }) => {
-        await openChat(page);
-        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
         await sendMessage(page, LONG_WORD_USER_MESSAGE);
 
         const userMessage = page.locator("#onyx-human-message").first();
         await expect(userMessage).toContainText("__________");
 
-        await screenshotChatContainer(
-          page,
-          `chat-long-word-user-message-${theme}`
-        );
+        await chat.screenshotContainer(`chat-long-word-user-message-${theme}`);
 
         // Assert the message bubble does not overflow horizontally.
         const overflows = await userMessage.evaluate((el) => {
@@ -421,8 +221,8 @@ for (const theme of THEMES) {
       test("long user message with long AI response renders correctly", async ({
         page,
       }) => {
-        await openChat(page);
-        await mockChatEndpoint(page, LONG_AI_RESPONSE);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(LONG_AI_RESPONSE));
 
         await sendMessage(page, LONG_USER_MESSAGE);
 
@@ -432,8 +232,7 @@ for (const theme of THEMES) {
         const aiMessage = page.getByTestId("onyx-ai-message").first();
         await expect(aiMessage).toContainText("Retrieval-Augmented Generation");
 
-        await screenshotChatContainerTopAndBottom(
-          page,
+        await chat.screenshotContainerTopAndBottom(
           `chat-long-message-long-response-${theme}`
         );
       });
@@ -443,8 +242,8 @@ for (const theme of THEMES) {
       test("AI response with tables and code blocks renders correctly", async ({
         page,
       }) => {
-        await openChat(page);
-        await mockChatEndpoint(page, MARKDOWN_AI_RESPONSE);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(MARKDOWN_AI_RESPONSE));
 
         await sendMessage(page, "Give me an overview of Onyx features");
 
@@ -453,26 +252,20 @@ for (const theme of THEMES) {
         await expect(aiMessage).toContainText("OnyxClient");
         await expect(aiMessage).toContainText("Privacy");
 
-        await screenshotChatContainer(
-          page,
-          `chat-markdown-code-response-${theme}`
-        );
+        await chat.screenshotContainer(`chat-markdown-code-response-${theme}`);
       });
 
       test("AI response with LaTeX math renders correctly", async ({
         page,
       }) => {
-        await openChat(page);
-        await mockChatEndpoint(page, LATEX_AI_RESPONSE);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(LATEX_AI_RESPONSE));
 
         await sendMessage(page, "Show me inline and block math");
 
         const aiMessage = page.getByTestId("onyx-ai-message").first();
 
-        await screenshotChatContainer(
-          page,
-          `chat-latex-math-response-${theme}`
-        );
+        await chat.screenshotContainer(`chat-latex-math-response-${theme}`);
 
         await expect(aiMessage).toContainText("Inline math should render");
         await expect(aiMessage).toContainText(
@@ -490,7 +283,7 @@ for (const theme of THEMES) {
       test("multi-turn conversation renders all messages correctly", async ({
         page,
       }) => {
-        await openChat(page);
+        await chat.goto();
 
         const responses = [
           SHORT_AI_RESPONSE,
@@ -518,8 +311,7 @@ for (const theme of THEMES) {
         const userMessages = page.locator("#onyx-human-message");
         await expect(userMessages).toHaveCount(3);
 
-        await screenshotChatContainerTopAndBottom(
-          page,
+        await chat.screenshotContainerTopAndBottom(
           `chat-multi-turn-conversation-${theme}`
         );
       });
@@ -527,7 +319,7 @@ for (const theme of THEMES) {
       test("multi-turn with mixed message lengths renders correctly", async ({
         page,
       }) => {
-        await openChat(page);
+        await chat.goto();
 
         const responses = [LONG_AI_RESPONSE, SHORT_AI_RESPONSE];
 
@@ -543,8 +335,7 @@ for (const theme of THEMES) {
           timeout: 30000,
         });
 
-        await screenshotChatContainerTopAndBottom(
-          page,
+        await chat.screenshotContainerTopAndBottom(
           `chat-multi-turn-mixed-lengths-${theme}`
         );
       });
@@ -645,7 +436,7 @@ Key advantages include:
       test("web search response with citations renders correctly", async ({
         page,
       }) => {
-        await openChat(page);
+        await chat.goto();
 
         await page.route("**/api/chat/send-chat-message", async (route) => {
           await route.fulfill({
@@ -672,8 +463,7 @@ Key advantages include:
         await expect(aiMessage).toContainText("Docker Compose");
         await expect(aiMessage).toContainText("MIT licensed");
 
-        await screenshotChatContainer(
-          page,
+        await chat.screenshotContainer(
           `chat-web-search-with-citations-${theme}`
         );
 
@@ -714,7 +504,7 @@ The Q3 2025 priorities focus on three main areas [[D1]](https://company.atlassia
 
 The platform architecture document provides additional context on how these improvements fit into the overall system design [[D2]](https://drive.google.com/file/d/abc123). The microservices architecture allows each component to be scaled independently.`;
 
-        await openChat(page);
+        await chat.goto();
 
         await page.route("**/api/chat/send-chat-message", async (route) => {
           await route.fulfill({
@@ -740,8 +530,7 @@ The platform architecture document provides additional context on how these impr
         await expect(aiMessage).toContainText("New integrations");
         await expect(aiMessage).toContainText("Performance");
 
-        await screenshotChatContainer(
-          page,
+        await chat.screenshotContainer(
           `chat-internal-search-with-citations-${theme}`
         );
 
@@ -769,8 +558,8 @@ Set \`max_results\` to limit the number of returned documents.`;
       test("h1 through h4 headings with inline code render correctly", async ({
         page,
       }) => {
-        await openChat(page);
-        await mockChatEndpoint(page, HEADINGS_RESPONSE);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(HEADINGS_RESPONSE));
 
         await sendMessage(page, "Show me all heading levels");
 
@@ -794,10 +583,7 @@ Set \`max_results\` to limit the number of returned documents.`;
         await expect(aiMessage.locator("h3")).toHaveCount(1);
         await expect(aiMessage.locator("h4")).toHaveCount(1);
 
-        await screenshotChatContainer(
-          page,
-          `chat-heading-levels-h1-h4-${theme}`
-        );
+        await chat.screenshotContainer(`chat-heading-levels-h1-h4-${theme}`);
       });
     });
 
@@ -805,8 +591,8 @@ Set \`max_results\` to limit the number of returned documents.`;
       test("hovering over user message shows action buttons", async ({
         page,
       }) => {
-        await openChat(page);
-        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
         await sendMessage(page, SHORT_USER_MESSAGE);
 
@@ -816,8 +602,7 @@ Set \`max_results\` to limit the number of returned documents.`;
         const editButton = userMessage.getByTestId("HumanMessage/edit-button");
         await expect(editButton).toBeVisible({ timeout: 5000 });
 
-        await screenshotChatContainer(
-          page,
+        await chat.screenshotContainer(
           `chat-user-message-hover-state-${theme}`
         );
       });
@@ -825,8 +610,8 @@ Set \`max_results\` to limit the number of returned documents.`;
       test("AI message toolbar is visible after response completes", async ({
         page,
       }) => {
-        await openChat(page);
-        await mockChatEndpoint(page, SHORT_AI_RESPONSE);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(SHORT_AI_RESPONSE));
 
         await sendMessage(page, SHORT_USER_MESSAGE);
 
@@ -842,10 +627,7 @@ Set \`max_results\` to limit the number of returned documents.`;
         await expect(likeButton).toBeVisible();
         await expect(dislikeButton).toBeVisible();
 
-        await screenshotChatContainer(
-          page,
-          `chat-ai-message-with-toolbar-${theme}`
-        );
+        await chat.screenshotContainer(`chat-ai-message-with-toolbar-${theme}`);
       });
     });
   });

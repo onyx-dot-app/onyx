@@ -1,5 +1,5 @@
 import { useState, KeyboardEvent } from "react";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import Button from "@/refresh-components/buttons/Button";
 import { SvgX } from "@opal/icons";
 interface ListFieldInputProps {
@@ -68,7 +68,7 @@ export function ListFieldInput({
               aria-label={`Remove ${value}`}
               onClick={() => removeValue(index)}
               rightIcon={SvgX}
-              className="rounded h-8"
+              className="rounded-sm h-8"
             >
               {value}
             </Button>

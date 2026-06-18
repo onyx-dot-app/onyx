@@ -1,18 +1,16 @@
 """Integration tests for MCP Server auth delegated to API /me."""
 
-import requests
-
 from tests.integration.common_utils.constants import MCP_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.test_models import DATestUser
-
 
 STREAMABLE_HTTP_URL = f"{MCP_SERVER_URL.rstrip('/')}/?transportType=streamable-http"
 
 
 def test_mcp_server_health_check(reset: None) -> None:  # noqa: ARG001
     """Test MCP server health check endpoint."""
-    response = requests.get(f"{MCP_SERVER_URL}/health", timeout=10)
+    response = client.get(f"{MCP_SERVER_URL}/health", timeout=10)
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
     assert response.json()["service"] == "mcp_server"
@@ -20,13 +18,13 @@ def test_mcp_server_health_check(reset: None) -> None:  # noqa: ARG001
 
 def test_mcp_server_auth_missing_token(reset: None) -> None:  # noqa: ARG001
     """Test MCP server rejects requests without credentials."""
-    response = requests.post(STREAMABLE_HTTP_URL)
+    response = client.post(STREAMABLE_HTTP_URL)
     assert response.status_code == 401
 
 
 def test_mcp_server_auth_invalid_token(reset: None) -> None:  # noqa: ARG001
     """Test MCP server rejects requests with an invalid bearer token."""
-    response = requests.post(
+    response = client.post(
         STREAMABLE_HTTP_URL,
         headers={"Authorization": "Bearer invalid-token"},
         json={"jsonrpc": "2.0", "method": "initialize", "id": 1},
@@ -47,7 +45,7 @@ def test_mcp_server_auth_valid_token(
     access_token = pat.token
 
     # Test connection with MCP protocol request
-    response = requests.post(
+    response = client.post(
         STREAMABLE_HTTP_URL,
         headers={
             "Authorization": f"Bearer {access_token}",

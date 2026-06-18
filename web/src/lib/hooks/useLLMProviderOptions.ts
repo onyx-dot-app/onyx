@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import { WellKnownLLMProviderDescriptor } from "@/interfaces/llm";
+import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 

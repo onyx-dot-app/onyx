@@ -306,7 +306,9 @@ def test_parallel_yield_basic() -> None:
     results: list[tuple[float, int]] = []
     start_time = time.time()
 
-    for value in parallel_yield([gen1, gen2, gen3]):
+    for value in parallel_yield(
+        [gen1, gen2, gen3]  # ty: ignore[invalid-argument-type]
+    ):
         results.append((time.time() - start_time, value))
 
     # Verify all values were yielded

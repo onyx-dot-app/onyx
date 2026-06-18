@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
+import { Text } from "@opal/components";
 import {
   Collapsible,
   CollapsibleContent,
@@ -54,15 +55,13 @@ function TodoItemRow({ todo }: { todo: TodoItem }) {
       {getStatusIcon(todo.status)}
 
       {/* Task text - show activeForm when in_progress, otherwise content */}
-      <span
-        className={cn(
-          "text-sm",
-          todo.status === "completed"
-            ? "text-text-03 line-through"
-            : "text-text-04"
-        )}
-      >
-        {todo.status === "in_progress" ? todo.activeForm : todo.content}
+      <span className={cn(todo.status === "completed" && "line-through")}>
+        <Text
+          font="main-ui-body"
+          color={todo.status === "completed" ? "text-03" : "text-04"}
+        >
+          {todo.status === "in_progress" ? todo.activeForm : todo.content}
+        </Text>
       </span>
     </div>
   );
@@ -120,25 +119,27 @@ export default function TodoListCard({
               {allCompleted ? (
                 <SvgCheckCircle className="size-4 stroke-status-success-05 shrink-0" />
               ) : (
-                <div className="size-4 rounded border-2 border-text-03 shrink-0 flex items-center justify-center">
-                  <div className="size-2 bg-text-03 rounded-sm" />
+                <div className="size-4 rounded-sm border-2 border-text-03 shrink-0 flex items-center justify-center">
+                  <div className="size-2 bg-text-03 rounded-xs" />
                 </div>
               )}
 
               {/* Title */}
-              <span className="text-sm font-medium text-text-04">Tasks</span>
+              <Text font="main-ui-action" color="text-04" nowrap>
+                Tasks
+              </Text>
 
               {/* Progress count */}
-              <span className="text-xs text-text-03">
-                {completed}/{total} completed
-              </span>
+              <Text font="secondary-body" color="text-03" nowrap>
+                {`${completed}/${total} completed`}
+              </Text>
             </div>
 
             {/* Expand arrow */}
             <SvgChevronDown
               className={cn(
                 "size-4 stroke-text-03 transition-transform duration-150 shrink-0",
-                !isOpen && "rotate-[-90deg]"
+                !isOpen && "-rotate-90"
               )}
             />
           </button>
@@ -150,7 +151,11 @@ export default function TodoListCard({
               <TodoItemRow key={`${todoList.id}-${index}`} todo={todo} />
             ))}
             {todoList.todos.length === 0 && (
-              <span className="text-sm text-text-03 italic">No tasks</span>
+              <span className="italic">
+                <Text font="main-ui-body" color="text-03">
+                  No tasks
+                </Text>
+              </span>
             )}
           </div>
         </CollapsibleContent>

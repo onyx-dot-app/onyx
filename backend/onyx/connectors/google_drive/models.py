@@ -167,6 +167,16 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         default_factory=ThreadSafeSet
     )
 
+    # Maps email → set of folder IDs that email should skip when walking the
+    # parent chain. Covers two cases:
+    #   1. Folders where that email confirmed no accessible parent (true orphans).
+    #   2. Intermediate folders on a path that dead-ended at a confirmed orphan —
+    #      backfilled so future walks short-circuit earlier in the chain.
+    # In both cases _get_folder_metadata skips the API call and returns None.
+    failed_folder_ids_by_email: ThreadSafeDict[str, ThreadSafeSet[str]] = Field(
+        default_factory=ThreadSafeDict
+    )
+
     @field_serializer("completion_map")
     def serialize_completion_map(
         self, completion_map: ThreadSafeDict[str, StageCompletion], _info: Any
@@ -199,7 +209,7 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         if isinstance(v, set):
             return ThreadSafeSet(v)
         if isinstance(v, list):
-            return ThreadSafeSet(set(v))
+            return ThreadSafeSet(set(v))  # ty: ignore[invalid-return-type]
         return ThreadSafeSet()
 
     @field_validator("fully_walked_hierarchy_node_raw_ids", mode="before")
@@ -209,5 +219,27 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         if isinstance(v, set):
             return ThreadSafeSet(v)
         if isinstance(v, list):
-            return ThreadSafeSet(set(v))
+            return ThreadSafeSet(set(v))  # ty: ignore[invalid-return-type]
         return ThreadSafeSet()
+
+    @field_serializer("failed_folder_ids_by_email")
+    def serialize_failed_folder_ids_by_email(
+        self,
+        failed_folder_ids_by_email: ThreadSafeDict[str, ThreadSafeSet[str]],
+        _info: Any,
+    ) -> dict[str, set[str]]:
+        return {
+            k: inner.copy() for k, inner in failed_folder_ids_by_email.copy().items()
+        }
+
+    @field_validator("failed_folder_ids_by_email", mode="before")
+    def validate_failed_folder_ids_by_email(
+        cls, v: Any
+    ) -> ThreadSafeDict[str, ThreadSafeSet[str]]:
+        if isinstance(v, ThreadSafeDict):
+            return v
+        if isinstance(v, dict):
+            return ThreadSafeDict(
+                {k: ThreadSafeSet(set(vals)) for k, vals in v.items()}
+            )
+        return ThreadSafeDict()

@@ -59,12 +59,9 @@ def _add_user_filters(stmt: Select, user: User, get_editable: bool = True) -> Se
             user_groups = user_groups.where(
                 User__UserGroup.is_curator == True  # noqa: E712
             )
-        where_clause &= (
-            ~exists()
-            .where(TRLimit_UG.rate_limit_id == TokenRateLimit.id)
-            .where(~TRLimit_UG.user_group_id.in_(user_groups))
-            .correlate(TokenRateLimit)
-        )
+        where_clause &= ~exists().where(
+            TRLimit_UG.rate_limit_id == TokenRateLimit.id
+        ).where(~TRLimit_UG.user_group_id.in_(user_groups)).correlate(TokenRateLimit)
 
     return stmt.where(where_clause)
 

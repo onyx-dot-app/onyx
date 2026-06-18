@@ -6,14 +6,17 @@ from celery.schedules import crontab
 
 from onyx.configs.app_configs import AUTO_LLM_CONFIG_URL
 from onyx.configs.app_configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
+from onyx.configs.app_configs import DISABLE_OPENSEARCH_MIGRATION_TASK
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.configs.app_configs import ONYX_DISABLE_VESPA
 from onyx.configs.app_configs import SCHEDULED_EVAL_DATASET_NAMES
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.utils.variable_functionality import _LICENSE_ENFORCEMENT_ENABLED
 from shared_configs.configs import MULTI_TENANT
 
 # choosing 15 minutes because it roughly gives us enough time to process many tasks
@@ -66,6 +69,7 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
         },
     },
     {
@@ -75,6 +79,9 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Run on gated tenants too — they may still have stale checkpoints to clean.
+            "skip_gated": False,
+            "work_gated": True,
         },
     },
     {
@@ -84,6 +91,9 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Run on gated tenants too — they may still have stale index attempts.
+            "skip_gated": False,
+            "work_gated": True,
         },
     },
     {
@@ -93,6 +103,9 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Gated tenants may still have connectors awaiting deletion.
+            "skip_gated": False,
+            "work_gated": True,
         },
     },
     {
@@ -102,6 +115,7 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
         },
     },
     {
@@ -111,6 +125,7 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.MEDIUM,
             "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
         },
     },
     {
@@ -132,30 +147,56 @@ beat_task_templates: list[dict] = [
             "queue": OnyxCeleryQueues.MONITORING,
         },
     },
-    # Sandbox cleanup tasks
+    # Craft scheduled tasks (per-tenant dispatcher + stuck-run sweeper).
+    # Both are lightweight DB-only coordination tasks and run on the
+    # primary queue. The dedicated `scheduled_tasks` worker is reserved
+    # for the long-running executor (`run_scheduled_task`); routing the
+    # dispatcher there would let a saturated executor pool stall dispatch.
+    {
+        "name": "dispatch-due-scheduled-tasks",
+        "task": OnyxCeleryTask.SCHEDULED_TASKS_DISPATCH_DUE,
+        # 30 s is the spec's contract: 60 s is too coarse for a minute-
+        # cadence cron schedule; 15 s would over-load the FOR UPDATE
+        # SKIP LOCKED path for tenants with no due tasks.
+        "schedule": timedelta(seconds=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            # Drop redundant ticks aggressively; if a tick is more than
+            # ~2 schedules behind, the next one supersedes it.
+            "expires": 60,
+            "queue": OnyxCeleryQueues.PRIMARY,
+        },
+    },
+    {
+        "name": "cleanup-stuck-scheduled-runs",
+        "task": OnyxCeleryTask.SCHEDULED_TASKS_CLEANUP_STUCK,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": 60 * 60,
+            "queue": OnyxCeleryQueues.PRIMARY,
+        },
+    },
+    # Sandbox sweep: background-snapshot changed sessions, sleep idle sandboxes.
     {
         "name": "cleanup-idle-sandboxes",
         "task": OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
+        # Ticks are cheap (DB-only when nothing is stale); snapshot pacing is
+        # gated inside the task at idle_timeout/4, so cloud's x8 multiplier
+        # (~8 min effective) still lands under the ~15 min data-loss bound.
         "schedule": timedelta(minutes=1),
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
             "queue": OnyxCeleryQueues.SANDBOX,
-        },
-    },
-    {
-        "name": "cleanup-old-snapshots",
-        "task": OnyxCeleryTask.CLEANUP_OLD_SNAPSHOTS,
-        "schedule": timedelta(hours=24),
-        "options": {
-            "priority": OnyxCeleryPriority.LOW,
-            "expires": BEAT_EXPIRES_DEFAULT,
-            "queue": OnyxCeleryQueues.SANDBOX,
+            "work_gated": True,
         },
     },
 ]
 
-if ENTERPRISE_EDITION_ENABLED:
+# Mirror set_is_ee_based_on_env_variable(): EE features are active when either
+# ENABLE_PAID_ENTERPRISE_EDITION_FEATURES or LICENSE_ENFORCEMENT_ENABLED is set.
+if ENTERPRISE_EDITION_ENABLED or _LICENSE_ENFORCEMENT_ENABLED:
     beat_task_templates.extend(
         [
             {
@@ -165,6 +206,7 @@ if ENTERPRISE_EDITION_ENABLED:
                 "options": {
                     "priority": OnyxCeleryPriority.MEDIUM,
                     "expires": BEAT_EXPIRES_DEFAULT,
+                    "work_gated": True,
                 },
             },
             {
@@ -174,6 +216,7 @@ if ENTERPRISE_EDITION_ENABLED:
                 "options": {
                     "priority": OnyxCeleryPriority.MEDIUM,
                     "expires": BEAT_EXPIRES_DEFAULT,
+                    "work_gated": True,
                 },
             },
         ]
@@ -213,7 +256,11 @@ if SCHEDULED_EVAL_DATASET_NAMES:
     )
 
 # Add OpenSearch migration task if enabled.
-if ENABLE_OPENSEARCH_INDEXING_FOR_ONYX:
+if (
+    ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
+    and not DISABLE_OPENSEARCH_MIGRATION_TASK
+    and not ONYX_DISABLE_VESPA
+):
     beat_task_templates.append(
         {
             "name": "migrate-chunks-from-vespa-to-opensearch",
@@ -266,7 +313,7 @@ def make_cloud_generator_task(task: dict[str, Any]) -> dict[str, Any]:
     cloud_task["kwargs"] = {}
     cloud_task["kwargs"]["task_name"] = task["task"]
 
-    optional_fields = ["queue", "priority", "expires"]
+    optional_fields = ["queue", "priority", "expires", "skip_gated", "work_gated"]
     for field in optional_fields:
         if field in task["options"]:
             cloud_task["kwargs"][field] = task["options"][field]
@@ -302,7 +349,7 @@ beat_cloud_tasks: list[dict] = [
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-available-tenants",
         "task": OnyxCeleryTask.CLOUD_CHECK_AVAILABLE_TENANTS,
-        "schedule": timedelta(minutes=10),
+        "schedule": timedelta(minutes=2),
         "options": {
             "queue": OnyxCeleryQueues.MONITORING,
             "priority": OnyxCeleryPriority.HIGH,
@@ -359,7 +406,15 @@ if not MULTI_TENANT:
         ]
     )
 
-    tasks_to_schedule.extend(beat_task_templates)
+    # `skip_gated` and `work_gated` are cloud-only hints consumed by
+    # `cloud_beat_task_generator`. Strip them before extending the self-hosted
+    # schedule so they don't leak into apply_async as unrecognised options on
+    # every fired task message.
+    for _template in beat_task_templates:
+        _self_hosted_template = copy.deepcopy(_template)
+        _self_hosted_template["options"].pop("skip_gated", None)
+        _self_hosted_template["options"].pop("work_gated", None)
+        tasks_to_schedule.append(_self_hosted_template)
 
 
 def generate_cloud_tasks(

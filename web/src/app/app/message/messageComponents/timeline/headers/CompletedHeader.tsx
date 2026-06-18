@@ -5,10 +5,10 @@ import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
 import { Button } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import Text from "@/refresh-components/texts/Text";
-import SimpleTooltip from "@/refresh-components/SimpleTooltip";
+import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
-import { formatDurationSeconds } from "@/lib/time";
+import { formatDurationSeconds } from "@opal/time";
 import { noProp } from "@/lib/utils";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -51,10 +51,9 @@ function MemoryTagWithTooltip({
       {memoriesModal.isOpen ? (
         <span>{tag}</span>
       ) : (
-        <SimpleTooltip
+        <Tooltip
           delayDuration={0}
           side="bottom"
-          className="bg-background-neutral-00 text-text-01 shadow-md max-w-[17.5rem] p-1"
           tooltip={
             <Section
               flexDirection="column"
@@ -72,9 +71,9 @@ function MemoryTagWithTooltip({
                 icon={SvgAddLines}
                 title={operationLabel}
                 sizePreset="secondary"
-                paddingVariant="sm"
+                padding="sm"
                 variant="body"
-                prominence="muted"
+                color="muted"
                 rightChildren={
                   <Button
                     prominence="tertiary"
@@ -91,7 +90,7 @@ function MemoryTagWithTooltip({
           }
         >
           <span>{tag}</span>
-        </SimpleTooltip>
+        </Tooltip>
       )}
     </>
   );
@@ -132,7 +131,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   if (isMemoryOnly) {
     return (
       <div className="flex w-full justify-between">
-        <div className="flex items-center px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+        <div className="flex items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
           <MemoryTagWithTooltip
             memoryText={memoryText}
             memoryOperation={memoryOperation}
@@ -173,9 +172,9 @@ export const CompletedHeader = React.memo(function CompletedHeader({
       onClick={onToggle}
       className="flex items-center justify-between w-full"
     >
-      <div className="flex items-center gap-2 px-[var(--timeline-header-text-padding-x)] py-[var(--timeline-header-text-padding-y)]">
+      <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
         <Text as="p" mainUiAction text03>
-          {isExpanded ? durationText : imageText ?? durationText}
+          {isExpanded ? durationText : (imageText ?? durationText)}
         </Text>
         {memoryOperation && !isExpanded && (
           <MemoryTagWithTooltip

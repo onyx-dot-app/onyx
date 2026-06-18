@@ -17,12 +17,12 @@ import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
-import { useAgents } from "@/hooks/useAgents";
+import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import useChatController from "@/hooks/useChatController";
 import useChatSessionController from "@/hooks/useChatSessionController";
-import useAgentController from "@/hooks/useAgentController";
+import { useAgentController } from "@/lib/agents/hooks";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -33,8 +33,8 @@ import ChatUI from "@/sections/chat/ChatUI";
 import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
-import { cn } from "@/lib/utils";
-import Spacer from "@/refresh-components/Spacer";
+import { cn } from "@opal/utils";
+import { Spacer } from "@opal/components";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
@@ -43,10 +43,13 @@ import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { eeGated } from "@/ce";
+import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
+import useMultiModelChat from "@/hooks/useMultiModelChat";
+import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
+import { Section } from "@/layouts/general-layouts";
 
-const SearchUI = eeGated(EESearchUI);
+const SearchUI = paidTierGated(EESearchUI);
 
 interface NRFPageProps {
   isSidePanel?: boolean;
@@ -92,10 +95,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Assistant controller
   const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController({
-      selectedChatSession: undefined,
-      onAgentSelect: () => {},
-    });
+    useAgentController(undefined, () => {});
 
   // LLM manager for model selection.
   // - currentChatSession: undefined because NRF always starts new chats
@@ -105,6 +105,20 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // If no LLM provider is configured (e.g., fresh signup), the input bar is
   // disabled and a "Set up an LLM" button is shown (see bottom of component).
   const llmManager = useLlmManager(undefined, liveAgent ?? undefined);
+  const multiModel = useMultiModelChat(llmManager);
+
+  // Sync single-model selection to llmManager so the submission path
+  // uses the correct provider/version (mirrors AppPage behaviour).
+  useEffect(() => {
+    if (multiModel.selectedModels.length === 1) {
+      const model = multiModel.selectedModels[0]!;
+      llmManager.updateCurrentLlm({
+        name: model.name,
+        provider: model.provider,
+        modelName: model.modelName,
+      });
+    }
+  }, [multiModel.selectedModels]);
 
   // Deep research toggle
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -295,12 +309,17 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       // If we already have messages (chat session started), always use chat mode
       // (matches AppPage behavior where existing sessions bypass classification)
+      const selectedModels = multiModel.isMultiModelActive
+        ? multiModel.selectedModels
+        : undefined;
+
       if (hasMessages) {
         onSubmit({
           message: submittedMessage,
           currentMessageFiles: currentMessageFiles,
-          deepResearch: deepResearchEnabled,
+          deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
           additionalContext,
+          selectedModels,
         });
         return;
       }
@@ -310,8 +329,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         onSubmit({
           message: chatMessage,
           currentMessageFiles: currentMessageFiles,
-          deepResearch: deepResearchEnabled,
+          deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
           additionalContext,
+          selectedModels,
         });
       };
 
@@ -328,6 +348,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       submitQuery,
       tabReadingEnabled,
       currentTabUrl,
+      multiModel.isMultiModelActive,
+      multiModel.selectedModels,
     ]
   );
 
@@ -345,10 +367,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     onSubmit({
       message: lastUserMsg.message,
       currentMessageFiles: currentMessageFiles,
-      deepResearch: deepResearchEnabled,
+      deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,
     });
-  }, [messageHistory, onSubmit, currentMessageFiles, deepResearchEnabled]);
+  }, [
+    messageHistory,
+    onSubmit,
+    currentMessageFiles,
+    deepResearchEnabled,
+    multiModel.isMultiModelActive,
+  ]);
 
   // Start a new chat session in the side panel
   const handleNewChat = useCallback(() => {
@@ -429,7 +457,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           <div
             {...getRootProps()}
             className={cn(
-              "flex-1 min-h-0 w-full flex flex-col items-center outline-none",
+              "flex-1 min-h-0 w-full flex flex-col items-center outline-hidden",
               isSidePanel && "px-3"
             )}
           >
@@ -456,6 +484,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                     onResubmit={handleResubmitLastMessage}
                     deepResearchEnabled={deepResearchEnabled}
                     anchorNodeId={anchorNodeId}
+                    selectedModels={multiModel.selectedModels}
                   />
                 </ChatScrollContainer>
               </>
@@ -464,7 +493,22 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             {/* Welcome message - centered when no messages and not in search mode */}
             {!hasMessages && !isSearch && (
               <div className="relative w-full flex-1 flex flex-col items-center justify-end">
-                <WelcomeMessage isDefaultAgent />
+                <Section
+                  flexDirection="row"
+                  justifyContent="between"
+                  alignItems="end"
+                  className="max-w-(--app-page-main-content-width)"
+                >
+                  <WelcomeMessage isDefaultAgent />
+                  {liveAgent && (
+                    <MultiModelSelector
+                      selectedModels={multiModel.selectedModels}
+                      onAdd={multiModel.addModel}
+                      onRemove={multiModel.removeModel}
+                      onReplace={multiModel.replaceModel}
+                    />
+                  )}
+                </Section>
                 <Spacer rem={1.5} />
               </div>
             )}
@@ -474,14 +518,24 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
               ref={inputRef}
               className={cn(
                 "w-full flex flex-col",
-                !isSidePanel &&
-                  "max-w-[var(--app-page-main-content-width)] px-4"
+                !isSidePanel && "max-w-(--app-page-main-content-width)"
               )}
             >
+              {hasMessages && liveAgent && (
+                <div className="pb-1">
+                  <MultiModelSelector
+                    selectedModels={multiModel.selectedModels}
+                    onAdd={multiModel.addModel}
+                    onRemove={multiModel.removeModel}
+                    onReplace={multiModel.replaceModel}
+                  />
+                </div>
+              )}
               <AppInputBar
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}
+                isMultiModelActive={multiModel.isMultiModelActive}
                 filterManager={filterManager}
                 llmManager={llmManager}
                 initialMessage={message}
@@ -506,7 +560,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
             {/* Search results - shown when query is classified as search */}
             {isSearch && (
-              <div className="flex-1 w-full max-w-[var(--app-page-main-content-width)] px-4 min-h-0 overflow-auto">
+              <div className="flex-1 w-full max-w-(--app-page-main-content-width) px-4 min-h-0 overflow-auto">
                 <Spacer rem={0.75} />
                 <SearchUI onDocumentClick={handleSearchDocumentClick} />
               </div>
@@ -522,7 +576,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       <div
         className={cn(
           "absolute right-0 top-0 h-full z-20 overflow-hidden transition-all duration-300",
-          documentSidebarVisible ? "w-[25rem]" : "w-0"
+          documentSidebarVisible ? "w-100" : "w-0"
         )}
       >
         <DocumentsSidebar
@@ -612,7 +666,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           width="full"
           prominence="secondary"
           onClick={() => {
-            window.location.href = "/admin/configuration/llm";
+            window.location.href = "/admin/configuration/language-models";
           }}
         >
           Set up an LLM.

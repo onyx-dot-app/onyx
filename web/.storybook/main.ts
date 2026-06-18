@@ -6,6 +6,8 @@ const config: StorybookConfig = {
     "./*.mdx",
     "../lib/opal/src/**/*.stories.@(ts|tsx)",
     "../src/refresh-components/**/*.stories.@(ts|tsx)",
+    "../src/sections/**/*.stories.@(ts|tsx)",
+    "../src/app/craft/**/*.stories.@(ts|tsx)",
   ],
   addons: ["@storybook/addon-essentials", "@storybook/addon-themes"],
   framework: {
@@ -35,6 +37,13 @@ const config: StorybookConfig = {
     // Process CSS with Tailwind via PostCSS
     config.css = config.css ?? {};
     config.css.postcss = path.resolve(__dirname, "..");
+
+    // Provide `process.env` for modules that reference it at the top level
+    // (e.g. src/lib/constants.ts). Vite doesn't polyfill Node globals.
+    config.define = {
+      ...config.define,
+      "process.env": JSON.stringify({}),
+    };
 
     return config;
   },

@@ -4,10 +4,10 @@ import {
   AuthType,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
   SERVER_SIDE_ONLY__AUTH_TYPE,
+  SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
 } from "./lib/constants";
 
 // Authentication cookie names (matches backend constants)
-const FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth";
 const ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
 
 // Protected route prefixes (require authentication)
@@ -16,29 +16,45 @@ const PROTECTED_ROUTES = ["/app", "/admin", "/agents", "/connector"];
 // Public route prefixes (no authentication required)
 const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
 
-// NOTE: have to have the "/:path*" here since NextJS doesn't allow any real JS to
-// be run before the config is defined e.g. if we try and do a .map it will complain
+// The CSP is emitted here, not in next.config.js `headers()` (which is baked
+// into the build), so WEB_FRAME_PROTECTION_ENABLED is read at runtime and
+// applies on restart without a rebuild.
+//
+// frame-ancestors controls who may embed Onyx in an <iframe>. On by default;
+// WEB_FRAME_PROTECTION_ENABLED=false drops it so any origin may frame Onyx.
+// chrome-extension:/moz-extension: are app-wide (the extension iframes every
+// route, not just /nrf) and cover both Chromium and Firefox builds.
+// X-Frame-Options is omitted: it can't express the extension allowance and
+// modern browsers honor frame-ancestors.
+const frameProtectionEnabled =
+  process.env.WEB_FRAME_PROTECTION_ENABLED?.toLowerCase() !== "false";
+
+// NEXT_PUBLIC_* and NODE_ENV are inlined at build, so this stays build-time —
+// only the frame-ancestors flag above is runtime.
+const upgradeInsecureRequests =
+  process.env.NEXT_PUBLIC_CLOUD_ENABLED === "true" &&
+  process.env.NODE_ENV !== "development";
+
+const CSP_HEADER = [
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
+  "font-src 'self' https://fonts.gstatic.com;",
+  "object-src 'none';",
+  "base-uri 'self';",
+  "form-action 'self';",
+  frameProtectionEnabled
+    ? "frame-ancestors 'self' chrome-extension: moz-extension:;"
+    : "",
+  upgradeInsecureRequests ? "upgrade-insecure-requests;" : "",
+]
+  .filter(Boolean)
+  .join(" ");
+
+// Match every route except Next.js internals and static assets so the CSP rides
+// on all document responses. The auth/EE logic below is pathname-gated, so the
+// broader match doesn't change its behavior. Matchers must be static strings —
+// no JS runs before `config` is read.
 export const config = {
-  matcher: [
-    // Auth-protected routes (for middleware auth check)
-    "/app/:path*",
-    "/admin/:path*",
-    "/agents/:path*",
-    "/connector/:path*",
-
-    // Enterprise Edition routes (for /ee rewriting)
-    // These are ONLY the EE-specific routes that should be rewritten
-    "/admin/groups/:path*",
-    "/admin/performance/usage/:path*",
-    "/admin/performance/query-history/:path*",
-    "/admin/theme/:path*",
-    "/admin/performance/custom-analytics/:path*",
-    "/admin/standard-answer/:path*",
-    "/agents/stats/:path*",
-
-    // Cloud only
-    "/admin/billing/:path*",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
 
 // Enterprise Edition specific routes (ONLY these get /ee rewriting)
@@ -51,6 +67,11 @@ const EE_ROUTES = [
   "/admin/standard-answer",
   "/agents/stats",
 ];
+
+function withSecurityHeaders(response: NextResponse): NextResponse {
+  response.headers.set("Content-Security-Policy", CSP_HEADER);
+  return response;
+}
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
@@ -65,7 +86,7 @@ export async function proxy(request: NextRequest) {
   );
 
   if (isProtectedRoute && !isPublicRoute) {
-    const authCookie = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME);
+    const authCookie = request.cookies.get(SERVER_SIDE_ONLY__AUTH_COOKIE_NAME);
     const anonymousCookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME);
 
     // Allow access if user has either a regular auth cookie or anonymous user cookie
@@ -74,7 +95,7 @@ export async function proxy(request: NextRequest) {
       // Preserve full URL including query params and hash for deep linking
       const fullPath = pathname + request.nextUrl.search + request.nextUrl.hash;
       loginUrl.searchParams.set("next", fullPath);
-      return NextResponse.redirect(loginUrl);
+      return withSecurityHeaders(NextResponse.redirect(loginUrl));
     }
   }
 
@@ -82,9 +103,9 @@ export async function proxy(request: NextRequest) {
   if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
     if (EE_ROUTES.some((route) => pathname.startsWith(route))) {
       const newUrl = new URL(`/ee${pathname}`, request.url);
-      return NextResponse.rewrite(newUrl);
+      return withSecurityHeaders(NextResponse.rewrite(newUrl));
     }
   }
 
-  return NextResponse.next();
+  return withSecurityHeaders(NextResponse.next());
 }

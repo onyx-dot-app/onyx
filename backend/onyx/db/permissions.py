@@ -8,15 +8,36 @@ other onyx/db/ modules such as users.py.
 """
 
 from collections import defaultdict
+from collections.abc import Iterable
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import Permission
 from onyx.db.models import PermissionGrant
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+def parse_permission_values(values: Iterable[str]) -> list[Permission]:
+    """Parse stored permission strings into Permissions, dropping unknown values.
+
+    Stored values are validated on write, so an unknown one means stale/corrupt
+    data; we drop it (logged) rather than fail the read — dropping only ever
+    narrows access, so it fails safe.
+    """
+    parsed: list[Permission] = []
+    for value in values:
+        try:
+            parsed.append(Permission(value))
+        except ValueError:
+            logger.warning("Ignoring unknown permission value %r", value)
+    return parsed
 
 
 def recompute_user_permissions__no_commit(
@@ -64,7 +85,7 @@ def recompute_user_permissions__no_commit(
     for uid, perms in perms_by_user.items():
         db_session.execute(
             update(User)
-            .where(User.id == uid)  # type: ignore[arg-type]
+            .where(User.id == uid)  # ty: ignore[invalid-argument-type]
             .values(effective_permissions=sorted(perms))
         )
 

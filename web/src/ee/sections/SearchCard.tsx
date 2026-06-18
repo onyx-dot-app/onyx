@@ -11,7 +11,7 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { Section } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import { useMemo } from "react";
 
 export interface SearchResultCardProps {
@@ -56,7 +56,7 @@ export default function SearchCard({
 
   return (
     <Interactive.Stateless onClick={handleClick} prominence="secondary">
-      <Interactive.Container heightVariant="fit" widthVariant="full">
+      <Interactive.Container size="fit" width="full">
         <Section alignItems="start" gap={0} padding={0.25}>
           {/* Title Row */}
           <Section

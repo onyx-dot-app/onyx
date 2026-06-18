@@ -23,7 +23,10 @@ logger = setup_logger()
     trail=False,
 )
 def perform_ttl_management_task(
-    self: Task, retention_limit_days: int, *, tenant_id: str  # noqa: ARG001
+    self: Task,
+    retention_limit_days: int,
+    *,
+    tenant_id: str,  # noqa: ARG001
 ) -> None:
     task_id = self.request.id
     if not task_id:
@@ -33,25 +36,32 @@ def perform_ttl_management_task(
     session_id: UUID | None = None
     try:
         with get_session_with_current_tenant() as db_session:
-
             old_chat_sessions = get_chat_sessions_older_than(
                 retention_limit_days, db_session
             )
 
         for user_id, session_id in old_chat_sessions:
-            # one session per delete so that we don't blow up if a deletion fails.
-            with get_session_with_current_tenant() as db_session:
-                delete_chat_session(
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    delete_chat_session(
+                        user_id,
+                        session_id,
+                        db_session,
+                        include_deleted=True,
+                        hard_delete=True,
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to delete chat session user_id=%s session_id=%s, continuing with remaining sessions",
                     user_id,
                     session_id,
-                    db_session,
-                    include_deleted=True,
-                    hard_delete=True,
                 )
 
     except Exception:
         logger.exception(
-            f"delete_chat_session exceptioned. user_id={user_id} session_id={session_id}"
+            "delete_chat_session exceptioned. user_id=%s session_id=%s",
+            user_id,
+            session_id,
         )
         raise
 

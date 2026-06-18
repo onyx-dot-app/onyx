@@ -132,7 +132,7 @@ export function GenericMultiSelect<
                 value: String(item.id),
               }))}
             strict
-            leftSearchIcon
+            searchIcon
           />
         </div>
       </Disabled>
@@ -147,7 +147,7 @@ export function GenericMultiSelect<
               disabled={disabled}
               rightIcon={SvgX}
               onClick={() => handleRemove(item.id)}
-              className="!px-2 !py-1"
+              className="px-2! py-1!"
             >
               {item.name}
             </Button>

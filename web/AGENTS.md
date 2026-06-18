@@ -55,7 +55,7 @@ A two-axis layout component that automatically routes to the correct internal la
 
 Wraps `Content` and adds a `rightChildren` slot. Accepts all `Content` props plus:
 - `rightChildren`: `ReactNode` — actions rendered on the right
-- `paddingVariant`: `SizeVariant` — controls outer padding
+- `padding`: `SizeVariant` — controls outer padding
 
 ```typescript
 <ContentAction
@@ -194,8 +194,10 @@ hover, active, and disabled states.
 ### Disabled (`core/disabled/`)
 
 A pure CSS wrapper that applies disabled visuals (`opacity-50`, `cursor-not-allowed`,
-`pointer-events: none`) to a single child element via Radix `Slot`. Has no React context —
-Interactive primitives and buttons manage their own disabled state via a `disabled` prop.
+`pointer-events: none`) to a single child element via Radix `Slot`. Supports an optional `tooltip`
+prop (shown on hover when disabled) and `allowClick` to re-enable pointer events. The child must
+be a single DOM element. Interactive primitives and buttons manage their own disabled state via a
+`disabled` prop.
 
 ### Hoverable (`core/animations/`)
 
@@ -542,7 +544,7 @@ function UserCard({
 ## 4. Spacing Guidelines
 
 **Prefer padding over margins for spacing. When a library component exposes a padding prop
-(e.g., `paddingVariant`), use that prop instead of wrapping it in a `<div>` with padding classes.
+(e.g., `padding`), use that prop instead of wrapping it in a `<div>` with padding classes.
 If a library component does not expose a padding override and you find yourself adding a wrapper
 div for spacing, consider updating the library component to accept one.**
 
@@ -551,7 +553,7 @@ divs that exist solely for spacing.
 
 ```typescript
 // ✅ Good — use the component's padding prop
-<ContentAction paddingVariant="md" ... />
+<ContentAction padding="md" ... />
 
 // ✅ Good — padding utilities when no component prop exists
 <div className="p-4 space-y-2">

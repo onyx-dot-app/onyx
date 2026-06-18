@@ -47,10 +47,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
-import { Button } from "@opal/components";
+import { Button, type TagProps } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import { WithoutStyles } from "@/types";
+import type { WithoutStyles } from "@opal/types";
 
 // Context for sharing state between compound components
 interface SimpleCollapsibleContextValue {
@@ -100,8 +100,9 @@ function useSimpleCollapsible() {
  * </SimpleCollapsible>
  * ```
  */
-interface SimpleCollapsibleRootProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface SimpleCollapsibleRootProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   /** Controlled open state - when provided, component becomes controlled */
   open?: boolean;
   /** Default open state for uncontrolled mode (defaults to true) */
@@ -179,15 +180,18 @@ Root.displayName = "SimpleCollapsible";
  * </SimpleCollapsible>
  * ```
  */
-interface SimpleCollapsibleHeaderProps
-  extends WithoutStyles<React.HTMLAttributes<HTMLDivElement>> {
+interface SimpleCollapsibleHeaderProps extends WithoutStyles<
+  React.HTMLAttributes<HTMLDivElement>
+> {
   /** The main heading text displayed in emphasized style */
   title: string;
   /** Optional secondary description text displayed below the title */
   description?: string;
+  /** Optional tag rendered inline next to the title (e.g. a plan badge). */
+  tag?: TagProps;
 }
 const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
-  ({ title, description, ...props }, ref) => {
+  ({ title, description, tag, ...props }, ref) => {
     const { open } = useSimpleCollapsible();
     const { ref: boundingRef, inside } = useBoundingBox();
 
@@ -204,6 +208,7 @@ const Header = React.forwardRef<HTMLDivElement, SimpleCollapsibleHeaderProps>(
               description={description}
               sizePreset="main-content"
               variant="section"
+              tag={tag}
             />
           </div>
           <Button

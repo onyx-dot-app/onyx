@@ -3,12 +3,11 @@
 import { Fragment, useState, useRef, useEffect, useCallback } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Divider } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
-import Separator from "@/refresh-components/Separator";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import { toast } from "@/hooks/useToast";
 import { useModalClose } from "@/refresh-components/contexts/ModalContext";
@@ -19,7 +18,7 @@ import {
   MAX_MEMORY_COUNT,
   LocalMemory,
 } from "@/hooks/useMemoryManager";
-import { cn } from "@/lib/utils";
+import { cn } from "@opal/utils";
 import { useUser } from "@/providers/UserProvider";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import type { MemoryItem } from "@/lib/types";
@@ -277,9 +276,7 @@ export default function MemoriesModal({
               placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              leftSearchIcon
-              showClearButton={false}
-              className="w-full !bg-transparent !border-transparent [&:is(:hover,:active,:focus,:focus-within)]:!bg-background-neutral-00 [&:is(:hover)]:!border-border-01 [&:is(:focus,:focus-within)]:!shadow-none"
+              searchIcon
             />
             <Button
               disabled={!canAddMemory}
@@ -323,7 +320,9 @@ export default function MemoriesModal({
                       setHighlightMemoryId(null);
                     }}
                   />
-                  {memory.isNew && <Separator noPadding />}
+                  {memory.isNew && (
+                    <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                  )}
                 </Fragment>
               ))}
             </Section>

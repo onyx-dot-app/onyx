@@ -1,0 +1,102 @@
+/**
+ * @opal/sizes — web-only LAYOUT dimensions (library-owned).
+ *
+ * Design-token scales (radius, spacing, padding, weights, backdrop-blur, and the
+ * typography height metrics) now live in @onyx-ai/shared and are pulled in via
+ * `@import "@onyx-ai/shared/tokens.css"` (see _reference.css / root.css). Only the
+ * web-app layout dimensions — container/sidebar/modal/panel/page/card widths and
+ * heights — remain here, as they are not cross-platform design tokens.
+ */
+
+:root {
+  --app-page-main-content-width: 45rem;
+  --notifications-popover: 20rem;
+
+  --app-container-sm: 42rem;
+  --app-container-sm-md: 47rem;
+  --app-container-md: 54.5rem;
+  --app-container-lg: 62rem;
+  --app-container-full: 100%;
+
+  --toast-width: 25rem;
+
+  --sidebar-width-expanded: 15rem;
+  --sidebar-width-folded: 3.25rem;
+
+  --chrome-header-height: 3.25rem;
+
+  /* BLOCK — WIDTH */
+  --block-width-tooltip-max: 15rem;
+
+  --block-width-card-2-column-min: 17.5rem;
+  --block-width-card-4-column-min: 11.75rem;
+
+  --block-width-contextual-menu-extra-small: 7.5rem;
+  --block-width-contextual-menu-small: 10rem;
+  --block-width-contextual-menu-medium-small: 12.5rem;
+  --block-width-contextual-menu-medium: 15rem;
+  --block-width-contextual-menu-medium-large: 17.5rem;
+  --block-width-contextual-menu-large: 20rem;
+  --block-width-contextual-menu-extra-large: 22.5rem;
+
+  --block-width-flash-message-small: 20rem;
+  --block-width-flash-message-medium: 30rem;
+  --block-width-flash-message-large: 40rem;
+
+  --block-width-modal-small: 30rem;
+  --block-width-modal-medium: 40rem;
+  --block-width-modal-large: 50rem;
+  --block-width-modal-extra-large: 60rem;
+
+  --block-width-page-extra-small-content: 30rem;
+  --block-width-page-small-content: 40rem;
+  --block-width-page-small-medium-content: 45rem;
+  --block-width-page-medium-content: 52.5rem;
+  --block-width-page-large-content: 60rem;
+  --block-width-page-extra-small-container: 32rem;
+  --block-width-page-small-container: 42rem;
+  --block-width-page-small-medium-container: 47rem;
+  --block-width-page-medium-container: 54.5rem;
+  --block-width-page-large-container: 62rem;
+
+  --block-width-sidebar-small: 10rem;
+  --block-width-sidebar-medium-small: 12.5rem;
+  --block-width-sidebar-medium: 15rem;
+  --block-width-sidebar-medium-large: 17.5rem;
+  --block-width-sidebar-large: 20rem;
+
+  --block-width-panel-small: 20rem;
+  --block-width-panel-medium-small: 22.5rem;
+  --block-width-panel-medium: 25rem;
+  --block-width-panel-large: 30rem;
+  --block-width-panel-extra-large: 35rem;
+
+  --block-width-form-label-column-max: 30rem;
+  --block-width-form-input-column-max: 15rem;
+  --block-width-form-input-min: 10rem;
+  --block-width-form-value-min: 5rem;
+
+  --block-width-tag-label-max: 10rem;
+  --block-width-tag-label-small-max: 7.5rem;
+  --block-width-tag-value-max: 10rem;
+
+  --block-width-column-small: 5rem;
+  --block-width-column-medium-small: 7.5rem;
+  --block-width-column-medium: 10rem;
+  --block-width-column-medium-large: 12.5rem;
+  --block-width-column-large: 15rem;
+
+  --block-width-inline-tile-min: 7.5rem;
+  --block-width-inline-tile-max: 15rem;
+
+  /* BLOCK — HEIGHT */
+  --block-height-modal-min: 15rem;
+  --block-height-card-list-max: 30rem;
+  --block-height-contextual-menu-max: 22.5rem;
+
+  --block-height-image-extra-large: 22.5rem;
+  --block-height-image-large: 17.5rem;
+  --block-height-image-medium: 5rem;
+  --block-height-image-small: 3.5rem;
+  --block-height-image-inline: 2.75rem;
+}

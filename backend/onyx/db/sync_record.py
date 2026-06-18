@@ -32,8 +32,10 @@ def insert_sync_record(
 
     if existing_in_progress_sync_record is not None:
         logger.info(
-            f"Cancelling existing in-progress sync record {existing_in_progress_sync_record.id} "
-            f"for entity_id={entity_id} sync_type={sync_type}"
+            "Cancelling existing in-progress sync record %s for entity_id=%s sync_type=%s",
+            existing_in_progress_sync_record.id,
+            entity_id,
+            sync_type,
         )
         mark_sync_records_as_cancelled(db_session, entity_id, sync_type)
 
@@ -129,16 +131,19 @@ def update_sync_record_status(
     """
     sync_record = fetch_latest_sync_record(db_session, entity_id, sync_type)
     if sync_record is None:
-        raise ValueError(
-            f"No sync record found for entity_id={entity_id} sync_type={sync_type}"
+        logger.warning(
+            "No sync record found for entity_id=%s sync_type=%s — skipping status update. This typically means the record was never created (insert_sync_record failed silently) or was cleaned up.",
+            entity_id,
+            sync_type,
         )
+        return
 
     sync_record.sync_status = sync_status
     if num_docs_synced is not None:
         sync_record.num_docs_synced = num_docs_synced
 
     if sync_status.is_terminal():
-        sync_record.sync_end_time = func.now()  # type: ignore
+        sync_record.sync_end_time = func.now()
 
     db_session.commit()
 

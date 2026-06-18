@@ -63,11 +63,13 @@ Your features must pass all tests and all comments must be addressed prior to me
 ### Implicit agreements
 
 If we approve an issue, we are promising you the following:
+
 - Your work will receive timely attention and we will put aside other important items to ensure you are not blocked.
 - You will receive necessary coaching on eng quality, system design, etc. to ensure the feature is completed well.
 - The Onyx team will pull resources and bandwidth from design, PM, and engineering to ensure that you have all the resources to build the feature to the quality required for merging.
 
 Because this is a large investment from our team, we ask that you:
+
 - Thoroughly read all the requirements of the design docs, engineering best practices, and try to minimize overhead for the Onyx team.
 - Complete the feature in a timely manner to reduce context switching and an ongoing resource pull from the Onyx team.
 
@@ -89,16 +91,16 @@ Onyx being a fully functional app, relies on some external software, specificall
 
 ### Prerequisites
 
-- **Python 3.11** — If using a lower version, modifications will have to be made to the code. Higher versions may have library compatibility issues.
+- **Python 3.13** — Other versions may require code or dependency changes; 3.14 is not yet supported (some dependencies, e.g. `onnxruntime` and CUDA `torch`, do not yet ship 3.14 wheels).
 - **Docker** — Required for running external services (Postgres, OpenSearch, Redis, MinIO).
-- **Node.js v22** — We recommend using [nvm](https://github.com/nvm-sh/nvm) to manage Node installations.
+- **Bun** — We use [bun](https://bun.sh) as the JavaScript package manager. Install it from https://bun.sh/docs/installation.
 
 ### Backend: Python Requirements
 
 We use [uv](https://docs.astral.sh/uv/) and recommend creating a [virtual environment](https://docs.astral.sh/uv/pip/environments/#using-a-virtual-environment).
 
 ```bash
-uv venv .venv --python 3.11
+uv venv .venv --python 3.13
 source .venv/bin/activate
 ```
 
@@ -117,7 +119,7 @@ If using PowerShell, the command slightly differs:
 Install the required Python dependencies:
 
 ```bash
-uv sync --all-extras
+uv sync
 ```
 
 Install Playwright for Python (headless browser required by the Web Connector):
@@ -128,42 +130,46 @@ uv run playwright install
 
 ### Frontend: Node Dependencies
 
-```bash
-nvm install 22 && nvm use 22
-node -v # verify your active version
-```
-
 Navigate to `onyx/web` and run:
 
 ```bash
-npm i
+bun install
 ```
 
 ### Formatting and Linting
 
 #### Backend
 
-Set up pre-commit hooks (black / reorder-python-imports):
+Set up pre-commit hooks (`ruff` / `ruff format`):
 
 ```bash
 uv run pre-commit install
 ```
 
-We also use `mypy` for static type checking. Onyx is fully type-annotated, and we want to keep it that way! To run the mypy checks manually:
+We also use `ty` for static type checking. Onyx is fully type-annotated, and we want to keep it that way! To run the ty checks manually:
 
 ```bash
-uv run mypy .  # from onyx/backend
+uv run ty check
 ```
 
 #### Frontend
 
-We use `prettier` for formatting. The desired version will be installed via `npm i` from the `onyx/web` directory. To run the formatter:
+We use `oxfmt` for formatting. The desired version will be installed via `bun install` from the `onyx/web` directory. To run the formatter:
 
 ```bash
-npx prettier --write .  # from onyx/web
+bunx oxfmt .  # from onyx/web
 ```
 
-Pre-commit will also run prettier automatically on files you've recently touched. If re-formatted, your commit will fail. Re-stage your changes and commit again.
+Pre-commit will also run oxfmt automatically on files you've recently touched. If re-formatted, your commit will fail. Re-stage your changes and commit again.
+
+We use `oxlint` for linting. The desired version will be installed via `bun install` from the `onyx/web` directory. To run the linter:
+
+```bash
+bunx oxlint  # from onyx/web
+bunx oxlint --fix  # auto-fix what it can
+```
+
+Pre-commit will also run oxlint automatically. If it reports errors, fix them and commit again.
 
 ---
 
@@ -192,7 +198,10 @@ Before starting, make sure the Docker Daemon is running.
 > **Note:** "Clear and Restart External Volumes and Containers" will reset your Postgres and OpenSearch (relational-db and index). Only run this if you are okay with wiping your data.
 
 **Features:**
-- Hot reload is enabled for the web server and API servers
+
+- Hot reload is enabled for the web server, API server, and celery workers
+  (celery is wrapped in `backend/scripts/dev_celery_reload.py` so breakpoints
+  survive reloads — debugpy follows the watchfiles fork via `subProcess: true`)
 - Python debugging is configured with debugpy
 - Environment variables are loaded from `.vscode/.env`
 - Console output is organized in the integrated terminal with labeled tabs
@@ -216,7 +225,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d index relat
 To start the frontend, navigate to `onyx/web` and run:
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 Next, start the model server which runs the local NLP models. Navigate to `onyx/backend` and run:
@@ -275,6 +284,10 @@ Now, visit http://localhost:3000 in your browser. You should see the Onyx onboar
 
 You've successfully set up a local Onyx instance!
 
+### Running on a Local Kubernetes Cluster
+
+For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Local Kubernetes Development](/docs/dev/local-kubernetes.md) for the full workflow.
+
 ### Running in Docker
 
 You can run the full Onyx application stack from pre-built images including all external software dependencies.
@@ -299,16 +312,16 @@ docker compose up -d --build
 
 ### Setting up Python
 
-Ensure [Homebrew](https://brew.sh/) is already set up, then install Python 3.11:
+Ensure [Homebrew](https://brew.sh/) is already set up, then install Python 3.13:
 
 ```bash
-brew install python@3.11
+brew install python@3.13
 ```
 
-Add Python 3.11 to your path by adding the following line to `~/.zshrc`:
+Add Python 3.13 to your path by adding the following line to `~/.zshrc`:
 
 ```
-export PATH="$(brew --prefix)/opt/python@3.11/libexec/bin:$PATH"
+export PATH="$(brew --prefix)/opt/python@3.13/libexec/bin:$PATH"
 ```
 
 > **Note:** You will need to open a new terminal for the path change above to take effect.
@@ -344,13 +357,16 @@ sudo xattr -r -d com.apple.quarantine ~/.cache/pre-commit
 ### Style and Maintainability
 
 #### Comments and readability
+
 Add clear comments:
+
 - At logical boundaries (e.g., interfaces) so the reader doesn't need to dig 10 layers deeper.
 - Wherever assumptions are made or something non-obvious/unexpected is done.
 - For complicated flows/functions.
 - Wherever it saves time (e.g., nontrivial regex patterns).
 
 #### Errors and exceptions
+
 - **Fail loudly** rather than silently skipping work.
   - Example: raise and let exceptions propagate instead of silently dropping a document.
 - **Don't overuse `try/except`.**
@@ -358,6 +374,7 @@ Add clear comments:
   - Do not mask exceptions unless it is clearly appropriate.
 
 #### Typing
+
 - Everything should be **as strictly typed as possible**.
 - Use `cast` for annoying/loose-typed interfaces (e.g., results of `run_functions_tuples_in_parallel`).
   - Only `cast` when the type checker sees `Any` or types are too loose.
@@ -368,6 +385,7 @@ Add clear comments:
     - `dict[EmbeddingModel, list[EmbeddingVector]]`
 
 #### State, objects, and boundaries
+
 - Keep **clear logical boundaries** for state containers and objects.
 - A **config** object should never contain things like a `db_session`.
 - Avoid state containers that are overly nested, or huge + flat (use judgment).
@@ -380,6 +398,7 @@ Add clear comments:
   - Prefer **hash maps (dicts)** over tree structures unless there's a strong reason.
 
 #### Naming
+
 - Name variables carefully and intentionally.
 - Prefer long, explicit names when undecided.
 - Avoid single-character variables except for small, self-contained utilities (or not at all).
@@ -390,6 +409,7 @@ Add clear comments:
   - IntelliSense can miss call sites; search works best with unique names.
 
 #### Correctness by construction
+
 - Prefer self-contained correctness — don't rely on callers to "use it right" if you can make misuse hard.
 - Avoid redundancies: if a function takes an arg, it shouldn't also take a state object that contains that same arg.
 - No dead code (unless there's a very good reason).
@@ -417,29 +437,35 @@ Add clear comments:
 ### Repository Conventions
 
 #### Where code lives
+
 - Pydantic + data models: `models.py` files.
 - DB interface functions (excluding lazy loading): `db/` directory.
 - LLM prompts: `prompts/` directory, roughly mirroring the code layout that uses them.
 - API routes: `server/` directory.
 
 #### Pydantic and modeling
+
 - Prefer **Pydantic** over dataclasses.
 - If absolutely required, use `allow_arbitrary_types`.
 
 #### Data conventions
+
 - Prefer explicit `None` over sentinel empty strings (usually; depends on intent).
 - Prefer explicit identifiers: use string enums instead of integer codes.
 - Avoid magic numbers (co-location is good when necessary). **Always avoid magic strings.**
 
 #### Logging
+
 - Log messages where they are created.
 - Don't propagate log messages around just to log them elsewhere.
 
 #### Encapsulation
+
 - Don't use private attributes/methods/properties from other classes/modules.
 - "Private" is private — respect that boundary.
 
 #### SQLAlchemy guidance
+
 - Lazy loading is often bad at scale, especially across multiple list relationships.
 - Be careful when accessing SQLAlchemy object attributes:
   - It can help avoid redundant DB queries,
@@ -448,6 +474,7 @@ Add clear comments:
 - Reference: https://www.reddit.com/r/SQLAlchemy/comments/138f248/joinedload_vs_selectinload/
 
 #### Trunk-based development and feature flags
+
 - **PRs should contain no more than 500 lines of real change.**
 - **Merge to main frequently.** Avoid long-lived feature branches — they create merge conflicts and integration pain.
 - **Use feature flags for incremental rollout.**
@@ -458,6 +485,7 @@ Add clear comments:
 - **Test both flag states.** Ensure the codebase works correctly with the flag on and off.
 
 #### Miscellaneous
+
 - Any TODOs you add in the code must be accompanied by either the name/username of the owner of that TODO, or an issue number for an issue referencing that piece of work.
 - Avoid module-level logic that runs on import, which leads to import-time side effects. Essentially every piece of meaningful logic should exist within some function that has to be explicitly invoked. Acceptable exceptions may include loading environment variables or setting up loggers.
   - If you find yourself needing something like this, you may want that logic to exist in a file dedicated for manual execution (contains `if __name__ == "__main__":`) which should not be imported by anything else.

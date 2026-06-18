@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FiEdit2 } from "react-icons/fi";
-import { CheckmarkIcon } from "./icons/icons";
+import { SvgCheck } from "@opal/icons";
 
 export function EditableValue({
   initialValue,
@@ -38,7 +38,7 @@ export function EditableValue({
               onSubmit(initialValue);
             }
           }}
-          className="border bg-background-200 border-background-300 rounded py-1 px-1 w-12 h-4 my-auto"
+          className="border bg-background-200 border-background-300 rounded-sm py-1 px-1 w-12 h-4 my-auto"
         />
         <div
           onClick={async () => {
@@ -49,7 +49,7 @@ export function EditableValue({
           }}
           className="cursor-pointer my-auto ml-2"
         >
-          <CheckmarkIcon size={16} className="text-green-700" />
+          <SvgCheck size={16} className="text-green-700" />
         </div>
       </div>
     );
@@ -58,7 +58,7 @@ export function EditableValue({
   return (
     <div className="h-full flex flex-col">
       <div
-        className="flex my-auto cursor-pointer hover:bg-accent-background-hovered rounded"
+        className="flex my-auto cursor-pointer hover:bg-accent-background-hovered rounded-sm"
         onClick={() => setIsOpen(true)}
       >
         <div className={"flex " + (consistentWidth && " w-6")}>

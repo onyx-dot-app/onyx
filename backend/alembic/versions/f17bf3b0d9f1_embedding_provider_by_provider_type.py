@@ -9,7 +9,6 @@ Create Date: 2024-08-21 13:13:31.120460
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "f17bf3b0d9f1"
 down_revision = "351faebd379d"
@@ -50,16 +49,14 @@ def upgrade() -> None:
     )
 
     # Update provider_type for existing embedding models
-    op.execute(
-        """
+    op.execute("""
         UPDATE embedding_model
         SET provider_type = (
             SELECT provider_type
             FROM embedding_provider
             WHERE embedding_provider.id = embedding_model.cloud_provider_id
         )
-    """
-    )
+    """)
 
     # Drop the old id column from embedding_provider
     op.drop_column("embedding_provider", "id")
@@ -96,19 +93,14 @@ def downgrade() -> None:
     op.add_column("embedding_provider", sa.Column("id", sa.Integer(), nullable=True))
 
     # Assign incrementing IDs to embedding providers
-    op.execute(
-        """
-        CREATE SEQUENCE IF NOT EXISTS embedding_provider_id_seq;"""
-    )
-    op.execute(
-        """
+    op.execute("""
+        CREATE SEQUENCE IF NOT EXISTS embedding_provider_id_seq;""")
+    op.execute("""
         UPDATE embedding_provider SET id = nextval('embedding_provider_id_seq');
-    """
-    )
+    """)
 
     # Update cloud_provider_id based on provider_type
-    op.execute(
-        """
+    op.execute("""
         UPDATE embedding_model
         SET cloud_provider_id = CASE
             WHEN provider_type IS NULL THEN NULL
@@ -118,8 +110,7 @@ def downgrade() -> None:
                 WHERE embedding_provider.provider_type = embedding_model.provider_type
             )
         END
-    """
-    )
+    """)
 
     # Drop the provider_type column from embedding_model
     op.drop_column("embedding_model", "provider_type")
@@ -137,8 +128,7 @@ def downgrade() -> None:
     op.create_primary_key("embedding_provider_pkey", "embedding_provider", ["id"])
 
     # Update name with existing provider_type values
-    op.execute(
-        """
+    op.execute("""
         UPDATE embedding_provider
         SET name = CASE
             WHEN provider_type = 'OPENAI' THEN 'OpenAI'
@@ -147,8 +137,7 @@ def downgrade() -> None:
             WHEN provider_type = 'VOYAGE' THEN 'Voyage'
             ELSE provider_type
         END
-    """
-    )
+    """)
 
     # Drop the provider_type column from embedding_provider
     op.drop_column("embedding_provider", "provider_type")

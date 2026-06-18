@@ -10,6 +10,7 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import PersonaSearchInfo
+from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.enums import MCPAuthenticationPerformer
 from onyx.db.enums import MCPAuthenticationType
 from onyx.db.mcp import get_all_mcp_tools_for_server
@@ -29,6 +30,9 @@ from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.models import SearchToolUsage
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -38,14 +42,10 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
-from onyx.tools.tool_implementations.open_url.open_url_tool import (
-    OpenURLTool,
-)
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool_implementations.web_search.web_search_tool import (
-    WebSearchTool,
-)
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 
@@ -113,10 +113,10 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 
 def construct_tools(
     persona: Persona,
-    db_session: Session,
     emitter: Emitter,
     user: User,
     llm: LLM,
+    db_session: Session | None = None,
     search_tool_config: SearchToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     file_reader_tool_config: FileReaderToolConfig | None = None,
@@ -131,12 +131,42 @@ def construct_tools(
     ``attached_documents``, and ``hierarchy_nodes`` already eager-loaded
     (e.g. via ``eager_load_persona=True`` or ``eager_load_for_tools=True``)
     to avoid lazy SQL queries after the session may have been flushed."""
+    with get_session_with_current_tenant_if_none(db_session) as db_session:
+        return _construct_tools_impl(
+            persona=persona,
+            db_session=db_session,
+            emitter=emitter,
+            user=user,
+            llm=llm,
+            search_tool_config=search_tool_config,
+            custom_tool_config=custom_tool_config,
+            file_reader_tool_config=file_reader_tool_config,
+            allowed_tool_ids=allowed_tool_ids,
+            search_usage_forcing_setting=search_usage_forcing_setting,
+        )
+
+
+def _construct_tools_impl(
+    persona: Persona,
+    db_session: Session,
+    emitter: Emitter,
+    user: User,
+    llm: LLM,
+    search_tool_config: SearchToolConfig | None = None,
+    custom_tool_config: CustomToolConfig | None = None,
+    file_reader_tool_config: FileReaderToolConfig | None = None,
+    allowed_tool_ids: list[int] | None = None,
+    search_usage_forcing_setting: SearchToolUsage = SearchToolUsage.AUTO,
+) -> dict[int, list[Tool]]:
     tool_dict: dict[int, list[Tool]] = {}
 
     # Log which tools are attached to the persona for debugging
     persona_tool_names = [t.name for t in persona.tools]
     logger.debug(
-        f"Constructing tools for persona '{persona.name}' (id={persona.id}): {persona_tool_names}"
+        "Constructing tools for persona '%s' (id=%s): %s",
+        persona.name,
+        persona.id,
+        persona_tool_names,
     )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
@@ -240,7 +270,7 @@ def construct_tools(
                         WebSearchTool(tool_id=db_tool_model.id, emitter=emitter)
                     ]
                 except ValueError as e:
-                    logger.error(f"Failed to initialize Internet Search Tool: {e}")
+                    logger.error("Failed to initialize Internet Search Tool: %s", e)
                     raise ValueError(
                         "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
                     )
@@ -257,7 +287,7 @@ def construct_tools(
                         )
                     ]
                 except RuntimeError as e:
-                    logger.error(f"Failed to initialize Open URL Tool: {e}")
+                    logger.error("Failed to initialize Open URL Tool: %s", e)
                     raise ValueError(
                         "Open URL tool requires a web content provider, please contact your Onyx admin to get it configured!"
                     )
@@ -266,6 +296,16 @@ def construct_tools(
             elif tool_cls.__name__ == PythonTool.__name__:
                 tool_dict[db_tool_model.id] = [
                     PythonTool(tool_id=db_tool_model.id, emitter=emitter)
+                ]
+
+            # Handle Coding Agent Tool
+            elif tool_cls.__name__ == CodingAgentTool.__name__:
+                tool_dict[db_tool_model.id] = [
+                    CodingAgentTool(
+                        tool_id=db_tool_model.id,
+                        emitter=emitter,
+                        llm=llm,
+                    )
                 ]
 
             # Handle File Reader Tool
@@ -311,7 +351,7 @@ def construct_tools(
             if db_tool_model.oauth_config_id:
                 if user.is_anonymous:
                     logger.warning(
-                        f"Anonymous user cannot use OAuth tool {db_tool_model.id}"
+                        "Anonymous user cannot use OAuth tool %s", db_tool_model.id
                     )
                     continue
                 oauth_config = get_oauth_config(
@@ -322,15 +362,17 @@ def construct_tools(
                     oauth_token_for_tool = token_manager.get_valid_access_token()
                     if not oauth_token_for_tool:
                         logger.warning(
-                            f"No valid OAuth token found for tool {db_tool_model.id} "
-                            f"with OAuth config {db_tool_model.oauth_config_id}"
+                            "No valid OAuth token found for tool %s with OAuth config %s",
+                            db_tool_model.id,
+                            db_tool_model.oauth_config_id,
                         )
 
             # Priority 2: Passthrough auth (user's login OAuth token)
             elif db_tool_model.passthrough_auth:
                 if user.is_anonymous:
                     logger.warning(
-                        f"Anonymous user cannot use passthrough auth tool {db_tool_model.id}"
+                        "Anonymous user cannot use passthrough auth tool %s",
+                        db_tool_model.id,
                     )
                     continue
                 oauth_token_for_tool = user_oauth_token
@@ -344,6 +386,8 @@ def construct_tools(
                     dynamic_schema_info=DynamicSchemaInfo(
                         chat_session_id=custom_tool_config.chat_session_id,
                         message_id=custom_tool_config.message_id,
+                        user_id=user.id,
+                        user_email="anonymous" if user.is_anonymous else user.email,
                     ),
                     custom_headers=(db_tool_model.custom_headers or [])
                     + (
@@ -374,7 +418,8 @@ def construct_tools(
                 # Pass-through OAuth: use the user's login OAuth token
                 if user.is_anonymous:
                     logger.warning(
-                        f"Anonymous user cannot use PT_OAUTH MCP server {mcp_server.id}"
+                        "Anonymous user cannot use PT_OAUTH MCP server %s",
+                        mcp_server.id,
                     )
                     continue
                 mcp_user_oauth_token = user_oauth_token
@@ -425,7 +470,9 @@ def construct_tools(
                     tool_dict[saved_tool.id] = [cast(Tool, mcp_tool)]
             if db_tool_model.id not in tool_dict:
                 logger.warning(
-                    f"Tool '{expected_tool_name}' not found in MCP server '{mcp_server.name}'"
+                    "Tool '%s' not found in MCP server '%s'",
+                    expected_tool_name,
+                    mcp_server.name,
                 )
 
     if (

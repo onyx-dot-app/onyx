@@ -6,34 +6,68 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 const (
-	EnvServerURL  = "ONYX_SERVER_URL"
-	EnvAPIKey     = "ONYX_API_KEY"
-	EnvAgentID    = "ONYX_PERSONA_ID"
-	EnvSSHHostKey = "ONYX_SSH_HOST_KEY"
+	EnvServerURL      = "ONYX_SERVER_URL"
+	EnvAPIKey         = "ONYX_PAT"
+	EnvAgentID        = "ONYX_PERSONA_ID"
+	EnvSSHHostKey     = "ONYX_SSH_HOST_KEY"
+	EnvStreamMarkdown = "ONYX_STREAM_MARKDOWN"
 )
+
+// Features holds experimental feature flags for the CLI.
+type Features struct {
+	// StreamMarkdown enables progressive markdown rendering during streaming,
+	// so output is formatted as it arrives rather than after completion.
+	// nil means use the app default (true).
+	StreamMarkdown *bool `json:"stream_markdown,omitempty"`
+}
 
 // OnyxCliConfig holds the CLI configuration.
 type OnyxCliConfig struct {
-	ServerURL        string `json:"server_url"`
-	APIKey           string `json:"api_key"`
-	DefaultAgentID int    `json:"default_persona_id"`
+	ServerURL      string   `json:"server_url"`
+	APIKey         string   `json:"api_key"`
+	DefaultAgentID int      `json:"default_persona_id"`
+	Features       Features `json:"features,omitempty"`
 }
 
 // DefaultConfig returns a config with default values.
 func DefaultConfig() OnyxCliConfig {
 	return OnyxCliConfig{
-		ServerURL:        "https://cloud.onyx.app",
-		APIKey:           "",
+		ServerURL:      "https://cloud.onyx.app",
+		APIKey:         "",
 		DefaultAgentID: 0,
 	}
 }
 
-// IsConfigured returns true if the config has an API key.
+// StreamMarkdownEnabled returns whether stream markdown is enabled,
+// defaulting to true when the user hasn't set an explicit preference.
+func (f Features) StreamMarkdownEnabled() bool {
+	if f.StreamMarkdown != nil {
+		return *f.StreamMarkdown
+	}
+	return true
+}
+
+// IsConfigured returns true if the config has a personal access token (PAT).
 func (c OnyxCliConfig) IsConfigured() bool {
 	return c.APIKey != ""
+}
+
+// APIURL appends the API prefix (default "/api") to the server origin.
+// Set ONYX_API_PREFIX="" for direct backend access without the proxy prefix.
+func APIURL(serverURL string) string {
+	prefix := "/api"
+	if v, ok := os.LookupEnv("ONYX_API_PREFIX"); ok {
+		prefix = v
+	}
+	u := strings.TrimRight(serverURL, "/")
+	if prefix == "" {
+		return u
+	}
+	return u + "/" + strings.Trim(prefix, "/")
 }
 
 // ConfigDir returns ~/.config/onyx-cli
@@ -59,8 +93,10 @@ func ConfigExists() bool {
 	return err == nil
 }
 
-// Load reads config from file and applies environment variable overrides.
-func Load() OnyxCliConfig {
+// LoadFromDisk reads config from the file only, without applying environment
+// variable overrides. Use this when you need the persisted config values
+// (e.g., to preserve them during a save operation).
+func LoadFromDisk() OnyxCliConfig {
 	cfg := DefaultConfig()
 
 	data, err := os.ReadFile(ConfigFilePath())
@@ -69,6 +105,13 @@ func Load() OnyxCliConfig {
 			fmt.Fprintf(os.Stderr, "warning: config file %s is malformed: %v (using defaults)\n", ConfigFilePath(), jsonErr)
 		}
 	}
+
+	return cfg
+}
+
+// Load reads config from file and applies environment variable overrides.
+func Load() OnyxCliConfig {
+	cfg := LoadFromDisk()
 
 	// Environment overrides
 	if v := os.Getenv(EnvServerURL); v != "" {
@@ -80,6 +123,13 @@ func Load() OnyxCliConfig {
 	if v := os.Getenv(EnvAgentID); v != "" {
 		if id, err := strconv.Atoi(v); err == nil {
 			cfg.DefaultAgentID = id
+		}
+	}
+	if v := os.Getenv(EnvStreamMarkdown); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.Features.StreamMarkdown = &b
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: invalid value %q for %s (expected true/false), ignoring\n", v, EnvStreamMarkdown)
 		}
 	}
 

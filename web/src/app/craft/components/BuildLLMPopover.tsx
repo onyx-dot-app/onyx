@@ -7,18 +7,16 @@ import {
   SvgChevronRight,
   SvgPlug,
 } from "@opal/icons";
-import Text from "@/refresh-components/texts/Text";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
-import Switch from "@/refresh-components/inputs/Switch";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { LLMProviderDescriptor } from "@/interfaces/llm";
+import { Text, Popover, PopoverMenu, LineItemButton } from "@opal/components";
+import { Switch } from "@opal/components";
+import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import {
   BuildLlmSelection,
-  BUILD_MODE_PROVIDERS,
-  isRecommendedModel,
+  CRAFT_PROVIDERS,
 } from "@/app/craft/onboarding/constants";
+import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
 import { ToggleWarningModal } from "./ToggleWarningModal";
-import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
+import { getModelIcon, getProvider } from "@/lib/languageModels";
 import { Section } from "@/layouts/general-layouts";
 import {
   Accordion,
@@ -54,20 +52,15 @@ export function BuildLLMPopover({
   children,
   disabled = false,
 }: BuildLLMPopoverProps) {
+  // Well-known options expose unconfigured providers (admin-only; non-admins
+  // get nothing here and just see their configured providers).
+  const { llmProviderOptions } = useLLMProviderOptions();
   const [showRecommendedOnly, setShowRecommendedOnly] = useState(true);
   const [showToggleWarning, setShowToggleWarning] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const isClosingModalRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const selectedItemRef = useRef<HTMLDivElement>(null);
-
-  // Check which providers are configured (exact match on provider field)
-  const isProviderConfigured = useCallback(
-    (providerKey: string) => {
-      return llmProviders?.some((p) => p.provider === providerKey);
-    },
-    [llmProviders]
-  );
 
   // Get the actual provider descriptor for a configured provider
   const getProviderDescriptor = useCallback(
@@ -77,31 +70,44 @@ export function BuildLLMPopover({
     [llmProviders]
   );
 
+  // Label of the top craft provider's recommended model, for the toggle warning.
+  const recommendedModelLabel = useMemo(() => {
+    for (const { key } of CRAFT_PROVIDERS) {
+      const models =
+        llmProviders?.find((p) => p.provider === key)?.model_configurations ??
+        llmProviderOptions?.find((o) => o.name === key)?.known_models;
+      const rec = models?.find((m) => m.is_recommended_default);
+      if (rec) return rec.display_name || rec.name;
+    }
+    return "the recommended model";
+  }, [llmProviders, llmProviderOptions]);
+
   // Build model options based on mode
   const modelOptions = useMemo((): ModelOption[] => {
     const options: ModelOption[] = [];
 
     if (showRecommendedOnly) {
-      // Show curated list from BUILD_MODE_PROVIDERS
-      BUILD_MODE_PROVIDERS.forEach((provider) => {
-        const isConfigured = isProviderConfigured(provider.providerName);
-        const descriptor = getProviderDescriptor(provider.providerName);
-        const modelsToShow = provider.models.filter((m) => m.recommended);
+      // One recommended model per craft provider type (configured first; for
+      // admins, unconfigured providers come from the well-known options).
+      CRAFT_PROVIDERS.forEach(({ key }) => {
+        const descriptor = getProviderDescriptor(key);
+        const models =
+          descriptor?.model_configurations ??
+          llmProviderOptions?.find((o) => o.name === key)?.known_models;
+        const recModel =
+          models?.find((m) => m.is_recommended_default) ??
+          models?.find((m) => m.is_visible);
+        if (!recModel) return;
 
-        modelsToShow.forEach((model) => {
-          // Get display name from backend if available
-          const backendConfig = descriptor?.model_configurations.find(
-            (mc) => mc.name === model.name
-          );
-          options.push({
-            providerKey: provider.providerName,
-            providerName: descriptor?.name || provider.label,
-            providerDisplayName: provider.label,
-            modelName: model.name,
-            displayName: backendConfig?.display_name || model.label,
-            isRecommended: true,
-            isConfigured: isConfigured ?? false,
-          });
+        const label = getProvider(key).companyName;
+        options.push({
+          providerKey: key,
+          providerName: descriptor?.name || label,
+          providerDisplayName: label,
+          modelName: recModel.name,
+          displayName: recModel.display_name || recModel.name,
+          isRecommended: true,
+          isConfigured: !!descriptor,
         });
       });
     } else {
@@ -114,12 +120,12 @@ export function BuildLLMPopover({
         visibleModels.forEach((model) => {
           options.push({
             providerKey: provider.provider,
-            providerName: provider.name,
+            providerName: provider.name ?? "",
             providerDisplayName:
               provider.provider_display_name || provider.provider,
             modelName: model.name,
             displayName: model.display_name || model.name,
-            isRecommended: isRecommendedModel(provider.provider, model.name),
+            isRecommended: model.is_recommended_default ?? false,
             isConfigured: true,
           });
         });
@@ -130,7 +136,7 @@ export function BuildLLMPopover({
   }, [
     showRecommendedOnly,
     llmProviders,
-    isProviderConfigured,
+    llmProviderOptions,
     getProviderDescriptor,
   ]);
 
@@ -265,8 +271,10 @@ export function BuildLLMPopover({
         key={`${option.providerKey}-${option.modelName}`}
         ref={isSelected ? selectedItemRef : undefined}
       >
-        <LineItem
-          selected={isSelected}
+        <LineItemButton
+          sizePreset="main-ui"
+          variant="section"
+          state={isSelected ? "selected" : "empty"}
           description={description}
           onClick={() => applySelection(option)}
           rightChildren={
@@ -274,9 +282,8 @@ export function BuildLLMPopover({
               <SvgCheck className="h-4 w-4 stroke-action-link-05 shrink-0" />
             ) : null
           }
-        >
-          {option.displayName}
-        </LineItem>
+          title={option.displayName}
+        />
       </div>
     );
   };
@@ -304,7 +311,7 @@ export function BuildLLMPopover({
             <Section gap={0.5}>
               {/* Toggle for recommended only */}
               <div className="flex items-center justify-between py-3 gap-3 border-b border-border-01 px-1">
-                <Text secondaryBody text03>
+                <Text font="secondary-body" color="text-03">
                   Recommended Models Only
                 </Text>
                 <Switch
@@ -318,7 +325,7 @@ export function BuildLLMPopover({
                 {groupedOptions.length === 0
                   ? [
                       <div key="empty" className="py-3 px-2">
-                        <Text secondaryBody text03>
+                        <Text font="secondary-body" color="text-03">
                           No models found
                         </Text>
                       </div>,
@@ -334,7 +341,7 @@ export function BuildLLMPopover({
                             groupedOptions[0]!.options.map(renderModelItem)
                           ) : (
                             <div className="flex items-center justify-between px-2 py-2">
-                              <Text secondaryBody text03>
+                              <Text font="secondary-body" color="text-03">
                                 Not configured
                               </Text>
                               <button
@@ -365,9 +372,7 @@ export function BuildLLMPopover({
                             const isExpanded = expandedGroups.includes(
                               group.providerKey
                             );
-                            const ProviderIcon = getProviderIcon(
-                              group.providerKey
-                            );
+                            const ModelIcon = getModelIcon(group.providerKey);
 
                             return (
                               <AccordionItem
@@ -379,16 +384,17 @@ export function BuildLLMPopover({
                                 <AccordionTrigger className="flex items-center rounded-08 hover:no-underline hover:bg-background-tint-02 group [&>svg]:hidden w-full py-1">
                                   <div className="flex items-center gap-1 shrink-0">
                                     <div className="flex items-center justify-center size-5 shrink-0">
-                                      <ProviderIcon size={16} />
+                                      <ModelIcon size={16} />
                                     </div>
-                                    <Text
-                                      secondaryBody
-                                      text03
-                                      nowrap
-                                      className="px-0.5"
-                                    >
-                                      {group.displayName}
-                                    </Text>
+                                    <span className="px-0.5">
+                                      <Text
+                                        font="secondary-body"
+                                        color="text-03"
+                                        nowrap
+                                      >
+                                        {group.displayName}
+                                      </Text>
+                                    </span>
                                   </div>
                                   <div className="flex-1" />
                                   {!group.isConfigured && (
@@ -419,7 +425,10 @@ export function BuildLLMPopover({
                                       group.options.map(renderModelItem)
                                     ) : (
                                       <div className="py-1.5 px-3">
-                                        <Text secondaryBody text03>
+                                        <Text
+                                          font="secondary-body"
+                                          color="text-03"
+                                        >
                                           Not configured
                                         </Text>
                                       </div>
@@ -440,6 +449,7 @@ export function BuildLLMPopover({
       {/* Warning modal when turning OFF "Recommended Models Only" */}
       <ToggleWarningModal
         open={showToggleWarning}
+        recommendedModelLabel={recommendedModelLabel}
         onConfirm={() => {
           setShowRecommendedOnly(false);
           isClosingModalRef.current = true;
