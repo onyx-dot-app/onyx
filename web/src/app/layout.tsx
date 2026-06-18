@@ -1,7 +1,6 @@
 import "./globals.css";
 
 import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
-import { Metadata } from "next";
 import AppProvider from "@/providers/AppProvider";
 import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
@@ -49,11 +48,6 @@ const dmMono = DM_Mono({
     "monospace",
   ],
 });
-
-export const metadata: Metadata = {
-  title: "Onyx",
-  description: "Question answering for your documents",
-};
 
 // force-dynamic prevents Next.js from statically prerendering pages at build
 // time — many child routes use cookies() which requires dynamic rendering.
