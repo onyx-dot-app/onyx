@@ -571,24 +571,30 @@ def get_relationship_types_of_entity_types(
 
 
 def delete_document_references_from_kg(db_session: Session, document_id: str) -> None:
-    # Delete relationships from normalized stage
+    delete_documents_references_from_kg(db_session, [document_id])
+
+
+def delete_documents_references_from_kg(
+    db_session: Session, document_ids: list[str]
+) -> None:
+    """Bulk-delete KG entities and relationships referencing the given document IDs."""
+    if not document_ids:
+        return
+
     db_session.query(KGRelationship).filter(
-        KGRelationship.source_document == document_id
+        KGRelationship.source_document.in_(document_ids)
     ).delete(synchronize_session=False)
 
-    # Delete relationships from extraction staging
     db_session.query(KGRelationshipExtractionStaging).filter(
-        KGRelationshipExtractionStaging.source_document == document_id
+        KGRelationshipExtractionStaging.source_document.in_(document_ids)
     ).delete(synchronize_session=False)
 
-    # Delete entities from normalized stage
-    db_session.query(KGEntity).filter(KGEntity.document_id == document_id).delete(
+    db_session.query(KGEntity).filter(KGEntity.document_id.in_(document_ids)).delete(
         synchronize_session=False
     )
 
-    # Delete entities from extraction staging
     db_session.query(KGEntityExtractionStaging).filter(
-        KGEntityExtractionStaging.document_id == document_id
+        KGEntityExtractionStaging.document_id.in_(document_ids)
     ).delete(synchronize_session=False)
 
     db_session.flush()

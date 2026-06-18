@@ -312,6 +312,54 @@ class DocumentQuery:
         return final_delete_query
 
     @staticmethod
+    def delete_from_document_ids_query(
+        document_ids: list[str],
+        tenant_state: TenantState,
+    ) -> dict[str, Any]:
+        """Bulk variant of `delete_from_document_id_query`.
+
+        Filters via `attached_document_ids` so OpenSearch can use a
+        Lucene-optimized terms query in one delete_by_query round-trip.
+
+        Raises:
+            ValueError: document_ids is empty. An empty list would cause
+                `_get_search_filters` to omit the document filter entirely
+                (no knowledge_scope trigger), which on a delete_by_query
+                path would broaden the delete to every chunk in the tenant.
+            ValueError: len(document_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY
+                (raised from `_get_attached_document_id_filter`).
+        """
+        if not document_ids:
+            raise ValueError(
+                "delete_from_document_ids_query requires a non-empty document_ids "
+                "list — an empty list would broaden delete_by_query to every chunk "
+                "in the tenant."
+            )
+        filter_clauses = DocumentQuery._get_search_filters(
+            tenant_state=tenant_state,
+            include_hidden=True,
+            access_control_list=None,
+            source_types=[],
+            tags=[],
+            document_sets=[],
+            project_id_filter=None,
+            persona_id_filter=None,
+            time_cutoff=None,
+            min_chunk_index=None,
+            max_chunk_index=None,
+            max_chunk_size=None,
+            attached_document_ids=document_ids,
+        )
+        final_delete_query: dict[str, Any] = {
+            "query": {"bool": {"filter": filter_clauses}},
+            "timeout": f"{DEFAULT_OPENSEARCH_QUERY_TIMEOUT_S}s",
+        }
+        if not OPENSEARCH_PROFILING_DISABLED:
+            final_delete_query["profile"] = True
+
+        return final_delete_query
+
+    @staticmethod
     def get_hybrid_search_query(
         query_text: str,
         query_vector: list[float],
