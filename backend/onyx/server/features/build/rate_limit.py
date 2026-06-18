@@ -17,6 +17,7 @@ from onyx.server.features.build.db.rate_limit import get_oldest_message_timestam
 from onyx.server.features.build.subscription_check import is_user_subscribed
 from onyx.server.features.build.utils import CRAFT_HAS_USAGE_LIMITS
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 # Default limit for free/non-subscribed users (not configurable)
 FREE_USER_RATE_LIMIT = 5
@@ -48,10 +49,13 @@ def _should_skip_rate_limiting(user: User) -> bool:
 
     feature_flag_provider = get_default_feature_flag_provider()
     # Flag returns True for users who SHOULD be rate limited
-    # We negate to get: True = skip rate limiting
-    has_rate_limit = feature_flag_provider.feature_enabled(
+    # We negate to get: True = skip rate limiting.
+    # Pass tenant in the person properties so the flag can be targeted at a
+    # specific tenant (e.g. grant unlimited usage to tenant_dev).
+    has_rate_limit = feature_flag_provider.feature_enabled_for_user_tenant(
         CRAFT_HAS_USAGE_LIMITS,
-        user.id,
+        user,
+        get_current_tenant_id(),
     )
     return not has_rate_limit
 
