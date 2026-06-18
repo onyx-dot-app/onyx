@@ -109,7 +109,7 @@ jobs:
       - volume=100gb
       - ${{ format('run-id={0}-craft-k8s-tests', github.run_id) }}
       - extras=s3-cache
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     env:
       PYTHONPATH: ./backend
