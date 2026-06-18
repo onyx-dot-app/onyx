@@ -102,6 +102,7 @@ jobs:
           private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
+          permission-workflows: write
 
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -160,11 +161,12 @@ jobs:
           echo "status=failure" >> "$GITHUB_OUTPUT"
 
           reason="command-failed"
-          # The GitHub App installation token only carries contents + pull-requests
-          # write permissions, not `workflows`. Pushing a cherry-pick that touches
-          # .github/workflows is therefore rejected by the remote. Detect that
-          # specific rejection so the Slack alert can explain it clearly instead of
-          # surfacing a raw git error.
+          # The token requests `workflows` write (see the create-github-app-token
+          # step), but that only takes effect if the GitHub App installation has
+          # actually been granted the Workflows permission. If it hasn't, pushing a
+          # cherry-pick that touches .github/workflows is still rejected by the
+          # remote. Keep detecting that specific rejection so the Slack alert can
+          # explain it clearly instead of surfacing a raw git error.
           if grep -qiE "refusing to allow .* to (create or update|update) workflow|without [^[:space:]]*workflows[^[:space:]]* permission" "$output_file"; then
             reason="workflow-permission"
           elif grep -qiE "merge conflict during cherry-pick|CONFLICT|could not apply|cherry-pick in progress with staged changes" "$output_file"; then
