@@ -146,7 +146,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
   // available in server-side components
-  const { appName, vectorDbEnabled } = useSettings();
+  const { appName, vectorDbEnabled, disable_default_assistant } = useSettings();
 
   const appNameRef = useRef<string>("Onyx");
   useEffect(() => {
@@ -305,7 +305,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     liveAgent,
     currentChatSessionId,
     currentChatSession ?? undefined,
-    settings.disable_default_assistant ?? false
+    disable_default_assistant ?? false
   );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
@@ -667,7 +667,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, [updateCurrentDocumentSidebarVisible]);
 
   const desktopDocumentSidebar =
-    retrievalEnabled && !settings.isMobile ? (
+    retrievalEnabled && !isMobile ? (
       <RootLayout.RightPanel
         className={cn(
           "overflow-hidden transition-all duration-300 ease-in-out",
@@ -777,7 +777,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-<<<<<<< HEAD
       <div className="flex flex-row w-full h-full overflow-hidden">
         <div className="flex-1 h-full overflow-hidden">
           <Dropzone
@@ -787,39 +786,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             noClick
           >
             {({ getRootProps }) => (
-=======
-      {!(noAgents && !isLoadingAgents) && retrievalEnabled && !isMobile && (
-        <RootLayout.RightPanel>
-          <div
-            className={cn(
-              "overflow-hidden transition-all duration-300 ease-in-out h-full",
-              documentSidebarVisible ? "w-100" : "w-0"
-            )}
-          >
-            <DocumentsSidebar
-              setPresentingDocument={setPresentingDocument}
-              modal={false}
-              closeSidebar={handleDesktopDocumentSidebarClose}
-              selectedDocuments={selectedDocuments}
-            />
-          </div>
-        </RootLayout.RightPanel>
-      )}
-
-      <div className="w-full h-full overflow-hidden">
-        <Dropzone
-          onDrop={(acceptedFiles) =>
-            handleMessageSpecificFileUpload(acceptedFiles)
-          }
-          noClick
-        >
-          {({ getRootProps }) => (
-            <div
-              className="h-full w-full flex flex-col items-center outline-hidden relative"
-              {...getRootProps({ tabIndex: -1 })}
-            >
-              {/* Main content grid — 3 rows, animated */}
->>>>>>> ca2ea9d91b (refactor(settings): consolidate settings into a single useSettings() hook (#12155))
               <div
                 className="h-full w-full flex flex-col items-center outline-hidden relative"
                 {...getRootProps({ tabIndex: -1 })}

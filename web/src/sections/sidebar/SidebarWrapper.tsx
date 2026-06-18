@@ -3,7 +3,7 @@ import { cn } from "@opal/utils";
 import { Button } from "@opal/components";
 import Logo from "@/refresh-components/Logo";
 import { SvgSidebar } from "@opal/icons";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 
 interface LogoSectionProps {
   folded?: boolean;
@@ -11,8 +11,8 @@ interface LogoSectionProps {
 }
 
 function LogoSection({ folded, onFoldClick }: LogoSectionProps) {
-  const settings = useSettingsContext();
-  const logoDisplayStyle = settings.enterpriseSettings?.logo_display_style;
+  const { enterprise } = useSettings();
+  const logoDisplayStyle = enterprise?.logo_display_style;
 
   const logo = useMemo(
     () => (

@@ -294,7 +294,6 @@ function HeaderInner({
           - (mobile) sidebar toggle
           - app-mode (for Unified S+C [EE gated])
         */}
-<<<<<<< HEAD:web/src/sections/app-chrome/AppChrome.tsx
         <div className="flex-1 flex flex-row items-center gap-2 h-[3.3rem]">
           {isMobile && (
             <Button
@@ -304,7 +303,7 @@ function HeaderInner({
             />
           )}
           {businessTier &&
-            settings.isSearchModeAvailable &&
+            isSearchModeAvailable &&
             appFocus.isNewSession() &&
             state.phase === "idle" && (
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
@@ -349,71 +348,6 @@ function HeaderInner({
               </Popover>
             )}
         </div>
-=======
-              <div className="flex-1 flex flex-row items-center gap-2">
-                {isMobile && (
-                  <Button
-                    prominence="internal"
-                    icon={SvgSidebar}
-                    onClick={() => setFolded(false)}
-                  />
-                )}
-                {businessTier &&
-                  isSearchModeAvailable &&
-                  appFocus.isNewSession() &&
-                  state.phase === "idle" && (
-                    <Popover
-                      open={modePopoverOpen}
-                      onOpenChange={setModePopoverOpen}
-                    >
-                      <Popover.Trigger asChild>
-                        <OpenButton
-                          aria-label="Change app mode"
-                          icon={
-                            effectiveMode === "search"
-                              ? SvgSearchMenu
-                              : SvgBubbleText
-                          }
-                        >
-                          {effectiveMode === "search" ? "Search" : "Chat"}
-                        </OpenButton>
-                      </Popover.Trigger>
-                      <Popover.Content align="start" width="lg">
-                        <Popover.Menu>
-                          <LineItemButton
-                            sizePreset="main-ui"
-                            rounding="sm"
-                            icon={SvgSearchMenu}
-                            state={
-                              effectiveMode === "search" ? "selected" : "empty"
-                            }
-                            title="Search"
-                            description="Quick search for documents"
-                            onClick={noProp(() => {
-                              setAppMode("search");
-                              setModePopoverOpen(false);
-                            })}
-                          />
-                          <LineItemButton
-                            sizePreset="main-ui"
-                            rounding="sm"
-                            icon={SvgBubbleText}
-                            state={
-                              effectiveMode === "chat" ? "selected" : "empty"
-                            }
-                            title="Chat"
-                            description="Conversation and research"
-                            onClick={noProp(() => {
-                              setAppMode("chat");
-                              setModePopoverOpen(false);
-                            })}
-                          />
-                        </Popover.Menu>
-                      </Popover.Content>
-                    </Popover>
-                  )}
-              </div>
->>>>>>> ca2ea9d91b (refactor(settings): consolidate settings into a single useSettings() hook (#12155)):web/src/layouts/chromes/AppChrome.tsx
 
         {/*
           Center:
@@ -510,13 +444,13 @@ const footerMarkdownComponents = {
 } satisfies Partial<Components>;
 
 function Footer() {
-  const settings = useSettingsContext();
+  const settings = useSettings();
   const appFocus = useAppFocus();
 
   const customFooterContent =
-    settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
+    settings?.enterprise?.custom_lower_disclaimer_content ||
     `[Onyx ${
-      settings?.webVersion || "dev"
+      settings?.version || "dev"
     }](https://www.onyx.app/) - ${APP_SLOGAN}`;
 
   return (
