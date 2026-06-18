@@ -462,7 +462,7 @@ const AppInputBar = React.memo(
         // token_count is null until indexing finishes; don't hide the
         // processing indicator while a file's size is still unknown.
         const allTokenCountsKnown = currentIndexingFiles.every(
-          (file) => (file.token_count ?? 0) > 0
+          (file) => file.token_count !== null
         );
         if (!allTokenCountsKnown) {
           return false;
