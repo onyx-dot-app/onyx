@@ -54,6 +54,10 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/auth/mobile/login", {"POST"}),
     ("/auth/mobile/refresh", {"POST"}),
     ("/auth/mobile/logout", {"POST"}),
+    # swaps a one-time SSO code (+ PKCE verifier) for the session token; it has
+    # no user dependency by design (the code IS the credential), so it must be
+    # declared public to satisfy the startup public-route assertion.
+    ("/auth/mobile/sso/exchange", {"POST"}),
     ("/users/me", {"GET"}),
     ("/users/me", {"PATCH"}),
     ("/users/{id}", {"GET"}),
