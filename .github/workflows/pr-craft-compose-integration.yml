@@ -76,10 +76,11 @@ jobs:
         with:
           filters: |
             craft_compose:
+              - 'backend/Dockerfile'
               - 'backend/onyx/sandbox_proxy/**'
               - 'backend/onyx/server/features/build/sandbox/**'
               - 'backend/onyx/server/features/build/approvals/**'
-              - 'backend/Dockerfile'
+              - 'backend/onyx/skills/**'
               - 'deployment/docker_compose/docker-compose.yml'
               - 'deployment/docker_compose/docker-compose.dev.yml'
               - 'deployment/docker_compose/docker-compose.craft.yml'
@@ -99,10 +100,6 @@ jobs:
       - volume=100gb
       - run-id=${{ github.run_id }}-craft-compose-integration
       - extras=ecr-cache
-    # 30m covers the cold-cache case: the GHA buildx scopes are branch-keyed,
-    # so the first run on a new branch rebuilds sandbox (~3m) + backend (~4m)
-    # from scratch. Warm-cache runs land closer to 8m total. The inner
-    # `Run integration tests` step has its own 10m cap.
     timeout-minutes: 20
 
     env:
@@ -165,9 +162,9 @@ jobs:
         working-directory: deployment/docker_compose
         run: echo 'USER_AUTH_SECRET=craft-compose-ci-only-dummy-secret' > .env
 
-      # TODO(ods): Replace with `ods compose --craft` once that flag is
-      # added to tools/ods/cmd/compose.go. Today `ods compose` doesn't support
-      # the craft overlay, so we drop to raw docker compose.
+      # TODO(ods): Replace with `ods compose --craft` once that flag is added to
+      # tools/ods/cmd/compose.go. Today `ods compose` doesn't support the craft
+      # overlay, so we drop to raw docker compose.
       #
       # Service list: Only what the gate + posture tests need. compose's
       # depends_on graph pulls in relational_db / cache / opensearch / model
@@ -282,9 +279,9 @@ jobs:
           path: compose-logs/
           retention-days: 7
 
-      # Tear down. -v removes named volumes inside the compose project
-      # but the externally-declared sandbox_proxy_ca + onyx_craft_sandbox
-      # survive (compose down doesn't touch external resources).
+      # Tear down. -v removes named volumes inside the compose project but the
+      # externally-declared sandbox_proxy_ca + onyx_craft_sandbox survive
+      # (compose down doesn't touch external resources).
       - name: Teardown
         if: always()
         working-directory: deployment/docker_compose
