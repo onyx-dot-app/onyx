@@ -112,7 +112,10 @@ export default function AddSkillFromRepoModal({
     if (!preview || selected.size === 0) return;
     setInstalling(true);
     try {
-      const result = await installRepoSkills(source.trim(), [...selected]);
+      const result = await installRepoSkills(
+        source.trim(),
+        Array.from(selected)
+      );
       setCreatedCount(result.created.length);
       if (result.created.length > 0) {
         onInstalled();
