@@ -1,0 +1,111 @@
+---
+name: google-drive
+description: Search, read, create, and edit the connected user's Google Drive via a light Drive API wrapper.
+---
+
+# Google Drive
+
+Call the Google Drive API as the connected user via the bundled helper. Reads run
+freely; writes (create / upload / edit / delete) may pause for the user to approve.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/google-drive/gdrive_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. Pass `--raw` to skip pruning;
+`python gdrive_api.py <command> -h` shows a command's flags. Add `--shared-drives`
+to a search/list to include shared drives (My Drive only by default).
+
+### Search files
+
+```
+python gdrive_api.py search "quarterly report" [--name NAME] [--mime MIME] \
+    [--in FOLDER_ID] [--include-trashed] [--limit N]
+```
+
+`search` with no positional text just lists recent files. Common `--mime` values:
+`application/vnd.google-apps.document` (Docs),
+`application/vnd.google-apps.spreadsheet` (Sheets),
+`application/vnd.google-apps.folder` (folders), `application/pdf`.
+
+### List a folder's children
+
+```
+python gdrive_api.py list <folder_id> [--limit N]
+```
+
+### One file's metadata
+
+```
+python gdrive_api.py get <file_id> [--fields "id,name,mimeType,..."]
+```
+
+### Read a file's contents (text)
+
+```
+python gdrive_api.py read <file_id> [--mime EXPORT_MIME] [--max-bytes N]
+```
+
+Google-native docs are **exported** to text automatically: Docs → markdown,
+Sheets → CSV (first sheet only), Slides → plain text. Other files are downloaded
+as-is and returned as UTF-8. Output is capped at `--max-bytes` (5 MB default).
+
+### Create a folder (write)
+
+```
+python gdrive_api.py create-folder "Reports" [--in PARENT_FOLDER_ID]
+```
+
+### Upload a file (write)
+
+```
+python gdrive_api.py upload <local_path> [--name NAME] [--in FOLDER_ID] \
+    [--as CONTENT_TYPE] [--convert-to GOOGLE_MIME]
+```
+
+Uploads a file you've produced in the workspace. To create a real **Google Doc**
+from generated markdown/HTML, pass `--convert-to
+application/vnd.google-apps.document` (Sheets:
+`application/vnd.google-apps.spreadsheet`); Drive converts the upload. Without
+`--convert-to` the file is stored as-is.
+
+### Replace a file's contents (write)
+
+```
+python gdrive_api.py replace <file_id> <local_path> [--as CONTENT_TYPE]
+```
+
+### Update metadata: rename / move (write)
+
+```
+python gdrive_api.py update <file_id> [--name NEW_NAME] \
+    [--add-parent FOLDER_ID] [--remove-parent FOLDER_ID]
+```
+
+### Trash or delete (write / destructive)
+
+```
+python gdrive_api.py trash <file_id>     # reversible
+python gdrive_api.py delete <file_id>    # permanent
+```
+
+Prefer `trash` over `delete` unless a permanent removal is explicitly requested.
+
+### Raw request (escape hatch)
+
+```
+python gdrive_api.py call GET "files?q=...&fields=..."
+python gdrive_api.py call PATCH "files/<id>" '{"starred": true}'
+```
+
+Appended to `https://www.googleapis.com/drive/v3/`; pass a JSON object body as the
+last argument for write methods.
+
+## Output
+
+JSON on stdout. Search/list/drives return `{"ok": true, "items": [...], "count":
+N, "truncated": bool}`. `get` / create / upload / update / replace return `{"ok":
+true, "file": {...}}`. `read` returns `{"ok": true, "id", "name", "mimeType",
+"exportedAs", "truncated", "content"}`. Errors print to stderr and exit non-zero.

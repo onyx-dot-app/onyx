@@ -13,21 +13,20 @@ import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
 import { Tag, ValidSources } from "@/lib/types";
-import { getTimeFilterDate, TimeFilter } from "@/lib/time";
+import { getTimeFilterDate, TimeFilter } from "@opal/time";
 import useTags from "@/hooks/useTags";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
-import { SvgCheck, SvgClock, SvgTag } from "@opal/icons";
+import { Popover, PopoverMenu } from "@opal/components";
+import { SvgCheck, SvgClock, SvgTag, SvgSimpleLoader } from "@opal/icons";
 import { FilterButton } from "@opal/components";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import { LineItemButton } from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { cn } from "@opal/utils";
 import { toast } from "@/hooks/useToast";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
 
 // ============================================================================
 // Types
@@ -196,7 +195,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   if (state.phase === "searching") {
     return (
       <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-        <SimpleLoader />
+        <SvgSimpleLoader />
       </div>
     );
   }
@@ -204,11 +203,11 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   return (
     <div className="flex-1 min-h-0 w-full flex flex-col gap-3">
       {/* ── Top row: Filters + Result count ── */}
-      <div className="flex-shrink-0 flex flex-row gap-x-4">
+      <div className="shrink-0 flex flex-row gap-x-4">
         <div
           className={cn(
             "flex flex-col justify-end gap-3",
-            showEmpty ? "flex-1" : "flex-[3]"
+            showEmpty ? "flex-1" : "flex-3"
           )}
         >
           <div className="flex flex-row gap-2">
@@ -269,11 +268,11 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               <Popover.Content align="start" width="lg">
                 <PopoverMenu>
                   <InputTypeIn
-                    leftSearchIcon
+                    searchIcon
                     placeholder="Filter tags..."
                     value={tagQuery}
                     onChange={(e) => setTagQuery(e.target.value)}
-                    onClear={() => setTagQuery("")}
+                    clearButton
                     variant="internal"
                   />
                   {filteredTags.map((tag) => {
@@ -330,7 +329,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
         <div
           className={cn(
             "min-h-0 overflow-y-scroll flex flex-col gap-2",
-            showEmpty ? "flex-1 justify-center" : "flex-[3]"
+            showEmpty ? "flex-1 justify-center" : "flex-3"
           )}
         >
           {error ? (
@@ -344,7 +343,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               {paginatedResults.map((doc) => (
                 <div
                   key={`${doc.document_id}-${doc.chunk_ind}`}
-                  className="flex-shrink-0"
+                  className="shrink-0"
                 >
                   <SearchCard
                     document={doc}

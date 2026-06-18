@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import text
 
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
@@ -5,6 +7,28 @@ from onyx.db.engine.sql_engine import SqlEngine
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import TENANT_ID_PREFIX
+
+# Regex pattern for valid tenant IDs:
+# - UUID format: tenant_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+# - AWS instance ID format: tenant_i-xxxxxxxxxxxxxxxxx
+# - Staff dev tenant: tenant_dev
+# Also useful for not accidentally dropping `public` schema.
+TENANT_ID_PATTERN = re.compile(
+    rf"^{re.escape(TENANT_ID_PREFIX)}("
+    r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"  # UUID
+    r"|i-[a-f0-9]+"  # AWS instance ID
+    r"|dev"  # staff dev tenant
+    r")$"
+)
+
+
+def validate_tenant_id(tenant_id: str) -> bool:
+    """Validate that tenant_id matches expected format.
+
+    This is important for SQL injection prevention since schema names
+    cannot be parameterized in SQL and must be formatted directly.
+    """
+    return bool(TENANT_ID_PATTERN.match(tenant_id))
 
 
 def get_schemas_needing_migration(
@@ -42,8 +66,7 @@ def get_schemas_needing_migration(
         )
 
         conn.execute(
-            text(
-                """
+            text("""
                 DO $$
                 DECLARE
                     s        text;
@@ -77,8 +100,7 @@ def get_schemas_needing_migration(
                     END LOOP;
                 END;
                 $$
-                """
-            )
+                """)
         )
 
         rows = conn.execute(
@@ -106,17 +128,16 @@ def get_all_tenant_ids() -> list[str]:
     with get_session_with_shared_schema() as session:
         result = session.execute(
             text(
-                f"""
+                """
                 SELECT schema_name
                 FROM information_schema.schemata
-                WHERE schema_name NOT IN ('pg_catalog', 'information_schema', '{POSTGRES_DEFAULT_SCHEMA}')"""
-            )
+                WHERE schema_name NOT IN ('pg_catalog', 'information_schema', :default_schema)"""
+            ),
+            {"default_schema": POSTGRES_DEFAULT_SCHEMA},
         )
         tenant_ids = [row[0] for row in result]
 
     valid_tenants = [
-        tenant
-        for tenant in tenant_ids
-        if tenant is None or tenant.startswith(TENANT_ID_PREFIX)
+        tenant for tenant in tenant_ids if tenant is None or validate_tenant_id(tenant)
     ]
     return valid_tenants

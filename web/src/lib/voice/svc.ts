@@ -1,5 +1,6 @@
 const VOICE_PROVIDERS_URL = "/api/admin/voice/providers";
 
+/** Sets a provider as the active STT or TTS default. Optionally pins a specific TTS model. */
 export async function activateVoiceProvider(
   providerId: number,
   mode: "stt" | "tts",
@@ -15,6 +16,7 @@ export async function activateVoiceProvider(
   return fetch(url.toString(), { method: "POST" });
 }
 
+/** Removes the STT or TTS default status from a provider without deleting it. */
 export async function deactivateVoiceProvider(
   providerId: number,
   mode: "stt" | "tts"
@@ -24,6 +26,7 @@ export async function deactivateVoiceProvider(
   });
 }
 
+/** Validates provider credentials with a live API call before saving. */
 export async function testVoiceProvider(request: {
   provider_type: string;
   api_key?: string;
@@ -37,6 +40,7 @@ export async function testVoiceProvider(request: {
   });
 }
 
+/** Creates or updates a voice provider configuration. */
 export async function upsertVoiceProvider(
   request: Record<string, unknown>
 ): Promise<Response> {
@@ -47,18 +51,21 @@ export async function upsertVoiceProvider(
   });
 }
 
+/** Fetches the list of available voices for a given provider type. */
 export async function fetchVoicesByType(
   providerType: string
 ): Promise<Response> {
   return fetch(`/api/admin/voice/voices?provider_type=${providerType}`);
 }
 
+/** Permanently removes a voice provider and its stored credentials. */
 export async function deleteVoiceProvider(
   providerId: number
 ): Promise<Response> {
   return fetch(`${VOICE_PROVIDERS_URL}/${providerId}`, { method: "DELETE" });
 }
 
+/** Fetches all configured LLM providers (used to copy API keys into voice providers). */
 export async function fetchLLMProviders(): Promise<Response> {
   return fetch("/api/admin/llm/provider");
 }

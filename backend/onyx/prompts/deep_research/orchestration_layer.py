@@ -107,9 +107,7 @@ Before calling {GENERATE_REPORT_TOOL_NAME}, double check that all aspects of the
 
 INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE = """
  If necessary, clarify if the research agent should focus mostly on organization internal searches, web searches, or a combination of both. If the task doesn't require a clear priority, don't add sourcing guidance.
-""".strip(
-    "\n"
-)
+""".strip("\n")
 
 
 USER_ORCHESTRATOR_PROMPT = """

@@ -28,7 +28,7 @@ def fetch_query_analytics(
     stmt = (
         select(
             func.count(ChatMessage.id),
-            func.sum(case((ChatMessageFeedback.is_positive, 1), else_=0)),
+            func.sum(case((ChatMessageFeedback.is_positive, 1), else_=0)),  # ty: ignore[invalid-argument-type]
             func.sum(
                 case(
                     (ChatMessageFeedback.is_positive == False, 1),  # noqa: E712
@@ -64,7 +64,7 @@ def fetch_per_user_query_analytics(
     stmt = (
         select(
             func.count(ChatMessage.id),
-            func.sum(case((ChatMessageFeedback.is_positive, 1), else_=0)),
+            func.sum(case((ChatMessageFeedback.is_positive, 1), else_=0)),  # ty: ignore[invalid-argument-type]
             func.sum(
                 case(
                     (ChatMessageFeedback.is_positive == False, 1),  # noqa: E712

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchFileContent } from "@/app/craft/services/apiServices";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import ImagePreview from "@/app/craft/components/output-panel/ImagePreview";
@@ -179,7 +179,7 @@ function FetchedFilePreview({
           justifyContent="center"
           padding={2}
         >
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             Loading file...
           </Text>
         </Section>
@@ -187,7 +187,7 @@ function FetchedFilePreview({
     }
     return (
       <div className="p-4">
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           Loading file...
         </Text>
       </div>
@@ -204,10 +204,10 @@ function FetchedFilePreview({
           padding={2}
         >
           <SvgFileText size={48} className="stroke-text-02" />
-          <Text headingH3 text03>
+          <Text font="heading-h3" color="text-03">
             Error loading file
           </Text>
-          <Text secondaryBody text02>
+          <Text font="secondary-body" color="text-02">
             {error.message}
           </Text>
         </Section>
@@ -215,8 +215,8 @@ function FetchedFilePreview({
     }
     return (
       <div className="p-4">
-        <Text secondaryBody text02>
-          Error: {error.message}
+        <Text font="secondary-body" color="text-02">
+          {`Error: ${error.message}`}
         </Text>
       </div>
     );
@@ -231,7 +231,7 @@ function FetchedFilePreview({
           justifyContent="center"
           padding={2}
         >
-          <Text secondaryBody text03>
+          <Text font="secondary-body" color="text-03">
             No content
           </Text>
         </Section>
@@ -239,7 +239,7 @@ function FetchedFilePreview({
     }
     return (
       <div className="p-4">
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           No content
         </Text>
       </div>
@@ -256,18 +256,20 @@ function FetchedFilePreview({
           padding={2}
         >
           <SvgFileText size={48} className="stroke-text-02" />
-          <Text headingH3 text03>
+          <Text font="heading-h3" color="text-03">
             Cannot preview file
           </Text>
-          <Text secondaryBody text02 className="text-center max-w-md">
-            {data.error}
-          </Text>
+          <div className="text-center max-w-md">
+            <Text font="secondary-body" color="text-02">
+              {data.error}
+            </Text>
+          </div>
         </Section>
       );
     }
     return (
-      <div className="p-4">
-        <Text secondaryBody text02 className="text-center">
+      <div className="p-4 text-center">
+        <Text font="secondary-body" color="text-02">
           {data.error}
         </Text>
       </div>
@@ -298,7 +300,7 @@ function FetchedFilePreview({
     return (
       <div className="h-full flex flex-col">
         <div className="flex-1 overflow-auto p-4">
-          <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap break-words">
+          <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
             {data.content}
           </pre>
         </div>
@@ -308,7 +310,7 @@ function FetchedFilePreview({
 
   return (
     <div className="p-4">
-      <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap break-words">
+      <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
         {data.content}
       </pre>
     </div>

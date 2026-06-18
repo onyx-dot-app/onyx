@@ -65,6 +65,15 @@ if not MULTI_TENANT:
             },
         },
         {
+            "name": "check-license-expiry-notifications",
+            "task": OnyxCeleryTask.CHECK_LICENSE_EXPIRY_NOTIFICATIONS,
+            "schedule": timedelta(days=1),
+            "options": {
+                "priority": OnyxCeleryPriority.MEDIUM,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        },
+        {
             "name": "autogenerate-usage-report",
             "task": OnyxCeleryTask.GENERATE_USAGE_REPORT_TASK,
             "schedule": timedelta(days=30),  # TODO: change this to config flag

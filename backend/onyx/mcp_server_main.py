@@ -20,7 +20,7 @@ def main() -> None:
 
     set_is_ee_based_on_env_variable()
     setup_tracing()
-    logger.info(f"Starting MCP server on {MCP_SERVER_HOST}:{MCP_SERVER_PORT}")
+    logger.info("Starting MCP server on %s:%s", MCP_SERVER_HOST, MCP_SERVER_PORT)
 
     from onyx.mcp_server.api import mcp_app
 

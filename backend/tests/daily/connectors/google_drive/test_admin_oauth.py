@@ -2,12 +2,17 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
+
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from tests.daily.connectors.google_drive.consts_and_utils import _pick
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_MY_DRIVE_ID
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_expected_docs_in_retrieved_docs,
 )
@@ -58,8 +63,10 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_EXTRA_FOLDER_ID,
 )
+from tests.utils.secret_names import TestSecret
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -115,6 +122,7 @@ def test_include_all(
             RESTRICTED_ACCESS_FOLDER_ID,
             TEST_USER_1_EXTRA_FOLDER_ID,
             FOLDER_3_ID,
+            *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
         )
     )
     assert_hierarchy_nodes_match_expected(
@@ -124,6 +132,7 @@ def test_include_all(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -181,6 +190,7 @@ def test_include_shared_drives_only(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -212,6 +222,7 @@ def test_include_my_drives_only(
         ADMIN_MY_DRIVE_ID,
         PILL_FOLDER_ID,
         TEST_USER_1_EXTRA_FOLDER_ID,
+        *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
     )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
@@ -219,6 +230,7 @@ def test_include_my_drives_only(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -263,6 +275,7 @@ def test_drive_one_only(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -312,6 +325,7 @@ def test_folder_and_shared_drive(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -366,6 +380,7 @@ def test_folders_only(
     )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR)
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,

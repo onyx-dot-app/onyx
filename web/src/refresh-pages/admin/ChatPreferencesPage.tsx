@@ -7,12 +7,11 @@ import { Formik, Form } from "formik";
 import useSWR, { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
-import { Tooltip } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
@@ -21,6 +20,7 @@ import {
   SvgExpand,
   SvgFold,
   SvgExternalLink,
+  SvgOrganization,
   SvgRefreshCw,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -31,14 +31,10 @@ import {
   InputHorizontal,
   InputVertical,
 } from "@opal/layouts";
-import {
-  useSettingsContext,
-  useVectorDbEnabled,
-} from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
-import { EmptyMessageCard } from "@opal/components";
-import { QueryHistoryType, Settings } from "@/interfaces/settings";
+import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
@@ -47,18 +43,28 @@ import {
   WEB_SEARCH_TOOL_ID,
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
+  CODING_AGENT_TOOL_ID,
 } from "@/app/app/components/tools/constants";
-import { Button, Divider, Text, Card, MessageCard } from "@opal/components";
+import {
+  EmptyMessageCard,
+  Button,
+  Divider,
+  Text,
+  Card,
+  MessageCard,
+  Tooltip,
+} from "@opal/components";
 import Modal from "@/refresh-components/Modal";
-import Switch from "@/refresh-components/inputs/Switch";
-import useMcpServersForAgentEditor from "@/hooks/useMcpServersForAgentEditor";
+import { Switch } from "@opal/components";
+import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
@@ -98,8 +104,7 @@ function MCPServerCard({
   } = useFilter(tools, (tool) => `${tool.name} ${tool.description}`);
 
   const allToolIds = tools.map((t) => t.id);
-  const serverEnabled =
-    tools.length > 0 && tools.some((t) => isToolEnabled(t.id));
+  const serverEnabled = tools.some((t) => isToolEnabled(t.id));
   const needsAuth = !server.is_authenticated;
   const authTooltip = needsAuth
     ? "Authenticate this MCP server before enabling its tools."
@@ -149,7 +154,7 @@ function MCPServerCard({
               <InputTypeIn
                 placeholder="Search tools..."
                 variant="internal"
-                leftSearchIcon
+                searchIcon
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -284,20 +289,18 @@ function NumericLimitField({
     <Hoverable.Root group="numericLimit" width="full">
       <InputTypeIn
         inputMode="numeric"
-        showClearButton={false}
         pattern="[0-9]*"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={allowZero ? "No limit" : `Default: ${defaultValue}`}
         variant={isOverMax ? "error" : undefined}
-        rightSection={
+        rightChildren={
           (value || "") !== defaultValue ? (
-            <Hoverable.Item group="numericLimit" variant="opacity-on-hover">
-              <IconButton
+            <Hoverable.Item group="numericLimit" variant="appear-on-hover">
+              <Button
                 icon={SvgRefreshCw}
                 tooltip="Restore default"
-                internal
-                type="button"
+                prominence="internal"
                 onClick={handleRestore}
               />
             </Hoverable.Item>
@@ -367,10 +370,152 @@ function FileSizeLimitFields({
   );
 }
 
+// Retention presets offered directly in the dropdown. Any other (positive)
+// value is surfaced via the "Custom…" option. The backend stores
+// maximum_chat_retention_days as a free-form number, so these are purely UI.
+const RETENTION_PRESETS: number[] = [7, 30, 60, 90, 365];
+// FE-only guard: the backend imposes no upper bound, so cap absurd input.
+const MAX_RETENTION_DAYS = 36500; // ~100 years
+const CUSTOM_RETENTION_VALUE = "custom";
+const FOREVER_RETENTION_VALUE = "forever";
+
+// Pure predicate — lives at module scope so it can be referenced inside
+// useEffect without an exhaustive-deps suppression.
+const valueIsCustomRetention = (v: number | null): v is number =>
+  v !== null && !RETENTION_PRESETS.includes(v);
+
+// True only when the string is one or more digits within the allowed range.
+// parseInt alone would silently accept "1.5" → 1 or "7abc" → 7, so guard with
+// a digits-only check before persisting.
+const isValidCustomRetention = (raw: string): boolean =>
+  /^\d+$/.test(raw) &&
+  parseInt(raw, 10) > 0 &&
+  parseInt(raw, 10) <= MAX_RETENTION_DAYS;
+
+interface RetentionFieldProps {
+  value: number | null;
+  disabled: boolean;
+  onSave: (value: number | null) => void;
+}
+
+// Chat-retention control: a preset dropdown plus a "Custom…" option that
+// reveals a numeric "days" input. Drop-in replacement for the bare
+// <InputSelect>; the persisted shape (number | null) is unchanged, so any
+// existing value — preset or not — round-trips correctly.
+function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
+  const [showCustom, setShowCustom] = useState(valueIsCustomRetention(value));
+  const [customDays, setCustomDays] = useState(
+    valueIsCustomRetention(value) ? String(value) : ""
+  );
+
+  // Re-sync when the stored value changes externally (e.g. another admin),
+  // but only when our local state matches the last value we persisted.
+  const lastSavedRef = useRef(value);
+  useEffect(() => {
+    if (value === lastSavedRef.current) return;
+    lastSavedRef.current = value;
+    setShowCustom(valueIsCustomRetention(value));
+    setCustomDays(valueIsCustomRetention(value) ? String(value) : "");
+  }, [value]);
+
+  const selectValue = showCustom
+    ? CUSTOM_RETENTION_VALUE
+    : value === null
+      ? FOREVER_RETENTION_VALUE
+      : String(value);
+
+  const persist = (next: number | null) => {
+    lastSavedRef.current = next;
+    onSave(next);
+  };
+
+  const handleSelectChange = (next: string) => {
+    if (next === CUSTOM_RETENTION_VALUE) {
+      // Reveal the input; don't persist until a valid number is entered.
+      setShowCustom(true);
+      return;
+    }
+    setShowCustom(false);
+    setCustomDays("");
+    persist(next === FOREVER_RETENTION_VALUE ? null : parseInt(next, 10));
+  };
+
+  const handleCustomBlur = () => {
+    // Empty/invalid input reverts to the last persisted selection.
+    if (!isValidCustomRetention(customDays)) {
+      setShowCustom(valueIsCustomRetention(value));
+      setCustomDays(valueIsCustomRetention(value) ? String(value) : "");
+      return;
+    }
+
+    const parsed = parseInt(customDays, 10);
+    const normalized = String(parsed);
+    if (normalized !== customDays) setCustomDays(normalized);
+    if (parsed !== value) persist(parsed);
+  };
+
+  const customInvalid =
+    customDays !== "" && !isValidCustomRetention(customDays);
+
+  return (
+    <div className="flex flex-col gap-2 w-full">
+      <InputSelect
+        value={selectValue}
+        onValueChange={handleSelectChange}
+        disabled={disabled}
+      >
+        <InputSelect.Trigger />
+        <InputSelect.Content>
+          <InputSelect.Item value={FOREVER_RETENTION_VALUE}>
+            Forever
+          </InputSelect.Item>
+          {RETENTION_PRESETS.map((d) => (
+            <InputSelect.Item key={d} value={String(d)}>
+              {d} days
+            </InputSelect.Item>
+          ))}
+          <InputSelect.Item value={CUSTOM_RETENTION_VALUE}>
+            Custom…
+          </InputSelect.Item>
+        </InputSelect.Content>
+      </InputSelect>
+
+      {showCustom && (
+        <div className="flex flex-col gap-1 w-full">
+          <InputTypeIn
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="Enter number of days"
+            value={customDays}
+            onChange={(e) => setCustomDays(e.target.value)}
+            onBlur={handleCustomBlur}
+            variant={
+              disabled ? "disabled" : customInvalid ? "error" : undefined
+            }
+            rightChildren={
+              <Text font="secondary-body" color="text-03">
+                days
+              </Text>
+            }
+          />
+          {customInvalid && (
+            <Text font="secondary-body" color="text-03">
+              {`Enter a whole number of days between 1 and ${MAX_RETENTION_DAYS}.`}
+            </Text>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ChatPreferencesPage() {
   const router = useRouter();
-  const settings = useSettingsContext();
-  const s = settings.settings;
+  const settings = useSettings();
+  const s = settings;
+  // Search Mode toggle is Business+; Chat Retention is Enterprise-only.
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   // Local state for text fields (save-on-blur)
   const [companyName, setCompanyName] = useState(s.company_name ?? "");
@@ -403,7 +548,7 @@ export default function ChatPreferencesPage() {
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = settings;
 
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
@@ -419,6 +564,9 @@ export default function ChatPreferencesPage() {
   );
   const codeInterpreterTool = availableTools.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
+  );
+  const codingAgentTool = availableTools.find(
+    (t) => t.in_code_tool_id === CODING_AGENT_TOOL_ID
   );
 
   // Connectors
@@ -512,10 +660,13 @@ export default function ChatPreferencesPage() {
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
-      const currentSettings = settings?.settings;
+      const currentSettings = settings;
       if (!currentSettings) return;
 
-      const newSettings = { ...currentSettings, ...updates };
+      const newSettings: Settings = {
+        ...toSettings(currentSettings),
+        ...updates,
+      };
 
       try {
         const response = await fetch("/api/admin/settings", {
@@ -554,23 +705,37 @@ export default function ChatPreferencesPage() {
           <Card border="solid" rounding="lg">
             <Section>
               <Disabled
-                disabled={uniqueSources.length === 0}
-                allowClick
-                tooltip="Set up connectors to use Search Mode"
+                disabled={!businessTier || uniqueSources.length === 0}
+                allowClick={businessTier}
+                tooltip={
+                  !businessTier
+                    ? "Search Mode requires the Business or Enterprise plan."
+                    : "Set up connectors to use Search Mode"
+                }
               >
                 <InputHorizontal
                   title="Search Mode"
-                  tag={{ title: "beta", color: "blue" }}
+                  tag={
+                    !businessTier
+                      ? {
+                          title: "Business Plan",
+                          color: "amber",
+                          icon: SvgOrganization,
+                        }
+                      : { title: "beta", color: "blue" }
+                  }
                   description="UI mode for quick document search across your organization."
-                  disabled={uniqueSources.length === 0}
+                  disabled={!businessTier || uniqueSources.length === 0}
                   withLabel
                 >
                   <Switch
-                    checked={s.search_ui_enabled ?? true}
+                    checked={
+                      businessTier ? (s.search_ui_enabled ?? true) : false
+                    }
                     onCheckedChange={(checked) => {
                       void saveSettings({ search_ui_enabled: checked });
                     }}
-                    disabled={uniqueSources.length === 0}
+                    disabled={!businessTier || uniqueSources.length === 0}
                   />
                 </InputHorizontal>
               </Disabled>
@@ -608,6 +773,20 @@ export default function ChatPreferencesPage() {
                   checked={s.auto_scroll ?? false}
                   onCheckedChange={(checked) => {
                     void saveSettings({ auto_scroll: checked });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
+                title="Temperature Control"
+                description="Let users adjust the temperature (creativity) of model responses from the model picker in chat."
+                withLabel
+              >
+                <Switch
+                  checked={s.temperature_override_enabled ?? false}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({
+                      temperature_override_enabled: checked,
+                    });
                   }}
                 />
               </InputHorizontal>
@@ -710,7 +889,7 @@ export default function ChatPreferencesPage() {
                           {uniqueSources.slice(0, 3).map((source) => {
                             const meta = getSourceMetadata(source);
                             return (
-                              <div key={source} className="w-[10rem]">
+                              <div key={source} className="w-40">
                                 <Card padding="sm" border="solid">
                                   <Content
                                     icon={meta.icon}
@@ -858,6 +1037,30 @@ export default function ChatPreferencesPage() {
                           </InputHorizontal>
                         </Card>
                       </Disabled>
+
+                      <Disabled disabled={!codingAgentTool}>
+                        <Card border="solid" rounding="lg">
+                          <InputHorizontal
+                            title="Coding Agent"
+                            description="Investigate a GitHub repository and answer questions about its code."
+                            disabled={!codingAgentTool}
+                            withLabel
+                          >
+                            <Switch
+                              checked={
+                                codingAgentTool
+                                  ? isToolEnabled(codingAgentTool.id)
+                                  : false
+                              }
+                              onCheckedChange={(checked) =>
+                                codingAgentTool &&
+                                void toggleTool(codingAgentTool.id, checked)
+                              }
+                              disabled={!codingAgentTool}
+                            />
+                          </InputHorizontal>
+                        </Card>
+                      </Disabled>
                     </Section>
 
                     {/* Separator between built-in tools and MCP/OpenAPI tools */}
@@ -914,40 +1117,34 @@ export default function ChatPreferencesPage() {
               <Section gap={1}>
                 <Card border="solid" rounding="lg">
                   <Section>
-                    <InputHorizontal
-                      title="Keep Chat History"
-                      description="Specify how long Onyx should retain chats in your organization."
-                      withLabel
+                    <Disabled
+                      disabled={!enterpriseTier}
+                      tooltip="Chat history retention is an Enterprise Plan feature."
                     >
-                      <InputSelect
-                        value={
-                          s.maximum_chat_retention_days?.toString() ?? "forever"
+                      <InputHorizontal
+                        title="Keep Chat History"
+                        description="Specify how long Onyx should retain chats in your organization."
+                        tag={
+                          !enterpriseTier
+                            ? {
+                                title: "Enterprise Plan",
+                                color: "amber",
+                                icon: SvgOrganization,
+                              }
+                            : undefined
                         }
-                        onValueChange={(value) => {
-                          void saveSettings({
-                            maximum_chat_retention_days:
-                              value === "forever" ? null : parseInt(value, 10),
-                          });
-                        }}
+                        disabled={!enterpriseTier}
+                        withLabel
                       >
-                        <InputSelect.Trigger />
-                        <InputSelect.Content>
-                          <InputSelect.Item value="forever">
-                            Forever
-                          </InputSelect.Item>
-                          <InputSelect.Item value="7">7 days</InputSelect.Item>
-                          <InputSelect.Item value="30">
-                            30 days
-                          </InputSelect.Item>
-                          <InputSelect.Item value="90">
-                            90 days
-                          </InputSelect.Item>
-                          <InputSelect.Item value="365">
-                            365 days
-                          </InputSelect.Item>
-                        </InputSelect.Content>
-                      </InputSelect>
-                    </InputHorizontal>
+                        <RetentionField
+                          value={s.maximum_chat_retention_days ?? null}
+                          disabled={!enterpriseTier}
+                          onSave={(maximum_chat_retention_days) =>
+                            void saveSettings({ maximum_chat_retention_days })
+                          }
+                        />
+                      </InputHorizontal>
+                    </Disabled>
 
                     <InputHorizontal
                       title="Query History Visibility"
@@ -998,8 +1195,8 @@ export default function ChatPreferencesPage() {
                       saveSettings={saveSettings}
                       initialUploadSizeMb={
                         (s.user_file_max_upload_size_mb ?? 0) <= 0
-                          ? s.default_user_file_max_upload_size_mb?.toString() ??
-                            "100"
+                          ? (s.default_user_file_max_upload_size_mb?.toString() ??
+                            "100")
                           : s.user_file_max_upload_size_mb!.toString()
                       }
                       defaultUploadSizeMb={
@@ -1008,8 +1205,8 @@ export default function ChatPreferencesPage() {
                       }
                       initialTokenThresholdK={
                         s.file_token_count_threshold_k == null
-                          ? s.default_file_token_count_threshold_k?.toString() ??
-                            "200"
+                          ? (s.default_file_token_count_threshold_k?.toString() ??
+                            "200")
                           : s.file_token_count_threshold_k === 0
                             ? ""
                             : s.file_token_count_threshold_k.toString()
@@ -1021,23 +1218,6 @@ export default function ChatPreferencesPage() {
                       maxAllowedUploadSizeMb={s.max_allowed_upload_size_mb}
                     />
                   </InputVertical>
-                </Card>
-
-                <Card border="solid" rounding="lg">
-                  <InputHorizontal
-                    title="Image Extraction & Analysis"
-                    description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
-                    withLabel
-                  >
-                    <Switch
-                      checked={s.image_extraction_and_analysis_enabled ?? true}
-                      onCheckedChange={(checked) => {
-                        void saveSettings({
-                          image_extraction_and_analysis_enabled: checked,
-                        });
-                      }}
-                    />
-                  </InputHorizontal>
                 </Card>
 
                 <Card border="solid" rounding="lg">
@@ -1111,52 +1291,76 @@ export default function ChatPreferencesPage() {
               }
             }}
           >
-            {({ dirty, isSubmitting, submitForm }) => (
-              <Form>
-                <Modal.Header
-                  icon={SvgAddLines}
-                  title="System Prompt"
-                  description="This base prompt is prepended to all chats, agents, and projects."
-                  onClose={() => setSystemPromptModalOpen(false)}
-                />
-                <Modal.Body>
-                  <Section gap={0.25} alignItems="start">
-                    <InputTextAreaField
-                      name="system_prompt"
-                      placeholder="Enter your system prompt..."
-                      rows={8}
-                      maxRows={20}
-                      autoResize
-                    />
-                    <Text font="secondary-body" color="text-03">
-                      {markdown(
-                        "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used."
-                      )}
-                    </Text>
-                  </Section>
-                  <MessageCard
-                    title="Modify with caution."
-                    description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
-                    padding="xs"
+            {({ dirty, isSubmitting, submitForm, setFieldValue }) => {
+              const defaultPrompt =
+                defaultAgentConfig?.default_system_prompt ?? "";
+
+              const handleRestore = () => {
+                void setFieldValue("system_prompt", defaultPrompt);
+              };
+
+              return (
+                <Form>
+                  <Modal.Header
+                    icon={SvgAddLines}
+                    title="System Prompt"
+                    description="This base prompt is prepended to all chats, agents, and projects."
+                    onClose={() => setSystemPromptModalOpen(false)}
                   />
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button
-                    prominence="secondary"
-                    onClick={() => setSystemPromptModalOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    prominence="primary"
-                    onClick={submitForm}
-                    disabled={!dirty || isSubmitting}
-                  >
-                    Save
-                  </Button>
-                </Modal.Footer>
-              </Form>
-            )}
+                  <Modal.Body>
+                    <Section gap={0.25} alignItems="start">
+                      <Hoverable.Root group="systemPromptRestore" width="full">
+                        <InputTextAreaField
+                          name="system_prompt"
+                          placeholder="Enter your system prompt..."
+                          rows={8}
+                          maxRows={20}
+                          autoResize
+                          rightSection={
+                            <Hoverable.Item
+                              group="systemPromptRestore"
+                              variant="appear-on-hover"
+                            >
+                              <Button
+                                icon={SvgRefreshCw}
+                                tooltip="Restore default"
+                                prominence="internal"
+                                onClick={handleRestore}
+                              />
+                            </Hoverable.Item>
+                          }
+                        />
+                      </Hoverable.Root>
+                      <Text font="secondary-body" color="text-03">
+                        {markdown(
+                          "You can use the following placeholders in your prompt:\n`{{CURRENT_DATETIME}}` - Current date and day of the week in a human-readable format.\n`{{CITATION_GUIDANCE}}` - Instructions for providing citations when facts are retrieved from search tools.\nOnly included when search tools are used.\n`{{REMINDER_TAG_DESCRIPTION}}` - Instructions for how to interpret system reminders in user messages."
+                        )}
+                      </Text>
+                    </Section>
+                    <MessageCard
+                      title="Modify with caution."
+                      description="System prompt affects all chats, agents, and projects. Significant changes may degrade response quality."
+                      padding="xs"
+                    />
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      prominence="secondary"
+                      onClick={() => setSystemPromptModalOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      prominence="primary"
+                      onClick={submitForm}
+                      disabled={!dirty || isSubmitting}
+                    >
+                      Save
+                    </Button>
+                  </Modal.Footer>
+                </Form>
+              );
+            }}
           </Formik>
         </Modal.Content>
       </Modal>

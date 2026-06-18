@@ -10,20 +10,29 @@ from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
+from opensearchpy import ConflictError
 from opensearchpy import NotFoundError
+from opensearchpy.helpers import BulkIndexError
 
+import onyx.document_index.opensearch.client as client_module
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
+from onyx.document_index.opensearch.client import OpenSearchIndexError
+from onyx.document_index.opensearch.client import OpenSearchServerSideTimeout
+from onyx.document_index.opensearch.client import OpenSearchUpdateError
 from onyx.document_index.opensearch.client import wait_for_opensearch_with_timeout
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.constants import HybridSearchNormalizationPipeline
 from onyx.document_index.opensearch.constants import HybridSearchSubqueryConfiguration
+from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.opensearch_document_index import (
     generate_opensearch_filtered_access_control_list,
 )
@@ -650,8 +659,93 @@ class TestOpenSearchClient:
 
         # Under test and postcondition.
         # Index again - should raise.
-        with pytest.raises(Exception, match="already exists"):
+        with pytest.raises(ConflictError, match="already exists"):
             test_client.index_document(document=doc, tenant_state=tenant_state)
+
+    def test_bulk_index_duplicate_documents(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Tests bulk indexing documents that already exist raises BulkIndexError
+        when ``update_if_exists`` is False.
+
+        With ``update_if_exists=False`` the function uses ``_op_type=create``,
+        and opensearchpy's ``bulk`` is called with raise_on_error=True, so any
+        per-doc conflict surfaces as a BulkIndexError.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        docs = [
+            _create_test_document_chunk(
+                document_id="test-doc-bulk-dup",
+                chunk_index=i,
+                content=f"Duplicate content {i}",
+                tenant_state=tenant_state,
+            )
+            for i in range(5)
+        ]
+
+        # Bulk index once - should succeed.
+        test_client.bulk_index_documents(documents=docs, tenant_state=tenant_state)
+
+        # Under test and postcondition.
+        # Bulk index the same docs again without update_if_exists - should
+        # raise.
+        with pytest.raises(BulkIndexError, match="already exists"):
+            test_client.bulk_index_documents(documents=docs, tenant_state=tenant_state)
+
+        # Sanity check: passing update_if_exists=True does not raise.
+        test_client.bulk_index_documents(
+            documents=docs, tenant_state=tenant_state, update_if_exists=True
+        )
+
+    def test_bulk_index_documents_raises_on_success_count_mismatch(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Tests that bulk_index_documents raises OpenSearchIndexError when
+        OpenSearch reports no errors but the number of successful operations
+        does not match the number of requested documents.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        docs = [
+            _create_test_document_chunk(
+                document_id="test-doc-count-mismatch",
+                chunk_index=i,
+                content=f"Content {i}",
+                tenant_state=tenant_state,
+            )
+            for i in range(3)
+        ]
+
+        # Patch ``bulk`` to claim success but report fewer than requested.
+        def fake_bulk(
+            client: Any,  # noqa: ARG001
+            actions: Any,  # noqa: ARG001
+            **kwargs: Any,  # noqa: ARG001
+        ) -> tuple[int, list[dict[str, Any]]]:
+            return (1, [])
+
+        monkeypatch.setattr(client_module, "bulk", fake_bulk)
+
+        # Under test and postcondition.
+        with pytest.raises(OpenSearchIndexError, match="does not match"):
+            test_client.bulk_index_documents(documents=docs, tenant_state=tenant_state)
 
     def test_get_document(
         self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
@@ -859,7 +953,6 @@ class TestOpenSearchClient:
             chunk_index=0,
             content="Original content",
             tenant_state=tenant_state,
-            hidden=False,
         )
         test_client.index_document(document=doc, tenant_state=tenant_state)
 
@@ -907,6 +1000,238 @@ class TestOpenSearchClient:
         with pytest.raises(NotFoundError, match="404"):
             test_client.update_document(
                 document_chunk_id="test_source__nonexistent__512__0",
+                properties_to_update={"hidden": True},
+            )
+
+    def test_bulk_update_documents(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests bulk updating document chunks' properties."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Create documents to update.
+        docs = [
+            _create_test_document_chunk(
+                document_id="test-doc-bulk-update",
+                chunk_index=i,
+                content=f"Original content {i}",
+                tenant_state=tenant_state,
+            )
+            for i in range(5)
+        ]
+        test_client.bulk_index_documents(documents=docs, tenant_state=tenant_state)
+
+        # Under test.
+        doc_chunk_ids = [
+            get_opensearch_doc_chunk_id(
+                tenant_state=tenant_state,
+                document_id=doc.document_id,
+                chunk_index=doc.chunk_index,
+                max_chunk_size=doc.max_chunk_size,
+            )
+            for doc in docs
+        ]
+        properties_to_update = {
+            "hidden": True,
+            "global_boost": 7,
+        }
+        test_client.bulk_update_documents(
+            document_chunk_ids=doc_chunk_ids,
+            properties_to_update=properties_to_update,
+        )
+
+        # Postcondition.
+        # Retrieve each document and verify updates were applied.
+        for doc, doc_chunk_id in zip(docs, doc_chunk_ids):
+            updated_doc = test_client.get_document(document_chunk_id=doc_chunk_id)
+            assert updated_doc.hidden is True
+            assert updated_doc.global_boost == 7
+            # Other properties should remain unchanged.
+            assert updated_doc.document_id == doc.document_id
+            assert updated_doc.content == doc.content
+            assert updated_doc.public == doc.public
+
+    def test_bulk_update_documents_empty_list(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Tests bulk updating with an empty list is a no-op."""
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Under test and postcondition.
+        # Should not raise.
+        test_client.bulk_update_documents(
+            document_chunk_ids=[],
+            properties_to_update={"hidden": True},
+        )
+
+    def test_bulk_update_nonexistent_documents(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Tests bulk updating nonexistent document chunks raises
+        OpenSearchUpdateError.
+
+        OpenSearch returns a 404 ``document_missing_exception`` per missing
+        chunk. Because the status is < 500, the implementation classifies these
+        as fatal (non-retryable) and raises OpenSearchUpdateError.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Under test and postcondition.
+        # Try to bulk update document chunks that do not exist.
+        with pytest.raises(OpenSearchUpdateError, match="fatal error"):
+            test_client.bulk_update_documents(
+                document_chunk_ids=[
+                    "test_source__nonexistent-1__512__0",
+                    "test_source__nonexistent-2__512__0",
+                ],
+                properties_to_update={"hidden": True},
+            )
+
+    def test_bulk_update_documents_retries_retryable_errors(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Tests that retryable bulk-update errors (5xx + specific error types) are
+        retried once, and the call succeeds overall if the retry succeeds.
+
+        Guards the workaround for the OpenSearch 3.4.0 knn/derived_source bug.
+        The transient errors are very hard to trigger from a test against a
+        healthy OpenSearch, so we monkeypatch ``bulk`` to inject one.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Real chunk that the retry can successfully apply against.
+        doc = _create_test_document_chunk(
+            document_id="test-doc-retryable",
+            chunk_index=0,
+            content="content",
+            tenant_state=tenant_state,
+            hidden=False,
+        )
+        test_client.index_document(document=doc, tenant_state=tenant_state)
+        doc_chunk_id = get_opensearch_doc_chunk_id(
+            tenant_state=tenant_state,
+            document_id=doc.document_id,
+            chunk_index=doc.chunk_index,
+            max_chunk_size=doc.max_chunk_size,
+        )
+
+        # Patch ``bulk`` so the first call returns a retryable failure for our
+        # chunk, and the second call (the retry) performs the update for real
+        # against OpenSearch.
+        real_bulk = client_module.bulk
+        call_count = 0
+
+        def fake_bulk(
+            client: Any, actions: Any, **kwargs: Any
+        ) -> tuple[int, list[dict[str, Any]]]:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Simulate a retryable 5xx error for the single doc.
+                return (
+                    0,
+                    [
+                        {
+                            "update": {
+                                "_index": test_client._index_name,
+                                "_id": doc_chunk_id,
+                                "status": 503,
+                                "error": {
+                                    "type": "already_closed_exception",
+                                    "reason": "Vector file closed bro.",
+                                },
+                            }
+                        }
+                    ],
+                )
+            # Subsequent call: actually run the update against OpenSearch.
+            return real_bulk(client, actions, **kwargs)
+
+        monkeypatch.setattr(client_module, "bulk", fake_bulk)
+
+        # Under test.
+        # Should not raise — fake_bulk reports a retryable failure first, then
+        # the retry runs against the real OpenSearch and succeeds.
+        test_client.bulk_update_documents(
+            document_chunk_ids=[doc_chunk_id],
+            properties_to_update={"hidden": True, "global_boost": 9},
+        )
+
+        # Postcondition.
+        assert call_count == 2
+        updated_doc = test_client.get_document(document_chunk_id=doc_chunk_id)
+        assert updated_doc.hidden is True
+        assert updated_doc.global_boost == 9
+        # Other properties should remain unchanged.
+        assert updated_doc.document_id == doc.document_id
+        assert updated_doc.content == doc.content
+        assert updated_doc.public == doc.public
+
+    def test_bulk_update_documents_raises_on_success_count_mismatch(
+        self, test_client: OpenSearchIndexClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Tests that bulk_update_documents raises OpenSearchUpdateError when
+        OpenSearch reports no errors but the number of successful operations
+        does not match the number of requested chunk IDs.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        # Patch ``bulk`` to claim success but report fewer than requested.
+        def fake_bulk(
+            client: Any,  # noqa: ARG001
+            actions: Any,  # noqa: ARG001
+            **kwargs: Any,  # noqa: ARG001
+        ) -> tuple[int, list[dict[str, Any]]]:
+            return (1, [])
+
+        monkeypatch.setattr(client_module, "bulk", fake_bulk)
+
+        # Under test and postcondition.
+        with pytest.raises(OpenSearchUpdateError, match="does not match"):
+            test_client.bulk_update_documents(
+                document_chunk_ids=[
+                    "test_source__doc-1__512__0",
+                    "test_source__doc-2__512__0",
+                    "test_source__doc-3__512__0",
+                ],
                 properties_to_update={"hidden": True},
             )
 
@@ -2018,3 +2343,107 @@ class TestOpenSearchClient:
         )
         assert results[1].score
         assert 0.0 < results[1].score < 1.0
+
+
+class TestSearchFailureMetrics:
+    """Regression coverage for the OpenSearch search failure-rate metric.
+
+    Before the fix, ``self._log_search_result_perf(..., raise_on_timeout=True)``
+    ran after the metrics ``try/except`` block. When OpenSearch returned
+    ``"timed_out": true`` in the response body, the helper raised
+    ``RuntimeError`` outside the ``except`` arm, so the failure never reached
+    ``record_opensearch_search_error`` and ``observe_opensearch_search`` had
+    already been called with the timed-out duration.
+    """
+
+    @staticmethod
+    def _timed_out_response() -> dict[str, Any]:
+        """
+        A minimally-valid mock OpenSearch search response with timed_out=true.
+        """
+        return {
+            "took": 1234,
+            "timed_out": True,
+            "hits": {"hits": []},
+        }
+
+    @staticmethod
+    def _make_client_with_canned_response(
+        monkeypatch: pytest.MonkeyPatch, response: dict[str, Any]
+    ) -> OpenSearchIndexClient:
+        """
+        Patches the OpenSearch class imported by ``client_module`` so that
+        ``OpenSearchIndexClient.__init__`` constructs a mocked underlying client
+        whose ``.search`` returns a mocked response. Lets us drive the timeout
+        code path without hitting a real OpenSearch.
+        """
+        mock_underlying = MagicMock()
+        mock_underlying.search.return_value = response
+        monkeypatch.setattr(
+            client_module, "OpenSearch", MagicMock(return_value=mock_underlying)
+        )
+        return OpenSearchIndexClient(index_name="test_index")
+
+    def test_search_records_error_on_server_side_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Precondition.
+        # Stub the metric boundary functions so we can assert the client routes
+        # a timed-out response through the error path rather than the success
+        # path.
+        record_error_mock = MagicMock()
+        observe_mock = MagicMock()
+        monkeypatch.setattr(
+            client_module, "record_opensearch_search_error", record_error_mock
+        )
+        monkeypatch.setattr(client_module, "observe_opensearch_search", observe_mock)
+
+        client = self._make_client_with_canned_response(
+            monkeypatch, self._timed_out_response()
+        )
+
+        # Under test.
+        with pytest.raises(OpenSearchServerSideTimeout, match="timed out"):
+            client.search(
+                body={},
+                search_pipeline_id=None,
+                search_type=OpenSearchSearchType.HYBRID,
+            )
+
+        # Postcondition.
+        # The timed-out search was recorded as an error and was NOT observed in
+        # the latency histograms.
+        assert record_error_mock.call_count == 1
+        recorded_search_type, recorded_exc = record_error_mock.call_args.args
+        assert recorded_search_type == OpenSearchSearchType.HYBRID
+        assert isinstance(recorded_exc, OpenSearchServerSideTimeout)
+        assert observe_mock.call_count == 0
+
+    def test_search_for_document_ids_records_error_on_server_side_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Precondition.
+        record_error_mock = MagicMock()
+        observe_mock = MagicMock()
+        monkeypatch.setattr(
+            client_module, "record_opensearch_search_error", record_error_mock
+        )
+        monkeypatch.setattr(client_module, "observe_opensearch_search", observe_mock)
+
+        client = self._make_client_with_canned_response(
+            monkeypatch, self._timed_out_response()
+        )
+
+        # Under test.
+        with pytest.raises(OpenSearchServerSideTimeout, match="timed out"):
+            client.search_for_document_ids(
+                body={"_source": False},
+                search_type=OpenSearchSearchType.KEYWORD,
+            )
+
+        # Postcondition.
+        assert record_error_mock.call_count == 1
+        recorded_search_type, recorded_exc = record_error_mock.call_args.args
+        assert recorded_search_type == OpenSearchSearchType.KEYWORD
+        assert isinstance(recorded_exc, OpenSearchServerSideTimeout)
+        assert observe_mock.call_count == 0

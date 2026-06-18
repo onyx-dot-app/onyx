@@ -1,9 +1,11 @@
-"""Tests for GoogleDriveConnector.resolve_errors against real Google Drive."""
+"""Tests for GoogleDriveConnector.reindex against real Google Drive."""
 
 import json
 import os
 from collections.abc import Callable
 from unittest.mock import patch
+
+import pytest
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.models import ConnectorFailure
@@ -16,6 +18,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 )
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_ID
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_ID
+from tests.utils.secret_names import TestSecret
 
 _DRIVE_ID_MAPPING_PATH = os.path.join(
     os.path.dirname(__file__), "drive_id_mapping.json"
@@ -41,6 +44,7 @@ def _build_failures(web_view_links: list[str]) -> list[ConnectorFailure]:
     ]
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_single_file(
     mock_api_key: None,  # noqa: ARG001
@@ -60,7 +64,7 @@ def test_resolve_single_file(
     web_view_links = _load_web_view_links([0])
     failures = _build_failures(web_view_links)
 
-    results = list(connector.resolve_errors(failures))
+    results = list(connector.reindex(failures))
 
     docs = [r for r in results if isinstance(r, Document)]
     new_failures = [r for r in results if isinstance(r, ConnectorFailure)]
@@ -74,6 +78,7 @@ def test_resolve_single_file(
     assert len(hierarchy_nodes) > 0
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_multiple_files(
     mock_api_key: None,  # noqa: ARG001
@@ -95,7 +100,7 @@ def test_resolve_multiple_files(
     web_view_links = _load_web_view_links(file_ids)
     failures = _build_failures(web_view_links)
 
-    results = list(connector.resolve_errors(failures))
+    results = list(connector.reindex(failures))
 
     docs = [r for r in results if isinstance(r, Document)]
     new_failures = [r for r in results if isinstance(r, ConnectorFailure)]
@@ -110,12 +115,13 @@ def test_resolve_multiple_files(
     assert len(hierarchy_nodes) > 0
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_hierarchy_nodes_are_valid(
     mock_api_key: None,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
-    """Verify that hierarchy nodes from resolve_errors match expected structure."""
+    """Verify that hierarchy nodes from reindex match expected structure."""
     connector = google_drive_service_acct_connector_factory(
         primary_admin_email=ADMIN_EMAIL,
         include_shared_drives=True,
@@ -130,19 +136,19 @@ def test_resolve_hierarchy_nodes_are_valid(
     web_view_links = _load_web_view_links([25])
     failures = _build_failures(web_view_links)
 
-    results = list(connector.resolve_errors(failures))
+    results = list(connector.reindex(failures))
 
     hierarchy_nodes = [r for r in results if isinstance(r, HierarchyNode)]
     node_ids = {node.raw_node_id for node in hierarchy_nodes}
 
     # File 25 is in folder_1 which is inside shared_drive_1.
     # The parent walk must yield at least these two ancestors.
-    assert (
-        FOLDER_1_ID in node_ids
-    ), f"Expected folder_1 ({FOLDER_1_ID}) in hierarchy nodes, got: {node_ids}"
-    assert (
-        SHARED_DRIVE_1_ID in node_ids
-    ), f"Expected shared_drive_1 ({SHARED_DRIVE_1_ID}) in hierarchy nodes, got: {node_ids}"
+    assert FOLDER_1_ID in node_ids, (
+        f"Expected folder_1 ({FOLDER_1_ID}) in hierarchy nodes, got: {node_ids}"
+    )
+    assert SHARED_DRIVE_1_ID in node_ids, (
+        f"Expected shared_drive_1 ({SHARED_DRIVE_1_ID}) in hierarchy nodes, got: {node_ids}"
+    )
 
     for node in hierarchy_nodes:
         if node.raw_node_id not in ALL_EXPECTED_HIERARCHY_NODES:
@@ -158,6 +164,7 @@ def test_resolve_hierarchy_nodes_are_valid(
         )
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_with_invalid_link(
     mock_api_key: None,  # noqa: ARG001
@@ -178,7 +185,7 @@ def test_resolve_with_invalid_link(
     invalid_link = "https://drive.google.com/file/d/NONEXISTENT_FILE_ID_12345"
     failures = _build_failures(valid_links + [invalid_link])
 
-    results = list(connector.resolve_errors(failures))
+    results = list(connector.reindex(failures))
 
     docs = [r for r in results if isinstance(r, Document)]
     new_failures = [r for r in results if isinstance(r, ConnectorFailure)]
@@ -190,6 +197,7 @@ def test_resolve_with_invalid_link(
     assert new_failures[0].failed_document.document_id == invalid_link
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_empty_errors(
     mock_api_key: None,  # noqa: ARG001
@@ -206,17 +214,18 @@ def test_resolve_empty_errors(
         include_files_shared_with_me=False,
     )
 
-    results = list(connector.resolve_errors([]))
+    results = list(connector.reindex([]))
 
     assert len(results) == 0
 
 
+@pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 @patch("onyx.file_processing.extract_file_text.get_unstructured_api_key")
 def test_resolve_entity_failures_are_skipped(
     mock_api_key: None,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
-    """Entity failures (not document failures) should be skipped by resolve_errors."""
+    """Entity failures (not document failures) should be skipped by reindex."""
     from onyx.connectors.models import EntityFailure
 
     connector = google_drive_service_acct_connector_factory(
@@ -234,6 +243,6 @@ def test_resolve_entity_failures_are_skipped(
         failure_message="retrieval failure",
     )
 
-    results = list(connector.resolve_errors([entity_failure]))
+    results = list(connector.reindex([entity_failure]))
 
     assert len(results) == 0

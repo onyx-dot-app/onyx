@@ -1,10 +1,12 @@
 import copy
+import os
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from enum import Enum
+from io import BytesIO
 from typing import Any
 from typing import cast
 
@@ -12,6 +14,7 @@ from github import Github
 from github import RateLimitExceededException
 from github import Repository
 from github.GithubException import GithubException
+from github.GithubException import UnknownObjectException
 from github.Issue import Issue
 from github.NamedUser import NamedUser
 from github.PaginatedList import PaginatedList
@@ -44,9 +47,12 @@ from onyx.connectors.interfaces import SlimConnectorWithPermSync
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.file_processing.extract_file_text import file_io_to_text
+from onyx.file_processing.extract_file_text import is_text_file
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -58,6 +64,77 @@ _MAX_NUM_RATE_LIMIT_RETRIES = 5
 
 ONE_DAY = timedelta(days=1)
 SLIM_BATCH_SIZE = 100
+
+# Prose document extensions eligible for document indexing. Intentionally
+# limited to human-readable docs — source code as well as data/config/log
+# formats (.json, .csv, .tsv, .xml, .yml, .yaml, .sql, .log, .conf) are
+# excluded, as they are rarely useful to search as documents.
+GITHUB_INDEXABLE_FILE_EXTENSIONS = {
+    ".md",
+    ".mdx",
+    ".markdown",
+    ".rst",
+    ".txt",
+}
+# Common documentation files that conventionally have no extension. Matched
+# case-insensitively against the file's basename (stem before any extension).
+GITHUB_INDEXABLE_FILENAMES = {
+    "readme",
+    "license",
+    "licence",
+    "changelog",
+    "contributing",
+    "authors",
+    "notice",
+    "copying",
+    "install",
+    "maintainers",
+    "codeowners",
+    "security",
+    "support",
+}
+# Path segments whose presence anywhere in a file's path excludes it.
+GITHUB_PATH_DENYLIST = {
+    ".git",
+    "node_modules",
+    "vendor",
+    "dist",
+    "build",
+    ".venv",
+    "__pycache__",
+}
+# Skip files larger than this (checked against the git tree size before fetching).
+GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
+# Number of files emitted per checkpoint batch in the FILES stage.
+FILE_BATCH_SIZE = 100
+
+
+def _is_indexable_path(path: str, size: int | None) -> bool:
+    """Pure predicate: should this repo file be indexed?
+
+    Filters on a max size and path-segment denylist, then matches either a
+    document extension (.md, .txt, ...) or a conventional extensionless
+    document basename (README, LICENSE, ...).
+    """
+    if size is not None and size > GITHUB_MAX_FILE_SIZE_BYTES:
+        return False
+
+    segments = set(path.split("/"))
+    if segments & GITHUB_PATH_DENYLIST:
+        return False
+
+    basename = path.rsplit("/", 1)[-1]
+    _, extension = os.path.splitext(basename)
+    if extension.lower() in GITHUB_INDEXABLE_FILE_EXTENSIONS:
+        return True
+
+    # Extensionless docs like README / LICENSE (basename has no extension).
+    if not extension and basename.lower() in GITHUB_INDEXABLE_FILENAMES:
+        return True
+
+    return False
+
+
 # Cases
 # X (from start) standard run, no fallback to cursor-based pagination
 # X (from start) standard run errors, fallback to cursor-based pagination
@@ -140,11 +217,13 @@ def _paginate_until_error(
 
             if num_objs % CURSOR_LOG_FREQUENCY == 0:
                 logger.info(
-                    f"Retrieved {num_objs} objects with current cursor url: {get_nextUrl(pag_list, nextUrl_key)}"
+                    "Retrieved %s objects with current cursor url: %s",
+                    num_objs,
+                    get_nextUrl(pag_list, nextUrl_key),
                 )
 
     except Exception as e:
-        logger.exception(f"Error during cursor-based pagination: {e}")
+        logger.exception("Error during cursor-based pagination: %s", e)
         if num_objs - prev_num_objs > 0:
             raise
 
@@ -205,6 +284,16 @@ def _get_batch_rate_limited(
             github_client,
             attempt_num + 1,
         )
+    except UnknownObjectException:
+        # 404 on the listing endpoint means the collection is unavailable for
+        # this repo (e.g. pull requests or issues are disabled on a mirror).
+        # Treat it as empty so the connector skips the stage instead of crashing.
+        logger.warning(
+            "Got 404 listing objects (page %s); treating as empty. "
+            "The pull requests or issues feature is likely disabled for this repo.",
+            page_num,
+        )
+        return
     except GithubException as e:
         if not (
             e.status == 422
@@ -230,7 +319,7 @@ def _get_userinfo(user: NamedUser) -> dict[str, str]:
         try:
             return cast(str | None, getattr(user, attr_name))
         except GithubException:
-            logger.debug(f"Error getting {attr_name} for user")
+            logger.debug("Error getting %s for user", attr_name)
             return None
 
     return {
@@ -395,10 +484,67 @@ def _convert_issue_to_document(
     )
 
 
+def _decode_file_content(raw: bytes) -> str | None:
+    """Decode raw file bytes to text, or None if the content looks binary."""
+    buf = BytesIO(raw)
+    if not is_text_file(buf):
+        return None
+    return file_io_to_text(buf)
+
+
+def _convert_file_to_document(
+    repo: Repository.Repository,
+    path: str,
+    content_text: str,
+    repo_external_access: ExternalAccess | None,
+) -> Document:
+    repo_full_name = repo.full_name
+    parts = repo_full_name.split("/", 1)
+    owner_name = parts[0] if parts else ""
+    repo_name = parts[1] if len(parts) > 1 else repo_full_name
+
+    branch = repo.default_branch
+    html_url = f"{repo.html_url}/blob/{branch}/{path}"
+    _, extension = os.path.splitext(path)
+
+    # NOTE: GitHub's tree API does not expose per-file modification times without
+    # additional per-file commit-history calls. repo.pushed_at is the closest
+    # proxy available without extra API requests, but it reflects any push to
+    # any branch, so every file in the repo shares the same timestamp.
+    updated_at = repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
+
+    doc_metadata = {
+        "repo": repo_full_name,
+        "hierarchy": {
+            "source_path": [owner_name, repo_name, "files", *path.split("/")],
+            "owner": owner_name,
+            "repo": repo_name,
+            "object_type": "file",
+        },
+    }
+    return Document(
+        id=html_url,
+        sections=[TextSection(link=html_url, text=content_text)],
+        source=DocumentSource.GITHUB,
+        external_access=repo_external_access,
+        semantic_identifier=path,
+        doc_updated_at=updated_at,
+        doc_metadata=doc_metadata,
+        metadata={
+            "object_type": "File",
+            "repo": repo_full_name,
+            "path": path,
+            "file_extension": extension.lower(),
+            "branch": branch,
+        },
+    )
+
+
 class GithubConnectorStage(Enum):
     START = "start"
     PRS = "prs"
     ISSUES = "issues"
+    FILES = "files"
 
 
 class GithubConnectorCheckpoint(ConnectorCheckpoint):
@@ -408,17 +554,23 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     cached_repo_ids: list[int] | None = None
     cached_repo: SerializedRepository | None = None
 
+    # Resolved + filtered file paths for the current repo's FILES stage.
+    # Populated once when the stage begins, then paginated via curr_page.
+    file_paths: list[str] | None = None
+
     # Used for the fallback cursor-based pagination strategy
     num_retrieved: int
     cursor_url: str | None = None
 
     def reset(self) -> None:
         """
-        Resets curr_page, num_retrieved, and cursor_url to their initial values (0, 0, None)
+        Resets curr_page, num_retrieved, cursor_url, and file_paths to their
+        initial values (0, 0, None, None)
         """
         self.curr_page = 0
         self.num_retrieved = 0
         self.cursor_url = None
+        self.file_paths = None
 
 
 def make_cursor_url_callback(
@@ -446,12 +598,14 @@ class GithubConnector(
         state_filter: str = "all",
         include_prs: bool = True,
         include_issues: bool = False,
+        include_files: bool = False,
     ) -> None:
         self.repo_owner = repo_owner
         self.repositories = repositories
         self.state_filter = state_filter
         self.include_prs = include_prs
         self.include_issues = include_issues
+        self.include_files = include_files
         self.github_client: Github | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -504,7 +658,10 @@ class GithubConnector(
                         repos.append(repo)
                     except GithubException as e:
                         logger.warning(
-                            f"Could not fetch repo {self.repo_owner}/{repo_name}: {e}"
+                            "Could not fetch repo %s/%s: %s",
+                            self.repo_owner,
+                            repo_name,
+                            e,
                         )
 
             return repos
@@ -564,6 +721,157 @@ class GithubConnector(
             state=self.state_filter, sort="updated", direction="desc"
         )
 
+    def _list_indexable_files(
+        self, repo: Repository.Repository, attempt_num: int = 0
+    ) -> tuple[list[str], bool]:
+        """Resolve the repo's default-branch tree and return indexable file paths.
+
+        Returns (sorted paths, truncated) where `truncated` is True when GitHub
+        capped the recursive tree (>100k entries or >7MB), meaning some files
+        could not be enumerated and will be missing from the index.
+        """
+        if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
+            raise RuntimeError(
+                "Re-tried listing repo files too many times. "
+                "Something is going wrong with fetching objects from Github"
+            )
+        assert self.github_client is not None  # mypy
+        try:
+            git_tree = repo.get_git_tree(repo.default_branch, recursive=True)
+            truncated = bool(git_tree.raw_data.get("truncated"))
+            if truncated:
+                logger.error(
+                    "Git tree for repo %s was truncated by GitHub; "
+                    "some files will not be indexed",
+                    repo.full_name,
+                )
+            paths = [
+                element.path
+                for element in git_tree.tree
+                if element.type == "blob"
+                and _is_indexable_path(element.path, element.size)
+            ]
+            paths.sort()
+            return paths, truncated
+        except RateLimitExceededException:
+            sleep_after_rate_limit_exception(self.github_client)
+            return self._list_indexable_files(repo, attempt_num + 1)
+
+    def _fetch_file_content(
+        self, repo: Repository.Repository, path: str, attempt_num: int = 0
+    ) -> bytes:
+        if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
+            raise RuntimeError(
+                "Re-tried fetching file content too many times. "
+                "Something is going wrong with fetching objects from Github"
+            )
+        assert self.github_client is not None  # mypy
+        try:
+            content = repo.get_contents(path, ref=repo.default_branch)
+            if isinstance(content, list):
+                raise ValueError(f"Expected a file at {path}, got a directory")
+            if content.decoded_content is None:
+                raise ValueError(
+                    f"Could not decode content for {path} "
+                    f"(encoding={content.encoding!r})"
+                )
+            return content.decoded_content
+        except RateLimitExceededException:
+            sleep_after_rate_limit_exception(self.github_client)
+            return self._fetch_file_content(repo, path, attempt_num + 1)
+
+    def _fetch_repo_files(
+        self,
+        repo: Repository.Repository,
+        checkpoint: GithubConnectorCheckpoint,
+        start: datetime | None,
+        is_slim: bool,
+        repo_external_access: ExternalAccess | None,
+    ) -> Generator[Document | ConnectorFailure, None, bool]:
+        """Emit one batch of indexable documents for `repo`, advancing the checkpoint.
+
+        On first entry for a repo (file_paths is None) it resolves and caches the
+        filtered file list, applying the pushed_at gate and surfacing tree
+        truncation as a failure. Returns True if more file batches remain (the
+        caller should return the checkpoint to resume), False once drained.
+        """
+        if checkpoint.file_paths is None:
+            pushed_at = (
+                repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
+            )
+            if start is not None and pushed_at is not None and pushed_at < start:
+                # Nothing changed in this repo since the last poll — skip.
+                logger.info("Skipping files for repo %s (pushed_at < start)", repo.name)
+                checkpoint.file_paths = []
+            else:
+                logger.info("Listing files for repo: %s", repo.name)
+                paths, truncated = self._list_indexable_files(repo)
+                checkpoint.file_paths = paths
+                logger.info(
+                    "Found %s indexable files for repo: %s", len(paths), repo.name
+                )
+                # Surface truncation as a failure so the incomplete index is
+                # visible in the connector UI, not just buried in logs.
+                if truncated and not is_slim:
+                    yield ConnectorFailure(
+                        failed_entity=EntityFailure(
+                            entity_id=f"{repo.full_name}:files",
+                        ),
+                        failure_message=(
+                            f"GitHub truncated the file tree for "
+                            f"{repo.full_name}; some files could not be "
+                            f"enumerated and were not indexed."
+                        ),
+                    )
+
+        file_paths = checkpoint.file_paths
+        page = checkpoint.curr_page
+        batch = file_paths[page * FILE_BATCH_SIZE : (page + 1) * FILE_BATCH_SIZE]
+        checkpoint.curr_page += 1
+
+        for path in batch:
+            html_url = f"{repo.html_url}/blob/{repo.default_branch}/{path}"
+            if is_slim:
+                yield Document(
+                    id=html_url,
+                    sections=[],
+                    external_access=repo_external_access,
+                    source=DocumentSource.GITHUB,
+                    semantic_identifier="",
+                    metadata={},
+                )
+                continue
+            try:
+                raw = self._fetch_file_content(repo, path)
+                content_text = _decode_file_content(raw)
+                if content_text is None:
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=html_url,
+                            document_link=html_url,
+                        ),
+                        failure_message=f"Skipping non-text/undecodable file: {path}",
+                    )
+                    continue
+                yield _convert_file_to_document(
+                    repo, path, content_text, repo_external_access
+                )
+            except Exception as e:
+                error_msg = f"Error converting file {path} to document: {e}"
+                logger.exception(error_msg)
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=html_url,
+                        document_link=html_url,
+                    ),
+                    failure_message=error_msg,
+                    exception=e,
+                )
+                continue
+
+        # True if more file batches remain for this repo.
+        return (page + 1) * FILE_BATCH_SIZE < len(file_paths)
+
     def _fetch_from_github(
         self,
         checkpoint: GithubConnectorCheckpoint,
@@ -609,7 +917,7 @@ class GithubConnector(
                 repo, self.github_client
             )
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
-            logger.info(f"Fetching PRs for repo: {repo.name}")
+            logger.info("Fetching PRs for repo: %s", repo.name)
 
             pr_batch = _get_batch_rate_limited(
                 self._pull_requests_func(repo),
@@ -676,7 +984,7 @@ class GithubConnector(
             # In offset mode, while indexing without time constraints, the pr batch
             # will be empty when we're done.
             used_cursor = checkpoint.cursor_url is not None
-            logger.info(f"Fetched {num_prs} PRs for repo: {repo.name}")
+            logger.info("Fetched %s PRs for repo: %s", num_prs, repo.name)
             if num_prs > 0 and not done_with_prs and not used_cursor:
                 return checkpoint
 
@@ -689,10 +997,13 @@ class GithubConnector(
                 # save the checkpoint after changing stage; next run will continue from issues
                 return checkpoint
 
-        checkpoint.stage = GithubConnectorStage.ISSUES
+        # Advance into ISSUES only from PRS — never regress a later stage
+        # (e.g. a resumed FILES checkpoint) back to ISSUES.
+        if checkpoint.stage == GithubConnectorStage.PRS:
+            checkpoint.stage = GithubConnectorStage.ISSUES
 
         if self.include_issues and checkpoint.stage == GithubConnectorStage.ISSUES:
-            logger.info(f"Fetching issues for repo: {repo.name}")
+            logger.info("Fetching issues for repo: %s", repo.name)
 
             issue_batch = list(
                 _get_batch_rate_limited(
@@ -704,7 +1015,7 @@ class GithubConnector(
                     self.github_client,
                 )
             )
-            logger.info(f"Fetched {len(issue_batch)} issues for repo: {repo.name}")
+            logger.info("Fetched %s issues for repo: %s", len(issue_batch), repo.name)
             checkpoint.curr_page += 1
             done_with_issues = False
             num_issues = 0
@@ -753,16 +1064,35 @@ class GithubConnector(
                         )
                         continue
 
-            logger.info(f"Fetched {num_issues} issues for repo: {repo.name}")
+            logger.info("Fetched %s issues for repo: %s", num_issues, repo.name)
             # if we found any issues on the page, and we're not done, return the checkpoint.
             # don't return if we're using cursor-based pagination to avoid infinite loops
             if num_issues > 0 and not done_with_issues and not checkpoint.cursor_url:
                 return checkpoint
 
             # if we went past the start date during the loop or there are no more
-            # issues to get, we move on to the next repo
-            checkpoint.stage = GithubConnectorStage.PRS
+            # issues to get, we move on to indexing files
+            checkpoint.stage = GithubConnectorStage.FILES
             checkpoint.reset()
+
+        # Advance into FILES from PRS/ISSUES, but never regress a resumed FILES
+        # checkpoint (mid file-pagination) — that would null out file_paths and
+        # re-index from page 0.
+        if checkpoint.stage in (
+            GithubConnectorStage.PRS,
+            GithubConnectorStage.ISSUES,
+        ):
+            checkpoint.stage = GithubConnectorStage.FILES
+
+        if self.include_files and checkpoint.stage == GithubConnectorStage.FILES:
+            has_more_file_batches = yield from self._fetch_repo_files(
+                repo, checkpoint, start, is_slim, repo_external_access
+            )
+            # More file batches remain for this repo — checkpoint and resume.
+            if has_more_file_batches:
+                return checkpoint
+
+        # files complete (or disabled) -> fall through to next repo
 
         checkpoint.has_more = len(checkpoint.cached_repo_ids) > 0
         if checkpoint.cached_repo_ids:
@@ -778,7 +1108,9 @@ class GithubConnector(
 
         if checkpoint.cached_repo_ids:
             logger.info(
-                f"{len(checkpoint.cached_repo_ids)} repos remaining (IDs: {checkpoint.cached_repo_ids})"
+                "%s repos remaining (IDs: %s)",
+                len(checkpoint.cached_repo_ids),
+                checkpoint.cached_repo_ids,
             )
         else:
             logger.info("No more repos remaining")
@@ -897,6 +1229,12 @@ class GithubConnector(
                 "Invalid connector settings: 'repo_owner' must be provided."
             )
 
+        if not (self.include_prs or self.include_issues or self.include_files):
+            raise ConnectorValidationError(
+                "Invalid connector settings: at least one of pull requests, "
+                "issues, or files must be selected for indexing."
+            )
+
         try:
             if self.repositories:
                 if "," in self.repositories:
@@ -920,7 +1258,9 @@ class GithubConnector(
                                 f"{self.repo_owner}/{repo_name}"
                             )
                             logger.info(
-                                f"Successfully accessed repository: {self.repo_owner}/{repo_name}"
+                                "Successfully accessed repository: %s/%s",
+                                self.repo_owner,
+                                repo_name,
                             )
                             test_repo.get_contents("")
                             valid_repos = True

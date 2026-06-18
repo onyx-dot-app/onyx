@@ -16,7 +16,6 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-import requests
 
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import InputType
@@ -30,6 +29,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -131,9 +131,9 @@ def test_public_assistant_with_user_files(
     )
 
     # Verify the message was processed without errors
-    assert (
-        response.error is None
-    ), f"Expected no error when user2 uses public assistant with user1's files, but got error: {response.error}"
+    assert response.error is None, (
+        f"Expected no error when user2 uses public assistant with user1's files, but got error: {response.error}"
+    )
     assert len(response.full_message) > 0, "Expected a response from the assistant"
 
     # Verify chat history is accessible
@@ -141,18 +141,23 @@ def test_public_assistant_with_user_files(
         chat_session=chat_session,
         user_performing_action=user_file_setup.user2_non_owner,
     )
-    assert (
-        len(chat_history) >= 2
-    ), "Expected at least 2 messages (user message and assistant response)"
+    assert len(chat_history) >= 2, (
+        "Expected at least 2 messages (user message and assistant response)"
+    )
 
 
-def test_cannot_download_other_users_file_via_chat_file_endpoint(
+def test_public_assistant_attached_file_downloadable_by_non_owner(
     user_file_setup: UserFileTestSetup,
 ) -> None:
+    """A user file attached to a public persona must be downloadable by any
+    user, mirroring the indexing-time ACL in `collect_user_file_access`.
+    Without this, citations to the agent's knowledge files surface in chat
+    but 404 on click. Both URL forms (storage `file_id` and `UserFile.id`)
+    must work because citation links carry the latter."""
     storage_file_id = user_file_setup.user1_file_descriptor["id"]
     user_file_id = user_file_setup.user1_file_id
 
-    owner_response = requests.get(
+    owner_response = client.get(
         f"{API_SERVER_URL}/chat/file/{storage_file_id}",
         headers=user_file_setup.user1_file_owner.headers,
     )
@@ -160,18 +165,117 @@ def test_cannot_download_other_users_file_via_chat_file_endpoint(
     assert owner_response.content, "Owner should receive the file contents"
 
     for file_id in (storage_file_id, user_file_id):
-        user2_response = requests.get(
+        non_owner_response = client.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=user_file_setup.user2_non_owner.headers,
         )
-        assert user2_response.status_code in (
-            403,
-            404,
-        ), (
-            f"Expected access denied for non-owner, got {user2_response.status_code} "
-            f"when fetching file_id={file_id}"
+        assert non_owner_response.status_code == 200, (
+            "Non-owner should be able to download a file attached to a "
+            f"public persona via {file_id=}, got "
+            f"{non_owner_response.status_code}"
         )
-        assert user2_response.content != owner_response.content
+        assert non_owner_response.content == owner_response.content
+
+
+def test_private_persona_attached_file_downloadable_by_shared_user(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """A user file attached to a *private* persona must be downloadable by a
+    user who is on `Persona.users` (directly shared), but still denied for
+    third parties. Mirrors the `Persona__User` branch of the indexing-time
+    ACL in `collect_user_file_access`."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+    LLMProviderManager.create(user_performing_action=admin_user)
+    file_owner: DATestUser = UserManager.create(name="file_owner")
+    shared_user: DATestUser = UserManager.create(name="shared_user")
+    outsider: DATestUser = UserManager.create(name="outsider")
+
+    file_descriptors, error = FileManager.upload_files(
+        files=[("shared.txt", io.BytesIO(b"shared persona file"))],
+        user_performing_action=file_owner,
+    )
+    assert not error, f"Failed to upload file: {error}"
+    storage_file_id = file_descriptors[0]["id"]
+    user_file_id = file_descriptors[0].get("user_file_id")
+    assert user_file_id is not None
+
+    PersonaManager.create(
+        name="Private Shared Assistant",
+        description="Private persona shared with one specific user",
+        is_public=False,
+        users=[shared_user.id],
+        user_file_ids=[user_file_id],
+        user_performing_action=admin_user,
+    )
+
+    owner_response = client.get(
+        f"{API_SERVER_URL}/chat/file/{storage_file_id}",
+        headers=file_owner.headers,
+    )
+    assert owner_response.status_code == 200
+    assert owner_response.content, "Owner should receive the file contents"
+
+    for file_id in (storage_file_id, user_file_id):
+        shared_response = client.get(
+            f"{API_SERVER_URL}/chat/file/{file_id}",
+            headers=shared_user.headers,
+        )
+        assert shared_response.status_code == 200, (
+            "User on Persona.users should be able to download a file "
+            f"attached to the shared private persona via {file_id=}, got "
+            f"{shared_response.status_code}"
+        )
+        assert shared_response.content == owner_response.content
+
+        outsider_response = client.get(
+            f"{API_SERVER_URL}/chat/file/{file_id}",
+            headers=outsider.headers,
+        )
+        assert outsider_response.status_code in (403, 404), (
+            "Outsider not on Persona.users must not access a private "
+            f"persona's attached file via {file_id=}, got "
+            f"{outsider_response.status_code}"
+        )
+        assert outsider_response.content != owner_response.content
+
+
+def test_cannot_download_unattached_file_via_chat_file_endpoint(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Files that are *not* exposed via any accessible persona, public chat
+    session, or chat-image-gen output must still 404 for non-owners. This
+    pins the negative case so the persona-attached relaxation above does not
+    silently grant access to arbitrary files."""
+    admin_user: DATestUser = UserManager.create(name="admin_user")
+    LLMProviderManager.create(user_performing_action=admin_user)
+    owner: DATestUser = UserManager.create(name="owner")
+    intruder: DATestUser = UserManager.create(name="intruder")
+
+    file_descriptors, error = FileManager.upload_files(
+        files=[("private.txt", io.BytesIO(b"private contents"))],
+        user_performing_action=owner,
+    )
+    assert not error, f"Failed to upload file: {error}"
+    storage_file_id = file_descriptors[0]["id"]
+    user_file_id = file_descriptors[0].get("user_file_id")
+    assert user_file_id is not None
+
+    owner_response = client.get(
+        f"{API_SERVER_URL}/chat/file/{storage_file_id}",
+        headers=owner.headers,
+    )
+    assert owner_response.status_code == 200
+
+    for file_id in (storage_file_id, user_file_id):
+        intruder_response = client.get(
+            f"{API_SERVER_URL}/chat/file/{file_id}",
+            headers=intruder.headers,
+        )
+        assert intruder_response.status_code in (403, 404), (
+            f"Expected access denied for non-owner of an unattached file, "
+            f"got {intruder_response.status_code} when fetching file_id={file_id}"
+        )
+        assert intruder_response.content != owner_response.content
 
 
 # -----------------------------------------------------------------------------
@@ -259,7 +363,7 @@ def test_owner_can_download_image_gen_file(
     """The chat session owner must be able to fetch an image-gen file_id stored
     on `ToolCall.generated_images`. Pre-fix, this returned 404 — that 404 is
     the exact regression these tests pin."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
         headers=image_gen_setup.owner.headers,
     )
@@ -278,7 +382,7 @@ def test_non_owner_cannot_download_image_gen_file_in_private_session(
 ) -> None:
     """A non-owner must not be able to read an image-gen file in a PRIVATE
     session — the new branch should not over-grant access."""
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
         headers=image_gen_setup.intruder.headers,
     )
@@ -303,7 +407,7 @@ def test_non_owner_can_download_image_gen_file_in_public_session(
         chat_session.shared_status = ChatSessionSharedStatus.PUBLIC
         db_session.commit()
 
-    response = requests.get(
+    response = client.get(
         f"{API_SERVER_URL}/chat/file/{image_gen_setup.file_id}",
         headers=image_gen_setup.intruder.headers,
     )
@@ -379,7 +483,7 @@ def test_connector_file_is_accessible_via_chat_file_endpoint(
     )
 
     for user in (admin_user, basic_user):
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/file/{storage_id}",
             headers=user.headers,
         )
@@ -416,7 +520,7 @@ def test_connector_file_denied_for_users_without_access(
         file_origin=file_origin,
     )
 
-    basic_response = requests.get(
+    basic_response = client.get(
         f"{API_SERVER_URL}/chat/file/{storage_id}",
         headers=basic_user.headers,
     )
@@ -505,7 +609,7 @@ def test_non_tabular_connector_file_is_accessible_via_chat_file_endpoint(
     _save_non_tabular_file_bytes(file_id, file_origin)
 
     for user in (admin_user, basic_user):
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
             headers=user.headers,
         )
@@ -541,7 +645,7 @@ def test_non_tabular_connector_file_denied_for_users_without_access(
     )
     _save_non_tabular_file_bytes(file_id, file_origin)
 
-    basic_response = requests.get(
+    basic_response = client.get(
         f"{API_SERVER_URL}/chat/file/{file_id}",
         headers=basic_user.headers,
     )

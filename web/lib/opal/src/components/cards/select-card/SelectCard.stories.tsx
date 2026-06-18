@@ -11,14 +11,6 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 import { Interactive } from "@opal/core";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import type { Decorator } from "@storybook/react";
-
-const withTooltipProvider: Decorator = (Story) => (
-  <TooltipPrimitive.Provider>
-    <Story />
-  </TooltipPrimitive.Provider>
-);
 
 const STATES = ["empty", "filled", "selected"] as const;
 const PADDING_VARIANTS = ["fit", "2xs", "xs", "sm", "md", "lg"] as const;
@@ -28,7 +20,7 @@ const meta = {
   title: "opal/components/SelectCard",
   component: SelectCard,
   tags: ["autodocs"],
-  decorators: [withTooltipProvider],
+
   parameters: {
     layout: "centered",
   },
@@ -100,7 +92,7 @@ export const Clickable: Story = {
 
 export const WithActions: Story = {
   render: () => (
-    <div className="flex flex-col gap-4 w-[28rem]">
+    <div className="flex flex-col gap-4 w-112">
       {/* Disconnected */}
       <SelectCard state="empty" onClick={() => {}}>
         <div className="flex flex-row items-stretch w-full">

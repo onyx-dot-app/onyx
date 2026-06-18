@@ -69,7 +69,7 @@ class OnyxDiscordClient(commands.Bot):
             try:
                 await self.cache.refresh_all()
             except Exception as e:
-                logger.error(f"Cache refresh failed: {e}")
+                logger.error("Cache refresh failed: %s", e)
 
     async def on_ready(self) -> None:
         """Bot connected and ready."""
@@ -79,9 +79,11 @@ class OnyxDiscordClient(commands.Bot):
         if not self.user:
             raise RuntimeError("Critical error: Discord Bot user not found")
 
-        logger.info(f"Discord Bot connected as {self.user} (ID: {self.user.id})")
-        logger.info(f"Connected to {len(self.guilds)} guild(s)")
-        logger.info(f"Cached {len(self.cache.get_all_guild_ids())} registered guild(s)")
+        logger.info("Discord Bot connected as %s (ID: %s)", self.user, self.user.id)
+        logger.info("Connected to %s guild(s)", len(self.guilds))
+        logger.info(
+            "Cached %s registered guild(s)", len(self.cache.get_all_guild_ids())
+        )
 
         self.ready = True
 
@@ -158,7 +160,7 @@ class OnyxDiscordClient(commands.Bot):
             # Get API key
             api_key = self.cache.get_api_key(tenant_id)
             if not api_key:
-                logger.warning(f"No API key cached for tenant {tenant_id}")
+                logger.warning("No API key cached for tenant %s", tenant_id)
                 return
 
             # Check if bot should respond
@@ -168,9 +170,11 @@ class OnyxDiscordClient(commands.Bot):
                 return
 
             logger.debug(
-                f"Processing message: '{message.content[:50]}' in "
-                f"#{getattr(message.channel, 'name', 'unknown')} ({message.guild.name}), "
-                f"persona_id={should_respond_context.persona_id}"
+                "Processing message: '%s' in #%s (%s), persona_id=%s",
+                message.content[:50],
+                getattr(message.channel, "name", "unknown"),
+                message.guild.name,
+                should_respond_context.persona_id,
             )
 
             # Process the message
@@ -184,7 +188,7 @@ class OnyxDiscordClient(commands.Bot):
             )
 
         except Exception as e:
-            logger.exception(f"Error processing message: {e}")
+            logger.exception("Error processing message: %s", e)
 
 
 # -----------------------------------------------------------------------------

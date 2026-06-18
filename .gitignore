@@ -2,8 +2,9 @@
 .vscode/*
 !/.vscode/env_template.txt
 !/.vscode/env.web_template.txt
+!/.vscode/.env.k8s.template
 !/.vscode/launch.json
-!/.vscode/tasks.template.jsonc
+!/.vscode/tasks.json
 .zed
 .cursor
 !/.cursor/mcp.json
@@ -62,3 +63,7 @@ plans/
 
 # Added context for LLMs
 .claude/CLAUDE.md
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+!.claude/settings.json

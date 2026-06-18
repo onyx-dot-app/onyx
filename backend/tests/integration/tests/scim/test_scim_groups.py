@@ -17,13 +17,14 @@ Auth tests live in test_scim_tokens.py.
 User lifecycle tests live in test_scim_users.py.
 """
 
+import httpx
 import pytest
-import requests
 
 from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.scim_client import ScimClient
 from tests.integration.common_utils.managers.scim_token import ScimTokenManager
 from tests.integration.common_utils.managers.user import build_email
@@ -119,7 +120,7 @@ def _make_patch_request(operations: list[dict], idp_style: str = "okta") -> dict
     }
 
 
-def _create_scim_user(token: str, email: str, external_id: str) -> requests.Response:
+def _create_scim_user(token: str, email: str, external_id: str) -> httpx.Response:
     return ScimClient.post(
         "/Users", token, json=_make_user_resource(email, external_id)
     )
@@ -130,7 +131,7 @@ def _create_scim_group(
     display_name: str,
     external_id: str | None = None,
     members: list[dict] | None = None,
-) -> requests.Response:
+) -> httpx.Response:
     return ScimClient.post(
         "/Groups",
         token,
@@ -645,7 +646,7 @@ def test_scim_created_group_has_basic_permission(
     admin = UserManager.login_as_user(admin)
 
     # Verify the group itself was granted the basic permission
-    perms_resp = requests.get(
+    perms_resp = client.get(
         f"{API_SERVER_URL}/manage/admin/user-group/{group_id}/permissions",
         headers=admin.headers,
     )

@@ -1,6 +1,8 @@
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/card/styles.css";
 import type {
+  BackgroundVariants,
+  BorderVariants,
   PaddingVariants,
   RoundingVariants,
   SizeVariants,
@@ -17,9 +19,6 @@ import { cn } from "@opal/utils";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type BackgroundVariant = "none" | "light" | "heavy";
-type BorderVariant = "none" | "dashed" | "solid";
 
 /**
  * Props shared by both plain and expandable Card modes.
@@ -54,6 +53,7 @@ type CardBaseProps = {
    * | `"sm"` | `rounded-08` |
    * | `"md"` | `rounded-12` |
    * | `"lg"` | `rounded-16` |
+   * | `"xl"` | `rounded-20` |
    *
    * In expandable mode when expanded, rounding applies only to the header's
    * top corners and the expandedContent's bottom corners so the two join seamlessly.
@@ -71,7 +71,7 @@ type CardBaseProps = {
    *
    * @default "light"
    */
-  background?: BackgroundVariant;
+  background?: BackgroundVariants;
 
   /**
    * Border style.
@@ -81,7 +81,7 @@ type CardBaseProps = {
    *
    * @default "none"
    */
-  border?: BorderVariant;
+  border?: BorderVariants;
 
   /**
    * Border color, drawn from the same status palette as {@link MessageCard}.
@@ -262,4 +262,4 @@ function Card(props: CardProps) {
 // Exports
 // ---------------------------------------------------------------------------
 
-export { Card, type CardProps, type BackgroundVariant, type BorderVariant };
+export { Card, type CardProps };

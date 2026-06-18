@@ -3,7 +3,7 @@
 import { Button, Card } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgPlusCircle } from "@opal/icons";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn } from "@opal/components";
 
 interface AdminListHeaderProps {
   /** Whether items exist — controls search bar vs empty-state card. */
@@ -59,10 +59,14 @@ export default function AdminListHeader({
   onAction,
   actionLabel,
 }: AdminListHeaderProps) {
+  // Pin the button to its label width — the flexible sibling (search input /
+  // empty-state text) absorbs the row shrink; otherwise the button clips its label.
   const actionButton = (
-    <Button rightIcon={SvgPlusCircle} onClick={onAction}>
-      {actionLabel}
-    </Button>
+    <div className="shrink-0">
+      <Button rightIcon={SvgPlusCircle} onClick={onAction}>
+        {actionLabel}
+      </Button>
+    </div>
   );
 
   if (!hasItems) {
@@ -73,7 +77,7 @@ export default function AdminListHeader({
             title={emptyStateText}
             sizePreset="main-ui"
             variant="body"
-            prominence="muted"
+            color="muted"
             width="fit"
           />
           {actionButton}
@@ -86,11 +90,10 @@ export default function AdminListHeader({
     <div className="flex flex-row gap-3 items-center px-2 pb-3">
       <InputTypeIn
         variant="internal"
-        leftSearchIcon
+        searchIcon
         placeholder={placeholder}
         value={searchQuery}
         onChange={(e) => onSearchQueryChange(e.target.value)}
-        showClearButton={false}
       />
       {actionButton}
     </div>

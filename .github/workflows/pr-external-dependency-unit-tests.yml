@@ -14,6 +14,7 @@ on:
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
       - ".github/actions/setup-playwright/**"
+      - ".github/actions/login-ecr-pullthrough-cache/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
   push:
@@ -24,6 +25,8 @@ permissions:
   contents: read
 
 env:
+  SANDBOX_BACKEND: "docker"
+
   # AWS credentials for S3-specific test
   S3_AWS_ACCESS_KEY_ID_FOR_TEST: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
   S3_AWS_SECRET_ACCESS_KEY_FOR_TEST: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}
@@ -59,7 +62,7 @@ jobs:
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
-    timeout-minutes: 45
+    timeout-minutes: 5
     outputs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
@@ -83,7 +86,7 @@ jobs:
       - runner=2cpu-linux-arm64
       - ${{ format('run-id={0}-external-dependency-unit-tests-job-{1}', github.run_id, strategy['job-index']) }}
       - extras=s3-cache
-    timeout-minutes: 45
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -95,7 +98,7 @@ jobs:
       DISABLE_TELEMETRY: "true"
 
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -113,21 +116,16 @@ jobs:
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
 
-      # needed for pulling Vespa, Redis, Postgres, and Minio images
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Create .env file for Docker Compose
         run: |
           cat <<EOF > deployment/docker_compose/.env
-          COMPOSE_PROFILES=s3-filestore,opensearch-enabled
+          COMPOSE_PROFILES=s3-filestore
           DISABLE_TELEMETRY=true
-          OPENSEARCH_FOR_ONYX_ENABLED=true
           EOF
 
       - name: Set up Standard Dependencies
@@ -140,7 +138,6 @@ jobs:
             minio \
             relational_db \
             cache \
-            index \
             opensearch \
             code-interpreter
 
@@ -161,6 +158,7 @@ jobs:
             -o junit_family=xunit2 \
             -xv \
             --ff \
+            -m "not nightly" \
             backend/tests/external_dependency_unit/${TEST_DIR}
 
       - name: Collect Docker logs on failure

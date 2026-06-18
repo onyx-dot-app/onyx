@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 import { SvgLock, SvgArrowRight } from "@opal/icons";
 import { logout } from "@/lib/user";
 import { cn } from "@opal/utils";
@@ -38,7 +38,7 @@ export default function NoLlmProvidersModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-xs" />
 
       {/* Modal */}
       <div className="relative z-10 w-full max-w-xl mx-4 bg-background-tint-01 rounded-16 shadow-lg border border-border-01">
@@ -51,15 +51,15 @@ export default function NoLlmProvidersModal({
             </div>
 
             {/* Header */}
-            <div className="flex flex-col items-center gap-2 text-center">
-              <Text headingH2 text05>
+            <div className="flex flex-col items-center gap-2 text-center max-w-sm">
+              <Text font="heading-h2" color="text-05">
                 LLM Provider Required
               </Text>
-              <Text mainUiBody text03 className="max-w-sm">
+              <Text font="main-ui-body" color="text-03">
                 Onyx Craft requires an LLM provider to be configured, but only
                 admins can set this up.
-                <br />
-                <br />
+              </Text>
+              <Text font="main-ui-body" color="text-03">
                 Please ask your admin to configure an LLM provider, or create a
                 new Onyx account to become an admin yourself!
               </Text>
@@ -73,7 +73,9 @@ export default function NoLlmProvidersModal({
               onClick={onClose}
               className="flex items-center gap-1.5 px-4 py-2 rounded-12 border border-border-01 bg-background-tint-00 text-text-04 hover:bg-background-tint-02 transition-colors"
             >
-              <Text mainUiAction>Go Back</Text>
+              <Text font="main-ui-action" color="text-05">
+                Go Back
+              </Text>
             </button>
             <button
               type="button"
@@ -87,10 +89,8 @@ export default function NoLlmProvidersModal({
               )}
             >
               <Text
-                mainUiAction
-                className={cn(
-                  !isLoading ? "text-white dark:text-black" : "text-text-02"
-                )}
+                font="main-ui-action"
+                color={!isLoading ? "text-inverted-05" : "text-02"}
               >
                 {isLoading ? "Signing out..." : "Create a new account"}
               </Text>

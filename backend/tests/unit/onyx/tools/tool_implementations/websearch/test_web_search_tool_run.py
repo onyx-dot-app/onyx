@@ -128,9 +128,9 @@ class TestWebSearchToolRunQueryCoercion:
 
         dispatched = _run(tool, "hi")
         for query_arg in dispatched:
-            assert (
-                len(query_arg) > 1
-            ), f"Single-character query dispatched: {query_arg!r}"
+            assert len(query_arg) > 1, (
+                f"Single-character query dispatched: {query_arg!r}"
+            )
 
     def test_control_characters_sanitized_before_dispatch(self) -> None:
         """Queries with control chars have those chars removed before dispatch."""

@@ -73,7 +73,7 @@ def _create_image_section(
         )
         return section, stored_file_name
     except Exception as e:
-        logger.error(f"Failed to store image {display_name}: {e}")
+        logger.error("Failed to store image %s: %s", display_name, e)
         raise e
 
 
@@ -98,7 +98,7 @@ def _process_file(
 
     if extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
         logger.warning(
-            f"Skipping file '{file_name}' with unrecognized extension '{extension}'"
+            "Skipping file '%s' with unrecognized extension '%s'", file_name, extension
         )
         return []
 
@@ -121,7 +121,7 @@ def _process_file(
         # Read the image data
         image_data = file.read()
         if not image_data:
-            logger.warning(f"Empty image file: {file_name}")
+            logger.warning("Empty image file: %s", file_name)
             return []
 
         # Create an ImageSection for the image
@@ -147,7 +147,7 @@ def _process_file(
                 )
             ]
         except Exception as e:
-            logger.error(f"Failed to process image file {file_name}: {e}")
+            logger.error("Failed to process image file %s: %s", file_name, e)
             return []
 
     # 2) Otherwise: text-based approach. Possibly with embedded images.
@@ -165,7 +165,9 @@ def _process_file(
     # If so, we should add it to any metadata processed so far
     if extraction_result.metadata:
         logger.debug(
-            f"Found file-specific metadata for {file_name}: {extraction_result.metadata}"
+            "Found file-specific metadata for %s: %s",
+            file_name,
+            extraction_result.metadata,
         )
         onyx_metadata, more_custom_tags = process_onyx_metadata(
             extraction_result.metadata
@@ -218,13 +220,13 @@ def _process_file(
                 )
             )
         except Exception as e:
-            logger.error(f"Failed to process tabular file {file_name}: {e}")
+            logger.error("Failed to process tabular file %s: %s", file_name, e)
             return []
         if not sections:
-            logger.warning(f"No content extracted from tabular file {file_name}")
+            logger.warning("No content extracted from tabular file %s", file_name)
             return []
     elif extraction_result.text_content.strip():
-        logger.debug(f"Creating TextSection for {file_name} with link: {link}")
+        logger.debug("Creating TextSection for %s with link: %s", file_name, link)
         sections.append(
             TextSection(link=link, text=extraction_result.text_content.strip())
         )
@@ -245,11 +247,14 @@ def _process_file(
             )
             sections.append(image_section)
             logger.debug(
-                f"Created ImageSection for embedded image {idx} in {file_name}, stored as: {stored_file_name}"
+                "Created ImageSection for embedded image %s in %s, stored as: %s",
+                idx,
+                file_name,
+                stored_file_name,
             )
         except Exception as e:
             logger.warning(
-                f"Failed to process embedded image {idx} in {file_name}: {e}"
+                "Failed to process embedded image %s in %s: %s", idx, file_name, e
             )
 
     return [
@@ -319,7 +324,7 @@ class LocalFileConnector(LoadConnector):
                 else:
                     zip_metadata = loaded_metadata
             except Exception as e:
-                logger.warning(f"Failed to load metadata from file store: {e}")
+                logger.warning("Failed to load metadata from file store: %s", e)
         elif self._zip_metadata_deprecated:
             logger.warning(
                 "Using deprecated inline zip_metadata dict. Re-upload files to use the new file store format."
@@ -333,7 +338,9 @@ class LocalFileConnector(LoadConnector):
             file_record = file_store.read_file_record(file_id=file_id)
             if not file_record:
                 # typically an unsupported extension
-                logger.warning(f"No file record found for '{file_id}' in PG; skipping.")
+                logger.warning(
+                    "No file record found for '%s' in PG; skipping.", file_id
+                )
                 continue
 
             metadata = zip_metadata.get(

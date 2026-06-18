@@ -2,9 +2,9 @@ import os
 from functools import lru_cache
 
 import requests
-from retry import retry
 
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import MODEL_SERVER_HOST
@@ -31,11 +31,13 @@ def _get_gpu_status_from_model_server(indexing: bool) -> bool:
         gpu_status = response.json()
         return gpu_status["gpu_available"]
     except requests.RequestException as e:
-        logger.error(f"Error: Unable to fetch GPU status. Error: {str(e)}")
+        logger.error("Error: Unable to fetch GPU status. Error: %s", str(e))
         raise  # Re-raise exception to trigger a retry
 
 
-@retry(tries=5, delay=5)
+# backoff=1 + jitter=0 preserve the constant 5s delay this had under the
+# legacy `retry` package
+@retry_builder(tries=5, delay=5, backoff=1, jitter=0)
 def gpu_status_request(indexing: bool) -> bool:
     return _get_gpu_status_from_model_server(indexing)
 

@@ -1,22 +1,19 @@
 "use client";
 
 import { useMemo, useCallback } from "react";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { usePinnedAgents, useAgent } from "@/hooks/useAgents";
+import { usePinnedAgents, useAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import {
-  checkUserOwnsAgent,
-  updateAgentSharedStatus,
-  updateAgentFeaturedStatus,
-} from "@/lib/agents";
+import { checkUserCanEditAgent, checkUserOwnsAgent } from "@/lib/agents/utils";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 import { useUser } from "@/providers/UserProvider";
 import {
   SvgActions,
@@ -31,14 +28,13 @@ import {
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import AgentViewerModal from "@/sections/modals/AgentViewerModal";
-import { toast } from "@/hooks/useToast";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 
 export interface AgentCardProps {
-  agent: MinimalPersonaSnapshot;
+  agent: MinimalAgent;
 }
 
 export default function AgentCard({ agent }: AgentCardProps) {
@@ -49,13 +45,13 @@ export default function AgentCard({ agent }: AgentCardProps) {
     () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
     [agent.id, pinnedAgents]
   );
-  const { user, isAdmin, isCurator } = useUser();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const canUpdateFeaturedStatus = isAdmin || isCurator;
+  const { user } = useUser();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const isOwnedByUser = checkUserOwnsAgent(user, agent);
+  const canEditAgent = checkUserCanEditAgent(user, agent);
   const shareAgentModal = useCreateModal();
   const agentViewerModal = useCreateModal();
-  const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
+  const { agent: fullAgent } = useAgent(agent.id);
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -65,63 +61,11 @@ export default function AgentCard({ agent }: AgentCardProps) {
     route({ agentId: agent.id });
   }, [pinned, togglePinnedAgent, agent, route]);
 
-  const handleShare = useCallback(
-    async (
-      userIds: string[],
-      groupIds: number[],
-      isPublic: boolean,
-      isFeatured: boolean,
-      labelIds: number[]
-    ) => {
-      const shareError = await updateAgentSharedStatus(
-        agent.id,
-        userIds,
-        groupIds,
-        isPublic,
-        isPaidEnterpriseFeaturesEnabled,
-        labelIds
-      );
-
-      if (shareError) {
-        toast.error(`Failed to share agent: ${shareError}`);
-        return;
-      }
-
-      if (canUpdateFeaturedStatus) {
-        const featuredError = await updateAgentFeaturedStatus(
-          agent.id,
-          isFeatured
-        );
-        if (featuredError) {
-          toast.error(`Failed to update featured status: ${featuredError}`);
-          refreshAgent();
-          return;
-        }
-      }
-
-      refreshAgent();
-      shareAgentModal.toggle(false);
-    },
-    [
-      agent.id,
-      canUpdateFeaturedStatus,
-      isPaidEnterpriseFeaturesEnabled,
-      refreshAgent,
-    ]
-  );
-
   return (
     <>
       <shareAgentModal.Provider>
-        <ShareAgentModal
-          agentId={agent.id}
-          userIds={fullAgent?.users?.map((u) => u.id) ?? []}
-          groupIds={fullAgent?.groups ?? []}
-          isPublic={fullAgent?.is_public ?? false}
-          isFeatured={fullAgent?.is_featured ?? false}
-          labelIds={fullAgent?.labels?.map((l) => l.id) ?? []}
-          onShare={handleShare}
-        />
+        {/* Saved agents persist sharing inside the dialog itself */}
+        <ShareAgentModal agentId={agent.id} />
       </shareAgentModal.Provider>
 
       <agentViewerModal.Provider>
@@ -138,14 +82,14 @@ export default function AgentCard({ agent }: AgentCardProps) {
           height="full"
           className="radial-00 hover:shadow-00"
         >
-          <div className="flex self-stretch h-[6rem]">
+          <div className="flex self-stretch h-24">
             <CardItemLayout
               icon={(props) => <AgentAvatar agent={agent} {...props} />}
               title={agent.name}
               description={agent.description}
               rightChildren={
                 <>
-                  {isOwnedByUser && isPaidEnterpriseFeaturesEnabled && (
+                  {isOwnedByUser && businessTier && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgBarChart}
@@ -157,7 +101,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
-                  {isOwnedByUser && (
+                  {canEditAgent && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgEdit}
@@ -169,7 +113,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
-                  {isOwnedByUser && (
+                  {canEditAgent && (
                     // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
                     <IconButton
                       icon={SvgShare}
@@ -203,7 +147,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 title={agent.owner?.email || "Onyx"}
                 sizePreset="secondary"
                 variant="body"
-                prominence="muted"
+                color="muted"
               />
               <Content
                 icon={SvgActions}
@@ -216,7 +160,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 }
                 sizePreset="secondary"
                 variant="body"
-                prominence="muted"
+                color="muted"
               />
             </div>
 

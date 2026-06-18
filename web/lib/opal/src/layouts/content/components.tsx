@@ -1,8 +1,9 @@
+"use client";
+
 import "@opal/layouts/content/styles.css";
 import {
   ContentSm,
   type ContentSmOrientation,
-  type ContentSmProminence,
 } from "@opal/layouts/content/ContentSm";
 import {
   ContentXl,
@@ -17,7 +18,7 @@ import {
   type ContentMdProps,
 } from "@opal/layouts/content/ContentMd";
 import type { TagProps } from "@opal/components";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { ColorTypes, IconFunctionComponent, RichStr } from "@opal/types";
 import { widthVariants } from "@opal/shared";
 import type { ExtremaSizeVariants } from "@opal/types";
 
@@ -44,6 +45,9 @@ interface ContentBaseProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
+  /** Clamp the description to N lines. Maps to Text's maxLines prop. */
+  descriptionMaxLines?: number;
+
   /** Enable inline editing of the title. */
   editable?: boolean;
 
@@ -52,7 +56,6 @@ interface ContentBaseProps {
 
   /**
    * Width preset controlling the component's horizontal size.
-   * Uses the shared `WidthVariant` scale from `@opal/shared`.
    *
    * - `"auto"` — Shrink-wraps to content width
    * - `"fit"` — Shrink-wraps to content width
@@ -63,15 +66,17 @@ interface ContentBaseProps {
   width?: ExtremaSizeVariants;
 
   /**
-   * Opt out of the automatic interactive color override.
+   * Color mode for the icon + title pair.
    *
-   * When `Content` is nested inside an `.interactive` element, its title and
-   * icon colors are normally overridden by the interactive foreground palette.
-   * Set this to `true` to keep Content's own colors regardless of context.
+   * - `"default"` — `text-04` for both icon and title
+   * - `"muted"` — `text-03` for both
+   * - `"danger"` — `status-error-05` for both
+   * - `"interactive"` — inherits from the parent `.interactive` element's
+   *   `--interactive-foreground` / `--interactive-foreground-icon` variables
    *
-   * @default false
+   * @default "default"
    */
-  nonInteractive?: boolean;
+  color?: ColorTypes;
 
   /** Ref forwarded to the root `<div>` of the resolved layout. */
   ref?: React.Ref<HTMLDivElement>;
@@ -108,6 +113,8 @@ type MdContentProps = ContentBaseProps & {
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
   /** Tag rendered beside the title. */
   tag?: TagProps;
+  /** Let the title wrap to multiple lines instead of truncating to one. */
+  titleWrap?: boolean;
 };
 
 /** ContentSm does not support descriptions or inline editing. */
@@ -119,8 +126,6 @@ type SmContentProps = Omit<
   variant: "body";
   /** Layout orientation. Default: `"inline"`. */
   orientation?: ContentSmOrientation;
-  /** Title prominence. Default: `"default"`. */
-  prominence?: ContentSmProminence;
 };
 
 type ContentProps =
@@ -138,7 +143,7 @@ function Content(props: ContentProps) {
     sizePreset = "headline",
     variant = "heading",
     width = "full",
-    nonInteractive,
+    color = "default",
     ref,
     ...rest
   } = props;
@@ -199,10 +204,7 @@ function Content(props: ContentProps) {
     );
 
   return (
-    <div
-      className={widthVariants[width]}
-      data-opal-non-interactive={nonInteractive || undefined}
-    >
+    <div className={widthVariants[width]} data-content-color={color}>
       {layout}
     </div>
   );

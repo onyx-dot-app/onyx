@@ -3,11 +3,8 @@
 **Import:** `import { Disabled } from "@opal/core";`
 
 Wrapper component that applies baseline disabled CSS (opacity, cursor, pointer-events) to its
-child element. Uses Radix `Slot` to merge props onto the single child element without adding any
-DOM node. Supports an optional `tooltip` prop and `allowClick` to re-enable pointer events.
-
-**Note:** The child must be a single DOM element (not a React component). Radix `Slot` cannot
-merge data-attributes onto React component children.
+children. Renders a `<div>` with the `data-opal-disabled` attribute so styling cascades into all
+descendants. Works with any children — DOM elements, React components, or fragments.
 
 ## Props
 
@@ -22,6 +19,7 @@ merge data-attributes onto React component children.
 
 | Selector | Effect |
 |----------|--------|
+| `.opal-disabled` | `self-stretch` (wrapper stretches to fill parent cross-axis) |
 | `[data-opal-disabled]` | `cursor-not-allowed`, `select-none`, `pointer-events: none` |
 | `[data-opal-disabled]:not(.interactive)` | `opacity-50` (non-Interactive elements only) |
 | `[data-opal-disabled].interactive` | `pointer-events: auto` (Interactive elements handle their own disabled colors) |
@@ -32,16 +30,16 @@ merge data-attributes onto React component children.
 ```tsx
 // Basic — disables children visually and blocks pointer events
 <Disabled disabled={!canSubmit}>
-  <div>Content</div>
+  <Card>Content</Card>
 </Disabled>
 
 // With tooltip — explains why the section is disabled
 <Disabled disabled={!canSubmit} tooltip="Complete the form first">
-  <div>Content</div>
+  <Card>Content</Card>
 </Disabled>
 
 // With allowClick — keeps pointer events for custom handling
 <Disabled disabled={isProcessing} allowClick>
-  <div>...</div>
+  <MyInputBar />
 </Disabled>
 ```

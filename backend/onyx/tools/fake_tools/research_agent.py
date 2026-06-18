@@ -18,6 +18,7 @@ from onyx.chat.llm_step import run_llm_step_pkt_generator
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.models import LlmStepResult
 from onyx.chat.models import ToolCallSimple
+from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.dr_mock_tools import (
@@ -139,7 +140,7 @@ def generate_intermediate_report(
             max_tokens=MAX_INTERMEDIATE_REPORT_LENGTH_TOKENS,
             use_existing_tab_index=True,
             is_deep_research=True,
-            timeout_override=300,  # 5 minute read timeout for long report generation
+            timeout_override=DR_REPORT_LLM_TIMEOUT_S,
         )
 
         while True:
@@ -260,8 +261,9 @@ def run_research_agent_call(
                 elapsed_seconds = time.monotonic() - start_time
                 if elapsed_seconds > RESEARCH_AGENT_FORCE_REPORT_SECONDS:
                     logger.info(
-                        f"Research agent exceeded {RESEARCH_AGENT_FORCE_REPORT_SECONDS}s "
-                        f"(elapsed: {elapsed_seconds:.1f}s), forcing intermediate report generation"
+                        "Research agent exceeded %ss (elapsed: %ss), forcing intermediate report generation",
+                        RESEARCH_AGENT_FORCE_REPORT_SECONDS,
+                        format(elapsed_seconds, ".1f"),
                     )
                     break
 
@@ -608,7 +610,7 @@ def run_research_agent_call(
             )
 
         except Exception as e:
-            logger.error(f"Error running research agent call: {e}")
+            logger.error("Error running research agent call: %s", e)
             emitter.emit(
                 Packet(
                     placement=Placement(turn_index=turn_index, tab_index=tab_index),
@@ -633,7 +635,9 @@ def _on_research_agent_timeout(
         RESEARCH_AGENT_TASK_KEY, "unknown"
     )
     logger.warning(
-        f"Research agent timed out after {RESEARCH_AGENT_TIMEOUT_SECONDS} seconds for task: {research_task}"
+        "Research agent timed out after %s seconds for task: %s",
+        RESEARCH_AGENT_TIMEOUT_SECONDS,
+        research_task,
     )
     return ResearchAgentCallResult(
         intermediate_report=RESEARCH_AGENT_TIMEOUT_MESSAGE,
@@ -762,9 +766,9 @@ if __name__ == "__main__":
             if tool.name != "generate_image"
         ]
 
-        logger.info(f"Running research agent with prompt: {RESEARCH_PROMPT}")
-        logger.info(f"LLM: {llm.config.model_provider}/{llm.config.model_name}")
-        logger.info(f"Tools: {[t.name for t in tools]}")
+        logger.info("Running research agent with prompt: %s", RESEARCH_PROMPT)
+        logger.info("LLM: %s/%s", llm.config.model_provider, llm.config.model_name)
+        logger.info("Tools: %s", [t.name for t in tools])
 
         result = run_research_agent_call(
             research_agent_call=ToolCallKickoff(

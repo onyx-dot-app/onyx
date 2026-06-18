@@ -6,6 +6,7 @@ from typing import Optional
 import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import GenerateDocumentsOutput
@@ -53,7 +54,10 @@ class ClickupConnector(LoadConnector, PollConnector):
         headers = {"Authorization": self.api_token}
 
         response = requests.get(
-            f"{CLICKUP_API_BASE_URL}/{endpoint}", headers=headers, params=params
+            f"{CLICKUP_API_BASE_URL}/{endpoint.lstrip('/')}",
+            headers=headers,
+            params=params,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         response.raise_for_status()
@@ -61,7 +65,7 @@ class ClickupConnector(LoadConnector, PollConnector):
         return response.json()
 
     def _get_task_comments(self, task_id: str) -> list[TextSection]:
-        url_endpoint = f"/task/{task_id}/comment"
+        url_endpoint = f"task/{task_id}/comment"
         response = self._make_request(url_endpoint)
         comments = [
             TextSection(
@@ -100,7 +104,7 @@ class ClickupConnector(LoadConnector, PollConnector):
         elif self.connector_type == "space":
             params["space_ids[]"] = self.connector_ids  # ty: ignore[invalid-assignment]
 
-        url_endpoint = f"/team/{self.team_id}/task"
+        url_endpoint = f"team/{self.team_id}/task"
 
         while True:
             response = self._make_request(url_endpoint, params)

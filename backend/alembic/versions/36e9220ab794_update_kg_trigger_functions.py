@@ -28,7 +28,6 @@ def _get_tenant_contextvar(session: Session) -> str:
 
 
 def upgrade() -> None:
-
     bind = op.get_bind()
     session = Session(bind=bind)
 
@@ -38,8 +37,7 @@ def upgrade() -> None:
     truncate_length = 1000
     function = "update_kg_entity_name"
     op.execute(
-        text(
-            f"""
+        text(f"""
             CREATE OR REPLACE FUNCTION "{tenant_id}".{function}()
             RETURNS TRIGGER AS $$
             DECLARE
@@ -70,26 +68,22 @@ def upgrade() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-            """
-        )
+            """)
     )
     trigger = f"{function}_trigger"
     op.execute(f'DROP TRIGGER IF EXISTS {trigger} ON "{tenant_id}".kg_entity')
-    op.execute(
-        f"""
+    op.execute(f"""
         CREATE TRIGGER {trigger}
             BEFORE INSERT OR UPDATE OF name
             ON "{tenant_id}".kg_entity
             FOR EACH ROW
             EXECUTE FUNCTION "{tenant_id}".{function}();
-        """
-    )
+        """)
 
     # Create kg_entity trigger to update kg_entity.name and its trigrams
     function = "update_kg_entity_name_from_doc"
     op.execute(
-        text(
-            f"""
+        text(f"""
             CREATE OR REPLACE FUNCTION "{tenant_id}".{function}()
             RETURNS TRIGGER AS $$
             DECLARE
@@ -116,20 +110,17 @@ def upgrade() -> None:
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
-            """
-        )
+            """)
     )
     trigger = f"{function}_trigger"
     op.execute(f'DROP TRIGGER IF EXISTS {trigger} ON "{tenant_id}".document')
-    op.execute(
-        f"""
+    op.execute(f"""
         CREATE TRIGGER {trigger}
             AFTER UPDATE OF semantic_id
             ON "{tenant_id}".document
             FOR EACH ROW
             EXECUTE FUNCTION "{tenant_id}".{function}();
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

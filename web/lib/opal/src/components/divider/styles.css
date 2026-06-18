@@ -1,3 +1,5 @@
+@reference "#reference.css";
+
 /* ---------------------------------------------------------------------------
    Divider
 
@@ -34,11 +36,15 @@
 /* ── Vertical orientation ───────────────────────────────────────────────────── */
 
 .opal-divider-vertical {
-  @apply flex flex-row h-full;
+  /* self-stretch overrides items-center on the parent so the divider spans
+     the full cross-axis height of the flex container. */
+  @apply flex flex-row self-stretch;
 }
 
 .opal-divider-line-vertical {
-  @apply flex-1 w-px bg-border-01;
+  /* flex-1 in a flex-row grows horizontally — use w-px alone and let the
+     default align-items:stretch fill the outer div's height. */
+  @apply w-px bg-border-01;
 }
 
 /* ── Foldable chevron ───────────────────────────────────────────────────────── */

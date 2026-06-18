@@ -27,6 +27,8 @@ import httpx
 from fastapi import APIRouter
 from fastapi import Depends
 from pydantic import BaseModel
+from pydantic import ValidationError
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.license import get_license
@@ -36,6 +38,7 @@ from ee.onyx.server.billing.models import CreateCheckoutSessionRequest
 from ee.onyx.server.billing.models import CreateCheckoutSessionResponse
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionRequest
 from ee.onyx.server.billing.models import CreateCustomerPortalSessionResponse
+from ee.onyx.server.billing.models import EndTrialResponse
 from ee.onyx.server.billing.models import SeatUpdateRequest
 from ee.onyx.server.billing.models import SeatUpdateResponse
 from ee.onyx.server.billing.models import StripePublishableKeyResponse
@@ -46,6 +49,7 @@ from ee.onyx.server.billing.service import (
 from ee.onyx.server.billing.service import (
     create_customer_portal_session as create_portal_service,
 )
+from ee.onyx.server.billing.service import end_trial as end_trial_service
 from ee.onyx.server.billing.service import (
     get_billing_information as get_billing_service,
 )
@@ -59,7 +63,9 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_shared_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -78,6 +84,13 @@ BILLING_CIRCUIT_BREAKER_KEY = "billing_circuit_open"
 # Circuit breaker auto-expires after 1 hour (user can manually retry sooner)
 BILLING_CIRCUIT_BREAKER_TTL_SECONDS = 3600
 
+# Cache for /billing-information responses. Self-hosted instances hit this
+# admin endpoint on every billing-page load, which in turn proxies to the
+# cloud data plane. A short shared Redis cache absorbs the polling without
+# affecting Stripe-driven invalidation (handled by /seats/update + webhooks).
+BILLING_INFO_CACHE_KEY = "billing-information:v1"
+BILLING_INFO_CACHE_TTL_SECONDS = 300
+
 
 def _is_billing_circuit_open() -> bool:
     """Check if the billing circuit breaker is open (self-hosted only)."""
@@ -87,11 +100,13 @@ def _is_billing_circuit_open() -> bool:
         redis_client = get_shared_redis_client()
         is_open = bool(redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY))
         logger.debug(
-            f"Circuit breaker check: key={BILLING_CIRCUIT_BREAKER_KEY}, is_open={is_open}"
+            "Circuit breaker check: key=%s, is_open=%s",
+            BILLING_CIRCUIT_BREAKER_KEY,
+            is_open,
         )
         return is_open
     except Exception as e:
-        logger.error(f"Failed to check circuit breaker: {e}")
+        logger.error("Failed to check circuit breaker: %s", e)
         return False
 
 
@@ -109,11 +124,12 @@ def _open_billing_circuit() -> None:
         # Verify it was set
         exists = redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY)
         logger.warning(
-            f"Billing circuit breaker opened (TTL={BILLING_CIRCUIT_BREAKER_TTL_SECONDS}s, "
-            f"verified={exists}). Stripe billing requests are disabled until manually reset."
+            "Billing circuit breaker opened (TTL=%ss, verified=%s). Stripe billing requests are disabled until manually reset.",
+            BILLING_CIRCUIT_BREAKER_TTL_SECONDS,
+            exists,
         )
     except Exception as e:
-        logger.error(f"Failed to open circuit breaker: {e}")
+        logger.error("Failed to open circuit breaker: %s", e)
 
 
 def _close_billing_circuit() -> None:
@@ -127,7 +143,7 @@ def _close_billing_circuit() -> None:
             "Billing circuit breaker closed. Stripe billing requests re-enabled."
         )
     except Exception as e:
-        logger.error(f"Failed to close circuit breaker: {e}")
+        logger.error("Failed to close circuit breaker: %s", e)
 
 
 def _get_license_data(db_session: Session) -> str | None:
@@ -179,7 +195,7 @@ async def create_checkout_session(
     # Build redirect URL for after checkout completion
     redirect_url = f"{WEB_DOMAIN}/admin/billing?checkout=success"
 
-    return await create_checkout_service(
+    result = await create_checkout_service(
         billing_period=billing_period,
         seats=seats,
         email=email,
@@ -187,6 +203,12 @@ async def create_checkout_session(
         redirect_url=redirect_url,
         tenant_id=tenant_id,
     )
+
+    # Force the next /billing-information read to hit the live service so the
+    # post-checkout subscription snapshot isn't delayed by the cache.
+    _invalidate_billing_cache()
+
+    return result
 
 
 @router.post("/create-customer-portal-session")
@@ -212,7 +234,37 @@ async def create_customer_portal_session(
         license_data=license_data,
         return_url=return_url,
         tenant_id=tenant_id,
+        flow_type=request.flow_type if request else None,
     )
+
+
+def _billing_cache_client() -> TenantRedisClient | None:
+    """Best-effort Redis client for the billing-info cache.
+
+    Cloud uses the tenant-prefixed client so cache entries are isolated per
+    tenant. Self-hosted is single-tenant; the shared client is fine.
+    Returns None on any failure so the caller falls through to a live
+    fetch — matches the broad guard used by ``_is_billing_circuit_open``
+    in this same file.
+    """
+    try:
+        if MULTI_TENANT:
+            return get_redis_client(tenant_id=get_current_tenant_id())
+        return get_shared_redis_client()
+    except Exception as exc:
+        logger.warning("Billing info cache client unavailable: %s", exc)
+        return None
+
+
+def _invalidate_billing_cache() -> None:
+    """Drop the cached /billing-information entry. Best-effort."""
+    redis_client = _billing_cache_client()
+    if redis_client is None:
+        return
+    try:
+        redis_client.delete(BILLING_INFO_CACHE_KEY)
+    except RedisError as exc:
+        logger.warning("Billing info cache invalidation failed: %s", exc)
 
 
 @router.get("/billing-information")
@@ -225,6 +277,10 @@ async def get_billing_information(
     Returns subscription status and details from Stripe.
     For self-hosted: If the circuit breaker is open (previous failure),
     returns a 503 error without making the request.
+
+    A 5-minute Redis cache absorbs admin-page polling so each instance does
+    not re-proxy every poll through the cloud data plane. Mutations
+    (`/seats/update`) bust the cache.
     """
     license_data = _get_license_data(db_session)
     tenant_id = _get_tenant_id()
@@ -240,8 +296,26 @@ async def get_billing_information(
             "Stripe connection temporarily disabled. Click 'Connect to Stripe' to retry.",
         )
 
+    redis_client = _billing_cache_client()
+    if redis_client is not None:
+        try:
+            cached = redis_client.get(BILLING_INFO_CACHE_KEY)
+        except RedisError as exc:
+            logger.warning("Billing info cache read failed: %s", exc)
+            cached = None
+        if cached is not None:
+            try:
+                return BillingInformationResponse.model_validate_json(cached)
+            except ValidationError:
+                # Stale schema or partial write — try SubscriptionStatusResponse
+                # before falling through to a live fetch.
+                try:
+                    return SubscriptionStatusResponse.model_validate_json(cached)
+                except ValidationError as exc:
+                    logger.warning("Billing info cache deserialize failed: %s", exc)
+
     try:
-        return await get_billing_service(
+        result = await get_billing_service(
             license_data=license_data,
             tenant_id=tenant_id,
         )
@@ -254,6 +328,18 @@ async def get_billing_information(
         ):
             _open_billing_circuit()
         raise
+
+    if redis_client is not None:
+        try:
+            redis_client.set(
+                BILLING_INFO_CACHE_KEY,
+                result.model_dump_json(),
+                ex=BILLING_INFO_CACHE_TTL_SECONDS,
+            )
+        except RedisError as exc:
+            logger.warning("Billing info cache write failed: %s", exc)
+
+    return result
 
 
 @router.post("/seats/update")
@@ -287,11 +373,46 @@ async def update_seats(
     # Note: Don't store license here - the control plane may still be processing
     # the subscription update. The frontend should call /license/claim after a
     # short delay to get the freshly generated license.
-    return await update_seat_service(
+    result = await update_seat_service(
         new_seat_count=request.new_seat_count,
         license_data=license_data,
         tenant_id=tenant_id,
     )
+
+    # Bust the billing-info cache so the new seat count is visible on the
+    # next /billing-information read.
+    _invalidate_billing_cache()
+
+    return result
+
+
+@router.post("/end-trial")
+async def end_trial(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> EndTrialResponse:
+    """End the current trial immediately and charge the customer's card.
+
+    Cloud-only. The control plane sets `trial_end="now"` on the Stripe
+    subscription; Stripe attempts to charge the attached payment method, and
+    the resulting webhook transitions the subscription to active.
+
+    Returns 402 (forwarded from the control plane) when no payment method is
+    attached. The frontend handles that by routing to the customer portal.
+    """
+    if not MULTI_TENANT:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "End-trial is only available for cloud deployments",
+        )
+
+    tenant_id = _get_tenant_id()
+    result = await end_trial_service(tenant_id=tenant_id)
+
+    # Bust the billing-info cache so the post-trial subscription state is
+    # visible on the next /billing-information read.
+    _invalidate_billing_cache()
+
+    return result
 
 
 @router.get("/stripe-publishable-key")

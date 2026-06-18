@@ -27,6 +27,7 @@ from ee.onyx.server.scim.auth import generate_scim_token
 from ee.onyx.server.scim.models import ScimTokenCreate
 from ee.onyx.server.scim.models import ScimTokenCreatedResponse
 from ee.onyx.server.scim.models import ScimTokenResponse
+from ee.onyx.utils.tier import get_tier
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_user_with_expired_token
 from onyx.auth.users import get_user_manager
@@ -34,7 +35,11 @@ from onyx.auth.users import UserManager
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.settings.models import Tier
+from onyx.server.settings.tier_order import tier_at_least
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -70,7 +75,7 @@ async def refresh_access_token(
     user_manager: UserManager = Depends(get_user_manager),
 ) -> None:
     try:
-        logger.debug(f"Received response from Meechum auth URL for user {user.id}")
+        logger.debug("Received response from Meechum auth URL for user %s", user.id)
 
         # Extract new tokens
         new_access_token = refresh_token.access_token
@@ -81,7 +86,7 @@ async def refresh_access_token(
         )
         expires_at_timestamp = int(new_expiry.timestamp())
 
-        logger.debug(f"Access token has been refreshed for user {user.id}")
+        logger.debug("Access token has been refreshed for user %s", user.id)
 
         await user_manager.oauth_callback(
             oauth_name="custom",
@@ -93,17 +98,19 @@ async def refresh_access_token(
             associate_by_email=True,
         )
 
-        logger.info(f"Successfully refreshed tokens for user {user.id}")
+        logger.info("Successfully refreshed tokens for user %s", user.id)
 
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
-            logger.warning(f"Full authentication required for user {user.id}")
+            logger.warning("Full authentication required for user %s", user.id)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Full authentication required",
             )
         logger.error(
-            f"HTTP error occurred while refreshing token for user {user.id}: {str(e)}"
+            "HTTP error occurred while refreshing token for user %s: %s",
+            user.id,
+            str(e),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -111,7 +118,9 @@ async def refresh_access_token(
         )
     except Exception as e:
         logger.error(
-            f"Unexpected error occurred while refreshing token for user {user.id}: {str(e)}"
+            "Unexpected error occurred while refreshing token for user %s: %s",
+            user.id,
+            str(e),
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -124,6 +133,26 @@ def admin_ee_put_settings(
     settings: EnterpriseSettings,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> None:
+    # Custom help link and Onyx-branding toggle are Enterprise-only. Block
+    # writes to those fields when tier < ENTERPRISE so the FE disabled state
+    # cannot be bypassed by crafting a request. Uses FEATURE_NOT_AVAILABLE
+    # (402) to match the tier_gate middleware shape.
+    if not tier_at_least(get_tier(), Tier.ENTERPRISE):
+        existing = load_settings()
+        if (
+            settings.custom_help_link_url != existing.custom_help_link_url
+            or settings.custom_help_link_label != existing.custom_help_link_label
+        ):
+            raise OnyxError(
+                OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+                "Custom help link requires the Enterprise plan.",
+            )
+        if settings.hide_onyx_branding != existing.hide_onyx_branding:
+            raise OnyxError(
+                OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+                "Hiding Onyx branding requires the Enterprise plan.",
+            )
+
     store_settings(settings)
 
 
@@ -225,11 +254,11 @@ def _get_scim_dal(db_session: Session = Depends(get_session)) -> ScimDAL:
 def get_active_scim_token(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     dal: ScimDAL = Depends(_get_scim_dal),
-) -> ScimTokenResponse:
-    """Return the currently active SCIM token's metadata, or 404 if none."""
+) -> ScimTokenResponse | None:
+    """Return the currently active SCIM token's metadata, or null if none."""
     token = dal.get_active_token()
     if not token:
-        raise HTTPException(status_code=404, detail="No active SCIM token")
+        return None
 
     # Derive the IdP domain from the first synced user as a heuristic.
     idp_domain: str | None = None

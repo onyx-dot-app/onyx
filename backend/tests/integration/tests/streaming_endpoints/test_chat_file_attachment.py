@@ -1,9 +1,8 @@
 import mimetypes
 from typing import Any
 
-import requests
-
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -42,9 +41,9 @@ def test_send_message_with_image_attachment(admin_user: DATestUser) -> None:
 
     # Verify that the message was processed successfully
     assert response.error is None, "Chat response should not have an error"
-    assert (
-        "blue" in response.full_message.lower()
-    ), "Chat response should contain the color of the image"
+    assert "blue" in response.full_message.lower(), (
+        "Chat response should contain the color of the image"
+    )
 
 
 def test_send_message_with_text_file_attachment(admin_user: DATestUser) -> None:
@@ -82,14 +81,14 @@ def test_send_message_with_text_file_attachment(admin_user: DATestUser) -> None:
 
     # Verify that the message was processed successfully
     assert response.error is None, "Chat response should not have an error"
-    assert (
-        "third line" in response.full_message.lower()
-    ), "Chat response should contain the contents of the file"
+    assert "third line" in response.full_message.lower(), (
+        "Chat response should contain the contents of the file"
+    )
 
 
 def _set_token_threshold(admin_user: DATestUser, threshold_k: int) -> None:
     """Set the file token count threshold via admin settings API."""
-    response = requests.put(
+    response = client.put(
         f"{API_SERVER_URL}/admin/settings",
         json={"file_token_count_threshold_k": threshold_k},
         headers=admin_user.headers,
@@ -107,7 +106,7 @@ def _upload_raw(
     headers = user.headers.copy()
     headers.pop("Content-Type", None)
 
-    response = requests.post(
+    response = client.post(
         f"{API_SERVER_URL}/user/projects/file/upload",
         files=[("files", (filename, content, mime_type or "application/octet-stream"))],
         headers=headers,
@@ -128,12 +127,12 @@ def test_csv_over_token_threshold_uploaded_not_indexed(
 
         assert len(result["user_files"]) == 1, "CSV should be accepted"
         assert len(result["rejected_files"]) == 0, "CSV should not be rejected"
-        assert (
-            result["user_files"][0]["status"] == "SKIPPED"
-        ), "CSV over threshold should be SKIPPED (uploaded but not indexed)"
-        assert (
-            result["user_files"][0]["chunk_count"] is None
-        ), "Skipped file should have no chunks"
+        assert result["user_files"][0]["status"] == "SKIPPED", (
+            "CSV over threshold should be SKIPPED (uploaded but not indexed)"
+        )
+        assert result["user_files"][0]["chunk_count"] is None, (
+            "Skipped file should have no chunks"
+        )
     finally:
         _set_token_threshold(admin_user, threshold_k=200)
 
@@ -149,9 +148,9 @@ def test_csv_under_token_threshold_uploaded_and_indexed(
 
         assert len(result["user_files"]) == 1, "CSV should be accepted"
         assert len(result["rejected_files"]) == 0, "CSV should not be rejected"
-        assert (
-            result["user_files"][0]["status"] == "PROCESSING"
-        ), "CSV under threshold should be PROCESSING (queued for indexing)"
+        assert result["user_files"][0]["status"] == "PROCESSING", (
+            "CSV under threshold should be PROCESSING (queued for indexing)"
+        )
     finally:
         _set_token_threshold(admin_user, threshold_k=200)
 

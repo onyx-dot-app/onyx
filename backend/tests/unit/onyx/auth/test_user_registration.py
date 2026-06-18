@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
+from fastapi_users import exceptions
 
 from onyx.auth.schemas import UserCreate
 from onyx.auth.users import UserManager
@@ -139,7 +140,9 @@ class TestDisposableEmailValidation:
 
         # Verify domain validation was called
         mock_verify_domain.assert_called_once_with(
-            mock_user_create.email, is_registration=True
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
         )
 
 
@@ -430,8 +433,54 @@ class TestSeatLimitEnforcement:
     def test_seat_limit_only_enforced_for_self_hosted(self) -> None:
         from onyx.auth.users import enforce_seat_limit
 
-        with patch("onyx.auth.users.MULTI_TENANT", True):
+        # In MULTI_TENANT mode the local seat check is bypassed in favor of
+        # the cloud auto-bill helper. Patch fetch_ee_implementation_or_noop
+        # to the no-op default so the test does not depend on whether the
+        # real EE billing module has been imported by an earlier test.
+        with (
+            patch("onyx.auth.users.MULTI_TENANT", True),
+            patch(
+                "onyx.auth.users.fetch_ee_implementation_or_noop",
+                return_value=lambda **_kw: None,
+            ),
+        ):
             enforce_seat_limit(MagicMock())  # should not raise
+
+    def test_cloud_locked_variant_forwards_session_to_billing(self) -> None:
+        from onyx.auth.users import enforce_seat_limit_locked
+
+        captured: dict = {}
+
+        def fake_cloud_enforce(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        def fake_acquire_lock(*_a: object, **_kw: object) -> None:
+            pass
+
+        def fake_fetch(_module: str, name: str, _default: object) -> object:
+            if name == "acquire_seat_lock":
+                return fake_acquire_lock
+            if name == "enforce_cloud_seat_limit":
+                return fake_cloud_enforce
+            return _default
+
+        db_session = MagicMock()
+        with (
+            patch("onyx.auth.users.MULTI_TENANT", True),
+            patch(
+                "onyx.auth.users.get_current_tenant_id",
+                return_value="tenant_xyz",
+            ),
+            patch(
+                "onyx.auth.users.fetch_ee_implementation_or_noop",
+                side_effect=fake_fetch,
+            ),
+        ):
+            enforce_seat_limit_locked(db_session, seats_needed=2)
+
+        assert captured["db_session"] is db_session
+        assert captured["tenant_id"] == "tenant_xyz"
+        assert captured["seats_needed"] == 2
 
 
 class TestCaseInsensitiveEmailMatching:
@@ -493,7 +542,9 @@ class TestCaseInsensitiveEmailMatching:
 
         # Verify flow
         mock_verify_domain.assert_called_once_with(
-            user_create.email, is_registration=True
+            user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
         )
 
     @patch("onyx.auth.users.is_disposable_email")
@@ -545,6 +596,75 @@ class TestCaseInsensitiveEmailMatching:
 
         # Verify flow
         mock_verify_domain.assert_called_once_with(
-            mock_user_create.email, is_registration=True
+            mock_user_create.email,
+            valid_email_domains=(),
+            is_registration=True,
         )
         mock_verify_invited.assert_called_once()  # Existing tenant = invite needed
+
+
+class TestOAuthDottedGmail:
+    """OAuth account creation must not apply the dotted-Gmail signup block.
+
+    Regression guard for the redirect loop where a dotted-Gmail Google account
+    could never be created (verify_email_domain(is_registration=True) rejected
+    it on every first login), so the user never became "existing".
+    """
+
+    @pytest.mark.asyncio
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    async def test_oauth_create_does_not_block_dotted_gmail(
+        self,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        mock_async_session: MagicMock,
+    ) -> None:
+        dotted_email = "first.last@gmail.com"
+
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+        mock_verify_domain.return_value = None
+
+        user_manager = UserManager(MagicMock())
+        _mock_user_manager_methods(user_manager)
+        setattr(user_manager, "on_after_register", AsyncMock())
+        setattr(
+            user_manager,
+            "get_by_oauth_account",
+            AsyncMock(side_effect=exceptions.UserNotExists()),
+        )
+
+        created_user = MagicMock(id="test-id", email=dotted_email)
+        created_user.oidc_expiry = None
+
+        mock_user_db = MagicMock()
+        mock_user_db.get_by_email = AsyncMock(side_effect=exceptions.UserNotExists())
+        mock_user_db.create = AsyncMock(return_value=created_user)
+        mock_user_db.add_oauth_account = AsyncMock(return_value=MagicMock())
+        mock_user_db.session = MagicMock()
+        mock_user_db.session.run_sync = AsyncMock()
+        user_manager.user_db = mock_user_db
+
+        await user_manager.oauth_callback(
+            oauth_name="google",
+            access_token="token",
+            account_id="acct-123",
+            account_email=dotted_email,
+        )
+
+        # The user was actually created (creation branch reached, not blocked).
+        mock_user_db.create.assert_awaited_once()
+        # No verify_email_domain call on the OAuth path used the signup block.
+        assert mock_verify_domain.call_args_list
+        for call in mock_verify_domain.call_args_list:
+            assert call.kwargs.get("is_registration") is not True

@@ -7,6 +7,12 @@ NUM_RETURNED_HITS = 50
 # May be less depending on model
 MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 
+# Maximum number of LLM cycles (one tool-call round-trip per cycle) before the
+# agent is forced to answer. Default 6 covers the common search → open_url
+# pattern documented at the call site; raise via env when integrating with
+# tool-heavy MCPs that legitimately need more turns.
+MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
+
 # 1 / (1 + DOC_TIME_DECAY * doc-age-in-years), set to 0 to have no decay
 # Capped in Vespa at 0.5
 DOC_TIME_DECAY = float(
@@ -24,6 +30,31 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Max silent gap before the chat stream emits a keepalive packet; must stay below
+# the smallest proxy idle timeout in front (ALBs default to 60s).
+CHAT_HEARTBEAT_INTERVAL_S = int(os.environ.get("CHAT_HEARTBEAT_INTERVAL_S") or "15")
+# Extra attempts when a streaming completion errors before its first chunk.
+# Never retried after partial output.
+LLM_FIRST_CHUNK_MAX_RETRIES = max(
+    0, int(os.environ.get("LLM_FIRST_CHUNK_MAX_RETRIES") or "2")
+)
+# Socket-read timeout for deep-research report calls — bounds inter-chunk gaps
+# (including a zero-chunk stall), not total generation time.
+DR_REPORT_LLM_TIMEOUT_S = int(os.environ.get("DR_REPORT_LLM_TIMEOUT_S") or "60")
+# Live buffer TTL. Refreshed per write.
+CHAT_STREAM_BUFFER_TTL_S = int(os.environ.get("CHAT_STREAM_BUFFER_TTL_S") or 3600)
+# Retention after the run is done.
+CHAT_STREAM_BUFFER_DONE_TTL_S = int(
+    os.environ.get("CHAT_STREAM_BUFFER_DONE_TTL_S") or 600
+)
+# Cap on compressed buffer bytes.
+CHAT_STREAM_BUFFER_MAX_BYTES = int(
+    os.environ.get("CHAT_STREAM_BUFFER_MAX_BYTES") or 16 * 1024 * 1024
+)
+# Resume poll cadence.
+CHAT_RESUME_POLL_INTERVAL_S = float(
+    os.environ.get("CHAT_RESUME_POLL_INTERVAL_S") or 0.2
+)
 # Weighting factor between vector and keyword Search; 1 for completely vector
 # search, 0 for keyword. Enforces a valid range of [0, 1]. A supplied value from
 # the env outside of this range will be clipped to the respective end of the

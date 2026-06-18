@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Button } from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -16,7 +16,7 @@ import {
   SvgBarChart,
   SvgTrash,
 } from "@opal/icons";
-import Popover, { PopoverMenu } from "@/refresh-components/Popover";
+import { Popover, PopoverMenu } from "@opal/components";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@/hooks/useToast";
@@ -25,25 +25,20 @@ import {
   deleteAgent,
   toggleAgentFeatured,
   toggleAgentListed,
-} from "@/refresh-pages/admin/AgentsPage/svc";
-import type { AgentRow } from "@/refresh-pages/admin/AgentsPage/interfaces";
+} from "@/lib/agents/svc";
+import type { Agent } from "@/lib/agents/types";
 import type { Route } from "next";
 import ShareAgentModal from "@/sections/modals/ShareAgentModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
-import { useAgent } from "@/hooks/useAgents";
-import {
-  updateAgentSharedStatus,
-  updateAgentFeaturedStatus,
-} from "@/lib/agents";
-import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
-import { useUser } from "@/providers/UserProvider";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 interface AgentRowActionsProps {
-  agent: AgentRow;
+  agent: Agent;
   onMutate: () => void;
 }
 
@@ -56,10 +51,7 @@ export default function AgentRowActions({
   onMutate,
 }: AgentRowActionsProps) {
   const router = useRouter();
-  const { isAdmin, isCurator } = useUser();
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-  const canUpdateFeaturedStatus = isAdmin || isCurator;
-  const { agent: fullAgent, refresh: refreshAgent } = useAgent(agent.id);
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareModal = useCreateModal();
 
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -82,70 +74,16 @@ export default function AgentRowActions({
     }
   }
 
-  const handleShare = useCallback(
-    async (
-      userIds: string[],
-      groupIds: number[],
-      isPublic: boolean,
-      isFeatured: boolean,
-      labelIds: number[]
-    ) => {
-      const shareError = await updateAgentSharedStatus(
-        agent.id,
-        userIds,
-        groupIds,
-        isPublic,
-        isPaidEnterpriseFeaturesEnabled,
-        labelIds
-      );
-
-      if (shareError) {
-        toast.error(`Failed to share agent: ${shareError}`);
-        return;
-      }
-
-      if (canUpdateFeaturedStatus) {
-        const featuredError = await updateAgentFeaturedStatus(
-          agent.id,
-          isFeatured
-        );
-        if (featuredError) {
-          toast.error(`Failed to update featured status: ${featuredError}`);
-          refreshAgent();
-          return;
-        }
-      }
-
-      refreshAgent();
-      onMutate();
-      shareModal.toggle(false);
-    },
-    [
-      agent.id,
-      isPaidEnterpriseFeaturesEnabled,
-      canUpdateFeaturedStatus,
-      refreshAgent,
-      onMutate,
-    ]
-  );
-
   return (
     <>
       <shareModal.Provider>
-        <ShareAgentModal
-          agentId={agent.id}
-          userIds={fullAgent?.users?.map((u) => u.id) ?? []}
-          groupIds={fullAgent?.groups ?? []}
-          isPublic={fullAgent?.is_public ?? false}
-          isFeatured={fullAgent?.is_featured ?? false}
-          labelIds={fullAgent?.labels?.map((l) => l.id) ?? []}
-          onShare={handleShare}
-        />
+        {/* Saved agents persist sharing inside the dialog itself */}
+        <ShareAgentModal agentId={agent.id} />
       </shareModal.Provider>
 
       <div className="flex items-center gap-0.5">
         {/* TODO(@raunakab): abstract a more standardized way of doing this
-            opacity-on-hover animation. Making Hoverable more extensible
+            appear-on-hover animation. Making Hoverable more extensible
             (e.g. supporting table row groups) would let us use it here
             instead of raw Tailwind group-hover. */}
         {!agent.builtin_persona && (
@@ -240,7 +178,7 @@ export default function AgentRowActions({
                 >
                   Share
                 </LineItem>,
-                isPaidEnterpriseFeaturesEnabled ? (
+                businessTier ? (
                   <LineItem
                     key="stats"
                     icon={SvgBarChart}

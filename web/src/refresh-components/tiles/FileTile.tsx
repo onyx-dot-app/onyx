@@ -40,7 +40,7 @@ function RemoveButton({ onRemove }: RemoveButtonProps) {
         "pointer-events-none focus-within:pointer-events-auto"
       )}
     >
-      <Hoverable.Item group="fileTile" variant="opacity-on-hover">
+      <Hoverable.Item group="fileTile" variant="appear-on-hover">
         <button
           type="button"
           onClick={(e) => {
@@ -83,7 +83,7 @@ export default function FileTile({
       <div
         onClick={onOpen && state !== "disabled" ? () => onOpen() : undefined}
         className={cn(
-          "relative min-w-[7.5rem] max-w-[15rem] h-full",
+          "relative min-w-30 max-w-60 h-full",
           "border rounded-12 p-1",
           "flex flex-row items-center",
           "transition-colors duration-150",

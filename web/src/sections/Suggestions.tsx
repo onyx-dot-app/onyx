@@ -1,7 +1,7 @@
 "use client";
 
 import { OnSubmitProps } from "@/hooks/useChatController";
-import { useCurrentAgent } from "@/hooks/useAgents";
+import { useCurrentAgent } from "@/lib/agents/hooks";
 import { Interactive } from "@opal/core";
 import { Content } from "@opal/layouts";
 
@@ -28,7 +28,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
   };
 
   return (
-    <div className="max-w-[var(--app-page-main-content-width)] flex flex-col w-full p-1">
+    <div className="max-w-(--app-page-main-content-width) flex flex-col w-full p-1">
       {currentAgent.starter_messages.map(({ message }, index) => (
         <Interactive.Stateless
           key={index}
@@ -42,7 +42,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
               sizePreset="main-ui"
               variant="body"
               width="full"
-              prominence="muted"
+              color="muted"
             />
           </Interactive.Container>
         </Interactive.Stateless>

@@ -110,7 +110,7 @@ test.describe("Query History Toggle @exclusive", () => {
     await page.goto("/admin/performance/usage");
     await page.waitForLoadState("networkidle");
 
-    const sidebar = page.locator('[class*="group/SidebarWrapper"]');
+    const sidebar = page.locator(".opal-sidebar-root__column");
     const queryHistoryLink = sidebar.locator(
       'a[href="/admin/performance/query-history"]'
     );
@@ -121,7 +121,7 @@ test.describe("Query History Toggle @exclusive", () => {
     await page.goto("/admin/performance/usage");
     await page.waitForLoadState("networkidle");
 
-    const sidebarAfter = page.locator('[class*="group/SidebarWrapper"]');
+    const sidebarAfter = page.locator(".opal-sidebar-root__column");
     const queryHistoryLinkAfter = sidebarAfter.locator(
       'a[href="/admin/performance/query-history"]'
     );

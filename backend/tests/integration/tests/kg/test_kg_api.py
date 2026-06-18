@@ -3,7 +3,6 @@ from datetime import datetime
 from http import HTTPStatus
 
 import pytest
-import requests
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
@@ -19,6 +18,7 @@ from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 from onyx.server.kg.models import SourceAndEntityTypeView
 from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
 
@@ -65,23 +65,23 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
             coverage_start=datetime(1970, 1, 1, 0, 0),
         ).model_dump_json()
     )
-    res1 = requests.put(
+    res1 = client.put(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req1,
     )
-    assert (
-        res1.status_code == HTTPStatus.OK
-    ), f"Error response: {res1.status_code} - {res1.text}"
+    assert res1.status_code == HTTPStatus.OK, (
+        f"Error response: {res1.status_code} - {res1.text}"
+    )
 
     # Check KG
-    res2 = requests.get(
+    res2 = client.get(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
     )
-    assert (
-        res2.status_code == HTTPStatus.OK
-    ), f"Error response: {res2.status_code} - {res2.text}"
+    assert res2.status_code == HTTPStatus.OK, (
+        f"Error response: {res2.status_code} - {res2.text}"
+    )
 
     actual_config = KGConfigAPIModel.model_validate_json(res2.text)
     assert actual_config == KGConfigAPIModel(
@@ -94,23 +94,23 @@ def test_kg_enable_and_disable(connectors: None) -> None:  # noqa: ARG001
 
     # Disable KG
     req3 = DisableKGConfigRequest().model_dump()
-    res3 = requests.put(
+    res3 = client.put(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req3,
     )
-    assert (
-        res3.status_code == HTTPStatus.OK
-    ), f"Error response: {res3.status_code} - {res3.text}"
+    assert res3.status_code == HTTPStatus.OK, (
+        f"Error response: {res3.status_code} - {res3.text}"
+    )
 
     # Check KG
-    res4 = requests.get(
+    res4 = client.get(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
     )
-    assert (
-        res4.status_code == HTTPStatus.OK
-    ), f"Error response: {res4.status_code} - {res4.text}"
+    assert res4.status_code == HTTPStatus.OK, (
+        f"Error response: {res4.status_code} - {res4.text}"
+    )
 
     actual_config = KGConfigAPIModel.model_validate_json(res4.text)
     assert actual_config == KGConfigAPIModel(
@@ -133,7 +133,7 @@ def test_kg_enable_with_missing_fields_should_fail() -> None:
             coverage_start=datetime(1970, 1, 1, 0, 0),
         ).model_dump_json()
     )
-    res = requests.put(
+    res = client.put(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req,
@@ -153,23 +153,23 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
             coverage_start=datetime(1970, 1, 1, 0, 0),
         ).model_dump_json()
     )
-    res1 = requests.put(
+    res1 = client.put(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req1,
     )
-    assert (
-        res1.status_code == HTTPStatus.OK
-    ), f"Error response: {res1.status_code} - {res1.text}"
+    assert res1.status_code == HTTPStatus.OK, (
+        f"Error response: {res1.status_code} - {res1.text}"
+    )
 
     # Get old entity types
-    res2 = requests.get(
+    res2 = client.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
-    assert (
-        res2.status_code == HTTPStatus.OK
-    ), f"Error response: {res2.status_code} - {res2.text}"
+    assert res2.status_code == HTTPStatus.OK, (
+        f"Error response: {res2.status_code} - {res2.text}"
+    )
     res2_parsed = SourceAndEntityTypeView.model_validate(res2.json())
 
     # Update entity types
@@ -186,14 +186,14 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
             active=False,
         ).model_dump(),
     ]
-    res3 = requests.put(
+    res3 = client.put(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
         json=req3,
     )
-    assert (
-        res3.status_code == HTTPStatus.OK
-    ), f"Error response: {res3.status_code} - {res3.text}"
+    assert res3.status_code == HTTPStatus.OK, (
+        f"Error response: {res3.status_code} - {res3.text}"
+    )
 
     # Check connector kg_processing is enabled
     with get_session_with_current_tenant() as db_session:
@@ -205,13 +205,13 @@ def test_update_kg_entity_types(connectors: None) -> None:  # noqa: ARG001
         assert connector.kg_processing_enabled
 
     # Check entity types looks correct
-    res4 = requests.get(
+    res4 = client.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
-    assert (
-        res4.status_code == HTTPStatus.OK
-    ), f"Error response: {res4.status_code} - {res4.text}"
+    assert res4.status_code == HTTPStatus.OK, (
+        f"Error response: {res4.status_code} - {res4.text}"
+    )
     res4_parsed = SourceAndEntityTypeView.model_validate(res4.json())
 
     def to_entity_type_map(map: dict[str, list[EntityType]]) -> dict[str, EntityType]:
@@ -248,45 +248,45 @@ def test_update_invalid_kg_entity_type_should_do_nothing(
             coverage_start=datetime(1970, 1, 1, 0, 0),
         ).model_dump_json()
     )
-    res1 = requests.put(
+    res1 = client.put(
         f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
         json=req1,
     )
-    assert (
-        res1.status_code == HTTPStatus.OK
-    ), f"Error response: {res1.status_code} - {res1.text}"
+    assert res1.status_code == HTTPStatus.OK, (
+        f"Error response: {res1.status_code} - {res1.text}"
+    )
 
     # Get old entity types
-    res2 = requests.get(
+    res2 = client.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
-    assert (
-        res2.status_code == HTTPStatus.OK
-    ), f"Error response: {res2.status_code} - {res2.text}"
+    assert res2.status_code == HTTPStatus.OK, (
+        f"Error response: {res2.status_code} - {res2.text}"
+    )
 
     # Update entity types with non-existent entity type
     req3 = [
         EntityType(name="NON-EXISTENT", description="Test.", active=False).model_dump(),
     ]
-    res3 = requests.put(
+    res3 = client.put(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
         json=req3,
     )
-    assert (
-        res3.status_code == HTTPStatus.OK
-    ), f"Error response: {res3.status_code} - {res3.text}"
+    assert res3.status_code == HTTPStatus.OK, (
+        f"Error response: {res3.status_code} - {res3.text}"
+    )
 
     # Get entity types after the update attempt
-    res4 = requests.get(
+    res4 = client.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
-    assert (
-        res4.status_code == HTTPStatus.OK
-    ), f"Error response: {res4.status_code} - {res4.text}"
+    assert res4.status_code == HTTPStatus.OK, (
+        f"Error response: {res4.status_code} - {res4.text}"
+    )
 
     # Should be the same as before since non-existent entity type should be ignored
     assert res2.json() == res4.json()

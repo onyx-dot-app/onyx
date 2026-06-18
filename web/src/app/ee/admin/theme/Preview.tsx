@@ -11,7 +11,7 @@ import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 const previewMarkdownComponents = {
   p: ({ children }) => (
-    <Text as="p" text03 figureSmallValue className="!my-0 text-center">
+    <Text as="p" text03 figureSmallValue className="my-0! text-center">
       {children}
     </Text>
   ),
@@ -55,17 +55,6 @@ export type PreviewHighlightTarget =
   | "chat_header"
   | "chat_footer";
 
-export interface PreviewProps {
-  logoDisplayStyle: "logo_and_name" | "logo_only" | "name_only";
-  applicationDisplayName: string;
-  chat_footer_content: string;
-  chat_header_content: string;
-  greeting_message: string;
-  className?: string;
-  logoSrc?: string;
-  highlightTarget?: PreviewHighlightTarget | null;
-}
-
 function PreviewLogo({
   logoSrc,
   forceOnyxIcon,
@@ -86,100 +75,17 @@ function PreviewLogo({
         height: `${size}px`,
         width: `${size}px`,
       }}
-      className={cn("flex-shrink-0 rounded-full", className)}
+      className={cn("shrink-0 rounded-full", className)}
     />
   ) : (
-    <SvgOnyxLogo size={size} className={cn("flex-shrink-0", className)} />
+    <SvgOnyxLogo size={size} className={cn("shrink-0", className)} />
   );
 }
 
-export function InputPreview() {
+function InputPreview() {
   return (
     <div className="bg-background-neutral-00 border border-border-01 flex flex-col gap-1.5 items-end pb-1 pl-2.5 pr-1 pt-2.5 rounded-08 w-full h-14">
-      <div className="h-5 w-5 bg-theme-primary-05 mt-auto rounded-[0.25rem]"></div>
-    </div>
-  );
-}
-
-function PreviewStart({
-  logoDisplayStyle,
-  applicationDisplayName,
-  chat_footer_content,
-  chat_header_content,
-  greeting_message,
-  logoSrc,
-  highlightTarget,
-}: PreviewProps) {
-  return (
-    <div className="flex h-60 rounded-12 shadow-00 bg-background-tint-01 relative">
-      {/* Sidebar */}
-      <div className="flex w-[6rem] h-full bg-background-tint-02 rounded-l-12 p-1 justify-start">
-        <div className="flex flex-col h-fit w-full justify-start">
-          <div
-            className={cn(
-              "inline-flex max-w-full items-center justify-start gap-1 rounded-08 p-0.5 overflow-hidden",
-              highlightTarget === "sidebar" && "bg-highlight-match"
-            )}
-          >
-            {logoDisplayStyle !== "name_only" && (
-              <PreviewLogo
-                logoSrc={logoSrc}
-                size={16}
-                forceOnyxIcon={
-                  logoDisplayStyle === "logo_and_name" &&
-                  !applicationDisplayName
-                }
-              />
-            )}
-            {(logoDisplayStyle === "logo_and_name" ||
-              logoDisplayStyle === "name_only") && (
-              <Truncated mainUiAction text04 nowrap>
-                {applicationDisplayName || "Onyx"}
-              </Truncated>
-            )}
-          </div>
-        </div>
-      </div>
-      {/* Chat */}
-      <div className="flex flex-col flex-1 h-full">
-        {/* Chat Body */}
-        <div className="flex flex-col flex-1 h-full items-center justify-center px-3">
-          <div className="flex w-full max-w-[300px] flex-col items-center justify-center">
-            <div
-              className={cn(
-                "inline-flex max-w-full items-center justify-center gap-1 mb-2 rounded-08 border border-transparent p-0.5 text-center",
-                highlightTarget === "greeting" && "bg-highlight-match"
-              )}
-            >
-              <PreviewLogo logoSrc={logoSrc} size={18} />
-              <Text
-                text04
-                headingH3
-                className="max-w-[260px] whitespace-normal break-words text-center"
-              >
-                {greeting_message}
-              </Text>
-            </div>
-            <InputPreview />
-          </div>
-        </div>
-        {/* Chat Footer */}
-        <div className="flex flex-col items-center justify-end w-full">
-          <div className="flex w-full max-w-[300px] justify-center">
-            <div
-              className={cn(
-                "inline-flex max-w-full items-start justify-center rounded-04 border border-transparent p-0.5 text-center",
-                highlightTarget === "chat_footer" && "bg-highlight-match"
-              )}
-            >
-              <PreviewMinimalMarkdown
-                content={chat_footer_content}
-                className={cn("max-w-full text-center origin-center")}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
+      <div className="h-5 w-5 bg-theme-primary-05 mt-auto rounded-sm"></div>
     </div>
   );
 }
@@ -207,7 +113,7 @@ function PreviewChat({
             <Text
               figureSmallLabel
               text03
-              className="max-w-full whitespace-normal break-words text-center"
+              className="max-w-full whitespace-normal wrap-break-word text-center"
             >
               {chat_header_content}
             </Text>
@@ -254,7 +160,102 @@ function PreviewChat({
     </div>
   );
 }
-export function Preview({
+
+export interface PreviewProps {
+  logoDisplayStyle: "logo_and_name" | "logo_only" | "name_only";
+  applicationDisplayName: string;
+  chat_footer_content: string;
+  chat_header_content: string;
+  greeting_message: string;
+  className?: string;
+  logoSrc?: string;
+  highlightTarget?: PreviewHighlightTarget | null;
+}
+
+function PreviewStart({
+  logoDisplayStyle,
+  applicationDisplayName,
+  chat_footer_content,
+  chat_header_content,
+  greeting_message,
+  logoSrc,
+  highlightTarget,
+}: PreviewProps) {
+  return (
+    <div className="flex h-60 rounded-12 shadow-00 bg-background-tint-01 relative">
+      {/* Sidebar */}
+      <div className="flex w-24 h-full bg-background-tint-02 rounded-l-12 p-1 justify-start">
+        <div className="flex flex-col h-fit w-full justify-start">
+          <div
+            className={cn(
+              "inline-flex max-w-full items-center justify-start gap-1 rounded-08 p-0.5 overflow-hidden",
+              highlightTarget === "sidebar" && "bg-highlight-match"
+            )}
+          >
+            {logoDisplayStyle !== "name_only" && (
+              <PreviewLogo
+                logoSrc={logoSrc}
+                size={16}
+                forceOnyxIcon={
+                  logoDisplayStyle === "logo_and_name" &&
+                  !applicationDisplayName
+                }
+              />
+            )}
+            {(logoDisplayStyle === "logo_and_name" ||
+              logoDisplayStyle === "name_only") && (
+              <Truncated mainUiAction text04 nowrap>
+                {applicationDisplayName || "Onyx"}
+              </Truncated>
+            )}
+          </div>
+        </div>
+      </div>
+      {/* Chat */}
+      <div className="flex flex-col flex-1 h-full">
+        {/* Chat Body */}
+        <div className="flex flex-col flex-1 h-full items-center justify-center px-3">
+          <div className="flex w-full max-w-[300px] flex-col items-center justify-center">
+            <div
+              className={cn(
+                "inline-flex max-w-full items-center justify-center gap-1 mb-2 rounded-08 border border-transparent p-0.5 text-center",
+                highlightTarget === "greeting" && "bg-highlight-match"
+              )}
+            >
+              <PreviewLogo logoSrc={logoSrc} size={18} />
+              <Text
+                text04
+                headingH3
+                className="max-w-[260px] whitespace-normal wrap-break-word text-center"
+              >
+                {greeting_message}
+              </Text>
+            </div>
+            <InputPreview />
+          </div>
+        </div>
+        {/* Chat Footer */}
+        <div className="flex flex-col items-center justify-end w-full">
+          <div className="flex w-full max-w-[300px] justify-center">
+            <div
+              className={cn(
+                "inline-flex max-w-full items-start justify-center rounded-04 border border-transparent p-0.5 text-center",
+                highlightTarget === "chat_footer" && "bg-highlight-match"
+              )}
+            >
+              <PreviewMinimalMarkdown
+                content={chat_footer_content}
+                className={cn("max-w-full text-center origin-center")}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Preview({
   logoDisplayStyle,
   applicationDisplayName,
   chat_footer_content,

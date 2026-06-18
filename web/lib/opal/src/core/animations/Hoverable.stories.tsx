@@ -35,7 +35,7 @@ export const GroupMode: StoryObj = {
         }}
       >
         <span style={{ color: "var(--text-01)" }}>Hover this card</span>
-        <Hoverable.Item group="demo" variant="opacity-on-hover">
+        <Hoverable.Item group="demo" variant="appear-on-hover">
           <span style={{ color: "var(--text-03)" }}>✓ Revealed</span>
         </Hoverable.Item>
       </div>
@@ -55,7 +55,7 @@ export const LocalMode: StoryObj = {
       }}
     >
       <span style={{ color: "var(--text-01)" }}>Hover the icon →</span>
-      <Hoverable.Item variant="opacity-on-hover">
+      <Hoverable.Item variant="appear-on-hover">
         <span style={{ fontSize: "1.25rem" }}>🗑</span>
       </Hoverable.Item>
     </div>
@@ -79,7 +79,7 @@ export const MultipleGroups: StoryObj = {
             }}
           >
             <span style={{ color: "var(--text-01)" }}>Group: {group}</span>
-            <Hoverable.Item group={group} variant="opacity-on-hover">
+            <Hoverable.Item group={group} variant="appear-on-hover">
               <span style={{ color: "var(--text-03)" }}>✓ Revealed</span>
             </Hoverable.Item>
           </div>
@@ -104,13 +104,13 @@ export const MultipleItems: StoryObj = {
         }}
       >
         <span style={{ color: "var(--text-01)" }}>Hover to reveal all</span>
-        <Hoverable.Item group="multi" variant="opacity-on-hover">
+        <Hoverable.Item group="multi" variant="appear-on-hover">
           <span>Edit</span>
         </Hoverable.Item>
-        <Hoverable.Item group="multi" variant="opacity-on-hover">
+        <Hoverable.Item group="multi" variant="appear-on-hover">
           <span>Delete</span>
         </Hoverable.Item>
-        <Hoverable.Item group="multi" variant="opacity-on-hover">
+        <Hoverable.Item group="multi" variant="appear-on-hover">
           <span>Share</span>
         </Hoverable.Item>
       </div>
@@ -134,7 +134,7 @@ export const NestedGroups: StoryObj = {
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <span style={{ color: "var(--text-01)" }}>Outer card</span>
-          <Hoverable.Item group="outer" variant="opacity-on-hover">
+          <Hoverable.Item group="outer" variant="appear-on-hover">
             <span style={{ color: "var(--text-03)" }}>Outer action</span>
           </Hoverable.Item>
         </div>
@@ -151,7 +151,7 @@ export const NestedGroups: StoryObj = {
             }}
           >
             <span style={{ color: "var(--text-02)" }}>Inner card</span>
-            <Hoverable.Item group="inner" variant="opacity-on-hover">
+            <Hoverable.Item group="inner" variant="appear-on-hover">
               <span style={{ color: "var(--text-03)" }}>Inner action</span>
             </Hoverable.Item>
           </div>

@@ -1,0 +1,105 @@
+{
+  "expo": {
+    "name": "Onyx",
+    "slug": "mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "onyx",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "app.onyx.mobile",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "app.onyx.mobile",
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#208AEF",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 120
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "buildReactNativeFromSource": true
+          },
+          "android": {
+            "kotlinVersion": "2.1.20"
+          }
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Hanken Grotesk",
+                "fontDefinitions": [
+                  {
+                    "path": "./node_modules/@expo-google-fonts/hanken-grotesk/400Regular/HankenGrotesk_400Regular.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./node_modules/@expo-google-fonts/hanken-grotesk/500Medium/HankenGrotesk_500Medium.ttf",
+                    "weight": 450
+                  },
+                  {
+                    "path": "./node_modules/@expo-google-fonts/hanken-grotesk/500Medium/HankenGrotesk_500Medium.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./node_modules/@expo-google-fonts/hanken-grotesk/600SemiBold/HankenGrotesk_600SemiBold.ttf",
+                    "weight": 600
+                  },
+                  {
+                    "path": "./node_modules/@expo-google-fonts/hanken-grotesk/700Bold/HankenGrotesk_700Bold.ttf",
+                    "weight": 700
+                  }
+                ]
+              },
+              {
+                "fontFamily": "DM Mono",
+                "fontDefinitions": [
+                  {
+                    "path": "./node_modules/@expo-google-fonts/dm-mono/400Regular/DMMono_400Regular.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./node_modules/@expo-google-fonts/dm-mono/500Medium/DMMono_500Medium.ttf",
+                    "weight": 500
+                  }
+                ]
+              }
+            ]
+          },
+          "ios": {
+            "fonts": [
+              "./node_modules/@expo-google-fonts/hanken-grotesk/400Regular/HankenGrotesk_400Regular.ttf",
+              "./node_modules/@expo-google-fonts/hanken-grotesk/500Medium/HankenGrotesk_500Medium.ttf",
+              "./node_modules/@expo-google-fonts/hanken-grotesk/600SemiBold/HankenGrotesk_600SemiBold.ttf",
+              "./node_modules/@expo-google-fonts/hanken-grotesk/700Bold/HankenGrotesk_700Bold.ttf",
+              "./node_modules/@expo-google-fonts/dm-mono/400Regular/DMMono_400Regular.ttf",
+              "./node_modules/@expo-google-fonts/dm-mono/500Medium/DMMono_500Medium.ttf"
+            ]
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

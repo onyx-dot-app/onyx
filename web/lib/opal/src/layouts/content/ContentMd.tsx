@@ -23,16 +23,17 @@ type ContentMdAuxIcon = "info-gray" | "info-blue" | "warning" | "error";
 type ContentMdSuffix = "optional" | (string & {});
 
 interface ContentMdPresetConfig {
-  iconSize: string;
-  iconContainerPadding: string;
-  iconColorClass: string;
+  /** Opal font name for the title. */
   titleFont: TextFont;
+  /** Title line-height — also sets icon container height (CSS value). */
   lineHeight: string;
-  /** Button `size` prop for the edit button. Uses the shared `SizeVariant` scale. */
+  /** Icon width/height = lineHeight - 4px (CSS value). */
+  iconSize: string;
+  /** Button `size` prop for the edit button. */
   editButtonSize: ContainerSizeVariants;
   editButtonPadding: string;
   optionalFont: TextFont;
-  /** Aux icon size = lineHeight − 2 × p-0.5. */
+  /** Aux icon size = lineHeight − 4px. */
   auxIconSize: string;
   /** Left indent for the description so it aligns with the title (past the icon). */
   descriptionIndent: string;
@@ -47,6 +48,9 @@ interface ContentMdProps {
 
   /** Optional description text below the title. */
   description?: string | RichStr;
+
+  /** Clamp the description to N lines. Maps to Text's maxLines prop. */
+  descriptionMaxLines?: number;
 
   /** Enable inline editing of the title. */
   editable?: boolean;
@@ -66,6 +70,9 @@ interface ContentMdProps {
   /** Tag rendered beside the title. */
   tag?: TagProps;
 
+  /** Let the title wrap to multiple lines instead of truncating to one. */
+  titleWrap?: boolean;
+
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
 
@@ -79,11 +86,9 @@ interface ContentMdProps {
 
 const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
   "main-content": {
-    iconSize: "1rem",
-    iconContainerPadding: "p-1",
-    iconColorClass: "text-text-04",
     titleFont: "main-content-emphasis",
     lineHeight: "1.5rem",
+    iconSize: "1.25rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0",
     optionalFont: "main-content-muted",
@@ -91,11 +96,9 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     descriptionIndent: "1.625rem",
   },
   "main-ui": {
-    iconSize: "1rem",
-    iconContainerPadding: "p-0.5",
-    iconColorClass: "text-text-03",
     titleFont: "main-ui-action",
     lineHeight: "1.25rem",
+    iconSize: "1rem",
     editButtonSize: "xs",
     editButtonPadding: "p-0",
     optionalFont: "main-ui-muted",
@@ -103,11 +106,9 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     descriptionIndent: "1.375rem",
   },
   secondary: {
-    iconSize: "0.75rem",
-    iconContainerPadding: "p-0.5",
-    iconColorClass: "text-text-04",
     titleFont: "secondary-action",
     lineHeight: "1rem",
+    iconSize: "0.75rem",
     editButtonSize: "2xs",
     editButtonPadding: "p-0",
     optionalFont: "secondary-action",
@@ -134,11 +135,13 @@ function ContentMd({
   icon: Icon,
   title,
   description,
+  descriptionMaxLines,
   editable,
   onTitleChange,
   suffix,
   auxIcon,
   tag,
+  titleWrap,
   sizePreset = "main-ui",
   ref,
 }: ContentMdProps) {
@@ -155,26 +158,23 @@ function ContentMd({
 
   function commit() {
     const value = editValue.trim();
-    if (value && value !== toPlainString(title)) onTitleChange?.(value);
+    if (value !== toPlainString(title)) onTitleChange?.(value);
     setEditing(false);
   }
 
   return (
-    <div ref={ref} className="opal-content-md">
+    <div ref={ref} className="opal-content-md" data-opal-content>
       <div
         className="opal-content-md-header"
         data-editing={editing || undefined}
       >
         {Icon && (
           <div
-            className={cn(
-              "opal-content-md-icon-container shrink-0",
-              config.iconContainerPadding
-            )}
+            className="opal-content-md-icon-container shrink-0"
             style={{ minHeight: config.lineHeight }}
           >
             <Icon
-              className={cn("opal-content-md-icon", config.iconColorClass)}
+              className="opal-content-md-icon"
               style={{ width: config.iconSize, height: config.iconSize }}
             />
           </div>
@@ -218,7 +218,7 @@ function ContentMd({
             <Text
               font={config.titleFont}
               color="inherit"
-              maxLines={1}
+              maxLines={titleWrap ? undefined : 1}
               title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
             >
@@ -278,7 +278,12 @@ function ContentMd({
           className="opal-content-md-description"
           style={Icon ? { paddingLeft: config.descriptionIndent } : undefined}
         >
-          <Text font="secondary-body" color="text-03" as="p">
+          <Text
+            font="secondary-body"
+            color="text-03"
+            as="p"
+            maxLines={descriptionMaxLines}
+          >
             {description}
           </Text>
         </div>

@@ -24,6 +24,7 @@ from ee.onyx.server.middleware.license_enforcement import (
 from ee.onyx.server.middleware.tenant_tracking import (
     add_api_server_tenant_id_middleware,
 )
+from ee.onyx.server.middleware.tier_gate import add_tier_gate_middleware
 from ee.onyx.server.oauth.api import router as ee_oauth_router
 from ee.onyx.server.query_and_chat.query_backend import basic_router as ee_query_router
 from ee.onyx.server.query_and_chat.search_backend import router as search_router
@@ -84,6 +85,13 @@ def get_application() -> FastAPI:
     test_encryption()
 
     application = get_application_base(lifespan_override=lifespan)
+
+    # Register tier_gate FIRST so it becomes the innermost middleware: Starlette
+    # executes middleware in reverse registration order, and tier_gate must run
+    # AFTER tenant_tracking has populated CURRENT_TENANT_ID_CONTEXTVAR.
+    # Tier gate attaches in both modes; get_tier() resolves per deployment
+    # internally. Reads the unified PATH_PREFIX_MIN_TIER map.
+    add_tier_gate_middleware(application, logger)
 
     if MULTI_TENANT:
         add_api_server_tenant_id_middleware(application, logger)

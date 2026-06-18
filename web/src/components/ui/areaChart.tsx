@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/card";
 
 interface AreaChartProps {
-  data?: any[];
+  data?: Array<Record<string, string | number>>;
   categories?: string[];
   index?: string;
   colors?: string[];
@@ -35,8 +35,8 @@ interface AreaChartProps {
   className?: string;
   title?: string;
   description?: string;
-  xAxisFormatter?: (value: any) => string;
-  yAxisFormatter?: (value: any) => string;
+  xAxisFormatter?: (value: string) => string;
+  yAxisFormatter?: (value: number) => string;
   stacked?: boolean;
 }
 

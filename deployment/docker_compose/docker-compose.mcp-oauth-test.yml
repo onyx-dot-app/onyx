@@ -1,15 +1,62 @@
 name: onyx
 
 services:
+  # Self-hosted mock OIDC / OAuth2 authorization server. Replaces the real Okta
+  # org the OAuth tests used to depend on: no secrets, no hosted login page
+  # (/authorize auto-issues a code), and it signs RS256 tokens whose public key
+  # is served at /jwks so the mcp_oauth_server's JWTVerifier accepts them. The
+  # advertised issuer must resolve identically for the dockerized services (via
+  # host.docker.internal -> host-gateway) and the host-run Playwright browser
+  # (via an /etc/hosts entry the workflow adds before the tests run).
+  mock_oidc_idp:
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    restart: on-failure
+    working_dir: /workspace
+    environment:
+      - MOCK_OIDC_PORT=${MOCK_OIDC_PORT:-8090}
+      - MOCK_OIDC_BIND_HOST=0.0.0.0
+      - MOCK_OIDC_ISSUER=${MCP_OAUTH_ISSUER:-http://host.docker.internal:8090}
+      - MOCK_OIDC_AUDIENCE=${MCP_OAUTH_AUDIENCE:-api://mcp}
+      - MOCK_OIDC_SCOPE=${MCP_OAUTH_REQUIRED_SCOPES:-mcp:use}
+    command: >
+      /bin/sh -c "
+      python backend/tests/integration/mock_services/mcp_test_server/run_mock_oidc_idp.py ${MOCK_OIDC_PORT:-8090}
+      "
+    ports:
+      - "${MOCK_OIDC_PORT:-8090}:${MOCK_OIDC_PORT:-8090}"
+    volumes:
+      - ../..:/workspace:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ['MOCK_OIDC_PORT']}/healthz\")",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   mcp_oauth_server:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     restart: on-failure
     working_dir: /workspace
+    depends_on:
+      mock_oidc_idp:
+        condition: service_healthy
+    # Unlike the api-key/per-user mocks (which only receive connections), this
+    # server's JWTVerifier reaches OUT to the IdP's JWKS at runtime. Like
+    # api_server, it needs host.docker.internal to resolve to the host gateway.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - MCP_OAUTH_CLIENT_ID=${MCP_OAUTH_CLIENT_ID:-}
       - MCP_OAUTH_CLIENT_SECRET=${MCP_OAUTH_CLIENT_SECRET:-}
       - MCP_OAUTH_ISSUER=${MCP_OAUTH_ISSUER:-}
       - MCP_OAUTH_JWKS_URI=${MCP_OAUTH_JWKS_URI:-}
+      - MCP_OAUTH_AUDIENCE=${MCP_OAUTH_AUDIENCE:-api://mcp}
       - MCP_OAUTH_USERNAME=${MCP_OAUTH_USERNAME:-}
       - MCP_OAUTH_PASSWORD=${MCP_OAUTH_PASSWORD:-}
       - MCP_OAUTH_REQUIRED_SCOPES=${MCP_OAUTH_REQUIRED_SCOPES:-mcp:use}
@@ -26,4 +73,16 @@ services:
       - "${MCP_TEST_SERVER_PORT:-8004}:${MCP_TEST_SERVER_PORT:-8004}"
     volumes:
       - ../..:/workspace:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.environ['MCP_TEST_SERVER_PORT']}/healthz\")",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 

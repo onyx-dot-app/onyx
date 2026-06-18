@@ -16,7 +16,7 @@ import {
   ThemePreference,
 } from "@/lib/types";
 import { usePostHog } from "posthog-js/react";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import {
@@ -35,6 +35,7 @@ interface UserContextType {
   authTypeMetadata: AuthTypeMetadata;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
+  updateUserPasteAsTile: (enabled: boolean) => Promise<void>;
   toggleAgentPinnedStatus: (
     currentPinnedAgentIDs: number[],
     agentId: number,
@@ -61,13 +62,18 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser } = useCurrentUser();
-  const { authTypeMetadata } = useAuthTypeMetadata();
-  const updatedSettings = useContext(SettingsContext);
+  const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
+    useAuthTypeMetadata();
+  const updatedSettingsData = useSettings();
   const posthog = usePostHog();
 
   // For auto_scroll and temperature_override_enabled:
   // - If user has a preference set, use that
   // - Otherwise, use the workspace setting if available
+  const wsAutoScroll = updatedSettingsData.auto_scroll;
+  const wsTemperatureOverride =
+    updatedSettingsData.temperature_override_enabled;
+
   const mergeUserPreferences = useCallback(
     (currentUser: User | null): User | null => {
       if (!currentUser) return null;
@@ -76,17 +82,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         preferences: {
           ...currentUser.preferences,
           auto_scroll:
-            currentUser.preferences?.auto_scroll ??
-            updatedSettings?.settings?.auto_scroll ??
-            false,
+            currentUser.preferences?.auto_scroll ?? wsAutoScroll ?? false,
           temperature_override_enabled:
             currentUser.preferences?.temperature_override_enabled ??
-            updatedSettings?.settings?.temperature_override_enabled ??
+            wsTemperatureOverride ??
             false,
         },
       };
     },
-    [updatedSettings]
+    [wsAutoScroll, wsTemperatureOverride]
   );
 
   const [upToDateUser, setUpToDateUser] = useState<User | null>(null);
@@ -116,7 +120,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const onRefreshFail = useCallback(async () => {
     await mutateUser();
   }, [mutateUser]);
-  useTokenRefresh(upToDateUser, authTypeMetadata, onRefreshFail);
+  useTokenRefresh(
+    upToDateUser,
+    authTypeMetadata,
+    authTypeMetadataLoading,
+    onRefreshFail
+  );
 
   // Sync user's theme preference from DB to next-themes on load
   const { setTheme, theme } = useTheme();
@@ -212,6 +221,41 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Error updating user shortcut setting:", error);
+      throw error;
+    }
+  };
+
+  const updateUserPasteAsTile = async (enabled: boolean) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              paste_as_tile: enabled,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(
+        `/api/paste-as-tile?paste_as_tile=${enabled}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update paste tile setting");
+      }
+    } catch (error) {
+      console.error("Error updating paste tile setting:", error);
       throw error;
     }
   };
@@ -510,6 +554,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         authTypeMetadata,
         updateUserAutoScroll,
         updateUserShortcuts,
+        updateUserPasteAsTile,
         updateUserTemperatureOverrideEnabled,
         updateUserPersonalization,
         updateUserThemePreference,

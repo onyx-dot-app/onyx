@@ -30,6 +30,7 @@ VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG = [
     "claude-opus-4-5@20251101",
     "claude-opus-4-6",
     "claude-opus-4-7",
+    "claude-opus-4-8",
 ]
 
 
@@ -100,9 +101,9 @@ def _accumulate_stream_to_assistant_message(
                     if tool_call_delta.function.name:
                         tool_calls_map[index]["name"] = tool_call_delta.function.name
                     if tool_call_delta.function.arguments:
-                        tool_calls_map[index][
-                            "arguments"
-                        ] += tool_call_delta.function.arguments
+                        tool_calls_map[index]["arguments"] += (
+                            tool_call_delta.function.arguments
+                        )
 
     # Convert accumulated tool calls to ToolCall list, sorted by index
     tool_calls = None
@@ -423,6 +424,106 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
             mock_response=MOCK_LLM_RESPONSE,
             allowed_openai_params=["tool_choice"],
         )
+
+
+ANTHROPIC_MODELS_OMITTING_SAMPLING_PARAMS = [
+    "claude-opus-4-7",
+    "claude-opus-4-7@20260101",
+    "claude-opus-4.7",
+    "claude-4-7-opus",
+    "claude-4.7-opus",
+    "claude-opus-4-8",
+    "claude-opus-4-8@20260101",
+    "claude-opus-4.8",
+    "claude-4-8-opus",
+    "claude-4.8-opus",
+    "claude-fable-5",
+    "claude-fable-5@20260101",
+    "claude-5-fable",
+    "claude-mythos-5",
+    "claude-5-mythos",
+]
+
+
+@pytest.mark.parametrize("model_name", ANTHROPIC_MODELS_OMITTING_SAMPLING_PARAMS)
+def test_omits_temperature_for_no_sampling_params_models(model_name: str) -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name=model_name,
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "temperature" not in kwargs
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-fable-5",
+        "claude-5-fable",
+        "claude-mythos-5",
+        "claude-5-mythos",
+    ],
+)
+@pytest.mark.parametrize(
+    "reasoning_effort, expected_effort",
+    [(ReasoningEffort.AUTO, "medium"), (ReasoningEffort.HIGH, "high")],
+)
+def test_claude_adaptive_thinking_uses_output_config(
+    model_name: str, reasoning_effort: ReasoningEffort, expected_effort: str
+) -> None:
+    # Non-Vertex providers must use the adaptive thinking API for these models
+    # (thinking.type=adaptive + output_config.effort) rather than the legacy
+    # thinking.type.enabled + budget_tokens path, which they reject with a 400.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.LITELLM_PROXY,
+            model_name=model_name,
+        ),
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=True),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=reasoning_effort))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["thinking"] == {"type": "adaptive"}
+        assert kwargs["output_config"] == {"effort": expected_effort}
+        assert "budget_tokens" not in kwargs["thinking"]
+
+
+def test_keeps_temperature_for_other_models(default_multi_llm: LitellmLLM) -> None:
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(default_multi_llm.stream(messages))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["temperature"] == 0.0
 
 
 @pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
@@ -1127,12 +1228,13 @@ def test_multithreaded_custom_config_isolation(
     assert os.environ.get("LLM_B_ONLY") is None
 
 
-def test_multithreaded_invoke_without_custom_config_skips_env_lock() -> None:
-    """Verify that invoke() without custom_config does not acquire the env lock.
+def test_multithreaded_invoke_without_custom_config_does_not_inject_env() -> None:
+    """invoke() without custom_config holds _env_lock but injects no env vars.
 
-    Two LitellmLLM instances without custom_config call invoke concurrently.
-    Both should run with stream=False, never touch the env lock, and complete
-    without blocking each other.
+    Every call goes through temporary_env_and_lock (so it holds the shared
+    _env_lock during its litellm call and can't observe a concurrent
+    custom_config call's injected secrets). Calls without custom_config pass an
+    empty mapping, so they take the lock but never mutate os.environ.
     """
     from onyx.llm import multi_llm as multi_llm_module
 
@@ -1214,8 +1316,136 @@ def test_multithreaded_invoke_without_custom_config_skips_env_lock() -> None:
     assert call_kwargs["A"]["stream"] is True
     assert call_kwargs["B"]["stream"] is True
 
-    # The env lock context manager should never have been called
-    mock_env_lock.assert_not_called()
+    # Each call takes the lock via temporary_env_and_lock but injects nothing.
+    assert mock_env_lock.call_count == 2
+    for call in mock_env_lock.call_args_list:
+        assert call.args[0] == {}
+
+
+def test_keyless_reader_cannot_observe_writer_injected_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cross-tenant credential isolation in the shared process os.environ.
+
+    A "victim" Bedrock call injects AWS creds from custom_config into os.environ
+    for the duration of its litellm call (litellm's SDKs read more from the
+    environment than litellm accepts as kwargs). It does so under the env write
+    lock. A concurrent keyless "attacker" Bedrock call (no custom_config) takes
+    the shared read lock, so it must block until the writer releases the lock and
+    restores os.environ — it can therefore only ever read a clean environment.
+
+    Before the fix the attacker took nullcontext() (no lock) and could read the
+    victim's secret straight out of os.environ. This test pins that the reader is
+    blocked during the writer's window and sees no secret.
+    """
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+
+    VICTIM_SECRET = "victim-aws-secret-DO-NOT-LEAK-0001"
+    VICTIM_ACCESS_KEY_ID = "victim-akid-0002"
+
+    # Victim: Bedrock provider whose creds live in custom_config (env-var format).
+    victim_llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet-20240229-v1:0",
+        max_input_tokens=200000,
+        custom_config={
+            "AWS_SECRET_ACCESS_KEY": VICTIM_SECRET,
+            "AWS_ACCESS_KEY_ID": VICTIM_ACCESS_KEY_ID,
+            "AWS_REGION_NAME": "us-east-1",
+        },
+    )
+    # Attacker: keyless Bedrock provider, NO custom_config -> shared read lock.
+    attacker_llm = LitellmLLM(
+        api_key=None,
+        timeout=30,
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-haiku-20240307-v1:0",
+        max_input_tokens=200000,
+    )
+
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chatcmpl-123",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(role="assistant", content="Hi"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model="anthropic.claude-3-sonnet-20240229-v1:0",
+        ),
+    ]
+
+    writer_inside = threading.Event()
+    release_writer = threading.Event()
+    reader_ran = threading.Event()
+    reader_env_snapshot: dict[str, str | None] = {}
+
+    def fake_completion(**kwargs: Any) -> list[litellm.ModelResponse]:
+        # The victim's custom_config is mapped into explicit kwargs, so its
+        # presence distinguishes the victim (writer) from the keyless attacker.
+        is_writer = "aws_secret_access_key" in kwargs
+        if is_writer:
+            # Holding the env write lock here; the secret is live in os.environ.
+            # Keep it live until released (bounded so a broken lock can't hang).
+            writer_inside.set()
+            release_writer.wait(timeout=5)
+        else:
+            reader_env_snapshot["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
+                "AWS_SECRET_ACCESS_KEY"
+            )
+            reader_env_snapshot["AWS_ACCESS_KEY_ID"] = os.environ.get(
+                "AWS_ACCESS_KEY_ID"
+            )
+            reader_ran.set()
+        return mock_stream_chunks
+
+    errors: list[Exception] = []
+
+    def run_llm(llm: LitellmLLM) -> None:
+        try:
+            llm.invoke([UserMessage(content="Hi")])
+        except Exception as e:
+            errors.append(e)
+
+    with patch("litellm.completion", side_effect=fake_completion):
+        victim_thread = threading.Thread(target=run_llm, args=(victim_llm,))
+        victim_thread.start()
+        assert writer_inside.wait(timeout=5), (
+            "victim never entered the write-locked section"
+        )
+
+        attacker_thread = threading.Thread(target=run_llm, args=(attacker_llm,))
+        attacker_thread.start()
+
+        # While the writer holds the env write lock, the reader must be blocked
+        # on the read lock: it cannot have run its completion yet. A leak (no
+        # lock for readers) would let it read os.environ immediately.
+        reader_ran_during_window = reader_ran.wait(timeout=1.0)
+
+        release_writer.set()
+        victim_thread.join(timeout=10)
+        attacker_thread.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    assert reader_ran.is_set(), "attacker never completed"
+
+    # The attacker was blocked during the writer's env window...
+    assert not reader_ran_during_window, (
+        "Cross-tenant leak: keyless reader ran concurrently with the victim's "
+        "env injection"
+    )
+    # ...and when it finally ran, the environment was clean.
+    assert reader_env_snapshot["AWS_SECRET_ACCESS_KEY"] is None
+    assert reader_env_snapshot["AWS_ACCESS_KEY_ID"] is None
+
+    # Env fully restored after the writer finished.
+    assert os.environ.get("AWS_SECRET_ACCESS_KEY") is None
+    assert os.environ.get("AWS_ACCESS_KEY_ID") is None
 
 
 # ---- Tests for Bedrock tool content stripping ----
@@ -1461,9 +1691,9 @@ def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> Non
         default_multi_llm.invoke(messages, tools=None)
 
         _, kwargs = mock_completion.call_args
-        assert (
-            "tool_choice" not in kwargs
-        ), "tool_choice must not be sent to providers when no tools are provided"
+        assert "tool_choice" not in kwargs, (
+            "tool_choice must not be sent to providers when no tools are provided"
+        )
 
 
 def test_bifrost_normalizes_api_base_in_model_kwargs() -> None:

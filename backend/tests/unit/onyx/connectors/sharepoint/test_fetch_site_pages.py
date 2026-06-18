@@ -2,7 +2,10 @@
 
 Covers 404 handling (classic sites / no modern pages) and 400
 canvasLayout fallback (corrupt pages causing $expand=canvasLayout to
-fail on the LIST endpoint).
+fail on the LIST endpoint), plus the per-site failure classifier and
+propagation of `site.execute_query()` 404s out of `_fetch_site_pages`
+so the Phase 5 wrap in `_load_from_checkpoint` can convert them into a
+ConnectorFailure instead of crashing the connector run.
 """
 
 from __future__ import annotations
@@ -11,10 +14,13 @@ import json
 from typing import Any
 
 import pytest
+from office365.runtime.client_request_exception import ClientRequestException
 from requests import Response
 from requests.exceptions import HTTPError
 
+from onyx.connectors.sharepoint.connector import _is_per_site_graph_failure
 from onyx.connectors.sharepoint.connector import GRAPH_INVALID_REQUEST_CODE
+from onyx.connectors.sharepoint.connector import PER_SITE_GRAPH_FAILURE_STATUSES
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.sharepoint.connector import SiteDescriptor
 
@@ -39,6 +45,19 @@ def _make_http_error(
     response._content = json.dumps(body).encode()
     response.headers["Content-Type"] = "application/json"
     return HTTPError(response=response)
+
+
+def _make_client_request_exception(
+    status_code: int,
+    error_code: str = "itemNotFound",
+    message: str = "Requested site could not be found",
+) -> ClientRequestException:
+    body = {"error": {"code": error_code, "message": message}}
+    response = Response()
+    response.status_code = status_code
+    response._content = json.dumps(body).encode()
+    response.headers["Content-Type"] = "application/json"
+    return ClientRequestException(f"{status_code} Client Error", response=response)
 
 
 def _setup_connector(
@@ -325,3 +344,103 @@ class TestFetchSitePages400Fallback:
 
         with pytest.raises(HTTPError):
             list(connector._fetch_site_pages(_site_descriptor()))
+
+
+class TestIsPerSiteGraphFailure:
+    """Classifier the Phase 5 wrap in `_load_from_checkpoint` uses to
+    decide skip-this-site (yield ConnectorFailure) vs abort-the-run."""
+
+    @pytest.mark.parametrize("status_code", sorted(PER_SITE_GRAPH_FAILURE_STATUSES))
+    def test_per_site_statuses_classify_as_per_site(self, status_code: int) -> None:
+        exc = _make_client_request_exception(status_code)
+        assert _is_per_site_graph_failure(exc) is True
+
+    @pytest.mark.parametrize("status_code", [401, 500, 502, 503, 504])
+    def test_tenant_wide_statuses_classify_as_raise(self, status_code: int) -> None:
+        exc = _make_client_request_exception(status_code)
+        assert _is_per_site_graph_failure(exc) is False
+
+    def test_none_response_classifies_as_raise(self) -> None:
+        # Older SDK paths and transport-error wrappers can produce a
+        # ClientRequestException with response=None. The retry layer owns
+        # those, so we treat None as "not per-site".
+        exc = _make_client_request_exception(404)
+        exc.response = None  # type: ignore[assignment]
+        assert _is_per_site_graph_failure(exc) is False
+
+    def test_itemnotfound_404_is_per_site(self) -> None:
+        # Mirrors the production traceback exactly.
+        exc = _make_client_request_exception(
+            404,
+            error_code="itemNotFound",
+            message="Requested site could not be found",
+        )
+        assert exc.code == "itemNotFound"
+        assert _is_per_site_graph_failure(exc) is True
+
+    @pytest.mark.parametrize("status_code", sorted(PER_SITE_GRAPH_FAILURE_STATUSES))
+    def test_per_site_http_errors_classify_as_per_site(self, status_code: int) -> None:
+        exc = _make_http_error(status_code)
+        assert _is_per_site_graph_failure(exc) is True
+
+    @pytest.mark.parametrize("status_code", [401, 500, 502, 503, 504])
+    def test_tenant_wide_http_errors_classify_as_raise(self, status_code: int) -> None:
+        exc = _make_http_error(status_code)
+        assert _is_per_site_graph_failure(exc) is False
+
+
+class TestFetchSitePagesPropagatesSiteLookup404:
+    """When `site.execute_query()` itself raises (the site URL no longer
+    resolves), `_fetch_site_pages` must let the exception propagate so
+    the outer Phase 5 wrap can convert it into a ConnectorFailure and
+    continue to the next site.
+    """
+
+    def _setup_connector_with_failing_site_lookup(
+        self, status_code: int
+    ) -> SharepointConnector:
+        connector = SharepointConnector(sites=[SITE_URL])
+        connector.graph_api_base = "https://graph.microsoft.com/v1.0"
+
+        exc = _make_client_request_exception(status_code)
+
+        def raising_execute_query(self: Any) -> None:  # noqa: ARG001
+            raise exc
+
+        fake_site_query = type(
+            "Q",
+            (),
+            {"execute_query": raising_execute_query, "id": None},
+        )()
+        mock_sites = type(
+            "FakeSites",
+            (),
+            {
+                "get_by_url": staticmethod(
+                    lambda url: fake_site_query  # noqa: ARG005
+                ),
+            },
+        )()
+        connector._graph_client = type(  # ty: ignore[invalid-assignment]
+            "FakeGraphClient", (), {"sites": mock_sites}
+        )()
+        return connector
+
+    def test_404_propagates_so_outer_handler_can_skip(self) -> None:
+        connector = self._setup_connector_with_failing_site_lookup(404)
+
+        with pytest.raises(ClientRequestException) as excinfo:
+            list(connector._fetch_site_pages(_site_descriptor()))
+
+        # The exception must carry enough info for the outer handler to
+        # classify it as per-site rather than tenant-wide.
+        assert _is_per_site_graph_failure(excinfo.value) is True
+
+    def test_401_propagates_and_classifies_as_tenant_wide(self) -> None:
+        connector = self._setup_connector_with_failing_site_lookup(401)
+
+        with pytest.raises(ClientRequestException) as excinfo:
+            list(connector._fetch_site_pages(_site_descriptor()))
+
+        # 401 is tenant-wide — outer handler should re-raise on this one.
+        assert _is_per_site_graph_failure(excinfo.value) is False

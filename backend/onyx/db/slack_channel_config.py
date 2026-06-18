@@ -71,8 +71,6 @@ def create_slack_channel_persona(
         datetime_aware=True,
         tool_ids=[search_tool.id],
         document_set_ids=document_set_ids,
-        llm_model_provider_override=None,
-        llm_model_version_override=None,
         starter_messages=None,
         is_public=True,
         is_featured=False,

@@ -4,7 +4,6 @@ from typing import Any
 from typing import Optional
 from typing import TypeVar
 
-from retry import retry
 from slack_sdk import WebClient
 
 from onyx.auth.users import get_anonymous_user
@@ -26,7 +25,6 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
-from onyx.onyxbot.slack.handlers.utils import send_team_member_message
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.models import ThreadMessage
 from onyx.onyxbot.slack.utils import get_channel_from_id
@@ -38,6 +36,7 @@ from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.models import MessageOrigin
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.utils.logger import OnyxLoggingAdapter
+from onyx.utils.retry_wrapper import retry_builder
 
 srl = SlackRateLimiter()
 
@@ -68,7 +67,7 @@ def resolve_channel_references(
                 channel_info = get_channel_from_id(client=client, channel_id=channel_id)
                 channel_name = channel_info.get("name") or None
             except Exception:
-                logger.warning(f"Failed to resolve channel name for ID: {channel_id}")
+                logger.warning("Failed to resolve channel name for ID: %s", channel_id)
 
             if not channel_name:
                 continue
@@ -197,7 +196,7 @@ def handle_regular_answer(
                 document_set.name for document_set in persona.document_sets
             ]
     else:
-        logger.info(f"Using persona {persona.name} for channel config")
+        logger.info("Using persona %s for channel config", persona.name)
         document_set_names = [
             document_set.name for document_set in persona.document_sets
         ]
@@ -235,7 +234,7 @@ def handle_regular_answer(
             "No message timestamp to respond to in `handle_message`. This should never happen."
         )
 
-    @retry(
+    @retry_builder(
         tries=num_retries,
         delay=0.25,
         backoff=2,
@@ -246,16 +245,14 @@ def handle_regular_answer(
         slack_context_str: str | None,
         onyx_user: User,
     ) -> ChatBasicResponse:
-        with get_session_with_current_tenant() as db_session:
-            packets = handle_stream_message_objects(
-                new_msg_req=new_message_request,
-                user=onyx_user,
-                db_session=db_session,
-                bypass_acl=False,
-                additional_context=slack_context_str,
-                slack_context=message_info.slack_context,
-            )
-            answer = gather_stream(packets)
+        packets = handle_stream_message_objects(
+            new_msg_req=new_message_request,
+            user=onyx_user,
+            bypass_acl=False,
+            additional_context=slack_context_str,
+            slack_context=message_info.slack_context,
+        )
+        answer = gather_stream(packets)
 
         if answer.error_msg:
             raise RuntimeError(answer.error_msg)
@@ -263,8 +260,6 @@ def handle_regular_answer(
         return answer
 
     try:
-        # By leaving time_cutoff and favor_recent as None, and setting enable_auto_detect_filters
-        # it allows the slack flow to extract out filters from the user query
         filters = BaseFilters(
             source_type=None,
             document_set=document_set_names,
@@ -306,7 +301,8 @@ def handle_regular_answer(
 
     except Exception as e:
         logger.exception(
-            f"Unable to process message - did not successfully answer in {num_retries} attempts"
+            "Unable to process message - did not successfully answer in %s attempts",
+            num_retries,
         )
         # Optionally, respond in thread with the error message, Used primarily
         # for debugging purposes
@@ -359,7 +355,7 @@ def handle_regular_answer(
         and not channel_tags
     ):
         logger.error(
-            f"Unable to find citations to answer: '{answer.answer}' - not answering!"
+            "Unable to find citations to answer: '%s' - not answering!", answer.answer
         )
         # Optionally, respond in thread with the error message
         # Used primarily for debugging purposes
@@ -412,28 +408,11 @@ def handle_regular_answer(
             send_as_ephemeral=send_as_ephemeral,
         )
 
-        # For DM (ephemeral message), we need to create a thread via a normal message so the user can see
-        # the ephemeral message. This also will give the user a notification which ephemeral message does not.
-        # if there is no message_ts_to_respond_to, and we have made it this far, then this is a /onyx message
-        # so we shouldn't send_team_member_message
-        if (
-            target_receiver_ids
-            and message_ts_to_respond_to is not None
-            and not send_as_ephemeral
-            and target_thread_ts is not None
-        ):
-            send_team_member_message(
-                client=client,
-                channel=channel,
-                thread_ts=target_thread_ts,
-                receiver_ids=target_receiver_ids,
-                send_as_ephemeral=send_as_ephemeral,
-            )
-
         return False
 
     except Exception:
         logger.exception(
-            f"Unable to process message - could not respond in slack in {num_retries} attempts"
+            "Unable to process message - could not respond in slack in %s attempts",
+            num_retries,
         )
         return True

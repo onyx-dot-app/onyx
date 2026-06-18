@@ -1,8 +1,6 @@
 import os
 from uuid import uuid4
 
-import requests
-
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import DefaultModel
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
@@ -10,6 +8,7 @@ from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -53,7 +52,7 @@ class LLMProviderManager:
             api_key_changed=True,
         )
 
-        llm_response = requests.put(
+        llm_response = client.put(
             f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
             json=llm_provider.model_dump(),
             headers=user_performing_action.headers,
@@ -73,12 +72,17 @@ class LLMProviderManager:
             personas=response_data.get("personas", []),
             api_base=response_data["api_base"],
             api_version=response_data["api_version"],
+            model_configuration_ids=[
+                mc["id"]
+                for mc in response_data.get("model_configurations", [])
+                if mc.get("id") is not None
+            ],
         )
 
         if set_as_default:
             if default_model_name is None:
                 default_model_name = "gpt-4o-mini"
-            set_default_response = requests.post(
+            set_default_response = client.post(
                 f"{API_SERVER_URL}/admin/llm/default",
                 json={
                     "provider_id": response_data["id"],
@@ -99,7 +103,7 @@ class LLMProviderManager:
         llm_provider: DATestLLMProvider,
         user_performing_action: DATestUser,
     ) -> bool:
-        response = requests.delete(
+        response = client.delete(
             f"{API_SERVER_URL}/admin/llm/provider/{llm_provider.id}",
             headers=user_performing_action.headers,
         )
@@ -110,7 +114,7 @@ class LLMProviderManager:
     def get_all(
         user_performing_action: DATestUser,
     ) -> list[LLMProviderView]:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/llm/provider",
             headers=user_performing_action.headers,
         )
@@ -155,7 +159,7 @@ class LLMProviderManager:
     def get_default_model(
         user_performing_action: DATestUser | None = None,
     ) -> DefaultModel | None:
-        response = requests.get(
+        response = client.get(
             f"{API_SERVER_URL}/admin/llm/provider",
             headers=(
                 user_performing_action.headers

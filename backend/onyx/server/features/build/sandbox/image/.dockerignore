@@ -1,0 +1,12 @@
+# Sandbox image build context. Keep this an EXCLUDE list only — never exclude
+# anything the Dockerfile COPYs (templates/, initial-requirements.txt,
+# sandbox_daemon/, *.sh, opencode-plugins/).
+
+# Not built into the image.
+README.md
+
+# Junk.
+**/__pycache__/
+**/.next/
+**/node_modules/
+**/.DS_Store

@@ -98,9 +98,9 @@ def get_latest_valid_checkpoint(
 
         if not had_any_progress:
             logger.warning(
-                f"{_NUM_RECENT_ATTEMPTS_TO_CONSIDER} consecutive failed attempts without progress "
-                f"found for cc_pair={cc_pair_id}. Ignoring checkpoint to let the run start "
-                "from scratch."
+                "%s consecutive failed attempts without progress found for cc_pair=%s. Ignoring checkpoint to let the run start from scratch.",
+                _NUM_RECENT_ATTEMPTS_TO_CONSIDER,
+                cc_pair_id,
             )
             return connector.build_dummy_checkpoint(), False
 
@@ -141,7 +141,8 @@ def get_latest_valid_checkpoint(
     checkpoint = connector.build_dummy_checkpoint()
     if latest_valid_checkpoint_candidate is None:
         logger.info(
-            f"No valid checkpoint found for cc_pair={cc_pair_id}. Starting from scratch."
+            "No valid checkpoint found for cc_pair=%s. Starting from scratch.",
+            cc_pair_id,
         )
         return checkpoint, False
 
@@ -152,15 +153,15 @@ def get_latest_valid_checkpoint(
         )
     except Exception:
         logger.exception(
-            f"Failed to load checkpoint from previous failed attempt with ID "
-            f"{latest_valid_checkpoint_candidate.id}. Falling back to default checkpoint."
+            "Failed to load checkpoint from previous failed attempt with ID %s. Falling back to default checkpoint.",
+            latest_valid_checkpoint_candidate.id,
         )
         return checkpoint, False
 
     logger.info(
-        f"Using checkpoint from previous failed attempt with ID "
-        f"{latest_valid_checkpoint_candidate.id}. Previous checkpoint: "
-        f"{previous_checkpoint}"
+        "Using checkpoint from previous failed attempt with ID %s. Previous checkpoint: %s",
+        latest_valid_checkpoint_candidate.id,
+        previous_checkpoint,
     )
     return previous_checkpoint, True
 

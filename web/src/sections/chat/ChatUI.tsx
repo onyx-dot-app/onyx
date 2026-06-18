@@ -5,13 +5,13 @@ import { Message } from "@/app/app/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
 import { MultiModelResponse } from "@/app/app/message/interfaces";
-import { SelectedModel } from "@/refresh-components/popovers/ModelSelector";
-import { buildLlmOptions } from "@/refresh-components/popovers/llmUtils";
+import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
+import { buildLlmOptions } from "@/lib/languageModels/options";
 import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
   useCurrentMessageHistory,
@@ -24,7 +24,7 @@ import {
 const MSG_MAX_W = "max-w-[720px] min-w-[400px]";
 
 export interface ChatUIProps {
-  liveAgent: MinimalPersonaSnapshot;
+  liveAgent: MinimalAgent;
   llmManager: LlmManager;
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   onMessageSelection: (nodeId: number) => void;

@@ -7,16 +7,16 @@ import { formatDateTimeLog } from "@/lib/dateUtils";
 import { Button, Divider, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import Popover from "@/refresh-components/Popover";
-import SimpleLoader from "@/refresh-components/loaders/SimpleLoader";
+import { Popover } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import {
   SvgAlertTriangle,
   SvgCheckCircle,
   SvgMaximize2,
   SvgXOctagon,
+  SvgSimpleLoader,
 } from "@opal/icons";
-import CopyIconButton from "@/refresh-components/buttons/CopyIconButton";
+import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import HookLogsModal from "@/ee/refresh-pages/admin/HooksPage/HookLogsModal";
@@ -55,11 +55,8 @@ function ErrorLogRow({
               {formatDateTimeLog(log.created_at)}
             </Text>
           </span>
-          <Hoverable.Item group={group} variant="opacity-on-hover">
-            <CopyIconButton
-              size="xs"
-              getCopyText={() => log.error_message ?? ""}
-            />
+          <Hoverable.Item group={group} variant="appear-on-hover">
+            <CopyButton size="xs" getCopyText={() => log.error_message ?? ""} />
           </Hoverable.Item>
         </Section>
         <span className="break-all">
@@ -229,7 +226,7 @@ export default function HookStatusPopover({
           >
             {isLoading ? (
               <Section justifyContent="center">
-                <SimpleLoader />
+                <SvgSimpleLoader />
               </Section>
             ) : error ? (
               <Text font="secondary-body" color="text-03">

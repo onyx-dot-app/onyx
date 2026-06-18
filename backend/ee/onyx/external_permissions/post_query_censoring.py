@@ -69,7 +69,9 @@ def _post_query_chunk_censoring(
             censored_chunks = censor_chunks_for_source(chunks_for_source, user.email)
         except Exception as e:
             logger.exception(
-                f"Failed to censor chunks for source {source} so throwing out all chunks for this source and continuing: {e}"
+                "Failed to censor chunks for source %s so throwing out all chunks for this source and continuing: %s",
+                source,
+                e,
             )
             continue
 

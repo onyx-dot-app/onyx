@@ -73,9 +73,9 @@ def _create_chat_session_with_feedback(
     return feedback_type, test_session
 
 
-def setup_chat_sessions_with_different_feedback() -> (
-    tuple[DATestUser, dict[QAFeedbackType | None, list[DAQueryHistoryEntry]]]
-):
+def setup_chat_sessions_with_different_feedback() -> tuple[
+    DATestUser, dict[QAFeedbackType | None, list[DAQueryHistoryEntry]]
+]:
     # Create admin user and required resources
     admin_user: DATestUser = UserManager.create(name="admin_user")
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)

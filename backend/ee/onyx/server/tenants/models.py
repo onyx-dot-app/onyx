@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from ee.onyx.server.license.models import CustomerTier
 from onyx.server.settings.models import ApplicationStatus
 
 
@@ -24,8 +25,20 @@ class ProductGatingFullSyncRequest(BaseModel):
     gated_tenant_ids: list[str]
 
 
+class TierUpdateRequest(BaseModel):
+    tenant_id: str
+    customer_tier: CustomerTier
+    trial_end: datetime | None = None
+
+
+class TierUpdateResponse(BaseModel):
+    updated: bool
+    error: str | None
+
+
 class SubscriptionStatusResponse(BaseModel):
     subscribed: bool
+    customer_tier: CustomerTier | None = None
 
 
 class BillingInformation(BaseModel):
@@ -40,6 +53,7 @@ class BillingInformation(BaseModel):
     trial_end: datetime | None
     seats: int
     payment_method_enabled: bool
+    customer_tier: CustomerTier | None = None
 
 
 class CreateCheckoutSessionRequest(BaseModel):
@@ -76,8 +90,18 @@ class ProductGatingResponse(BaseModel):
     error: str | None
 
 
+class StripeCheckoutSessionResult(BaseModel):
+    # url is always set on success; sessionId is null for the past_due/unpaid
+    # payment-method-update portal response.
+    session_id: str | None = None
+    url: str | None = None
+    requires_payment_method_update: bool = False
+
+
 class SubscriptionSessionResponse(BaseModel):
-    sessionId: str
+    sessionId: str | None = None
+    url: str | None = None
+    requires_payment_method_update: bool = False
 
 
 class CreateSubscriptionSessionRequest(BaseModel):

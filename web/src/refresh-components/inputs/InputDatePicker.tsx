@@ -3,7 +3,7 @@
 import { Button } from "@opal/components";
 import { isAfterDate, normalizeDate } from "@/lib/dateUtils";
 import Calendar from "@/refresh-components/Calendar";
-import Popover from "@/refresh-components/Popover";
+import { Popover } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useMemo, useState } from "react";
 import { SvgCalendar } from "@opal/icons";

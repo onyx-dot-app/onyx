@@ -1,4 +1,6 @@
+import { mutate } from "swr";
 import { User } from "@/lib/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const checkUserIsNoAuthUser = (userId: string) => {
   return userId === "__no_auth_user__";
@@ -20,6 +22,11 @@ export const logout = async (): Promise<Response> => {
     method: "POST",
     credentials: "include",
   });
+  if (response.ok) {
+    // Drop the cached /api/me so any subsequent useCurrentUser read does not
+    // hand callers the just-signed-out user from the SWR dedup window.
+    await mutate(SWR_KEYS.me, null, { revalidate: false });
+  }
   return response;
 };
 
@@ -122,10 +129,10 @@ export async function refreshToken(
 
 export function getUserDisplayName(user: User | null): string {
   // Prioritize custom personal name, if set.
-  if (!!user?.personalization?.name) return user.personalization.name;
+  if (user?.personalization?.name) return user.personalization.name;
 
   // Then, prioritize personal email.
-  if (!!user?.email) {
+  if (user?.email) {
     const atIndex = user.email.indexOf("@");
     if (atIndex > 0) {
       return user.email.substring(0, atIndex);
@@ -138,7 +145,7 @@ export function getUserDisplayName(user: User | null): string {
 
 export function getUserEmail(user: User | null): string {
   // Prioritize personal email.
-  if (!!user?.email) return user.email;
+  if (user?.email) return user.email;
 
   // If nothing works, then fall back to anonymous email.
   return "anonymous@email.com";

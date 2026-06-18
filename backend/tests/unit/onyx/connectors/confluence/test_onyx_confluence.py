@@ -6,9 +6,18 @@ import pytest
 import requests
 from requests import HTTPError
 
+from onyx.connectors.confluence import onyx_confluence as onyx_confluence_module
 from onyx.connectors.confluence.onyx_confluence import _DEFAULT_PAGINATION_LIMIT
 from onyx.connectors.confluence.onyx_confluence import _MINIMUM_PAGINATION_LIMIT
+from onyx.connectors.confluence.onyx_confluence import (
+    ConfluenceRestSpacePermissionsNotAvailableError,
+)
+from onyx.connectors.confluence.onyx_confluence import (
+    get_user_email_from_userkey__server,
+)
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import CredentialsProviderInterface
 
 
@@ -1009,3 +1018,478 @@ def test_paginate_url_504_halves_multiple_times(
     assert "limit=20" in mock_get_call_paths[1]
     assert "limit=10" in mock_get_call_paths[2]
     assert "limit=5" in mock_get_call_paths[3]
+
+
+def test_retrieve_confluence_spaces_server_paginates_past_capped_page(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """
+    Regression test for #4129: Confluence Server/DC silently caps
+    ``rest/api/space`` page size at the admin-configured maximum when the
+    requested ``limit`` is larger. The pagination loop must NOT terminate
+    just because ``len(results) < requested_limit`` -- doing so causes
+    spaces beyond the cap to be invisible to permission sync, which in
+    turn breaks ``get_all_space_permissions`` and crashes
+    ``generic_doc_sync`` with "No external access found for document ID".
+
+    Here we request limit=5000 but the server caps responses at 3 per
+    page. The real end-of-data is signaled by ``_links.next`` being
+    absent on the last data-bearing page (the canonical Atlassian
+    contract).
+    """
+    requested_limit = 5000
+    server_cap = 3
+    all_keys = ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "GGG", "HHH"]
+
+    mock_get_call_paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+
+        # Honor whatever ``start`` the loop asks for; default 0 on the
+        # initial call (no start param).
+        start_token = "start="
+        start = 0
+        if start_token in path:
+            start = int(path.split(start_token, 1)[1].split("&", 1)[0])
+
+        keys_on_page = all_keys[start : start + server_cap]
+        has_more = (start + server_cap) < len(all_keys)
+        # Atlassian's canonical end-of-pagination signal: emit
+        # ``_links.next`` only when more data follows. The loop must
+        # terminate when this is absent -- NOT when
+        # ``len(results) < limit``.
+        links: dict[str, str] = {}
+        if has_more:
+            links["next"] = (
+                f"/rest/api/space?limit={requested_limit}&start={start + server_cap}"
+            )
+        return _create_mock_response(
+            200,
+            {
+                "results": [{"key": k} for k in keys_on_page],
+                "size": len(keys_on_page),
+                "_links": links,
+            },
+            url=path,
+        )
+
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
+
+    returned = list(
+        confluence_server_client.retrieve_confluence_spaces(limit=requested_limit)
+    )
+
+    assert [s["key"] for s in returned] == all_keys
+    # 8 keys / 3 per page = 3 data pages. The third response carries no
+    # ``_links.next``, so we must NOT make a fourth probe call.
+    assert len(mock_get_call_paths) == 3
+    assert all(f"limit={requested_limit}" in p for p in mock_get_call_paths)
+
+
+def test_paginate_url_server_re_derives_start_when_dc_under_counts(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """#4129: no-callback Server callers (paginated_cql_retrieval, slim
+    docs, etc.) must re-derive ``start`` when DC under-counts
+    ``_links.next.start``.
+    """
+    requested_limit = 10
+    server_cap = 3
+    all_ids = list(range(1, 9))
+    mock_get_call_paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+
+        start = 0
+        if "start=" in path:
+            start = int(path.split("start=", 1)[1].split("&", 1)[0])
+
+        ids_on_page = all_ids[start : start + server_cap]
+        has_more = (start + server_cap) < len(all_ids)
+        # Simulate the bug: _links.next.start advances by requested_limit
+        # (10) rather than server_cap (3).
+        links: dict[str, str] = {}
+        if has_more:
+            links["next"] = (
+                f"/rest/api/content/search?cql=type=page"
+                f"&limit={requested_limit}&start={start + requested_limit}"
+            )
+        return _create_mock_response(
+            200,
+            {
+                "results": [{"id": i} for i in ids_on_page],
+                "_links": links,
+                "size": len(ids_on_page),
+            },
+            url=path,
+        )
+
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
+
+    returned = list(
+        confluence_server_client.paginated_cql_retrieval(
+            cql="type=page", limit=requested_limit
+        )
+    )
+
+    assert [r["id"] for r in returned] == all_ids
+    starts_seen = []
+    for path in mock_get_call_paths:
+        if "start=" in path:
+            starts_seen.append(int(path.split("start=", 1)[1].split("&", 1)[0]))
+        else:
+            starts_seen.append(0)
+    assert starts_seen == [0, 3, 6]
+
+
+def test_retrieve_confluence_spaces_server_stops_when_next_link_absent(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """
+    Regression test for CONFSERVER-95272 / CONFSERVER-95312 (DC 8.5.8,
+    7.19.21, 8.9.0): when ``start`` exceeds the true total,
+    ``rest/api/space`` keeps returning records instead of an empty page.
+    A loop that terminated only on empty ``results`` would run unbounded
+    on these versions.
+
+    We must honor ``_links.next`` absence as the canonical end signal.
+    This test simulates the bug -- every call returns a record -- and
+    confirms that absence of ``_links.next`` is enough to stop the
+    loop after a finite number of calls.
+    """
+    mock_get_call_paths: list[str] = []
+    page_counter = {"n": 0}
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,  # noqa: ARG001
+        advanced_mode: bool = False,  # noqa: ARG001
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+        page_counter["n"] += 1
+        is_first_page = page_counter["n"] == 1
+        return _create_mock_response(
+            200,
+            {
+                "results": [{"key": f"SPACE{page_counter['n']}"}],
+                "size": 1,
+                "_links": (
+                    {"next": "/rest/api/space?limit=5000&start=1"}
+                    if is_first_page
+                    else {}
+                ),
+            },
+            url=path,
+        )
+
+    confluence_server_client._confluence.get.side_effect = (  # ty: ignore[unresolved-attribute]
+        get_side_effect
+    )
+
+    returned = list(confluence_server_client.retrieve_confluence_spaces(limit=5000))
+
+    assert [s["key"] for s in returned] == ["SPACE1", "SPACE2"]
+    assert len(mock_get_call_paths) == 2
+
+
+def test_jsonrpc_websudo_html_response_raises_validation_error(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """
+    Regression test for the production failure against Confluence DC 10.2.10.
+
+    When 'Secure Administrator Sessions' (WebSudo) intercepts a JSON-RPC
+    call, the response body is HTML (login page / WebSudoRequiredException)
+    rather than a JSON-RPC envelope. atlassian-python-api's _response_handler
+    swallows the ValueError from response.json() and returns None, and the
+    pre-fix implementation then did `response.get("result")` and blew up
+    with `AttributeError: 'NoneType' object has no attribute 'get'` --
+    leaking up through permission sync as an unactionable error.
+
+    After the fix, this surfaces as a ConnectorValidationError that:
+      - Names the WebSudo failure mode and points at the Atlassian KB.
+      - Includes the actual HTTP status, Content-Type, and body snippet so
+        the admin can confirm WebSudo (rather than guessing) and act on it.
+    """
+    websudo_html = (
+        "<!DOCTYPE html>\n"
+        "<html><head><title>Confluence</title></head>\n"
+        "<body><h1>WebSudoRequiredException</h1>"
+        "<p>You need to confirm your password to access this resource. "
+        "(Secure Administrator Sessions are enabled.)</p></body></html>"
+    )
+    fake_response = requests.Response()
+    fake_response.status_code = 200
+    fake_response.url = "http://fake-confluence.com/rpc/json-rpc/confluenceservice-v2"
+    fake_response.headers["Content-Type"] = "text/html;charset=UTF-8"
+    fake_response._content = websudo_html.encode("utf-8")
+
+    post_mock = mock.Mock(return_value=fake_response)
+    confluence_server_client._confluence.post = (  # ty: ignore[invalid-assignment]
+        post_mock
+    )
+
+    with pytest.raises(ConnectorValidationError) as exc_info:
+        confluence_server_client.get_all_space_permissions_server(space_key="TST")
+
+    # Verify atlassian-python-api was invoked in advanced mode -- otherwise
+    # the library swallows the parse failure and we lose the response body.
+    _, kwargs = post_mock.call_args
+    assert kwargs.get("advanced_mode") is True
+
+    msg = str(exc_info.value)
+    # Names the failure mode in language a Confluence admin will recognize.
+    assert "Secure Administrator Sessions" in msg
+    # Includes the bad space key so it correlates with sync logs.
+    assert "TST" in msg
+    # Includes the canonical Atlassian KB so the admin can act without us.
+    assert "support.atlassian.com" in msg
+    # Includes the actual HTTP status and Content-Type from the upstream
+    # response, so a developer reading the error doesn't have to guess.
+    assert "HTTP 200" in msg
+    assert "text/html" in msg
+    # And critically, surfaces the actual body so we can confirm that what
+    # we're looking at really is WebSudo (vs e.g. a reverse-proxy error
+    # page that happens to also be HTML).
+    assert "WebSudoRequiredException" in msg
+
+
+# ---------------------------------------------------------------------------
+# DC 9.1+ REST space-permissions API: version detection, REST call, and
+# userKey -> email helper. See plans/confluence-dc-space-permissions-rest.md
+# for the broader rationale.
+# ---------------------------------------------------------------------------
+
+
+def _server_information_payload(version: str) -> dict[str, Any]:
+    """Minimal /rest/api/server-information payload; we only consume
+    `version`. Schema documented in the Confluence DC REST API reference
+    under the "Server Information" group.
+    """
+    return {"version": version, "buildNumber": 0}
+
+
+def test_supports_rest_space_permissions_true_for_dc_91_plus(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """DC 10.2.10 (the customer's actual deployed version) should report
+    support for the REST API. Cached after first probe, so a subsequent
+    call must not hit /rest/api/server-information a second time.
+    """
+    server_info_mock = mock.Mock(return_value=_server_information_payload("10.2.10"))
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        server_info_mock
+    )
+
+    assert confluence_server_client.supports_rest_space_permissions() is True
+    assert confluence_server_client.get_server_version() == (10, 2)
+    assert confluence_server_client.supports_rest_space_permissions() is True
+    assert server_info_mock.call_count == 1
+    # Regression-guard the path itself: the Jira-style /rest/api/serverInfo
+    # 404s on Confluence DC 10.x; the documented Confluence path is the
+    # hyphenated /rest/api/server-information.
+    (called_path, *_), _ = server_info_mock.call_args
+    assert called_path == "rest/api/server-information"
+
+
+def test_supports_rest_space_permissions_false_for_dc_pre_91(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    server_info_mock = mock.Mock(return_value=_server_information_payload("8.9.1"))
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        server_info_mock
+    )
+
+    assert confluence_server_client.supports_rest_space_permissions() is False
+    assert confluence_server_client.get_server_version() == (8, 9)
+
+
+def test_supports_rest_space_permissions_false_when_probe_fails(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """Negative probe is cached: a flaky server-information call doesn't
+    make us re-probe on every space-permissions sync. Also pins the
+    "version=None -> JSON-RPC fallback" contract that downstream
+    dispatchers rely on.
+    """
+    server_info_mock = mock.Mock(side_effect=requests.ConnectionError("boom"))
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        server_info_mock
+    )
+
+    assert confluence_server_client.supports_rest_space_permissions() is False
+    assert confluence_server_client.get_server_version() is None
+    confluence_server_client.supports_rest_space_permissions()
+    assert server_info_mock.call_count == 1
+
+
+def test_get_all_space_permissions_server_rest_404_raises_unavailable(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """A 404 from the REST endpoint means the upstream DC version is too
+    old for this API; surface as the typed signal so the dispatcher can
+    fall back to JSON-RPC instead of bubbling up an opaque HTTPError.
+    """
+    response = _create_mock_response(404, json_data={}, url="x")
+    get_mock = mock.Mock(return_value=response)
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        get_mock
+    )
+
+    with pytest.raises(ConfluenceRestSpacePermissionsNotAvailableError) as exc_info:
+        confluence_server_client.get_all_space_permissions_server_rest(space_key="ENG")
+
+    msg = str(exc_info.value)
+    assert "ENG" in msg
+    assert "9.1" in msg
+
+
+def test_get_all_space_permissions_server_rest_500_raises_insufficient_permissions(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """CONFSERVER-99908: the REST endpoint returns 500 (not 403) when the
+    bot account lacks Confluence/space-admin rights. Make sure we surface
+    this as InsufficientPermissionsError with the ticket reference rather
+    than a raw 5xx.
+    """
+    response = _create_mock_response(500, json_data={}, url="x")
+    get_mock = mock.Mock(return_value=response)
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        get_mock
+    )
+
+    with pytest.raises(InsufficientPermissionsError) as exc_info:
+        confluence_server_client.get_all_space_permissions_server_rest(space_key="ENG")
+
+    msg = str(exc_info.value)
+    assert "ENG" in msg
+    assert "CONFSERVER-99908" in msg
+    assert "admin" in msg.lower()
+
+
+def test_get_all_space_permissions_server_rest_happy_path(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """Verifies advanced_mode is on (so non-200s reach our handlers) and
+    that the raw list shape from CONFSERVER-78176 is returned unchanged
+    so the dispatcher can do its own filtering.
+    """
+    permissions_payload: list[dict[str, Any]] = [
+        {
+            "operation": {"targetType": "space", "operationKey": "read"},
+            "subject": {"type": "group", "name": "confluence-users"},
+            "spaceKey": "ENG",
+            "spaceId": 131083,
+        },
+        {
+            "operation": {"targetType": "space", "operationKey": "read"},
+            "subject": {
+                "type": "user",
+                # Format is opaque hex in production; keep it human-readable
+                # here so secret-scanners don't flag it as a real credential.
+                "userKey": "fake-test-userkey-alice",
+            },
+            "spaceKey": "ENG",
+            "spaceId": 131083,
+        },
+    ]
+    # The REST endpoint returns a list, not a dict, so we hand-roll the
+    # mock response (the shared _create_mock_response helper is
+    # dict-only).
+    response = requests.Response()
+    response.status_code = 200
+    response.url = "x"
+    json_mock = mock.Mock(return_value=permissions_payload)
+    response.json = json_mock  # ty: ignore[invalid-assignment]
+    get_mock = mock.Mock(return_value=response)
+    confluence_server_client._confluence.get = (  # ty: ignore[invalid-assignment]
+        get_mock
+    )
+
+    result = confluence_server_client.get_all_space_permissions_server_rest(
+        space_key="ENG"
+    )
+
+    assert result == permissions_payload
+    _, kwargs = get_mock.call_args
+    assert kwargs.get("advanced_mode") is True
+
+
+def test_get_user_email_from_userkey_caches_lookups(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """Cache hit-rate is the only thing keeping per-space user resolution
+    from being O(N_users * N_spaces) network calls. Regression-guard the
+    cache.
+    """
+    user_key = "test_userkey_unique_to_this_case"
+    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.pop(user_key, None)
+
+    user_details_mock = mock.Mock(
+        return_value={
+            "userKey": user_key,
+            "username": "alice",
+            "email": "alice@example.com",
+            "displayName": "Alice",
+        }
+    )
+    confluence_server_client._confluence.get_user_details_by_userkey = (  # ty: ignore[invalid-assignment]
+        user_details_mock
+    )
+
+    first = get_user_email_from_userkey__server(
+        confluence_server_client, user_key=user_key
+    )
+    second = get_user_email_from_userkey__server(
+        confluence_server_client, user_key=user_key
+    )
+
+    assert first == "alice@example.com"
+    assert second == "alice@example.com"
+    assert user_details_mock.call_count == 1
+
+
+def test_get_user_email_from_userkey_caches_negative_result(
+    confluence_server_client: OnyxConfluence,
+) -> None:
+    """A user we couldn't resolve (HTTPError, no email field, etc.) should
+    cache as None so we don't keep retrying every sync. This both saves
+    HTTP load and keeps the warning log from spamming.
+    """
+    user_key = "missing_userkey_unique_to_this_case"
+    onyx_confluence_module._USER_KEY_TO_EMAIL_CACHE.pop(user_key, None)
+
+    user_details_mock = mock.Mock(
+        side_effect=HTTPError(response=_create_mock_response(404, {}, "x"))
+    )
+    confluence_server_client._confluence.get_user_details_by_userkey = (  # ty: ignore[invalid-assignment]
+        user_details_mock
+    )
+
+    first = get_user_email_from_userkey__server(
+        confluence_server_client, user_key=user_key
+    )
+    second = get_user_email_from_userkey__server(
+        confluence_server_client, user_key=user_key
+    )
+
+    assert first is None
+    assert second is None
+    assert user_details_mock.call_count == 1

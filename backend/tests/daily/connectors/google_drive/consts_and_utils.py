@@ -301,6 +301,14 @@ ADMIN_MY_DRIVE_ID = "0ABTZwt798K7MUk9PVA"  # Admin's My Drive
 TEST_USER_2_MY_DRIVE = "0ADjBZv2nEvJNUk9PVA"  # Test user 2's My Drive
 TEST_USER_3_MY_DRIVE_ID = "0AKl0e4Wr5NW7Uk9PVA"  # Test user 3's My Drive
 PILL_FOLDER_ID = "1FWzfA369tx9VT8scJ3LCOPBBuTBgt0OH"  # contains file with date pills
+SHORTCUTS_GALORE_FOLDER_ID = "1oBDLgN21c3PX9pPGPWvdp7S1gVqt5-iQ"
+SHORTCUTTED_FOLDER_ID = "1_SzLQFnmMcS6BoB5VqgRYQz_Xg89j0t9"
+SHORTCUTTED_2_FOLDER_ID = "12L8p_dJnaHlPwULuMvWgn9s-zaAmubRw"
+ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS = (
+    SHORTCUTS_GALORE_FOLDER_ID,
+    SHORTCUTTED_FOLDER_ID,
+    SHORTCUTTED_2_FOLDER_ID,
+)
 
 PADDING_DRIVE_URLS = [
     "0AOorXE6AfJRAUk9PVA",
@@ -395,6 +403,24 @@ EXPECTED_TEST_USER_1_EXTRA_FOLDER = _node(
 EXPECTED_PILL_FOLDER = _node(
     PILL_FOLDER_ID, "pill_folder", HierarchyNodeType.FOLDER, ADMIN_MY_DRIVE_ID
 )
+EXPECTED_SHORTCUTS_GALORE_FOLDER = _node(
+    SHORTCUTS_GALORE_FOLDER_ID,
+    "shortcuts galore",
+    HierarchyNodeType.FOLDER,
+    ADMIN_MY_DRIVE_ID,
+)
+EXPECTED_SHORTCUTTED_FOLDER = _node(
+    SHORTCUTTED_FOLDER_ID,
+    "shortcutted",
+    HierarchyNodeType.FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID,
+)
+EXPECTED_SHORTCUTTED_2_FOLDER = _node(
+    SHORTCUTTED_2_FOLDER_ID,
+    "shortcutted2",
+    HierarchyNodeType.FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID,
+)
 EXPECTED_EXTERNAL_SHARED_FOLDER = _node(
     EXTERNAL_SHARED_FOLDER_ID, "Onyx-test", HierarchyNodeType.FOLDER
 )
@@ -419,6 +445,9 @@ ALL_EXPECTED_HIERARCHY_NODES: dict[str, ExpectedHierarchyNode] = {
     TEST_USER_1_EXTRA_DRIVE_2_ID: EXPECTED_TEST_USER_1_EXTRA_DRIVE_2,
     TEST_USER_1_EXTRA_FOLDER_ID: EXPECTED_TEST_USER_1_EXTRA_FOLDER,
     PILL_FOLDER_ID: EXPECTED_PILL_FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID: EXPECTED_SHORTCUTS_GALORE_FOLDER,
+    SHORTCUTTED_FOLDER_ID: EXPECTED_SHORTCUTTED_FOLDER,
+    SHORTCUTTED_2_FOLDER_ID: EXPECTED_SHORTCUTTED_2_FOLDER,
     EXTERNAL_SHARED_FOLDER_ID: EXPECTED_EXTERNAL_SHARED_FOLDER,
 }
 
@@ -641,25 +670,25 @@ def assert_hierarchy_nodes_match_expected(
             print("Ignorable node IDs:")
             print(sorted(ignorable))
 
-    assert (
-        not missing and not extra
-    ), f"Hierarchy node mismatch. Missing: {missing}, Extra: {extra}"
+    assert not missing and not extra, (
+        f"Hierarchy node mismatch. Missing: {missing}, Extra: {extra}"
+    )
 
     for node in retrieved_nodes:
         if node.raw_node_id in ignorable and node.raw_node_id not in expected_nodes:
             continue
 
-        assert (
-            node.raw_node_id in expected_nodes
-        ), f"Node {node.raw_node_id} ({node.display_name}) not found in expected_nodes"
+        assert node.raw_node_id in expected_nodes, (
+            f"Node {node.raw_node_id} ({node.display_name}) not found in expected_nodes"
+        )
         expected = expected_nodes[node.raw_node_id]
 
-        assert (
-            node.display_name == expected.display_name
-        ), f"Display name mismatch for node {node.raw_node_id}: expected '{expected.display_name}', got '{node.display_name}'"
-        assert (
-            node.node_type == expected.node_type
-        ), f"Node type mismatch for node {node.raw_node_id}: expected '{expected.node_type}', got '{node.node_type}'"
+        assert node.display_name == expected.display_name, (
+            f"Display name mismatch for node {node.raw_node_id}: expected '{expected.display_name}', got '{node.display_name}'"
+        )
+        assert node.node_type == expected.node_type, (
+            f"Node type mismatch for node {node.raw_node_id}: expected '{expected.node_type}', got '{node.node_type}'"
+        )
         if expected.raw_parent_id is not None:
             assert node.raw_parent_id == expected.raw_parent_id, (
                 f"Parent mismatch for node {node.raw_node_id} ({node.display_name}): "
@@ -752,9 +781,9 @@ def get_expected_hierarchy_for_test_user_1() -> dict[str, ExpectedHierarchyNode]
     return _clear_parents(result, FOLDER_3_ID)
 
 
-def get_expected_hierarchy_for_test_user_1_shared_drives_only() -> (
-    dict[str, ExpectedHierarchyNode]
-):
+def get_expected_hierarchy_for_test_user_1_shared_drives_only() -> dict[
+    str, ExpectedHierarchyNode
+]:
     """Expected hierarchy nodes when test_user_1 runs with include_shared_drives=True only."""
     result = get_expected_hierarchy_for_test_user_1()
     for nid in (
@@ -767,9 +796,9 @@ def get_expected_hierarchy_for_test_user_1_shared_drives_only() -> (
     return result
 
 
-def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> (
-    dict[str, ExpectedHierarchyNode]
-):
+def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> dict[
+    str, ExpectedHierarchyNode
+]:
     """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only."""
     return _clear_parents(
         _pick(FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID),
@@ -777,8 +806,8 @@ def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> (
     )
 
 
-def get_expected_hierarchy_for_test_user_1_my_drive_only() -> (
-    dict[str, ExpectedHierarchyNode]
-):
+def get_expected_hierarchy_for_test_user_1_my_drive_only() -> dict[
+    str, ExpectedHierarchyNode
+]:
     """Expected hierarchy nodes when test_user_1 runs with include_my_drives=True only."""
     return _pick(TEST_USER_1_MY_DRIVE_ID, TEST_USER_1_MY_DRIVE_FOLDER_ID)

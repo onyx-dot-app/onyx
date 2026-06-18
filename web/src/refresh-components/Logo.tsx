@@ -1,6 +1,6 @@
 "use client";
 
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   DEFAULT_LOGO_SIZE_PX,
   NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED,
@@ -8,36 +8,40 @@ import {
 import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { useMemo } from "react";
 import { SvgOnyxLogo, SvgOnyxLogoTyped } from "@opal/logos";
 
 export interface LogoProps {
   folded?: boolean;
   size?: number;
   className?: string;
+  // Always render the real Onyx logo, ignoring enterprise white-label settings
+  // (custom logo / application name). Used by Onyx-branded surfaces like Craft.
+  onyxBranded?: boolean;
 }
 
-export default function Logo({ folded, size, className }: LogoProps) {
+export default function Logo({
+  folded,
+  size,
+  className,
+  onyxBranded,
+}: LogoProps) {
   const resolvedSize = size ?? DEFAULT_LOGO_SIZE_PX;
-  const settings = useSettingsContext();
-  const logoDisplayStyle = settings.enterpriseSettings?.logo_display_style;
-  const applicationName = settings.enterpriseSettings?.application_name;
+  const { enterprise, logoUrl } = useSettings();
+  const logoDisplayStyle = enterprise?.logo_display_style;
+  const applicationName = enterprise?.application_name;
 
-  // Cache-buster: the logo URL never changes (/api/enterprise-settings/logo)
-  // so the browser serves the in-memory cached image even after an admin
-  // uploads a new one. Generating a fresh timestamp each time enterprise
-  // settings are revalidated by SWR appends a unique query param to force
-  // the browser to re-fetch the image.
-  const logoBuster = useMemo(
-    () => Date.now(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings.enterpriseSettings]
-  );
+  if (onyxBranded) {
+    return folded ? (
+      <SvgOnyxLogo size={resolvedSize} className={cn("shrink-0", className)} />
+    ) : (
+      <SvgOnyxLogoTyped size={resolvedSize} className={className} />
+    );
+  }
 
-  const logo = settings.enterpriseSettings?.use_custom_logo ? (
+  const logo = logoUrl ? (
     <div
       className={cn(
-        "aspect-square rounded-full overflow-hidden relative flex-shrink-0",
+        "aspect-square rounded-full overflow-hidden relative shrink-0",
         className
       )}
       style={{ height: resolvedSize }}
@@ -45,15 +49,12 @@ export default function Logo({ folded, size, className }: LogoProps) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         alt="Logo"
-        src={`/api/enterprise-settings/logo?v=${logoBuster}`}
+        src={logoUrl}
         className="object-cover object-center w-full h-full"
       />
     </div>
   ) : (
-    <SvgOnyxLogo
-      size={resolvedSize}
-      className={cn("flex-shrink-0", className)}
-    />
+    <SvgOnyxLogo size={resolvedSize} className={cn("shrink-0", className)} />
   );
 
   const renderNameAndPoweredBy = (opts: {
@@ -69,16 +70,17 @@ export default function Logo({ folded, size, className }: LogoProps) {
             {opts.includeName && (
               <Truncated headingH3>{applicationName}</Truncated>
             )}
-            {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-              <Text
-                secondaryBody
-                text03
-                className={"line-clamp-1 truncate"}
-                nowrap
-              >
-                Powered by Onyx
-              </Text>
-            )}
+            {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED &&
+              !enterprise?.hide_onyx_branding && (
+                <Text
+                  secondaryBody
+                  text03
+                  className={"line-clamp-1 truncate"}
+                  nowrap
+                >
+                  Powered by Onyx
+                </Text>
+              )}
           </div>
         )}
       </div>
@@ -99,10 +101,7 @@ export default function Logo({ folded, size, className }: LogoProps) {
   return applicationName ? (
     renderNameAndPoweredBy({ includeLogo: true, includeName: true })
   ) : folded ? (
-    <SvgOnyxLogo
-      size={resolvedSize}
-      className={cn("flex-shrink-0", className)}
-    />
+    <SvgOnyxLogo size={resolvedSize} className={cn("shrink-0", className)} />
   ) : (
     <SvgOnyxLogoTyped size={resolvedSize} className={className} />
   );

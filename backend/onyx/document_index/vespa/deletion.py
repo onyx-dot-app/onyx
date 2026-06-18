@@ -2,11 +2,11 @@ import concurrent.futures
 from uuid import UUID
 
 import httpx
-from retry import retry
 
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -14,7 +14,7 @@ logger = setup_logger()
 CONTENT_SUMMARY = "content_summary"
 
 
-@retry(tries=10, delay=1, backoff=2)
+@retry_builder(tries=10, delay=1, backoff=2)
 def _retryable_http_delete(http_client: httpx.Client, url: str) -> None:
     res = http_client.delete(url)
     res.raise_for_status()
@@ -29,7 +29,7 @@ def _delete_vespa_chunk(
             f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{doc_chunk_id}",
         )
     except httpx.HTTPStatusError as e:
-        logger.error(f"Failed to delete chunk, details: {e.response.text}")
+        logger.error("Failed to delete chunk, details: %s", e.response.text)
         raise
 
 

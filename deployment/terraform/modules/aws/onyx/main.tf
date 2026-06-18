@@ -74,6 +74,18 @@ module "eks" {
   tags            = local.merged_tags
   s3_bucket_names = [local.bucket_name]
 
+  irsa_additional_service_account_names = var.irsa_additional_service_account_names
+
+  enable_craft_sandbox_node_group   = var.enable_craft_sandbox_node_group
+  craft_sandbox_node_instance_types = var.craft_sandbox_node_instance_types
+  craft_sandbox_node_min_size       = var.craft_sandbox_node_min_size
+  craft_sandbox_node_max_size       = var.craft_sandbox_node_max_size
+  craft_sandbox_node_desired_size   = var.craft_sandbox_node_desired_size
+
+  main_node_subnet_ids = length(var.main_node_subnet_ids) > 0 ? var.main_node_subnet_ids : (
+    var.main_node_private_subnets_only ? local.private_subnets : []
+  )
+
   # Wire RDS IAM connection for the same IRSA service account used by apps
   enable_rds_iam_for_service_account = var.enable_iam_auth
   rds_db_username                    = var.postgres_username

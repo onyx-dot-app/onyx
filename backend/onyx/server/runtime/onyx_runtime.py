@@ -1,5 +1,4 @@
 import io
-from typing import cast
 
 from PIL import Image
 
@@ -106,10 +105,9 @@ class OnyxRuntime:
 
         r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
 
-        beat_multiplier_raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:beat_multiplier")
-        if beat_multiplier_raw is not None:
+        beat_multiplier_bytes = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:beat_multiplier")
+        if beat_multiplier_bytes is not None:
             try:
-                beat_multiplier_bytes = cast(bytes, beat_multiplier_raw)
                 beat_multiplier = float(beat_multiplier_bytes.decode())
             except ValueError:
                 pass
@@ -127,10 +125,11 @@ class OnyxRuntime:
 
         r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
 
-        value_raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:doc_permission_sync_multiplier")
-        if value_raw is not None:
+        value_bytes = r.get(
+            f"{ONYX_CLOUD_REDIS_RUNTIME}:doc_permission_sync_multiplier"
+        )
+        if value_bytes is not None:
             try:
-                value_bytes = cast(bytes, value_raw)
                 value = float(value_bytes.decode())
             except ValueError:
                 pass
@@ -152,7 +151,7 @@ class OnyxRuntime:
             return default
 
         try:
-            return cast(bytes, raw).decode().strip().lower() == "true"
+            return raw.decode().strip().lower() == "true"
         except Exception:
             return default
 
@@ -193,7 +192,7 @@ class OnyxRuntime:
             return default
 
         try:
-            value = int(cast(bytes, raw).decode())
+            value = int(raw.decode())
             return value if value > 0 else default
         except ValueError:
             return default
@@ -216,7 +215,7 @@ class OnyxRuntime:
             return default
 
         try:
-            value = int(cast(bytes, raw).decode())
+            value = int(raw.decode())
             return value if value > 0 else default
         except ValueError:
             return default
@@ -231,12 +230,11 @@ class OnyxRuntime:
 
         r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
 
-        interval_raw = r.get(
+        interval_bytes = r.get(
             f"{ONYX_CLOUD_REDIS_RUNTIME}:build_fence_lookup_table_interval"
         )
-        if interval_raw is not None:
+        if interval_bytes is not None:
             try:
-                interval_bytes = cast(bytes, interval_raw)
                 interval = int(interval_bytes.decode())
             except ValueError:
                 pass

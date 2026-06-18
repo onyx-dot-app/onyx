@@ -46,6 +46,7 @@ from onyx.db.models import ScimUserMapping
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
+from onyx.db.models import UserRole
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -250,6 +251,8 @@ class ScimDAL(DAL):
         email: str | None = None,
         is_active: bool | None = None,
         personal_name: str | None = None,
+        role: UserRole | None = None,
+        account_type: AccountType | None = None,
     ) -> None:
         """Update user attributes. Only sets fields that are provided."""
         if email is not None:
@@ -258,6 +261,10 @@ class ScimDAL(DAL):
             user.is_active = is_active
         if personal_name is not None:
             user.personal_name = personal_name
+        if role is not None:
+            user.role = role
+        if account_type is not None:
+            user.account_type = account_type
 
     def deactivate_user(self, user: User) -> None:
         """Mark a user as inactive."""
@@ -294,7 +301,9 @@ class ScimDAL(DAL):
                 # arg-type: fastapi-users types User.email as str, not a column expression
                 # assignment: union return type widens but query is still Select[tuple[User]]
                 query = _apply_scim_string_op(
-                    query, User.email, scim_filter  # ty: ignore[invalid-argument-type]
+                    query,
+                    User.email,  # ty: ignore[invalid-argument-type]
+                    scim_filter,
                 )
             elif attr == "active":
                 query = query.where(

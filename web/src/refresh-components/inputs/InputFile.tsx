@@ -1,18 +1,15 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import InputTypeIn, {
-  InputTypeInProps,
-} from "@/refresh-components/inputs/InputTypeIn";
+import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { Button } from "@opal/components";
 import { noProp } from "@/lib/utils";
-import { SvgPaperclip } from "@opal/icons";
+import { SvgPaperclip, SvgX } from "@opal/icons";
 
-export interface InputFileProps
-  extends Omit<
-    InputTypeInProps,
-    "type" | "rightSection" | "value" | "onChange" | "readOnly" | "onClear"
-  > {
+export interface InputFileProps extends Omit<
+  InputTypeInProps,
+  "type" | "rightChildren" | "value" | "onChange" | "readOnly" | "clearButton"
+> {
   /**
    * Whether the input is disabled.
    */
@@ -43,7 +40,6 @@ export default function InputFile({
   error,
   variant,
   placeholder,
-  className,
   ...rest
 }: InputFileProps) {
   const [displayValue, setDisplayValue] = useState<string>("");
@@ -126,7 +122,16 @@ export default function InputFile({
     onValueSet?.(pastedText, "paste");
   }
 
-  const rightSection = (
+  const rightChildren = isFileMode ? (
+    <Button
+      icon={SvgX}
+      onClick={noProp(handleClear)}
+      type="button"
+      prominence="tertiary"
+      size="sm"
+      aria-label="Clear file"
+    />
+  ) : (
     <Button
       disabled={isNonEditable}
       icon={SvgPaperclip}
@@ -152,15 +157,20 @@ export default function InputFile({
       />
       <InputTypeIn
         {...rest}
-        className={className}
         placeholder={placeholder}
-        variant={isDisabled ? "disabled" : error ? "error" : variant}
+        variant={
+          isDisabled
+            ? "disabled"
+            : error
+              ? "error"
+              : isFileMode || isReadOnly
+                ? "readOnly"
+                : variant
+        }
         value={displayValue}
         onChange={handleChangeWhenTyping}
         onPaste={handlePaste}
-        onClear={handleClear}
-        readOnly={isFileMode || isReadOnly}
-        rightSection={rightSection}
+        rightChildren={rightChildren}
       />
     </>
   );

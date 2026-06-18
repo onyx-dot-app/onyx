@@ -1,25 +1,28 @@
 "use client";
 
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
+import { markdown } from "@opal/utils";
 
 interface ToggleWarningModalProps {
   open: boolean;
+  recommendedModelLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 export function ToggleWarningModal({
   open,
+  recommendedModelLabel,
   onConfirm,
   onCancel,
 }: ToggleWarningModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[1400] flex items-center justify-center">
+    <div className="fixed inset-0 z-1400 flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-xs"
         onClick={(e) => {
           e.stopPropagation();
           onCancel();
@@ -31,19 +34,17 @@ export function ToggleWarningModal({
         <div className="p-6 flex flex-col gap-6">
           {/* Header */}
           <div className="flex items-center justify-center">
-            <Text headingH2 text05>
+            <Text font="heading-h2" color="text-05">
               Show all models?
             </Text>
           </div>
 
           {/* Message */}
-          <div className="flex justify-center">
-            <Text mainUiBody text04 className="text-center">
-              We recommend using <strong>Claude Opus 4.6</strong> for Crafting.
-              <br />
-              Other models may have reduced capabilities for code creation,
-              <br />
-              data analysis, and artifact creation.
+          <div className="flex justify-center text-center">
+            <Text font="main-ui-body" color="text-04">
+              {markdown(
+                `We recommend using **${recommendedModelLabel}** for Crafting.\nOther models may have reduced capabilities for code creation,\ndata analysis, and artifact creation.`
+              )}
             </Text>
           </div>
 
@@ -57,7 +58,7 @@ export function ToggleWarningModal({
               }}
               className="px-4 py-2 rounded-12 bg-background-neutral-01 border border-border-02 hover:opacity-90 transition-colors"
             >
-              <Text mainUiBody text05>
+              <Text font="main-ui-body" color="text-05">
                 Show All Models
               </Text>
             </button>
@@ -69,10 +70,7 @@ export function ToggleWarningModal({
               }}
               className="px-4 py-2 rounded-12 bg-black dark:bg-white hover:opacity-90 transition-colors"
             >
-              <Text
-                mainUiAction
-                className="text-text-light-05 dark:text-text-dark-05"
-              >
+              <Text font="main-ui-action" color="text-inverted-05">
                 Keep Recommended
               </Text>
             </button>

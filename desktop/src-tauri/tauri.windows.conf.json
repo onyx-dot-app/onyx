@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "app": {
+    "windows": [
+      {
+        "title": "Onyx",
+        "label": "main",
+        "url": "index.html",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "transparent": false
+      }
+    ]
+  }
+}

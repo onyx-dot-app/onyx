@@ -9,6 +9,11 @@ on:
     branches:
       - main
       - "release/**"
+    # NOTE: Intentionally no `paths:` filter. We always trigger and let the
+    # `changes` job below decide whether the real test matrix runs. This
+    # avoids the dual-workflow skip pattern where a `paths-ignore`'d skip
+    # workflow can race the real workflow's same-named status check under
+    # branch protection.
   push:
     tags:
       - "v*.*.*"
@@ -33,13 +38,21 @@ env:
   SLACK_CLIENT_ID: ${{ secrets.SLACK_CLIENT_ID }}
   SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
 
-  # for MCP Oauth tests
-  MCP_OAUTH_CLIENT_ID: ${{ secrets.MCP_OAUTH_CLIENT_ID }}
-  MCP_OAUTH_CLIENT_SECRET: ${{ secrets.MCP_OAUTH_CLIENT_SECRET }}
-  MCP_OAUTH_ISSUER: ${{ secrets.MCP_OAUTH_ISSUER }}
-  MCP_OAUTH_JWKS_URI: ${{ secrets.MCP_OAUTH_JWKS_URI }}
-  MCP_OAUTH_USERNAME: ${{ vars.MCP_OAUTH_USERNAME }}
-  MCP_OAUTH_PASSWORD: ${{ secrets.MCP_OAUTH_PASSWORD }}
+  # MCP OAuth tests. AUDIENCE and REQUIRED_SCOPES are identical for both
+  # providers (the real Okta org is configured to mint exactly these), so they
+  # stay here. The issuer, JWKS URI, and client/user credentials are
+  # provider-specific and set per-job by a "Configure MCP OAuth provider" step
+  # (the only place `secrets` resolve) — NOT here, so the Okta job's $GITHUB_ENV
+  # writes aren't clobbered by a workflow-level definition. The playwright-tests
+  # job always uses the self-hosted mock OIDC IdP
+  # (deployment/docker_compose/docker-compose.mcp-oauth-test.yml): no secrets,
+  # deterministic, fork-safe, and gates every PR + merge_group. The
+  # playwright-tests-oauth-okta job additionally exercises the real Okta org when
+  # OAuth-relevant paths change — required on same-repo PRs, informational on
+  # merge_group.
+  MOCK_OIDC_PORT: 8090
+  MCP_OAUTH_AUDIENCE: api://mcp
+  MCP_OAUTH_REQUIRED_SCOPES: mcp:use
 
   # for MCP API Key tests
   MCP_API_KEY: test-api-key-12345
@@ -47,6 +60,13 @@ env:
   MCP_API_KEY_TEST_URL: http://host.docker.internal:8005/mcp
   MCP_API_KEY_SERVER_HOST: 0.0.0.0
   MCP_API_KEY_SERVER_PUBLIC_HOST: host.docker.internal
+
+  # for MCP per-user API key (multi-field template) tests
+  MCP_PER_USER_KEY_TEST_PORT: 8007
+  MCP_PER_USER_KEY_TEST_URL: http://host.docker.internal:8007/mcp
+  MCP_PER_USER_KEY_REQUIRED_HEADER: X-Username
+  MCP_PER_USER_KEY_SERVER_HOST: 0.0.0.0
+  MCP_PER_USER_KEY_SERVER_PUBLIC_HOST: host.docker.internal
 
   MOCK_LLM_RESPONSE: true
   MCP_TEST_SERVER_PORT: 8004
@@ -62,7 +82,54 @@ env:
   PLAYWRIGHT_S3_BUCKET: onyx-playwright-artifacts
 
 jobs:
+  changes:
+    # Decides whether the playwright matrix runs. On pull_request / merge_group
+    # we use paths-filter; on push (tags, release branches) we default to
+    # `true` so everything runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      playwright: ${{ steps.filter.outputs.playwright || 'true' }}
+      # Whether this change touches MCP-OAuth-relevant code. Drives whether a
+      # same-repo PR validates the OAuth spec against the real Okta org instead of
+      # the mock IdP. Defaults to 'false' on events where the filter doesn't run.
+      mcp_oauth: ${{ steps.filter.outputs.mcp_oauth || 'false' }}
+    steps:
+      - name: Checkout code
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          filters: |
+            playwright:
+              - 'backend/**'
+              - 'web/**'
+              - 'deployment/docker_compose/**'
+              - 'docker-bake.hcl'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/pr-playwright-tests.yml'
+              - '.github/actions/setup-test-license/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
+            mcp_oauth:
+              - 'backend/onyx/server/features/mcp/**'
+              - 'backend/tests/integration/mock_services/mcp_test_server/**'
+              - 'web/tests/e2e/mcp/**'
+              - 'web/tests/e2e/pages/ActionsPopover.ts'
+              - 'deployment/docker_compose/docker-compose.mcp-oauth-test.yml'
+              - '.github/workflows/pr-playwright-tests.yml'
+
   build-web-image:
+    needs: changes
+    if: needs.changes.outputs.playwright == 'true'
     runs-on:
       [
         runs-on,
@@ -70,9 +137,9 @@ jobs:
         "run-id=${{ github.run_id }}-build-web-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -94,29 +161,28 @@ jobs:
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
-      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Build and push Web Docker image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./web
           file: ./web/Dockerfile
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-web-${{ github.run_id }}
           push: true
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ steps.format-branch.outputs.cache-suffix }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache
-            type=registry,ref=onyxdotapp/onyx-web-server:latest
+            type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-web-server:latest
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:web-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
@@ -124,6 +190,8 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-image:
+    needs: changes
+    if: needs.changes.outputs.playwright == 'true'
     runs-on:
       [
         runs-on,
@@ -131,9 +199,9 @@ jobs:
         "run-id=${{ github.run_id }}-build-backend-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -155,29 +223,28 @@ jobs:
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
-      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Build and push Backend Docker image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-backend-${{ github.run_id }}
           push: true
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache
-            type=registry,ref=onyxdotapp/onyx-backend:latest
+            type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-backend:latest
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:backend-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
@@ -185,6 +252,8 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-model-server-image:
+    needs: changes
+    if: needs.changes.outputs.playwright == 'true'
     runs-on:
       [
         runs-on,
@@ -192,9 +261,9 @@ jobs:
         "run-id=${{ github.run_id }}-build-model-server-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -216,29 +285,28 @@ jobs:
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
-      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Build and push Model Server Docker image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # ratchet:docker/build-push-action@v7
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
           platforms: linux/arm64
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:playwright-test-model-server-${{ github.run_id }}
           push: true
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache
-            type=registry,ref=onyxdotapp/onyx-model-server:latest
+            type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-model-server:latest
           cache-to: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ github.event.pull_request.head.sha || github.sha }},mode=max
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
@@ -247,53 +315,70 @@ jobs:
 
   playwright-tests:
     needs: [build-web-image, build-backend-image, build-model-server-image]
-    name: Playwright Tests (${{ matrix.project }})
+    name: Playwright Tests (${{ matrix.project }} ${{ matrix.shard }}/${{ matrix.shards }})
     permissions:
-      id-token: write # Required for OIDC-based AWS credential exchange (S3 access)
+      id-token: write # Required for OIDC-based AWS credential exchange (S3 access for the dev license)
       contents: read
     runs-on:
       - runs-on
       - runner=8cpu-linux-arm64
-      - "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}"
+      - "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}-${{ matrix.shard }}"
       - "extras=ecr-cache"
       - volume=50gb
-    timeout-minutes: 45
+    timeout-minutes: 20
     strategy:
       fail-fast: false
+      # Each entry is one parallel runner. `admin` (the bulk of the suite) is
+      # split into shards via Playwright's `--shard=index/total`; the smaller
+      # `exclusive` project runs as a single shard (1/1). Visual-regression
+      # screenshots are merged back together per-project in the
+      # `visual-regression` job below, so individual shards only ever hold a
+      # subset of screenshots.
       matrix:
-        project: [admin, exclusive]
+        include:
+          - project: admin
+            shard: 1
+            shards: 2
+          - project: admin
+            shard: 2
+            shards: 2
+          - project: exclusive
+            shard: 1
+            shards: 1
     steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Setup node
-        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
         with:
-          node-version: 24
-          cache: "npm" # zizmor: ignore[cache-poisoning]
-          cache-dependency-path: ./web/package-lock.json
+          bun-version: "1.3.13"
 
       - name: Install node dependencies
         working-directory: ./web
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Cache playwright cache
         # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed # ratchet:runs-on/cache@v4
+        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-bun-${{ hashFiles('web/bun.lock') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-npm-
+            ${{ runner.os }}-playwright-bun-
 
       - name: Install playwright browsers
         working-directory: ./web
-        run: npx playwright install --with-deps
+        run: bunx playwright install chromium
+
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       - name: Create .env file for Docker Compose
         env:
@@ -305,151 +390,261 @@ jobs:
           cat <<EOF > deployment/docker_compose/.env
           COMPOSE_PROFILES=s3-filestore
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          # TODO(Nik): https://linear.app/onyx-app/issue/ENG-1/update-test-infra-to-use-test-license
-          LICENSE_ENFORCEMENT_ENABLED=false
           AUTH_TYPE=basic
           INTEGRATION_TESTS_MODE=true
           GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
+          # MCP E2E tests register mock servers on host.docker.internal (a private
+          # host-gateway address); opt in so the SSRF guard allows it. Cloud-
+          # metadata/link-local stays blocked regardless.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
           ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
           ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
           ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
           EOF
 
-      # needed for pulling Vespa, Redis, Postgres, and Minio images
-      # otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      # The MCP OAuth test drives the mock OIDC IdP in the browser at its
+      # advertised issuer (http://host.docker.internal:8090). The dockerized
+      # services reach that host via host-gateway, but the Playwright browser
+      # runs on the runner host, which doesn't resolve host.docker.internal by
+      # default — map it to the loopback where the IdP container publishes 8090.
+      - name: Make host.docker.internal resolvable for the browser
+        run: |
+          if ! grep -q "host.docker.internal" /etc/hosts; then
+            echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+          fi
+
+      # The main suite always runs the OAuth spec against the self-hosted mock
+      # OIDC IdP — deterministic, fork-safe, and the gate for every PR +
+      # merge_group. The real Okta org is validated separately by the
+      # playwright-tests-oauth-okta job. Written to $GITHUB_ENV (not the
+      # workflow-level env:) so that job can set its own values without a
+      # workflow-level definition clobbering them. getMcpOAuthConfig() requires
+      # the client/user vars even though the auto-issuing IdP ignores them.
+      - name: Configure MCP OAuth provider (mock IdP)
+        run: |
+          {
+            echo "MCP_OAUTH_ISSUER=http://host.docker.internal:8090"
+            echo "MCP_OAUTH_JWKS_URI=http://host.docker.internal:8090/jwks"
+            echo "MCP_OAUTH_CLIENT_ID=mock-oauth-client"
+            echo "MCP_OAUTH_CLIENT_SECRET=mock-oauth-secret"
+            echo "MCP_OAUTH_USERNAME=mock-user@example.com"
+            echo "MCP_OAUTH_PASSWORD=mock-password"
+          } >> "$GITHUB_ENV"
 
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml up -d
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d --wait --wait-timeout 300
         id: start_docker
 
-      - name: Wait for service to be ready
+      - name: Seed dev license
         run: |
-          echo "Starting wait-for-service script..."
-
-          docker logs -f onyx-api_server-1 &
-
-          start_time=$(date +%s)
-          timeout=300  # 5 minutes in seconds
-
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Service did not become ready in 5 minutes."
-              exit 1
-            fi
-
-            # Use curl with error handling to ignore specific exit code 56
-            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
-
-            if [ "$response" = "200" ]; then
-              echo "Service is ready!"
-              break
-            elif [ "$response" = "curl_error" ]; then
-              echo "Curl encountered an error, possibly exit code 56. Continuing to retry..."
-            else
-              echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
-            fi
-
-            sleep 5
-          done
-          echo "Finished waiting for service."
-
-      - name: Wait for MCP OAuth mock server
-        run: |
-          echo "Waiting for MCP OAuth mock server on port ${MCP_TEST_SERVER_PORT:-8004}..."
-          start_time=$(date +%s)
-          timeout=120
-
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. MCP OAuth mock server did not become ready in ${timeout}s."
-              exit 1
-            fi
-
-            if curl -sf "http://localhost:${MCP_TEST_SERVER_PORT:-8004}/healthz" > /dev/null; then
-              echo "MCP OAuth mock server is ready!"
-              break
-            fi
-
-            sleep 3
-          done
-
-      - name: Wait for MCP API Key mock server
-        run: |
-          echo "Waiting for MCP API Key mock server on port ${MCP_API_KEY_TEST_PORT:-8005}..."
-          start_time=$(date +%s)
-          timeout=120
-
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. MCP API Key mock server did not become ready in ${timeout}s."
-              exit 1
-            fi
-
-            if curl -sf "http://localhost:${MCP_API_KEY_TEST_PORT:-8005}/healthz" > /dev/null; then
-              echo "MCP API Key mock server is ready!"
-              break
-            fi
-
-            sleep 3
-          done
-
-      - name: Wait for web server to be ready
-        run: |
-          echo "Waiting for web server on port 3000..."
-          start_time=$(date +%s)
-          timeout=120
-
-          while true; do
-            current_time=$(date +%s)
-            elapsed_time=$((current_time - start_time))
-
-            if [ $elapsed_time -ge $timeout ]; then
-              echo "Timeout reached. Web server did not become ready in ${timeout}s."
-              exit 1
-            fi
-
-            if curl -sf "http://localhost:3000/api/health" > /dev/null 2>&1 || \
-               curl -sf "http://localhost:3000/" > /dev/null 2>&1; then
-              echo "Web server is ready!"
-              break
-            fi
-
-            echo "Web server not ready yet. Retrying in 3 seconds..."
-            sleep 3
-          done
+          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+            python -m scripts.seed_dev_license
 
       - name: Run Playwright tests
         working-directory: ./web
         env:
           PROJECT: ${{ matrix.project }}
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ matrix.shards }}
         run: |
-          npx playwright test --project ${PROJECT}
+          bunx playwright test --project "${PROJECT}" --shard="${SHARD}/${SHARDS}"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           # Includes test results and trace.zip files
-          name: playwright-test-results-${{ matrix.project }}-${{ github.run_id }}
+          name: playwright-test-results-${{ matrix.project }}-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: ./web/output/playwright/
+          retention-days: 30
+
+      # Per-shard screenshots. These are merged back together per-project in the
+      # `visual-regression` job, which is where the actual diff/baseline work
+      # happens — a single shard only ever holds a subset of a project's
+      # screenshots, so it must not compare or upload baselines on its own.
+      - name: Upload screenshots
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: playwright-screenshots-${{ matrix.project }}-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: ./web/output/screenshots/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # save before stopping the containers so the logs can be captured
+      - name: Save Docker logs
+        if: success() || failure()
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          cd deployment/docker_compose
+          # Pass the same -f overrides as `up` so the mock MCP/IdP services
+          # (defined only in the override files) are included in the logs.
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
+          mv docker-compose.log ${WORKSPACE}/docker-compose.log
+
+      - name: Upload logs
+        if: success() || failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: docker-logs-${{ matrix.project }}-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ github.workspace }}/docker-compose.log
+
+  # Validates the MCP OAuth spec against the REAL Okta org (the mock IdP run in
+  # playwright-tests is a deterministic stand-in). Runs only when OAuth-relevant
+  # paths change AND the secrets are reachable: always on merge_group, and on
+  # same-repo PRs (forks can't read secrets, so they rely on the mock-IdP run).
+  # Gating: this job's result is REQUIRED on pull_request and INFORMATIONAL on
+  # merge_group — see the playwright-required job.
+  playwright-tests-oauth-okta:
+    needs: [changes, build-web-image, build-backend-image, build-model-server-image]
+    if: >-
+      needs.changes.outputs.playwright == 'true' &&
+      needs.changes.outputs.mcp_oauth == 'true' && (
+        github.event_name == 'merge_group' || (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
+      )
+    name: Playwright Tests (oauth-okta)
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange (license)
+      contents: read
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-playwright-tests-oauth-okta"
+      - "extras=ecr-cache"
+      - volume=50gb
+    timeout-minutes: 15
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
+        with:
+          bun-version: "1.3.13"
+
+      - name: Install node dependencies
+        working-directory: ./web
+        run: bun install --frozen-lockfile
+
+      - name: Cache playwright cache
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
+        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-bun-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-bun-
+
+      - name: Install playwright browsers
+        working-directory: ./web
+        run: bunx playwright install chromium
+
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
+      - name: Create .env file for Docker Compose
+        env:
+          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
+          EXA_API_KEY_VALUE: ${{ env.EXA_API_KEY }}
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          COMPOSE_PROFILES=s3-filestore
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          AUTH_TYPE=basic
+          INTEGRATION_TESTS_MODE=true
+          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
+          EXA_API_KEY=${EXA_API_KEY_VALUE}
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          # MCP E2E tests register mock servers on host.docker.internal (a private
+          # host-gateway address); opt in so the SSRF guard allows it. Cloud-
+          # metadata/link-local stays blocked regardless.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
+          ONYX_MODEL_SERVER_IMAGE=${ECR_CACHE}:playwright-test-model-server-${RUN_ID}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
+          EOF
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Make host.docker.internal resolvable for the browser
+        run: |
+          if ! grep -q "host.docker.internal" /etc/hosts; then
+            echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+          fi
+
+      # Point the OAuth spec + mcp_oauth_server at the real Okta org. Written to
+      # $GITHUB_ENV (the only level where `secrets` resolve). This job only runs
+      # when the secrets are expected to be present, so an empty value is a hard
+      # error rather than a silent fall-back. The McpOAuthFlow page object drives
+      # the Okta login form (its selectors are still in DEFAULT_*_SELECTORS).
+      - name: Configure MCP OAuth provider (real Okta)
+        env:
+          OKTA_ISSUER: ${{ secrets.MCP_OAUTH_ISSUER }}
+          OKTA_JWKS_URI: ${{ secrets.MCP_OAUTH_JWKS_URI }}
+          OKTA_CLIENT_ID: ${{ secrets.MCP_OAUTH_CLIENT_ID }}
+          OKTA_CLIENT_SECRET: ${{ secrets.MCP_OAUTH_CLIENT_SECRET }}
+          OKTA_USERNAME: ${{ vars.MCP_OAUTH_USERNAME }}
+          OKTA_PASSWORD: ${{ secrets.MCP_OAUTH_PASSWORD }}
+        run: |
+          if [ -z "${OKTA_ISSUER}" ] || [ -z "${OKTA_JWKS_URI}" ] || \
+             [ -z "${OKTA_CLIENT_ID}" ] || [ -z "${OKTA_CLIENT_SECRET}" ] || \
+             [ -z "${OKTA_USERNAME}" ] || [ -z "${OKTA_PASSWORD}" ]; then
+            echo "::error::The MCP_OAUTH_* Okta secrets/vars are required but one or more are empty. Confirm they still exist in repo settings (secrets: ISSUER/JWKS_URI/CLIENT_ID/CLIENT_SECRET/PASSWORD; var: USERNAME)."
+            exit 1
+          fi
+          {
+            echo "MCP_OAUTH_ISSUER=${OKTA_ISSUER}"
+            echo "MCP_OAUTH_JWKS_URI=${OKTA_JWKS_URI}"
+            echo "MCP_OAUTH_CLIENT_ID=${OKTA_CLIENT_ID}"
+            echo "MCP_OAUTH_CLIENT_SECRET=${OKTA_CLIENT_SECRET}"
+            echo "MCP_OAUTH_USERNAME=${OKTA_USERNAME}"
+            echo "MCP_OAUTH_PASSWORD=${OKTA_PASSWORD}"
+          } >> "$GITHUB_ENV"
+
+      - name: Start Docker containers
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml up -d --wait --wait-timeout 300
+        id: start_docker
+
+      - name: Seed dev license
+        run: |
+          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+            python -m scripts.seed_dev_license
+
+      - name: Run Playwright OAuth spec (real Okta)
+        working-directory: ./web
+        run: bunx playwright test mcp_oauth_flow --project admin
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: playwright-test-results-oauth-okta-${{ github.run_id }}
           path: ./web/output/playwright/
           retention-days: 30
 
@@ -457,27 +652,212 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: playwright-screenshots-${{ matrix.project }}-${{ github.run_id }}
+          name: playwright-screenshots-oauth-okta-${{ github.run_id }}
           path: ./web/output/screenshots/
           retention-days: 30
 
-      # --- Visual Regression Diff ---
-      - name: Configure AWS credentials
+      - name: Save Docker logs
+        if: success() || failure()
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.mcp-oauth-test.yml -f docker-compose.mcp-api-key-test.yml -f docker-compose.mcp-per-user-key-test.yml logs > docker-compose.log
+          mv docker-compose.log ${WORKSPACE}/docker-compose.log
+
+      - name: Upload logs
+        if: success() || failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: docker-logs-oauth-okta-${{ github.run_id }}
+          path: ${{ github.workspace }}/docker-compose.log
+
+  playwright-tests-lite:
+    needs: [build-web-image, build-backend-image]
+    name: Playwright Tests (lite)
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange
+      contents: read
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-playwright-tests-lite"
+      - "extras=ecr-cache"
+    timeout-minutes: 10
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
+        with:
+          bun-version: "1.3.13"
+
+      - name: Install node dependencies
+        working-directory: ./web
+        run: bun install --frozen-lockfile
+
+      - name: Cache playwright cache
+        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
+        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-bun-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-bun-
+
+      - name: Install playwright browsers
+        working-directory: ./web
+        run: bunx playwright install chromium
+
+      - name: Setup test license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
+      - name: Create .env file for Docker Compose
+        env:
+          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          cat <<EOF > deployment/docker_compose/.env
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          AUTH_TYPE=basic
+          INTEGRATION_TESTS_MODE=true
+          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
+          MOCK_LLM_RESPONSE=true
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          # MCP E2E tests register mock servers on host.docker.internal (a private
+          # host-gateway address); opt in so the SSRF guard allows it. Cloud-
+          # metadata/link-local stays blocked regardless.
+          MCP_SERVER_ALLOW_PRIVATE_NETWORK=true
+          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
+          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
+          EOF
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Start Docker containers (lite)
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d --wait
+        id: start_docker
+
+      - name: Seed dev license
+        run: |
+          docker exec -e ONYX_DEV_LICENSE onyx-api_server-1 \
+            python -m scripts.seed_dev_license
+
+      - name: Run Playwright tests (lite)
+        working-directory: ./web
+        run: bunx playwright test --project lite
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
-        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        with:
+          name: playwright-test-results-lite-${{ github.run_id }}
+          path: ./web/output/playwright/
+          retention-days: 30
+
+      - name: Save Docker logs
+        if: success() || failure()
+        env:
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          cd deployment/docker_compose
+          docker compose logs > docker-compose.log
+          mv docker-compose.log ${WORKSPACE}/docker-compose.log
+
+      - name: Upload logs
+        if: success() || failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: docker-logs-lite-${{ github.run_id }}
+          path: ${{ github.workspace }}/docker-compose.log
+
+  # Per-project visual regression. Because the test matrix is sharded, each
+  # shard only captures a subset of a project's screenshots. This job merges
+  # every shard's screenshots back into one directory before running the diff
+  # against the S3 baseline and (on main/release) re-uploading baselines with
+  # --delete. Running compare / upload-baselines on a partial set would report
+  # spurious "removed" screenshots and, worse, let shards race each other and
+  # corrupt the baseline — so this work MUST happen here, on the complete set.
+  visual-regression:
+    needs: [playwright-tests]
+    name: Visual Regression (${{ matrix.project }})
+    permissions:
+      id-token: write # Required for OIDC-based AWS credential exchange (S3 access)
+      contents: read
+    if: >-
+      always() &&
+      needs.playwright-tests.result != 'cancelled' &&
+      needs.playwright-tests.result != 'skipped'
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-arm64
+      - "run-id=${{ github.run_id }}-visual-regression-${{ matrix.project }}"
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [admin, exclusive]
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # Pull every shard's screenshots for this project into one directory.
+      # Shards capture disjoint screenshot names, so merge-multiple is safe.
+      # download-artifact errors when zero artifacts match the pattern (e.g. a
+      # shard failed before capturing any screenshot, so its artifact was never
+      # uploaded). Tolerate that here and let the presence check below decide
+      # whether there's anything to diff, so an infra failure degrades to a
+      # no-op rather than turning this advisory job red.
+      - name: Download shard screenshots
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: playwright-screenshots-${{ matrix.project }}-shard-*-${{ github.run_id }}
+          path: web/output/screenshots/
+          merge-multiple: true
+
+      - name: Check for screenshots
+        id: screenshots
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          if [ -d "web/output/screenshots/" ] && [ -n "$(ls -A web/output/screenshots/ 2>/dev/null)" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No shard screenshots found for ${PROJECT} — skipping diff and baseline update."
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
       - name: Install the latest version of uv
-        if: always()
-        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # ratchet:astral-sh/setup-uv@v8.0.0
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # ratchet:astral-sh/setup-uv@v8.1.0
         with:
           enable-cache: false
           version: "0.9.9"
 
       - name: Determine baseline revision
-        if: always()
         id: baseline-rev
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -501,7 +881,7 @@ jobs:
           fi
 
       - name: Generate screenshot diff report
-        if: always()
+        if: steps.screenshots.outputs.present == 'true'
         env:
           PROJECT: ${{ matrix.project }}
           PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
@@ -511,8 +891,11 @@ jobs:
             --project "${PROJECT}" \
             --rev "${BASELINE_REV}"
 
+      # PR-only: PR_NUMBER is empty on push/merge_group events, which would write
+      # the report under a junk `reports/pr-/...` key. Baselines (updated below)
+      # are the meaningful artifact on those events, not this PR-scoped report.
       - name: Upload visual diff report to S3
-        if: always()
+        if: github.event_name == 'pull_request' && steps.screenshots.outputs.present == 'true'
         env:
           PROJECT: ${{ matrix.project }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -552,8 +935,13 @@ jobs:
           retention-days: 30
 
       - name: Update S3 baselines
+        # Only update baselines from a fully green run on a protected ref.
+        # `success()` covers the diff steps above; `needs.playwright-tests.result`
+        # ensures no shard (in any project) failed before we treat this run's
+        # screenshots as the new source of truth.
         if: >-
-          success() && (
+          success() &&
+          needs.playwright-tests.result == 'success' && (
             github.ref == 'refs/heads/main' ||
             startsWith(github.ref, 'refs/heads/release/') ||
             startsWith(github.ref, 'refs/tags/v') ||
@@ -578,132 +966,14 @@ jobs:
             echo "No screenshots to upload for ${PROJECT} — skipping baseline update."
           fi
 
-      # save before stopping the containers so the logs can be captured
-      - name: Save Docker logs
-        if: success() || failure()
-        env:
-          WORKSPACE: ${{ github.workspace }}
-        run: |
-          cd deployment/docker_compose
-          docker compose logs > docker-compose.log
-          mv docker-compose.log ${WORKSPACE}/docker-compose.log
-
-      - name: Upload logs
-        if: success() || failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: docker-logs-${{ matrix.project }}-${{ github.run_id }}
-          path: ${{ github.workspace }}/docker-compose.log
-
-  playwright-tests-lite:
-    needs: [build-web-image, build-backend-image]
-    name: Playwright Tests (lite)
-    runs-on:
-      - runs-on
-      - runner=4cpu-linux-arm64
-      - "run-id=${{ github.run_id }}-playwright-tests-lite"
-      - "extras=ecr-cache"
-    timeout-minutes: 30
-    steps:
-      - uses: runs-on/action@cd2b598b0515d39d78c38a02d529db87d2196d1e # ratchet:runs-on/action@v2
-
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Setup node
-        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: "npm" # zizmor: ignore[cache-poisoning]
-          cache-dependency-path: ./web/package-lock.json
-
-      - name: Install node dependencies
-        working-directory: ./web
-        run: npm ci
-
-      - name: Cache playwright cache
-        # zizmor: ignore[cache-poisoning] ephemeral runners; no release artifacts
-        uses: runs-on/cache@a5f51d6f3fece787d03b7b4e981c82538a0654ed # ratchet:runs-on/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-npm-${{ hashFiles('web/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-npm-
-
-      - name: Install playwright browsers
-        working-directory: ./web
-        run: npx playwright install --with-deps
-
-      - name: Create .env file for Docker Compose
-        env:
-          OPENAI_API_KEY_VALUE: ${{ env.OPENAI_API_KEY }}
-          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          cat <<EOF > deployment/docker_compose/.env
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
-          LICENSE_ENFORCEMENT_ENABLED=false
-          AUTH_TYPE=basic
-          INTEGRATION_TESTS_MODE=true
-          GEN_AI_API_KEY=${OPENAI_API_KEY_VALUE}
-          MOCK_LLM_RESPONSE=true
-          REQUIRE_EMAIL_VERIFICATION=false
-          DISABLE_TELEMETRY=true
-          ONYX_BACKEND_IMAGE=${ECR_CACHE}:playwright-test-backend-${RUN_ID}
-          ONYX_WEB_SERVER_IMAGE=${ECR_CACHE}:playwright-test-web-${RUN_ID}
-          EOF
-
-      # needed for pulling external images otherwise, we hit the "Unauthenticated users" limit
-      # https://docs.docker.com/docker-hub/usage/
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # ratchet:docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Start Docker containers (lite)
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d
-        id: start_docker
-
-      - name: Run Playwright tests (lite)
-        working-directory: ./web
-        run: npx playwright test --project lite
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: playwright-test-results-lite-${{ github.run_id }}
-          path: ./web/output/playwright/
-          retention-days: 30
-
-      - name: Save Docker logs
-        if: success() || failure()
-        env:
-          WORKSPACE: ${{ github.workspace }}
-        run: |
-          cd deployment/docker_compose
-          docker compose logs > docker-compose.log
-          mv docker-compose.log ${WORKSPACE}/docker-compose.log
-
-      - name: Upload logs
-        if: success() || failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: docker-logs-lite-${{ github.run_id }}
-          path: ${{ github.workspace }}/docker-compose.log
-
   # Post a single combined visual regression comment after all matrix jobs finish
   visual-regression-comment:
-    needs: [playwright-tests]
+    needs: [visual-regression]
     if: >-
       always() &&
       github.event_name == 'pull_request' &&
-      needs.playwright-tests.result != 'cancelled'
+      needs.visual-regression.result != 'cancelled' &&
+      needs.visual-regression.result != 'skipped'
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -791,11 +1061,48 @@ jobs:
 
   playwright-required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
+    # This job is the single required status check for the playwright suite. It
+    # always runs so branch protection has something to wait on, and it passes
+    # cleanly when `changes` reports no relevant paths changed (i.e. the test
+    # matrix was legitimately skipped).
     runs-on: ubuntu-slim
-    timeout-minutes: 45
-    needs: [playwright-tests, playwright-tests-lite]
+    timeout-minutes: 5
+    needs:
+      [changes, playwright-tests, playwright-tests-lite, playwright-tests-oauth-okta]
     if: ${{ always() }}
     steps:
       - name: Check job status
-        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
-        run: exit 1
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_TESTS: ${{ needs.changes.outputs.playwright }}
+          TESTS_RESULT: ${{ needs.playwright-tests.result }}
+          LITE_RESULT: ${{ needs.playwright-tests-lite.result }}
+          OKTA_RESULT: ${{ needs.playwright-tests-oauth-okta.result }}
+        run: |
+          # Fail closed if `changes` didn't succeed. Otherwise an empty
+          # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
+          # would be indistinguishable from "no relevant paths changed" and we
+          # would incorrectly pass the required check.
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
+          if [ "${RUN_TESTS}" != "true" ]; then
+            echo "No relevant paths changed — required check passes."
+            exit 0
+          fi
+          if [ "${TESTS_RESULT}" != "success" ] || [ "${LITE_RESULT}" != "success" ]; then
+            echo "Test results: playwright-tests=${TESTS_RESULT}, playwright-tests-lite=${LITE_RESULT}"
+            exit 1
+          fi
+          # The real-Okta OAuth job gates pull_request runs (blocks the PR), but
+          # is informational on merge_group so a flaky Okta run can't wedge the
+          # serialized merge queue. `skipped` means it wasn't applicable (no OAuth
+          # paths changed, or a fork PR) and is always acceptable.
+          if [ "${EVENT_NAME}" = "pull_request" ] && \
+             [ "${OKTA_RESULT}" != "success" ] && [ "${OKTA_RESULT}" != "skipped" ]; then
+            echo "Okta OAuth job result (required on PRs): ${OKTA_RESULT}"
+            exit 1
+          fi
+          echo "All tests passed."

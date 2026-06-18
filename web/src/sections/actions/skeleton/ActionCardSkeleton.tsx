@@ -31,8 +31,8 @@ const ActionCardSkeleton: React.FC<ActionCardSkeletonProps> = ({
 
             {/* Title & Description */}
             <div className="flex flex-col items-start flex-1 min-w-0 gap-2">
-              <div className="h-4 w-1/3 rounded bg-background-tint-02 animate-pulse" />
-              <div className="h-3 w-2/3 rounded bg-background-tint-02 animate-pulse" />
+              <div className="h-4 w-1/3 rounded-sm bg-background-tint-02 animate-pulse" />
+              <div className="h-3 w-2/3 rounded-sm bg-background-tint-02 animate-pulse" />
             </div>
           </div>
 

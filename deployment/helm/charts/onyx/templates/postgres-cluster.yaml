@@ -1,0 +1,40 @@
+{{- /*
+CNPG Cluster CR. The CRDs live in crds/cnpg-crds.yaml (copied from the
+subchart) so Helm pre-installs them before templates — no hook needed.
+Name must differ from the operator Deployment (`<release>-<nameOverride>`)
+to avoid a ServiceAccount collision. POSTGRES_HOST in configmap.yaml must
+stay in sync: `<cluster-name>-rw`.
+*/}}
+{{- if .Values.postgresql.enabled }}
+{{- $pgSecretName := include "onyx.secretName" .Values.auth.postgresql -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Release.Name }}-pg
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.postgresql.cluster.instances | default 1 }}
+  storage:
+    size: {{ .Values.postgresql.cluster.storage.size | default "10Gi" }}
+    {{- with .Values.postgresql.cluster.storage.storageClass }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+  {{- if hasKey .Values.postgresql.cluster "enableSuperuserAccess" }}
+  enableSuperuserAccess: {{ .Values.postgresql.cluster.enableSuperuserAccess }}
+  {{- else }}
+  enableSuperuserAccess: true
+  {{- end }}
+  superuserSecret:
+    name: {{ $pgSecretName }}
+  bootstrap:
+    initdb:
+      database: postgres
+      owner: postgres
+      secret:
+        name: {{ $pgSecretName }}
+  {{- with .Values.postgresql.cluster.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

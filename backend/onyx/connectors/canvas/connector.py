@@ -6,7 +6,6 @@ from typing import cast
 from typing import NoReturn
 
 from pydantic import BaseModel
-from retry import retry
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
@@ -35,6 +34,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -268,7 +268,7 @@ class CanvasConnector(
             )
         return self._course_permissions_cache[course_id]
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_courses(self) -> list[CanvasCourse]:
         """Fetch all courses accessible to the authenticated user."""
         logger.debug("Fetching Canvas courses")
@@ -280,10 +280,10 @@ class CanvasConnector(
             courses.extend(CanvasCourse.from_api(c) for c in page)
         return courses
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_pages(self, course_id: int) -> list[CanvasPage]:
         """Fetch all pages for a given course."""
-        logger.debug(f"Fetching pages for course {course_id}")
+        logger.debug("Fetching pages for course %s", course_id)
 
         pages: list[CanvasPage] = []
         for page in self.canvas_client.paginate(
@@ -293,10 +293,10 @@ class CanvasConnector(
             pages.extend(CanvasPage.from_api(p, course_id=course_id) for p in page)
         return pages
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_assignments(self, course_id: int) -> list[CanvasAssignment]:
         """Fetch all assignments for a given course."""
-        logger.debug(f"Fetching assignments for course {course_id}")
+        logger.debug("Fetching assignments for course %s", course_id)
 
         assignments: list[CanvasAssignment] = []
         for page in self.canvas_client.paginate(
@@ -308,10 +308,10 @@ class CanvasConnector(
             )
         return assignments
 
-    @retry(tries=3, delay=1, backoff=2)
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _list_announcements(self, course_id: int) -> list[CanvasAnnouncement]:
         """Fetch all announcements for a given course."""
-        logger.debug(f"Fetching announcements for course {course_id}")
+        logger.debug("Fetching announcements for course %s", course_id)
 
         announcements: list[CanvasAnnouncement] = []
         for page in self.canvas_client.paginate(
@@ -529,8 +529,9 @@ class CanvasConnector(
                     )
                     if not announcement.posted_at:
                         logger.debug(
-                            f"Skipping announcement {announcement.id} in "
-                            f"course {course_id}: no posted_at"
+                            "Skipping announcement %s in course %s: no posted_at",
+                            announcement.id,
+                            course_id,
                         )
                         continue
                     if not _in_time_window(announcement.posted_at, start, end):
@@ -596,7 +597,7 @@ class CanvasConnector(
                     _handle_canvas_api_error(e)  # NoReturn — always raises
                 raise
             new_checkpoint.course_ids = [c.id for c in courses]
-            logger.info(f"Found {len(courses)} Canvas courses to process")
+            logger.info("Found %s Canvas courses to process", len(courses))
             new_checkpoint.has_more = len(new_checkpoint.course_ids) > 0
             return new_checkpoint
 
@@ -648,8 +649,9 @@ class CanvasConnector(
             # the whole course rather than burning API calls on each stage.
             if oe.status_code == 404:
                 logger.warning(
-                    f"Canvas course {course_id} not found while fetching "
-                    f"{stage} (HTTP 404). Skipping course."
+                    "Canvas course %s not found while fetching %s (HTTP 404). Skipping course.",
+                    course_id,
+                    stage,
                 )
                 yield ConnectorFailure(
                     failed_entity=EntityFailure(
@@ -661,8 +663,10 @@ class CanvasConnector(
                 new_checkpoint.advance_course()
             else:
                 logger.warning(
-                    f"Failed to fetch {stage} for course {course_id}: {oe}. "
-                    f"Skipping remainder of this stage."
+                    "Failed to fetch %s for course %s: %s. Skipping remainder of this stage.",
+                    stage,
+                    course_id,
+                    oe,
                 )
                 yield ConnectorFailure(
                     failed_entity=EntityFailure(
@@ -681,8 +685,10 @@ class CanvasConnector(
         except Exception as e:
             # Unknown error — skip the stage and try to continue.
             logger.warning(
-                f"Failed to fetch {stage} for course {course_id}: {e}. "
-                f"Skipping remainder of this stage."
+                "Failed to fetch %s for course %s: %s. Skipping remainder of this stage.",
+                stage,
+                course_id,
+                e,
             )
             yield ConnectorFailure(
                 failed_entity=EntityFailure(

@@ -12,7 +12,7 @@ import { uploadLicense } from "@/lib/billing/svc";
 import { LicenseStatus } from "@/lib/billing/interfaces";
 import { formatDateShort } from "@/lib/dateUtils";
 
-const BILLING_HELP_URL = "https://docs.onyx.app/more/billing";
+const BILLING_HELP_URL = "https://docs.onyx.app/admins/billing/overview";
 
 interface LicenseActivationCardProps {
   isOpen: boolean;
@@ -191,7 +191,6 @@ export default function LicenseActivationCard({
                 setError(null);
               }}
               error={!!error}
-              className="billing-license-input"
             />
             {error && (
               <Section
@@ -202,7 +201,7 @@ export default function LicenseActivationCard({
                 height="auto"
               >
                 <div className="billing-error-icon">
-                  <SvgXCircle />
+                  <SvgXCircle size={12} />
                 </div>
                 <Text secondaryBody text04>
                   {error}.{" "}

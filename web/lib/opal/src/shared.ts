@@ -25,14 +25,14 @@ import type {
  *
  * Heights are driven by CSS custom properties defined in `@opal/root.css`.
  *
- * | Key   | Height                      | Padding  |
- * |-------|-----------------------------|----------|
- * | `lg`  | `--opal-line-height-lg`     | `p-2`   |
- * | `md`  | `--opal-line-height-md`     | `p-1`   |
- * | `sm`  | `--opal-line-height-sm`     | `p-1`   |
- * | `xs`  | `--opal-line-height-xs`     | `p-0.5` |
- * | `2xs` | `--opal-line-height-2xs`    | `p-0.5` |
- * | `fit` | `h-fit`                     | `p-0`   |
+ * | Key   | Height                          | Padding  |
+ * |-------|---------------------------------|----------|
+ * | `lg`  | `--height-line-h1-headline`     | `p-2`   |
+ * | `md`  | `--height-line-h3-section`      | `p-1`   |
+ * | `sm`  | `--height-line-label`           | `p-1`   |
+ * | `xs`  | `--height-line-main`            | `p-0.5` |
+ * | `2xs` | `--height-line-secondary`       | `p-0.5` |
+ * | `fit` | `h-fit`                         | `p-0`   |
  */
 type ContainerProperties = {
   height: string;
@@ -45,28 +45,28 @@ const containerSizeVariants: Record<
 > = {
   fit: { height: "h-fit", minWidth: "", padding: "p-0" },
   lg: {
-    height: "h-[var(--opal-line-height-lg)]",
-    minWidth: "min-w-[var(--opal-line-height-lg)]",
+    height: "h-(--height-line-h1-headline)",
+    minWidth: "min-w-(--height-line-h1-headline)",
     padding: "p-2",
   },
   md: {
-    height: "h-[var(--opal-line-height-md)]",
-    minWidth: "min-w-[var(--opal-line-height-md)]",
+    height: "h-(--height-line-h3-section)",
+    minWidth: "min-w-(--height-line-h3-section)",
     padding: "p-1",
   },
   sm: {
-    height: "h-[var(--opal-line-height-sm)]",
-    minWidth: "min-w-[var(--opal-line-height-sm)]",
+    height: "h-(--height-line-label)",
+    minWidth: "min-w-(--height-line-label)",
     padding: "p-1",
   },
   xs: {
-    height: "h-[var(--opal-line-height-xs)]",
-    minWidth: "min-w-[var(--opal-line-height-xs)]",
+    height: "h-(--height-line-main)",
+    minWidth: "min-w-(--height-line-main)",
     padding: "p-0.5",
   },
   "2xs": {
-    height: "h-[var(--opal-line-height-2xs)]",
-    minWidth: "min-w-[var(--opal-line-height-2xs)]",
+    height: "h-(--height-line-secondary)",
+    minWidth: "min-w-(--height-line-secondary)",
     padding: "p-0.5",
   },
 } as const;
@@ -148,6 +148,7 @@ const paddingYVariants: Record<PaddingVariants, string> = {
 };
 
 const cardRoundingVariants: Record<RoundingVariants, string> = {
+  xl: "rounded-20",
   lg: "rounded-16",
   md: "rounded-12",
   sm: "rounded-08",
@@ -155,6 +156,7 @@ const cardRoundingVariants: Record<RoundingVariants, string> = {
 };
 
 const cardTopRoundingVariants: Record<RoundingVariants, string> = {
+  xl: "rounded-t-20",
   lg: "rounded-t-16",
   md: "rounded-t-12",
   sm: "rounded-t-08",
@@ -162,6 +164,7 @@ const cardTopRoundingVariants: Record<RoundingVariants, string> = {
 };
 
 const cardBottomRoundingVariants: Record<RoundingVariants, string> = {
+  xl: "rounded-b-20",
   lg: "rounded-b-16",
   md: "rounded-b-12",
   sm: "rounded-b-08",

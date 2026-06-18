@@ -11,7 +11,7 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { Section } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { timeAgo } from "@/lib/time";
+import { timeAgo } from "@opal/time";
 import { useMemo } from "react";
 
 export interface SearchResultCardProps {

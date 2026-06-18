@@ -159,8 +159,7 @@ def upgrade() -> None:
     exists = result.fetchone()
     if not exists:
         op.execute(
-            sa.text(
-                """
+            sa.text("""
                 INSERT INTO persona (
                     id, user_id, name, description, search_type, num_chunks,
                     llm_relevance_filter, llm_filter_extraction, recency_bias,
@@ -169,15 +168,12 @@ def upgrade() -> None:
                     0, NULL, '', '', 'HYBRID', NULL,
                     TRUE, TRUE, 'BASE_DECAY', NULL, TRUE, FALSE
                 )
-                """
-            )
+                """)
         )
-    delete_statement = sa.text(
-        """
+    delete_statement = sa.text("""
         DELETE FROM persona
         WHERE name = 'Danswer' AND default_persona = TRUE AND id != 0
-        """
-    )
+        """)
 
     bind.execute(delete_statement)
 

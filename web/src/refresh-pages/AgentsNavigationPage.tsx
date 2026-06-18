@@ -3,15 +3,13 @@
 import { useMemo, useState, useRef } from "react";
 import AgentCard from "@/sections/agents/AgentCard";
 import { useUser } from "@/providers/UserProvider";
-import { checkUserOwnsAgent as checkUserOwnsAgent } from "@/lib/agents";
-import { useAgents } from "@/hooks/useAgents";
-import { MinimalPersonaSnapshot } from "@/app/admin/agents/interfaces";
+import { checkUserOwnsAgent } from "@/lib/agents/utils";
+import { useAgents } from "@/lib/agents/hooks";
+import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
-import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
+import { SettingsLayouts } from "@opal/layouts";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import Tabs from "@/refresh-components/Tabs";
-import { Button } from "@opal/components";
+import { Button, InputTypeIn, Tabs } from "@opal/components";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
@@ -19,7 +17,7 @@ import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 interface AgentsSectionProps {
   title: string;
   description?: string;
-  agents: MinimalPersonaSnapshot[];
+  agents: MinimalAgent[];
 }
 
 function AgentsSection({ title, description, agents }: AgentsSectionProps) {
@@ -81,9 +79,9 @@ export default function AgentsNavigationPage() {
     });
   }, [agentsFilteredByFilters, searchQuery, activeTab, user]);
 
-  const featuredAgents = [
-    ...memoizedCurrentlyVisibleAgents.filter((agent) => agent.is_featured),
-  ];
+  const featuredAgents = memoizedCurrentlyVisibleAgents.filter(
+    (agent) => agent.is_featured
+  );
   const allAgents = memoizedCurrentlyVisibleAgents.filter(
     (agent) => !agent.is_featured
   );
@@ -111,13 +109,13 @@ export default function AgentsNavigationPage() {
       >
         <div className="flex flex-col gap-2">
           <div className="flex flex-row items-center gap-2">
-            <div className="flex-[2]">
+            <div className="flex-2">
               <InputTypeIn
                 ref={searchInputRef}
                 placeholder="Search agents..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                leftSearchIcon
+                searchIcon
               />
             </div>
             <div className="flex-1">
