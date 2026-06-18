@@ -90,6 +90,13 @@ spec:
             {{- end }}
           env:
             {{- include "onyx.envSecrets" . | nindent 12}}
+            {{- /* The heavy worker runs the `sandbox` queue (cleanup_idle_sandboxes →
+                   create_snapshot / create_opencode_history_snapshot). Those POSTs are
+                   signed with ONYX_SANDBOX_PUSH_PRIVATE_KEY, which (with the default
+                   sandboxPushSecret.allPods=false) is only emitted via envSecretsRestricted.
+                   Without it the sidecar client raises before sending and no snapshots are
+                   created. Pairs with the heavy-worker rule in network-policy-sandbox-push. */}}
+            {{- include "onyx.envSecretsRestricted" . | nindent 12}}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}
             {{- end }}
