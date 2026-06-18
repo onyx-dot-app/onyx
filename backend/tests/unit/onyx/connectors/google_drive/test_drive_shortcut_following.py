@@ -225,6 +225,50 @@ def test_folder_shortcut_cycle_stops_without_completed_folders() -> None:
     assert traversed == set()
 
 
+def test_traversed_parent_still_crawls_untraversed_child_folder() -> None:
+    child = _target_file("child_file", "child_folder")
+    service = _FakeDriveService({})
+    file_query_parents: list[str] = []
+
+    def _fake_paginated_retrieval(**kwargs: object) -> Iterator[dict[str, Any]]:
+        q = str(kwargs["q"])
+        if q.startswith("mimeType !="):
+            parent_id = _file_query_parent(q)
+            file_query_parents.append(parent_id)
+            if parent_id == "child_folder":
+                yield child
+            return
+
+        parent_id = _folder_query_parent(q)
+        if parent_id == "root_folder":
+            yield {
+                "id": "child_folder",
+                "name": "Child Folder",
+                "mimeType": DRIVE_FOLDER_TYPE,
+            }
+
+    traversed = {"root_folder"}
+    with patch(
+        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
+        side_effect=_fake_paginated_retrieval,
+    ):
+        files = list(
+            crawl_folders_for_files(
+                service=cast(Resource, service),
+                parent_id="root_folder",
+                field_type=DriveFileFieldType.STANDARD,
+                user_email="user@example.com",
+                traversed_parent_ids=traversed,
+                update_traversed_ids_func=traversed.add,
+            )
+        )
+
+    assert len(files) == 1
+    assert files[0].drive_file == child
+    assert file_query_parents == ["child_folder"]
+    assert "child_folder" in traversed
+
+
 def test_raw_shortcut_conversion_logs_bug_guard(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

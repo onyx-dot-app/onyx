@@ -438,57 +438,61 @@ def crawl_folders_for_files(
     This function starts crawling from any folder. It is slower though.
     """
     logger.info("Entered crawl_folders_for_files with parent_id: " + parent_id)
-    if parent_id in traversed_parent_ids:
-        logger.info("Skipping subfolder files since already traversed: %s", parent_id)
-        return
-
-    active_parent_ids = active_parent_ids or set()
+    if active_parent_ids is None:
+        active_parent_ids = set()
     if parent_id in active_parent_ids:
         logger.info("Skipping folder cycle at parent_id: %s", parent_id)
         return
 
     active_parent_ids.add(parent_id)
     try:
-        logger.info("Parent id not in traversed parent ids, getting files")
-        found_files = False
-        file = {}
-        try:
-            for file in _get_files_in_parent(
-                service=service,
-                parent_id=parent_id,
-                field_type=field_type,
-                start=start,
-                end=end,
-            ):
-                logger.info("Found file: %s, user email: %s", file["name"], user_email)
-                found_files = True
-                yield RetrievedDriveFile(
-                    drive_file=file,
-                    user_email=user_email,
+        if parent_id not in traversed_parent_ids:
+            logger.info("Parent id not in traversed parent ids, getting files")
+            found_files = False
+            file = {}
+            try:
+                for file in _get_files_in_parent(
+                    service=service,
                     parent_id=parent_id,
-                    completion_stage=DriveRetrievalStage.FOLDER_FILES,
-                )
-            # Only mark a folder as done if it was fully traversed without errors
-            # This usually indicates that the owner of the folder was impersonated.
-            # In cases where this never happens, most likely the folder owner is
-            # not part of the google workspace in question (or for oauth, the authenticated
-            # user doesn't own the folder)
-            if found_files:
-                update_traversed_ids_func(parent_id)
-        except Exception as e:
-            if isinstance(e, HttpError) and e.status_code == 403:
-                # don't yield an error here because this is expected behavior
-                # when a user doesn't have access to a folder
-                logger.debug("Error getting files in parent %s: %s", parent_id, e)
-            else:
-                logger.error("Error getting files in parent %s: %s", parent_id, e)
-                yield RetrievedDriveFile(
-                    drive_file=file,
-                    user_email=user_email,
-                    parent_id=parent_id,
-                    completion_stage=DriveRetrievalStage.FOLDER_FILES,
-                    error=e,
-                )
+                    field_type=field_type,
+                    start=start,
+                    end=end,
+                ):
+                    logger.info(
+                        "Found file: %s, user email: %s", file["name"], user_email
+                    )
+                    found_files = True
+                    yield RetrievedDriveFile(
+                        drive_file=file,
+                        user_email=user_email,
+                        parent_id=parent_id,
+                        completion_stage=DriveRetrievalStage.FOLDER_FILES,
+                    )
+                # Only mark a folder as done if it was fully traversed without errors
+                # This usually indicates that the owner of the folder was impersonated.
+                # In cases where this never happens, most likely the folder owner is
+                # not part of the google workspace in question (or for oauth, the authenticated
+                # user doesn't own the folder)
+                if found_files:
+                    update_traversed_ids_func(parent_id)
+            except Exception as e:
+                if isinstance(e, HttpError) and e.status_code == 403:
+                    # don't yield an error here because this is expected behavior
+                    # when a user doesn't have access to a folder
+                    logger.debug("Error getting files in parent %s: %s", parent_id, e)
+                else:
+                    logger.error("Error getting files in parent %s: %s", parent_id, e)
+                    yield RetrievedDriveFile(
+                        drive_file=file,
+                        user_email=user_email,
+                        parent_id=parent_id,
+                        completion_stage=DriveRetrievalStage.FOLDER_FILES,
+                        error=e,
+                    )
+        else:
+            logger.info(
+                "Skipping files since parent is already traversed: %s", parent_id
+            )
 
         for subfolder in _get_folders_in_parent(
             service=service,
