@@ -104,6 +104,18 @@ mode. Each maps to a real production incident class:
   abandons the session. Stresses server-side disconnect cleanup of held
   transactions/connections/buffers (slow leaks). The turn is recorded as
   `disconnect:disconnected`, separate from success/failure.
+- **CompressionUser** (`compress:*`) — long session (default 60 turns) of
+  large messages (`ONYX_MSG_CHARS`, default 8000) so the history crosses the
+  model's input-token limit and Onyx summarizes/recompresses it every turn —
+  the history-driven slowdown / compression death-spiral path. **Point it at a
+  mock model registered with a small `max_input_tokens` (e.g. 16k) via
+  `ONYX_LONGCONV_MODEL`**, otherwise the default 200k window needs an
+  impractically long history before compression triggers.
+
+```bash
+ONYX_LONGCONV_MODEL=mock-smallctx \
+... uv run locust --headless -u 25 -r 5 -t 20m -H https://<your-onyx-url> CompressionUser
+```
 
 ```bash
 ... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> LongConversationUser
@@ -138,7 +150,8 @@ The API key is created by an admin via `POST /api/admin/api-key`
 | `ONYX_MULTITOOL_MODEL` | `mock-tools3` | Model for MultiToolUser |
 | `ONYX_DR_MODEL` | `mock-agents2` | Model for DeepResearchUser |
 | `ONYX_LONGCONV_MODEL` | unset | Model for LongConversationUser (unset = persona default) |
-| `ONYX_SESSION_TURNS` | 1 | Turns to keep one session alive (LongConversationUser defaults to 20) |
+| `ONYX_SESSION_TURNS` | 1 | Turns to keep one session alive (LongConversationUser 20, CompressionUser 60) |
+| `ONYX_MSG_CHARS` | 0 | Per-message size in chars (CompressionUser defaults to 8000; 0 = short questions) |
 | `ONYX_DISCONNECT_AFTER` | `first_answer_token` | Milestone after which DisconnectUser drops the stream |
 | `ONYX_SHAPE` | unset | `stepramp` activates the staged ramp shape |
 | `ONYX_RAMP_STAGES` / `ONYX_RAMP_DWELL` / `ONYX_RAMP_SPAWN` | `25,50,100,200` / 300 / 5 | Ramp user plateaus, dwell seconds, spawn rate |
