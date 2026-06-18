@@ -9,11 +9,13 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    SHORTCUTS_GALORE_FOLDER_ID,
+)
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
 
-SHORTCUTS_GALORE_FOLDER_ID = "1oBDLgN21c3PX9pPGPWvdp7S1gVqt5-iQ"
 SHORTCUTS_GALORE_FOLDER_URL = (
     f"https://drive.google.com/drive/folders/{SHORTCUTS_GALORE_FOLDER_ID}"
 )
