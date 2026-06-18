@@ -6,6 +6,7 @@ import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
 import {
   PostHogPageTracker,
+  PostHogRuntimeInitializer,
   CustomAnalyticsScript,
   WebVitals,
 } from "@/lib/analytics/shared";
@@ -104,12 +105,13 @@ export default function Layout({ children }: LayoutProps) {
                   <LicenseExpiryBanner />
                   <AppProvider>
                     <DynamicMetadata />
+                    <PostHogRuntimeInitializer />
                     <CustomAnalyticsScript />
                     <PostHogPageTracker />
                     <div id={MODAL_ROOT_ID} className="h-screen w-screen">
                       <ProductGatingWrapper>{children}</ProductGatingWrapper>
                     </div>
-                    {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
+                    <WebVitals />
                     {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
                       <StatsOverlayLoader />
                     )}
