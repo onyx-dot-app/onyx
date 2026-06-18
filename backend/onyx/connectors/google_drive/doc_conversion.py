@@ -711,7 +711,7 @@ def _convert_drive_item_to_document(
     try:
         # skip shortcuts or folders
         if file.get("mimeType") in [DRIVE_SHORTCUT_TYPE, DRIVE_FOLDER_TYPE]:
-            logger.info("Skipping shortcut/folder.")
+            logger.info("bug: raw shortcut/folder reached document conversion.")
             return None
 
         size_str = file.get("size")

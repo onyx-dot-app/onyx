@@ -49,17 +49,22 @@ PERMISSION_FULL_DESCRIPTION = (
 )
 FILE_FIELDS = (
     "nextPageToken, files(mimeType, id, name, driveId, parents, "
-    "modifiedTime, webViewLink, shortcutDetails, owners(emailAddress), size)"
+    "modifiedTime, webViewLink, owners(emailAddress), size)"
 )
 FILE_FIELDS_WITH_PERMISSIONS = (
     f"nextPageToken, files(mimeType, id, name, driveId, parents, {PERMISSION_FULL_DESCRIPTION}, permissionIds, "
-    "modifiedTime, webViewLink, shortcutDetails, owners(emailAddress), size)"
+    "modifiedTime, webViewLink, owners(emailAddress), size)"
 )
 SLIM_FILE_FIELDS = (
     f"nextPageToken, files(mimeType, driveId, id, name, parents, {PERMISSION_FULL_DESCRIPTION}, "
     "permissionIds, webViewLink, owners(emailAddress), modifiedTime)"
 )
-FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
+FOLDER_FIELDS = (
+    "nextPageToken, files(id, name, mimeType, permissions, modifiedTime, webViewLink)"
+)
+SHORTCUT_FIELDS = (
+    "id, name, mimeType, shortcutDetails(targetId,targetMimeType,targetResourceKey)"
+)
 
 MAX_BATCH_SIZE = 100
 
@@ -107,7 +112,6 @@ def _get_folders_in_parent(
     service: Resource,
     parent_id: str | None = None,
 ) -> Iterator[GoogleDriveFileType]:
-    # Follow shortcuts to folders
     query = f"(mimeType = '{DRIVE_FOLDER_TYPE}' or mimeType = '{DRIVE_SHORTCUT_TYPE}')"
     query += " and trashed = false"
 
@@ -124,7 +128,9 @@ def _get_folders_in_parent(
         fields=FOLDER_FIELDS,
         q=query,
     ):
-        yield file
+        folder = _resolve_folder_or_shortcut(service, file)
+        if folder:
+            yield folder
 
 
 def get_folder_metadata(
@@ -255,6 +261,136 @@ def _get_single_file_fields(field_type: DriveFileFieldType) -> str:
     return _extract_single_file_fields(_get_fields_for_file_type(field_type))
 
 
+def _get_file_by_id(
+    service: Resource,
+    file_id: str,
+    fields: str,
+    resource_key: str | None = None,
+) -> GoogleDriveFileType | None:
+    kwargs: dict[str, object] = {
+        "fileId": file_id,
+        "fields": fields,
+        "supportsAllDrives": True,
+    }
+    if resource_key:
+        kwargs["resourceKey"] = resource_key
+
+    try:
+        return service.files().get(**kwargs).execute()  # ty: ignore[unresolved-attribute]
+    except HttpError as e:
+        if e.resp.status in (403, 404):
+            logger.debug("Cannot access Drive file %s: %s", file_id, e)
+            return None
+        raise
+    except RefreshError:
+        logger.debug("Cannot access Drive file %s: impersonation failed", file_id)
+        return None
+
+
+def _is_drive_shortcut(file: GoogleDriveFileType) -> bool:
+    return file.get("mimeType") == DRIVE_SHORTCUT_TYPE
+
+
+def _get_shortcut_details(
+    service: Resource,
+    shortcut: GoogleDriveFileType,
+) -> dict[str, str] | None:
+    existing_details = shortcut.get("shortcutDetails")
+    if isinstance(existing_details, dict) and existing_details.get("targetId"):
+        return cast(dict[str, str], existing_details)
+
+    shortcut_id = shortcut.get("id")
+    if not isinstance(shortcut_id, str):
+        logger.debug("Skipping shortcut without id: %s", shortcut.get("name"))
+        return None
+
+    shortcut_file = _get_file_by_id(service, shortcut_id, SHORTCUT_FIELDS)
+    if not shortcut_file:
+        return None
+
+    shortcut_details = shortcut_file.get("shortcutDetails")
+    if isinstance(shortcut_details, dict) and shortcut_details.get("targetId"):
+        return cast(dict[str, str], shortcut_details)
+
+    logger.debug("Skipping shortcut without target metadata: %s", shortcut_id)
+    return None
+
+
+def _resolve_shortcut_target(
+    service: Resource,
+    shortcut: GoogleDriveFileType,
+    target_fields: str,
+) -> GoogleDriveFileType | None:
+    details = _get_shortcut_details(service, shortcut)
+    if details is None:
+        return None
+
+    return _get_file_by_id(
+        service=service,
+        file_id=details["targetId"],
+        fields=target_fields,
+        resource_key=details.get("targetResourceKey"),
+    )
+
+
+def _resolve_file_or_shortcut(
+    service: Resource,
+    file: GoogleDriveFileType,
+    field_type: DriveFileFieldType,
+) -> GoogleDriveFileType | None:
+    if not _is_drive_shortcut(file):
+        return file
+
+    target = _resolve_shortcut_target(
+        service=service,
+        shortcut=file,
+        target_fields=_get_single_file_fields(field_type),
+    )
+    if target is None or target.get("mimeType") == DRIVE_FOLDER_TYPE:
+        return None
+
+    logger.debug(
+        "Resolved Drive shortcut %s to target %s", file.get("id"), target["id"]
+    )
+    return target
+
+
+def _resolve_folder_or_shortcut(
+    service: Resource,
+    file: GoogleDriveFileType,
+) -> GoogleDriveFileType | None:
+    if not _is_drive_shortcut(file):
+        return file
+
+    target = _resolve_shortcut_target(
+        service=service,
+        shortcut=file,
+        target_fields=HIERARCHY_FIELDS,
+    )
+    if target is None or target.get("mimeType") != DRIVE_FOLDER_TYPE:
+        return None
+
+    logger.debug(
+        "Resolved Drive folder shortcut %s to target %s", file.get("id"), target["id"]
+    )
+    return target
+
+
+def _resolve_file_shortcuts(
+    service: Resource,
+    files: Iterator[GoogleDriveFileType | str],
+    field_type: DriveFileFieldType,
+) -> Iterator[GoogleDriveFileType | str]:
+    for file in files:
+        if isinstance(file, str):
+            yield file
+            continue
+
+        resolved_file = _resolve_file_or_shortcut(service, file, field_type)
+        if resolved_file is not None:
+            yield resolved_file
+
+
 def _get_files_in_parent(
     service: Resource,
     parent_id: str,
@@ -279,7 +415,9 @@ def _get_files_in_parent(
         q=query,
         **kwargs,
     ):
-        yield file
+        resolved_file = _resolve_file_or_shortcut(service, file, field_type)
+        if resolved_file is not None:
+            yield resolved_file
 
 
 def crawl_folders_for_files(
@@ -409,6 +547,13 @@ def get_files_in_shared_drive(
         q=file_query,
         **kwargs,
     ):
+        if isinstance(file, str):
+            yield file
+            continue
+
+        resolved_file = _resolve_file_or_shortcut(service, file, field_type)
+        if resolved_file is None:
+            continue
         # If we found any files, mark this drive as traversed. When a user has access to a drive,
         # they have access to all the files in the drive. Also not a huge deal if we re-traverse
         # empty drives.
@@ -416,7 +561,7 @@ def get_files_in_shared_drive(
         # https://support.google.com/a/users/answer/12380484?hl=en
         # So we may have to change this logic for people who use folder restrictions.
         update_traversed_ids_func(drive_id)
-        yield file
+        yield resolved_file
 
 
 def get_all_files_in_my_drive_and_shared(
@@ -461,15 +606,19 @@ def get_all_files_in_my_drive_and_shared(
     if not include_shared_with_me:
         file_query += " and 'me' in owners"
     file_query += generate_time_range_filter(start, end)
-    yield from execute_paginated_retrieval_with_max_pages(
-        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
-        max_num_pages=max_num_pages,
-        list_key="files",
-        continue_on_404_or_403=False,
-        corpora="user",
-        fields=_get_fields_for_file_type(field_type),
-        q=file_query,
-        **kwargs,
+    yield from _resolve_file_shortcuts(
+        service,
+        execute_paginated_retrieval_with_max_pages(
+            retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
+            max_num_pages=max_num_pages,
+            list_key="files",
+            continue_on_404_or_403=False,
+            corpora="user",
+            fields=_get_fields_for_file_type(field_type),
+            q=file_query,
+            **kwargs,
+        ),
+        field_type,
     )
 
 
@@ -505,17 +654,21 @@ def get_all_files_for_oauth(
         if not include_files_shared_with_me and include_my_drives:
             file_query += " and 'me' in owners"
 
-    yield from execute_paginated_retrieval_with_max_pages(
-        max_num_pages=max_num_pages,
-        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
-        list_key="files",
-        continue_on_404_or_403=False,
-        corpora=corpora,
-        includeItemsFromAllDrives=should_get_all,
-        supportsAllDrives=should_get_all,
-        fields=_get_fields_for_file_type(field_type),
-        q=file_query,
-        **kwargs,
+    yield from _resolve_file_shortcuts(
+        service,
+        execute_paginated_retrieval_with_max_pages(
+            max_num_pages=max_num_pages,
+            retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
+            list_key="files",
+            continue_on_404_or_403=False,
+            corpora=corpora,
+            includeItemsFromAllDrives=should_get_all,
+            supportsAllDrives=should_get_all,
+            fields=_get_fields_for_file_type(field_type),
+            q=file_query,
+            **kwargs,
+        ),
+        field_type,
     )
 
 
