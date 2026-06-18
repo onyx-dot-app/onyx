@@ -760,29 +760,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         if plan_scope:
             self._tried_scopes.update(plan_scope)
 
-        # Resolve THIS call's scope: the filter flow's pick if it routed within
-        # the candidate set, else the restriction itself (which always applies),
-        # else everything.
-        resolved_scope: list[DocumentSource] | None
-        scope_origin: str
-        if plan_scope is not None:
-            resolved_scope = plan_scope
-            scope_origin = "filter flow"
-        elif user_source_restriction is not None:
-            resolved_scope = user_source_restriction
-            scope_origin = "persona/user restriction"
-        else:
-            resolved_scope = None
-            scope_origin = "none"
+        # This call's scope: the filter flow's pick, else the persona/user
+        # restriction (the outer bound), else everything.
+        resolved_scope = (
+            plan_scope if plan_scope is not None else user_source_restriction
+        )
 
         logger.info(
-            "Internal search - source scope: %s (%s, next=%s)",
-            (
-                [source.value for source in resolved_scope]
-                if resolved_scope
-                else "all sources"
-            ),
-            scope_origin,
+            "Internal search - source scope: %s (next=%s)",
+            [s.value for s in resolved_scope] if resolved_scope else "all sources",
             next_source.value if next_source else "none",
         )
 
