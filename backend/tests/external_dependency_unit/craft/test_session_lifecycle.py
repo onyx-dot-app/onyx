@@ -36,6 +36,7 @@ from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
+from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
 from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -1015,6 +1016,11 @@ class TestRestoreSession:
         assert (
             stub_sandbox_manager.last_restore_snapshot_payload["snapshot_storage_path"]
             == snapshot.storage_path
+        )
+        assert stub_sandbox_manager.last_write_files_to_sandbox_payload is not None
+        assert (
+            stub_sandbox_manager.last_write_files_to_sandbox_payload["mount_path"]
+            == USER_LIBRARY_MOUNT_PATH
         )
 
 

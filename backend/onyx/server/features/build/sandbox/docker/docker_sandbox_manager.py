@@ -150,6 +150,7 @@ WORKSPACE_ROOT = "/workspace"
 SESSIONS_ROOT = f"{WORKSPACE_ROOT}/sessions"
 TEMPLATES_OUTPUTS_PATH = f"{WORKSPACE_ROOT}/templates/outputs"
 MANAGED_SKILLS_PATH = f"{WORKSPACE_ROOT}/managed/skills"
+MANAGED_USER_LIBRARY_PATH = f"{WORKSPACE_ROOT}/managed/user_library"
 SANDBOX_EXEC_USER = "1000:1000"
 # Docker exec bypasses firewall-init.sh's setpriv environment workaround, so
 # sandbox-user execs must carry the uid/gid and user HOME together.
@@ -1097,6 +1098,7 @@ else
     mkdir -p {session_path}/outputs/web
 fi
 ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
+ln -sf {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
 {nextjs_start}
 echo "Session workspace setup complete"
@@ -1386,6 +1388,7 @@ fi
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
+ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
 """
         try:
@@ -1445,7 +1448,7 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
                 [
                     "/bin/sh",
                     "-c",
-                    f"ls -laL --time-style=+%s {quoted} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
+                    f"ls -la --time-style=+%s {quoted}/ 2>/dev/null || echo 'ERROR_NOT_FOUND'",
                 ],
                 check=False,
             )
@@ -1468,20 +1471,22 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
             if len(parts) < 7:
                 continue
             is_symlink = line.startswith("l")
+            link_target: str | None = None
             if is_symlink and " -> " in line:
                 name_and_target = " ".join(parts[6:])
-                name = (
-                    name_and_target.split(" -> ")[0]
-                    if " -> " in name_and_target
-                    else parts[-1]
-                )
+                if " -> " in name_and_target:
+                    name, link_target = name_and_target.split(" -> ", 1)
+                else:
+                    name = parts[-1]
             else:
                 name = " ".join(parts[6:])
 
             if name in (".", ".."):
                 continue
 
-            is_directory = line.startswith("d")
+            is_directory = line.startswith("d") or (
+                is_symlink and link_target == MANAGED_USER_LIBRARY_PATH
+            )
             size_str = parts[4]
             try:
                 size = int(size_str) if not is_directory else None

@@ -21,7 +21,16 @@ from cryptography.hazmat.primitives.serialization import PublicFormat
 
 from onyx.server.features.build.configs import SANDBOX_PUSH_PRIVATE_KEY
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    FilesystemListRequest,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    FilesystemListResponse,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     PUSH_DAEMON_PORT,
+)
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    SIDECAR_FILESYSTEM_LIST_PATH,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_HEALTH_PATH,
@@ -29,6 +38,7 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_PUSH_PATH,
 )
+from onyx.server.features.build.sandbox.models import FilesystemEntry
 
 _SIDECAR_CHUNK_SIZE = 8 * 1024 * 1024
 
@@ -131,6 +141,55 @@ class SidecarClient:
             except httpx.TransportError:
                 continue
         return False
+
+    def list_directory(
+        self,
+        *,
+        sandbox_id: UUID,
+        session_id: UUID,
+        path: str,
+        timeout_seconds: float = 30.0,
+    ) -> list[FilesystemEntry]:
+        payload = FilesystemListRequest(session_id=session_id, path=path)
+        body = payload.model_dump_json().encode()
+        sha256_hex = hashlib.sha256(body).hexdigest()
+        last_exc: httpx.TransportError | None = None
+
+        for host in self._hosts(sandbox_id):
+            try:
+                with httpx.Client(timeout=timeout_seconds) as http_client:
+                    resp = http_client.post(
+                        self._url(host, SIDECAR_FILESYSTEM_LIST_PATH),
+                        content=body,
+                        headers=self._signed_headers(
+                            signing_path=SIDECAR_FILESYSTEM_LIST_PATH,
+                            sha256_hex=sha256_hex,
+                            content_type="application/json",
+                        ),
+                    )
+            except httpx.TransportError as e:
+                last_exc = e
+                continue
+
+            if resp.status_code != 200:
+                raise SidecarStatusError("filesystem list", resp.status_code, resp.text)
+
+            listing = FilesystemListResponse.model_validate_json(resp.content)
+            return [
+                FilesystemEntry(
+                    name=entry.name,
+                    path=entry.path,
+                    is_directory=entry.is_directory,
+                    size=entry.size,
+                    mime_type=entry.mime_type,
+                )
+                for entry in listing.entries
+            ]
+
+        raise SidecarRequestError(
+            "filesystem list request failed: "
+            f"{last_exc or 'no sandbox pod host reachable'}"
+        )
 
     @contextmanager
     def request_and_stream_new_snapshot(
