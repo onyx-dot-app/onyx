@@ -469,11 +469,11 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
           <InputSelect.Item value={FOREVER_RETENTION_VALUE}>
             Forever
           </InputSelect.Item>
-          <InputSelect.Item value="7">7 days</InputSelect.Item>
-          <InputSelect.Item value="30">30 days</InputSelect.Item>
-          <InputSelect.Item value="60">60 days</InputSelect.Item>
-          <InputSelect.Item value="90">90 days</InputSelect.Item>
-          <InputSelect.Item value="365">365 days</InputSelect.Item>
+          {RETENTION_PRESETS.map((d) => (
+            <InputSelect.Item key={d} value={String(d)}>
+              {d} days
+            </InputSelect.Item>
+          ))}
           <InputSelect.Item value={CUSTOM_RETENTION_VALUE}>
             Custom…
           </InputSelect.Item>
