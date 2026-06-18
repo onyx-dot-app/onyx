@@ -433,16 +433,14 @@ class TestRunModels:
 
         errors = [p for p in packets if isinstance(p, StreamingError)]
         assert len(errors) == 1
-        # The worker error is now classified via litellm_exception_to_error_msg
-        # rather than hardcoded to MODEL_ERROR; a generic (non-litellm) exception
-        # maps to UNKNOWN_ERROR while preserving the original message.
+        # A generic (non-litellm) worker exception surfaces as UNKNOWN_ERROR
+        # with the original message preserved.
         assert errors[0].error_code == "UNKNOWN_ERROR"
         assert "intentional test failure" in errors[0].error
 
     def test_context_window_overflow_surfaces_as_context_too_long(self) -> None:
-        """The long-thread failure mode: a provider context-window rejection
-        inside a worker must surface as CONTEXT_TOO_LONG (not MODEL_ERROR) and
-        be marked non-retryable, end-to-end through _run_model -> drain loop."""
+        """A provider context-window rejection in a worker surfaces as
+        CONTEXT_TOO_LONG and non-retryable through the _run_model -> drain path."""
 
         def overflow(**_kwargs: Any) -> None:
             raise ContextWindowExceededError(

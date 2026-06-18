@@ -70,17 +70,13 @@ GEN_AI_MODEL_FALLBACK_MAX_TOKENS = int(
     os.environ.get("GEN_AI_MODEL_FALLBACK_MAX_TOKENS") or 32000
 )
 
-# Fraction of a model's max_input_tokens to hold back when fitting chat history,
-# as headroom for token-count drift: Onyx estimates with tiktoken, but providers
-# (e.g. Anthropic/Vertex) tokenize differently and can count higher, so filling
-# right up to the limit risks a provider context-window rejection on long
-# threads. Truncating against (1 - margin) * max_input_tokens absorbs that drift.
+# Fraction of max_input_tokens to hold back when fitting history: headroom for
+# tiktoken undercounting the provider's tokenizer and overflowing the context.
 GEN_AI_INPUT_TOKEN_SAFETY_MARGIN = float(
     os.environ.get("GEN_AI_INPUT_TOKEN_SAFETY_MARGIN") or 0.05
 )
-# Must be in [0, 1): a value >= 1 drives available_tokens to <= 0 (history
-# construction breaks), and a negative value silently expands the budget past
-# the model's real limit. Fail loudly on misconfiguration.
+# Must be in [0, 1): >= 1 zeroes available_tokens; negative inflates the budget
+# past the real limit.
 if not 0.0 <= GEN_AI_INPUT_TOKEN_SAFETY_MARGIN < 1.0:
     raise ValueError(
         "GEN_AI_INPUT_TOKEN_SAFETY_MARGIN must be in [0, 1), got "

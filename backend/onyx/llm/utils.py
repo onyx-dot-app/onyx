@@ -174,10 +174,8 @@ def litellm_exception_to_error_msg(
             if error_msg_pattern in error_msg:
                 return custom_error_msg, "CUSTOM_ERROR", True
 
-    # ContextWindowExceededError and ContentPolicyViolationError both subclass
-    # BadRequestError, so they MUST be checked before the generic BadRequestError
-    # branch — otherwise they'd be misclassified as BAD_REQUEST (and the
-    # context-length case would never surface as CONTEXT_TOO_LONG).
+    # Both subclass BadRequestError, so they must precede the BadRequestError
+    # branch or they'd be misclassified as BAD_REQUEST.
     if isinstance(core_exception, ContextWindowExceededError):
         error_msg = (
             "Context window exceeded: Your input is too long for the model to process."

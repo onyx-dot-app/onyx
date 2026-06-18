@@ -1,9 +1,7 @@
-"""Regression guards for litellm_exception_to_error_msg classification order.
-
-ContextWindowExceededError and ContentPolicyViolationError both subclass
-BadRequestError, so they must be checked before the generic BadRequestError
-branch — otherwise context-window overflow (the long-thread failure) is
-mislabeled BAD_REQUEST and never surfaces as CONTEXT_TOO_LONG.
+"""Guards classification order in litellm_exception_to_error_msg:
+ContextWindowExceededError and ContentPolicyViolationError subclass
+BadRequestError and must be matched first, or context overflow is mislabeled
+BAD_REQUEST instead of CONTEXT_TOO_LONG.
 """
 
 from litellm.exceptions import BadRequestError

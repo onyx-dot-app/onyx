@@ -670,11 +670,8 @@ def run_llm_loop(
             raw_answer=None,
         )
 
-        # Pass the budget to construct_message_history, which handles token
-        # allocation. Hold back a safety margin below the advertised limit:
-        # our tiktoken estimate can undercount vs the provider's real tokenizer,
-        # so fitting right up to max_input_tokens risks a context-window
-        # rejection on long threads.
+        # Hold back a margin below max_input_tokens: our tiktoken estimate can
+        # undercount the provider's tokenizer and overflow the context window.
         available_tokens = int(
             llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
         )

@@ -1103,9 +1103,8 @@ def _run_models(
     # Set to True when a model raises an exception (distinct from "still running").
     # Used in the stop-button path to avoid calling completion for errored models.
     model_errored: list[bool] = [False] * n_models
-    # Classified (message, error_code, is_retryable) for a model that errored,
-    # computed once in _run_model where the exception + llm are in scope, then
-    # reused by both the streamed error packet and the persisted message.
+    # Per-model classified (message, error_code, is_retryable), set in _run_model
+    # and reused by the streamed packet and the persisted message.
     model_error_info: list[tuple[str, str, bool] | None] = [None] * n_models
     persist_lock = threading.Lock()
     persisted: list[bool] = [False] * n_models
@@ -1292,11 +1291,8 @@ def _run_models(
             message, error_code, is_retryable = litellm_exception_to_error_msg(
                 e, model_llm, fallback_to_error_msg=True
             )
-            # Redact the API key at the source so every consumer of
-            # model_error_info is safe — both the streamed StreamingError and
-            # the message persisted to the DB in _save_errored_message. The
-            # fallback_to_error_msg path returns str(e) verbatim, which can
-            # embed the key for exceptions outside the classifier's branches.
+            # Redact here so both the streamed and persisted error are safe:
+            # the fallback path returns str(e) verbatim, which can embed the key.
             if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
                 message = message.replace(
                     model_llm.config.api_key, "[REDACTED_API_KEY]"
@@ -1404,8 +1400,7 @@ def _run_models(
                     # _run_model's finally always posts _MODEL_DONE, which is
                     # the sole completion signal.
                     model_llm = setup.llms[model_idx]
-                    # Classified in _run_model (where the llm is in scope);
-                    # fall back to a generic model error if missing.
+                    # Classified in _run_model; fall back to a generic error.
                     info = model_error_info[model_idx]
                     if info is not None:
                         error_msg, err_code, err_retryable = info
