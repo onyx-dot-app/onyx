@@ -232,3 +232,23 @@ export async function installRepoSkills(
   });
   return handle<RepoSkillsInstallResult>(res);
 }
+
+// Admin-gated counterpart: installs org-wide custom skills with visibility.
+export async function installRepoSkillsAdmin(
+  source: string,
+  slugs: string[],
+  isPublic: boolean,
+  groupIds: number[]
+): Promise<RepoSkillsInstallResult> {
+  const res = await fetch("/api/admin/skills/from-repo/install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      source,
+      slugs,
+      is_public: isPublic,
+      group_ids: groupIds,
+    }),
+  });
+  return handle<RepoSkillsInstallResult>(res);
+}
