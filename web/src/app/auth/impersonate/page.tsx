@@ -1,6 +1,7 @@
 "use client";
 
-import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
+import { AuthLayouts } from "@opal/layouts";
+import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { redirect, useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -19,6 +20,8 @@ const ImpersonateSchema = Yup.object().shape({
 export default function ImpersonatePage() {
   const router = useRouter();
   const { user, isCloudSuperuser } = useUser();
+  const { logoUrl } = useSettings();
+
   if (!user) {
     redirect("/auth/login");
   }
@@ -59,9 +62,10 @@ export default function ImpersonatePage() {
   };
 
   return (
-    <AuthFlowContainer
+    <AuthLayouts.Card
       title="Impersonate User"
       description="Cloud superuser access only."
+      logoSrc={logoUrl}
     >
       <Formik
         initialValues={{ email: "", apiKey: "" }}
@@ -83,7 +87,7 @@ export default function ImpersonatePage() {
               placeholder="Enter API Key"
             />
             <Button disabled={isSubmitting} type="submit" width="full">
-              Impersonate User
+              Impersonate
             </Button>
           </Form>
         )}
@@ -94,6 +98,6 @@ export default function ImpersonatePage() {
         text03
         className="mt-4 text-center px-4"
       >{`Note: This feature is only available for @onyx.app administrators`}</Text>
-    </AuthFlowContainer>
+    </AuthLayouts.Card>
   );
 }

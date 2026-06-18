@@ -1,6 +1,7 @@
 "use client";
 
-import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
+import { AuthLayouts } from "@opal/layouts";
+import { useSettings } from "@/lib/settings/hooks";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -30,10 +31,13 @@ interface AuthErrorContentProps {
 
 function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
   const message = resolveMessage(rawMessage);
+  const { logoUrl } = useSettings();
+
   return (
-    <AuthFlowContainer
+    <AuthLayouts.Card
       title="Authentication Error"
       description="There was a problem with your login attempt."
+      logoSrc={logoUrl}
     >
       <div className="flex flex-col gap-4">
         {/* TODO: Error card component */}
@@ -78,7 +82,7 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
           )}
         </Text>
       </div>
-    </AuthFlowContainer>
+    </AuthLayouts.Card>
   );
 }
 

@@ -4,10 +4,11 @@ import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
+import { useSettings } from "@/lib/settings/hooks";
 import { AuthType } from "@/lib/constants";
-import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
+import { AuthLayouts } from "@opal/layouts";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
-import EmailPasswordForm from "@/app/auth/login/EmailPasswordForm";
+import EmailPasswordForm from "@/refresh-pages/auth/EmailPasswordForm";
 import { MessageCard } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
@@ -19,6 +20,7 @@ export default function SignupPage() {
   const defaultEmail = searchParams.get("email");
   const { user } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
+  const { logoUrl } = useSettings();
   const isSignupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
 
   useEffect(() => {
@@ -44,10 +46,11 @@ export default function SignupPage() {
 
   if (isSignupDisabled) {
     return (
-      <AuthFlowContainer
+      <AuthLayouts.Card
         title="Create account"
         description="Get started with Onyx"
         bottomPrompt={bottomPrompt}
+        logoSrc={logoUrl}
       >
         <MessageCard
           title="New account creation unavailable."
@@ -55,15 +58,16 @@ export default function SignupPage() {
             "Existing accounts can still [sign in](/auth/login?autoRedirectToSignup=false). New account creation will be available again soon. You can also try Onyx by [self-hosting](https://docs.onyx.app/deployment/overview)."
           )}
         />
-      </AuthFlowContainer>
+      </AuthLayouts.Card>
     );
   }
 
   return (
-    <AuthFlowContainer
+    <AuthLayouts.Card
       title="Create account"
       description="Get started with Onyx"
       bottomPrompt={bottomPrompt}
+      logoSrc={logoUrl}
     >
       <AuthErrorDisplay
         searchParams={Object.fromEntries(searchParams.entries())}
@@ -74,6 +78,6 @@ export default function SignupPage() {
         nextUrl={nextUrl}
         defaultEmail={defaultEmail}
       />
-    </AuthFlowContainer>
+    </AuthLayouts.Card>
   );
 }

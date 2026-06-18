@@ -68,3 +68,7 @@ export type {
 /* SidebarLayouts */
 export * as SidebarLayouts from "@opal/layouts/sidebar/components";
 export { type SidebarRootProps } from "@opal/layouts/sidebar/components";
+
+/* AuthLayouts */
+export * as AuthLayouts from "@opal/layouts/auth/components";
+export type { CardProps as AuthCardProps } from "@opal/layouts/auth/components";

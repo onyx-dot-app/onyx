@@ -5,7 +5,7 @@ import { basicLogin, basicSignup } from "@/lib/user";
 import { Button } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { requestEmailVerification } from "../lib";
+import { requestEmailVerification } from "@/app/auth/lib";
 import { useMemo, useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import Link from "next/link";

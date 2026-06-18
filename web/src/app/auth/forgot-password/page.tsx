@@ -1,10 +1,10 @@
 "use client";
 import React, { useState } from "react";
 import { forgotPassword } from "./utils";
-import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
-import { Text, Button } from "@opal/components";
+import { AuthLayouts } from "@opal/layouts";
+import { useSettings } from "@/lib/settings/hooks";
+import { Button } from "@opal/components";
 import { markdown } from "@opal/utils";
-import { Spacer } from "@opal/components";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { TextFormField } from "@/components/Field";
@@ -15,16 +15,18 @@ import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 
 const ForgotPasswordPage: React.FC = () => {
   const [isWorking, setIsWorking] = useState(false);
+  const { logoUrl } = useSettings();
 
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
     redirect("/auth/login");
   }
 
   return (
-    <AuthFlowContainer
+    <AuthLayouts.Card
       title="Forgot Password"
       description="Enter your email address and we'll send you a reset link."
       bottomPrompt={markdown("[Back to Login](/auth/login)")}
+      logoSrc={logoUrl}
     >
       {isWorking && <Spinner />}
       <Formik
@@ -64,7 +66,7 @@ const ForgotPasswordPage: React.FC = () => {
           </Form>
         )}
       </Formik>
-    </AuthFlowContainer>
+    </AuthLayouts.Card>
   );
 };
 

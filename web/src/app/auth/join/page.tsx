@@ -6,9 +6,9 @@ import {
   getAuthUrlSS,
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
-import EmailPasswordForm from "../login/EmailPasswordForm";
-import SignInButton from "@/app/auth/login/SignInButton";
-import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
+import EmailPasswordForm from "@/refresh-pages/auth/EmailPasswordForm";
+import SignInButton from "@/refresh-pages/auth/SignInButton";
+import { AuthLayouts } from "@opal/layouts";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import { AuthType } from "@/lib/constants";
 
@@ -53,7 +53,7 @@ const Page = async (props: {
   }
 
   return (
-    <AuthFlowContainer
+    <AuthLayouts.Card
       title="Re-authenticate to join team"
       description="Sign in to accept your team invitation."
     >
@@ -77,7 +77,7 @@ const Page = async (props: {
         nextUrl={nextUrl}
         defaultEmail={defaultEmail}
       />
-    </AuthFlowContainer>
+    </AuthLayouts.Card>
   );
 };
 

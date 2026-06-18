@@ -15,7 +15,7 @@ import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import SidePanelHeader from "@/app/nrf/side-panel/SidePanelHeader";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
-import LoginPage from "@/app/auth/login/LoginPage";
+import EmailPasswordForm from "@/refresh-pages/auth/EmailPasswordForm";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
@@ -634,11 +634,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
             <Modal.Header icon={SvgUser} title="Welcome to Onyx" />
             <Modal.Body>
               {authTypeMetadata.authType === AuthType.BASIC ? (
-                <LoginPage
-                  authUrl={null}
-                  authTypeMetadata={authTypeMetadata}
-                  nextUrl="/nrf"
-                />
+                <EmailPasswordForm nextUrl="/nrf" />
               ) : (
                 <div className="flex flex-col items-center">
                   <Button

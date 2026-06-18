@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { resetPassword } from "../forgot-password/utils";
-import AuthFlowContainer from "@/refresh-pages/auth/AuthFlowContainer";
+import { AuthLayouts } from "@opal/layouts";
+import { useSettings } from "@/lib/settings/hooks";
 import { Button } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Form, Formik } from "formik";
@@ -21,6 +22,7 @@ const ResetPasswordPage: React.FC = () => {
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
   const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
+  const { logoUrl } = useSettings();
 
   useEffect(() => {
     if (tenantId) {
@@ -36,10 +38,11 @@ const ResetPasswordPage: React.FC = () => {
   }
 
   return (
-    <AuthFlowContainer
+    <AuthLayouts.Card
       title="Reset Password"
       description="Enter your new password below."
       bottomPrompt={markdown("[Back to Login](/auth/login)")}
+      logoSrc={logoUrl}
     >
       {isWorking && <Spinner />}
       <Formik
@@ -97,7 +100,7 @@ const ResetPasswordPage: React.FC = () => {
           </Form>
         )}
       </Formik>
-    </AuthFlowContainer>
+    </AuthLayouts.Card>
   );
 };
 
