@@ -63,11 +63,6 @@ def _noop(*_args: object, **_kwargs: object) -> None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
@@ -128,11 +123,6 @@ def initialize_file_store() -> Generator[None, None, None]:
         yield
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
 
 class TestCreateCustomExternalAppFromRepo:

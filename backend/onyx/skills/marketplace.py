@@ -54,11 +54,6 @@ class DiscoveredSkill:
     abs_dir: Path
 
 
-# ---------------------------------------------------------------------------
-# parse_skill_source
-# ---------------------------------------------------------------------------
-
-
 def _strip_skills_command(raw: str) -> tuple[str, list[str]]:
     """Strip leading npx/skills/add tokens; collect --skill/-s values.
 
@@ -71,7 +66,6 @@ def _strip_skills_command(raw: str) -> tuple[str, list[str]]:
     # Drop package name variants: skills, skills@latest, skills@X.Y.Z
     if tokens and (tokens[0] == "skills" or tokens[0].startswith("skills@")):
         tokens.pop(0)
-    # Drop 'add' subcommand
     if tokens and tokens[0] == "add":
         tokens.pop(0)
 
@@ -125,14 +119,12 @@ def parse_skill_source(raw: str) -> ParsedSource:
     if not source_token:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "no source found in input")
 
-    # Full URL
     if source_token.startswith("https://") or source_token.startswith("http://"):
         return _parse_url_source(source_token, skill_filters)
 
     # Bare owner/repo (may contain a host prefix like github.com/owner/repo)
     if "/" in source_token:
         parts = source_token.split("/")
-        # Check if first segment looks like a hostname
         if "." in parts[0]:
             host = parts[0].lower()
             if host not in _SUPPORTED_HOSTS:
@@ -155,7 +147,6 @@ def parse_skill_source(raw: str) -> ParsedSource:
                 subpath=None,
                 skill_filters=skill_filters,
             )
-        # Bare owner/repo
         if len(parts) < 2:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
@@ -222,11 +213,6 @@ def _parse_url_source(url: str, skill_filters: list[str]) -> ParsedSource:
     )
 
 
-# ---------------------------------------------------------------------------
-# fetch_repo_archive
-# ---------------------------------------------------------------------------
-
-
 def fetch_repo_archive(source: ParsedSource) -> bytes:
     """Download the repository tar.gz archive for the given ParsedSource."""
     ref = source.ref or "HEAD"
@@ -277,11 +263,6 @@ def fetch_repo_archive(source: ParsedSource) -> bytes:
         chunks.append(chunk)
 
     return b"".join(chunks)
-
-
-# ---------------------------------------------------------------------------
-# discover_skills
-# ---------------------------------------------------------------------------
 
 
 def _safe_extract_tar(
@@ -337,7 +318,6 @@ def _safe_extract_tar(
                 target.mkdir(parents=True, exist_ok=True)
                 continue
 
-            # Regular file: enforce size caps.
             if member.size > DEFAULT_PER_FILE_MAX_BYTES:
                 raise OnyxError(
                     OnyxErrorCode.PAYLOAD_TOO_LARGE,
@@ -528,7 +508,6 @@ def _discover_skills_in_dir(
     for d in _parse_manifest_skill_dirs(search_root):
         _add(d)
 
-    # Build DiscoveredSkill for each valid dir.
     results: list[DiscoveredSkill] = []
     repo_root_resolved = repo_root.resolve()
     for skill_dir in skill_dirs:
@@ -572,11 +551,6 @@ def _discover_skills_in_dir(
         )
 
     return sorted(results, key=lambda s: s.slug)
-
-
-# ---------------------------------------------------------------------------
-# build_bundle_for_skill
-# ---------------------------------------------------------------------------
 
 
 def build_bundle_for_skill(skill: DiscoveredSkill) -> bytes:
@@ -625,11 +599,6 @@ def build_bundle_for_skill(skill: DiscoveredSkill) -> bytes:
                 zf.write(file_path, arcname=arc_name)
 
     return buf.getvalue()
-
-
-# ---------------------------------------------------------------------------
-# extracted_skills
-# ---------------------------------------------------------------------------
 
 
 @contextmanager

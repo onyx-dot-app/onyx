@@ -53,11 +53,6 @@ def _skill_md(name: str = "My Skill", description: str = "does things") -> str:
     return f"---\nname: {name}\ndescription: {description}\n---\n# body\n"
 
 
-# ---------------------------------------------------------------------------
-# Module-level helpers
-# ---------------------------------------------------------------------------
-
-
 def _init_engine() -> None:
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
 
@@ -170,11 +165,6 @@ def _delete_skills_by_slugs(slugs: list[str]) -> None:
         pass
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
     _init_engine()
@@ -211,11 +201,6 @@ def initialize_file_store() -> Generator[None, None, None]:
         yield
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
 
 class TestInstallPersonalRepoSkills:
@@ -392,11 +377,6 @@ class TestInstallPersonalRepoSkills:
         assert "not found" in failure.error.lower()
 
 
-# ---------------------------------------------------------------------------
-# Admin install path
-# ---------------------------------------------------------------------------
-
-
 class TestInstallAdminRepoSkills:
     def test_public_no_groups(
         self,
@@ -513,11 +493,6 @@ class TestInstallAdminRepoSkills:
         assert result.failures == []
 
 
-# ---------------------------------------------------------------------------
-# Reserved-slug rejection in install
-# ---------------------------------------------------------------------------
-
-
 class TestReservedSlugRejection:
     def test_reserved_slug_is_failure_normal_slug_is_created(
         self,
@@ -560,11 +535,6 @@ class TestReservedSlugRejection:
         failure = result.failures[0]
         assert failure.slug == reserved_slug
         assert "reserved" in failure.error.lower()
-
-
-# ---------------------------------------------------------------------------
-# Blob cleanup on per-skill failure
-# ---------------------------------------------------------------------------
 
 
 class TestBlobCleanupOnFailure:

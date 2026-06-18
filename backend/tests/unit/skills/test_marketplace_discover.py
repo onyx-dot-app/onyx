@@ -41,11 +41,6 @@ def make_tar_bytes(files: dict[str, bytes]) -> bytes:
     return buf.getvalue()
 
 
-# ---------------------------------------------------------------------------
-# Layout discovery
-# ---------------------------------------------------------------------------
-
-
 def test_flat_skill_discovered() -> None:
     archive = make_tar({"repo-main/skills/my-tool/SKILL.md": _VALID_SKILL_MD})
     with extracted_skills(archive) as skills:
@@ -100,11 +95,6 @@ def test_name_and_description_from_frontmatter() -> None:
         assert skills[0].description == "Does fancy things"
 
 
-# ---------------------------------------------------------------------------
-# Bundle validity and sibling inclusion
-# ---------------------------------------------------------------------------
-
-
 def test_build_bundle_passes_validate() -> None:
     archive = make_tar(
         {
@@ -135,11 +125,6 @@ def test_build_bundle_includes_sibling_file() -> None:
     assert "helper.py" in names
 
 
-# ---------------------------------------------------------------------------
-# subpath filtering
-# ---------------------------------------------------------------------------
-
-
 def test_subpath_filters_skills() -> None:
     # With subpath="skills/inner", search_root = repo-main/skills/inner.
     # The flat pattern skills/*/SKILL.md becomes skills/inner/skills/tool/SKILL.md
@@ -168,11 +153,6 @@ def test_subpath_not_found_raises() -> None:
             pass
 
 
-# ---------------------------------------------------------------------------
-# Tar traversal rejection
-# ---------------------------------------------------------------------------
-
-
 def test_tar_traversal_raises() -> None:
     # "../../evil.txt" resolves to a path above dest, triggering the OnyxError.
     buf = io.BytesIO()
@@ -187,11 +167,6 @@ def test_tar_traversal_raises() -> None:
     with pytest.raises(OnyxError):
         with extracted_skills(archive) as _:
             pass
-
-
-# ---------------------------------------------------------------------------
-# Invalid SKILL.md silently skipped
-# ---------------------------------------------------------------------------
 
 
 def test_invalid_skill_md_skipped() -> None:
