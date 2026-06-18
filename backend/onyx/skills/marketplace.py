@@ -12,10 +12,12 @@ import tempfile
 import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
-from dataclasses import field
 from pathlib import Path
 from urllib.parse import urlparse
+
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
 
 from onyx.configs.app_configs import SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES
 from onyx.configs.app_configs import SKILL_MARKETPLACE_FETCH_TIMEOUT_SECONDS
@@ -35,18 +37,20 @@ _SUPPORTED_HOSTS = ("github.com", "gitlab.com")
 _TAR_MAX_MEMBERS = 10_000
 
 
-@dataclass(frozen=True)
-class ParsedSource:
+class ParsedSource(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     host: str
     owner: str
     repo: str
     ref: str | None
     subpath: str | None
-    skill_filters: list[str] = field(default_factory=list)
+    skill_filters: list[str] = Field(default_factory=list)
 
 
-@dataclass(frozen=True)
-class DiscoveredSkill:
+class DiscoveredSkill(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     slug: str
     name: str
     description: str
