@@ -5,6 +5,7 @@ import { Table, createTableColumns } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import Text from "@/refresh-components/texts/Text";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { InputTypeIn } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
@@ -13,7 +14,7 @@ import { useAdminAgents } from "@/lib/agents/hooks";
 import { toast } from "@/hooks/useToast";
 import AgentRowActions from "@/refresh-pages/admin/AgentsPage/AgentRowActions";
 import { updateAgentDisplayPriorities } from "@/lib/agents/svc";
-import { SvgUser, SvgSimpleLoader } from "@opal/icons";
+import { SvgUser } from "@opal/icons";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { Section } from "@/layouts/general-layouts";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
@@ -139,11 +140,7 @@ export default function AgentsTable() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <SvgSimpleLoader className="h-6 w-6" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (

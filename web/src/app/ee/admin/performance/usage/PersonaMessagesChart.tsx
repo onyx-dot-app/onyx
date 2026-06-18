@@ -1,4 +1,4 @@
-import { PageLoader } from "@/refresh-components/PageLoader";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { X, Search } from "lucide-react";
 import {
   getDatesList,
@@ -138,7 +138,11 @@ export function PersonaMessagesChart({
 
   let content;
   if (isLoading) {
-    content = <PageLoader />;
+    content = (
+      <div className="h-80 flex flex-col items-center justify-center">
+        <SvgSimpleLoader className="h-6 w-6" />
+      </div>
+    );
   } else if (!availablePersonas || hasError) {
     content = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
