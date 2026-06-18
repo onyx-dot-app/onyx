@@ -15,6 +15,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from litellm.exceptions import ContextWindowExceededError
 
 from onyx.chat.models import StreamingError
 from onyx.configs.constants import MessageType
@@ -432,8 +433,38 @@ class TestRunModels:
 
         errors = [p for p in packets if isinstance(p, StreamingError)]
         assert len(errors) == 1
-        assert errors[0].error_code == "MODEL_ERROR"
+        # A generic (non-litellm) worker exception surfaces as UNKNOWN_ERROR
+        # with the original message preserved.
+        assert errors[0].error_code == "UNKNOWN_ERROR"
         assert "intentional test failure" in errors[0].error
+
+    def test_context_window_overflow_surfaces_as_context_too_long(self) -> None:
+        """A provider context-window rejection in a worker surfaces as
+        CONTEXT_TOO_LONG and non-retryable through the _run_model -> drain path."""
+
+        def overflow(**_kwargs: Any) -> None:
+            raise ContextWindowExceededError(
+                "This model's maximum context length is 8192 tokens",
+                model="gpt-4",
+                llm_provider="openai",
+            )
+
+        with (
+            patch("onyx.chat.process_message.run_llm_loop", side_effect=overflow),
+            patch("onyx.chat.process_message.run_deep_research_llm_loop"),
+            patch("onyx.chat.process_message.construct_tools", return_value={}),
+            patch("onyx.chat.process_message.llm_loop_completion_handle"),
+            patch(
+                "onyx.chat.process_message.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            packets = _run_models_collect(_make_setup(n_models=1))
+
+        errors = [p for p in packets if isinstance(p, StreamingError)]
+        assert len(errors) == 1
+        assert errors[0].error_code == "CONTEXT_TOO_LONG"
+        assert errors[0].is_retryable is False
 
     def test_one_model_error_does_not_stop_other_models(self) -> None:
         """A failing model yields StreamingError; the surviving model's packets still arrive."""
