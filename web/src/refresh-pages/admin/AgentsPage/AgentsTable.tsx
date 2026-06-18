@@ -35,7 +35,10 @@ function renderCreatedByColumn(_value: MinimalUserSnapshot | null, row: Agent) {
 
 function getAccessTitle(row: Agent): string {
   if (row.is_public) return "Public";
-  if (row.groups.length > 0 || row.users.length > 0) return "Shared";
+  // Group ownership counts as shared even with an empty share list
+  if (row.groups.length > 0 || row.users.length > 0 || row.owner_group) {
+    return "Shared";
+  }
   return "Private";
 }
 
