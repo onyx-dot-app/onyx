@@ -10,6 +10,7 @@ from secrets import token_urlsafe
 from typing import Any
 from typing import Literal
 from urllib.parse import urlparse
+from uuid import UUID
 
 import requests
 from fastapi import APIRouter
@@ -1902,6 +1903,37 @@ def _list_mcp_tools_by_id(
     )
 
 
+def _apply_mcp_server_access(
+    *,
+    mcp_server: DbMCPServer,
+    acting_user: User,
+    is_public: bool,
+    user_ids: list[UUID],
+    group_ids: list[int],
+    is_new: bool,
+    db_session: Session,
+) -> None:
+    """Validate the acting user may assign these groups (EE; no-op in MIT), set
+    the public flag, and reconcile the user/group access rows (EE write). Public
+    servers clear any existing grants."""
+    fetch_ee_implementation_or_noop(
+        "onyx.db.user_group", "validate_object_creation_for_user", None
+    )(
+        db_session=db_session,
+        user=acting_user,
+        target_group_ids=group_ids,
+        object_is_public=is_public,
+        object_is_new=is_new,
+    )
+    mcp_server.is_public = is_public
+    fetch_versioned_implementation("onyx.db.mcp", "make_mcp_server_private")(
+        server_id=mcp_server.id,
+        user_ids=[] if is_public else user_ids,
+        group_ids=[] if is_public else group_ids,
+        db_session=db_session,
+    )
+
+
 def _upsert_mcp_server(
     request: MCPToolCreateRequest,
     db_session: Session,
@@ -1918,17 +1950,6 @@ def _upsert_mcp_server(
     )
     _validate_mcp_server_url(
         request.oauth_token_endpoint, "oauth_token_endpoint", require_https=True
-    )
-
-    # Curators may only assign groups they curate; EE-enforced, no-op in MIT.
-    fetch_ee_implementation_or_noop(
-        "onyx.db.user_group", "validate_object_creation_for_user", None
-    )(
-        db_session=db_session,
-        user=user,
-        target_group_ids=request.groups,
-        object_is_public=request.is_public,
-        object_is_new=request.existing_server_id is None,
     )
 
     mcp_server = None
@@ -2094,7 +2115,6 @@ def _upsert_mcp_server(
             oauth_scopes_override=request.oauth_scopes_override,
             oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport,
-            is_public=request.is_public,
         )
 
         logger.info(
@@ -2128,24 +2148,24 @@ def _upsert_mcp_server(
             oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport or MCPTransport.STREAMABLE_HTTP,
             db_session=db_session,
-            is_public=request.is_public,
         )
 
         logger.info(
             "Created new MCP server '%s' with ID %s", request.name, mcp_server.id
         )
 
-    # Reconcile access grants. Public servers clear any prior grants; restricted
-    # servers persist the user/group rows (group writes are EE-only).
-    versioned_make_mcp_server_private = fetch_versioned_implementation(
-        "onyx.db.mcp", "make_mcp_server_private"
-    )
-    versioned_make_mcp_server_private(
-        server_id=mcp_server.id,
-        user_ids=[] if request.is_public else request.users,
-        group_ids=[] if request.is_public else request.groups,
-        db_session=db_session,
-    )
+    # Access is owned by the create/edit form; only touch it if this request
+    # explicitly carries an access decision (None = leave unchanged).
+    if request.is_public is not None:
+        _apply_mcp_server_access(
+            mcp_server=mcp_server,
+            acting_user=user,
+            is_public=request.is_public,
+            user_ids=request.users or [],
+            group_ids=request.groups or [],
+            is_new=request.existing_server_id is None,
+            db_session=db_session,
+        )
 
     # PT_OAUTH doesn't need stored connection config (uses user's login token)
     if (
@@ -2567,6 +2587,16 @@ def create_mcp_server_simple(
         db_session=db_session,
     )
 
+    _apply_mcp_server_access(
+        mcp_server=mcp_server,
+        acting_user=user,
+        is_public=request.is_public,
+        user_ids=request.users,
+        group_ids=request.groups,
+        is_new=True,
+        db_session=db_session,
+    )
+
     db_session.commit()
 
     return MCPServer(
@@ -2585,6 +2615,8 @@ def create_mcp_server_simple(
         oauth_additional_auth_params=mcp_server.oauth_additional_auth_params,
         is_authenticated=False,  # Not authenticated yet
         status=mcp_server.status,
+        is_public=mcp_server.is_public,
+        groups=[group.id for group in mcp_server.user_groups],
         tool_count=0,  # New server, no tools yet
         auth_template=None,
         user_credentials=None,
@@ -2617,6 +2649,18 @@ def update_mcp_server_simple(
         description=request.description,
         server_url=request.server_url,
     )
+
+    # Only touch access when this request carries a decision (None = unchanged).
+    if request.is_public is not None:
+        _apply_mcp_server_access(
+            mcp_server=updated_server,
+            acting_user=user,
+            is_public=request.is_public,
+            user_ids=request.users or [],
+            group_ids=request.groups or [],
+            is_new=False,
+            db_session=db_session,
+        )
 
     db_session.commit()
 

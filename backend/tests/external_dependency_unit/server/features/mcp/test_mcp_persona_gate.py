@@ -2,6 +2,8 @@
 agent by passing tool IDs directly. `upsert_persona` must reject it before
 the persona is written."""
 
+from uuid import uuid4
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -40,7 +42,7 @@ def _restricted_server_with_tool(
 
 def test_non_member_cannot_attach_restricted_mcp_tool(db_session: Session) -> None:
     outsider = create_test_user(db_session, "gate_outsider", role=UserRole.BASIC)
-    group = UserGroup(name="gate_group", is_up_to_date=True)
+    group = UserGroup(name=f"gate_group_{uuid4().hex[:8]}", is_up_to_date=True)
     db_session.add(group)
     db_session.commit()
     db_session.refresh(group)
@@ -64,7 +66,7 @@ def test_non_member_cannot_attach_restricted_mcp_tool(db_session: Session) -> No
 
 def test_member_passes_the_mcp_access_gate(db_session: Session) -> None:
     member = create_test_user(db_session, "gate_member", role=UserRole.BASIC)
-    group = UserGroup(name="gate_group_member", is_up_to_date=True)
+    group = UserGroup(name=f"gate_group_member_{uuid4().hex[:8]}", is_up_to_date=True)
     db_session.add(group)
     db_session.commit()
     db_session.refresh(group)

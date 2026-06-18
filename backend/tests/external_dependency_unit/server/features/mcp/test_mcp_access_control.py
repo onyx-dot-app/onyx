@@ -4,6 +4,8 @@ These verify the read path (`get_mcp_servers_accessible_to_user` /
 `user_can_access_mcp_server`) directly against Postgres rows, so they don't
 depend on the EE group-write path. Access rows are inserted by hand."""
 
+from uuid import uuid4
+
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
@@ -32,7 +34,7 @@ def _make_server(db_session: Session, name: str, is_public: bool) -> MCPServer:
 
 
 def _make_group(db_session: Session, name: str) -> UserGroup:
-    group = UserGroup(name=f"{name}", is_up_to_date=True)
+    group = UserGroup(name=f"{name}_{uuid4().hex[:8]}", is_up_to_date=True)
     db_session.add(group)
     db_session.commit()
     db_session.refresh(group)

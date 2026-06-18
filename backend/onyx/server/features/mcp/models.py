@@ -189,19 +189,22 @@ class MCPToolCreateRequest(BaseModel):
     existing_server_id: Optional[int] = Field(
         None, description="ID of existing server to update (for editing)"
     )
-    is_public: bool = Field(
-        default=True,
+    # Access fields are optional on this auth-configuration path: `None` leaves
+    # the server's existing access untouched (the create/edit form owns access).
+    is_public: Optional[bool] = Field(
+        default=None,
         description=(
             "If True, any user may add this server's tools to their agents. "
-            "If False, access is limited to `users` / `groups`."
+            "If False, access is limited to `users` / `groups`. None leaves "
+            "existing access unchanged."
         ),
     )
-    groups: list[int] = Field(
-        default_factory=list,
+    groups: Optional[list[int]] = Field(
+        default=None,
         description="User group IDs allowed to use this server when not public",
     )
-    users: list[UUID] = Field(
-        default_factory=list,
+    users: Optional[list[UUID]] = Field(
+        default=None,
         description="User IDs allowed to use this server when not public",
     )
 
@@ -289,6 +292,21 @@ class MCPServerSimpleCreateRequest(BaseModel):
         None, description="Description of the MCP server"
     )
     server_url: str = Field(..., description="URL of the MCP server")
+    is_public: bool = Field(
+        default=True,
+        description=(
+            "If True, any user may add this server's tools to their agents. "
+            "If False, access is limited to `users` / `groups`."
+        ),
+    )
+    groups: list[int] = Field(
+        default_factory=list,
+        description="User group IDs allowed to use this server when not public",
+    )
+    users: list[UUID] = Field(
+        default_factory=list,
+        description="User IDs allowed to use this server when not public",
+    )
 
 
 class MCPServerSimpleUpdateRequest(BaseModel):
@@ -297,6 +315,23 @@ class MCPServerSimpleUpdateRequest(BaseModel):
         None, description="Description of the MCP server"
     )
     server_url: Optional[str] = Field(None, description="URL of the MCP server")
+    # None leaves the server's existing access unchanged.
+    is_public: Optional[bool] = Field(
+        default=None,
+        description=(
+            "If True, any user may add this server's tools to their agents. "
+            "If False, access is limited to `users` / `groups`. None leaves "
+            "existing access unchanged."
+        ),
+    )
+    groups: Optional[list[int]] = Field(
+        default=None,
+        description="User group IDs allowed to use this server when not public",
+    )
+    users: Optional[list[UUID]] = Field(
+        default=None,
+        description="User IDs allowed to use this server when not public",
+    )
 
 
 class MCPToolResponse(BaseModel):
