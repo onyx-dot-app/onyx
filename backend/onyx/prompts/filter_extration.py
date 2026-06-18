@@ -2,6 +2,7 @@
 # document index. For example, a filter for dates or a filter by source type such as GitHub
 # or Slack
 SOURCES_KEY = "sources"
+NEXT_KEY = "next"
 
 # Smaller followup prompts in time_filter.py
 TIME_FILTER_PROMPT = """
@@ -21,45 +22,48 @@ The valid values for "date" is a date in format MM/DD/YYYY, ALWAYS follow this f
 """.strip()
 
 
-# Smaller followup prompts in source_filter.py
-# Known issue: LLMs like GPT-3.5 try to generalize. If the valid sources contains "web" but not
-# "confluence" and the user asks for confluence related things, the LLM will select "web" since
-# confluence is accessed as a website. This cannot be fixed without also reducing the capability
-# to match things like repository->github, website->web, etc.
-# This is generally not a big issue though as if the company has confluence, hopefully they add
-# a connector for it or the user is aware that confluence has not been added.
-SOURCE_FILTER_PROMPT = f"""
-Given a user query, extract relevant source filters for use in a downstream search tool.
-Respond with a json containing the source filters or null if no specific sources are referenced.
-ONLY extract sources when the user is explicitly limiting the scope of where information is \
-coming from.
-The user may provide invalid source filters, ignore those.
+# Used in source_filter.py: decide, per call, which connected source(s) THIS
+# internal search should cover, given the conversation and what's already been tried.
+SOURCE_SCOPE_DECISION_PROMPT = f"""
+You route an internal search. Based on the conversation — the assistant/persona \
+instructions on where to look and what the user asks — and which sources have already \
+been searched for this request, decide which connected source(s) THIS search should cover.
+
+The default is NO filter (search everything). Only apply a source filter when the \
+conversation EXPLICITLY names or routes to that source. Filtering is the exception, not \
+the norm.
+
+Output JSON with two keys, "{SOURCES_KEY}" and "{NEXT_KEY}":
+- "{SOURCES_KEY}": the source(s) to search now.
+  - Priority / fallback order that EXPLICITLY names sources ("check Zendesk first, then \
+Confluence"; "if nothing in the wiki, try GitHub"): return the FIRST named source in that \
+order that has NOT already been searched. Just that one source.
+  - Several sources EXPLICITLY named with no priority ("search Confluence and GitHub"): \
+return all of them.
+  - No source explicitly named or routed, OR every routed source has already been \
+searched: return an empty list (search everything).
+- "{NEXT_KEY}": for a priority/fallback order, the next not-yet-searched source a follow-up \
+search would cover after this one (or null if none remain). null otherwise.
+
+Rules:
+- A source must be EXPLICITLY mentioned (by name) or routed to in the conversation to be \
+filtered on. Default to an empty list; when in doubt, return an empty list.
+- NEVER infer or guess a source from the topic or subject of the request. The subject \
+matter of a question (e.g. an HR or billing question) is NOT a source — do not hallucinate \
+a filter from it.
+- Ignore anything not in the valid sources below.
 
 The valid sources are:
 {{valid_sources}}
-{{web_source_warning}}
-{{file_source_warning}}
 
+Sources already searched for this request: {{tried_sources}}
 
-ALWAYS answer with ONLY a json with the key "{SOURCES_KEY}". \
-The value for "{SOURCES_KEY}" must be null or a list of valid sources.
-
-Sample Response:
-{{sample_response}}
+Answer with ONLY a json, e.g. {{{{"{SOURCES_KEY}": ["confluence"], "{NEXT_KEY}": "slack"}}}} \
+or {{{{"{SOURCES_KEY}": [], "{NEXT_KEY}": null}}}}.
 """.strip()
-
-WEB_SOURCE_WARNING = """
-Note: The "web" source only applies to when the user specifies "website" in the query. \
-It does not apply to tools such as Confluence, GitHub, etc. that have a website.
-""".strip()
-
-FILE_SOURCE_WARNING = """
-Note: The "file" source only applies to when the user refers to uploaded files in the query.
-""".strip()
-
 
 # Use the following for easy viewing of prompts
 if __name__ == "__main__":
     print(TIME_FILTER_PROMPT)
     print("------------------")
-    print(SOURCE_FILTER_PROMPT)
+    print(SOURCE_SCOPE_DECISION_PROMPT)
