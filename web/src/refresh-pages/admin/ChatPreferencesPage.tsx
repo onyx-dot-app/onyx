@@ -1009,6 +1009,9 @@ export default function ChatPreferencesPage() {
                             <InputSelect.Item value="30">
                               30 days
                             </InputSelect.Item>
+                            <InputSelect.Item value="60">
+                              60 days
+                            </InputSelect.Item>
                             <InputSelect.Item value="90">
                               90 days
                             </InputSelect.Item>
