@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, LineItemButton, OpenButton, Popover } from "@opal/components";
+import { LineItemButton, OpenButton, Popover } from "@opal/components";
 import { SvgMinusCircle } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 
@@ -101,15 +101,17 @@ export function SharePermissionMenu<T extends string>({
 
           {onRemove && (
             <Popover.Close asChild>
-              <Button
+              <LineItemButton
+                color="danger"
                 icon={SvgMinusCircle}
                 onClick={onRemove}
-                prominence="tertiary"
-                variant="danger"
+                rounding="md"
+                selectVariant="select-heavy"
+                sizePreset="main-ui"
+                title={removeLabel}
+                variant="section"
                 width="full"
-              >
-                {removeLabel}
-              </Button>
+              />
             </Popover.Close>
           )}
         </Popover.Menu>
