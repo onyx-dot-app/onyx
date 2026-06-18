@@ -209,6 +209,18 @@ export async function previewRepoSkills(
   return handle<RepoSkillsPreview>(res);
 }
 
+// Admin-gated counterpart for system-wide flows (e.g. custom external apps).
+export async function previewRepoSkillsAdmin(
+  source: string
+): Promise<RepoSkillsPreview> {
+  const res = await fetch("/api/admin/skills/from-repo/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source }),
+  });
+  return handle<RepoSkillsPreview>(res);
+}
+
 export async function installRepoSkills(
   source: string,
   slugs: string[]

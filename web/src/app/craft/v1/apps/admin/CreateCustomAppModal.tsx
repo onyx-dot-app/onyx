@@ -24,7 +24,7 @@ import {
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
 import {
-  previewRepoSkills,
+  previewRepoSkillsAdmin,
   type RepoSkillPreviewItem,
   type RepoSkillsPreview,
 } from "@/lib/skills/api";
@@ -128,7 +128,7 @@ export default function CreateCustomAppModal({
     setRepoPreview(null);
     setSelectedSkill(null);
     try {
-      const result = await previewRepoSkills(repoSource.trim());
+      const result = await previewRepoSkillsAdmin(repoSource.trim());
       setRepoPreview(result);
     } catch (err) {
       setRepoPreviewError(
@@ -421,6 +421,11 @@ export default function CreateCustomAppModal({
                         onChange={(e) => {
                           setRepoSource(e.target.value);
                           setRepoPreviewError(null);
+                          // Editing the source invalidates the previous repo's
+                          // discovery — clear it so Create can't submit a stale
+                          // skill slug against a different source.
+                          setRepoPreview(null);
+                          setSelectedSkill(null);
                         }}
                         onKeyDown={(e) => {
                           if (
