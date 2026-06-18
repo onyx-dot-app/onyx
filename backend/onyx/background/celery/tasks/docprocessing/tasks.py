@@ -1862,12 +1862,10 @@ def _docprocessing_task(
         # All batches serialize on this one lock, so the acquire wait is the key
         # contention signal — timed separately from the held section, and
         # recorded after release (below) so the metric write doesn't extend the
-        # critical section.
+        # critical section. acquire() blocks until granted (or raises), matching
+        # the original `with cross_batch_db_lock` semantics.
         lock_acquire_start = time.monotonic()
-        if not cross_batch_db_lock.acquire():
-            raise RuntimeError(
-                f"Failed to acquire cross-batch indexing lock for attempt {index_attempt_id}"
-            )
+        cross_batch_db_lock.acquire()
         lock_acquire_ms = max(0, int((time.monotonic() - lock_acquire_start) * 1000))
         try:
             with get_session_with_current_tenant() as db_session:

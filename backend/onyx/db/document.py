@@ -1137,13 +1137,17 @@ def prepare_to_modify_documents(
                     db_session=db_session, document_ids=document_ids
                 )
                 if lock_acquired:
+                    # Capture the acquire wait now (excludes the held body), but
+                    # record it after the caller commits below (lock released) so
+                    # the metric write doesn't extend the held lock.
+                    acquire_ms = max(0, int((time.monotonic() - acquire_start) * 1000))
+                    yielded = True
+                    yield transaction
                     safe_record_single_event_if_set(
                         IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT,
                         index_attempt_id,
-                        max(0, int((time.monotonic() - acquire_start) * 1000)),
+                        acquire_ms,
                     )
-                    yielded = True
-                    yield transaction
                     return
         except Exception as e:
             if yielded:

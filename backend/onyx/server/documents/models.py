@@ -35,6 +35,8 @@ from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
+logger = setup_logger()
+
 
 class DocumentSyncStatus(BaseModel):
     doc_id: str
@@ -275,9 +277,6 @@ class IndexAttemptStageMetricsResponse(BaseModel):
 
     index_attempt_id: int
     stages: list[IndexAttemptStageMetricSnapshot]
-
-
-logger = setup_logger()
 
 
 # Stages inside the BATCH_TOTAL span; residual = BATCH_TOTAL - sum(these).
