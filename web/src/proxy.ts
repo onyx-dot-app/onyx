@@ -7,17 +7,11 @@ import {
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
 } from "./lib/constants";
 
-// Protected route prefixes that require a real authenticated session and never
-// permit anonymous access — safe to fast-fail at the edge when no cookie is
-// present.
-//
-// "/app" (the chat surface) is intentionally NOT listed: it permits anonymous
-// access when an admin enables it, which is a runtime (Redis-backed) setting the
-// edge can't see from cookies. In single-tenant self-hosted mode no anonymous
-// cookie is set either — the backend synthesizes the anonymous user from the
-// setting alone. So "/app" is gated server-side by requireAuth() in
-// web/src/app/app/layout.tsx, which reads the setting via /me and serves the
-// anonymous user when it's on or redirects to login when it's off.
+// Route prefixes that never allow anonymous access, so we fast-fail at the edge
+// when no auth cookie is present. "/app" is intentionally excluded: it allows
+// anonymous access via a runtime (Redis-backed) setting the edge can't read from
+// cookies, so it's gated server-side by requireAuth() in
+// web/src/app/app/layout.tsx instead.
 const PROTECTED_ROUTES = ["/admin", "/agents", "/connector"];
 
 // Public route prefixes (no authentication required)
@@ -95,10 +89,8 @@ export async function proxy(request: NextRequest) {
   if (isProtectedRoute && !isPublicRoute) {
     const authCookie = request.cookies.get(SERVER_SIDE_ONLY__AUTH_COOKIE_NAME);
 
-    // These routes never permit anonymous access, so require a real auth cookie.
-    // The anonymous-user cookie is intentionally not honored here — an anonymous
-    // session must never satisfy the edge gate for /admin, /agents, or
-    // /connector (the server-side role checks reject it anyway).
+    // Require a real auth cookie; the anonymous-user cookie must not satisfy the
+    // edge gate for these routes (the server-side role checks reject it anyway).
     if (!authCookie) {
       const loginUrl = new URL("/auth/login", request.url);
       // Preserve full URL including query params and hash for deep linking

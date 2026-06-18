@@ -62,9 +62,8 @@ test.describe("Anonymous chat access @exclusive", () => {
     await page.goto("/app");
     await page.waitForLoadState("networkidle");
 
-    // The cookie-less visitor stays on the chat surface instead of being
-    // bounced to login. Use the auto-retrying matcher so a brief client-side
-    // settle after load doesn't flake the assertion.
+    // The cookie-less visitor stays on the chat surface instead of being bounced
+    // to login.
     await expect(page).toHaveURL(/\/app(\/|\?|$)/);
     await expect(page).not.toHaveURL(/\/auth\/login/);
 

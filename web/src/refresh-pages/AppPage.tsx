@@ -191,14 +191,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { data: federatedConnectorsData } = useFederatedConnectors();
 
   const { user } = useUser();
-  // `useUser()` collapses the loading state to `null` (its backing state inits
-  // to null and is populated by an effect). Read the raw /me result so the
-  // auth-gate below only fires once the query has actually resolved to "no
-  // user" — otherwise the brief load window redirects everyone to /auth/login.
-  // Logged-in users silently bounce back, but the synthesized anonymous user is
-  // kept on the login page (it's a deliberate non-redirect there), so anonymous
-  // chat visitors get stranded. `undefined` = still loading, `null` = resolved
-  // signed-out / anonymous-disabled, object = a real or anonymous user.
+  // `useUser()` reports null while loading, so gating on it would redirect during
+  // the /me load window. Read the raw result instead (undefined = loading, null =
+  // resolved signed-out). This matters for anonymous users specifically: they're
+  // kept on the login page, so unlike logged-in users they wouldn't bounce back.
   const { user: resolvedUser } = useCurrentUser();
 
   function processSearchParamsAndSubmitMessage(searchParamsString: string) {
