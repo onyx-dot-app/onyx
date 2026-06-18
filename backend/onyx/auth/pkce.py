@@ -1,9 +1,8 @@
-"""Shared PKCE (RFC 7636) primitives.
+"""PKCE (RFC 7636) S256 transform for the mobile SSO bridge.
 
-A single home for the S256 transform so every PKCE call site agrees byte-for-byte
-on how a verifier maps to a challenge — the OAuth router's IdP-leg challenge
-(`generate_pkce_pair`) and the mobile SSO code store's app-leg verification both
-go through `compute_s256_challenge`.
+Used by the mobile SSO code store to verify the app's ``code_verifier``. The web
+OAuth flow computes the same transform independently in
+``users.generate_pkce_pair``; a test pins that the two agree so they can't drift.
 """
 
 import base64

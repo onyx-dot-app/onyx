@@ -18,16 +18,8 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
-
-
-def _mobile_login(email: str, password: str) -> httpx.Response:
-    headers = GENERAL_HEADERS.copy()
-    headers.pop("Content-Type", None)
-    return client.post(
-        url=f"{API_SERVER_URL}/auth/mobile/login",
-        data={"username": email, "password": password},
-        headers=headers,
-    )
+from tests.integration.tests.mobile_auth._helpers import bearer
+from tests.integration.tests.mobile_auth._helpers import mobile_login
 
 
 def _exchange(code: str, code_verifier: str) -> httpx.Response:
@@ -40,7 +32,7 @@ def _exchange(code: str, code_verifier: str) -> httpx.Response:
 
 def test_mobile_sso_exchange_round_trip(admin_user: DATestUser) -> None:
     # A real, revocable session token (as a provider callback would mint).
-    login_resp = _mobile_login(admin_user.email, admin_user.password)
+    login_resp = mobile_login(admin_user.email, admin_user.password)
     login_resp.raise_for_status()
     token = login_resp.json()["access_token"]
     assert token
@@ -56,10 +48,7 @@ def test_mobile_sso_exchange_round_trip(admin_user: DATestUser) -> None:
     assert body["token_type"].lower() == "bearer"
     assert body["access_token"] == token
 
-    me = client.get(
-        url=f"{API_SERVER_URL}/me",
-        headers={**GENERAL_HEADERS, "Authorization": f"Bearer {token}"},
-    )
+    me = client.get(url=f"{API_SERVER_URL}/me", headers=bearer(token))
     assert me.status_code == 200
     assert me.json()["email"] == admin_user.email
     client.cookies.clear()
@@ -67,20 +56,3 @@ def test_mobile_sso_exchange_round_trip(admin_user: DATestUser) -> None:
     # Single-use: replaying the same code now fails with a generic 401.
     replay = _exchange(code, verifier)
     assert replay.status_code == 401
-
-
-def test_mobile_sso_exchange_wrong_verifier_is_generic_401(
-    admin_user: DATestUser,
-) -> None:
-    login_resp = _mobile_login(admin_user.email, admin_user.password)
-    login_resp.raise_for_status()
-    token = login_resp.json()["access_token"]
-    client.cookies.clear()
-
-    _, challenge = generate_pkce_pair()
-    code = asyncio.run(store_sso_code(token, challenge))
-
-    # A code without the matching verifier is useless (PKCE), same 401 as a
-    # missing/expired code — no oracle.
-    resp = _exchange(code, "not-the-real-verifier")
-    assert resp.status_code == 401

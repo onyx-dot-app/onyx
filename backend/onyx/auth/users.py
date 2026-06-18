@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import os
@@ -85,7 +86,6 @@ from onyx.auth.mobile_sso.sso_completion import apply_mobile_state
 from onyx.auth.mobile_sso.sso_completion import complete_mobile_sso
 from onyx.auth.mobile_sso.sso_completion import is_mobile_sso
 from onyx.auth.pat import get_hashed_pat_from_request
-from onyx.auth.pkce import compute_s256_challenge
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRole
@@ -2190,9 +2190,14 @@ def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def _base64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
 def generate_pkce_pair() -> tuple[str, str]:
     verifier = secrets.token_urlsafe(64)
-    return verifier, compute_s256_challenge(verifier)
+    challenge = _base64url_encode(hashlib.sha256(verifier.encode("ascii")).digest())
+    return verifier, challenge
 
 
 def get_pkce_cookie_name(state: str) -> str:

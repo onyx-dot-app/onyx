@@ -22,6 +22,17 @@ from onyx.auth.users import mobile_auth_backend
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
+# Prefix ("/auth/mobile") is applied at registration in main.py. The bearer
+# login/refresh/logout sub-routers are built from `mobile_auth_backend`, so they
+# reuse the existing session strategy — the Bearer token is the exact same token
+# web gets (server-revocable under the redis/postgres backends); only the
+# transport differs. Their route names are namespaced `auth:mobile-bearer.*`, so
+# they never collide with the web cookie backend's `auth:<backend>.*` routes.
+router = APIRouter()
+# get_auth_router provides both /login and /logout for the bearer backend.
+router.include_router(fastapi_users.get_auth_router(mobile_auth_backend))
+router.include_router(fastapi_users.get_refresh_router(mobile_auth_backend))
+
 
 class MobileSsoExchangeRequest(BaseModel):
     code: str
@@ -35,34 +46,16 @@ class MobileSsoTokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
-def get_mobile_auth_router() -> APIRouter:
-    """Build the `/auth/mobile` router (prefix applied at registration).
+@router.post("/sso/exchange")
+async def sso_exchange(payload: MobileSsoExchangeRequest) -> MobileSsoTokenResponse:
+    """Swap a one-time SSO code (+ PKCE verifier) for the session token.
 
-    The login/refresh/logout routes reuse the existing session strategy (so the
-    Bearer token is the exact same token web gets — server-revocable under the
-    redis/postgres backends) — only the transport differs. Routes are namespaced
-    `auth:mobile-bearer.*`, so they never collide with the web cookie backend's
-    `auth:<backend>.*` routes.
+    Returns the same `{access_token, token_type}` shape as the bearer login. Any
+    failure — unknown / expired / replayed code, or a verifier that doesn't match
+    the stored PKCE challenge — yields one generic 401 with no oracle (see
+    `consume_sso_code`).
     """
-    router = APIRouter()
-    # get_auth_router provides both /login and /logout for the bearer backend.
-    router.include_router(fastapi_users.get_auth_router(mobile_auth_backend))
-    router.include_router(fastapi_users.get_refresh_router(mobile_auth_backend))
-
-    @router.post("/sso/exchange")
-    async def sso_exchange(
-        payload: MobileSsoExchangeRequest,
-    ) -> MobileSsoTokenResponse:
-        """Swap a one-time SSO code (+ PKCE verifier) for the session token.
-
-        Returns the same `{access_token, token_type}` shape as the bearer login.
-        Any failure — unknown / expired / replayed code, or a verifier that
-        doesn't match the stored PKCE challenge — yields one generic 401 with no
-        oracle (see `consume_sso_code`).
-        """
-        token = await consume_sso_code(payload.code, payload.code_verifier)
-        if token is None:
-            raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Invalid or expired code")
-        return MobileSsoTokenResponse(access_token=token)
-
-    return router
+    token = await consume_sso_code(payload.code, payload.code_verifier)
+    if token is None:
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Invalid or expired code")
+    return MobileSsoTokenResponse(access_token=token)

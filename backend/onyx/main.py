@@ -70,7 +70,7 @@ from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth.captcha_api import CaptchaCookieMiddleware
 from onyx.server.auth.captcha_api import LoginCaptchaMiddleware
 from onyx.server.auth.captcha_api import router as captcha_router
-from onyx.server.auth.mobile import get_mobile_auth_router
+from onyx.server.auth.mobile import router as mobile_auth_router
 from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
 from onyx.server.documents.connector import router as connector_router
@@ -598,7 +598,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         # token is issued/refreshed/revoked as a Bearer instead of a cookie.
         include_auth_router_with_prefix(
             application,
-            get_mobile_auth_router(),
+            mobile_auth_router,
             prefix="/auth/mobile",
         )
 
