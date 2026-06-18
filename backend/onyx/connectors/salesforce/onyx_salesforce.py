@@ -1,10 +1,12 @@
 import time
 from typing import Any
 
+from requests.adapters import HTTPAdapter
 from simple_salesforce import Salesforce
 from simple_salesforce import SFType
 from simple_salesforce.exceptions import SalesforceRefusedRequest
 from simple_salesforce.format import format_soql
+from urllib3.util.retry import Retry
 
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.salesforce.blacklist import SALESFORCE_BLACKLISTED_OBJECTS
@@ -17,6 +19,16 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
+
+# A Salesforce sync holds its connection pool idle for hours during the local
+# CSV->sqlite phase. Salesforce's edge / intermediary load balancers silently
+# close idle keep-alive sockets, so the next REST query or bulk-result fetch
+# reuses a dead pooled connection and fails with "Connection reset by peer".
+# Mounting a urllib3 Retry makes the shared session transparently reopen and
+# retry idempotent (GET) requests instead of failing the whole indexing attempt.
+_SF_RETRY_TOTAL = 5
+_SF_RETRY_BACKOFF_FACTOR = 1.0
+_SF_RETRY_STATUS_FORCELIST = (500, 502, 503, 504)
 
 
 def is_salesforce_rate_limit_error(exception: Exception) -> bool:
@@ -32,6 +44,8 @@ class OnyxSalesforce(Salesforce):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
+        self._mount_retry_adapter()
+
         self.parent_types: set[str] = set()
         self.child_types: set[str] = set()
         self.parent_to_child_types: dict[
@@ -45,6 +59,27 @@ class OnyxSalesforce(Salesforce):
         self.prefix_to_type: dict[
             str, str
         ] = {}  # infer the object type of an id immediately
+
+    def _mount_retry_adapter(self) -> None:
+        """Make the shared requests session resilient to stale keep-alive
+        sockets that Salesforce's edge closes during long idle gaps. The same
+        session is reused for bulk-result downloads (see salesforce_calls.py),
+        so this covers both REST queries and bulk fetches."""
+        retry = Retry(
+            total=_SF_RETRY_TOTAL,
+            connect=_SF_RETRY_TOTAL,
+            read=_SF_RETRY_TOTAL,
+            status=_SF_RETRY_TOTAL,
+            backoff_factor=_SF_RETRY_BACKOFF_FACTOR,
+            status_forcelist=_SF_RETRY_STATUS_FORCELIST,
+            # Only idempotent methods (the urllib3 default) are retried, so job
+            # creation (POST) is never double-submitted. raise_on_status=False
+            # lets simple_salesforce surface the final HTTP error normally.
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
     def initialize(self) -> bool:
         """Eventually cache all first run client state with this method"""
