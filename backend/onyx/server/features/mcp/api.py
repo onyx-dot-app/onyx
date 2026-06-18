@@ -54,6 +54,7 @@ from onyx.db.mcp import extract_connection_data
 from onyx.db.mcp import get_all_mcp_servers
 from onyx.db.mcp import get_connection_config_by_id
 from onyx.db.mcp import get_mcp_server_by_id
+from onyx.db.mcp import get_mcp_servers_accessible_to_user
 from onyx.db.mcp import get_mcp_servers_for_persona
 from onyx.db.mcp import get_server_auth_template
 from onyx.db.mcp import get_user_connection_config
@@ -98,6 +99,8 @@ from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import BLOCKED_HOSTNAMES
 from onyx.utils.url import SSRFException
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -1543,6 +1546,8 @@ def _db_mcp_server_to_api_mcp_server(
         is_authenticated=is_authenticated,
         user_authenticated=user_authenticated,
         status=db_server.status,
+        is_public=db_server.is_public,
+        groups=[group.id for group in db_server.user_groups],
         last_refreshed_at=db_server.last_refreshed_at,
         tool_count=tool_count,
         auth_template=auth_template,
@@ -1588,10 +1593,11 @@ def get_mcp_servers_for_user(
     """List all MCP servers for use in agent configuration and chat UI.
 
     This endpoint is intentionally available to all authenticated users so they
-    can attach MCP actions to assistants. Sensitive admin credentials are never
-    returned.
+    can attach MCP actions to assistants. Only servers the user may access
+    (public, or shared with them directly / via a group) are returned, and
+    sensitive admin credentials are never returned.
     """
-    db_mcp_servers = get_all_mcp_servers(db)
+    db_mcp_servers = get_mcp_servers_accessible_to_user(user, db)
     mcp_servers = [
         _db_mcp_server_to_api_mcp_server(db_server, db, request_user=user)
         for db_server in db_mcp_servers
@@ -1914,6 +1920,17 @@ def _upsert_mcp_server(
         request.oauth_token_endpoint, "oauth_token_endpoint", require_https=True
     )
 
+    # Curators may only assign groups they curate; EE-enforced, no-op in MIT.
+    fetch_ee_implementation_or_noop(
+        "onyx.db.user_group", "validate_object_creation_for_user", None
+    )(
+        db_session=db_session,
+        user=user,
+        target_group_ids=request.groups,
+        object_is_public=request.is_public,
+        object_is_new=request.existing_server_id is None,
+    )
+
     mcp_server = None
     admin_config = None
 
@@ -2077,6 +2094,7 @@ def _upsert_mcp_server(
             oauth_scopes_override=request.oauth_scopes_override,
             oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport,
+            is_public=request.is_public,
         )
 
         logger.info(
@@ -2110,11 +2128,24 @@ def _upsert_mcp_server(
             oauth_additional_auth_params=request.oauth_additional_auth_params,
             transport=request.transport or MCPTransport.STREAMABLE_HTTP,
             db_session=db_session,
+            is_public=request.is_public,
         )
 
         logger.info(
             "Created new MCP server '%s' with ID %s", request.name, mcp_server.id
         )
+
+    # Reconcile access grants. Public servers clear any prior grants; restricted
+    # servers persist the user/group rows (group writes are EE-only).
+    versioned_make_mcp_server_private = fetch_versioned_implementation(
+        "onyx.db.mcp", "make_mcp_server_private"
+    )
+    versioned_make_mcp_server_private(
+        server_id=mcp_server.id,
+        user_ids=[] if request.is_public else request.users,
+        group_ids=[] if request.is_public else request.groups,
+        db_session=db_session,
+    )
 
     # PT_OAUTH doesn't need stored connection config (uses user's login token)
     if (

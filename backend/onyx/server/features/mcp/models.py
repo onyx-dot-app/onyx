@@ -6,6 +6,7 @@ from typing import List
 from typing import NotRequired
 from typing import Optional
 from typing import TypedDict
+from uuid import UUID
 
 from mcp.types import Tool as MCPLibTool
 from pydantic import BaseModel
@@ -187,6 +188,21 @@ class MCPToolCreateRequest(BaseModel):
     )
     existing_server_id: Optional[int] = Field(
         None, description="ID of existing server to update (for editing)"
+    )
+    is_public: bool = Field(
+        default=True,
+        description=(
+            "If True, any user may add this server's tools to their agents. "
+            "If False, access is limited to `users` / `groups`."
+        ),
+    )
+    groups: list[int] = Field(
+        default_factory=list,
+        description="User group IDs allowed to use this server when not public",
+    )
+    users: list[UUID] = Field(
+        default_factory=list,
+        description="User IDs allowed to use this server when not public",
     )
 
     @model_validator(mode="after")
@@ -441,6 +457,8 @@ class MCPServer(BaseModel):
     is_authenticated: bool
     user_authenticated: Optional[bool] = None
     status: MCPServerStatus
+    is_public: bool = True
+    groups: list[int] = Field(default_factory=list)
     last_refreshed_at: Optional[datetime.datetime] = None
     tool_count: int = Field(
         default=0, description="Number of tools associated with this server"
