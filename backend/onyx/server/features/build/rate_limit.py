@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import User
 from onyx.feature_flags.factory import get_default_feature_flag_provider
+from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.server.features.build.configs import CRAFT_PAID_USER_RATE_LIMIT
 from onyx.server.features.build.db.rate_limit import count_user_messages_in_window
 from onyx.server.features.build.db.rate_limit import count_user_messages_total
@@ -49,14 +50,18 @@ def _should_skip_rate_limiting(user: User) -> bool:
 
     feature_flag_provider = get_default_feature_flag_provider()
     # Flag returns True for users who SHOULD be rate limited
-    # We negate to get: True = skip rate limiting.
-    # Pass tenant in the person properties so the flag can be targeted at a
-    # specific tenant (e.g. grant unlimited usage to tenant_dev).
-    has_rate_limit = feature_flag_provider.feature_enabled_for_user_tenant(
-        CRAFT_HAS_USAGE_LIMITS,
-        user,
-        get_current_tenant_id(),
-    )
+    # We negate to get: True = skip rate limiting
+    if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
+        has_rate_limit = feature_flag_provider.feature_enabled(
+            CRAFT_HAS_USAGE_LIMITS,
+            user.id,
+        )
+    else:
+        has_rate_limit = feature_flag_provider.feature_enabled_for_user_tenant(
+            CRAFT_HAS_USAGE_LIMITS,
+            user,
+            get_current_tenant_id(),
+        )
     return not has_rate_limit
 
 

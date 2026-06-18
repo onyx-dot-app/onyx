@@ -127,8 +127,6 @@ def is_onyx_craft_enabled(user: User) -> bool:
     if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
         return ENABLE_CRAFT
 
-    # Evaluate with the user's tenant in the person properties so the flag can
-    # be targeted at a specific tenant (e.g. enable Craft only for tenant_dev).
     is_enabled = feature_flag_provider.feature_enabled_for_user_tenant(
         ONYX_CRAFT_ENABLED_FLAG,
         user,

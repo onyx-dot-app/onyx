@@ -100,9 +100,7 @@ def test_posthog_flag_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
     user = _make_user()
     assert is_onyx_craft_enabled(user) is True
-    # The provider was consulted with the craft-enabled flag key for this user,
-    # and the current tenant was forwarded as a person property so the flag can
-    # be targeted per-tenant.
+    # The provider was consulted with the craft-enabled flag key for this user.
     assert provider.calls == [
         (
             "onyx-craft-enabled",
