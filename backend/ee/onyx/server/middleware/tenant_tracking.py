@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import sys
 from collections.abc import Awaitable
 from collections.abc import Callable
 
@@ -177,13 +178,16 @@ async def _get_tenant_id_from_request(
         raise HTTPException(status_code=500, detail="Internal server error")
 
     finally:
-        if tenant_id:
-            return tenant_id
+        # Don't `return` while an exception is propagating — it would swallow it
+        # and fall back to the wrong tenant. Fall back only on the normal path.
+        if sys.exc_info()[0] is None:
+            if tenant_id:
+                return tenant_id
 
-        # As a final step, check for explicit tenant_id cookie
-        tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
-        if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
-            return tenant_id_cookie
+            # As a final step, check for explicit tenant_id cookie
+            tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
+            if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
+                return tenant_id_cookie
 
-        # If we've reached this point, return the default schema
-        return POSTGRES_DEFAULT_SCHEMA
+            # If we've reached this point, return the default schema
+            return POSTGRES_DEFAULT_SCHEMA
