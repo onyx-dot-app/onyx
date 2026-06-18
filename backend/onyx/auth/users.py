@@ -143,9 +143,7 @@ from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import mt_cloud_alias
-from onyx.utils.telemetry import mt_cloud_get_anon_id
-from onyx.utils.telemetry import mt_cloud_identify
+from onyx.utils.telemetry import mt_cloud_identify_user
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -1057,16 +1055,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         except Exception:
             logger.exception("Error deleting anonymous user cookie")
 
-        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
-
-        # Link the anonymous PostHog session to the identified user so that
-        # pre-login session recordings and events merge into one person profile.
-        if anon_id := mt_cloud_get_anon_id(request):
-            mt_cloud_alias(distinct_id=str(user.id), anonymous_id=anon_id)
-
-        mt_cloud_identify(
+        mt_cloud_identify_user(
             distinct_id=str(user.id),
-            properties={"email": user.email, "tenant_id": tenant_id},
+            email=user.email,
+            request=request,
         )
 
     async def on_after_register(
@@ -1087,15 +1079,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_count = await get_user_count()
             logger.debug("Current tenant user count: %s", user_count)
 
-            # Link the anonymous PostHog session to the identified user so
-            # that pre-signup session recordings merge into one person profile.
-            if anon_id := mt_cloud_get_anon_id(request):
-                mt_cloud_alias(distinct_id=str(user.id), anonymous_id=anon_id)
-
-            # Ensure a PostHog person profile exists for this user.
-            mt_cloud_identify(
+            mt_cloud_identify_user(
                 distinct_id=str(user.id),
-                properties={"email": user.email, "tenant_id": tenant_id},
+                email=user.email,
+                request=request,
+                tenant_id=tenant_id,
             )
 
             mt_cloud_telemetry(
