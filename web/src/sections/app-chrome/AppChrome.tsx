@@ -40,12 +40,12 @@ import {
   SvgSidebar,
   SvgTrash,
 } from "@opal/icons";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { APP_SLOGAN } from "@/lib/constants";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +65,8 @@ function HeaderInner({
 }) {
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
-  const settings = useSettingsContext();
+  const isSearchModeAvailable = useIsSearchModeAvailable();
+  const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
   const [showShareModal, setShowShareModal] = useState(false);
@@ -90,9 +91,9 @@ function HeaderInner({
     useChatSessions();
   const router = useRouter();
 
-  const customHeaderContent =
-    settings?.enterpriseSettings?.custom_header_content;
-  const pageWithHeaderContent = appFocus.isChat() || appFocus.isNewSession();
+  const customHeaderContent = settings.enterprise?.custom_header_content;
+  const pageWithHeaderContent =
+    appFocus.isChat() || appFocus.isNewSession() || appFocus.isAgent();
 
   const effectiveMode: AppMode =
     appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
@@ -302,7 +303,7 @@ function HeaderInner({
             />
           )}
           {businessTier &&
-            settings.isSearchModeAvailable &&
+            isSearchModeAvailable &&
             appFocus.isNewSession() &&
             state.phase === "idle" && (
               <Popover open={modePopoverOpen} onOpenChange={setModePopoverOpen}>
@@ -443,13 +444,13 @@ const footerMarkdownComponents = {
 } satisfies Partial<Components>;
 
 function Footer() {
-  const settings = useSettingsContext();
+  const settings = useSettings();
   const appFocus = useAppFocus();
 
   const customFooterContent =
-    settings?.enterpriseSettings?.custom_lower_disclaimer_content ||
+    settings?.enterprise?.custom_lower_disclaimer_content ||
     `[Onyx ${
-      settings?.webVersion || "dev"
+      settings?.version || "dev"
     }](https://www.onyx.app/) - ${APP_SLOGAN}`;
 
   return (

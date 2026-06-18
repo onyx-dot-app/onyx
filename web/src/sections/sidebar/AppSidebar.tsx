@@ -3,7 +3,7 @@
 import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
@@ -201,7 +201,7 @@ function RecentsSection({
 const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
   const folded = useSidebarFolded();
   const router = useRouter();
-  const combinedSettings = useSettingsContext();
+  const combinedSettingsData = useSettings();
   const posthog = usePostHog();
   const { newTenantInfo, invitationInfo } = useModalContext();
   const { setAppMode, reset } = useQueryController();
@@ -253,8 +253,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
 
   // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled
-  const isOnyxCraftEnabled =
-    combinedSettings?.settings?.onyx_craft_enabled === true;
+  const isOnyxCraftEnabled = combinedSettingsData?.onyx_craft_enabled === true;
 
   // Find build_mode feature announcement notification (only if Onyx Craft is enabled)
   const buildModeNotification = isOnyxCraftEnabled
@@ -488,7 +487,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
     "chat";
   const newSessionButton = useMemo(() => {
     const href =
-      combinedSettings?.settings?.disable_default_assistant && currentAgent
+      combinedSettingsData?.disable_default_assistant && currentAgent
         ? `/app?agentId=${currentAgent.id}`
         : "/app";
     return (
@@ -511,7 +510,7 @@ const MemoizedAppSidebarInner = memo(function AppSidebarInner() {
   }, [
     folded,
     activeSidebarTab,
-    combinedSettings,
+    combinedSettingsData,
     currentAgent,
     defaultAppMode,
   ]);

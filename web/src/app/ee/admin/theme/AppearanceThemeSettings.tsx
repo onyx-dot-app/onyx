@@ -26,7 +26,7 @@ import {
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { planTagProps } from "@/lib/tier-badge";
 
 interface AppearanceThemeSettingsProps {
