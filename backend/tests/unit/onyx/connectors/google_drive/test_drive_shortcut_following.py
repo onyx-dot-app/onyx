@@ -103,11 +103,7 @@ def test_shortcut_to_file_yields_target_with_true_parent() -> None:
     )
 
     def _fake_paginated_retrieval(**_kwargs: object) -> Iterator[dict[str, Any]]:
-        yield {
-            "id": "shortcut_file",
-            "name": "Shortcut",
-            "mimeType": DRIVE_SHORTCUT_TYPE,
-        }
+        yield _shortcut("shortcut_file", "target_file", _PDF_MIME_TYPE)
 
     with patch(
         f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
@@ -122,8 +118,8 @@ def test_shortcut_to_file_yields_target_with_true_parent() -> None:
         )
 
     assert files == [target]
-    assert service.files_resource.get_calls[0]["fileId"] == "shortcut_file"
-    assert service.files_resource.get_calls[1]["fileId"] == "target_file"
+    assert service.files_resource.get_calls[0]["fileId"] == "target_file"
+    assert len(service.files_resource.get_calls) == 1
 
 
 def test_shortcut_to_folder_crawls_target_folder() -> None:
@@ -147,11 +143,7 @@ def test_shortcut_to_folder_crawls_target_folder() -> None:
 
         parent_id = _folder_query_parent(q)
         if parent_id == "root_folder":
-            yield {
-                "id": "shortcut_folder",
-                "name": "Shortcut Folder",
-                "mimeType": DRIVE_SHORTCUT_TYPE,
-            }
+            yield _shortcut("shortcut_folder", "target_folder", DRIVE_FOLDER_TYPE)
 
     traversed: set[str] = set()
     with patch(

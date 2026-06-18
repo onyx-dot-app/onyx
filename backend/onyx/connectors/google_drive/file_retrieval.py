@@ -49,18 +49,19 @@ PERMISSION_FULL_DESCRIPTION = (
 )
 FILE_FIELDS = (
     "nextPageToken, files(mimeType, id, name, driveId, parents, "
-    "modifiedTime, webViewLink, owners(emailAddress), size)"
+    "modifiedTime, webViewLink, shortcutDetails, owners(emailAddress), size)"
 )
 FILE_FIELDS_WITH_PERMISSIONS = (
     f"nextPageToken, files(mimeType, id, name, driveId, parents, {PERMISSION_FULL_DESCRIPTION}, permissionIds, "
-    "modifiedTime, webViewLink, owners(emailAddress), size)"
+    "modifiedTime, webViewLink, shortcutDetails, owners(emailAddress), size)"
 )
 SLIM_FILE_FIELDS = (
     f"nextPageToken, files(mimeType, driveId, id, name, parents, {PERMISSION_FULL_DESCRIPTION}, "
     "permissionIds, webViewLink, owners(emailAddress), modifiedTime)"
 )
 FOLDER_FIELDS = (
-    "nextPageToken, files(id, name, mimeType, permissions, modifiedTime, webViewLink)"
+    "nextPageToken, files(id, name, mimeType, permissions, modifiedTime, webViewLink, "
+    "shortcutDetails)"
 )
 SHORTCUT_FIELDS = (
     "id, name, mimeType, shortcutDetails(targetId,targetMimeType,targetResourceKey)"
@@ -350,7 +351,7 @@ def _resolve_file_or_shortcut(
         return None
 
     logger.debug(
-        "Resolved Drive shortcut %s to target %s", file.get("id"), target["id"]
+        "Resolved Drive shortcut %s to target %s", file.get("id"), target.get("id")
     )
     return target
 
@@ -371,7 +372,9 @@ def _resolve_folder_or_shortcut(
         return None
 
     logger.debug(
-        "Resolved Drive folder shortcut %s to target %s", file.get("id"), target["id"]
+        "Resolved Drive folder shortcut %s to target %s",
+        file.get("id"),
+        target.get("id"),
     )
     return target
 
