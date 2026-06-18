@@ -10,9 +10,7 @@ import { useProjects } from "@/lib/hooks/useProjects";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import { timeAgo } from "@opal/time";
-import {
-  highlightMatch,
-} from "@/sections/sidebar/chatSearchUtils";
+import { highlightMatch } from "@/sections/sidebar/chatSearchUtils";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentAgent } from "@/lib/agents/hooks";
 import Text from "@/refresh-components/texts/Text";

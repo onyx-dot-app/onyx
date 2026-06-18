@@ -44,8 +44,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
 
   return (
     <div className="h-screen w-screen flex overflow-hidden">
-      {settings.application_status ===
-        ApplicationStatus.PAYMENT_REMINDER && (
+      {settings.application_status === ApplicationStatus.PAYMENT_REMINDER && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 bg-status-warning-01 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
           <Text font="main-ui-body" color="text-05">
             {markdown(
