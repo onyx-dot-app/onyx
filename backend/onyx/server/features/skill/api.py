@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from typing import Annotated
 from typing import Final
 from uuid import UUID
@@ -557,12 +558,27 @@ def _preview_repo_skills(source: str) -> RepoSkillsPreview:
         )
 
 
-def _install_personal_repo_skills(
+def _install_repo_skills(
+    *,
     source: str,
     slugs: list[str],
-    user: User,
+    author_user_id: UUID,
+    is_public: bool,
+    group_ids: list[int],
     db_session: Session,
-) -> RepoSkillsInstallResult:
+    before_install: Callable[[int], None] | None = None,
+) -> tuple[list[Skill], list[RepoSkillInstallFailure]]:
+    """Shared repo-install core for the personal and admin paths.
+
+    Fetches + discovers the repo, then for each requested skill builds a bundle
+    and creates a row inside its own savepoint so one failure (validation, slug
+    collision, file-store/integrity error) becomes a per-skill failure instead
+    of aborting the batch. ``before_install`` runs once with the resolved
+    install count after not-found slugs are recorded but before any writes — the
+    personal path uses it for the advisory-lock + cap check. ``group_ids`` are
+    granted per row; an empty list (the personal path) skips grants. Returns the
+    created rows (caller owns the sandbox push) and the per-skill failures.
+    """
     parsed = parse_skill_source(source)
     archive = fetch_repo_archive(parsed)
     file_store = get_default_file_store()
@@ -579,7 +595,7 @@ def _install_personal_repo_skills(
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "no skills selected")
 
     failures: list[RepoSkillInstallFailure] = []
-    created_responses: list[CustomSkillResponse] = []
+    created_rows: list[Skill] = []
 
     with extracted_skills(archive, parsed.subpath) as discovered:
         by_slug = {s.slug: s for s in discovered}
@@ -593,17 +609,9 @@ def _install_personal_repo_skills(
             else:
                 to_install.append(by_slug[slug])
 
-        lock_personal_skills_for_user(user.id, db_session)
-        existing = count_personal_skills_for_user(user.id, db_session)
-        if existing + len(to_install) > MAX_PERSONAL_SKILLS_PER_USER:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                f"Installing {len(to_install)} skill(s) would exceed your limit of "
-                f"{MAX_PERSONAL_SKILLS_PER_USER} personal skills "
-                f"(you currently have {existing}).",
-            )
+        if before_install is not None:
+            before_install(len(to_install))
 
-        created_rows: list[Skill] = []
         batch_blob_ids: list[str] = []
 
         for skill in to_install:
@@ -627,10 +635,12 @@ def _install_personal_repo_skills(
                         description=ingested.description,
                         bundle_file_id=ingested.bundle_file_id,
                         bundle_sha256=ingested.bundle_sha256,
-                        is_public=False,
-                        author_user_id=user.id,
+                        is_public=is_public,
+                        author_user_id=author_user_id,
                         db_session=db_session,
                     )
+                    if group_ids:
+                        replace_skill_grants(row.id, group_ids, db_session=db_session)
                     sp.commit()
                 except Exception:
                     sp.rollback()
@@ -656,10 +666,40 @@ def _install_personal_repo_skills(
                 delete_bundle_blob(file_store, bid)
             raise
 
-        for row in created_rows:
-            push_skill_to_affected_sandboxes(row, db_session)
-            created_responses.append(CustomSkillResponse.from_model(row, group_ids=[]))
+    return created_rows, failures
 
+
+def _install_personal_repo_skills(
+    source: str,
+    slugs: list[str],
+    user: User,
+    db_session: Session,
+) -> RepoSkillsInstallResult:
+    def _enforce_cap(install_count: int) -> None:
+        lock_personal_skills_for_user(user.id, db_session)
+        existing = count_personal_skills_for_user(user.id, db_session)
+        if existing + install_count > MAX_PERSONAL_SKILLS_PER_USER:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Installing {install_count} skill(s) would exceed your limit of "
+                f"{MAX_PERSONAL_SKILLS_PER_USER} personal skills "
+                f"(you currently have {existing}).",
+            )
+
+    created_rows, failures = _install_repo_skills(
+        source=source,
+        slugs=slugs,
+        author_user_id=user.id,
+        is_public=False,
+        group_ids=[],
+        db_session=db_session,
+        before_install=_enforce_cap,
+    )
+
+    created_responses: list[CustomSkillResponse] = []
+    for row in created_rows:
+        push_skill_to_affected_sandboxes(row, db_session)
+        created_responses.append(CustomSkillResponse.from_model(row, group_ids=[]))
     return RepoSkillsInstallResult(created=created_responses, failures=failures)
 
 
@@ -671,99 +711,24 @@ def _install_admin_repo_skills(
     user: User,
     db_session: Session,
 ) -> RepoSkillsInstallResult:
-    parsed = parse_skill_source(source)
-    archive = fetch_repo_archive(parsed)
-    file_store = get_default_file_store()
+    created_rows, failures = _install_repo_skills(
+        source=source,
+        slugs=slugs,
+        author_user_id=user.id,
+        is_public=is_public,
+        group_ids=group_ids,
+        db_session=db_session,
+    )
 
-    # Dedupe preserving order.
-    seen_slugs: set[str] = set()
-    unique_slugs: list[str] = []
-    for s in slugs:
-        if s not in seen_slugs:
-            seen_slugs.add(s)
-            unique_slugs.append(s)
-
-    if not unique_slugs:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "no skills selected")
-
-    failures: list[RepoSkillInstallFailure] = []
-    created_responses: list[CustomSkillResponse] = []
-
-    with extracted_skills(archive, parsed.subpath) as discovered:
-        by_slug = {s.slug: s for s in discovered}
-
-        to_install = []
-        for slug in unique_slugs:
-            if slug not in by_slug:
-                failures.append(
-                    RepoSkillInstallFailure(slug=slug, error="not found in repository")
-                )
-            else:
-                to_install.append(by_slug[slug])
-
-        created_rows: list[Skill] = []
-        batch_blob_ids: list[str] = []
-
-        for skill in to_install:
-            blob_id = None
-            try:
-                if skill.slug in _RESERVED_SKILL_SLUGS:
-                    raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
-                        f"slug '{skill.slug}' is reserved",
-                    )
-                bundle = build_bundle_for_skill(skill)
-                ingested = ingest_skill_bundle(
-                    bundle, None, file_store, slug=skill.slug
-                )
-                blob_id = ingested.bundle_file_id
-                sp = db_session.begin_nested()
-                try:
-                    row = create_skill__no_commit(
-                        slug=ingested.slug,
-                        name=ingested.name,
-                        description=ingested.description,
-                        bundle_file_id=ingested.bundle_file_id,
-                        bundle_sha256=ingested.bundle_sha256,
-                        is_public=is_public,
-                        author_user_id=user.id,
-                        db_session=db_session,
-                    )
-                    if group_ids:
-                        replace_skill_grants(row.id, group_ids, db_session=db_session)
-                    sp.commit()
-                except Exception:
-                    sp.rollback()
-                    raise
-                created_rows.append(row)
-                batch_blob_ids.append(blob_id)
-            except Exception as e:
-                # Drop a single failing skill to a failure entry instead of
-                # aborting the batch; the savepoint already rolled back.
-                if blob_id is not None:
-                    delete_bundle_blob(file_store, blob_id)
-                if not isinstance(e, OnyxError):
-                    logger.exception("Unexpected error installing skill %s", skill.slug)
-                error = e.detail if isinstance(e, OnyxError) else "internal error"
-                failures.append(RepoSkillInstallFailure(slug=skill.slug, error=error))
-
-        try:
-            db_session.commit()
-        except Exception:
-            for bid in batch_blob_ids:
-                delete_bundle_blob(file_store, bid)
-            raise
-
-        affected: set[UUID] = set()
-        for row in created_rows:
-            affected |= affected_user_ids_for_skill(row, db_session)
+    affected: set[UUID] = set()
+    for row in created_rows:
+        affected |= affected_user_ids_for_skill(row, db_session)
+    if affected:
         push_skills_for_users(affected, db_session)
 
-        for row in created_rows:
-            created_responses.append(
-                CustomSkillResponse.from_model(row, group_ids=group_ids)
-            )
-
+    created_responses = [
+        CustomSkillResponse.from_model(row, group_ids=group_ids) for row in created_rows
+    ]
     return RepoSkillsInstallResult(created=created_responses, failures=failures)
 
 
