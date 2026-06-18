@@ -31,7 +31,10 @@ import { getBaseUrl } from "@/api/config";
 const ACCESS_TOKEN_KEY_PREFIX = "onyx.auth.access_token";
 const SAFE_KEY_CHAR = /^[A-Za-z0-9.-]$/;
 
-const TOKEN_OPTIONS: SecureStore.SecureStoreOptions = {
+// When the OS keychain will release the stored token (not a login signal):
+//   WHEN_UNLOCKED    — readable only while the device is unlocked.
+//   THIS_DEVICE_ONLY — never synced to iCloud or restored onto another device.
+const TOKEN_KEYCHAIN_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
 
@@ -58,5 +61,9 @@ export function getToken(): Promise<string | null> {
 export function setToken(token: string | null): Promise<void> {
   return token === null
     ? SecureStore.deleteItemAsync(getAccessTokenKey())
-    : SecureStore.setItemAsync(getAccessTokenKey(), token, TOKEN_OPTIONS);
+    : SecureStore.setItemAsync(
+        getAccessTokenKey(),
+        token,
+        TOKEN_KEYCHAIN_OPTIONS,
+      );
 }
