@@ -74,12 +74,12 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 MAX_PERSONAL_SKILLS_PER_USER = _non_negative_int_env("MAX_PERSONAL_SKILLS_PER_USER", 50)
 
 # Skills marketplace: max compressed archive size fetched from GitHub/GitLab.
-SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES = int(
-    os.environ.get("SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES") or 100 * 1024 * 1024
+SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES = _non_negative_int_env(
+    "SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES", 100 * 1024 * 1024
 )
 # Skills marketplace: HTTP fetch timeout in seconds for repo archive downloads.
-SKILL_MARKETPLACE_FETCH_TIMEOUT_SECONDS = int(
-    os.environ.get("SKILL_MARKETPLACE_FETCH_TIMEOUT_SECONDS") or 30
+SKILL_MARKETPLACE_FETCH_TIMEOUT_SECONDS = _non_negative_int_env(
+    "SKILL_MARKETPLACE_FETCH_TIMEOUT_SECONDS", 30
 )
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
