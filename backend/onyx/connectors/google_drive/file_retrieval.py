@@ -429,12 +429,23 @@ def crawl_folders_for_files(
     update_traversed_ids_func: Callable[[str], None],
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
+    active_parent_ids: set[str] | None = None,
 ) -> Iterator[RetrievedDriveFile]:
     """
     This function starts crawling from any folder. It is slower though.
     """
     logger.info("Entered crawl_folders_for_files with parent_id: " + parent_id)
-    if parent_id not in traversed_parent_ids:
+    if parent_id in traversed_parent_ids:
+        logger.info("Skipping subfolder files since already traversed: %s", parent_id)
+        return
+
+    active_parent_ids = active_parent_ids or set()
+    if parent_id in active_parent_ids:
+        logger.info("Skipping folder cycle at parent_id: %s", parent_id)
+        return
+
+    active_parent_ids.add(parent_id)
+    try:
         logger.info("Parent id not in traversed parent ids, getting files")
         found_files = False
         file = {}
@@ -475,24 +486,25 @@ def crawl_folders_for_files(
                     completion_stage=DriveRetrievalStage.FOLDER_FILES,
                     error=e,
                 )
-    else:
-        logger.info("Skipping subfolder files since already traversed: %s", parent_id)
 
-    for subfolder in _get_folders_in_parent(
-        service=service,
-        parent_id=parent_id,
-    ):
-        logger.info("Fetching all files in subfolder: " + subfolder["name"])
-        yield from crawl_folders_for_files(
+        for subfolder in _get_folders_in_parent(
             service=service,
-            parent_id=subfolder["id"],
-            field_type=field_type,
-            user_email=user_email,
-            traversed_parent_ids=traversed_parent_ids,
-            update_traversed_ids_func=update_traversed_ids_func,
-            start=start,
-            end=end,
-        )
+            parent_id=parent_id,
+        ):
+            logger.info("Fetching all files in subfolder: " + subfolder["name"])
+            yield from crawl_folders_for_files(
+                service=service,
+                parent_id=subfolder["id"],
+                field_type=field_type,
+                user_email=user_email,
+                traversed_parent_ids=traversed_parent_ids,
+                update_traversed_ids_func=update_traversed_ids_func,
+                start=start,
+                end=end,
+                active_parent_ids=active_parent_ids,
+            )
+    finally:
+        active_parent_ids.remove(parent_id)
 
 
 def get_files_in_shared_drive(

@@ -177,6 +177,62 @@ def test_shortcut_to_folder_crawls_target_folder() -> None:
     assert "shortcut_folder" not in traversed
 
 
+def test_folder_shortcut_cycle_stops_without_completed_folders() -> None:
+    service = _FakeDriveService(
+        {
+            "shortcut_a_to_b": _shortcut(
+                "shortcut_a_to_b", "folder_b", DRIVE_FOLDER_TYPE
+            ),
+            "shortcut_b_to_a": _shortcut(
+                "shortcut_b_to_a", "folder_a", DRIVE_FOLDER_TYPE
+            ),
+            "folder_a": _target_folder("folder_a"),
+            "folder_b": _target_folder("folder_b"),
+        }
+    )
+    folder_queries: list[str] = []
+
+    def _fake_paginated_retrieval(**kwargs: object) -> Iterator[dict[str, Any]]:
+        q = str(kwargs["q"])
+        if q.startswith("mimeType !="):
+            return
+
+        parent_id = _folder_query_parent(q)
+        folder_queries.append(parent_id or "")
+        if parent_id == "folder_a":
+            yield {
+                "id": "shortcut_a_to_b",
+                "name": "Shortcut A to B",
+                "mimeType": DRIVE_SHORTCUT_TYPE,
+            }
+        if parent_id == "folder_b":
+            yield {
+                "id": "shortcut_b_to_a",
+                "name": "Shortcut B to A",
+                "mimeType": DRIVE_SHORTCUT_TYPE,
+            }
+
+    traversed: set[str] = set()
+    with patch(
+        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
+        side_effect=_fake_paginated_retrieval,
+    ):
+        files = list(
+            crawl_folders_for_files(
+                service=cast(Resource, service),
+                parent_id="folder_a",
+                field_type=DriveFileFieldType.STANDARD,
+                user_email="user@example.com",
+                traversed_parent_ids=traversed,
+                update_traversed_ids_func=traversed.add,
+            )
+        )
+
+    assert files == []
+    assert folder_queries == ["folder_a", "folder_b"]
+    assert traversed == set()
+
+
 def test_raw_shortcut_conversion_logs_bug_guard(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
