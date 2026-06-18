@@ -3204,7 +3204,9 @@ class SharepointConnector(
             site = self.graph_client.sites.get_by_url(site_url)
             drives = site.drives.get().execute_query()
             site_drives_cache[site_url] = [
-                SiteDrive(drive_id=cast(str, d.id), name=d.name or "", web_url=d.web_url)
+                SiteDrive(
+                    drive_id=cast(str, d.id), name=d.name or "", web_url=d.web_url
+                )
                 for d in drives
             ]
         return site_drives_cache[site_url]
@@ -3231,7 +3233,9 @@ class SharepointConnector(
         site_url = descriptors[0].url
 
         for drive in self._list_site_drives(site_url, site_drives_cache):
-            item_url = f"{self.graph_api_base}/drives/{drive.drive_id}/items/{document_id}"
+            item_url = (
+                f"{self.graph_api_base}/drives/{drive.drive_id}/items/{document_id}"
+            )
             try:
                 item_json = self._graph_api_get_json(item_url)
             except HTTPError as e:
