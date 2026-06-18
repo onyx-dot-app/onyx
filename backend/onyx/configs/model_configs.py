@@ -70,6 +70,19 @@ GEN_AI_MODEL_FALLBACK_MAX_TOKENS = int(
     os.environ.get("GEN_AI_MODEL_FALLBACK_MAX_TOKENS") or 32000
 )
 
+# Fraction of max_input_tokens to hold back when fitting history: headroom for
+# tiktoken undercounting the provider's tokenizer and overflowing the context.
+GEN_AI_INPUT_TOKEN_SAFETY_MARGIN = float(
+    os.environ.get("GEN_AI_INPUT_TOKEN_SAFETY_MARGIN") or 0.05
+)
+# Must be in [0, 1): >= 1 zeroes available_tokens; negative inflates the budget
+# past the real limit.
+if not 0.0 <= GEN_AI_INPUT_TOKEN_SAFETY_MARGIN < 1.0:
+    raise ValueError(
+        "GEN_AI_INPUT_TOKEN_SAFETY_MARGIN must be in [0, 1), got "
+        f"{GEN_AI_INPUT_TOKEN_SAFETY_MARGIN}"
+    )
+
 # This is used when computing how much context space is available for documents
 # ahead of time in order to let the user know if they can "select" more documents
 # It represents a maximum "expected" number of input tokens from the latest user
