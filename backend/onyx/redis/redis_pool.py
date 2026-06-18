@@ -17,6 +17,9 @@ from redis.exceptions import TimeoutError as RedisTimeoutError
 from redis.lock import Lock as RedisLock
 from redis.retry import Retry
 
+from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
+from onyx.auth.constants import API_KEY_HEADER_NAME
+from onyx.auth.constants import BEARER_PREFIX
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REDIS_DB_NUMBER
 from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
@@ -407,6 +410,27 @@ async def retrieve_auth_token_data_from_redis(request: Request) -> dict | None:
     token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
     if not token:
         logger.debug("No auth token cookie found")
+        return None
+    return await retrieve_auth_token_data(token)
+
+
+async def retrieve_auth_token_data_from_bearer(request: Request) -> dict | None:
+    """Validate a session auth token sent via the ``Authorization: Bearer`` header.
+
+    Mobile clients can't hold the HttpOnly ``fastapiusersauth`` cookie, so they
+    send the same opaque session token as a Bearer header. The token value is the
+    Redis lookup key, identical to the cookie flow. API keys / PATs are resolved
+    earlier by their prefix-based extractor, so a non-session bearer token simply
+    misses in Redis and returns None here.
+    """
+    auth_header = request.headers.get(
+        API_KEY_HEADER_ALTERNATIVE_NAME
+    ) or request.headers.get(API_KEY_HEADER_NAME)
+    if not auth_header or not auth_header.startswith(BEARER_PREFIX):
+        return None
+
+    token = auth_header[len(BEARER_PREFIX) :].strip()
+    if not token:
         return None
     return await retrieve_auth_token_data(token)
 

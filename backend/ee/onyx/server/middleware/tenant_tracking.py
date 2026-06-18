@@ -19,6 +19,7 @@ from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.redis.redis_pool import retrieve_auth_token_data_from_bearer
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -108,7 +109,8 @@ async def _get_tenant_id_from_request(
     """
     Attempt to extract tenant_id from:
     1) The API key or PAT (Personal Access Token) header
-    2) The Redis-based token (stored in Cookie: fastapiusersauth)
+    2) The Redis-based session token (Cookie: fastapiusersauth, or the
+       Authorization: Bearer header used by mobile clients)
     3) The anonymous user cookie
     Fallback: POSTGRES_DEFAULT_SCHEMA
     """
@@ -118,9 +120,12 @@ async def _get_tenant_id_from_request(
         return tenant_id
 
     try:
-        # Look up token data in Redis
-
+        # Look up the session token data in Redis. Web clients send it as the
+        # `fastapiusersauth` cookie; mobile clients send the same opaque token as
+        # an Authorization: Bearer header and carry no cookie.
         token_data = await retrieve_auth_token_data_from_redis(request)
+        if token_data is None:
+            token_data = await retrieve_auth_token_data_from_bearer(request)
 
         if token_data:
             tenant_id_from_payload = token_data.get(
