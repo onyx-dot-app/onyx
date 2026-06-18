@@ -1584,3 +1584,49 @@ class TestGetBedrockAvailableModels:
                 os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
             else:
                 os.environ["AWS_BEARER_TOKEN_BEDROCK"] = prior
+
+    def test_masked_bearer_token_resolved_from_existing_provider(
+        self, mock_bedrock_client: MagicMock
+    ) -> None:
+        """Editing an existing provider sends the masked bearer token. The
+        endpoint must swap it back for the stored value so AWS sees real
+        credentials instead of the masked placeholder."""
+        from onyx.server.manage.llm.api import _mask_string
+        from onyx.server.manage.llm.api import get_bedrock_available_models
+
+        real_token = "real-bearer-token-secret"
+        masked_token = _mask_string(real_token)
+        assert masked_token != real_token
+
+        existing_provider = MagicMock()
+        existing_provider.custom_config = {"AWS_BEARER_TOKEN_BEDROCK": real_token}
+
+        mock_session = MagicMock()
+        mock_session.client.return_value = mock_bedrock_client
+
+        prior = os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
+        try:
+            with (
+                patch(
+                    "onyx.server.manage.llm.api.boto3.Session",
+                    return_value=mock_session,
+                ),
+                patch(
+                    "onyx.server.manage.llm.api.fetch_existing_llm_provider",
+                    return_value=existing_provider,
+                ),
+                patch("onyx.server.manage.llm.api._sync_fetched_models"),
+            ):
+                request = BedrockModelsRequest(
+                    aws_region_name="us-west-2",
+                    aws_bearer_token_bedrock=masked_token,
+                    provider_name="my-bedrock",
+                )
+                get_bedrock_available_models(request, MagicMock(), MagicMock())
+
+            # The real stored token — not the masked placeholder — reached boto3.
+            assert mock_bedrock_client.bearer_token_at_call_time == real_token
+            assert "AWS_BEARER_TOKEN_BEDROCK" not in os.environ
+        finally:
+            if prior is not None:
+                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = prior

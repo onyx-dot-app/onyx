@@ -161,6 +161,35 @@ def _resolve_api_key(
     return api_key
 
 
+def _resolve_bedrock_bearer_token(
+    bearer_token: str | None,
+    provider_name: str | None,
+    db_session: Session,
+) -> str | None:
+    """Return the real Bedrock bearer token for the model-fetch endpoint.
+
+    When editing an existing provider the form value is masked (e.g.
+    ``abcd****wxyz``). If *provider_name* is supplied we look up the unmasked
+    token from the provider's stored ``custom_config`` so the AWS request
+    succeeds instead of being rejected for using the masked placeholder.
+    """
+    if not bearer_token or not provider_name:
+        return bearer_token
+
+    existing_provider = fetch_existing_llm_provider(
+        name=provider_name, db_session=db_session
+    )
+    if not existing_provider or not existing_provider.custom_config:
+        return bearer_token
+
+    stored_token = existing_provider.custom_config.get("AWS_BEARER_TOKEN_BEDROCK")
+    if stored_token and _is_masked_value_for_existing(
+        bearer_token, stored_token, "AWS_BEARER_TOKEN_BEDROCK"
+    ):
+        return stored_token
+    return bearer_token
+
+
 def _sync_fetched_models(
     db_session: Session,
     provider_name: str,
@@ -1032,17 +1061,23 @@ def get_bedrock_available_models(
     Returns model IDs with display names from AWS. Prefers inference profiles
     (for cross-region support) over base models when available.
     """
+    # When editing an existing provider the form sends the masked bearer token;
+    # swap it back for the stored value so the AWS call uses real credentials.
+    bearer_token = _resolve_bedrock_bearer_token(
+        request.aws_bearer_token_bedrock, request.provider_name, db_session
+    )
+
     # boto3 reads AWS_BEARER_TOKEN_BEDROCK lazily at API call time, not at
     # Session construction — so the env var must stay set through the actual
     # list_foundation_models / list_inference_profiles calls below, not just
     # while building the Session.
     prev_bearer_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
-    if request.aws_bearer_token_bedrock:
-        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = request.aws_bearer_token_bedrock
+    if bearer_token:
+        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = bearer_token
 
     try:
         # Precedence: bearer → keys → IAM
-        if request.aws_bearer_token_bedrock:
+        if bearer_token:
             session = boto3.Session(region_name=request.aws_region_name)
         elif request.aws_access_key_id and request.aws_secret_access_key:
             session = boto3.Session(
@@ -1180,7 +1215,7 @@ def get_bedrock_available_models(
             f"Unexpected error fetching Bedrock models: {e}",
         )
     finally:
-        if request.aws_bearer_token_bedrock:
+        if bearer_token:
             if prev_bearer_token is None:
                 os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
             else:
