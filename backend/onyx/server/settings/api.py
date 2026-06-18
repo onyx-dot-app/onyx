@@ -11,6 +11,8 @@ from onyx.auth.users import is_user_admin
 from onyx.configs.app_configs import DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import MAX_ALLOWED_UPLOAD_SIZE_MB
+from onyx.configs.app_configs import POSTHOG_API_KEY
+from onyx.configs.app_configs import POSTHOG_HOST
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session
@@ -150,6 +152,8 @@ def fetch_settings(
             else DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB
         ),
         is_containerized=is_running_in_container(),
+        posthog_key=POSTHOG_API_KEY,
+        posthog_host=POSTHOG_HOST,
     )
 
 

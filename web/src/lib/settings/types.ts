@@ -98,6 +98,10 @@ export interface Settings {
   // True when the backend runs inside a container (Docker/Podman).
   // Used to default local-service URLs to host.docker.internal.
   is_containerized?: boolean;
+
+  // PostHog client key + host for the web app; null = analytics off.
+  posthog_key?: string | null;
+  posthog_host?: string | null;
 }
 
 export interface NavigationItem {

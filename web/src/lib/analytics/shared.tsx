@@ -12,19 +12,41 @@ import { useEffect, useRef, Suspense, type ReactElement } from "react";
 import { usePostHog } from "posthog-js/react";
 import { useReportWebVitals } from "next/web-vitals";
 import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
+import { useSettings } from "@/lib/settings/hooks";
+import { initPostHog } from "@/app/providers";
+
+// ─── PostHogRuntimeInitializer ──────────────────────────────────────────────
+
+/**
+ * Initializes PostHog from the runtime key in `/api/settings`, for deployments
+ * that don't bake one into the web image. Must render inside the settings
+ * provider. No-ops if a build-time key already initialized PostHog.
+ */
+export function PostHogRuntimeInitializer(): null {
+  const { posthog_key, posthog_host } = useSettings();
+
+  useEffect(() => {
+    if (posthog_key) {
+      initPostHog(posthog_key, posthog_host);
+    }
+  }, [posthog_key, posthog_host]);
+
+  return null;
+}
 
 // ─── WebVitals ─────────────────────────────────────────────────────────────
 
 /**
  * Captures Core Web Vitals (LCP, FID, CLS, INP, TTFB) as PostHog events.
- *
- * Only rendered when `NEXT_PUBLIC_POSTHOG_KEY` is set — callers are
- * responsible for that guard so this component is never mounted in
- * self-hosted / MIT installs where PostHog is absent.
+ * Self-guards on PostHog being initialized, so it's safe to mount always.
  */
 export function WebVitals(): null {
   const posthog = usePostHog();
-  useReportWebVitals((metric) => posthog.capture(metric.name, metric));
+  useReportWebVitals((metric) => {
+    if (posthog.__loaded) {
+      posthog.capture(metric.name, metric);
+    }
+  });
   return null;
 }
 
