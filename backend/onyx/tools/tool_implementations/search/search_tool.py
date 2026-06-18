@@ -94,6 +94,7 @@ from onyx.secondary_llm_flows.source_filter import SearchCycle
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.interface import Tool
@@ -783,6 +784,22 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 ),
             )
         )
+
+        # Surface the scope to the UI only when it narrows to a strict subset of
+        # the connected sources — scoping to all of them is equivalent to an
+        # unscoped search, so the UI keeps its default "internal documents" label.
+        scopes_all_sources = bool(connected_sources) and set(
+            connected_sources
+        ).issubset(resolved_scope or [])
+        if resolved_scope and not scopes_all_sources:
+            self.emitter.emit(
+                Packet(
+                    placement=placement,
+                    obj=SearchToolFilterDelta(
+                        sources=[source.value for source in resolved_scope]
+                    ),
+                )
+            )
 
         queries_run = list(
             dict.fromkeys(

@@ -18,6 +18,7 @@ export enum PacketType {
   // Specific tool packets
   SEARCH_TOOL_START = "search_tool_start",
   SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta",
+  SEARCH_TOOL_FILTER_DELTA = "search_tool_filter_delta",
   SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta",
   IMAGE_GENERATION_TOOL_START = "image_generation_start",
   IMAGE_GENERATION_TOOL_DELTA = "image_generation_final",
@@ -129,6 +130,12 @@ export interface SearchToolStart extends BaseObj {
 export interface SearchToolQueriesDelta extends BaseObj {
   type: "search_tool_queries_delta";
   queries: string[];
+}
+
+export interface SearchToolFilterDelta extends BaseObj {
+  type: "search_tool_filter_delta";
+  // Connector/source values this search is scoped to (empty/absent == all).
+  sources: string[];
 }
 
 export interface SearchToolDocumentsDelta extends BaseObj {
@@ -360,6 +367,7 @@ export type PacketErrorObj = PacketError;
 export type SearchToolObj =
   | SearchToolStart
   | SearchToolQueriesDelta
+  | SearchToolFilterDelta
   | SearchToolDocumentsDelta
   | SectionEnd
   | PacketError;
