@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { OpenButton } from "@opal/components";
 import { Disabled } from "@opal/core";
 import { SvgCheck, SvgGlobe, SvgUser, SvgUserManage } from "@opal/icons";

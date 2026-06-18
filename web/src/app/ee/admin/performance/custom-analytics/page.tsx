@@ -4,7 +4,7 @@ import { Callout } from "@/components/ui/callout";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Text } from "@opal/components";
 import { Spacer } from "@opal/components";
-import { CustomAnalyticsUpdateForm } from "./CustomAnalyticsUpdateForm";
+import CustomAnalyticsUpdateForm from "./CustomAnalyticsUpdateForm";
 
 const route = ADMIN_ROUTES.CUSTOM_ANALYTICS;
 

@@ -1,20 +1,20 @@
 import React from "react";
 import { render, screen, waitFor, userEvent } from "@tests/setup/test-utils";
 import InviteOnlyCard from "./InviteOnlyCard";
-import { Settings } from "@/interfaces/settings";
+import { Settings } from "@/lib/settings/types";
 
 const baseSettings: Partial<Settings> = {
   invite_only_enabled: false,
 };
 
-const mockUseSettingsContext = jest.fn();
+const mockUseSettings = jest.fn();
 const mockToastSuccess = jest.fn();
 const mockToastError = jest.fn();
 const mockMutate = jest.fn();
 const mockUpdateAdminSettings = jest.fn();
 
-jest.mock("@/providers/SettingsProvider", () => ({
-  useSettingsContext: () => mockUseSettingsContext(),
+jest.mock("@/lib/settings/hooks", () => ({
+  useSettings: () => mockUseSettings(),
 }));
 
 jest.mock("@/hooks/useToast", () => ({
@@ -36,7 +36,14 @@ jest.mock("@/lib/settings/svc", () => ({
 
 describe("InviteOnlyCard", () => {
   beforeEach(() => {
-    mockUseSettingsContext.mockReturnValue({ settings: baseSettings });
+    mockUseSettings.mockReturnValue({
+      ...baseSettings,
+      enterprise: null,
+      appName: "Onyx",
+      vectorDbEnabled: true,
+      isLoading: false,
+      error: undefined,
+    });
     mockMutate.mockImplementation(async (_key, fn) => {
       if (typeof fn === "function") return fn();
     });
@@ -56,8 +63,14 @@ describe("InviteOnlyCard", () => {
   });
 
   test("reflects checked state when invite_only_enabled is true", () => {
-    mockUseSettingsContext.mockReturnValue({
-      settings: { ...baseSettings, invite_only_enabled: true },
+    mockUseSettings.mockReturnValue({
+      ...baseSettings,
+      invite_only_enabled: true,
+      enterprise: null,
+      appName: "Onyx",
+      vectorDbEnabled: true,
+      isLoading: false,
+      error: undefined,
     });
     render(<InviteOnlyCard />);
     expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "true");

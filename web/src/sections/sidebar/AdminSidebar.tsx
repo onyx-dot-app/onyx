@@ -2,12 +2,12 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
 import { UserRole } from "@/lib/types";
-import { CombinedSettings, Tier } from "@/interfaces/settings";
+import { Settings, Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
 import { Divider, InputTypeIn, Spacer, SidebarTab } from "@opal/components";
 import { SvgArrowUpCircle, SvgSearch, SvgX } from "@opal/icons";
@@ -49,7 +49,7 @@ function buildItems(
   isCurator: boolean,
   enableCloud: boolean,
   tier: Tier | undefined,
-  settings: CombinedSettings | null,
+  settings: Settings | null,
   customAnalyticsEnabled: boolean,
   hasSubscription: boolean,
   hooksEnabled: boolean
@@ -108,7 +108,7 @@ function buildItems(
     items.push({
       ...sidebarItem(ADMIN_ROUTES.INDEX_SETTINGS),
       section: SECTIONS.DOCUMENTS_AND_KNOWLEDGE,
-      error: settings?.settings.needs_reindexing,
+      error: settings?.needs_reindexing,
     });
   }
 
@@ -136,8 +136,8 @@ function buildItems(
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.USAGE, Tier.BUSINESS);
     addGated(SECTIONS.USAGE, ADMIN_ROUTES.TOKEN_RATE_LIMITS, Tier.ENTERPRISE);
     if (
-      settings?.settings.query_history_type !== "disabled" &&
-      !settings?.settings.hide_query_history_from_admin_panel
+      settings?.query_history_type !== "disabled" &&
+      !settings?.hide_query_history_from_admin_panel
     ) {
       addGated(SECTIONS.USAGE, ADMIN_ROUTES.QUERY_HISTORY, Tier.BUSINESS);
     }
@@ -194,8 +194,8 @@ export default function AdminSidebar() {
   const pathname = usePathname();
   const { customAnalyticsEnabled } = useCustomAnalyticsEnabled();
   const { user } = useUser();
-  const settings = useSettingsContext();
-  const tier = settings?.settings.tier;
+  const settings = useSettings();
+  const tier = settings?.tier;
   const { data: billingData, isLoading: billingLoading } =
     useBillingInformation();
   const { data: licenseData, isLoading: licenseLoading } = useLicense();
@@ -211,8 +211,7 @@ export default function AdminSidebar() {
         );
   // Hooks are ENTERPRISE-only and only available for self-hosted single-tenant.
   const hooksEnabled =
-    tierAtLeast(tier, Tier.ENTERPRISE) &&
-    (settings?.settings.hooks_enabled ?? false);
+    tierAtLeast(tier, Tier.ENTERPRISE) && (settings?.hooks_enabled ?? false);
 
   const allItems = buildItems(
     isCurator,

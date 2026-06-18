@@ -11,7 +11,7 @@ import {
 } from "@opal/components";
 import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { LLMOption, buildLlmOptions } from "@/lib/languageModels/options";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
@@ -46,9 +46,8 @@ export default function MultiModelSelector({
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
 
-  const settings = useSettingsContext();
-  const multiModelAllowed =
-    settings?.settings?.multi_model_chat_enabled ?? true;
+  const settings = useSettings();
+  const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
 
   // Mirror the data source used by `ModelSelectorContent` so the selector is
   // disabled precisely when the popover would render "No models found".

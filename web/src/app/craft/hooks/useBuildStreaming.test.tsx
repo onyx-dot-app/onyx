@@ -75,7 +75,7 @@ describe("useBuildStreaming thinking packets", () => {
           raw_output: null,
           status: "pending",
           timestamp: "2026-01-01T00:00:01Z",
-        });
+        } as never);
       });
   });
 
@@ -656,7 +656,7 @@ describe("useBuildStreaming thinking packets", () => {
         onPacket({
           type: "error",
           message: "provider model not found",
-        });
+        } as never);
       });
     const { result } = renderHook(() => useBuildStreaming());
 
@@ -974,7 +974,7 @@ describe("useBuildStreaming thinking packets", () => {
           raw_output: null,
           status: "pending",
           timestamp: "2026-01-01T00:00:00Z",
-        });
+        } as never);
         useBuildSessionStore.getState().updateSessionData(sessionId, {
           isInterrupting: true,
         });
@@ -986,7 +986,7 @@ describe("useBuildStreaming thinking packets", () => {
           raw_output: null,
           status: "in_progress",
           timestamp: "2026-01-01T00:00:00.500Z",
-        });
+        } as never);
         onPacket({
           type: "prompt_response",
           timestamp: "2026-01-01T00:00:01Z",
@@ -1064,7 +1064,7 @@ describe("useBuildStreaming thinking packets", () => {
         onPacket({
           type: "error",
           message: "old turn failed",
-        });
+        } as never);
       });
     const { result } = renderHook(() => useBuildStreaming());
 

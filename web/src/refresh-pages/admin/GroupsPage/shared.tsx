@@ -47,13 +47,14 @@ const ROLE_ICONS: Partial<Record<UserRole, IconFunctionComponent>> = {
 // Column renderers
 // ---------------------------------------------------------------------------
 
-function renderNameColumn(email: string, row: MemberRow) {
+function renderNameColumn(_searchValue: unknown, row: MemberRow) {
+  const { email, personal_name } = row;
   return (
     <Content
       sizePreset="main-ui"
       variant="section"
-      title={row.personal_name ?? email}
-      description={row.personal_name ? email : undefined}
+      title={personal_name ?? email}
+      description={personal_name ? email : undefined}
     />
   );
 }
@@ -78,7 +79,10 @@ export const tc = createTableColumns<MemberRow>();
 
 export const baseColumns = [
   tc.qualifier(),
-  tc.column("email", {
+  // Search/sort by a name+email composite so service accounts — whose email is a
+  // "Service Account" placeholder — are findable by their API-key name.
+  tc.column((row) => [row.personal_name, row.email].filter(Boolean).join(" "), {
+    id: "name",
     header: "Name",
     weight: 25,
     cell: renderNameColumn,

@@ -42,6 +42,7 @@ from onyx.server.features.build.db.sandbox import update_sandbox_status__no_comm
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import DirectoryListing
+from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.session.errors import UploadLimitExceededError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import ArtifactResponse
@@ -444,7 +445,6 @@ def restore_session(
                             sandbox_id=sandbox.id,
                             session_id=session_id,
                             snapshot_storage_path=snapshot.storage_path,
-                            tenant_id=tenant_id,
                             nextjs_port=session.nextjs_port,
                             llm_config=llm_config,
                             skills_section=skills_section,
@@ -479,6 +479,15 @@ def restore_session(
                         sandbox.id,
                         exc_info=True,
                     )
+
+                try:
+                    hydrate_user_library(sandbox.id, user.id, db_session)
+                except Exception:
+                    logger.warning(
+                        "Failed to push user library to sandbox %s",
+                        sandbox.id,
+                        exc_info=True,
+                    )
         else:
             logger.warning(
                 "Sandbox %s status is %s after re-provision, expected RUNNING",
@@ -505,13 +514,7 @@ def restore_session(
             elif stuck is not None and stuck.status == SandboxStatus.RUNNING:
                 # Workspace load failed after provision — drop the partial dir
                 # so session_workspace_exists() doesn't later report it restored.
-                failed_session = get_build_session(session_id, user.id, db_session)
-                failed_port = (
-                    failed_session.nextjs_port if failed_session is not None else None
-                )
-                sandbox_manager.cleanup_session_workspace(
-                    stuck.id, session_id, failed_port
-                )
+                sandbox_manager.cleanup_session_workspace(stuck.id, session_id)
                 logger.info(
                     "Cleaned up partial workspace for session %s after failed restore",
                     session_id,

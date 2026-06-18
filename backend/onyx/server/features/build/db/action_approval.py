@@ -118,26 +118,6 @@ def get_action_approval_for_user(
     return db_session.scalar(stmt)
 
 
-def list_session_action_approvals(
-    db_session: Session,
-    session_id: UUID,
-    *,
-    decision: ApprovalDecision | None = None,
-    since: datetime | None = None,
-    until: datetime | None = None,
-) -> list[ActionApproval]:
-    """Audit query for a session. `decision=None` includes pending rows."""
-    stmt = select(ActionApproval).where(ActionApproval.session_id == session_id)
-    if decision is not None:
-        stmt = stmt.where(ActionApproval.decision == decision)
-    if since is not None:
-        stmt = stmt.where(ActionApproval.created_at >= since)
-    if until is not None:
-        stmt = stmt.where(ActionApproval.created_at <= until)
-    stmt = stmt.order_by(ActionApproval.created_at.desc())
-    return list(db_session.scalars(stmt))
-
-
 def list_session_pending_action_approvals(
     db_session: Session,
     session_id: UUID,

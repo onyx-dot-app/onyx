@@ -41,6 +41,14 @@ def test_delete_user_nulls_out_document_set_ownership(
     user = _mock_user()
     db_session = MagicMock()
 
+    # A private/unshared persona dies with its owner; a shared one is orphaned.
+    private_persona = MagicMock(
+        is_public=False, user_shares=[], group_shares=[], deleted=False
+    )
+    shared_persona = MagicMock(
+        is_public=False, user_shares=[MagicMock()], group_shares=[], deleted=False
+    )
+
     query_chains: dict[type, MagicMock] = {}
 
     def query_side_effect(model: type) -> MagicMock:
@@ -49,6 +57,12 @@ def test_delete_user_nulls_out_document_set_ownership(
         return query_chains[model]
 
     db_session.query.side_effect = query_side_effect
+    # Owned personas are fetched via options(...).filter(...).all() then
+    # orphaned/deleted in Python.
+    persona_chain = _make_query_chain()
+    persona_chain.options.return_value = persona_chain
+    persona_chain.all.return_value = [private_persona, shared_persona]
+    query_chains[Persona] = persona_chain
 
     delete_user_from_db(user, db_session)
 
@@ -59,12 +73,12 @@ def test_delete_user_nulls_out_document_set_ownership(
         {DocumentSet.user_id: None}
     )
 
-    # Verify Persona.user_id is nulled out (update, not delete)
-    persona_chain = query_chains[Persona]
-    persona_chain.filter.assert_called()
-    persona_chain.filter.return_value.update.assert_called_once_with(
-        {Persona.user_id: None}
-    )
+    # Owned personas are orphaned (user_id -> None); the private, unshared one
+    # is additionally soft-deleted while the shared one survives ownerless.
+    assert private_persona.user_id is None
+    assert private_persona.deleted is True
+    assert shared_persona.user_id is None
+    assert shared_persona.deleted is False
 
 
 @patch("onyx.db.users.remove_user_from_invited_users")

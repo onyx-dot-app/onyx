@@ -89,7 +89,7 @@ Keep the design compatible with adding sidecars later:
 
 - Mounts `${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock` when Craft is enabled.
 - Sets `SANDBOX_BACKEND=docker`.
-- Sets `SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:<tag>`.
+- Uses the default app-aligned sandbox image `onyxdotapp/sandbox:${IMAGE_TAG}`; `SANDBOX_CONTAINER_IMAGE` is only an internal override.
 - Keeps existing Craft template envs.
 - Keeps FileStore/S3/MinIO envs; snapshots are handled by api_server/FileStore, not by giving credentials to the sandbox.
 
@@ -214,7 +214,6 @@ Manager responsibilities:
   - add Docker socket mount to `api_server` when Craft is enabled
   - add Docker socket mount to `background` if idle cleanup runs there
   - set `SANDBOX_BACKEND=${SANDBOX_BACKEND:-docker}` when Craft is enabled
-  - set `SANDBOX_CONTAINER_IMAGE`
   - document the trust boundary inline
 - Update `deployment/docker_compose/env.template`:
   - document `SANDBOX_BACKEND=docker`

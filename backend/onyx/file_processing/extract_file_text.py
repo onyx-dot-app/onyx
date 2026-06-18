@@ -269,6 +269,33 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     return text
 
 
+def _extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
+    """Extract all text from a PDF via pypdfium2 (PDFium/C).
+
+    PDFium releases the GIL while parsing, so a large or complex PDF can't pin
+    a worker thread or stall the indexing heartbeat during text extraction.
+    """
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(file_bytes, password=password)
+    try:
+        page_texts: list[str] = []
+        for page in pdf:
+            # Per-page try/finally so a get_textpage() failure still closes the
+            # native page handle instead of leaking it until GC.
+            try:
+                textpage = page.get_textpage()
+                try:
+                    page_texts.append(textpage.get_text_range())
+                finally:
+                    textpage.close()
+            finally:
+                page.close()
+        return TEXT_SECTION_SEPARATOR.join(page_texts)
+    finally:
+        pdf.close()
+
+
 def read_pdf_file(
     file: IO[Any],
     pdf_pass: str | None = None,
@@ -284,8 +311,11 @@ def read_pdf_file(
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
     try:
-        pdf_reader = PdfReader(file)
+        # Read once: the text extractor and the metadata/image reader share these bytes.
+        file_bytes = file.read()
+        pdf_reader = PdfReader(io.BytesIO(file_bytes))
 
+        decrypt_password: str | None = None
         if pdf_reader.is_encrypted:
             # Try the explicit password first, then fall back to an empty
             # string.  Owner-password-only PDFs (permission restrictions but
@@ -297,6 +327,7 @@ def read_pdf_file(
                 try:
                     if pdf_reader.decrypt(pw) != 0:
                         decrypt_success = True
+                        decrypt_password = pw
                         break
                 except Exception:
                     pass
@@ -318,9 +349,8 @@ def read_pdf_file(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        text = TEXT_SECTION_SEPARATOR.join(
-            page.extract_text() for page in pdf_reader.pages
-        )
+        # GIL-releasing extraction so a large PDF can't pin the worker — see helper.
+        text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
 
         if extract_images:
             image_cap = MAX_EMBEDDED_IMAGES_PER_FILE

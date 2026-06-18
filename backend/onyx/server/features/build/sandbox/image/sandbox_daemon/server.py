@@ -20,7 +20,9 @@ from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 from fastapi.responses import StreamingResponse
+from sandbox_daemon.contract import FilesystemListRequest
 from sandbox_daemon.contract import PUSH_DAEMON_PORT
+from sandbox_daemon.contract import SIDECAR_FILESYSTEM_LIST_PATH
 from sandbox_daemon.contract import SIDECAR_HEALTH_PATH
 from sandbox_daemon.contract import SIDECAR_OPENCODE_HISTORY_CREATE_PATH
 from sandbox_daemon.contract import SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH
@@ -34,6 +36,8 @@ from sandbox_daemon.contract import SIDECAR_SNAPSHOT_RESTORE_ROUTE
 from sandbox_daemon.contract import SnapshotCreateRequest
 from sandbox_daemon.extract import MAX_BUNDLE_BYTES
 from sandbox_daemon.extract import safe_extract_then_atomic_swap
+from sandbox_daemon.filesystem import FilesystemPathError
+from sandbox_daemon.filesystem import list_session_directory
 from sandbox_daemon.opencode_history import create_opencode_history_archive_file
 from sandbox_daemon.opencode_history import mark_opencode_history_restored
 from sandbox_daemon.opencode_history import opencode_history_restored
@@ -143,6 +147,41 @@ def ready() -> dict[str, str]:
     if not opencode_history_restored():
         raise HTTPException(status_code=503, detail="opencode history not restored")
     return {"status": "ok"}
+
+
+@app.post(SIDECAR_FILESYSTEM_LIST_PATH)
+async def filesystem_list(
+    request: Request,
+    x_push_signature: str = Header(..., alias="X-Push-Signature"),
+    x_push_timestamp: str = Header(..., alias="X-Push-Timestamp"),
+) -> dict[str, object]:
+    body = await request.body()
+    _verify_signature(
+        SIDECAR_FILESYSTEM_LIST_PATH,
+        hashlib.sha256(body).hexdigest(),
+        x_push_signature,
+        x_push_timestamp,
+    )
+
+    try:
+        payload = FilesystemListRequest.model_validate_json(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
+
+    try:
+        listing = await asyncio.to_thread(
+            list_session_directory,
+            session_id=payload.session_id,
+            path=payload.path,
+        )
+    except FilesystemPathError as e:
+        detail = str(e)
+        status_code = 400 if "traversal" in detail else 404
+        raise HTTPException(status_code=status_code, detail=detail)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"filesystem list OS error: {e}")
+
+    return listing.model_dump()
 
 
 @app.post(SIDECAR_PUSH_PATH)

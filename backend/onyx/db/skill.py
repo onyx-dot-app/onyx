@@ -3,8 +3,11 @@
 Access model:
 - Admin reads: see every row. Disabled skills stay visible so admins can
   re-enable them.
-- User reads: filter `enabled = True`, plus `is_public` OR the user is in a
-  group that has been granted access.
+- User reads: filter `enabled = True` (except the user's own personal skills,
+  which stay listed while disabled so the owner can re-enable them), plus
+  `is_public` OR the user is in a group that has been granted access OR the
+  skill is the user's own personal skill (custom, non-public, zero group
+  grants, authored by the user).
 
 Delete is a hard delete — `delete_skill` removes the row and returns its
 `bundle_file_id` so the caller can drop the blob from the file store
@@ -15,20 +18,24 @@ These helpers never commit — callers control the transaction boundary so a
 multi-step admin flow (e.g. create row + replace grants) can roll back atomically.
 """
 
+import hashlib
+import struct
 from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import and_
+from sqlalchemy import ColumnElement
 from sqlalchemy import delete
+from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import SandboxStatus
 from onyx.db.external_app import is_user_authenticated_for_app
 from onyx.db.models import ExternalApp
@@ -45,6 +52,9 @@ from onyx.db.utils import UnsetType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 SKILL_SLUG_UNIQUE_CONSTRAINT = "uq_skill_slug"
 
@@ -55,17 +65,34 @@ class SkillPatch:
     enabled: bool | UnsetType = UNSET
 
 
+def _personal_skill_clause(user_id: UUID) -> ColumnElement[bool]:
+    """Predicate matching *user_id*'s personal skills: custom, non-public,
+    zero group grants, authored by the user. Shared by the visibility
+    filter and the sandbox-push fanout so the two can't drift."""
+    no_grants = ~(
+        select(Skill__UserGroup.skill_id)
+        .where(Skill__UserGroup.skill_id == Skill.id)
+        .exists()
+    )
+    return and_(
+        Skill.author_user_id == user_id,
+        Skill.built_in_skill_id.is_(None),
+        Skill.is_public.is_(False),
+        no_grants,
+    )
+
+
 def _add_user_visibility_filter(
     stmt: Select[tuple[Skill]], user: User
 ) -> Select[tuple[Skill]]:
-    """Restrict a `select(Skill)` to rows the given user can see.
+    """Restrict a `select(Skill)` to rows the given user can see:
+    is_public OR group-granted OR their own personal skill.
 
-    Admins bypass the filter; everyone else goes through the
-    is_public-or-group-grant path.
+    Admins get NO bypass here on purpose: this filter also feeds sandbox
+    injection, and a bypass would push every user's personal skill
+    (untrusted content) into admins' agent contexts. Admin oversight lives
+    on the /admin/skills surface instead.
     """
-    if user.role == UserRole.ADMIN:
-        return stmt
-
     group_grant_exists = (
         select(Skill__UserGroup.skill_id)
         .join(
@@ -77,7 +104,13 @@ def _add_user_visibility_filter(
         .exists()
     )
 
-    return stmt.where(or_(Skill.is_public.is_(True), group_grant_exists))
+    return stmt.where(
+        or_(
+            Skill.is_public.is_(True),
+            group_grant_exists,
+            _personal_skill_clause(user.id),
+        )
+    )
 
 
 def _exclude_unavailable_built_ins(
@@ -146,10 +179,14 @@ def list_skills_for_user(user: User, db_session: Session) -> Sequence[Skill]:
     ``list_skills_for_sandbox_injection`` to get the wider set the
     sandbox actually receives (which includes authenticated external
     apps).
+
+    Disabled skills are hidden EXCEPT the user's own personal skills,
+    which stay listed (greyed out in the UI) so the owner can re-enable
+    them. Sandbox injection never includes disabled skills.
     """
     stmt = (
         select(Skill)
-        .where(Skill.enabled.is_(True))
+        .where(or_(Skill.enabled.is_(True), _personal_skill_clause(user.id)))
         .where(Skill.id.notin_(_external_app_skill_ids_subquery()))
         .options(selectinload(Skill.author))
         .order_by(Skill.name)
@@ -164,11 +201,12 @@ def fetch_skill_for_user(
 ) -> Skill | None:
     """Skill the user can read via the skills endpoint. Returns ``None``
     for external-app-backed rows even when the id matches — the skills
-    endpoint must not be a mutation seam for external apps."""
+    endpoint must not be a mutation seam for external apps. Disabled
+    skills resolve only for their owner (own-personal rows)."""
     stmt = (
         select(Skill)
         .where(Skill.id == skill_id)
-        .where(Skill.enabled.is_(True))
+        .where(or_(Skill.enabled.is_(True), _personal_skill_clause(user.id)))
         .where(Skill.id.notin_(_external_app_skill_ids_subquery()))
         .options(selectinload(Skill.author))
     )
@@ -185,7 +223,7 @@ def fetch_skill_for_user_by_slug(
     stmt = (
         select(Skill)
         .where(Skill.slug == slug)
-        .where(Skill.enabled.is_(True))
+        .where(or_(Skill.enabled.is_(True), _personal_skill_clause(user.id)))
         .where(Skill.id.notin_(_external_app_skill_ids_subquery()))
         .options(selectinload(Skill.author))
     )
@@ -214,7 +252,7 @@ def list_skills_for_sandbox_injection(
     return list(db_session.scalars(stmt))
 
 
-def fetch_skill_for_admin(skill_id: UUID, db_session: Session) -> Skill | None:
+def fetch_skill_by_id(skill_id: UUID, db_session: Session) -> Skill | None:
     stmt = select(Skill).where(Skill.id == skill_id).options(selectinload(Skill.author))
     return db_session.scalars(stmt).one_or_none()
 
@@ -338,7 +376,7 @@ def replace_skill_bundle(
 
     Rejects built-in rows — they have no bundle.
     """
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
@@ -373,7 +411,7 @@ def patch_skill(
     patch: SkillPatch,
     db_session: Session,
 ) -> Skill:
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
@@ -392,7 +430,7 @@ def patch_skill(
 def replace_skill_grants(
     skill_id: UUID, group_ids: Sequence[int], db_session: Session
 ) -> None:
-    if fetch_skill_for_admin(skill_id, db_session) is None:
+    if fetch_skill_by_id(skill_id, db_session) is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"Skill {skill_id} not found.",
@@ -419,7 +457,7 @@ def replace_skill_grants(
 
 def delete_skill(skill_id: UUID, db_session: Session) -> str | None:
     """Hard-delete a skill and return its `bundle_file_id` for caller cleanup."""
-    skill = fetch_skill_for_admin(skill_id, db_session)
+    skill = fetch_skill_by_id(skill_id, db_session)
     if skill is None:
         return None
     bundle_file_id = skill.bundle_file_id
@@ -450,6 +488,70 @@ def affected_user_ids_for_skill(skill: Skill, db_session: Session) -> set[UUID]:
         )
         .where(Skill__UserGroup.skill_id == skill.id)
         .where(Sandbox.status == SandboxStatus.RUNNING)
+    )
+    user_ids = set(db_session.scalars(stmt))
+
+    if skill.author_user_id is not None:
+        author_stmt = (
+            select(Sandbox.user_id)
+            .where(Sandbox.user_id == skill.author_user_id)
+            .where(Sandbox.status == SandboxStatus.RUNNING)
+            .where(
+                select(Skill.id)
+                .where(Skill.id == skill.id)
+                .where(_personal_skill_clause(skill.author_user_id))
+                .exists()
+            )
+        )
+        user_ids |= set(db_session.scalars(author_stmt))
+
+    return user_ids
+
+
+def count_personal_skills_for_user(user_id: UUID, db_session: Session) -> int:
+    stmt = select(func.count(Skill.id)).where(_personal_skill_clause(user_id))
+    return db_session.scalar(stmt) or 0
+
+
+# Namespaced + user-hashed so unrelated users don't block each other and the
+# lock id can't collide with other advisory locks in the codebase.
+_PERSONAL_SKILL_LOCK_NAMESPACE = "onyx_personal_skill_lock"
+
+
+def _personal_skill_lock_id(user_id: UUID) -> int:
+    digest = hashlib.sha256(
+        f"{_PERSONAL_SKILL_LOCK_NAMESPACE}:{user_id}".encode()
+    ).digest()
+    # Full 64-bit key (not 32-bit hashtext) so distinct users don't collide;
+    # explicit big-endian so the id is stable across platforms.
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    return struct.unpack(">q", digest[:8])[0]
+
+
+def lock_personal_skills_for_user(user_id: UUID, db_session: Session) -> None:
+    """Serialize a user's concurrent personal-skill creates so the
+    count-then-insert cap check is race-free; released at transaction end."""
+    lock_id = _personal_skill_lock_id(user_id)
+    logger.debug(
+        "Acquiring personal-skill advisory lock for user %s (lock_id=%d)",
+        user_id,
+        lock_id,
+    )
+    db_session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": lock_id},
+    )
+    logger.debug("Acquired personal-skill advisory lock for user %s", user_id)
+
+
+def skill_ids_with_grants(skill_ids: Sequence[UUID], db_session: Session) -> set[UUID]:
+    """Subset of *skill_ids* that have at least one group grant row."""
+    if not skill_ids:
+        return set()
+    stmt = (
+        select(Skill__UserGroup.skill_id)
+        .where(Skill__UserGroup.skill_id.in_(skill_ids))
+        .distinct()
     )
     return set(db_session.scalars(stmt))
 

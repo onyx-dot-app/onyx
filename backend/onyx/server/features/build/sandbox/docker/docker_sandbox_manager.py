@@ -156,6 +156,7 @@ SESSIONS_ROOT = f"{WORKSPACE_ROOT}/sessions"
 OPENCODE_DATA_DIR = f"{WORKSPACE_ROOT}/.opencode-data"
 TEMPLATES_OUTPUTS_PATH = f"{WORKSPACE_ROOT}/templates/outputs"
 MANAGED_SKILLS_PATH = f"{WORKSPACE_ROOT}/managed/skills"
+MANAGED_USER_LIBRARY_PATH = f"{WORKSPACE_ROOT}/managed/user_library"
 SANDBOX_EXEC_USER = "1000:1000"
 # Docker exec bypasses firewall-init.sh's setpriv environment workaround, so
 # sandbox-user execs must carry the uid/gid and user HOME together.
@@ -183,6 +184,17 @@ _PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # Registered in the opencode config only when the proxy is wired up; otherwise
 # it would no-op (no HTTP(S)_PROXY to re-tag).
 _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-tag.ts"
+_MUTABLE_SANDBOX_IMAGE_TAGS = {"latest", "beta", "edge"}
+
+# In-container opencode-history archive builder: reuses the sandbox_daemon
+# helper (sqlite-safe backup + symlink guards) and prints the temp archive path,
+# or nothing when there's no history. Exec it with OPENCODE_DATA_HOME set.
+_OPENCODE_HISTORY_CREATE_SCRIPT = (
+    "import sys; "
+    "from sandbox_daemon.opencode_history import create_opencode_history_archive_file; "
+    "p = create_opencode_history_archive_file(); "
+    "sys.stdout.write('' if p is None else str(p))"
+)
 
 # In-container opencode-history archive builder: reuses the sandbox_daemon
 # helper (sqlite-safe backup + symlink guards) and prints the temp archive path,
@@ -715,6 +727,8 @@ class DockerSandboxManager(SandboxManager):
 
         self._docker = DockerClient(base_url=f"unix://{SANDBOX_DOCKER_SOCKET}")
         self._image = SANDBOX_CONTAINER_IMAGE
+        self._image_checked = False
+        self._image_check_lock = threading.Lock()
         self._network_name = SANDBOX_DOCKER_NETWORK
         self._memory_limit = SANDBOX_DOCKER_MEMORY_LIMIT
         self._cpu_limit = SANDBOX_DOCKER_CPU_LIMIT
@@ -737,6 +751,55 @@ class DockerSandboxManager(SandboxManager):
             self._network_name,
             self._compose_project,
         )
+
+    def _ensure_sandbox_image(self) -> None:
+        with self._image_check_lock:
+            if self._image_checked:
+                return
+
+            image_tag: str | None = None
+            # Digest refs use ``@sha256:...``; do not parse that colon as a tag.
+            if "@" not in self._image:
+                image_name = self._image.rsplit("/", 1)[-1]
+                image_tag = (
+                    image_name.rsplit(":", 1)[1] if ":" in image_name else "latest"
+                )
+            is_mutable_tag = image_tag in _MUTABLE_SANDBOX_IMAGE_TAGS
+            if not is_mutable_tag:
+                try:
+                    self._docker.images.get(self._image)
+                    self._image_checked = True
+                    return
+                except NotFound:
+                    pass
+
+            logger.info(
+                "%s sandbox image %s.",
+                "Refreshing" if is_mutable_tag else "Pulling missing",
+                self._image,
+            )
+            try:
+                self._docker.images.pull(self._image)
+            except APIError as e:
+                if not is_mutable_tag:
+                    raise RuntimeError(
+                        f"Failed to pull sandbox image {self._image}: {e}"
+                    ) from e
+
+                try:
+                    self._docker.images.get(self._image)
+                except NotFound:
+                    raise RuntimeError(
+                        f"Failed to pull sandbox image {self._image}: {e}"
+                    ) from e
+                logger.warning(
+                    "Failed to refresh mutable sandbox image %s; using cached "
+                    "local image: %s",
+                    self._image,
+                    e,
+                )
+
+            self._image_checked = True
 
     def _ensure_sandbox_network(self) -> None:
         try:
@@ -863,6 +926,7 @@ class DockerSandboxManager(SandboxManager):
                     plugins=session_tag_plugins,
                 )
             )
+            self._ensure_sandbox_image()
             self._ensure_sandbox_network()
             volume_name = self._ensure_sandbox_volume(sandbox_id, tenant_id)
             container, created_fresh = self._create_sandbox_container(
@@ -1110,6 +1174,7 @@ else
     mkdir -p {session_path}/outputs/web
 fi
 ln -sf {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
+ln -sf {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
 {nextjs_start}
 echo "Session workspace setup complete"
@@ -1136,7 +1201,6 @@ echo "Session workspace setup complete"
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
         self._close_session_buses(sandbox_id, session_id)
 
@@ -1414,7 +1478,6 @@ echo "Session cleanup complete"
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,  # noqa: ARG002
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
@@ -1521,6 +1584,7 @@ fi
 set -e
 mkdir -p {session_path}/.opencode
 ln -sfn {MANAGED_SKILLS_PATH} {session_path}/.opencode/skills
+ln -sfn {MANAGED_USER_LIBRARY_PATH} {session_path}/user_library
 printf '%s' '{agents_md}' > {session_path}/AGENTS.md
 """
         try:
@@ -1580,7 +1644,7 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
                 [
                     "/bin/sh",
                     "-c",
-                    f"ls -laL --time-style=+%s {quoted} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
+                    f"ls -la --time-style=+%s {quoted}/ 2>/dev/null || echo 'ERROR_NOT_FOUND'",
                 ],
                 check=False,
             )
@@ -1603,20 +1667,22 @@ printf '%s' '{agents_md}' > {session_path}/AGENTS.md
             if len(parts) < 7:
                 continue
             is_symlink = line.startswith("l")
+            link_target: str | None = None
             if is_symlink and " -> " in line:
                 name_and_target = " ".join(parts[6:])
-                name = (
-                    name_and_target.split(" -> ")[0]
-                    if " -> " in name_and_target
-                    else parts[-1]
-                )
+                if " -> " in name_and_target:
+                    name, link_target = name_and_target.split(" -> ", 1)
+                else:
+                    name = parts[-1]
             else:
                 name = " ".join(parts[6:])
 
             if name in (".", ".."):
                 continue
 
-            is_directory = line.startswith("d")
+            is_directory = line.startswith("d") or (
+                is_symlink and link_target == MANAGED_USER_LIBRARY_PATH
+            )
             size_str = parts[4]
             try:
                 size = int(size_str) if not is_directory else None

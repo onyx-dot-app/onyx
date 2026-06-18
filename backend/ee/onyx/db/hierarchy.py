@@ -67,3 +67,15 @@ def _get_accessible_hierarchy_nodes_for_source(
     stmt = stmt.where(_build_hierarchy_access_filter(user_email, external_group_ids))
     stmt = stmt.order_by(HierarchyNode.display_name)
     return list(db_session.execute(stmt).scalars().all())
+
+
+def _filter_accessible_hierarchy_node_ids(
+    db_session: Session,
+    node_ids: list[int],
+    user_email: str,
+    external_group_ids: list[str],
+) -> set[int]:
+    """EE version: keep only the node ids the user can access."""
+    stmt = select(HierarchyNode.id).where(HierarchyNode.id.in_(node_ids))
+    stmt = stmt.where(_build_hierarchy_access_filter(user_email, external_group_ids))
+    return set(db_session.execute(stmt).scalars().all())

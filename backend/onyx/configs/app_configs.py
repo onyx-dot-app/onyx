@@ -16,6 +16,16 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
+def _non_negative_int_env(name: str, default: int) -> int:
+    """Parse an int env var, falling back to ``default`` when unset or negative."""
+    value = int(os.environ.get(name) or default)
+    if value < 0:
+        logger.warning("%s=%d is negative; falling back to %d", name, value, default)
+        return default
+    return value
+
+
 #####
 # App Configs
 #####
@@ -47,31 +57,21 @@ BLURB_SIZE = 128  # Number Encoder Tokens included in the chunk blurb
 
 # Hard ceiling for the admin-configurable file upload size (in MB).
 # Self-hosted customers can raise or lower this via the environment variable.
-_raw_max_upload_size_mb = int(os.environ.get("MAX_ALLOWED_UPLOAD_SIZE_MB", "250"))
-if _raw_max_upload_size_mb < 0:
-    logger.warning(
-        "MAX_ALLOWED_UPLOAD_SIZE_MB=%d is negative; falling back to 250",
-        _raw_max_upload_size_mb,
-    )
-    _raw_max_upload_size_mb = 250
-MAX_ALLOWED_UPLOAD_SIZE_MB = _raw_max_upload_size_mb
+MAX_ALLOWED_UPLOAD_SIZE_MB = _non_negative_int_env("MAX_ALLOWED_UPLOAD_SIZE_MB", 250)
 
 # Default fallback for the per-user file upload size limit (in MB) when no
 # admin-configured value exists.  Clamped to MAX_ALLOWED_UPLOAD_SIZE_MB at
 # runtime so this never silently exceeds the hard ceiling.
-_raw_default_upload_size_mb = int(
-    os.environ.get("DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", "100")
+DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = _non_negative_int_env(
+    "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", 100
 )
-if _raw_default_upload_size_mb < 0:
-    logger.warning(
-        "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB=%d is negative; falling back to 100",
-        _raw_default_upload_size_mb,
-    )
-    _raw_default_upload_size_mb = 100
-DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = _raw_default_upload_size_mb
 GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
+
+# Per-user cap on self-managed personal skills. Env-overridable so CI can lower
+# it without uploading the full quota of real bundles to exercise the limit.
+MAX_PERSONAL_SKILLS_PER_USER = _non_negative_int_env("MAX_PERSONAL_SKILLS_PER_USER", 50)
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
@@ -263,6 +263,38 @@ OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
 
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
+
+# Native mobile (Expo / React Native) SSO bridge. The app completes OAuth in the
+# system browser (reusing the existing registered IdP callback), then the backend
+# returns a single-use, PKCE-bound one-time code over a custom-scheme deep link —
+# never a token. The app swaps the code for the session token at
+# /auth/mobile/sso/exchange.
+MOBILE_SSO_CODE_PREFIX = "mobile_sso_code:"
+# Lifetime of the one-time code; intentionally short — it only has to survive the
+# system-browser -> app handoff plus the immediate exchange call. A non-positive
+# TTL would make Redis reject the SET, breaking every exchange — fail fast at boot.
+MOBILE_SSO_CODE_TTL_SECONDS = int(os.environ.get("MOBILE_SSO_CODE_TTL_SECONDS") or 60)
+if MOBILE_SSO_CODE_TTL_SECONDS < 1:
+    raise ValueError("MOBILE_SSO_CODE_TTL_SECONDS must be >= 1")
+# Deep-link URIs the SSO completion is allowed to 302 to. Defaults to the app's
+# custom scheme; override (comma-separated) to add Universal/App Links later.
+_DEFAULT_MOBILE_REDIRECT_URIS = frozenset({"onyx://auth/callback"})
+_MOBILE_ALLOWED_REDIRECT_URIS_RAW = os.environ.get("MOBILE_ALLOWED_REDIRECT_URIS", "")
+MOBILE_ALLOWED_REDIRECT_URIS: frozenset[str] = frozenset(
+    uri.strip() for uri in _MOBILE_ALLOWED_REDIRECT_URIS_RAW.split(",") if uri.strip()
+)
+if not MOBILE_ALLOWED_REDIRECT_URIS:
+    # An override that was set but parsed empty (e.g. just commas/whitespace) is a
+    # misconfig — warn rather than silently rejecting every mobile redirect. An
+    # unset value is the normal default, so don't warn there.
+    if _MOBILE_ALLOWED_REDIRECT_URIS_RAW.strip():
+        logger.warning(
+            "MOBILE_ALLOWED_REDIRECT_URIS=%r parsed to an empty set; "
+            "falling back to default %s",
+            _MOBILE_ALLOWED_REDIRECT_URIS_RAW,
+            _DEFAULT_MOBILE_REDIRECT_URIS,
+        )
+    MOBILE_ALLOWED_REDIRECT_URIS = _DEFAULT_MOBILE_REDIRECT_URIS
 
 # JWT Public Key URL for JWT token verification
 JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)

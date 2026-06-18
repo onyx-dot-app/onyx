@@ -179,6 +179,21 @@ def filter_document_set_names_by_user_access(
     return set(db_session.scalars(stmt).all())
 
 
+def filter_document_set_ids_by_user_access(
+    db_session: Session,
+    document_set_ids: list[int],
+    user: User,
+) -> set[int]:
+    """Return the subset of ``document_set_ids`` the user has view access to."""
+    if not document_set_ids:
+        return set()
+    stmt = select(DocumentSetDBModel.id).where(
+        DocumentSetDBModel.id.in_(document_set_ids)
+    )
+    stmt = _add_user_filters(stmt, user, get_editable=False)
+    return set(db_session.scalars(stmt).all())
+
+
 def get_document_sets_by_ids(
     db_session: Session, document_set_ids: list[int]
 ) -> Sequence[DocumentSetDBModel]:
