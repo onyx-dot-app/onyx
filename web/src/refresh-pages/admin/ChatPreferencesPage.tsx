@@ -776,6 +776,20 @@ export default function ChatPreferencesPage() {
                   }}
                 />
               </InputHorizontal>
+              <InputHorizontal
+                title="Temperature Control"
+                description="Let users adjust the temperature (creativity) of model responses from the model picker in chat."
+                withLabel
+              >
+                <Switch
+                  checked={s.temperature_override_enabled ?? false}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({
+                      temperature_override_enabled: checked,
+                    });
+                  }}
+                />
+              </InputHorizontal>
             </Section>
           </Card>
 
