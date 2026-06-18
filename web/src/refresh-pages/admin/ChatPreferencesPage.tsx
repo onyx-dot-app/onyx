@@ -379,6 +379,19 @@ const MAX_RETENTION_DAYS = 36500; // ~100 years
 const CUSTOM_RETENTION_VALUE = "custom";
 const FOREVER_RETENTION_VALUE = "forever";
 
+// Pure predicate — lives at module scope so it can be referenced inside
+// useEffect without an exhaustive-deps suppression.
+const valueIsCustomRetention = (v: number | null): v is number =>
+  v !== null && !RETENTION_PRESETS.includes(v);
+
+// True only when the string is one or more digits within the allowed range.
+// parseInt alone would silently accept "1.5" → 1 or "7abc" → 7, so guard with
+// a digits-only check before persisting.
+const isValidCustomRetention = (raw: string): boolean =>
+  /^\d+$/.test(raw) &&
+  parseInt(raw, 10) > 0 &&
+  parseInt(raw, 10) <= MAX_RETENTION_DAYS;
+
 interface RetentionFieldProps {
   value: number | null;
   disabled: boolean;
@@ -390,12 +403,9 @@ interface RetentionFieldProps {
 // <InputSelect>; the persisted shape (number | null) is unchanged, so any
 // existing value — preset or not — round-trips correctly.
 function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
-  const valueIsCustom = (v: number | null): v is number =>
-    v !== null && !RETENTION_PRESETS.includes(v);
-
-  const [showCustom, setShowCustom] = useState(valueIsCustom(value));
+  const [showCustom, setShowCustom] = useState(valueIsCustomRetention(value));
   const [customDays, setCustomDays] = useState(
-    valueIsCustom(value) ? String(value) : ""
+    valueIsCustomRetention(value) ? String(value) : ""
   );
 
   // Re-sync when the stored value changes externally (e.g. another admin),
@@ -404,9 +414,9 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   useEffect(() => {
     if (value === lastSavedRef.current) return;
     lastSavedRef.current = value;
-    setShowCustom(valueIsCustom(value));
-    setCustomDays(valueIsCustom(value) ? String(value) : "");
-  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+    setShowCustom(valueIsCustomRetention(value));
+    setCustomDays(valueIsCustomRetention(value) ? String(value) : "");
+  }, [value]);
 
   const selectValue = showCustom
     ? CUSTOM_RETENTION_VALUE
@@ -431,28 +441,21 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   };
 
   const handleCustomBlur = () => {
-    const parsed = parseInt(customDays, 10);
-    const isValid =
-      !isNaN(parsed) && parsed > 0 && parsed <= MAX_RETENTION_DAYS;
-
     // Empty/invalid input reverts to the last persisted selection.
-    if (!isValid) {
-      setShowCustom(valueIsCustom(value));
-      setCustomDays(valueIsCustom(value) ? String(value) : "");
+    if (!isValidCustomRetention(customDays)) {
+      setShowCustom(valueIsCustomRetention(value));
+      setCustomDays(valueIsCustomRetention(value) ? String(value) : "");
       return;
     }
 
+    const parsed = parseInt(customDays, 10);
     const normalized = String(parsed);
     if (normalized !== customDays) setCustomDays(normalized);
     if (parsed !== value) persist(parsed);
   };
 
-  const parsedCustom = parseInt(customDays, 10);
   const customInvalid =
-    customDays !== "" &&
-    (isNaN(parsedCustom) ||
-      parsedCustom <= 0 ||
-      parsedCustom > MAX_RETENTION_DAYS);
+    customDays !== "" && !isValidCustomRetention(customDays);
 
   return (
     <div className="flex flex-col gap-2 w-full">
