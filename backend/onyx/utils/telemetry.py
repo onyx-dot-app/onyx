@@ -22,6 +22,7 @@ from onyx.utils.variable_functionality import (
 )
 from onyx.utils.variable_functionality import noop_fallback
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -178,43 +179,50 @@ def mt_cloud_telemetry(
     )(distinct_id, event, all_properties)
 
 
-def mt_cloud_identify(
+def _get_tenant_id_for_user_identify(user_email: str) -> str | None:
+    try:
+        return fetch_versioned_implementation_with_fallback(
+            module="onyx.server.tenants.user_mapping",
+            attribute="get_tenant_id_for_email",
+            fallback=lambda _email: POSTGRES_DEFAULT_SCHEMA,
+        )(user_email)
+    except Exception:
+        logger.exception("Failed to resolve tenant id for user %s", user_email)
+
+    return None
+
+
+def mt_cloud_identify_user(
+    *,
     distinct_id: str,
-    properties: dict[str, Any] | None = None,
+    email: str,
+    request: Any = None,
+    tenant_id: str | None = None,
 ) -> None:
-    """Create/update a PostHog person profile (Cloud only)."""
+    """Create/update a Cloud PostHog user profile and link any anonymous session."""
     if not MULTI_TENANT:
         return
+
+    if request:
+        anon_id = fetch_versioned_implementation_with_fallback(
+            module="onyx.utils.posthog_client",
+            attribute="get_anon_id_from_request",
+            fallback=noop_fallback,
+        )(request)
+        if anon_id:
+            fetch_versioned_implementation_with_fallback(
+                module="onyx.utils.posthog_client",
+                attribute="alias_user",
+                fallback=noop_fallback,
+            )(distinct_id, anon_id)
+
+    resolved_tenant_id = tenant_id or _get_tenant_id_for_user_identify(email)
+    properties: dict[str, str] = {"email": email}
+    if resolved_tenant_id and resolved_tenant_id != POSTGRES_DEFAULT_SCHEMA:
+        properties["tenant_id"] = resolved_tenant_id
 
     fetch_versioned_implementation_with_fallback(
         module="onyx.utils.telemetry",
         attribute="identify_user",
         fallback=noop_fallback,
     )(distinct_id, properties)
-
-
-def mt_cloud_alias(
-    distinct_id: str,
-    anonymous_id: str,
-) -> None:
-    """Link an anonymous distinct_id to an identified user (Cloud only)."""
-    if not MULTI_TENANT:
-        return
-
-    fetch_versioned_implementation_with_fallback(
-        module="onyx.utils.posthog_client",
-        attribute="alias_user",
-        fallback=noop_fallback,
-    )(distinct_id, anonymous_id)
-
-
-def mt_cloud_get_anon_id(request: Any) -> str | None:
-    """Extract the anonymous distinct_id from the app PostHog cookie (Cloud only)."""
-    if not MULTI_TENANT or not request:
-        return None
-
-    return fetch_versioned_implementation_with_fallback(
-        module="onyx.utils.posthog_client",
-        attribute="get_anon_id_from_request",
-        fallback=noop_fallback,
-    )(request)
