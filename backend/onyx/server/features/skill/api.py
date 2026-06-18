@@ -37,10 +37,17 @@ from onyx.db.skill import SkillPatch
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.skill.models import AdminRepoSkillsInstallRequest
 from onyx.server.features.skill.models import BuiltinSkillResponse
 from onyx.server.features.skill.models import CustomSkillResponse
 from onyx.server.features.skill.models import GrantsReplace
 from onyx.server.features.skill.models import PersonalSkillPatchRequest
+from onyx.server.features.skill.models import RepoSkillInstallFailure
+from onyx.server.features.skill.models import RepoSkillPreviewItem
+from onyx.server.features.skill.models import RepoSkillsInstallRequest
+from onyx.server.features.skill.models import RepoSkillsInstallResult
+from onyx.server.features.skill.models import RepoSkillsPreview
+from onyx.server.features.skill.models import RepoSkillsPreviewRequest
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.server.features.skill.models import SkillsList
 from onyx.skills.built_in import BUILT_IN_SKILLS
@@ -49,6 +56,10 @@ from onyx.skills.bundle import read_bundle_file
 from onyx.skills.bundle import slug_from_filename
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
+from onyx.skills.marketplace import build_bundle_for_skill
+from onyx.skills.marketplace import extracted_skills
+from onyx.skills.marketplace import fetch_repo_archive
+from onyx.skills.marketplace import parse_skill_source
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
@@ -513,3 +524,280 @@ def _parse_group_ids(raw: str) -> list[int]:
             "group_ids must be a JSON array of integers",
         )
     return parsed
+
+
+def _preview_repo_skills(source: str) -> RepoSkillsPreview:
+    parsed = parse_skill_source(source)
+    archive = fetch_repo_archive(parsed)
+    source_label = f"{parsed.owner}/{parsed.repo}"
+    with extracted_skills(archive, parsed.subpath) as discovered:
+        items: list[RepoSkillPreviewItem] = []
+        for skill in discovered:
+            if parsed.skill_filters:
+                last_segment = skill.rel_path.split("/")[-1]
+                pre_selected = any(
+                    f.lower() in (skill.slug, skill.name.lower(), last_segment.lower())
+                    for f in parsed.skill_filters
+                )
+            else:
+                pre_selected = True
+            items.append(
+                RepoSkillPreviewItem(
+                    slug=skill.slug,
+                    name=skill.name,
+                    description=skill.description,
+                    rel_path=skill.rel_path,
+                    pre_selected=pre_selected,
+                )
+            )
+        return RepoSkillsPreview(
+            source_label=source_label,
+            ref=parsed.ref,
+            skills=items,
+        )
+
+
+def _install_personal_repo_skills(
+    source: str,
+    slugs: list[str],
+    user: User,
+    db_session: Session,
+) -> RepoSkillsInstallResult:
+    parsed = parse_skill_source(source)
+    archive = fetch_repo_archive(parsed)
+    file_store = get_default_file_store()
+
+    # Dedupe preserving order.
+    seen_slugs: set[str] = set()
+    unique_slugs: list[str] = []
+    for s in slugs:
+        if s not in seen_slugs:
+            seen_slugs.add(s)
+            unique_slugs.append(s)
+
+    if not unique_slugs:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "no skills selected")
+
+    failures: list[RepoSkillInstallFailure] = []
+    created_responses: list[CustomSkillResponse] = []
+
+    with extracted_skills(archive, parsed.subpath) as discovered:
+        by_slug = {s.slug: s for s in discovered}
+
+        to_install = []
+        for slug in unique_slugs:
+            if slug not in by_slug:
+                failures.append(
+                    RepoSkillInstallFailure(slug=slug, error="not found in repository")
+                )
+            else:
+                to_install.append(by_slug[slug])
+
+        lock_personal_skills_for_user(user.id, db_session)
+        existing = count_personal_skills_for_user(user.id, db_session)
+        if existing + len(to_install) > MAX_PERSONAL_SKILLS_PER_USER:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Installing {len(to_install)} skill(s) would exceed your limit of "
+                f"{MAX_PERSONAL_SKILLS_PER_USER} personal skills "
+                f"(you currently have {existing}).",
+            )
+
+        created_rows: list[Skill] = []
+        batch_blob_ids: list[str] = []
+
+        for skill in to_install:
+            blob_id: str | None = None
+            try:
+                if skill.slug in _RESERVED_SKILL_SLUGS:
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"slug '{skill.slug}' is reserved",
+                    )
+                bundle = build_bundle_for_skill(skill)
+                ingested = ingest_skill_bundle(
+                    bundle, None, file_store, slug=skill.slug
+                )
+                blob_id = ingested.bundle_file_id
+                sp = db_session.begin_nested()
+                try:
+                    row = create_skill__no_commit(
+                        slug=ingested.slug,
+                        name=ingested.name,
+                        description=ingested.description,
+                        bundle_file_id=ingested.bundle_file_id,
+                        bundle_sha256=ingested.bundle_sha256,
+                        is_public=False,
+                        author_user_id=user.id,
+                        db_session=db_session,
+                    )
+                    sp.commit()
+                except Exception:
+                    sp.rollback()
+                    raise
+                created_rows.append(row)
+                batch_blob_ids.append(blob_id)
+            except Exception as e:
+                # Any failure (validation, slug collision, or an unexpected
+                # file-store / integrity error) drops this one skill to a
+                # failure entry rather than aborting the batch. The savepoint
+                # was already rolled back, so the session stays usable.
+                if blob_id is not None:
+                    delete_bundle_blob(file_store, blob_id)
+                if not isinstance(e, OnyxError):
+                    logger.exception("Unexpected error installing skill %s", skill.slug)
+                error = e.detail if isinstance(e, OnyxError) else "internal error"
+                failures.append(RepoSkillInstallFailure(slug=skill.slug, error=error))
+
+        try:
+            db_session.commit()
+        except Exception:
+            for bid in batch_blob_ids:
+                delete_bundle_blob(file_store, bid)
+            raise
+
+        for row in created_rows:
+            push_skill_to_affected_sandboxes(row, db_session)
+            created_responses.append(CustomSkillResponse.from_model(row, group_ids=[]))
+
+    return RepoSkillsInstallResult(created=created_responses, failures=failures)
+
+
+def _install_admin_repo_skills(
+    source: str,
+    slugs: list[str],
+    is_public: bool,
+    group_ids: list[int],
+    user: User,
+    db_session: Session,
+) -> RepoSkillsInstallResult:
+    parsed = parse_skill_source(source)
+    archive = fetch_repo_archive(parsed)
+    file_store = get_default_file_store()
+
+    # Dedupe preserving order.
+    seen_slugs: set[str] = set()
+    unique_slugs: list[str] = []
+    for s in slugs:
+        if s not in seen_slugs:
+            seen_slugs.add(s)
+            unique_slugs.append(s)
+
+    if not unique_slugs:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "no skills selected")
+
+    failures: list[RepoSkillInstallFailure] = []
+    created_responses: list[CustomSkillResponse] = []
+
+    with extracted_skills(archive, parsed.subpath) as discovered:
+        by_slug = {s.slug: s for s in discovered}
+
+        to_install = []
+        for slug in unique_slugs:
+            if slug not in by_slug:
+                failures.append(
+                    RepoSkillInstallFailure(slug=slug, error="not found in repository")
+                )
+            else:
+                to_install.append(by_slug[slug])
+
+        created_rows: list[Skill] = []
+        batch_blob_ids: list[str] = []
+
+        for skill in to_install:
+            blob_id = None
+            try:
+                if skill.slug in _RESERVED_SKILL_SLUGS:
+                    raise OnyxError(
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"slug '{skill.slug}' is reserved",
+                    )
+                bundle = build_bundle_for_skill(skill)
+                ingested = ingest_skill_bundle(
+                    bundle, None, file_store, slug=skill.slug
+                )
+                blob_id = ingested.bundle_file_id
+                sp = db_session.begin_nested()
+                try:
+                    row = create_skill__no_commit(
+                        slug=ingested.slug,
+                        name=ingested.name,
+                        description=ingested.description,
+                        bundle_file_id=ingested.bundle_file_id,
+                        bundle_sha256=ingested.bundle_sha256,
+                        is_public=is_public,
+                        author_user_id=user.id,
+                        db_session=db_session,
+                    )
+                    if group_ids:
+                        replace_skill_grants(row.id, group_ids, db_session=db_session)
+                    sp.commit()
+                except Exception:
+                    sp.rollback()
+                    raise
+                created_rows.append(row)
+                batch_blob_ids.append(blob_id)
+            except Exception as e:
+                # Drop a single failing skill to a failure entry instead of
+                # aborting the batch; the savepoint already rolled back.
+                if blob_id is not None:
+                    delete_bundle_blob(file_store, blob_id)
+                if not isinstance(e, OnyxError):
+                    logger.exception("Unexpected error installing skill %s", skill.slug)
+                error = e.detail if isinstance(e, OnyxError) else "internal error"
+                failures.append(RepoSkillInstallFailure(slug=skill.slug, error=error))
+
+        try:
+            db_session.commit()
+        except Exception:
+            for bid in batch_blob_ids:
+                delete_bundle_blob(file_store, bid)
+            raise
+
+        affected: set[UUID] = set()
+        for row in created_rows:
+            affected |= affected_user_ids_for_skill(row, db_session)
+        push_skills_for_users(affected, db_session)
+
+        for row in created_rows:
+            created_responses.append(
+                CustomSkillResponse.from_model(row, group_ids=group_ids)
+            )
+
+    return RepoSkillsInstallResult(created=created_responses, failures=failures)
+
+
+@user_router.post("/from-repo/preview")
+def preview_repo_skills_user(
+    body: RepoSkillsPreviewRequest,
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> RepoSkillsPreview:
+    return _preview_repo_skills(body.source)
+
+
+@user_router.post("/from-repo/install")
+def install_repo_skills_user(
+    body: RepoSkillsInstallRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> RepoSkillsInstallResult:
+    return _install_personal_repo_skills(body.source, body.slugs, user, db_session)
+
+
+@admin_router.post("/from-repo/preview")
+def preview_repo_skills_admin(
+    body: RepoSkillsPreviewRequest,
+    _: User = Depends(current_curator_or_admin_user),
+) -> RepoSkillsPreview:
+    return _preview_repo_skills(body.source)
+
+
+@admin_router.post("/from-repo/install")
+def install_repo_skills_admin(
+    body: AdminRepoSkillsInstallRequest,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> RepoSkillsInstallResult:
+    return _install_admin_repo_skills(
+        body.source, body.slugs, body.is_public, body.group_ids, user, db_session
+    )

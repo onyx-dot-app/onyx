@@ -169,3 +169,54 @@ export async function deleteUserSkill(skillId: string): Promise<void> {
   });
   await handle<void>(res);
 }
+
+// ---------------------------------------------------------------------------
+// Repo-based skill installation
+// ---------------------------------------------------------------------------
+
+export interface RepoSkillPreviewItem {
+  slug: string;
+  name: string;
+  description: string;
+  rel_path: string;
+  pre_selected: boolean;
+}
+
+export interface RepoSkillsPreview {
+  source_label: string;
+  ref: string | null;
+  skills: RepoSkillPreviewItem[];
+}
+
+export interface RepoSkillInstallFailure {
+  slug: string;
+  error: string;
+}
+
+export interface RepoSkillsInstallResult {
+  created: CustomSkill[];
+  failures: RepoSkillInstallFailure[];
+}
+
+export async function previewRepoSkills(
+  source: string
+): Promise<RepoSkillsPreview> {
+  const res = await fetch("/api/skills/from-repo/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source }),
+  });
+  return handle<RepoSkillsPreview>(res);
+}
+
+export async function installRepoSkills(
+  source: string,
+  slugs: string[]
+): Promise<RepoSkillsInstallResult> {
+  const res = await fetch("/api/skills/from-repo/install", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source, slugs }),
+  });
+  return handle<RepoSkillsInstallResult>(res);
+}

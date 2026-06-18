@@ -6,6 +6,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import Field
 from pydantic import model_validator
 from sqlalchemy.orm import Session
 
@@ -124,3 +125,41 @@ class PersonalSkillPatchRequest(BaseModel):
 
 class GrantsReplace(BaseModel):
     group_ids: list[int]
+
+
+class RepoSkillsPreviewRequest(BaseModel):
+    source: str
+
+
+class RepoSkillPreviewItem(BaseModel):
+    slug: str
+    name: str
+    description: str
+    rel_path: str
+    pre_selected: bool
+
+
+class RepoSkillsPreview(BaseModel):
+    source_label: str
+    ref: str | None
+    skills: list[RepoSkillPreviewItem]
+
+
+class RepoSkillsInstallRequest(BaseModel):
+    source: str
+    slugs: list[str]
+
+
+class AdminRepoSkillsInstallRequest(RepoSkillsInstallRequest):
+    is_public: bool = False
+    group_ids: list[int] = Field(default_factory=list)
+
+
+class RepoSkillInstallFailure(BaseModel):
+    slug: str
+    error: str
+
+
+class RepoSkillsInstallResult(BaseModel):
+    created: list[CustomSkillResponse]
+    failures: list[RepoSkillInstallFailure]
