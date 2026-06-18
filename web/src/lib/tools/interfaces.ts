@@ -37,6 +37,8 @@ export interface MCPServer {
   admin_credentials?: Record<string, string>;
   user_credentials?: Record<string, string>;
   status: MCPServerStatus;
+  is_public: boolean;
+  groups: number[];
   last_refreshed_at?: string;
   tool_count: number;
 }
@@ -50,12 +52,17 @@ export interface MCPServerCreateRequest {
   name: string;
   description?: string;
   server_url: string;
+  is_public: boolean;
+  groups: number[];
 }
 
 export interface MCPServerUpdateRequest {
   name?: string;
   description?: string;
   server_url?: string;
+  // Omit to leave the server's existing access unchanged.
+  is_public?: boolean;
+  groups?: number[];
 }
 
 export interface MCPTool {

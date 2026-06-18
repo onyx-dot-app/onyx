@@ -20,6 +20,7 @@ import { ModalCreationInterface } from "@/refresh-components/contexts/ModalConte
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
+import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 
 interface AddMCPServerModalProps {
   skipOverlay?: boolean;
@@ -71,20 +72,28 @@ export default function AddMCPServerModal({
     name: server?.name || "",
     description: server?.description || "",
     server_url: server?.server_url || "",
+    is_public: server?.is_public ?? true,
+    groups: server?.groups ?? [],
   };
 
   const handleSubmit = async (values: MCPServerCreateRequest) => {
     setIsSubmitting(true);
 
+    // A public server has no group restriction.
+    const payload: MCPServerCreateRequest = {
+      ...values,
+      groups: values.is_public ? [] : values.groups,
+    };
+
     try {
       if (isEditMode && server) {
         // Update existing server
-        await updateMCPServer(server.id, values);
+        await updateMCPServer(server.id, payload);
         toast.success("MCP Server updated successfully");
         await mutateMcpServers?.();
       } else {
         // Create new server
-        const createdServer = await createMCPServer(values);
+        const createdServer = await createMCPServer(payload);
 
         toast.success("MCP Server created successfully");
 
@@ -131,7 +140,7 @@ export default function AddMCPServerModal({
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
         >
-          {({ isValid, dirty }) => (
+          {(formikProps) => (
             <Form>
               <Modal.Header
                 icon={SvgServer}
@@ -177,6 +186,16 @@ export default function AddMCPServerModal({
                     placeholder="https://your-mcp-server.com/mcp"
                   />
                 </InputVertical>
+
+                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+                {/* Access control: who can add this server's tools to agents.
+                    Self-gates on tier/role; no-op when groups are unavailable. */}
+                <IsPublicGroupSelector
+                  formikProps={formikProps}
+                  objectName="MCP server"
+                  publicToWhom="Users"
+                />
 
                 {/* Authentication Status Section - Only show in edit mode when authenticated */}
                 {isEditMode &&
@@ -245,7 +264,9 @@ export default function AddMCPServerModal({
                   Cancel
                 </Button>
                 <Button
-                  disabled={isSubmitting || !isValid || !dirty}
+                  disabled={
+                    isSubmitting || !formikProps.isValid || !formikProps.dirty
+                  }
                   type="submit"
                 >
                   {isSubmitting
