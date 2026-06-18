@@ -87,6 +87,16 @@ class BuildSessionManager:
         return body
 
     @staticmethod
+    def restore(user: DATestUser, session_id: UUID) -> dict[str, Any]:
+        response = client.post(
+            _sessions_url(str(session_id), "restore"),
+            headers=user.headers,
+            cookies=user.cookies,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
     def start_turn(
         user: DATestUser,
         session_id: UUID,
