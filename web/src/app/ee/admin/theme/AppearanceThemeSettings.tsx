@@ -9,7 +9,7 @@ import {
   Tabs,
   Tag,
 } from "@opal/components";
-import { Preview } from "./Preview";
+import Preview from "@/app/ee/admin/theme/Preview";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";

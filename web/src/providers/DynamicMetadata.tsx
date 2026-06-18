@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 
 export default function DynamicMetadata() {
   const { enterpriseSettings } = useSettingsContext();
+  const pathname = usePathname();
 
   useEffect(() => {
     const title = enterpriseSettings?.application_name || "Onyx";
     if (document.title !== title) {
       document.title = title;
     }
-  }, [enterpriseSettings]);
+  }, [enterpriseSettings, pathname]);
 
   // Cache-buster so the favicon re-fetches after an admin uploads a new logo.
   const cacheBuster = useMemo(
