@@ -561,7 +561,7 @@ export interface TabNavigationHistory {
 }
 
 /** Output panel tab types */
-export type OutputTabType = "preview" | "files" | "artifacts";
+export type OutputTabType = "preview" | "files" | "artifacts" | "terminal";
 
 export interface BuildSessionData {
   id: string;

@@ -20,6 +20,7 @@ from abc import abstractmethod
 from collections.abc import Callable
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from typing import Protocol
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
@@ -69,6 +70,25 @@ SandboxEvent = (
     | Error
     | SSEKeepalive
 )
+
+
+class PtyHandle(Protocol):
+    """Minimal interface for an open interactive PTY session in a sandbox.
+
+    Both backends (Kubernetes WSClient, Docker DockerPtyHandle) satisfy this
+    protocol. All methods are synchronous/blocking and must be called via
+    run_in_executor from async contexts.
+    """
+
+    def update(self, timeout: float) -> None: ...
+
+    def read_channel(self, channel: int, timeout: float) -> str: ...
+
+    def write_channel(self, channel: int, data: str) -> None: ...
+
+    def is_open(self) -> bool: ...
+
+    def close(self) -> None: ...
 
 
 class SandboxManager(_ServeMixin, ABC):
@@ -683,5 +703,38 @@ class SandboxManager(_ServeMixin, ABC):
 
         Raises:
             ValueError: If file not found or conversion fails
+        """
+        ...
+
+    @staticmethod
+    def _terminal_shell_command(session_id: UUID) -> list[str]:
+        """Bash argv for an interactive terminal session.
+
+        cd's into the session workspace, then launches an interactive shell
+        whose prompt is ``\\w$`` (working dir + ``$``). We source ~/.bashrc
+        first (keeping the image's aliases/colors) and override PS1 afterward
+        via --rcfile so the default prompt's ``user@host:`` prefix (which
+        leaks the sandbox pod id) is dropped while the cwd path is kept.
+        """
+        return [
+            "/bin/bash",
+            "-lc",
+            f"cd /workspace/sessions/{session_id} 2>/dev/null; "
+            f"exec bash --rcfile <(cat ~/.bashrc 2>/dev/null; echo 'PS1=\"\\w\\$ \"')",
+        ]
+
+    @abstractmethod
+    def open_terminal(self, sandbox_id: UUID, session_id: UUID) -> PtyHandle:
+        """Open an interactive PTY shell in the sandbox, cwd'd to the session workspace.
+
+        Returns a PtyHandle. Callers must only access the handle through
+        run_in_executor to avoid blocking the event loop.
+
+        Args:
+            sandbox_id: The sandbox ID
+            session_id: The session ID whose workspace becomes the initial cwd
+
+        Returns:
+            PtyHandle exposing the PTY connection.
         """
         ...

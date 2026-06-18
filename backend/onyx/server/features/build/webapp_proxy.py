@@ -1,5 +1,7 @@
 import asyncio
+import json
 from collections.abc import AsyncGenerator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import parse_qsl
 from urllib.parse import urlencode
@@ -18,6 +20,9 @@ from fastapi.responses import RedirectResponse
 from fastapi.responses import StreamingResponse
 from fastapi_users.authentication.strategy.base import Strategy
 from fastapi_users.manager import BaseUserManager
+from kubernetes.stream.ws_client import RESIZE_CHANNEL
+from kubernetes.stream.ws_client import STDIN_CHANNEL
+from kubernetes.stream.ws_client import STDOUT_CHANNEL
 from starlette.websockets import WebSocketState
 from websockets.asyncio.client import ClientConnection
 from websockets.asyncio.client import connect as websocket_connect
@@ -35,6 +40,7 @@ from onyx.db.enums import SharingScope
 from onyx.db.models import User
 from onyx.server.features.build.db.build_session import get_webapp_access_async
 from onyx.server.features.build.db.build_session import get_webapp_target_async
+from onyx.server.features.build.sandbox.base import PtyHandle
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.utils.logger import setup_logger
 
@@ -361,6 +367,26 @@ async def _check_webapp_access(session_id: UUID, user: User | None) -> None:
     )
 
 
+async def _check_terminal_access(session_id: UUID, user: User | None) -> None:
+    """Owner-only access check for the terminal.
+
+    The terminal opens an interactive shell into the owner's sandbox, so —
+    unlike the read-only webapp preview, which honors PUBLIC_ORG sharing — it
+    is restricted to the session owner regardless of sharing scope. Returns 404
+    (not 403) for a non-owner to avoid leaking session existence.
+    """
+    async with get_async_session_context_manager() as db_session:
+        access = await get_webapp_access_async(db_session, session_id)
+
+    if access is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    _, owner_id = access
+    if owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+
 _OFFLINE_HTML = (_TEMPLATES_DIR / "webapp_offline.html").read_text()
 
 
@@ -414,3 +440,127 @@ async def websocket_webapp_hmr(
         raise WebSocketException(code=1008)
 
     await _proxy_webapp_hmr_websocket(session_id, websocket)
+
+
+# Dedicated pool: the perpetual PTY busy-poll would otherwise starve asyncio's
+# process-wide default executor. max_workers bounds concurrent terminals.
+_TERMINAL_MAX_CONCURRENT = 128
+_TERMINAL_POLL_TIMEOUT_S = 0.05
+_terminal_executor = ThreadPoolExecutor(
+    max_workers=_TERMINAL_MAX_CONCURRENT + 16,
+    thread_name_prefix="craft-terminal-pty",
+)
+_active_terminal_count = 0
+
+
+async def _pump_pod_to_browser(websocket: WebSocket, k8s: PtyHandle) -> None:
+    """Forward PTY stdout from the WSClient to the browser as binary frames."""
+    loop = asyncio.get_running_loop()
+
+    def _poll() -> tuple[str, bool]:
+        k8s.update(timeout=_TERMINAL_POLL_TIMEOUT_S)
+        return k8s.read_channel(STDOUT_CHANNEL, timeout=0), k8s.is_open()
+
+    while True:
+        data, is_open = await loop.run_in_executor(_terminal_executor, _poll)
+        if data:
+            # Flush before breaking so a final chunk delivered with close isn't lost.
+            await websocket.send_bytes(data.encode("utf-8", "surrogateescape"))
+        if not is_open:
+            break
+
+
+async def _pump_browser_to_pod(websocket: WebSocket, k8s: PtyHandle) -> None:
+    """Forward browser binary/text frames to the WSClient stdin/resize channels."""
+    loop = asyncio.get_running_loop()
+    while True:
+        msg = await websocket.receive()
+        if msg["type"] == "websocket.disconnect":
+            break
+        if "bytes" in msg and msg["bytes"]:
+            raw: bytes = msg["bytes"]
+            text = raw.decode("utf-8", "surrogateescape")
+            await loop.run_in_executor(
+                _terminal_executor,
+                lambda t=text: k8s.write_channel(STDIN_CHANNEL, t),
+            )
+        elif "text" in msg and msg["text"]:
+            try:
+                ctrl = json.loads(msg["text"])
+            except (ValueError, TypeError):
+                continue
+            if ctrl.get("type") == "resize":
+                cols = int(ctrl.get("cols", 80))
+                rows = int(ctrl.get("rows", 24))
+                # k8s resize channel payload uses Width/Height (capitalized)
+                resize_msg = json.dumps({"Width": cols, "Height": rows})
+                await loop.run_in_executor(
+                    _terminal_executor,
+                    lambda m=resize_msg: k8s.write_channel(RESIZE_CHANNEL, m),
+                )
+
+
+async def _proxy_terminal_websocket(session_id: UUID, websocket: WebSocket) -> None:
+    global _active_terminal_count
+    loop = asyncio.get_running_loop()
+
+    async with get_async_session_context_manager() as db_session:
+        target = await get_webapp_target_async(db_session, session_id)
+
+    if target is None:
+        raise WebSocketException(code=1011)
+    sandbox_id, _ = target
+    if sandbox_id is None:
+        raise WebSocketException(code=1011)
+
+    if _active_terminal_count >= _TERMINAL_MAX_CONCURRENT:
+        logger.warning(
+            "Terminal rejected for session %s: concurrency cap (%d) reached",
+            session_id,
+            _TERMINAL_MAX_CONCURRENT,
+        )
+        raise WebSocketException(code=1013)  # try again later
+
+    manager = get_sandbox_manager()
+    # Accept before opening the PTY so a failed accept can't leak the handle.
+    k8s: PtyHandle | None = None
+    _active_terminal_count += 1
+    try:
+        await websocket.accept()
+        k8s = await loop.run_in_executor(
+            _terminal_executor, lambda: manager.open_terminal(sandbox_id, session_id)
+        )
+        pod_task = asyncio.create_task(_pump_pod_to_browser(websocket, k8s))
+        browser_task = asyncio.create_task(_pump_browser_to_pod(websocket, k8s))
+        done, pending = await asyncio.wait(
+            {pod_task, browser_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        for task in done:
+            task.result()
+    except (ConnectionClosed, WebSocketDisconnect):
+        return
+    except Exception as e:
+        logger.warning("Error in terminal websocket for session %s: %s", session_id, e)
+        if websocket.application_state == WebSocketState.CONNECTED:
+            await websocket.close(code=1011)
+    finally:
+        _active_terminal_count -= 1
+        if k8s is not None:
+            await loop.run_in_executor(_terminal_executor, k8s.close)
+
+
+@public_build_router.websocket("/sessions/{session_id}/terminal")
+async def websocket_terminal(
+    session_id: UUID,
+    websocket: WebSocket,
+    user: User = Depends(_current_webapp_websocket_user),
+) -> None:
+    try:
+        await _check_terminal_access(session_id, user)
+    except HTTPException:
+        raise WebSocketException(code=1008)
+
+    await _proxy_terminal_websocket(session_id, websocket)

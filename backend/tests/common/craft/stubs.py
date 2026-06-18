@@ -57,6 +57,7 @@ from typing import Any
 from typing import cast
 from uuid import UUID
 
+from onyx.server.features.build.sandbox.base import PtyHandle
 from onyx.server.features.build.sandbox.base import SandboxEvent
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import FileSet
@@ -150,6 +151,7 @@ class StubSandboxManager(SandboxManager):
         self.prompt_slot_returns: bool = True
         self.get_upload_stats_returns: tuple[int, int] | None = None
         self.get_webapp_url_returns: str | None = None
+        self.open_terminal_returns: PtyHandle | None = None
         self.generate_pptx_preview_returns: tuple[list[str], bool] | None = None
         # Preflight session id. Defaulted (not _not_configured) so send_message
         # tests don't each have to wire it; the real _ServeMixin override POSTs
@@ -201,6 +203,7 @@ class StubSandboxManager(SandboxManager):
         self.get_upload_stats_count: int = 0
         self.write_files_to_sandbox_count: int = 0
         self.get_webapp_url_count: int = 0
+        self.open_terminal_count: int = 0
         self.generate_pptx_preview_count: int = 0
 
         self.last_provision_payload: dict[str, Any] | None = None
@@ -226,6 +229,7 @@ class StubSandboxManager(SandboxManager):
         self.last_get_upload_stats_payload: dict[str, Any] | None = None
         self.last_write_files_to_sandbox_payload: dict[str, Any] | None = None
         self.last_get_webapp_url_payload: dict[str, Any] | None = None
+        self.last_open_terminal_payload: dict[str, Any] | None = None
         self.last_generate_pptx_preview_payload: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------
@@ -403,6 +407,16 @@ class StubSandboxManager(SandboxManager):
         if self.list_session_workspaces_returns is None:
             raise _not_configured("list_session_workspaces")
         return list(self.list_session_workspaces_returns)
+
+    def open_terminal(self, sandbox_id: UUID, session_id: UUID) -> PtyHandle:
+        self.open_terminal_count += 1
+        self.last_open_terminal_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+        }
+        if self.open_terminal_returns is None:
+            raise _not_configured("open_terminal")
+        return self.open_terminal_returns
 
     def health_check(self, sandbox_id: UUID, timeout: float = 60.0) -> bool:
         self.health_check_count += 1

@@ -75,6 +75,7 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
+from onyx.server.features.build.sandbox.base import PtyHandle
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     PUSH_DAEMON_PORT,
@@ -2612,3 +2613,27 @@ fi
             if e.status_code >= 500:
                 raise RetriableWriteError(err) from e
             raise FatalWriteError(err) from e
+
+    def open_terminal(self, sandbox_id: UUID, session_id: UUID) -> PtyHandle:
+        """Open an interactive PTY shell via kubectl exec; returns a WSClient.
+
+        Must be called and accessed only through run_in_executor — WSClient is
+        synchronous/blocking. Use self._stream_core_api (not _core_api) to
+        avoid the stream monkey-patch leaking onto the shared REST client.
+        """
+        pod_name = self._get_pod_name(sandbox_id)
+        logger.debug(
+            "Opening terminal PTY for session %s on pod %s", session_id, pod_name
+        )
+        return k8s_stream(
+            self._stream_core_api.connect_get_namespaced_pod_exec,
+            name=pod_name,
+            namespace=self._namespace,
+            container=_SANDBOX_CONTAINER_NAME,
+            command=self._terminal_shell_command(session_id),
+            stderr=True,
+            stdin=True,
+            stdout=True,
+            tty=True,
+            _preload_content=False,
+        )

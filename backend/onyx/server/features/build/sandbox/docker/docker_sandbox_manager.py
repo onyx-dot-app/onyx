@@ -64,7 +64,9 @@ import json
 import mimetypes
 import re
 import secrets
+import select
 import shlex
+import socket
 import tarfile
 import threading
 import time
@@ -98,12 +100,16 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDE
 from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
+from onyx.server.features.build.sandbox.base import PtyHandle
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
 )
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     published_opencode_serve_base_url,
+)
+from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
+    _unwrap_socket,
 )
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecError
 from onyx.server.features.build.sandbox.docker.internal.exec_helpers import ExecResult
@@ -2043,6 +2049,101 @@ echo WRITE_OK"""
             elif p.endswith(".jpg"):
                 rel_paths.append(p)
         return rel_paths, cached
+
+    def open_terminal(self, sandbox_id: UUID, session_id: UUID) -> PtyHandle:
+        """Open an interactive PTY shell via docker exec; returns a DockerPtyHandle.
+
+        Must be called and accessed only through run_in_executor — the handle's
+        socket operations are synchronous/blocking.
+        """
+        container = self._require_container(sandbox_id)
+        if container.client is None:
+            raise RuntimeError(f"Docker client unavailable for sandbox {sandbox_id}")
+        api = container.client.api
+        cmd = self._terminal_shell_command(session_id)
+        exec_id = api.exec_create(
+            container.id,
+            cmd=cmd,
+            stdin=True,
+            stdout=True,
+            stderr=True,
+            tty=True,
+            user=SANDBOX_EXEC_USER,
+        )["Id"]
+        sock_obj = api.exec_start(exec_id, socket=True, tty=True, demux=False)
+        raw_sock = _unwrap_socket(sock_obj)
+        logger.debug(
+            "Opened terminal PTY for session %s in container %s",
+            session_id,
+            container.name,
+        )
+        return DockerPtyHandle(raw_sock)
+
+
+class DockerPtyHandle:
+    """Wraps the raw Docker TTY exec socket to satisfy the PtyHandle protocol.
+
+    TTY exec streams are raw (no multiplexing framing), so stdout/stderr arrive
+    interleaved. update() polls the socket; read_channel() drains buffered output.
+    """
+
+    _STDOUT_CHANNEL = 1
+    _STDIN_CHANNEL = 0
+
+    def __init__(self, sock: socket.socket) -> None:
+        self._sock = sock
+        self._closed = False
+        self._buf = b""
+
+    def update(self, timeout: float) -> None:
+        """Poll for incoming PTY bytes and buffer them."""
+        if self._closed:
+            return
+        ready, _, _ = select.select([self._sock], [], [], timeout)
+        if not ready:
+            return
+        try:
+            chunk = self._sock.recv(4096)
+        except OSError:
+            self._closed = True
+            return
+        if not chunk:
+            self._closed = True
+        else:
+            self._buf += chunk
+
+    def read_channel(self, channel: int, timeout: float) -> str:  # noqa: ARG002
+        """Return buffered PTY output as a str (only STDOUT_CHANNEL is meaningful).
+
+        Returns empty string for other channels. Uses surrogateescape so arbitrary
+        PTY bytes survive the str conversion. timeout is unused (output is already
+        buffered by update()).
+        """
+        if channel != self._STDOUT_CHANNEL or not self._buf:
+            return ""
+        data, self._buf = self._buf, b""
+        return data.decode("utf-8", "surrogateescape")
+
+    def write_channel(self, channel: int, data: str) -> None:
+        """Write to the PTY; STDIN_CHANNEL → socket, RESIZE_CHANNEL → no-op.
+
+        Docker TTY resize goes through the exec API rather than the data socket,
+        so resize messages are silently dropped here.
+        """
+        if channel != self._STDIN_CHANNEL or self._closed:
+            return
+        self._sock.sendall(data.encode("utf-8", "surrogateescape"))
+
+    def is_open(self) -> bool:
+        return not self._closed
+
+    def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            try:
+                self._sock.close()
+            except OSError:
+                pass
 
 
 class _GeneratorReader:
