@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mutate } from "swr";
 import useShareableGroups, {
   MinimalUserGroupSnapshot,
@@ -29,7 +22,7 @@ import {
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import Modal from "@/refresh-components/Modal";
 import { Button, Divider, Text } from "@opal/components";
 import {
@@ -240,15 +233,13 @@ export default function ShareAgentModal({
   });
   const { data: shareableGroupsData } = useShareableGroups();
   const { isAdmin, user: currentUser } = useUser();
-  const settings = useContext(SettingsContext);
+  const settings = useSettings();
 
   const shareableUsers = shareableUsersData ?? [];
   const transferableUsers = transferableUsersData ?? [];
   const shareableGroups = shareableGroupsData ?? [];
   const isPaidEnterpriseFeaturesEnabled =
-    settings !== null &&
-    !settings.settingsLoading &&
-    settings.enterpriseSettings !== null;
+    !settings.isLoading && settings.enterprise !== null;
 
   const initialValues = useMemo(
     () =>
