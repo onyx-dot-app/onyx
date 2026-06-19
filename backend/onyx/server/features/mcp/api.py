@@ -1926,12 +1926,20 @@ def _apply_mcp_server_access(
         object_is_new=is_new,
     )
     mcp_server.is_public = is_public
-    fetch_versioned_implementation("onyx.db.mcp", "make_mcp_server_private")(
-        server_id=mcp_server.id,
-        user_ids=[] if is_public else user_ids,
-        group_ids=[] if is_public else group_ids,
-        db_session=db_session,
-    )
+    try:
+        fetch_versioned_implementation("onyx.db.mcp", "make_mcp_server_private")(
+            server_id=mcp_server.id,
+            user_ids=[] if is_public else user_ids,
+            group_ids=[] if is_public else group_ids,
+            db_session=db_session,
+        )
+    except NotImplementedError:
+        # CE can't persist user/group grants; surface a clean 403 instead of 500.
+        raise OnyxError(
+            OnyxErrorCode.EE_REQUIRED,
+            "Restricting MCP servers to specific users or groups requires "
+            "Enterprise Edition.",
+        )
 
 
 def _upsert_mcp_server(
