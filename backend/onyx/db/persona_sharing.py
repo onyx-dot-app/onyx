@@ -51,16 +51,23 @@ def get_persona_access_level(
     persona: Persona,
     user: User,
     user_group_ids: set[int],
+    include_blanket_editor_grants: bool = True,
 ) -> PersonaAccessLevel | None:
     """Computed access for ``user`` over loaded share relations. OWNER outranks
-    everything; admins report EDITOR on personas they don't own. Curators'
-    group-attachment edit rights are not reflected here — this level drives
-    the sharing UI, not the editable fetch."""
+    everything. Admins report EDITOR on personas they don't own, and org-wide
+    public-editor personas report EDITOR for everyone. Curators' group-attachment
+    edit rights are not reflected here. This level drives the sharing UI, not the
+    editable fetch.
+
+    Pass ``include_blanket_editor_grants=False`` for the user's personal access
+    (ownership plus direct user/group shares) without the org-wide EDITOR grants
+    everyone holds: admin role and public-editor. Used by the "Your Agents"
+    gallery."""
     if persona.user_id == user.id or (
         persona.owner_group_id is not None and persona.owner_group_id in user_group_ids
     ):
         return PersonaAccessLevel.OWNER
-    if user.role == UserRole.ADMIN:
+    if include_blanket_editor_grants and user.role == UserRole.ADMIN:
         return PersonaAccessLevel.EDITOR
 
     has_viewer_access = False
@@ -75,10 +82,26 @@ def get_persona_access_level(
                 return PersonaAccessLevel.EDITOR
             has_viewer_access = True
     if persona.is_public:
-        if persona.public_permission == PersonaSharePermission.EDITOR:
+        if (
+            include_blanket_editor_grants
+            and persona.public_permission == PersonaSharePermission.EDITOR
+        ):
             return PersonaAccessLevel.EDITOR
         has_viewer_access = True
     return PersonaAccessLevel.VIEWER if has_viewer_access else None
+
+
+def user_owns_or_directly_edits(
+    persona: Persona,
+    user: User,
+    user_group_ids: set[int],
+) -> bool:
+    """True when the user owns the persona or holds a direct user/group EDITOR
+    share, excluding the org-wide EDITOR grants everyone holds (admin role,
+    public-editor). Drives the "Your Agents" gallery, which stays personal."""
+    return get_persona_access_level(
+        persona, user, user_group_ids, include_blanket_editor_grants=False
+    ) in (PersonaAccessLevel.OWNER, PersonaAccessLevel.EDITOR)
 
 
 def derive_persona_sharing_status(persona: Persona) -> PersonaSharingStatus:

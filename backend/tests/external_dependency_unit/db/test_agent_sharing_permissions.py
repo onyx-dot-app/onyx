@@ -17,6 +17,7 @@ from onyx.db.persona import fetch_persona_by_id_for_user
 from onyx.db.persona import update_persona_access
 from onyx.db.persona_sharing import derive_persona_sharing_status
 from onyx.db.persona_sharing import get_persona_access_level
+from onyx.db.persona_sharing import user_owns_or_directly_edits
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.db.agent_sharing_helpers import create_test_persona
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
@@ -200,6 +201,75 @@ def test_access_level_admin_and_stranger(db_session: Session) -> None:
 
     assert get_persona_access_level(persona, admin, set()) == PersonaAccessLevel.EDITOR
     assert get_persona_access_level(persona, stranger, set()) is None
+
+
+def test_your_agents_excludes_admin_only_access(db_session: Session) -> None:
+    """The "Your Agents" gallery lists owned + explicitly-shared-editor agents,
+    not the blanket EDITOR access admins hold on every persona."""
+    owner = create_test_user(db_session, "owner")
+    admin = create_test_user(db_session, "admin", role=UserRole.ADMIN)
+    persona = create_test_persona(db_session, owner)
+    db_session.refresh(persona)
+
+    # Admin still reports EDITOR for the sharing UI...
+    assert get_persona_access_level(persona, admin, set()) == PersonaAccessLevel.EDITOR
+    # ...but admin-only access is excluded from the intrinsic level and gallery.
+    assert (
+        get_persona_access_level(
+            persona, admin, set(), include_blanket_editor_grants=False
+        )
+        is None
+    )
+    assert not user_owns_or_directly_edits(persona, admin, set())
+    assert user_owns_or_directly_edits(persona, owner, set())
+
+
+def test_your_agents_includes_explicit_editor_even_for_admin(
+    db_session: Session,
+) -> None:
+    owner = create_test_user(db_session, "owner")
+    admin_editor = create_test_user(db_session, "admin_editor", role=UserRole.ADMIN)
+    persona = create_test_persona(db_session, owner)
+    share_persona_with_user(
+        db_session, persona, admin_editor, PersonaSharePermission.EDITOR
+    )
+    db_session.refresh(persona)
+
+    # An admin who also holds an explicit editor share belongs in their gallery.
+    assert user_owns_or_directly_edits(persona, admin_editor, set())
+
+
+def test_your_agents_excludes_viewer_share(db_session: Session) -> None:
+    owner = create_test_user(db_session, "owner")
+    viewer = create_test_user(db_session, "viewer")
+    persona = create_test_persona(db_session, owner)
+    share_persona_with_user(db_session, persona, viewer, PersonaSharePermission.VIEWER)
+    db_session.refresh(persona)
+
+    # View-only shares are not "your" agents.
+    assert not user_owns_or_directly_edits(persona, viewer, set())
+
+
+def test_your_agents_excludes_public_editor(db_session: Session) -> None:
+    """Org-wide public-editor grants edit to everyone, so it is a blanket grant
+    like admin access and must not put the agent in every user's gallery."""
+    owner = create_test_user(db_session, "owner")
+    stranger = create_test_user(db_session, "stranger")
+    persona = create_test_persona(
+        db_session,
+        owner,
+        is_public=True,
+        public_permission=PersonaSharePermission.EDITOR,
+    )
+    db_session.refresh(persona)
+
+    # The stranger can edit it org-wide (sharing UI reports EDITOR)...
+    assert (
+        get_persona_access_level(persona, stranger, set()) == PersonaAccessLevel.EDITOR
+    )
+    # ...but a blanket public-editor grant is not a "your" agent.
+    assert not user_owns_or_directly_edits(persona, stranger, set())
+    assert user_owns_or_directly_edits(persona, owner, set())
 
 
 def test_sharing_status_derivation(db_session: Session) -> None:

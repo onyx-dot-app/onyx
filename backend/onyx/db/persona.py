@@ -45,6 +45,7 @@ from onyx.db.notification import create_notification
 from onyx.db.persona_sharing import get_persona_access_level
 from onyx.db.persona_sharing import get_user_group_ids_for_user
 from onyx.db.persona_sharing import persona_ownership_is_vacant
+from onyx.db.persona_sharing import user_owns_or_directly_edits
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -759,6 +760,52 @@ def _user_may_view_persona_owner_email(user: User, persona: Persona) -> bool:
     return user.role == UserRole.ADMIN or persona.user_id == user.id
 
 
+# Eager-load set MinimalPersonaSnapshot.from_model needs. Shared by the list and
+# paginated minimal-snapshot queries.
+_MINIMAL_SNAPSHOT_LOAD_OPTIONS = (
+    selectinload(Persona.tools),
+    selectinload(Persona.labels),
+    selectinload(Persona.document_sets).options(
+        selectinload(DocumentSet.connector_credential_pairs).selectinload(
+            ConnectorCredentialPair.connector
+        ),
+        selectinload(DocumentSet.users),
+        selectinload(DocumentSet.groups),
+        selectinload(DocumentSet.federated_connectors).selectinload(
+            FederatedConnector__DocumentSet.federated_connector
+        ),
+    ),
+    selectinload(Persona.hierarchy_nodes),
+    selectinload(Persona.attached_documents).selectinload(
+        Document.parent_hierarchy_node
+    ),
+    selectinload(Persona.user),
+    selectinload(Persona.owner_group),
+    selectinload(Persona.user_shares),
+    selectinload(Persona.group_shares),
+)
+
+
+def _minimal_persona_snapshots_from_stmt(
+    db_session: Session, stmt: Select[tuple[Persona]], user: User
+) -> list[MinimalPersonaSnapshot]:
+    """Materialize the query as MinimalPersonaSnapshots, computing each persona's
+    per-user access fields."""
+    personas = db_session.scalars(stmt).all()
+    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
+    return [
+        MinimalPersonaSnapshot.from_model(
+            persona,
+            user_permission=get_persona_access_level(persona, user, user_group_ids),
+            user_is_owner_or_editor=user_owns_or_directly_edits(
+                persona, user, user_group_ids
+            ),
+            include_owner_email=_user_may_view_persona_owner_email(user, persona),
+        )
+        for persona in personas
+    ]
+
+
 def get_minimal_persona_snapshots_for_user(
     user: User,
     db_session: Session,
@@ -772,38 +819,8 @@ def get_minimal_persona_snapshots_for_user(
     stmt = _build_persona_filters(
         stmt, include_default, include_slack_bot_personas, include_deleted
     )
-    stmt = stmt.options(
-        selectinload(Persona.tools),
-        selectinload(Persona.labels),
-        selectinload(Persona.document_sets).options(
-            selectinload(DocumentSet.connector_credential_pairs).selectinload(
-                ConnectorCredentialPair.connector
-            ),
-            selectinload(DocumentSet.users),
-            selectinload(DocumentSet.groups),
-            selectinload(DocumentSet.federated_connectors).selectinload(
-                FederatedConnector__DocumentSet.federated_connector
-            ),
-        ),
-        selectinload(Persona.hierarchy_nodes),
-        selectinload(Persona.attached_documents).selectinload(
-            Document.parent_hierarchy_node
-        ),
-        selectinload(Persona.user),
-        selectinload(Persona.owner_group),
-        selectinload(Persona.user_shares),
-        selectinload(Persona.group_shares),
-    )
-    results = db_session.scalars(stmt).all()
-    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    return [
-        MinimalPersonaSnapshot.from_model(
-            persona,
-            user_permission=get_persona_access_level(persona, user, user_group_ids),
-            include_owner_email=_user_may_view_persona_owner_email(user, persona),
-        )
-        for persona in results
-    ]
+    stmt = stmt.options(*_MINIMAL_SNAPSHOT_LOAD_OPTIONS)
+    return _minimal_persona_snapshots_from_stmt(db_session, stmt, user)
 
 
 def get_persona_snapshots_for_user(
@@ -926,41 +943,8 @@ def get_minimal_persona_snapshots_paginated(
         include_slack_bot_personas,
         include_deleted,
     )
-    # Do eager loading of columns we know MinimalPersonaSnapshot.from_model will
-    # need.
-    stmt = stmt.options(
-        selectinload(Persona.tools),
-        selectinload(Persona.hierarchy_nodes),
-        selectinload(Persona.attached_documents).selectinload(
-            Document.parent_hierarchy_node
-        ),
-        selectinload(Persona.labels),
-        selectinload(Persona.document_sets).options(
-            selectinload(DocumentSet.connector_credential_pairs).selectinload(
-                ConnectorCredentialPair.connector
-            ),
-            selectinload(DocumentSet.users),
-            selectinload(DocumentSet.groups),
-            selectinload(DocumentSet.federated_connectors).selectinload(
-                FederatedConnector__DocumentSet.federated_connector
-            ),
-        ),
-        selectinload(Persona.user),
-        selectinload(Persona.owner_group),
-        selectinload(Persona.user_shares),
-        selectinload(Persona.group_shares),
-    )
-
-    results = db_session.scalars(stmt).all()
-    user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    return [
-        MinimalPersonaSnapshot.from_model(
-            persona,
-            user_permission=get_persona_access_level(persona, user, user_group_ids),
-            include_owner_email=_user_may_view_persona_owner_email(user, persona),
-        )
-        for persona in results
-    ]
+    stmt = stmt.options(*_MINIMAL_SNAPSHOT_LOAD_OPTIONS)
+    return _minimal_persona_snapshots_from_stmt(db_session, stmt, user)
 
 
 def get_persona_snapshots_paginated(
