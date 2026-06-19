@@ -1880,9 +1880,8 @@ class TestRetrieveAllSlimDocsPermSync:
                 is_public=False,
             ),
         }
-        mock_perms.side_effect = lambda _canvas_client, course_id: access_by_course[
-            course_id
-        ]
+        # mock is invoked as get_course_permissions(canvas_client=..., course_id=...)
+        mock_perms.side_effect = lambda **kwargs: access_by_course[kwargs["course_id"]]
 
         # Per-course dispatchers: pages keyed by course_id in the URL.
         api_prefix = f"{FAKE_BASE_URL}/api/v1"
