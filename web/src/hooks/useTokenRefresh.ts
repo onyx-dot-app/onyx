@@ -31,6 +31,9 @@ export function useTokenRefresh(
     if (
       !user ||
       user.id === NO_AUTH_USER_ID ||
+      // Anonymous users have no session to refresh; a failed refresh churns the
+      // /me query and can bounce them to login.
+      user.is_anonymous_user ||
       authTypeMetadata.authType === AuthType.OIDC ||
       authTypeMetadata.authType === AuthType.SAML
     ) {
