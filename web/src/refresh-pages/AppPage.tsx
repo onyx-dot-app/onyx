@@ -20,6 +20,7 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/lib/agents/hooks";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import { useUser } from "@/providers/UserProvider";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import NoAgentModal from "@/sections/modals/NoAgentModal";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import Modal from "@/refresh-components/Modal";
@@ -189,6 +190,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { data: federatedConnectorsData } = useFederatedConnectors();
 
   const { user } = useUser();
+  // `useUser()` reports null while loading, so gating on it would redirect during
+  // the /me load window. Read the raw result instead (undefined = loading, null =
+  // resolved signed-out). This matters for anonymous users specifically: they're
+  // kept on the login page, so unlike logged-in users they wouldn't bounce back.
+  const { user: resolvedUser } = useCurrentUser();
 
   function processSearchParamsAndSubmitMessage(searchParamsString: string) {
     const newSearchParams = new URLSearchParams(searchParamsString);
@@ -555,7 +561,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
-  if (!user) {
+  if (resolvedUser === null) {
     redirect("/auth/login");
   }
 
