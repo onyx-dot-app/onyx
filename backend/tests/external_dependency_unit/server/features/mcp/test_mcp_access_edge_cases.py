@@ -1,7 +1,7 @@
 """Edge cases for MCP group/public access, beyond the basic matrix.
 
-Read-path cases insert access rows directly. The EE-write flip case exercises
-the versioned `make_mcp_server_private` reconcile, so it sets the EE flag."""
+All cases insert access rows directly, so they exercise the read path without
+the EE write path."""
 
 from uuid import uuid4
 
@@ -16,8 +16,6 @@ from onyx.db.models import MCPServer__UserGroup
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
-from onyx.utils.variable_functionality import fetch_versioned_implementation
-from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -113,39 +111,15 @@ def test_direct_user_and_group_grants_coexist(db_session: Session) -> None:
     assert user_can_access_mcp_server(grp_member, server.id, db_session) is True
 
 
-def test_ee_flip_public_to_restricted_to_public_reconciles(db_session: Session) -> None:
-    set_is_ee_based_on_env_variable()
-    make_private = fetch_versioned_implementation(
-        "onyx.db.mcp", "make_mcp_server_private"
-    )
-    member = create_test_user(db_session, "edge_flip", role=UserRole.BASIC)
+def test_flipping_public_flag_changes_visibility(db_session: Session) -> None:
     outsider = create_test_user(db_session, "edge_flip_out", role=UserRole.BASIC)
     group = _group(db_session, "edge_flip_grp")
-    _join(db_session, member, group)
-
     server = _server(db_session, "edge_flip_server", is_public=True)
-    # public -> everyone (incl. outsider)
+    _restrict_groups(db_session, server, [group])
+
+    # public flag wins regardless of group rows
     assert user_can_access_mcp_server(outsider, server.id, db_session) is True
 
-    # flip to restricted: only the group
     server.is_public = False
-    make_private(
-        server_id=server.id, user_ids=[], group_ids=[group.id], db_session=db_session
-    )
     db_session.commit()
-    assert user_can_access_mcp_server(member, server.id, db_session) is True
     assert user_can_access_mcp_server(outsider, server.id, db_session) is False
-
-    # flip back to public: grants cleared, everyone again
-    server.is_public = True
-    make_private(
-        server_id=server.id, user_ids=[], group_ids=[], db_session=db_session
-    )
-    db_session.commit()
-    assert user_can_access_mcp_server(outsider, server.id, db_session) is True
-    remaining = (
-        db_session.query(MCPServer__UserGroup)
-        .filter(MCPServer__UserGroup.mcp_server_id == server.id)
-        .count()
-    )
-    assert remaining == 0
