@@ -44,7 +44,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _SYSTEM_POST_PREFIX = "system_"
-_DEFAULT_PER_PAGE = 200
+# Direct + group message channel types, excluded from indexing unless opted in.
 # Direct + group message channel types, excluded from indexing unless opted in.
 _DM_CHANNEL_TYPES = ("D", "G")
 
