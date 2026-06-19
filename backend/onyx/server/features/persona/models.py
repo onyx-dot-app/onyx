@@ -236,6 +236,9 @@ class MinimalPersonaSnapshot(BaseModel):
     # stamp it (fail-closed on the client). List endpoints stamp it so each card
     # doesn't refetch the full agent just to gate its icons.
     permissions: dict[str, bool] = Field(default_factory=dict)
+    # Owner or direct user/group editor, excluding org-wide grants (manage-agents,
+    # public-editor). Drives the "Your Agents" gallery filter.
+    user_is_owner_or_editor: bool = False
 
     @classmethod
     def from_model(
@@ -245,6 +248,7 @@ class MinimalPersonaSnapshot(BaseModel):
         # Fail closed: the owner email is PII and is only included when a caller
         # explicitly opts in (owner / admin paths). See the DB-layer callers.
         include_owner_email: bool = False,
+        user_is_owner_or_editor: bool = False,
     ) -> "MinimalPersonaSnapshot":
         # Collect unique sources from document sets, hierarchy nodes, and attached documents
         sources: set[DocumentSource] = set()
@@ -309,6 +313,7 @@ class MinimalPersonaSnapshot(BaseModel):
             ),
             owner_group=_owner_group_from_model(persona),
             user_permission=user_permission,
+            user_is_owner_or_editor=user_is_owner_or_editor,
         )
 
 
