@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0",
+  "brands": [
+    {
+      "brand_key": "novawear",
+      "enabled": true,
+      "persona_name_prefixes": ["NOVAWEAR"],
+      "persona_roles": [
+        {"key": "design_planning", "name_contains": ["设计企划"]},
+        {"key": "product_training", "name_contains": ["商品培训"]},
+        {"key": "customer_service", "name_contains": ["客服售后"]}
+      ],
+      "intent_routes": [
+        {
+          "key": "campaign_brief",
+          "personas": ["design_planning"],
+          "triggers": ["季度设计企划", "设计企划 brief", "企划 brief", "主题、目标人群", "产品结构和表达边界", "FW2026 通勤胶囊"],
+          "required_docs": ["80-campaigns/fw2026-campaign-brief.md", "80-campaigns/commuter-capsule-launch.md", "10-brand/brand-positioning.md"]
+        },
+        {
+          "key": "design_product_structure",
+          "personas": ["design_planning"],
+          "triggers": ["一周通勤", "SKU 组合", "产品结构", "价格带逻辑"],
+          "required_docs": ["20-products/sku-master-fw2026.md", "20-products/product-line-overview.md", "70-market-competitive/pricing-strategy.md", "80-campaigns/commuter-capsule-launch.md", "20-products/outerwear-product-guide.md", "20-products/pants-product-guide.md"]
+        },
+        {
+          "key": "product_story",
+          "personas": ["design_planning"],
+          "triggers": ["产品故事", "NW-OW-2601", "内容角度", "不夸大防水能力"],
+          "required_docs": ["20-products/outerwear-product-guide.md", "20-products/sku-master-fw2026.md", "10-brand/tone-of-voice.md"]
+        },
+        {
+          "key": "price_objection",
+          "personas": ["product_training"],
+          "triggers": ["太贵", "1299", "值不值", "价格", "硬推", "划算"],
+          "required_docs": ["30-retail-training/objection-handling.md", "70-market-competitive/pricing-strategy.md", "80-campaigns/commuter-capsule-launch.md"]
+        },
+        {
+          "key": "membership_livestream",
+          "personas": ["design_planning", "customer_service"],
+          "triggers": ["直播", "直播间", "会员活动", "权益", "赠品", "提前锁定"],
+          "required_docs": ["80-campaigns/membership-campaign.md", "80-campaigns/fw2026-campaign-brief.md", "40-ecommerce-content/livestream-script-fw2026.md"]
+        },
+        {
+          "key": "membership_xiaohongshu",
+          "personas": ["design_planning"],
+          "triggers": ["小红书", "种草", "选题", "会员", "内容角度"],
+          "required_docs": ["80-campaigns/membership-campaign.md", "40-ecommerce-content/xiaohongshu-content-examples.md", "10-brand/tone-of-voice.md"]
+        },
+        {
+          "key": "dwr_waterproof_boundary",
+          "personas": ["design_planning", "product_training", "customer_service"],
+          "triggers": ["DWR", "防泼", "泼水", "不泼水", "洗几次", "防水", "暴雨", "十年", "永不失效", "绝对防水"],
+          "required_docs": ["60-supply-chain-qc/fabric-qc-standards.md", "20-products/care-instructions.md", "50-customer-service/faq.md", "10-brand/visual-and-copy-dos-donts.md", "80-campaigns/fw2026-campaign-brief.md"],
+          "required_docs_by_persona": {
+            "design_planning": ["60-supply-chain-qc/fabric-qc-standards.md", "20-products/care-instructions.md", "10-brand/visual-and-copy-dos-donts.md", "80-campaigns/fw2026-campaign-brief.md"],
+            "product_training": ["60-supply-chain-qc/fabric-qc-standards.md", "20-products/care-instructions.md", "50-customer-service/faq.md"],
+            "customer_service": ["60-supply-chain-qc/fabric-qc-standards.md", "20-products/care-instructions.md", "50-customer-service/faq.md", "50-customer-service/quality-issue-handling.md", "60-supply-chain-qc/defect-classification.md", "80-campaigns/fw2026-campaign-brief.md"]
+          }
+        },
+        {
+          "key": "return_exchange",
+          "personas": ["customer_service"],
+          "triggers": ["尺码不合适", "吊牌", "退换货", "物流", "判断路径", "退货", "换货"],
+          "required_docs": ["50-customer-service/return-and-exchange-policy.md", "50-customer-service/size-recommendation-scripts.md", "50-customer-service/shipping-and-logistics.md"]
+        },
+        {
+          "key": "size_talktrack",
+          "personas": ["product_training"],
+          "triggers": ["165cm", "55kg", "尺码建议", "试穿", "尺码", "轻机能裤"],
+          "required_docs": ["20-products/size-and-fit-guide.md", "50-customer-service/size-recommendation-scripts.md", "20-products/sku-master-fw2026.md"]
+        },
+        {
+          "key": "product_quiz",
+          "personas": ["product_training"],
+          "triggers": ["测验题", "商品知识测验", "培训考核", "外套、裤装、面料", "洗护和竞品"],
+          "required_docs": ["20-products/product-line-overview.md", "20-products/care-instructions.md", "70-market-competitive/competitor-landscape.md"]
+        },
+        {
+          "key": "quality_after_sales",
+          "personas": ["customer_service"],
+          "triggers": ["起球", "掉色", "质量问题", "赔付", "退换", "售后", "缺陷", "拉链"],
+          "required_docs": ["50-customer-service/quality-issue-handling.md", "60-supply-chain-qc/defect-classification.md", "60-supply-chain-qc/fabric-qc-standards.md"]
+        },
+        {
+          "key": "training_outline",
+          "personas": ["product_training"],
+          "triggers": ["培训大纲", "门店导购", "SKU、价格、面料、尺码、搭配和异议处理"],
+          "required_docs": ["30-retail-training/store-associate-playbook.md", "20-products/sku-master-fw2026.md", "20-products/fabric-and-materials.md", "20-products/size-and-fit-guide.md", "30-retail-training/styling-recommendations.md", "30-retail-training/objection-handling.md", "70-market-competitive/pricing-strategy.md"]
+        },
+        {
+          "key": "commuter_capsule_recommendation",
+          "personas": ["product_training"],
+          "triggers": ["通勤胶囊", "骑行", "办公室", "城市徒步", "推荐", "搭配", "场景推荐"],
+          "required_docs": ["80-campaigns/commuter-capsule-launch.md", "30-retail-training/customer-needs-diagnosis.md", "30-retail-training/styling-recommendations.md", "20-products/outerwear-product-guide.md", "20-products/pants-product-guide.md", "20-products/product-line-overview.md", "20-products/sku-master-fw2026.md", "70-market-competitive/pricing-strategy.md"]
+        },
+        {
+          "key": "pdp_to_sales",
+          "personas": ["product_training"],
+          "triggers": ["PDP", "详情页", "导购话术", "销售话术", "门店话术", "转成门店"],
+          "required_docs": ["40-ecommerce-content/pdp-copy-guidelines.md", "80-campaigns/commuter-capsule-launch.md", "30-retail-training/store-associate-playbook.md"]
+        },
+        {
+          "key": "competitor_boundary",
+          "personas": ["design_planning", "product_training"],
+          "triggers": ["Uniqlo", "lululemon", "Arc'teryx", "Veilance", "平替", "同款", "竞品"],
+          "required_docs": ["70-market-competitive/competitor-landscape.md", "70-market-competitive/pricing-strategy.md", "70-market-competitive/uniqlo-comparison.md", "70-market-competitive/lululemon-comparison.md", "70-market-competitive/arcteryx-veilance-comparison.md"]
+        },
+        {
+          "key": "privacy_or_sensitive_export",
+          "personas": ["customer_service"],
+          "triggers": ["手机号", "订单号", "会员 ID", "地址", "支付", "供应商", "采购成本", "合同", "导出"],
+          "required_docs": ["80-campaigns/membership-campaign.md", "60-supply-chain-qc/supplier-communication-rules.md", "30-retail-training/vip-client-service.md"]
+        }
+      ]
+    }
+  ]
+}

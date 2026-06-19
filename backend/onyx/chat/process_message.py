@@ -54,8 +54,8 @@ from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import SearchParams
 from onyx.chat.models import StreamingError
 from onyx.chat.models import ToolCallResponse
-from onyx.chat.novawear_required_docs import add_novawear_required_file_descriptors
-from onyx.chat.novawear_required_docs import novawear_required_search_document_ids
+from onyx.chat.brand_required_docs import add_brand_required_file_descriptors
+from onyx.chat.brand_required_docs import brand_required_search_document_ids
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
@@ -636,13 +636,13 @@ def build_chat_turn(
 
     persona = chat_session.persona
     message_text = new_msg_req.message
-    new_msg_req.file_descriptors = add_novawear_required_file_descriptors(
+    new_msg_req.file_descriptors = add_brand_required_file_descriptors(
         message=message_text,
         persona=persona,
         file_descriptors=new_msg_req.file_descriptors,
         db_session=db_session,
     )
-    dynamic_search_document_ids = novawear_required_search_document_ids(
+    dynamic_search_document_ids = brand_required_search_document_ids(
         message=message_text,
         persona=persona,
     )
