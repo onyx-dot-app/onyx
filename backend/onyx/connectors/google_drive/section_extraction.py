@@ -96,10 +96,9 @@ def get_document_sections(
 ) -> list[TextSection] | None:
     """Extract heading-aware sections from a Google Doc.
 
-    Streams the Docs-API response under a byte cap. Returns None when the
-    structural payload exceeds `max_response_bytes`, so the caller can fall back
-    to the size-bounded basic text export instead of loading a structurally
-    unbounded doc into memory. `includeTabsContent` pulls every tab's content.
+    Streams the Docs-API response and returns None once it exceeds
+    `max_response_bytes`, so the caller can fall back to the basic text export
+    rather than load an unbounded structural payload into memory.
     """
     impersonated_creds = get_impersonated_creds(creds, user_email)
     with AuthorizedSession(impersonated_creds) as session:
@@ -114,9 +113,9 @@ def get_document_sections(
             for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
                 if not chunk:
                     continue
-                buffer.extend(chunk)
-                if len(buffer) > max_response_bytes:
+                if len(buffer) + len(chunk) > max_response_bytes:
                     return None
+                buffer.extend(chunk)
 
     doc = json.loads(buffer)
     tabs = doc.get("tabs", {})
