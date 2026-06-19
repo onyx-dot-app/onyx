@@ -48,6 +48,15 @@ def test_flat_skill_discovered() -> None:
     assert "my-tool" in slugs
 
 
+def test_subpath_pointing_at_skill_dir_uses_dir_slug() -> None:
+    # A tree/subpath URL pointing directly at a skill dir must derive the slug
+    # from that dir (e.g. "docx"), not the repo wrapper name.
+    archive = make_tar({"repo-main/skills/docx/SKILL.md": _VALID_SKILL_MD})
+    with extracted_skills(archive, subpath="skills/docx") as skills:
+        slugs = [s.slug for s in skills]
+    assert slugs == ["docx"]
+
+
 def test_catalog_skill_discovered() -> None:
     # skills/cat/deep/SKILL.md  — two levels under skills/
     archive = make_tar({"repo-main/skills/cat/deep/SKILL.md": _VALID_SKILL_MD})

@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
+import requests
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -241,6 +242,11 @@ def fetch_repo_archive(source: ParsedSource) -> bytes:
             OnyxErrorCode.INVALID_INPUT,
             f"SSRF check failed for '{url}': {exc}",
         ) from exc
+    except requests.RequestException as exc:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"failed to reach '{url}': {exc}",
+        ) from exc
 
     if response.status_code == 404:
         raise OnyxError(
@@ -255,16 +261,22 @@ def fetch_repo_archive(source: ParsedSource) -> bytes:
 
     chunks: list[bytes] = []
     total = 0
-    for chunk in response.iter_content(chunk_size=64 * 1024):
-        if not chunk:
-            continue
-        total += len(chunk)
-        if total > SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES:
-            raise OnyxError(
-                OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                f"archive exceeds {SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES // (1024 * 1024)} MiB",
-            )
-        chunks.append(chunk)
+    try:
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES:
+                raise OnyxError(
+                    OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    f"archive exceeds {SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES // (1024 * 1024)} MiB",
+                )
+            chunks.append(chunk)
+    except requests.RequestException as exc:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"error streaming archive from '{url}': {exc}",
+        ) from exc
 
     return b"".join(chunks)
 
@@ -523,8 +535,10 @@ def _discover_skills_in_dir(
         except Exception:
             continue
 
-        # slug: dir basename, except when the dir IS the search root (use repo dir name).
-        if skill_dir.resolve() == search_root.resolve():
+        # slug: dir basename. Only a true repo-root SKILL.md (no subpath) falls
+        # back to the repo wrapper dir name; a subpath leaf (e.g. a tree URL
+        # pointing at skills/docx) keeps its own dir name.
+        if skill_dir.resolve() == repo_root_resolved:
             slug_candidate = repo_root.name.lower()
             # Strip common suffixes like -main, -master
             for suffix in ("-main", "-master"):
