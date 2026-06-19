@@ -73,9 +73,10 @@ export default function AddSkillFromRepoModal({
   }
 
   function initSelection(skills: RepoSkillPreviewItem[]): Set<string> {
-    const preSelected = skills.filter((s) => s.pre_selected).map((s) => s.slug);
-    if (preSelected.length > 0) return new Set(preSelected);
-    return new Set(skills.map((s) => s.slug));
+    // pre_selected is all-true with no --skill filter, the matching subset when
+    // filters match, and all-false when filters matched nothing — in which case
+    // we select none rather than silently selecting every skill.
+    return new Set(skills.filter((s) => s.pre_selected).map((s) => s.slug));
   }
 
   async function handleFindSkills() {
