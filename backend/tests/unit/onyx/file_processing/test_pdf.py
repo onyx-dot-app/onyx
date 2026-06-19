@@ -56,8 +56,10 @@ class TestReadPdfFile:
         When PDFium raises, text extraction falls back to pypdf so the document
         is still indexed rather than silently dropped."""
 
+        from pypdfium2 import PdfiumError
+
         def _raise(*_args: object, **_kwargs: object) -> str:
-            raise RuntimeError("Failed to load document (PDFium: Data format error).")
+            raise PdfiumError("Failed to load document (PDFium: Data format error).")
 
         monkeypatch.setattr(extract_file_text, "_extract_pdf_text_pdfium", _raise)
         text, _, _ = read_pdf_file(_load("multipage.pdf"))

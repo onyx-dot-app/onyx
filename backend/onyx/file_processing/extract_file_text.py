@@ -307,6 +307,7 @@ def read_pdf_file(
     """
     from pypdf import PdfReader
     from pypdf.errors import PdfStreamError
+    from pypdfium2 import PdfiumError
 
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
@@ -352,7 +353,7 @@ def read_pdf_file(
         # GIL-releasing extraction so a large PDF can't pin the worker — see helper.
         try:
             text = _extract_pdf_text_pdfium(file_bytes, decrypt_password)
-        except Exception as pdfium_err:
+        except PdfiumError as pdfium_err:
             # PDFium rejects some malformed PDFs that pypdf can still read; fall
             # back so those docs aren't dropped. Only failing files take this path.
             logger.warning(
