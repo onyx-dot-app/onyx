@@ -114,18 +114,27 @@ def is_onyx_craft_enabled(user: User) -> bool:
     """
     Check if Onyx Craft (Build Mode) is enabled for the user.
 
-    Flag logic for "onyx-craft-enabled":
-    - Flag = True → enabled (Onyx Craft is available)
-    - Flag = False → disabled (Onyx Craft is not available)
-    - Flag = null/not found → disabled (Onyx Craft is not available)
+    Craft requires BOTH:
+    - ENABLE_CRAFT=true: the deployment wired the Craft infra (sandbox
+      namespace, RBAC, PodTemplate, egress proxy). Without it the feature
+      cannot function, so it gates everything.
+    - The "onyx-craft-enabled" PostHog flag (when a real provider is
+      configured): per-user/tenant rollout control. Only explicit True enables;
+      False/null/not-found disables.
 
-    Only explicit True enables the feature.
+    When no PostHog provider is configured (NoOp, e.g. self-hosted without
+    POSTHOG_API_KEY), ENABLE_CRAFT alone gates the feature.
     """
+    # ENABLE_CRAFT is a hard precondition: without the deploy-time infra,
+    # honoring the PostHog flag would expose a broken Craft experience.
+    if not ENABLE_CRAFT:
+        return False
+
     feature_flag_provider = get_default_feature_flag_provider()
 
-    # If no PostHog configured (NoOp provider), use ENABLE_CRAFT env var
+    # No PostHog configured (NoOp provider): ENABLE_CRAFT alone gates Craft.
     if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
-        return ENABLE_CRAFT
+        return True
 
     is_enabled = feature_flag_provider.feature_enabled_for_user_tenant(
         ONYX_CRAFT_ENABLED_FLAG,
