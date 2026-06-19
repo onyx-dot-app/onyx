@@ -101,19 +101,22 @@ def get_document_sections(
     to the size-bounded basic text export instead of loading a structurally
     unbounded doc into memory. `includeTabsContent` pulls every tab's content.
     """
-    session = AuthorizedSession(get_impersonated_creds(creds, user_email))
-    with session.get(
-        DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
-        params={"includeTabsContent": "true"},
-        stream=True,
-        timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
-    ) as response:
-        response.raise_for_status()
-        buffer = bytearray()
-        for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
-            buffer.extend(chunk)
-            if len(buffer) > max_response_bytes:
-                return None
+    impersonated_creds = get_impersonated_creds(creds, user_email)
+    with AuthorizedSession(impersonated_creds) as session:
+        with session.get(
+            DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
+            params={"includeTabsContent": "true"},
+            stream=True,
+            timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
+        ) as response:
+            response.raise_for_status()
+            buffer = bytearray()
+            for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
+                if not chunk:
+                    continue
+                buffer.extend(chunk)
+                if len(buffer) > max_response_bytes:
+                    return None
 
     doc = json.loads(buffer)
     tabs = doc.get("tabs", {})
