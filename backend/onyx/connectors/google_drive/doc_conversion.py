@@ -706,6 +706,15 @@ def _convert_drive_item_to_document(
     def _get_docs_service() -> GoogleDocsService:
         return get_google_docs_service(creds, user_email=retriever_email)
 
+    def _basic_extraction() -> FileExtractionResult:
+        return _download_and_extract_sections_basic(
+            file,
+            _get_drive_service(),
+            allow_images,
+            size_threshold,
+            raw_file_callback,
+        )
+
     doc_id = "unknown"
 
     try:
@@ -731,48 +740,51 @@ def _convert_drive_item_to_document(
 
         # If it's a Google Doc, we might do advanced parsing
         if file.get("mimeType") == GDriveMimeType.DOC.value:
+            # Export via the size-capped basic path first: _download_request aborts
+            # past size_threshold, so an oversized Doc yields no sections and we skip
+            # the advanced Docs-API path (get_document_sections), which loads the whole
+            # document into memory with no size cap and can OOM the indexing worker.
+            basic_extraction = _basic_extraction()
+            if not basic_extraction.sections:
+                logger.warning(
+                    "Skipping advanced parsing for %s: basic export empty or over "
+                    "size threshold of %s.",
+                    file.get("name"),
+                    size_threshold,
+                )
+                return None
+            sections = basic_extraction.sections
+            staged_file_id = basic_extraction.staged_file_id
+
+            # Within the size cap — safe to enrich with advanced heading-aware parsing.
             try:
                 logger.debug("starting advanced parsing for %s", file.get("name"))
-                # get_document_sections is the advanced approach for Google Docs
                 doc_sections = get_document_sections(
                     docs_service=_get_docs_service(),
                     doc_id=file.get("id", ""),
                 )
                 if doc_sections:
-                    sections = cast(
-                        list[TextSection | ImageSection | TabularSection], doc_sections
-                    )
                     if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
                         logger.debug(
                             "found smart chips in %s, aligning with basic sections",
                             file.get("name"),
                         )
-                        basic_extraction = _download_and_extract_sections_basic(
-                            file,
-                            _get_drive_service(),
-                            allow_images,
-                            size_threshold,
-                            raw_file_callback,
-                        )
                         sections = align_basic_advanced(
                             basic_extraction.sections, doc_sections
                         )
-                        staged_file_id = basic_extraction.staged_file_id
-
+                    else:
+                        sections = cast(
+                            list[TextSection | ImageSection | TabularSection],
+                            doc_sections,
+                        )
             except Exception as e:
                 logger.warning(
-                    "Error in advanced parsing: %s. Falling back to basic extraction.",
+                    "Error in advanced parsing: %s. Using basic extraction.",
                     e,
                 )
         # Not Google Doc, attempt basic extraction
         else:
-            basic_extraction = _download_and_extract_sections_basic(
-                file,
-                _get_drive_service(),
-                allow_images,
-                size_threshold,
-                raw_file_callback,
-            )
+            basic_extraction = _basic_extraction()
             sections = basic_extraction.sections
             staged_file_id = basic_extraction.staged_file_id
 
