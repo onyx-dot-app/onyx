@@ -755,10 +755,8 @@ def _convert_drive_item_to_document(
         # If it's a Google Doc, we might do advanced parsing
         if file.get("mimeType") == GDriveMimeType.DOC.value:
             # Export via the size-capped basic path first. If it aborts at
-            # size_threshold the Doc is too large to feed to the advanced (Docs-API)
-            # parser, which loads the whole document with no cap and can OOM the
-            # worker — so skip it. A basic export that did NOT hit the cap means the
-            # Doc is small, so the advanced parsing below stays bounded.
+            # size_threshold the Doc is too large to index, so skip it. Otherwise the
+            # Doc is within the cap and the advanced parsing below is size-bounded.
             try:
                 basic_extraction = _basic_extraction(raise_on_size_threshold=True)
             except ExportSizeThresholdExceeded:

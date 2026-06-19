@@ -96,9 +96,7 @@ def get_document_sections(
 ) -> list[TextSection] | None:
     """Extract heading-aware sections from a Google Doc.
 
-    Streams the Docs-API response and returns None once it exceeds
-    `max_response_bytes`, so the caller can fall back to the basic text export
-    rather than load an unbounded structural payload into memory.
+    Streams the Docs-API response; returns None if it exceeds `max_response_bytes`.
     """
     impersonated_creds = get_impersonated_creds(creds, user_email)
     with AuthorizedSession(impersonated_creds) as session:

@@ -893,9 +893,9 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
-# Native Docs report no `size`, so the Docs-API structural-JSON fetch is the one
-# content fetch we can't size-check upfront. Cap the streamed response so a
-# structurally-huge Doc can't OOM the worker; over-cap Docs fall back to basic text.
+# Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
+# fetch. Native Docs report no `size`, so the fetch can't be checked from
+# metadata; larger Docs are indexed via the basic text export.
 GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
     os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
 )
