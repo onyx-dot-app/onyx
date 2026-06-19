@@ -72,6 +72,10 @@ LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "onyx"
 
 # Enable generating persistent log files for local dev environments
 DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true"
+# File logging is on by default. Set LOG_TO_FILE=false to disable it for a given
+# pod/process — it then logs to stdout only (e.g. read-only-root containers where
+# /var/log/onyx isn't writable).
+LOG_TO_FILE = os.environ.get("LOG_TO_FILE", "true").lower() != "false"
 # notset, debug, info, notice, warning, error, or critical
 LOG_LEVEL = os.environ.get("LOG_LEVEL") or "info"
 
