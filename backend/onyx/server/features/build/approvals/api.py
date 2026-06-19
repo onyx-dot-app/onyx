@@ -143,31 +143,6 @@ def list_live_approvals(
     )
 
 
-@router.get("/sessions/{session_id}")
-def list_session_approvals(
-    session_id: UUID,
-    decision: ApprovalDecision | None = None,
-    since: datetime | None = None,
-    until: datetime | None = None,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> ApprovalListResponse:
-    """Audit query for a session. Non-owners get NOT_FOUND (no existence leak)."""
-    if get_build_session(session_id, user.id, db_session) is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "session not found")
-
-    rows = action_approval.list_session_action_approvals(
-        db_session,
-        session_id,
-        decision=decision,
-        since=since,
-        until=until,
-    )
-    return ApprovalListResponse(
-        items=[ApprovalView.model_validate(row) for row in rows]
-    )
-
-
 @router.post("/{approval_id}/decision")
 def submit_decision(
     approval_id: UUID,

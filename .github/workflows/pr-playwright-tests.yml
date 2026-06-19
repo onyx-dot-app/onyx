@@ -137,7 +137,7 @@ jobs:
         "run-id=${{ github.run_id }}-build-web-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -161,7 +161,7 @@ jobs:
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
@@ -199,7 +199,7 @@ jobs:
         "run-id=${{ github.run_id }}-build-backend-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -223,7 +223,7 @@ jobs:
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
@@ -261,7 +261,7 @@ jobs:
         "run-id=${{ github.run_id }}-build-model-server-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -285,7 +285,7 @@ jobs:
           echo "cache-suffix=${CACHE_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
@@ -325,7 +325,7 @@ jobs:
       - "run-id=${{ github.run_id }}-playwright-tests-${{ matrix.project }}-${{ matrix.shard }}"
       - "extras=ecr-cache"
       - volume=50gb
-    timeout-minutes: 45
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       # Each entry is one parallel runner. `admin` (the bulk of the suite) is
@@ -525,7 +525,7 @@ jobs:
       - "run-id=${{ github.run_id }}-playwright-tests-oauth-okta"
       - "extras=ecr-cache"
       - volume=50gb
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -683,7 +683,7 @@ jobs:
       - runner=4cpu-linux-arm64
       - "run-id=${{ github.run_id }}-playwright-tests-lite"
       - "extras=ecr-cache"
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
@@ -805,7 +805,7 @@ jobs:
       - runs-on
       - runner=2cpu-linux-arm64
       - "run-id=${{ github.run_id }}-visual-regression-${{ matrix.project }}"
-    timeout-minutes: 20
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
@@ -846,7 +846,7 @@ jobs:
           fi
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2

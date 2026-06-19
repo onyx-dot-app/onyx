@@ -23,7 +23,7 @@ from onyx.server.features.build.interactive_turns.state import TURN_STATUS_SUCCE
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
 from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.unit.onyx.server.features.build.fakes import FakeCache
+from tests.unit.fakes import FakeCache
 
 
 class _FakeDbSession:

@@ -17,6 +17,8 @@ export function constructMiniFiedPersona(name: string, id: number): Agent {
     document_sets: [],
     tools: [],
     owner: null,
+    owner_group: null,
+    user_permission: null,
     starter_messages: null,
     builtin_persona: false,
     is_featured: false,

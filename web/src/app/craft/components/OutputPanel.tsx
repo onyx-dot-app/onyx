@@ -65,7 +65,6 @@ const tabs: { value: TabValue; label: string; icon: React.FC<IconProps> }[] = [
 ];
 
 interface BuildOutputPanelProps {
-  onClose: () => void;
   isOpen: boolean;
 }
 
@@ -78,7 +77,7 @@ interface BuildOutputPanelProps {
  * - File browser for exploring sandbox filesystem
  * - Artifact list with download/view options
  */
-const BuildOutputPanel = memo(({ onClose, isOpen }: BuildOutputPanelProps) => {
+const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const session = useSession();
   const preProvisionedSessionId = usePreProvisionedSessionId();
   const isPreProvisioning = useIsPreProvisioning();

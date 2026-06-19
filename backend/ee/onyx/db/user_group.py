@@ -32,6 +32,7 @@ from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import LLMProvider__UserGroup
 from onyx.db.models import PermissionGrant
 from onyx.db.models import Persona
+from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import TokenRateLimit__UserGroup
 from onyx.db.models import User
@@ -90,6 +91,32 @@ def _cleanup_persona__user_group_relationships__no_commit(
     db_session.query(Persona__UserGroup).filter(
         Persona__UserGroup.user_group_id == user_group_id
     ).delete(synchronize_session=False)
+
+
+def _handle_owned_personas_for_group_deletion__no_commit(
+    db_session: Session, user_group_id: int
+) -> None:
+    """Personas owned by the group: otherwise-private ones die with it;
+    shared/public ones are orphaned (ownerless ⇒ managed by admins).
+
+    NOTE: does not commit the transaction."""
+    owned_personas = (
+        db_session.query(Persona)
+        .options(
+            selectinload(Persona.user_shares),
+            selectinload(Persona.group_shares),
+        )
+        .filter(Persona.owner_group_id == user_group_id)
+        .all()
+    )
+    for persona in owned_personas:
+        if (
+            not persona.is_public
+            and not persona.user_shares
+            and not persona.group_shares
+        ):
+            persona.deleted = True
+        persona.owner_group_id = None
 
 
 def _cleanup_token_rate_limit__user_group_relationships__no_commit(
@@ -252,6 +279,11 @@ def _add_user_group_snapshot_eager_loads(
             selectinload(Persona.user_files),
             selectinload(Persona.users),
             selectinload(Persona.groups),
+            selectinload(Persona.owner_group),
+            selectinload(Persona.user_shares).selectinload(Persona__User.user),
+            selectinload(Persona.group_shares).selectinload(
+                Persona__UserGroup.user_group
+            ),
         ),
     )
 
@@ -900,6 +932,9 @@ def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> 
         db_session=db_session, user_group_id=user_group_id
     )
     _cleanup_persona__user_group_relationships__no_commit(
+        db_session=db_session, user_group_id=user_group_id
+    )
+    _handle_owned_personas_for_group_deletion__no_commit(
         db_session=db_session, user_group_id=user_group_id
     )
     _cleanup_user_group__cc_pair_relationships__no_commit(

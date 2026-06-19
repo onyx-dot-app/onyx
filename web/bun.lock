@@ -130,13 +130,14 @@
     },
     "lib/opal": {
       "name": "@onyx-ai/opal",
-      "version": "0.1.11",
+      "version": "0.0.0",
       "dependencies": {
         "clsx": "^2.0.0",
         "copy-to-clipboard": "^3.3.3",
         "tailwind-merge": "^2.0.0",
       },
       "devDependencies": {
+        "@onyx-ai/shared": "file:../shared",
         "tsup": "^8.3.0",
         "typescript": "^5.0.0",
       },

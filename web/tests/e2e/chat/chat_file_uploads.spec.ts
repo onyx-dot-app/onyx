@@ -40,6 +40,29 @@ async function uploadFilesToChat(
   page: Page,
   files: UploadFile[]
 ): Promise<void> {
+  // Report every tracked file as COMPLETED so the chat input treats uploads
+  // as ready. The send button is disabled while a file is still processing,
+  // and a file that fails to index is dropped from the message — so without
+  // this stub these tests would race (or depend on) the real indexing
+  // pipeline. UI rendering is what's under test here, not indexing.
+  await page.route("**/api/user/projects/file/statuses", async (route) => {
+    const ids =
+      (route.request().postDataJSON() as { file_ids?: string[] })?.file_ids ??
+      [];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        ids.map((id) => ({
+          id,
+          status: "COMPLETED",
+          token_count: 1,
+          chunk_count: 1,
+        }))
+      ),
+    });
+  });
+
   const fileInput = page.locator('input[type="file"]').first();
   const chooserPromise = page.waitForEvent("filechooser");
   await fileInput.dispatchEvent("click");

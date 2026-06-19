@@ -16,7 +16,7 @@ Contract under test (observed through the admin response's ``actions`` view):
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.providers.slack import SlackAction
-from onyx.server.features.build.api.models import ExternalAppAdminResponse
+from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.test_models import DATestUser
 

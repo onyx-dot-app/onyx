@@ -179,37 +179,6 @@ def update_session_activity(
         db_session.commit()
 
 
-def update_session_status(
-    session_id: UUID,
-    status: BuildSessionStatus,
-    db_session: Session,
-) -> None:
-    """Update the status of a build session."""
-    session = (
-        db_session.query(BuildSession)
-        .filter(BuildSession.id == session_id)
-        .one_or_none()
-    )
-    if session:
-        session.status = status
-        db_session.commit()
-        logger.info("Updated build session %s status to %s", session_id, status)
-
-
-def update_session_agent_selection(
-    session_id: UUID,
-    agent_provider: str,
-    agent_model: str,
-    db_session: Session,
-) -> None:
-    """Persist the agent provider/model on the session row so a composer
-    model override sticks across reloads."""
-    session = db_session.query(BuildSession).filter(BuildSession.id == session_id).one()
-    session.agent_provider = agent_provider
-    session.agent_model = agent_model
-    db_session.commit()
-
-
 def set_build_session_sharing_scope(
     session_id: UUID,
     user_id: UUID,

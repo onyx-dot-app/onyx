@@ -2,10 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useBuildSessionController } from "@/app/craft/hooks/useBuildSessionController";
-import {
-  useOutputPanelOpen,
-  useToggleOutputPanel,
-} from "@/app/craft/hooks/useBuildSessionStore";
+import { useOutputPanelOpen } from "@/app/craft/hooks/useBuildSessionStore";
 import { getSessionIdFromSearchParams } from "@/app/craft/services/searchParams";
 import BuildChatPanel from "@/app/craft/components/ChatPanel";
 import BuildOutputPanel from "@/app/craft/components/OutputPanel";
@@ -24,7 +21,6 @@ export default function BuildV1Page() {
   const sessionId = getSessionIdFromSearchParams(searchParams);
 
   const outputPanelOpen = useOutputPanelOpen();
-  const toggleOutputPanel = useToggleOutputPanel();
   useBuildSessionController({ existingSessionId: sessionId });
 
   return (
@@ -35,10 +31,7 @@ export default function BuildV1Page() {
 
       <div className="relative z-10 w-full h-full">
         <BuildChatPanel existingSessionId={sessionId} />
-        <BuildOutputPanel
-          onClose={toggleOutputPanel}
-          isOpen={outputPanelOpen}
-        />
+        <BuildOutputPanel isOpen={outputPanelOpen} />
       </div>
     </div>
   );

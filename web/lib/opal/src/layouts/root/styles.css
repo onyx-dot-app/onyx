@@ -5,42 +5,6 @@
   @apply flex flex-row w-full h-full;
 }
 
-/* Sidebar overlay (mobile + medium) — fixed positioning strip */
-.opal-root-layout__sidebar-overlay {
-  @apply fixed inset-y-0 left-0 z-50;
-}
-
-/* Mobile: slides in/out via transform */
-.opal-root-layout__sidebar-overlay[data-variant="mobile"] {
-  @apply transition-transform duration-200;
-}
-.opal-root-layout__sidebar-overlay[data-variant="mobile"][data-folded="true"] {
-  @apply -translate-x-full;
-}
-.opal-root-layout__sidebar-overlay[data-variant="mobile"][data-folded="false"] {
-  @apply translate-x-0;
-}
-
-/* Medium: spacer that holds width in the flex layout flow */
-.opal-root-layout__sidebar-spacer {
-  @apply shrink-0 w-(--sidebar-width-folded);
-}
-
-/* Backdrop — shared fade behavior */
-.opal-root-layout__backdrop {
-  @apply fixed inset-0 z-40 backdrop-blur-03 transition-opacity duration-200;
-}
-/* Mobile gets a tinted mask; medium is blur-only */
-.opal-root-layout__backdrop[data-variant="mobile"] {
-  @apply bg-mask-03;
-}
-.opal-root-layout__backdrop[data-folded="true"] {
-  @apply opacity-0 pointer-events-none;
-}
-.opal-root-layout__backdrop[data-folded="false"] {
-  @apply opacity-100 pointer-events-auto;
-}
-
 /* App — fills remaining flex space; flex-col so Header/Footer pin correctly */
 .opal-root-layout__app {
   @apply flex-1 flex flex-col overflow-hidden h-full w-full;
@@ -59,6 +23,7 @@
 /* Header — pinned top bar inside main content */
 .opal-root-layout__header {
   @apply shrink-0;
+  height: var(--chrome-header-height);
 }
 
 /* Footer — pinned bottom bar inside main content */

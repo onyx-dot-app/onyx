@@ -2,7 +2,6 @@
 
 import React, {
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -26,10 +25,7 @@ import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
-import {
-  SettingsContext,
-  useVectorDbEnabled,
-} from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
 import {
@@ -284,6 +280,9 @@ const AppInputBar = React.memo(
       );
     }, [currentMessageFiles]);
 
+    // A file isn't queryable until indexing completes, so gate send on it.
+    const hasIndexingFiles = currentIndexingFiles.length > 0;
+
     // Convert ProjectFile to MinimalOnyxDocument format for viewing
     const handleFileClick = useCallback(
       (file: ProjectFile) => {
@@ -309,7 +308,7 @@ const AppInputBar = React.memo(
       [handleFileUpload]
     );
 
-    const combinedSettings = useContext(SettingsContext);
+    const combinedSettingsData = useSettings();
 
     const prevChatStateRef = useRef(chatState);
     const prevAwaitingRef = useRef(awaitingPreferredSelection);
@@ -392,7 +391,7 @@ const AppInputBar = React.memo(
     );
 
     const { activePromptShortcuts } = usePromptShortcuts();
-    const vectorDbEnabled = useVectorDbEnabled();
+    const { vectorDbEnabled } = combinedSettingsData;
     const { ccPairs, isLoading: ccPairsLoading } = useCCPairs(vectorDbEnabled);
     const { data: federatedConnectorsData, isLoading: federatedLoading } =
       useFederatedConnectors();
@@ -460,6 +459,14 @@ const AppInputBar = React.memo(
     // Determine if we should hide processing state based on context limits
     const hideProcessingState = useMemo(() => {
       if (currentMessageFiles.length > 0 && currentIndexingFiles.length > 0) {
+        // token_count is null until indexing finishes; don't hide the
+        // processing indicator while a file's size is still unknown.
+        const allTokenCountsKnown = currentIndexingFiles.every(
+          (file) => file.token_count !== null
+        );
+        if (!allTokenCountsKnown) {
+          return false;
+        }
         const currentFilesTokenTotal = currentMessageFiles.reduce(
           (acc, file) => acc + (file.token_count || 0),
           0
@@ -485,7 +492,7 @@ const AppInputBar = React.memo(
     // AND if deep research is globally enabled in admin settings
     const showDeepResearch = useMemo(() => {
       const deepResearchGloballyEnabled =
-        combinedSettings?.settings?.deep_research_enabled ?? true;
+        combinedSettingsData?.deep_research_enabled ?? true;
       const isProjectWorkflow = currentProjectId !== null;
 
       // TODO(@yuhong): Re-enable Deep Research in Projects workflow once it is fully supported.
@@ -497,7 +504,7 @@ const AppInputBar = React.memo(
       );
     }, [
       selectedAgent?.tools,
-      combinedSettings?.settings?.deep_research_enabled,
+      combinedSettingsData?.deep_research_enabled,
       currentProjectId,
     ]);
 
@@ -706,7 +713,13 @@ const AppInputBar = React.memo(
                 !isVoicePlaybackControllable &&
                 !message) ||
               hasUploadingFiles ||
+              hasIndexingFiles ||
               isClassifying
+            }
+            tooltip={
+              hasUploadingFiles || hasIndexingFiles
+                ? "Waiting for attached file(s) to finish processing"
+                : undefined
             }
             id="onyx-chat-input-send-button"
             icon={

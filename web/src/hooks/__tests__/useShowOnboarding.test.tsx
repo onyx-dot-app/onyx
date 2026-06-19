@@ -24,7 +24,7 @@ jest.mock("@/components/chat/ProviderContext", () => ({
   useProviderStatus: () => mockProviderStatus,
 }));
 
-jest.mock("@/hooks/useLanguageModels", () => ({
+jest.mock("@/lib/languageModels/hooks", () => ({
   useLLMProviders: () => ({
     refetch: jest.fn(),
   }),

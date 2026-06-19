@@ -8,6 +8,8 @@ from typing import Literal
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.constants import AuthType
 from onyx.db.models import User
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.server.features.build.configs import CRAFT_PAID_USER_RATE_LIMIT
@@ -17,6 +19,7 @@ from onyx.server.features.build.db.rate_limit import get_oldest_message_timestam
 from onyx.server.features.build.subscription_check import is_user_subscribed
 from onyx.server.features.build.utils import CRAFT_HAS_USAGE_LIMITS
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 # Default limit for free/non-subscribed users (not configurable)
 FREE_USER_RATE_LIMIT = 5
@@ -36,8 +39,9 @@ def _should_skip_rate_limiting(user: User) -> bool:
     """
     Check if rate limiting should be skipped for this user.
 
-    Currently grants unlimited usage to dev tenant users (tenant_dev).
-    Controlled via PostHog feature flag.
+    Grants unlimited usage to tenants/users whose `craft-has-usage-limits`
+    PostHog flag is off (e.g. tenant_dev). Only reached on Onyx Cloud, where
+    PostHog is configured.
 
     Returns:
         True to skip rate limiting (unlimited), False to apply normal limits
@@ -49,9 +53,10 @@ def _should_skip_rate_limiting(user: User) -> bool:
     feature_flag_provider = get_default_feature_flag_provider()
     # Flag returns True for users who SHOULD be rate limited
     # We negate to get: True = skip rate limiting
-    has_rate_limit = feature_flag_provider.feature_enabled(
+    has_rate_limit = feature_flag_provider.feature_enabled_for_user_tenant(
         CRAFT_HAS_USAGE_LIMITS,
-        user.id,
+        user,
+        get_current_tenant_id(),
     )
     return not has_rate_limit
 
@@ -63,14 +68,13 @@ def get_user_rate_limit_status(
     """
     Get the rate limit status for a user.
 
-    Rate limits:
-        - Cloud (MULTI_TENANT=true):
-            - Subscribed users: CRAFT_PAID_USER_RATE_LIMIT messages per week
-              (configurable, default 25)
-            - Non-subscribed users: 5 messages (lifetime total)
-            - Per-user overrides via PostHog feature flag
-        - Self-hosted (MULTI_TENANT=false):
-            - Unlimited (no rate limiting)
+    Rate limits apply on Onyx Cloud only:
+        - Subscribed users: CRAFT_PAID_USER_RATE_LIMIT messages per week
+          (configurable, default 25)
+        - Non-subscribed users: 5 messages (lifetime total)
+        - Per-tenant/user overrides via the `craft-has-usage-limits` PostHog flag
+
+    All non-cloud deployments (self-hosted, managed) are unlimited.
 
     Args:
         user: The authenticated user
@@ -79,8 +83,9 @@ def get_user_rate_limit_status(
     Returns:
         RateLimitResponse with current limit status
     """
-    # Self-hosted deployments have no rate limits
-    if not MULTI_TENANT:
+    # Rate limits apply only on Onyx Cloud (multi-tenant); all other deployments
+    # are unlimited.
+    if not MULTI_TENANT or AUTH_TYPE != AuthType.CLOUD:
         return RateLimitResponse(
             is_limited=False,
             limit_type="weekly",
@@ -100,7 +105,7 @@ def get_user_rate_limit_status(
         )
 
     # Determine subscription status
-    is_subscribed = is_user_subscribed(user, db_session)
+    is_subscribed = is_user_subscribed(user)
 
     # Get limit based on subscription status
     limit = CRAFT_PAID_USER_RATE_LIMIT if is_subscribed else FREE_USER_RATE_LIMIT

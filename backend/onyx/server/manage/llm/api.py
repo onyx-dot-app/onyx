@@ -51,6 +51,7 @@ from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import is_sensitive_custom_config_key
+from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
@@ -1179,12 +1180,28 @@ def get_bedrock_available_models(
 
 
 def _get_ollama_available_model_names(api_base: str) -> set[str]:
-    """Fetch available model names from Ollama server."""
+    """Fetch available model names from an Ollama server.
+
+    An unreachable address surfaces as 400, not 502: the admin supplied the
+    URL, so a server Onyx can't route to is a client misconfiguration.
+    """
     tags_url = f"{api_base}/api/tags"
     try:
         response = httpx.get(tags_url, timeout=5.0)
         response.raise_for_status()
         response_json = response.json()
+    except httpx.HTTPStatusError as e:
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            f"Ollama server at {api_base} returned an error "
+            f"({e.response.status_code}).",
+        )
+    except httpx.RequestError as e:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Could not reach an Ollama server at {api_base}. Check that the URL "
+            f"is correct and reachable from Onyx ({type(e).__name__}).",
+        )
     except Exception as e:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
@@ -1656,13 +1673,14 @@ def _get_openai_compatible_models_response(
             )
     except httpx.RequestError as e:
         logger.warning(
-            "Failed to fetch models from OpenAI-compatible endpoint",
+            "Could not reach OpenAI-compatible models endpoint",
             extra={"source": source_name, "url": url, "error": str(e)},
             exc_info=True,
         )
         raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"Failed to fetch {source_name} models: {e}",
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"Could not reach {source_name} at {url}. Check that the URL is "
+            f"correct and reachable from Onyx ({type(e).__name__}).",
         )
     except ValueError as e:
         logger.warning(
@@ -1719,7 +1737,10 @@ def get_bifrost_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=infer_vision_support(model_id),
+                    # Vision support from the LiteLLM cost map, not a hardcoded list
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.BIFROST
+                    ),
                     supports_reasoning=is_reasoning_model(model_id, model_name),
                 )
             )

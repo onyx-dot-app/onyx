@@ -9,6 +9,10 @@ env allowlist), so we lock it down here.
 from __future__ import annotations
 
 import re
+import threading
+from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
@@ -57,12 +61,28 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     LABEL_USER_ID,
 )
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    SANDBOX_TMP_PATH,
+)
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    SANDBOX_TMPFS_OPTIONS,
+)
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
 
 SANDBOX_ID = UUID("12345678-1234-1234-1234-1234567890ab")
 USER_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 TENANT_ID = "tenant-abc"
+
+
+def _bare_manager_with_image(image: str) -> tuple[dsm.DockerSandboxManager, MagicMock]:
+    mgr: dsm.DockerSandboxManager = object.__new__(dsm.DockerSandboxManager)
+    docker = MagicMock()
+    mgr._docker = docker  # type: ignore[attr-defined]
+    mgr._image = image  # type: ignore[attr-defined]
+    mgr._image_checked = False  # type: ignore[attr-defined]
+    mgr._image_check_lock = threading.Lock()  # type: ignore[attr-defined]
+    return mgr, docker
 
 
 def test_container_name_matches_k8s_pattern() -> None:
@@ -101,6 +121,117 @@ def test_labels_omit_user_id_when_none() -> None:
     labels = build_sandbox_labels(SANDBOX_ID, TENANT_ID, None)
     assert LABEL_USER_ID not in labels
     assert labels[LABEL_SANDBOX_ID] == str(SANDBOX_ID)
+
+
+def test_immutable_sandbox_image_uses_cached_image_when_present() -> None:
+    mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:v4.1.2")
+
+    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+
+    docker.images.get.assert_called_once_with("onyxdotapp/sandbox:v4.1.2")
+    docker.images.pull.assert_not_called()
+
+
+def test_immutable_sandbox_image_pulls_when_missing() -> None:
+    mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:v4.1.2")
+    docker.images.get.side_effect = dsm.NotFound("missing")
+
+    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+
+    docker.images.pull.assert_called_once_with("onyxdotapp/sandbox:v4.1.2")
+
+
+def test_mutable_sandbox_image_refreshes_once() -> None:
+    mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:latest")
+
+    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+
+    docker.images.pull.assert_called_once_with("onyxdotapp/sandbox:latest")
+    docker.images.get.assert_not_called()
+
+
+def test_sandbox_image_refresh_is_thread_safe() -> None:
+    mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:latest")
+    pull_started = threading.Event()
+    finish_pull = threading.Event()
+
+    def pull_image(_image: str) -> None:
+        pull_started.set()
+        assert finish_pull.wait(timeout=1)
+
+    docker.images.pull.side_effect = pull_image
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(mgr._ensure_sandbox_image)  # type: ignore[attr-defined]
+        assert pull_started.wait(timeout=1)
+        second = executor.submit(mgr._ensure_sandbox_image)  # type: ignore[attr-defined]
+        finish_pull.set()
+        first.result(timeout=1)
+        second.result(timeout=1)
+
+    docker.images.pull.assert_called_once_with("onyxdotapp/sandbox:latest")
+
+
+def test_implicit_latest_sandbox_image_refreshes() -> None:
+    image = "onyxdotapp/sandbox"
+    mgr, docker = _bare_manager_with_image(image)
+
+    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+
+    docker.images.pull.assert_called_once_with(image)
+    docker.images.get.assert_not_called()
+
+
+def test_mutable_sandbox_image_uses_cache_once_if_refresh_fails() -> None:
+    # Avoid retrying the registry on every sandbox spinup. A process restart
+    # gets another chance to refresh the moving tag.
+    mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:edge")
+    docker.images.pull.side_effect = dsm.APIError("registry unavailable")
+
+    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+
+    docker.images.pull.assert_called_once_with("onyxdotapp/sandbox:edge")
+    docker.images.get.assert_called_once_with("onyxdotapp/sandbox:edge")
+
+
+def test_mutable_sandbox_image_raises_if_refresh_fails_without_cache() -> None:
+    mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:beta")
+    docker.images.pull.side_effect = dsm.APIError("registry unavailable")
+    docker.images.get.side_effect = dsm.NotFound("missing")
+
+    with pytest.raises(RuntimeError, match="Failed to pull sandbox image"):
+        mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+
+
+def test_local_dev_sandbox_image_uses_cached_image_when_present() -> None:
+    mgr, docker = _bare_manager_with_image("onyxdotapp/sandbox:dev")
+
+    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+
+    docker.images.get.assert_called_once_with("onyxdotapp/sandbox:dev")
+    docker.images.pull.assert_not_called()
+
+
+def test_registry_port_untagged_image_refreshes_as_implicit_latest() -> None:
+    image = "localhost:5001/onyx-sandbox"
+    mgr, docker = _bare_manager_with_image(image)
+
+    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+
+    docker.images.pull.assert_called_once_with(image)
+    docker.images.get.assert_not_called()
+
+
+def test_digest_sandbox_image_uses_cached_image_when_present() -> None:
+    image = "onyxdotapp/sandbox@sha256:abc123"
+    mgr, docker = _bare_manager_with_image(image)
+
+    mgr._ensure_sandbox_image()  # type: ignore[attr-defined]
+
+    docker.images.get.assert_called_once_with(image)
+    docker.images.pull.assert_not_called()
 
 
 _OPENCODE_PASSWORD = "secret-password-fixture"
@@ -165,6 +296,78 @@ def test_container_kwargs_has_required_security_options(
     assert kwargs["cap_drop"] == ["ALL"]
     assert "no-new-privileges:true" in kwargs["security_opt"]
     assert kwargs["privileged"] is False
+
+
+def test_sandbox_exec_wrapper_pairs_uid_with_user_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_run = MagicMock(return_value=dsm.ExecResult(0, b"", b""))
+    monkeypatch.setattr(dsm, "run_in_container", mock_run)
+    container = MagicMock()
+
+    result = dsm._run_in_container_as_sandbox_user(
+        container,
+        ["/bin/sh", "-c", "id"],
+        check=False,
+        workdir="/workspace",
+    )
+
+    assert result.exit_code == 0
+    mock_run.assert_called_once_with(
+        container,
+        ["/bin/sh", "-c", "id"],
+        user=dsm.SANDBOX_EXEC_USER,
+        workdir="/workspace",
+        environment=dsm.SANDBOX_EXEC_ENV,
+        check=False,
+    )
+
+
+def _empty_byte_stream() -> Generator[bytes, None, int]:
+    yield from ()
+    return 0
+
+
+def test_sandbox_stream_exec_wrappers_pair_uid_with_user_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_stdin = MagicMock(return_value=dsm.ExecResult(0, b"", b""))
+    stream = _empty_byte_stream()
+    mock_stdout = MagicMock(return_value=stream)
+    monkeypatch.setattr(dsm, "stream_stdin_to_container", mock_stdin)
+    monkeypatch.setattr(dsm, "stream_stdout_from_container", mock_stdout)
+    container = MagicMock()
+
+    result = dsm._stream_stdin_to_container_as_sandbox_user(
+        container,
+        ["tar", "-xzf", "-"],
+        b"payload",
+        workdir="/workspace",
+    )
+    returned_stream = dsm._stream_stdout_from_container_as_sandbox_user(
+        container,
+        ["tar", "-czf", "-"],
+        workdir="/workspace",
+    )
+
+    assert result.exit_code == 0
+    assert returned_stream is stream
+    mock_stdin.assert_called_once_with(
+        container,
+        ["tar", "-xzf", "-"],
+        b"payload",
+        user=dsm.SANDBOX_EXEC_USER,
+        workdir="/workspace",
+        environment=dsm.SANDBOX_EXEC_ENV,
+    )
+    mock_stdout.assert_called_once_with(
+        container,
+        ["tar", "-czf", "-"],
+        user=dsm.SANDBOX_EXEC_USER,
+        workdir="/workspace",
+        environment=dsm.SANDBOX_EXEC_ENV,
+        chunk_size=64 * 1024,
+    )
 
 
 def test_container_kwargs_does_not_mount_docker_socket(
@@ -339,6 +542,13 @@ def test_container_kwargs_mounts_only_workspace_sessions(
         )
 
 
+def test_container_kwargs_mounts_tmp_as_tmpfs(
+    kwargs: ContainerCreateKwargs,
+) -> None:
+    """Expose /tmp as sandbox-local scratch space without adding a host mount."""
+    assert kwargs["tmpfs"] == {SANDBOX_TMP_PATH: SANDBOX_TMPFS_OPTIONS}
+
+
 def test_container_kwargs_warns_on_internal_compose_host(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -432,10 +642,17 @@ def test_proxy_kwargs_runs_init_as_root_with_required_caps(
     proxy_kwargs: ContainerCreateKwargs,
 ) -> None:
     """NET_ADMIN for iptables; SETPCAP authorises the bounding-set drop;
-    SETUID + SETGID gate the uid/gid switch under cap_drop=ALL."""
+    SETUID + SETGID gate the uid/gid switch under cap_drop=ALL; CHOWN repairs
+    the sessions mount-point owner."""
     assert proxy_kwargs["user"] == "0:0"
     assert proxy_kwargs["cap_drop"] == ["ALL"]
-    assert proxy_kwargs["cap_add"] == ["NET_ADMIN", "SETPCAP", "SETUID", "SETGID"]
+    assert proxy_kwargs["cap_add"] == [
+        "NET_ADMIN",
+        "SETPCAP",
+        "SETUID",
+        "SETGID",
+        "CHOWN",
+    ]
     # The other invariants must not regress in proxy mode.
     assert proxy_kwargs["privileged"] is False
     assert "no-new-privileges:true" in proxy_kwargs["security_opt"]

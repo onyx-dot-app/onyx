@@ -16,7 +16,7 @@ import {
   mergeFetchedModelConfigurations,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   APIBaseField,
@@ -29,7 +29,7 @@ import {
 import { fetchModels } from "@/lib/languageModels/svc";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 
 interface LMStudioModalValues extends BaseLLMModalValues {
   api_base: string;
@@ -48,7 +48,7 @@ function LMStudioModalInternals({
   isOnboarding,
 }: LMStudioModalInternalsProps) {
   const formikProps = useFormikContext<LMStudioModalValues>();
-  const { settings } = useSettingsContext();
+  const settings = useSettings();
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -124,7 +124,7 @@ export default function LMStudioModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
-  const { settings } = useSettingsContext();
+  const settings = useSettings();
   const defaultApiBase = settings.is_containerized
     ? "http://host.docker.internal:1234"
     : "http://localhost:1234";

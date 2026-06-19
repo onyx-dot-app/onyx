@@ -88,6 +88,15 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     "webfetch": "allow",
 }
 
+_TMP_EXTERNAL_DIRECTORY_RULES: dict[str, str] = {
+    # OpenCode applies granular permission objects by pattern match with the
+    # last matching rule winning. Keep the catch-all first so the /tmp allow
+    # rules override it without opening any other external paths.
+    "*": "deny",
+    "/tmp": "allow",  # noqa: S108 - sandbox-local scratch path.
+    "/tmp/**": "allow",  # noqa: S108 - sandbox-local scratch path.
+}
+
 
 def _build_permissions(
     disabled_tools: list[str] | None, dev_mode: bool
@@ -96,7 +105,9 @@ def _build_permissions(
         k: (v.copy() if isinstance(v, dict) else v)
         for k, v in _PERMISSIONS_TEMPLATE.items()
     }
-    permissions["external_directory"] = "allow" if dev_mode else {"*": "deny"}
+    permissions["external_directory"] = (
+        "allow" if dev_mode else _TMP_EXTERNAL_DIRECTORY_RULES.copy()
+    )
     if disabled_tools:
         for tool in disabled_tools:
             permissions[tool] = "deny"
@@ -115,33 +126,6 @@ def _build_provider_block(
     if options:
         block["models"] = {provider_config.model_name: {"options": options}}
     return block
-
-
-def build_opencode_config(
-    provider: str,
-    model_name: str,
-    api_key: str | None = None,
-    api_base: str | None = None,
-    disabled_tools: list[str] | None = None,
-    dev_mode: bool = False,
-    plugins: list[str] | None = None,
-) -> dict[str, Any]:
-    """Single-provider wrapper around :func:`build_multi_provider_opencode_config`."""
-    return build_multi_provider_opencode_config(
-        providers=[
-            LLMProviderConfig(
-                provider=provider,
-                model_name=model_name,
-                api_key=api_key,
-                api_base=api_base,
-            )
-        ],
-        default_provider=provider,
-        default_model=model_name,
-        disabled_tools=disabled_tools,
-        dev_mode=dev_mode,
-        plugins=plugins,
-    )
 
 
 def build_multi_provider_opencode_config(

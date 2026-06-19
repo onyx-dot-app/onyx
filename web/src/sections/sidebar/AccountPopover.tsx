@@ -28,10 +28,7 @@ import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import useAppFocus from "@/hooks/useAppFocus";
-import {
-  useVectorDbEnabled,
-  useSettingsContext,
-} from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -49,7 +46,8 @@ function SettingsPopover({
   undismissedCount,
 }: SettingsPopoverProps) {
   const { user } = useUser();
-  const settings = useSettingsContext();
+  const settings = useSettings();
+  const enterpriseSettings = settings.enterprise;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -132,7 +130,7 @@ function SettingsPopover({
           href="https://docs.onyx.app"
           target="_blank"
         />,
-        settings?.enterpriseSettings?.custom_help_link_url && (
+        enterpriseSettings?.custom_help_link_url && (
           <LineItemButton
             key="custom-help-link"
             sizePreset="main-ui"
@@ -140,10 +138,10 @@ function SettingsPopover({
             rounding="sm"
             icon={SvgExternalLink}
             title={
-              settings.enterpriseSettings.custom_help_link_label ||
-              settings.enterpriseSettings.custom_help_link_url
+              enterpriseSettings.custom_help_link_label ||
+              enterpriseSettings.custom_help_link_url
             }
-            href={settings.enterpriseSettings.custom_help_link_url}
+            href={enterpriseSettings.custom_help_link_url}
             target="_blank"
           />
         ),
@@ -180,7 +178,7 @@ function SettingsPopover({
             icon={SvgOnyxLogo}
             title={markdown(
               `[Onyx ${
-                settings?.webVersion ?? "dev"
+                settings.version ?? "dev"
               }](https://docs.onyx.app/changelog)`
             )}
           />
@@ -204,7 +202,7 @@ export default function AccountPopover({
   >(undefined);
   const { user } = useUser();
   const appFocus = useAppFocus();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = useSettings();
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
   const userDisplayName = getUserDisplayName(user);

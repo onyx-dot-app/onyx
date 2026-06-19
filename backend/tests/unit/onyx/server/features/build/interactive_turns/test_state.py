@@ -17,7 +17,7 @@ from onyx.server.features.build.interactive_turns.state import touch_turn
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_FAILED
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_QUEUED
 from onyx.server.features.build.interactive_turns.state import TURN_STATUS_RUNNING
-from tests.unit.onyx.server.features.build.fakes import FakeCache
+from tests.unit.fakes import FakeCache
 
 
 class _InterleavingCache(FakeCache):

@@ -1,44 +1,27 @@
-# Runs the Craft Kubernetes sandbox tests against a kind cluster on each
-# PR that touches sandbox source. The sandbox image is built from the
-# current tree and served from a local docker registry; kind pulls from
-# that registry rather than going through `kind load docker-image`,
-# which would write a multi-GB tar to tmpfs-backed /tmp.
-# Canonical kind-in-CI pattern: https://kind.sigs.k8s.io/docs/user/local-registry/
+# Runs the Craft Kubernetes sandbox tests against a kind cluster on each PR that
+# touches sandbox source. The sandbox image is built from the current tree and
+# served from a local docker registry; kind pulls from that registry rather than
+# going through `kind load docker-image`, which would write a multi-GB tar to
+# tmpfs-backed /tmp. Canonical kind-in-CI pattern:
+# https://kind.sigs.k8s.io/docs/user/local-registry/
 name: Craft Kubernetes Sandbox Tests
 concurrency:
   group: Craft-K8s-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 on:
+  schedule:
+    - cron: "0 7 * * *"   # 07:00 UTC nightly
   merge_group:
   pull_request:
     branches: [main]
-    paths:
-      - "backend/onyx/server/features/build/sandbox/**"
-      - "backend/onyx/server/features/build/approvals/**"
-      - "backend/onyx/skills/**"
-      - "backend/onyx/sandbox_proxy/**"
-      - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py"
-      - "backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox_file_ops.py"
-      - "backend/tests/external_dependency_unit/craft/test_bun_node_modules_dedup.py"
-      - "backend/tests/external_dependency_unit/craft/test_snapshot_restore.py"
-      - "backend/tests/external_dependency_unit/craft/test_idle_cleanup.py"
-      - "backend/tests/external_dependency_unit/craft/test_skill_push.py"
-      - "backend/tests/external_dependency_unit/craft/test_user_library_sync.py"
-      - "backend/tests/external_dependency_unit/craft/test_ensure_sandbox_running.py"
-      - "backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py"
-      - "backend/tests/external_dependency_unit/craft/test_approval_gate.py"
-      - "backend/tests/external_dependency_unit/craft/conftest.py"
-      - ".github/workflows/pr-craft-k8s-tests.yml"
-      - ".github/actions/setup-python-and-install-dependencies/**"
-      - ".github/actions/login-ecr-pullthrough-cache/**"
-      - "deployment/docker_compose/docker-compose.yml"
-      - "deployment/docker_compose/docker-compose.dev.yml"
-      # Watch the whole chart, not just the templates we render — shared
-      # inputs like _helpers.tpl, values.yaml, and Chart.yaml all feed
-      # into `helm template --show-only`, so a chart edit anywhere can
-      # break the render/apply flow.
-      - "deployment/helm/charts/onyx/**"
+    # NOTE: Intentionally no `paths:` filter. Trigger-level `paths:` is ignored
+    # for `merge_group`, so we always trigger and let the `changes` job below
+    # decide whether the real test job runs.
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -53,20 +36,21 @@ env:
   SANDBOX_NAMESPACE: "onyx-sandboxes"
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
-  # Sandbox pod resource requests live in values-ci.yaml (configMap.SANDBOX_POD_*).
+  # Sandbox pod resource requests live in values-ci.yaml
+  # (configMap.SANDBOX_POD_*).
   SANDBOX_API_SERVER_URL: "http://api-server.onyx-ci.invalid"
 
-  # Proxy lives in release namespace `onyx`. SANDBOX_PROXY_HOST is set
-  # later to the proxy Service ClusterIP — the runner has no cluster DNS,
-  # so a Service FQDN here would fail _resolve_proxy_ip in the manager.
+  # Proxy lives in release namespace `onyx`. SANDBOX_PROXY_HOST is set later to
+  # the proxy Service ClusterIP — the runner has no cluster DNS, so a Service
+  # FQDN here would fail _resolve_proxy_ip in the manager.
   HELM_RELEASE_NAMESPACE: "onyx"
   SANDBOX_PROXY_PORT: "8080"
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
   BACKEND_IMAGE: "localhost:5001/onyx-backend:ci"
-  # Fail fast on opencode hangs (default is 900s). Without this, CI
-  # waits 15 min for the per-turn timeout while the 20-min workflow timeout
-  # kills the job first — losing failure logs and giving zero signal.
+  # Fail fast on opencode hangs (default is 900s). Without this, CI waits 15 min
+  # for the per-turn timeout while the 20-min workflow timeout kills the job
+  # first — losing failure logs and giving zero signal.
   SANDBOX_TURN_TIMEOUT_SECONDS: "120"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
@@ -79,14 +63,53 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
+  changes:
+    # Decides whether the heavy test job runs. On pull_request / merge_group we
+    # use paths-filter; on schedule / push (tags) / workflow_dispatch the filter
+    # is skipped and the output defaults to `true` so everything runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      craft_k8s: ${{ steps.filter.outputs.craft_k8s || 'true' }}
+    steps:
+      - name: Checkout code
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          filters: |
+            craft_k8s:
+              - 'backend/onyx/sandbox_proxy/**'
+              - 'backend/onyx/server/features/build/sandbox/**'
+              - 'backend/onyx/server/features/build/approvals/**'
+              - 'backend/onyx/skills/**'
+              - 'backend/tests/external_dependency_unit/craft/**'
+              # Whole chart: shared inputs (_helpers.tpl, values.yaml,
+              # Chart.yaml) all feed `helm template`, so a chart edit anywhere
+              # can break it.
+              - 'deployment/helm/charts/onyx/**'
+              - '.github/workflows/pr-craft-k8s-tests.yml'
+              - '.github/actions/setup-python-and-install-dependencies/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
+
   craft-k8s-tests:
+    needs: changes
+    if: ${{ needs.changes.outputs.craft_k8s == 'true' }}
     runs-on:
       - runs-on
       - runner=4cpu-linux-x64
       - volume=100gb
       - ${{ format('run-id={0}-craft-k8s-tests', github.run_id) }}
       - extras=s3-cache
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     env:
       PYTHONPATH: ./backend
@@ -97,7 +120,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
 
@@ -114,10 +137,10 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
-      # network=host so buildx (running in a container) can push to the
-      # host's registry at localhost:5001.
+      # network=host so buildx (running in a container) can push to the host's
+      # registry at localhost:5001.
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
         with:
           driver-opts: network=host
 
@@ -134,8 +157,9 @@ jobs:
           context: ./backend/onyx/server/features/build/sandbox/image
           file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
           platforms: linux/amd64
-          # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
-          # so skip LibreOffice et al. to keep the CI image lean.
+          # CI tests don't exercise skill runtime deps
+          # (soffice/pdftoppm/pptxgenjs), so skip LibreOffice et al. to keep the
+          # CI image lean.
           build-args: |
             ENABLE_SKILLS=false
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
@@ -144,7 +168,8 @@ jobs:
           cache-from: type=gha,scope=craft-sandbox
           cache-to: type=gha,scope=craft-sandbox,mode=max
 
-      # Backend image runs the sandbox-proxy via `python -m onyx.sandbox_proxy.server`.
+      # Backend image runs the sandbox-proxy via `python -m
+      # onyx.sandbox_proxy.server`.
       - name: Build and push backend image
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
@@ -170,14 +195,14 @@ jobs:
           EOF
 
       - name: Create kind cluster
-        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # ratchet:helm/kind-action@v1.14.0
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc
         with:
           cluster_name: onyx-craft-ci
           node_image: kindest/node:v1.33.1
           config: ${{ runner.temp }}/kind-config.yaml
 
-      # Connect the registry to kind's docker network and tell containerd
-      # to route localhost:5001 → kind-registry:5000.
+      # Connect the registry to kind's docker network and tell containerd to
+      # route localhost:5001 → kind-registry:5000.
       - name: Connect local registry to kind network
         run: |
           docker network connect "kind" "${KIND_REGISTRY_NAME}" || true
@@ -195,14 +220,14 @@ jobs:
           sudo ip route add 10.244.0.0/16 via "$NODE_IP"
 
       # Pod spec sets nodeSelector onyx.app/workload=sandbox
-      # (kubernetes_sandbox_manager.py). In prod this matches a dedicated
-      # node pool; in kind we just label the single control-plane node.
+      # (kubernetes_sandbox_manager.py). In prod this matches a dedicated node
+      # pool; in kind we just label the single control-plane node.
       - name: Label kind node for sandbox workload
         run: kubectl label node onyx-craft-ci-control-plane onyx.app/workload=sandbox
 
-      # `helm template` validates Chart.yaml dependencies up front, even
-      # for --show-only of a parent-chart template. Add the repos and
-      # build the deps so the render step doesn't error out.
+      # `helm template` validates Chart.yaml dependencies up front, even for
+      # --show-only of a parent-chart template. Add the repos and build the deps
+      # so the render step doesn't error out.
       - name: Build helm chart dependencies
         run: |
           helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
@@ -214,11 +239,11 @@ jobs:
           helm repo update
           helm dependency build deployment/helm/charts/onyx
 
-      # Render the sandbox namespace, proxy, and MinIO manifests from the helm chart
-      # rather than maintaining a parallel copy here. Future chart edits
+      # Render the sandbox namespace, proxy, and MinIO manifests from the helm
+      # chart rather than maintaining a parallel copy here. Future chart edits
       # (proxy spec, RBAC, NetworkPolicy, env-configmap) flow into CI
-      # automatically. When you add a new chart component the K8s sandbox
-      # tests depend on, add its template path to --show-only here.
+      # automatically. When you add a new chart component the K8s sandbox tests
+      # depend on, add its template path to --show-only here.
       - name: Render sandbox + proxy manifests from chart
         run: |
           mkdir -p /tmp/manifests
@@ -290,10 +315,10 @@ jobs:
           exit 1
 
       # The test process runs on the CI runner, which has no cluster DNS.
-      # `socket.gethostbyname(IP)` returns the IP unchanged, so resolving
-      # the Service ClusterIP here lets _resolve_proxy_ip in the manager
-      # succeed without any DNS resolution. host_aliases on sandbox pods
-      # then pins `sandbox-proxy` to this same IP.
+      # `socket.gethostbyname(IP)` returns the IP unchanged, so resolving the
+      # Service ClusterIP here lets _resolve_proxy_ip in the manager succeed
+      # without any DNS resolution. host_aliases on sandbox pods then pins
+      # `sandbox-proxy` to this same IP.
       - name: Resolve proxy Service IP and export to env
         run: |
           PROXY_IP=$(kubectl -n "${HELM_RELEASE_NAMESPACE}" get svc \
@@ -342,12 +367,12 @@ jobs:
 
           # The sandbox-proxy is the only in-cluster component that reads the
           # DB; the chart renders its POSTGRES_HOST as `onyx-pg-rw` (the
-          # release-name + "-pg-rw"). CloudNativePG isn't deployed in this
-          # lane (only the proxy/configmap templates are rendered), so expose
-          # the docker-compose Postgres under that name via a selector-less
-          # Service + manual Endpoints pointing at the container's IP on
-          # kind's docker network. Without this the proxy's identity lookups
-          # raise (DNS for `onyx-pg-rw` fails) and every egress fail-closes 403.
+          # release-name + "-pg-rw"). CloudNativePG isn't deployed in this lane
+          # (only the proxy/configmap templates are rendered), so expose the
+          # docker-compose Postgres under that name via a selector-less Service
+          # + manual Endpoints pointing at the container's IP on kind's docker
+          # network. Without this the proxy's identity lookups raise (DNS for
+          # `onyx-pg-rw` fails) and every egress fail-closes 403.
           cat <<EOF | kubectl apply -f -
           apiVersion: v1
           kind: Service
@@ -416,8 +441,8 @@ jobs:
           alembic upgrade head
           alembic heads --verbose
 
-      # Sandbox pods are torn down on failure before `kind export logs` runs,
-      # so kubelet GCs their opencode-serve logs. Stream them to disk live (one
+      # Sandbox pods are torn down on failure before `kind export logs` runs, so
+      # kubelet GCs their opencode-serve logs. Stream them to disk live (one
       # follower per pod, retrying the attach) so failures leave a trail.
       - name: Start sandbox pod log capture
         run: |
@@ -470,8 +495,8 @@ jobs:
             backend/tests/external_dependency_unit/craft/test_scheduled_task_executor.py \
             backend/tests/external_dependency_unit/craft/test_approval_gate.py
 
-      # Surface the live-captured sandbox pod logs inline so the serve
-      # startup output is visible in the run without downloading artifacts.
+      # Surface the live-captured sandbox pod logs inline so the serve startup
+      # output is visible in the run without downloading artifacts.
       - name: Dump captured sandbox pod logs on failure
         if: failure()
         run: |
@@ -553,3 +578,37 @@ jobs:
             docker-logs/
             sandbox-logs/
           retention-days: 7
+
+  craft-k8s-tests-required:
+    # Single required status check for the craft k8s suite. Always runs so
+    # branch protection has a stable target, and passes cleanly when `changes`
+    # reports no relevant paths changed (i.e. the test job was legitimately
+    # skipped).
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes, craft-k8s-tests]
+    if: ${{ always() }}
+    steps:
+      - name: Check job status
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_TESTS: ${{ needs.changes.outputs.craft_k8s }}
+          TEST_RESULT: ${{ needs.craft-k8s-tests.result }}
+        run: |
+          # Fail closed if `changes` didn't succeed. Otherwise an empty
+          # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
+          # would be indistinguishable from "no relevant paths changed" and we
+          # would incorrectly pass the required check.
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
+          if [ "${RUN_TESTS}" != "true" ]; then
+            echo "No relevant paths changed -- required check passes."
+            exit 0
+          fi
+          if [ "${TEST_RESULT}" != "success" ]; then
+            echo "Test result: ${TEST_RESULT}"
+            exit 1
+          fi
+          echo "All tests passed."

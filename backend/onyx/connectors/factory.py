@@ -23,6 +23,7 @@ from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.enums import AccessType
 from onyx.db.models import Credential
 from onyx.file_store.staging import RawFileCallback
+from onyx.utils.credential_audit import emit_credential_access
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -120,6 +121,15 @@ def instantiate_connector(
         )
         connector.set_credentials_provider(provider)
     else:
+        if credential.credential_json:
+            # Distinct decrypt site from OnyxDBCredentialsProvider (static /
+            # non-dynamic connectors load creds directly here), so this is not
+            # double-logged. Audit is best-effort and never raises.
+            emit_credential_access(
+                credential_type="connector",
+                provider=str(source),
+                row_id=credential.id,
+            )
         credential_json = (
             credential.credential_json.get_value(apply_mask=False)
             if credential.credential_json

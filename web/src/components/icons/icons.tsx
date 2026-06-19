@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { StaticImageData } from "next/image";
+import canvasIcon from "@public/Canvas.png";
 import googleCloudStorageIcon from "@public/GoogleCloudStorage.png";
 import openSourceIcon from "@public/OpenSource.png";
 import r2Icon from "@public/r2.png";
@@ -235,6 +236,7 @@ export const WindowsIcon = ({
 // ============================================================================
 export const BoxIcon = createLogoIcon(boxIcon);
 export const BraintrustIcon = createLogoIcon("/Braintrust.svg");
+export const CanvasIcon = createLogoIcon(canvasIcon);
 export const GoogleStorageIcon = createLogoIcon(googleCloudStorageIcon, {
   sizeAdjustment: 4,
   classNameAddition: "-m-0.5",

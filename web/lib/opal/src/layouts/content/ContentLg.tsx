@@ -38,6 +38,9 @@ interface ContentLgProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
+  /** Clamp the description to N lines. Maps to Text's maxLines prop. */
+  descriptionMaxLines?: number;
+
   /** Enable inline editing of the title. */
   editable?: boolean;
 
@@ -81,6 +84,7 @@ function ContentLg({
   icon: Icon,
   title,
   description,
+  descriptionMaxLines,
   editable,
   onTitleChange,
   ref,
@@ -190,7 +194,12 @@ function ContentLg({
               : undefined
           }
         >
-          <Text font="secondary-body" color="text-03" as="p">
+          <Text
+            font="secondary-body"
+            color="text-03"
+            as="p"
+            maxLines={descriptionMaxLines}
+          >
             {description}
           </Text>
         </div>

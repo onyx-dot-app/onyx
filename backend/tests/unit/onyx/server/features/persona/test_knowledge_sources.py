@@ -46,6 +46,10 @@ def _make_persona(**overrides: object) -> MagicMock:
     p.builtin_persona = False
     p.labels = []
     p.user = None
+    p.owner_group = None
+    p.owner_group_id = None
+    p.user_shares = []
+    p.group_shares = []
 
     for k, v in overrides.items():
         setattr(p, k, v)

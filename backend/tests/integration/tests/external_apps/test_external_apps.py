@@ -4,8 +4,8 @@ import httpx
 import pytest
 
 from onyx.db.enums import ExternalAppType
-from onyx.server.features.build.api.models import ExternalAppAdminResponse
-from onyx.server.features.build.api.models import ExternalAppUserResponse
+from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
+from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
 from onyx.utils.encryption import mask_credential_dict
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.user import UserManager

@@ -279,6 +279,8 @@ class PostgresBackedFileStore(FileStore):
     def change_file_id(
         self, old_file_id: str, new_file_id: str, db_session: Session | None = None
     ) -> None:
+        if old_file_id == new_file_id:
+            return
         with get_session_with_current_tenant_if_none(db_session) as session:
             try:
                 old_record = get_filerecord_by_file_id(

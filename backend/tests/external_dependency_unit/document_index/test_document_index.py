@@ -489,3 +489,109 @@ class TestDocumentIndexNew:
             assert len(retrieved) == 2
             for chunk in retrieved:
                 assert chunk.boost == 0
+
+    def test_update_skips_doc_with_unknown_chunk_count(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that a doc whose chunk count is unknown (the perm-synced-but-not-
+        yet-indexed race) is skipped with a warning instead of raising, and that
+        other docs in the same request are still updated.
+        """
+        # Precondition - index one real doc; pair it with a phantom doc whose
+        # chunk count is unknown (absent from doc_id_to_chunk_cnt -> -1).
+        for document_index in document_indices:
+            real_doc = f"test_update_unknown_real_{uuid.uuid4().hex[:8]}"
+            phantom_doc = f"test_update_unknown_phantom_{uuid.uuid4().hex[:8]}"
+            chunks = [
+                make_chunk(real_doc, chunk_id=0),
+                make_chunk(real_doc, chunk_id=1),
+            ]
+            metadata = make_indexing_metadata(
+                [real_doc], old_counts=[0], new_counts=[2]
+            )
+            document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            # Allow OpenSearch refresh interval to settle.
+            time.sleep(1)
+
+            # Under test - phantom_doc has no entry in doc_id_to_chunk_cnt, so
+            # its chunk count resolves to -1 (unknown). This must not raise.
+            update_request = MetadataUpdateRequest(
+                document_ids=[real_doc, phantom_doc],
+                doc_id_to_chunk_cnt={real_doc: 2},
+                boost=5,
+            )
+            document_index.update([update_request])
+
+            # Postcondition - the real doc is still updated despite the phantom
+            # doc being skipped.
+            filters = IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT],
+                tenant_id=TEST_TENANT_ID,
+            )
+            retrieved = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=real_doc,
+                expected_chunk_count=2,
+                expected_boost=5,
+                filters=filters,
+            )
+            assert len(retrieved) == 2
+            for chunk in retrieved:
+                assert chunk.boost == 5
+
+    def test_update_skips_doc_with_zero_chunk_count(
+        self,
+        document_indices: list[DocumentIndexNew],
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that a doc with a chunk count of 0 (e.g. concurrent delete +
+        metadata sync) is skipped with a warning instead of raising, and that
+        other docs in the same request are still updated.
+        """
+        # Precondition - index one real doc; pair it with a phantom doc whose
+        # chunk count is explicitly 0.
+        for document_index in document_indices:
+            real_doc = f"test_update_zero_real_{uuid.uuid4().hex[:8]}"
+            phantom_doc = f"test_update_zero_phantom_{uuid.uuid4().hex[:8]}"
+            chunks = [
+                make_chunk(real_doc, chunk_id=0),
+                make_chunk(real_doc, chunk_id=1),
+            ]
+            metadata = make_indexing_metadata(
+                [real_doc], old_counts=[0], new_counts=[2]
+            )
+            document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+            # Allow OpenSearch refresh interval to settle.
+            time.sleep(1)
+
+            # Under test - phantom_doc has a chunk count of 0. This must not
+            # raise.
+            update_request = MetadataUpdateRequest(
+                document_ids=[real_doc, phantom_doc],
+                doc_id_to_chunk_cnt={real_doc: 2, phantom_doc: 0},
+                boost=6,
+            )
+            document_index.update([update_request])
+
+            # Postcondition - the real doc is still updated despite the phantom
+            # doc being skipped.
+            filters = IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT],
+                tenant_id=TEST_TENANT_ID,
+            )
+            retrieved = _retrieve_chunks_with_expected_boost(
+                document_index=document_index,
+                document_id=real_doc,
+                expected_chunk_count=2,
+                expected_boost=6,
+                filters=filters,
+            )
+            assert len(retrieved) == 2
+            for chunk in retrieved:
+                assert chunk.boost == 6

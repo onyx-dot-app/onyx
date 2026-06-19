@@ -195,7 +195,6 @@ class SandboxManager(_ServeMixin, ABC):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,
     ) -> None:
         """Clean up a session workspace on session delete: stop the
         Next.js dev server and remove ``sessions/$session_id/``. Does NOT
@@ -244,7 +243,6 @@ class SandboxManager(_ServeMixin, ABC):
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
@@ -258,7 +256,6 @@ class SandboxManager(_ServeMixin, ABC):
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: Path to the snapshot in storage
-            tenant_id: Tenant identifier for storage access
             nextjs_port: Port number for the NextJS dev server, or None to
                 skip starting it (e.g. headless scheduled-task fires).
             llm_config: LLM provider configuration (used to regenerate AGENTS.md)
@@ -688,22 +685,3 @@ class SandboxManager(_ServeMixin, ABC):
             ValueError: If file not found or conversion fails
         """
         ...
-
-    def ensure_nextjs_running(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        nextjs_port: int,
-    ) -> None:
-        """Ensure the Next.js server is running for a session.
-
-        Default is a no-op — only meaningful for backends that manage Next.js
-        process lifecycles directly from the api_server side. The kubernetes
-        backend starts Next.js inside the sandbox pod at workspace setup, so
-        nothing further is needed.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID
-            nextjs_port: The port the Next.js server should be listening on
-        """

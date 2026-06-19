@@ -157,7 +157,7 @@ Sketch:
    pipeline, boot the base, run `crictl pull <sandbox-image>:<tag>`,
    and snapshot the disk.
 3. Point the sandbox node group at the new image ID.
-4. Re-bake whenever `SANDBOX_CONTAINER_IMAGE` bumps (or fall back to
+4. Re-bake whenever the app-aligned sandbox image tag changes (or fall back to
    pulling for that version).
 
 Tradeoff: adds a build pipeline keyed to sandbox image versions, and

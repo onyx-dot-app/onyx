@@ -173,6 +173,20 @@ repos:
         pass_filenames: false
         files: ^web/(package\.json|bun\.lock|lib/opal/package\.json)$
 
+      # `bun install` won't rebuild an already-linked file: dep's gitignored `dist`, so
+      # token / opal-CSS changes from a pull leave opal/dist/root.css stale → the web dev
+      # server serves old radius/spacing/colors (a "boxy" UI). Regenerate it explicitly.
+      # `bun install --frozen-lockfile` first guards the clean-tree case (this hook's file
+      # set is disjoint from bun-install's, so it can fire before node_modules exists).
+      - id: opal-css-rebuild
+        name: rebuild opal token CSS
+        description: "Rebuild opal dist CSS after checkout/pull/rebase so dev gets fresh design tokens"
+        language: system
+        entry: bash -c 'cd web && bun install --frozen-lockfile && bun run --cwd lib/shared build:tokens && bun lib/opal/scripts/bundle-css.mjs'
+        pass_filenames: false
+        files: ^web/lib/(opal/src/.*\.css|opal/scripts/bundle-css\.mjs|shared/(tokens/.*\.json|style-dictionary\.config\.mjs))$
+        stages: [post-checkout, post-merge, post-rewrite]
+
       - id: root-bun-install
         name: root bun install
         description: "Automatically run 'bun install' at the repo root after a checkout, pull or rebase"
@@ -280,7 +294,11 @@ repos:
 
       - id: mobile-format
         name: mobile format
-        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bunx prettier --write "${@#mobile/}"' _
+        # pass_filenames: false so this runs as a single invocation (like the
+        # mobile lint/typecheck hooks above). Passing filenames makes pre-commit
+        # split them into multiple batches that each re-run `bun install`, which
+        # race on bun's cache (EEXIST locally / FileNotFound on CI).
+        entry: bash -c 'cd mobile && bun install --frozen-lockfile && bun run format'
         language: system
-        files: ^mobile/
-        types_or: [javascript, jsx, ts, tsx, json, css]
+        pass_filenames: false
+        files: ^mobile/.*\.(ts|tsx|js|jsx|json|css)$

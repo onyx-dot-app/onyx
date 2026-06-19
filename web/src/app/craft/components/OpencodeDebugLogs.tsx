@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SvgCheck, SvgCopy, SvgTerminal, SvgTrash } from "@opal/icons";
 import { Button, InputTypeIn, Text } from "@opal/components";
 import Modal from "@/refresh-components/Modal";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { cn } from "@opal/utils";
 
 /**
@@ -485,10 +485,10 @@ interface OpencodeDebugLogsButtonProps {
 export default function OpencodeDebugLogsButton({
   folded = false,
 }: OpencodeDebugLogsButtonProps) {
-  const settings = useSettingsContext();
+  const settings = useSettings();
   const [open, setOpen] = useState(false);
 
-  if (settings?.settings?.opencode_debugging_enabled !== true) {
+  if (settings.opencode_debugging_enabled !== true) {
     return null;
   }
 

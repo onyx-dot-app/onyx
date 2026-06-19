@@ -1,22 +1,23 @@
 import "./globals.css";
 
 import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
-import { Metadata } from "next";
 import AppProvider from "@/providers/AppProvider";
 import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
-import { Suspense } from "react";
-import PostHogPageView from "./PostHogPageView";
+import {
+  PostHogPageTracker,
+  PostHogRuntimeInitializer,
+  CustomAnalyticsScript,
+  WebVitals,
+} from "@/lib/analytics/shared";
 import Script from "next/script";
 import { DM_Mono, Hanken_Grotesk } from "next/font/google";
-import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
 import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/AppHealthBanner";
 import LicenseExpiryBanner from "@/sections/LicenseExpiryBanner";
-import CustomAnalyticsScript from "@/providers/CustomAnalyticsScript";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
 
@@ -49,22 +50,17 @@ const dmMono = DM_Mono({
   ],
 });
 
-export const metadata: Metadata = {
-  title: "Onyx",
-  description: "Question answering for your documents",
-};
-
 // force-dynamic prevents Next.js from statically prerendering pages at build
 // time — many child routes use cookies() which requires dynamic rendering.
 // This is safe because the layout itself has no server-side data fetching;
 // all data is fetched client-side via SWR in the provider tree.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
-  children,
-}: {
+interface LayoutProps {
   children: React.ReactNode;
-}) {
+}
+
+export default function Layout({ children }: LayoutProps) {
   return (
     <html
       lang="en"
@@ -109,14 +105,13 @@ export default function RootLayout({
                   <LicenseExpiryBanner />
                   <AppProvider>
                     <DynamicMetadata />
+                    <PostHogRuntimeInitializer />
                     <CustomAnalyticsScript />
-                    <Suspense fallback={null}>
-                      <PostHogPageView />
-                    </Suspense>
+                    <PostHogPageTracker />
                     <div id={MODAL_ROOT_ID} className="h-screen w-screen">
                       <ProductGatingWrapper>{children}</ProductGatingWrapper>
                     </div>
-                    {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
+                    <WebVitals />
                     {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
                       <StatsOverlayLoader />
                     )}

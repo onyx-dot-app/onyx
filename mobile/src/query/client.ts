@@ -1,9 +1,10 @@
 // TanStack Query client + MMKV-backed persister.
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, type DehydrateOptions } from "@tanstack/react-query";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 
 import { makeMmkvStorage, queryStorage } from "@/state/storage";
 import { isAuthError } from "@/api/errors";
+import { QUERY_KEYS } from "@/api/query-keys";
 
 // How long a restored MMKV snapshot stays valid (24h). gcTime is pinned to this
 // below: an inactive query must live in the in-memory cache at least as long as
@@ -33,3 +34,34 @@ export const queryClient = new QueryClient({
 export const persister = createSyncStoragePersister({
   storage: makeMmkvStorage(queryStorage),
 });
+
+// Query-key prefixes whose data is identity PII (or otherwise must not be
+// written to disk). The MMKV query-cache snapshot is unencrypted: a secure
+// encryption key would have to be fetched asynchronously from the keychain
+// before the synchronous MMKV instance is created — fragile — so instead we keep
+// PII out of the persisted snapshot entirely. /api/me (email, role) is the only
+// such query today. The in-memory cache still holds it for the session; only
+// persistence is skipped, so a relaunch refetches it (and the auth gate shows a
+// brief splash).
+//
+// Matched structurally, segment by segment (see `isNonPersistedKey`), so the
+// whole `["me", serverUrl]` family is excluded for any serverUrl while an
+// unrelated key such as `["me-preferences"]` is not. The trailing serverUrl
+// varies per instance, so only the leading entity segment forms the prefix.
+const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
+  [QUERY_KEYS.me(null)[0]],
+];
+
+function isNonPersistedKey(queryKey: readonly unknown[]): boolean {
+  return NON_PERSISTED_KEY_PREFIXES.some((prefix) =>
+    prefix.every((segment, i) => queryKey[i] === segment),
+  );
+}
+
+export const dehydrateOptions: DehydrateOptions = {
+  shouldDehydrateQuery: (query) => {
+    if (isNonPersistedKey(query.queryKey)) return false;
+    // Otherwise keep the library default: only persist successful queries.
+    return query.state.status === "success";
+  },
+};

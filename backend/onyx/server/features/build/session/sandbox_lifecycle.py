@@ -15,7 +15,7 @@ from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
-from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
+from onyx.server.features.build.db.sandbox import get_running_sandbox_count
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -137,12 +137,12 @@ def _wait_for_provisioning_to_complete(
         time.sleep(poll_interval_seconds)
 
 
-def _enforce_tenant_concurrency_limit(db_session: DBSession, tenant_id: str) -> None:
+def _enforce_tenant_concurrency_limit(db_session: DBSession) -> None:
     """No-op on self-hosted. On multi-tenant: raise if creating/waking a
     sandbox would exceed the per-tenant cap."""
     if not MULTI_TENANT:
         return
-    running_count = get_running_sandbox_count_by_tenant(db_session, tenant_id)
+    running_count = get_running_sandbox_count(db_session)
     if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
         raise ValueError(
             f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
@@ -231,7 +231,7 @@ def ensure_sandbox_ready(
         )
 
     # Everything below provisions a pod, which adds to the per-tenant cap.
-    _enforce_tenant_concurrency_limit(db_session, tenant_id)
+    _enforce_tenant_concurrency_limit(db_session)
 
     if user is None:
         user = fetch_user_by_id(db_session, user_id)

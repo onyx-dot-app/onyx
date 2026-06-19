@@ -7,7 +7,7 @@ import {
   track,
   AnalyticsEvent,
   LLMProviderConfiguredSource,
-} from "@/lib/analytics";
+} from "@/lib/analytics/utils";
 import {
   BaseLLMFormValues,
   TestApiKeyResult,

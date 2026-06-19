@@ -37,7 +37,6 @@ from onyx.server.features.build.db.build_session import update_session_activity
 from onyx.server.features.build.db.build_session import upsert_agent_plan
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
-from onyx.server.features.build.packet_logger import get_packet_logger
 from onyx.server.features.build.packets import ApprovalRequestedPacket
 from onyx.server.features.build.packets import BuildPacket
 from onyx.server.features.build.packets import ErrorPacket
@@ -570,7 +569,8 @@ def persist_sandbox_event(
         return
 
     if isinstance(sandbox_event, ToolCallStart):
-        # Stream-only; persistence happens on `completed` progress.
+        # Stream-only; persistence happens on terminal (`completed`/`failed`)
+        # progress.
         return
 
     if isinstance(sandbox_event, ToolCallProgress):
@@ -590,7 +590,7 @@ def persist_sandbox_event(
             or raw_input.get("subagentType") is not None
         )
 
-        if is_todo_write or sandbox_event.status == "completed":
+        if is_todo_write or sandbox_event.status in ("completed", "failed"):
             create_message(
                 session_id=session_id,
                 message_type=MessageType.ASSISTANT,
@@ -671,7 +671,6 @@ def stream_subagent_turn(
     or model selection (the child session already exists with its own
     default model).
     """
-    packet_logger = get_packet_logger()
     events_emitted = 0
     state: BuildStreamingState | None = None
     prompt_slot_cm: contextlib.AbstractContextManager[bool] | None = None
@@ -793,7 +792,6 @@ def stream_subagent_turn(
         return
     except Exception as e:
         error_packet = ErrorPacket(message=str(e))
-        packet_logger.log("error", error_packet.model_dump())
         logger.exception("Error in subagent message streaming")
         yield _format_packet_event(error_packet)
     finally:

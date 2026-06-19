@@ -21,6 +21,9 @@ Timing knobs are encoded in the model name (litellm passes it through):
                                       capped by how many the persona offers
     mock-agents2                    — spawn 2 parallel research agents per
                                       deep-research orchestrator cycle
+    mock-maxctx16000                — reject prompts over ~16k estimated tokens
+                                      with a context-window error (mimics a
+                                      provider; for long-thread overflow tests)
 
 Knob combinations can imitate provider latency profiles (see README:
 "Provider profiles") — e.g. a slow reasoning model is just
@@ -88,7 +91,7 @@ DEFAULT_TTFT_MS = int(os.environ.get("MOCK_TTFT_MS", "300"))
 DEFAULT_ITL_MS = int(os.environ.get("MOCK_ITL_MS", "15"))
 DEFAULT_LEN_TOKENS = int(os.environ.get("MOCK_LEN_TOKENS", "150"))
 
-_KNOB_RE = re.compile(r"-(ttft|itl|len|tools|agents)(\d+)")
+_KNOB_RE = re.compile(r"-(ttft|itl|len|tools|agents|maxctx)(\d+)")
 
 _FILLER_WORDS = (
     "This is deterministic mock answer content used only for load testing "
@@ -111,6 +114,9 @@ class Knobs:
         # 1=mock-tools1, 2+=multi-tool); capped by tools the persona offers.
         self.n_auto_tools: int = 0
         self.n_agents: int = 1
+        # >0 makes the mock reject requests whose estimated prompt tokens exceed
+        # this, mimicking a provider context-window error (mock-maxctx16000).
+        self.max_ctx_tokens: int = 0
         for name, value in _KNOB_RE.findall(model):
             if name == "ttft":
                 self.ttft_s = int(value) / 1000.0
@@ -122,6 +128,8 @@ class Knobs:
                 self.n_auto_tools = int(value)
             elif name == "agents":
                 self.n_agents = max(1, int(value))
+            elif name == "maxctx":
+                self.max_ctx_tokens = int(value)
 
 
 def _assistant_called(messages: list[ChatMessage], names: tuple[str, ...]) -> bool:
@@ -318,6 +326,36 @@ def _make_chunk(
     )
 
 
+def _estimate_prompt_tokens(messages: list[ChatMessage]) -> int:
+    """Rough token estimate of the whole prompt (~4 chars/token), used only to
+    decide whether to simulate a context-window overflow."""
+    chars = 0
+    for message in messages:
+        text = _content_text(message.content) or ""
+        chars += len(text) + 4  # small per-message role/format overhead
+    return chars // 4
+
+
+def _context_window_error(limit: int, used: int) -> JSONResponse:
+    """OpenAI-shaped context-length error → litellm maps it to
+    ContextWindowExceededError, mimicking what Vertex/Claude return."""
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": {
+                "message": (
+                    f"This model's maximum context length is {limit} tokens. "
+                    f"However, your messages resulted in {used} tokens. "
+                    "Please reduce the length of the messages."
+                ),
+                "type": "invalid_request_error",
+                "param": "messages",
+                "code": "context_length_exceeded",
+            }
+        },
+    )
+
+
 @app.get("/v1/models")
 def list_models() -> JSONResponse:
     return JSONResponse(
@@ -332,6 +370,12 @@ def list_models() -> JSONResponse:
 async def chat_completions(request: ChatCompletionRequest) -> Response:
     knobs = Knobs(request.model)
     completion_id = f"chatcmpl-mock-{uuid.uuid4().hex[:12]}"
+
+    # Simulate a provider context-window overflow on long prompts (mock-maxctx).
+    if knobs.max_ctx_tokens:
+        prompt_tokens = _estimate_prompt_tokens(request.messages)
+        if prompt_tokens > knobs.max_ctx_tokens:
+            return _context_window_error(knobs.max_ctx_tokens, prompt_tokens)
 
     tool_calls = _pick_tool(request, knobs)
     emit_tools = bool(tool_calls)

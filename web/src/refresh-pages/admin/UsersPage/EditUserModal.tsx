@@ -15,7 +15,7 @@ import { Section } from "@/layouts/general-layouts";
 import { toast } from "@/hooks/useToast";
 import { UserRole, USER_ROLE_LABELS } from "@/lib/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import useGroups from "@/hooks/useGroups";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { addUserToGroup, removeUserFromGroup, setUserRole } from "./svc";

@@ -228,13 +228,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release-tag.outputs.tag }}
         run: |
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
+          # Look up an existing release (including drafts) by tag name.
+          #
+          # NOTE: a draft release does not create the underlying git tag until
+          # it is published, so `GET /releases/tags/{tag}` (and
+          # `gh release view <tag>`) returns 404 for drafts. We must list
+          # releases instead — that endpoint DOES include drafts — and match
+          # on tag_name.
+          get_release_id() {
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+              --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n1
+          }
+
+          release_id=$(get_release_id)
+          if [ -z "$release_id" ]; then
             gh release create "$TAG" \
               --title "$TAG" \
               --notes "See the assets to download this version and install." \
               --draft
+            release_id=$(get_release_id)
           fi
-          release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.id')
+
+          if [ -z "$release_id" ]; then
+            echo "::error::Failed to resolve release id for tag ${TAG}"
+            exit 1
+          fi
           echo "id=${release_id}" >> "$GITHUB_OUTPUT"
 
   build-desktop:
@@ -270,7 +288,7 @@ jobs:
 
       - name: Configure AWS credentials
         if: startsWith(matrix.platform, 'macos-')
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -438,7 +456,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -460,7 +478,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
@@ -509,7 +527,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -531,7 +549,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
@@ -575,7 +593,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -589,7 +607,7 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
@@ -648,7 +666,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -670,7 +688,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
@@ -730,7 +748,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -752,7 +770,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
@@ -807,7 +825,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -821,7 +839,7 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
@@ -874,7 +892,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -896,7 +914,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
@@ -944,7 +962,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -966,7 +984,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
@@ -1009,7 +1027,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1023,7 +1041,7 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
@@ -1083,7 +1101,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1105,7 +1123,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
         with:
           buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
@@ -1160,7 +1178,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1182,7 +1200,7 @@ jobs:
             latest=false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
         with:
           buildkitd-flags: ${{ vars.DOCKER_DEBUG == 'true' && '--debug' || '' }}
 
@@ -1231,7 +1249,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1245,7 +1263,7 @@ jobs:
           parse-json-secrets: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
@@ -1281,12 +1299,329 @@ jobs:
             $(printf '%s\n' "${META_TAGS}" | xargs -I {} echo -t {}) \
             $IMAGES
 
+  prepare-sandbox:
+    needs:
+      - determine-builds
+    if: needs.determine-builds.outputs.is-test-run == 'true' || (needs.determine-builds.outputs.is-stable == 'true' || needs.determine-builds.outputs.is-beta-standalone == 'true' || needs.determine-builds.outputs.is-cloud-tag == 'true' || startsWith(github.ref_name, 'nightly-latest') || github.ref_name == 'edge')
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      context-tag: ${{ steps.context.outputs.context-tag }}
+      context-exists: ${{ steps.exists.outputs.context-exists }}
+    env:
+      REGISTRY_IMAGE: onyxdotapp/sandbox
+      SANDBOX_CONTEXT: backend/onyx/server/features/build/sandbox/image
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Compute sandbox context tag
+        id: context
+        run: |
+          set -euo pipefail
+          digest="$(git ls-files -s -z "$SANDBOX_CONTEXT" | sort -z | sha256sum | cut -d' ' -f1)"
+          echo "context-tag=ctx-${digest:0:20}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        if: needs.determine-builds.outputs.is-test-run != 'true' && vars.DOCKER_NO_CACHE != 'true'
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        if: needs.determine-builds.outputs.is-test-run != 'true' && vars.DOCKER_NO_CACHE != 'true'
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Login to Docker Hub
+        if: needs.determine-builds.outputs.is-test-run != 'true' && vars.DOCKER_NO_CACHE != 'true'
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Check for existing context image
+        id: exists
+        env:
+          CONTEXT_TAG: ${{ steps.context.outputs.context-tag }}
+          DOCKER_NO_CACHE: ${{ vars.DOCKER_NO_CACHE == 'true' && 'true' || 'false' }}
+          IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
+        run: |
+          if [ "${IS_TEST_RUN}" = "true" ] || [ "${DOCKER_NO_CACHE}" = "true" ]; then
+            echo "context-exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if docker buildx imagetools inspect "${REGISTRY_IMAGE}:${CONTEXT_TAG}" >/dev/null 2>&1; then
+            echo "context-exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "context-exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-sandbox-amd64:
+    needs:
+      - determine-builds
+      - prepare-sandbox
+    if: needs.prepare-sandbox.result == 'success' && needs.prepare-sandbox.outputs.context-exists != 'true'
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-x64
+      - run-id=${{ github.run_id }}-sandbox-amd64
+      - extras=ecr-cache
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    env:
+      REGISTRY_IMAGE: onyxdotapp/sandbox
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Build and push AMD64
+        id: build
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: ./backend/onyx/server/features/build/sandbox/image
+          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
+          platforms: linux/amd64
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/sandbox:edge
+            type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/sandbox:latest
+          cache-to: type=inline
+          outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  build-sandbox-arm64:
+    needs:
+      - determine-builds
+      - prepare-sandbox
+    if: needs.prepare-sandbox.result == 'success' && needs.prepare-sandbox.outputs.context-exists != 'true'
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-arm64
+      - run-id=${{ github.run_id }}-sandbox-arm64
+      - extras=ecr-cache
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    env:
+      REGISTRY_IMAGE: onyxdotapp/sandbox
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Build and push ARM64
+        id: build
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: ./backend/onyx/server/features/build/sandbox/image
+          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
+          platforms: linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: |
+            type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/sandbox:edge
+            type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/sandbox:latest
+          cache-to: type=inline
+          outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+  merge-sandbox:
+    needs:
+      - determine-builds
+      - prepare-sandbox
+      - build-sandbox-amd64
+      - build-sandbox-arm64
+    if: always() && needs.prepare-sandbox.result == 'success' && (needs.prepare-sandbox.outputs.context-exists == 'true' || (needs.build-sandbox-amd64.result == 'success' && needs.build-sandbox-arm64.result == 'success'))
+    runs-on:
+      - runs-on
+      - runner=2cpu-linux-x64
+      - run-id=${{ github.run_id }}-merge-sandbox
+      - extras=ecr-cache
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      id-token: write
+    env:
+      REGISTRY_IMAGE: onyxdotapp/sandbox
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@a9a7eb4e2f2871d30dc5b892576fde60a2ecc802
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('sandbox-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+            type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+
+      - name: Create and push manifest
+        env:
+          IMAGE_REPO: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          CONTEXT_TAG: ${{ needs.prepare-sandbox.outputs.context-tag }}
+          AMD64_DIGEST: ${{ needs.build-sandbox-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-sandbox-arm64.outputs.digest }}
+          META_TAGS: ${{ steps.meta.outputs.tags }}
+          DOCKER_NO_CACHE: ${{ vars.DOCKER_NO_CACHE == 'true' && 'true' || 'false' }}
+          IS_TEST_RUN: ${{ needs.determine-builds.outputs.is-test-run }}
+        run: |
+          mapfile -t tags < <(printf '%s\n' "${META_TAGS}" | sed '/^$/d')
+          tag_args=()
+          for tag in "${tags[@]}"; do
+            tag_args+=("-t" "$tag")
+          done
+
+          if [[ "$IS_TEST_RUN" == "true" ]]; then
+            if [[ -z "$AMD64_DIGEST" || -z "$ARM64_DIGEST" ]]; then
+              echo "::error::Missing sandbox image digest(s); cannot create test manifest"
+              exit 1
+            fi
+            images="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
+            docker buildx imagetools create \
+              "${tag_args[@]}" \
+              $images
+          elif [[ "$DOCKER_NO_CACHE" != "true" ]] && docker buildx imagetools inspect "${REGISTRY_IMAGE}:${CONTEXT_TAG}" >/dev/null 2>&1; then
+            docker buildx imagetools create \
+              "${tag_args[@]}" \
+              "${REGISTRY_IMAGE}:${CONTEXT_TAG}"
+          else
+            if [[ -z "$AMD64_DIGEST" || -z "$ARM64_DIGEST" ]]; then
+              echo "::error::Missing sandbox image digest(s); cannot create ${CONTEXT_TAG}"
+              exit 1
+            fi
+            tag_args=("-t" "${REGISTRY_IMAGE}:${CONTEXT_TAG}" "${tag_args[@]}")
+            images="${IMAGE_REPO}@${AMD64_DIGEST} ${IMAGE_REPO}@${ARM64_DIGEST}"
+            docker buildx imagetools create \
+              "${tag_args[@]}" \
+              $images
+          fi
+
   dispatch-cloud-deployment:
     needs:
       - determine-builds
       - merge-web-cloud
       - merge-backend
       - merge-model-server
+      - merge-sandbox
     if: needs.determine-builds.outputs.is-cloud-tag == 'true' && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
@@ -1333,12 +1668,14 @@ jobs:
       - merge-web-cloud
       - merge-backend
       - merge-model-server
+      - merge-sandbox
     if: >-
       always() && !cancelled() &&
       (needs.merge-web.result == 'success' ||
        needs.merge-web-cloud.result == 'success' ||
        needs.merge-backend.result == 'success' ||
-       needs.merge-model-server.result == 'success')
+       needs.merge-model-server.result == 'success' ||
+       needs.merge-sandbox.result == 'success')
     runs-on:
       - runs-on
       - runner=2cpu-linux-arm64
@@ -1361,6 +1698,8 @@ jobs:
             trivyignore: backend/.trivyignore
           - component: model-server
             registry-image: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
+          - component: sandbox
+            registry-image: onyxdotapp/sandbox
     steps:
       - name: Check if this scan should run
         id: should-run
@@ -1370,6 +1709,7 @@ jobs:
             web-cloud) RESULT="$MERGE_WEB_CLOUD" ;;
             backend) RESULT="$MERGE_BACKEND" ;;
             model-server) RESULT="$MERGE_MODEL_SERVER" ;;
+            sandbox) RESULT="$MERGE_SANDBOX" ;;
           esac
           if [ "$RESULT" == "success" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -1382,6 +1722,7 @@ jobs:
           MERGE_WEB_CLOUD: ${{ needs.merge-web-cloud.result }}
           MERGE_BACKEND: ${{ needs.merge-backend.result }}
           MERGE_MODEL_SERVER: ${{ needs.merge-model-server.result }}
+          MERGE_SANDBOX: ${{ needs.merge-sandbox.result }}
 
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
         if: steps.should-run.outputs.run == 'true'
@@ -1430,6 +1771,7 @@ jobs:
   notify-slack-on-failure:
     needs:
       - determine-builds
+      - create-release
       - build-desktop
       - build-web-amd64
       - build-web-arm64
@@ -1443,7 +1785,11 @@ jobs:
       - build-model-server-amd64
       - build-model-server-arm64
       - merge-model-server
-    if: always() && (needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
+      - prepare-sandbox
+      - build-sandbox-amd64
+      - build-sandbox-arm64
+      - merge-sandbox
+    if: always() && (needs.create-release.result == 'failure' || needs.build-desktop.result == 'failure' || needs.build-web-amd64.result == 'failure' || needs.build-web-arm64.result == 'failure' || needs.merge-web.result == 'failure' || needs.build-web-cloud-amd64.result == 'failure' || needs.build-web-cloud-arm64.result == 'failure' || needs.merge-web-cloud.result == 'failure' || needs.build-backend-amd64.result == 'failure' || needs.build-backend-arm64.result == 'failure' || needs.merge-backend.result == 'failure' || needs.build-model-server-amd64.result == 'failure' || needs.build-model-server-arm64.result == 'failure' || needs.merge-model-server.result == 'failure' || needs.prepare-sandbox.result == 'failure' || needs.build-sandbox-amd64.result == 'failure' || needs.build-sandbox-arm64.result == 'failure' || needs.merge-sandbox.result == 'failure') && needs.determine-builds.outputs.is-test-run != 'true'
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 90
@@ -1459,6 +1805,9 @@ jobs:
         shell: bash
         run: |
           FAILED_JOBS=""
+          if [ "${NEEDS_CREATE_RELEASE_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• create-release\\n"
+          fi
           if [ "${NEEDS_BUILD_DESKTOP_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• build-desktop\\n"
           fi
@@ -1498,10 +1847,23 @@ jobs:
           if [ "${NEEDS_MERGE_MODEL_SERVER_RESULT}" == "failure" ]; then
             FAILED_JOBS="${FAILED_JOBS}• merge-model-server\\n"
           fi
+          if [ "${NEEDS_PREPARE_SANDBOX_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• prepare-sandbox\\n"
+          fi
+          if [ "${NEEDS_BUILD_SANDBOX_AMD64_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• build-sandbox-amd64\\n"
+          fi
+          if [ "${NEEDS_BUILD_SANDBOX_ARM64_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• build-sandbox-arm64\\n"
+          fi
+          if [ "${NEEDS_MERGE_SANDBOX_RESULT}" == "failure" ]; then
+            FAILED_JOBS="${FAILED_JOBS}• merge-sandbox\\n"
+          fi
           # Remove trailing \n and set output
           FAILED_JOBS=$(printf '%s' "$FAILED_JOBS" | sed 's/\\n$//')
           echo "jobs=$FAILED_JOBS" >> "$GITHUB_OUTPUT"
         env:
+          NEEDS_CREATE_RELEASE_RESULT: ${{ needs.create-release.result }}
           NEEDS_BUILD_DESKTOP_RESULT: ${{ needs.build-desktop.result }}
           NEEDS_BUILD_WEB_AMD64_RESULT: ${{ needs.build-web-amd64.result }}
           NEEDS_BUILD_WEB_ARM64_RESULT: ${{ needs.build-web-arm64.result }}
@@ -1515,6 +1877,10 @@ jobs:
           NEEDS_BUILD_MODEL_SERVER_AMD64_RESULT: ${{ needs.build-model-server-amd64.result }}
           NEEDS_BUILD_MODEL_SERVER_ARM64_RESULT: ${{ needs.build-model-server-arm64.result }}
           NEEDS_MERGE_MODEL_SERVER_RESULT: ${{ needs.merge-model-server.result }}
+          NEEDS_PREPARE_SANDBOX_RESULT: ${{ needs.prepare-sandbox.result }}
+          NEEDS_BUILD_SANDBOX_AMD64_RESULT: ${{ needs.build-sandbox-amd64.result }}
+          NEEDS_BUILD_SANDBOX_ARM64_RESULT: ${{ needs.build-sandbox-arm64.result }}
+          NEEDS_MERGE_SANDBOX_RESULT: ${{ needs.merge-sandbox.result }}
 
       - name: Send Slack notification
         uses: ./.github/actions/slack-notify

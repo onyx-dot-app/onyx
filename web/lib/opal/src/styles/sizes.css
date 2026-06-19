@@ -1,3 +1,13 @@
+/**
+ * @opal/sizes — web-only LAYOUT dimensions (library-owned).
+ *
+ * Design-token scales (radius, spacing, padding, weights, backdrop-blur, and the
+ * typography height metrics) now live in @onyx-ai/shared and are pulled in via
+ * `@import "@onyx-ai/shared/tokens.css"` (see _reference.css / root.css). Only the
+ * web-app layout dimensions — container/sidebar/modal/panel/page/card widths and
+ * heights — remain here, as they are not cross-platform design tokens.
+ */
+
 :root {
   --app-page-main-content-width: 45rem;
   --notifications-popover: 20rem;
@@ -13,36 +23,7 @@
   --sidebar-width-expanded: 15rem;
   --sidebar-width-folded: 3.25rem;
 
-  /* HEIGHT — CONTENT */
-  --height-content-main: 1rem;
-  --height-content-label: 1.125rem;
-  --height-content-secondary: 0.75rem;
-  --height-content-h3-section: 1.5rem;
-  --height-content-h2-sub-headline: 1.5rem;
-  --height-content-h1-headline: 2rem;
-  --height-content-h1-hero: 2.5rem;
-  --height-content-small: 0.625rem;
-
-  /* HEIGHT — LINE */
-  --height-line-main: 1.25rem;
-  --height-line-label: 1.5rem;
-  --height-line-secondary: 1rem;
-  --height-line-h3-section: 1.75rem;
-  --height-line-h2-sub-headline: 2rem;
-  --height-line-h1-headline: 2.25rem;
-  --height-line-h1-hero: 3rem;
-  --height-line-small: 0.75rem;
-
-  /* HEIGHT — FONT */
-  --height-font-main: 0.875rem;
-  --height-font-label: 1rem;
-  --height-font-secondary: 0.75rem;
-  --height-font-h3-section: 1.125rem;
-  --height-font-h2-sub-headline: 1.25rem;
-  --height-font-h1-sub-headline: 1.375rem;
-  --height-font-h1-headline: 1.5rem;
-  --height-font-h1-hero: 2rem;
-  --height-font-small: 0.625rem;
+  --chrome-header-height: 3.25rem;
 
   /* BLOCK — WIDTH */
   --block-width-tooltip-max: 15rem;
@@ -118,75 +99,4 @@
   --block-height-image-medium: 5rem;
   --block-height-image-small: 3.5rem;
   --block-height-image-inline: 2.75rem;
-
-  /* PADDING */
-  --padding-text-2: 0.125rem;
-  --padding-text-4: 0.25rem;
-
-  --padding-icon-0: 0;
-  --padding-icon-1: 0.0625rem;
-  --padding-icon-2: 0.125rem;
-  --padding-icon-4: 0.25rem;
-
-  /* SPACING — BLOCK */
-  --spacing-block-4: 0.25rem;
-  --spacing-block-6: 0.375rem;
-  --spacing-block-8: 0.5rem;
-  --spacing-block-10: 0.625rem;
-  --spacing-block-12: 0.75rem;
-  --spacing-block-16: 1rem;
-  --spacing-block-20: 1.25rem;
-  --spacing-block-24: 1.5rem;
-  --spacing-block-28: 1.75rem;
-  --spacing-block-32: 2rem;
-  --spacing-block-36: 2.25rem;
-  --spacing-block-40: 2.5rem;
-  --spacing-block-44: 2.75rem;
-  --spacing-block-48: 3rem;
-  --spacing-block-52: 3.25rem;
-  --spacing-block-56: 3.5rem;
-  --spacing-block-64: 4rem;
-  --spacing-block-72: 4.5rem;
-  --spacing-block-80: 5rem;
-  --spacing-block-96: 6rem;
-  --spacing-block-100: 6.25rem;
-  --spacing-block-120: 7.5rem;
-  --spacing-block-128: 8rem;
-  --spacing-block-144: 9rem;
-  --spacing-block-160: 10rem;
-
-  /* SPACING — INLINE */
-  --spacing-inline-0: 0;
-  --spacing-inline-2: 0.125rem;
-  --spacing-inline-4: 0.25rem;
-
-  /* WEIGHT */
-  --weight-icon-main: 1.5;
-  --weight-icon-secondary: 1;
-  --weight-icon-section: 2;
-  --weight-icon-headline: 2.5;
-  --weight-icon-hero: 3.5;
-
-  --weight-line-border: 1;
-  --weight-line-chart-main: 2;
-  --weight-line-chart-light: 1.5;
-
-  --weight-bar-extra-small: 1;
-  --weight-bar-small: 2;
-  --weight-bar-medium-small: 3;
-  --weight-bar-medium: 4;
-
-  /* RADIUS */
-  --radius-02: 0.125rem;
-  --radius-04: 0.25rem;
-  --radius-08: 0.5rem;
-  --radius-12: 0.75rem;
-  --radius-16: 1rem;
-  --radius-20: 1.25rem;
-  --radius-round: 62.5rem;
-
-  /* BACKDROP BLUR */
-  --backdrop-blur-01: 2px;
-  --backdrop-blur-02: 1px;
-  --backdrop-blur-03: 1px;
 }
