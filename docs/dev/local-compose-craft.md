@@ -55,6 +55,7 @@ Useful for smoke-testing end-to-end behavior.
 
 ```bash
 cd deployment/docker_compose
+SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev \
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.craft.yml \
@@ -130,6 +131,7 @@ Iterate on `sandbox_proxy/` code with the VSCode debugger attached.
    ```bash
    PYTHONPATH=./backend \
    SANDBOX_BACKEND=docker \
+   SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:dev \
    SANDBOX_PROXY_HOST=host.docker.internal \
    SANDBOX_PROXY_PORT=8888 \
    uvicorn onyx.main:app --host 0.0.0.0 --port 8080

@@ -260,6 +260,10 @@ def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
     return urlunparse(parsed_url)
 
 
+class ExportSizeThresholdExceeded(Exception):
+    """A Drive download/export was aborted because it passed size_threshold."""
+
+
 def download_request(
     service: GoogleDriveService, file_id: str, size_threshold: int
 ) -> bytes:
@@ -289,12 +293,9 @@ def _download_request(request: Any, file_id: str, size_threshold: int) -> bytes:
             num_retries=_DOWNLOAD_NUM_RETRIES
         )
         if download_progress.resumable_progress > size_threshold:
-            logger.warning(
-                "File %s exceeds size threshold of %s. Skipping2.",
-                file_id,
-                size_threshold,
+            raise ExportSizeThresholdExceeded(
+                f"File {file_id} exceeds size threshold of {size_threshold}"
             )
-            return bytes()
 
     response = response_bytes.getvalue()
     if not response:
@@ -706,12 +707,35 @@ def _convert_drive_item_to_document(
     def _get_docs_service() -> GoogleDocsService:
         return get_google_docs_service(creds, user_email=retriever_email)
 
+    def _basic_extraction(
+        raise_on_size_threshold: bool = False,
+    ) -> FileExtractionResult:
+        try:
+            return _download_and_extract_sections_basic(
+                file,
+                _get_drive_service(),
+                allow_images,
+                size_threshold,
+                raw_file_callback,
+            )
+        except ExportSizeThresholdExceeded:
+            # Caller (the Google Doc path) opts in to handle oversize explicitly;
+            # everyone else treats an over-threshold file as "no content" and skips.
+            if raise_on_size_threshold:
+                raise
+            logger.warning(
+                "File %s exceeds size threshold of %s. Skipping.",
+                file.get("name"),
+                size_threshold,
+            )
+            return FileExtractionResult(sections=[])
+
     doc_id = "unknown"
 
     try:
         # skip shortcuts or folders
         if file.get("mimeType") in [DRIVE_SHORTCUT_TYPE, DRIVE_FOLDER_TYPE]:
-            logger.info("Skipping shortcut/folder.")
+            logger.info("bug: raw shortcut/folder reached document conversion.")
             return None
 
         size_str = file.get("size")
@@ -731,48 +755,53 @@ def _convert_drive_item_to_document(
 
         # If it's a Google Doc, we might do advanced parsing
         if file.get("mimeType") == GDriveMimeType.DOC.value:
+            # Export via the size-capped basic path first. If it aborts at
+            # size_threshold the Doc is too large to feed to the advanced (Docs-API)
+            # parser, which loads the whole document with no cap and can OOM the
+            # worker — so skip it. A basic export that did NOT hit the cap means the
+            # Doc is small, so the advanced parsing below stays bounded.
+            try:
+                basic_extraction = _basic_extraction(raise_on_size_threshold=True)
+            except ExportSizeThresholdExceeded:
+                logger.warning(
+                    "Skipping Google Doc %s: exceeds size threshold of %s.",
+                    file.get("name"),
+                    size_threshold,
+                )
+                return None
+            sections = basic_extraction.sections
+            staged_file_id = basic_extraction.staged_file_id
+
+            # Enrich with advanced heading-aware parsing (bounded — the Doc is within
+            # the size cap). Falls back to the basic sections on any failure.
             try:
                 logger.debug("starting advanced parsing for %s", file.get("name"))
-                # get_document_sections is the advanced approach for Google Docs
                 doc_sections = get_document_sections(
                     docs_service=_get_docs_service(),
                     doc_id=file.get("id", ""),
                 )
                 if doc_sections:
-                    sections = cast(
-                        list[TextSection | ImageSection | TabularSection], doc_sections
-                    )
                     if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
                         logger.debug(
                             "found smart chips in %s, aligning with basic sections",
                             file.get("name"),
                         )
-                        basic_extraction = _download_and_extract_sections_basic(
-                            file,
-                            _get_drive_service(),
-                            allow_images,
-                            size_threshold,
-                            raw_file_callback,
-                        )
                         sections = align_basic_advanced(
                             basic_extraction.sections, doc_sections
                         )
-                        staged_file_id = basic_extraction.staged_file_id
-
+                    else:
+                        sections = cast(
+                            list[TextSection | ImageSection | TabularSection],
+                            doc_sections,
+                        )
             except Exception as e:
                 logger.warning(
-                    "Error in advanced parsing: %s. Falling back to basic extraction.",
+                    "Error in advanced parsing: %s. Using basic extraction.",
                     e,
                 )
         # Not Google Doc, attempt basic extraction
         else:
-            basic_extraction = _download_and_extract_sections_basic(
-                file,
-                _get_drive_service(),
-                allow_images,
-                size_threshold,
-                raw_file_callback,
-            )
+            basic_extraction = _basic_extraction()
             sections = basic_extraction.sections
             staged_file_id = basic_extraction.staged_file_id
 

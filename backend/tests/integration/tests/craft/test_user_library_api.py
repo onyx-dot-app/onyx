@@ -1,7 +1,7 @@
 """User library tests.
 
 Integration tests for the user-library HTTP endpoints in
-``onyx.server.features.build.api.user_library``. Each test hits the real
+``onyx.server.features.build.user_library.api``. Each test hits the real
 backend and either asserts the response shape or verifies the resulting
 document row + storage blob via the tree-listing endpoint.
 """
@@ -81,15 +81,6 @@ def _tree(user: DATestUser) -> list[dict[str, Any]]:
     body = response.json()
     assert isinstance(body, list)
     return body
-
-
-def _toggle(user: DATestUser, document_id: str, enabled: bool) -> httpx.Response:
-    return client.patch(
-        _url("files", document_id, "toggle"),
-        params={"enabled": str(enabled).lower()},
-        headers=user.headers,
-        cookies=user.cookies,
-    )
 
 
 def _delete(user: DATestUser, document_id: str) -> httpx.Response:
@@ -312,33 +303,6 @@ def test_upload_zip_extracts_and_applies_caps_recursively(
     assert response.status_code == 400
 
 
-def test_toggle_sync_flag(admin_user: DATestUser) -> None:
-    """PATCH ``files/{id}/toggle`` flips the sync state.
-
-    Tree listing reports the new ``sync_enabled`` value after the
-    toggle. Two toggles round-trip back to the original state.
-    """
-    filename = f"toggle-{uuid4().hex[:6]}.txt"
-    response = _upload(admin_user, [(filename, b"hello", "text/plain")])
-    response.raise_for_status()
-    document_id = response.json()["entries"][0]["id"]
-
-    toggle = _toggle(admin_user, document_id, enabled=False)
-    toggle.raise_for_status()
-    assert toggle.json()["sync_enabled"] is False
-
-    after = _find_doc_by_name(_tree(admin_user), filename)
-    assert after is not None
-    assert after["sync_enabled"] is False
-
-    toggle = _toggle(admin_user, document_id, enabled=True)
-    toggle.raise_for_status()
-    assert toggle.json()["sync_enabled"] is True
-    after = _find_doc_by_name(_tree(admin_user), filename)
-    assert after is not None
-    assert after["sync_enabled"] is True
-
-
 def test_delete_file_removes_s3_blob(admin_user: DATestUser) -> None:
     """DELETE → row gone from tree, storage blob deleted.
 
@@ -381,10 +345,7 @@ def test_cross_user_access_returns_404(
     response.raise_for_status()
     document_id = response.json()["entries"][0]["id"]
 
-    # basic_user cannot toggle or delete admin's file.
-    toggle = _toggle(basic_user, document_id, enabled=False)
-    assert toggle.status_code in (403, 404)
-
+    # basic_user cannot delete admin's file.
     delete_response = _delete(basic_user, document_id)
     assert delete_response.status_code in (403, 404)
 

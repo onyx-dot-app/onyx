@@ -19,6 +19,12 @@ export function visibilityFromSkill(skill: CustomSkill): SkillVisibility {
 }
 
 export function summarizeVisibility(skill: CustomSkill): VisibilitySummary {
+  if (skill.is_personal) {
+    return {
+      label: "Personal",
+      description: skill.author_email ?? undefined,
+    };
+  }
   const visibility = visibilityFromSkill(skill);
   switch (visibility) {
     case "private":

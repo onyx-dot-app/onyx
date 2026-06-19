@@ -24,9 +24,7 @@ export class ScheduledTasksPage {
   readonly promptInput: Locator;
   readonly intervalEveryInput: Locator;
   readonly intervalUnitTrigger: Locator;
-  readonly saveButton: Locator;
   readonly saveAndRunNowButton: Locator;
-  readonly runNowButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -40,9 +38,7 @@ export class ScheduledTasksPage {
     // The interval-unit InputSelect has no test ID; it's the only combobox
     // on the new-task form.
     this.intervalUnitTrigger = page.getByRole("combobox").first();
-    this.saveButton = page.getByTestId("save-task");
     this.saveAndRunNowButton = page.getByTestId("save-and-run-now");
-    this.runNowButton = page.getByTestId("run-now-button");
   }
 
   // ---------------------------------------------------------------------------
@@ -130,18 +126,8 @@ export class ScheduledTasksPage {
   }
 
   /**
-   * Click "Save". The create flow redirects to the tasks list (NOT the
-   * detail page), so callers should follow this with `expectOnListPage()`
-   * and `openTaskByName()` if they need to reach the detail surface.
-   */
-  async save(): Promise<void> {
-    await this.saveButton.click();
-  }
-
-  /**
    * Click "Save and run now" — creates the task with `run_immediately=true`,
-   * which enqueues an immediate run. Same redirect as `save()`: lands on
-   * the tasks list.
+   * which enqueues an immediate run. Redirects to the tasks list.
    */
   async saveAndRunNow(): Promise<void> {
     await this.saveAndRunNowButton.click();
@@ -177,10 +163,6 @@ export class ScheduledTasksPage {
     await expect(
       this.page.getByTestId("task-status-ACTIVE").first()
     ).toBeVisible();
-  }
-
-  async runNow(): Promise<void> {
-    await this.runNowButton.click();
   }
 
   /**

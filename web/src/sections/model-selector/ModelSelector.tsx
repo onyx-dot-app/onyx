@@ -15,8 +15,7 @@ import {
   LLMOption,
 } from "@/lib/languageModels/options";
 import { useUser } from "@/providers/UserProvider";
-import { useCurrentAgent } from "@/lib/agents/hooks";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 
 interface TemperatureManager {
@@ -64,8 +63,7 @@ export default function ModelSelector({
   includeGlobalDefault = false,
   side = "top",
 }: ModelSelectorProps) {
-  const currentAgent = useCurrentAgent();
-  const { llmProviders, defaultText } = useLLMProviders(currentAgent?.id);
+  const { llmProviders, defaultText } = useCurrentAgentLLMProviders();
   const [open, setOpen] = useState(false);
   const { user } = useUser();
   const scrollContainerRef = useRef<HTMLDivElement>(null);

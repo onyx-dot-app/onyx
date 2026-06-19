@@ -3,30 +3,36 @@ import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useEffect } from "react";
 
-const isPostHogEnabled = !!process.env.NEXT_PUBLIC_POSTHOG_KEY;
+/**
+ * Initialize PostHog. Idempotent, so the build-time path (PHProvider) and the
+ * runtime path (PostHogRuntimeInitializer) can both call it safely.
+ */
+export function initPostHog(key: string, host?: string | null): void {
+  if (posthog.__loaded) return;
+  posthog.init(key, {
+    api_host: "/ph_ingest",
+    ui_host: host || "https://us.posthog.com",
+    person_profiles: "identified_only",
+    capture_pageview: false,
+    session_recording: {
+      // Sensitive inputs should use data-ph-no-capture attribute
+      maskAllInputs: false,
+    },
+  });
+}
 
-type PHProviderProps = { children: React.ReactNode };
+interface PHProviderProps {
+  children: React.ReactNode;
+}
 
 export function PHProvider({ children }: PHProviderProps) {
   useEffect(() => {
-    if (isPostHogEnabled) {
-      posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
-        api_host: "/ph_ingest",
-        ui_host:
-          process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.posthog.com",
-        person_profiles: "identified_only",
-        capture_pageview: false,
-        session_recording: {
-          // Sensitive inputs should use data-ph-no-capture attribute
-          maskAllInputs: false,
-        },
-      });
+    // Build-time key (Onyx Cloud); otherwise PostHogRuntimeInitializer handles it.
+    const buildTimeKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+    if (buildTimeKey) {
+      initPostHog(buildTimeKey, process.env.NEXT_PUBLIC_POSTHOG_HOST);
     }
   }, []);
-
-  if (!isPostHogEnabled) {
-    return <>{children}</>;
-  }
 
   return <PostHogProvider client={posthog}>{children}</PostHogProvider>;
 }

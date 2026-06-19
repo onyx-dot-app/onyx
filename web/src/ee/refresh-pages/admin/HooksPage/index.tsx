@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useHookSpecs } from "@/ee/hooks/useHookSpecs";
 import { useHooks } from "@/ee/hooks/useHooks";
 import useFilter from "@/hooks/useFilter";
@@ -449,7 +449,7 @@ function ConnectedHookCard({
 
 export default function HooksPage() {
   const router = useRouter();
-  const { settings, settingsLoading } = useSettingsContext();
+  const settings = useSettings();
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const [connectSpec, setConnectSpec] = useState<HookPointMeta | null>(null);
@@ -507,7 +507,7 @@ export default function HooksPage() {
   }, [specs, hooksByPoint, search]);
 
   useEffect(() => {
-    if (settingsLoading) return;
+    if (settings.isLoading) return;
     if (!enterpriseTier) {
       toast.info("Hook Extensions require an Enterprise license.");
       router.replace("/");
@@ -515,9 +515,9 @@ export default function HooksPage() {
       toast.info("Hook Extensions are not enabled for this deployment.");
       router.replace("/");
     }
-  }, [settingsLoading, enterpriseTier, settings.hooks_enabled, router]);
+  }, [settings.isLoading, enterpriseTier, settings.hooks_enabled, router]);
 
-  if (settingsLoading || !enterpriseTier || !settings.hooks_enabled) {
+  if (settings.isLoading || !enterpriseTier || !settings.hooks_enabled) {
     return <SvgSimpleLoader />;
   }
 

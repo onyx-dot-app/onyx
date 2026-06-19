@@ -1103,6 +1103,9 @@ def _run_models(
     # Set to True when a model raises an exception (distinct from "still running").
     # Used in the stop-button path to avoid calling completion for errored models.
     model_errored: list[bool] = [False] * n_models
+    # Per-model classified (message, error_code, is_retryable), set in _run_model
+    # and reused by the streamed packet and the persisted message.
+    model_error_info: list[tuple[str, str, bool] | None] = [None] * n_models
     persist_lock = threading.Lock()
     persisted: list[bool] = [False] * n_models
     post_steps_done = threading.Event()
@@ -1285,6 +1288,16 @@ def _run_models(
 
         except Exception as e:
             model_errored[model_idx] = True
+            message, error_code, is_retryable = litellm_exception_to_error_msg(
+                e, model_llm, fallback_to_error_msg=True
+            )
+            # Redact here so both the streamed and persisted error are safe:
+            # the fallback path returns str(e) verbatim, which can embed the key.
+            if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
+                message = message.replace(
+                    model_llm.config.api_key, "[REDACTED_API_KEY]"
+                )
+            model_error_info[model_idx] = (message, error_code, is_retryable)
             merged_queue.put((model_idx, e))
 
         finally:
@@ -1299,9 +1312,15 @@ def _run_models(
                     ChatMessage, setup.reserved_messages[model_idx].id
                 )
                 if msg is not None:
-                    error_text = (
-                        "Error from %s: model encountered an error during generation."
-                        % setup.model_display_names[model_idx]
+                    info = model_error_info[model_idx]
+                    detail = (
+                        info[0]
+                        if info is not None
+                        else "model encountered an error during generation."
+                    )
+                    error_text = "Error from %s: %s" % (
+                        setup.model_display_names[model_idx],
+                        detail,
                     )
                     msg.message = error_text
                     msg.error = error_text
@@ -1380,11 +1399,20 @@ def _run_models(
                     # models running. Do NOT decrement models_remaining —
                     # _run_model's finally always posts _MODEL_DONE, which is
                     # the sole completion signal.
-                    error_msg = str(item)
+                    model_llm = setup.llms[model_idx]
+                    # Classified in _run_model; fall back to a generic error.
+                    info = model_error_info[model_idx]
+                    if info is not None:
+                        error_msg, err_code, err_retryable = info
+                    else:
+                        error_msg, err_code, err_retryable = (
+                            str(item),
+                            "MODEL_ERROR",
+                            True,
+                        )
                     stack_trace = "".join(
                         traceback.format_exception(type(item), item, item.__traceback__)
                     )
-                    model_llm = setup.llms[model_idx]
                     if model_llm.config.api_key and len(model_llm.config.api_key) > 2:
                         error_msg = error_msg.replace(
                             model_llm.config.api_key, "[REDACTED_API_KEY]"
@@ -1396,8 +1424,8 @@ def _run_models(
                         StreamingError(
                             error=error_msg,
                             stack_trace=stack_trace,
-                            error_code="MODEL_ERROR",
-                            is_retryable=True,
+                            error_code=err_code,
+                            is_retryable=err_retryable,
                             details={
                                 "model": model_llm.config.model_name,
                                 "provider": model_llm.config.model_provider,

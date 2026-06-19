@@ -42,6 +42,7 @@ from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import count_index_attempts_for_cc_pair
+from onyx.db.index_attempt import get_error_counts_for_index_attempts
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
@@ -116,9 +117,16 @@ def get_cc_pair_index_attempts(
         page=page_num,
         page_size=page_size,
     )
+    error_counts = get_error_counts_for_index_attempts(
+        db_session=db_session,
+        index_attempt_ids=[index_attempt.id for index_attempt in index_attempts],
+    )
     return PaginatedReturn(
         items=[
-            IndexAttemptSnapshot.from_index_attempt_db_model(index_attempt)
+            IndexAttemptSnapshot.from_index_attempt_db_model(
+                index_attempt,
+                error_count=error_counts.get(index_attempt.id, 0),
+            )
             for index_attempt in index_attempts
         ],
         total_items=total_count,

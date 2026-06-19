@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { useCurrentAgent } from "@/lib/agents/hooks";
 import {
   LLMProviderDescriptor,
   LLMProviderName,
@@ -139,6 +140,17 @@ export function useLLMProviders(agentId?: number) {
       LLMProviderResponse<LLMProviderDescriptor> | undefined
     >,
   };
+}
+
+/**
+ * Resolves the active agent via `useCurrentAgent` and fetches that agent's
+ * LLM providers via `useLLMProviders`. User-facing model UIs (chat model
+ * selectors, popovers) consistently need exactly this pairing, so this hook
+ * keeps the resolution in one place instead of repeating it at each call site.
+ */
+export function useCurrentAgentLLMProviders() {
+  const currentAgent = useCurrentAgent();
+  return useLLMProviders(currentAgent?.id);
 }
 
 /**

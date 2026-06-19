@@ -532,6 +532,33 @@ def get_accessible_hierarchy_nodes_for_source(
     return versioned_fn(db_session, source, user_email, external_group_ids)
 
 
+def _filter_accessible_hierarchy_node_ids(
+    db_session: Session,  # noqa: ARG001
+    node_ids: list[int],
+    user_email: str,  # noqa: ARG001
+    external_group_ids: list[str],  # noqa: ARG001
+) -> set[int]:
+    """MIT version: hierarchy nodes carry no permission filtering — all
+    requested ids pass. The EE version applies the access filter."""
+    return set(node_ids)
+
+
+def filter_accessible_hierarchy_node_ids(
+    db_session: Session,
+    node_ids: list[int],
+    user_email: str,
+    external_group_ids: list[str],
+) -> set[int]:
+    """Return the subset of ``node_ids`` the user can access (EE filters,
+    MIT passes everything through)."""
+    if not node_ids:
+        return set()
+    versioned_fn = fetch_versioned_implementation(
+        "onyx.db.hierarchy", "_filter_accessible_hierarchy_node_ids"
+    )
+    return versioned_fn(db_session, node_ids, user_email, external_group_ids)
+
+
 def get_document_parent_hierarchy_node_ids(
     db_session: Session,
     document_ids: list[str],

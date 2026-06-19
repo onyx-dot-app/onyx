@@ -1,11 +1,18 @@
 import React, { useEffect } from "react";
-import { render, screen, waitFor } from "@tests/setup/test-utils";
+import { render, screen } from "@tests/setup/test-utils";
 import ShareAgentModal, { ShareAgentModalProps } from "./ShareAgentModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
-  default: jest.fn(() => ({ data: [] })),
+  default: jest.fn(() => ({
+    data: [
+      {
+        email: "owner@example.com",
+        id: "owner-id",
+      },
+    ],
+  })),
 }));
 
 jest.mock("@/hooks/useShareableGroups", () => ({
@@ -14,10 +21,50 @@ jest.mock("@/hooks/useShareableGroups", () => ({
 }));
 
 jest.mock("@/lib/agents/hooks", () => ({
-  useAgent: jest.fn(() => ({ agent: null })),
+  useAgent: jest.fn(() => ({
+    agent: {
+      admin_count: 1,
+      attached_document_count: 0,
+      builtin_persona: false,
+      datetime_aware: false,
+      default_model_configuration_id: null,
+      description: "Test agent",
+      display_priority: null,
+      document_sets: [],
+      group_shares: [],
+      groups: [],
+      hierarchy_node_count: 0,
+      id: 101,
+      is_featured: false,
+      is_listed: true,
+      is_public: false,
+      labels: [],
+      name: "Demo Agent",
+      owner: {
+        email: "owner@example.com",
+        id: "owner-id",
+      },
+      owner_group: null,
+      ownership_vacant: false,
+      public_permission: "VIEWER",
+      replace_base_system_prompt: false,
+      search_start_date: null,
+      sharing_status: "PRIVATE",
+      starter_messages: null,
+      system_prompt: null,
+      task_prompt: null,
+      tool_ids: [],
+      tools: [],
+      uploaded_image_id: undefined,
+      user_file_ids: [],
+      user_permission: "OWNER",
+      user_shares: [],
+      users: [],
+    },
+  })),
   useLabels: jest.fn(() => ({
-    labels: [],
     createLabel: jest.fn(),
+    labels: [],
   })),
 }));
 
@@ -37,11 +84,12 @@ function ModalHarness(props: ShareAgentModalProps) {
 
 function renderShareAgentModal(overrides: Partial<ShareAgentModalProps> = {}) {
   const props: ShareAgentModalProps = {
-    userIds: [],
+    agentId: 101,
     groupIds: [],
-    isPublic: false,
     isFeatured: false,
+    isPublic: false,
     labelIds: [],
+    userIds: [],
     ...overrides,
   };
 
@@ -49,32 +97,14 @@ function renderShareAgentModal(overrides: Partial<ShareAgentModalProps> = {}) {
 }
 
 describe("ShareAgentModal", () => {
-  it("defaults to Users & Groups when the agent is private", async () => {
-    renderShareAgentModal({ isPublic: false });
+  it("renders the new share view", async () => {
+    renderShareAgentModal();
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole("tab", { name: "Users & Groups" })
-      ).toHaveAttribute("data-state", "active")
-    );
-
+    expect(await screen.findByText(/Share/)).toBeInTheDocument();
     expect(
-      screen.getByRole("tab", { name: "Your Organization" })
-    ).toHaveAttribute("data-state", "inactive");
-  });
-
-  it("defaults to Your Organization when the agent is public", async () => {
-    renderShareAgentModal({ isPublic: true });
-
-    await waitFor(() =>
-      expect(
-        screen.getByRole("tab", { name: "Your Organization" })
-      ).toHaveAttribute("data-state", "active")
-    );
-
-    expect(screen.getByRole("tab", { name: "Users & Groups" })).toHaveAttribute(
-      "data-state",
-      "inactive"
-    );
+      screen.getByPlaceholderText("Add users, groups, and accounts")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Admins")).toBeInTheDocument();
+    expect(screen.getByText("Only those invited")).toBeInTheDocument();
   });
 });

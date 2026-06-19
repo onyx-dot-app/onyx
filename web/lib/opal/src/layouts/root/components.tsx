@@ -13,7 +13,6 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import useScreenSize from "@opal/hooks/useScreenSize";
 import type { WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
@@ -112,73 +111,6 @@ interface RootLayoutRootProps {
 
 function RootLayoutRoot({ children }: RootLayoutRootProps) {
   return <div className="opal-root-layout">{children}</div>;
-}
-
-// ---------------------------------------------------------------------------
-// Sidebar — handles mobile / medium / desktop positioning
-// ---------------------------------------------------------------------------
-
-interface RootLayoutSidebarProps {
-  /**
-   * Whether the sidebar is currently folded (collapsed on desktop, hidden on
-   * mobile). Controlled by the consumer — typically read from a persistent
-   * state provider such as `SidebarStateProvider`.
-   */
-  folded: boolean;
-  /** Called when the sidebar fold state should toggle. */
-  onFoldToggle: () => void;
-  children: ReactNode;
-}
-
-function RootLayoutSidebar({
-  folded,
-  onFoldToggle,
-  children,
-}: RootLayoutSidebarProps) {
-  const { isMobile, isMediumScreen } = useScreenSize();
-  const foldedAttr = folded ? "true" : "false";
-
-  if (isMobile) {
-    return (
-      <>
-        <div
-          className="opal-root-layout__sidebar-overlay"
-          data-variant="mobile"
-          data-folded={foldedAttr}
-        >
-          {children}
-        </div>
-        <div
-          className="opal-root-layout__backdrop"
-          data-variant="mobile"
-          data-folded={foldedAttr}
-          onClick={onFoldToggle}
-        />
-      </>
-    );
-  }
-
-  if (isMediumScreen) {
-    return (
-      <>
-        <div className="opal-root-layout__sidebar-spacer" />
-        <div
-          className="opal-root-layout__sidebar-overlay"
-          data-variant="medium"
-        >
-          {children}
-        </div>
-        <div
-          className="opal-root-layout__backdrop"
-          data-variant="medium"
-          data-folded={foldedAttr}
-          onClick={onFoldToggle}
-        />
-      </>
-    );
-  }
-
-  return <>{children}</>;
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +229,6 @@ function RootLayoutFooter({
 
 export {
   RootLayoutRoot as Root,
-  RootLayoutSidebar as Sidebar,
   RootLayoutApp as App,
   RootLayoutMainContent as MainContent,
   RootLayoutLeftPanel as LeftPanel,

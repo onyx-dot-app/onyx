@@ -25,20 +25,19 @@ and are pushed into sandboxes at session setup, never baked into the image.
 
 ### Via CI (preferred)
 
-Push the `sandbox-dev` git tag to have `.github/workflows/sandbox-deployment.yml`
-build multi-arch and push `onyxdotapp/sandbox:dev`:
+Application release CI publishes this image under the same tag as the app
+image, e.g. `onyxdotapp/sandbox:v4.1.2` for app tag `v4.1.2`.
 
-```bash
-git tag -f sandbox-dev && git push -f origin sandbox-dev
-```
+The sandbox jobs in `.github/workflows/deployment.yml` compute a content tag
+from this directory (`ctx-<hash>`). If the content tag already exists, the
+deployment workflow only adds the requested app tag/alias to the existing
+manifest. If the content tag does not exist, it builds multi-arch once, pushes
+`ctx-<hash>`, and then adds the app-aligned tags.
 
-Dev builds never cut a `vX.Y.Z` version or move `:latest`. The nightly tag
-still cuts an auto-versioned `vX.Y.Z` + `latest` when the image context changed.
-Only `sandbox-dev` is supported, to keep Docker Hub free of one-off tags.
-
-Environments that pin `SANDBOX_CONTAINER_IMAGE` to `:dev` must also set
-`SANDBOX_IMAGE_PULL_POLICY=Always` (default `IfNotPresent`) so re-pushed dev
-builds are picked up by new pods. See `docs/craft/image-architecture.md`.
+Use that workflow manually only to backfill or repair a supplied application
+tag. Do not publish sandbox-only `v0.1.x` tags or a Docker Hub
+`onyxdotapp/sandbox:dev` tag for new builds. Local development can still build
+`onyxdotapp/sandbox:dev` and load it directly into kind.
 
 ### Building locally
 
@@ -48,59 +47,31 @@ The sandbox image must be built for **amd64** architecture since our Kubernetes 
 
 ```bash
 cd backend/onyx/server/features/build/sandbox/image
-docker build --platform linux/amd64 -t onyxdotapp/sandbox:v0.1.x .
-docker push onyxdotapp/sandbox:v0.1.x
+docker build --platform linux/amd64 -t onyxdotapp/sandbox:dev .
 ```
 
-### Build multi-arch (recommended for flexibility)
+### Build multi-arch for backfill or repair
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t onyxdotapp/sandbox:v0.1.x \
-  --push .
-```
-
-### Update the `latest` tag
-
-After pushing a versioned tag, update `latest`:
-
-```bash
-docker tag onyxdotapp/sandbox:v0.1.x onyxdotapp/sandbox:latest
-docker push onyxdotapp/sandbox:latest
-```
-
-Or with buildx:
-
-```bash
-docker buildx build --platform linux/amd64,linux/arm64 \
-  -t onyxdotapp/sandbox:v0.1.x \
-  -t onyxdotapp/sandbox:latest \
+  -t onyxdotapp/sandbox:<app-tag> \
   --push .
 ```
 
 ## Deploying a New Version
 
-1. **Build and push** the new image (see above)
+Deploy the matching application tag. The deploy surface derives the sandbox
+image from the app version:
 
-2. **Update the ConfigMap** in in the internal repo
-   ```yaml
-   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:v0.1.x"
-   ```
+- Docker compose: `onyxdotapp/sandbox:${IMAGE_TAG}`.
+- Helm: `onyxdotapp/sandbox:${global.version}`.
 
-3. **Apply the ConfigMap**:
-   ```bash
-   kubectl apply -f configmap/env-configmap.yaml
-   ```
+Docker compose follows the normal app-image `IMAGE_TAG` behavior, including the
+default `latest`. Kubernetes deployments should prefer immutable application
+release tags unless they deliberately opt into moving tags.
 
-4. **Restart the API server** to pick up the new config:
-   ```bash
-   kubectl rollout restart deployment/api-server -n danswer
-   ```
-
-5. **Delete existing sandbox pods** (they will be recreated with the new image):
-   ```bash
-   kubectl delete pods -n onyx-sandboxes -l app.kubernetes.io/component=sandbox
-   ```
+`SANDBOX_CONTAINER_IMAGE` remains an internal escape hatch for local testing,
+staging, cloud, and emergency operations.
 
 ## What's Baked Into the Image
 

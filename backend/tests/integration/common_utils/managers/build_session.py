@@ -8,12 +8,8 @@ Each method calls the API server through the same ``user.headers`` /
 
 from __future__ import annotations
 
-import json
-from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
-
-import httpx
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -30,22 +26,6 @@ def _sessions_url(*parts: str) -> str:
 
 def _build_url(*parts: str) -> str:
     return f"{API_SERVER_URL}/build/" + "/".join(parts)
-
-
-def _parse_sse_lines(response: httpx.Response) -> Iterator[dict[str, Any]]:
-    """Yield decoded JSON payloads from an SSE stream.
-
-    The send-message endpoint emits Server-Sent Events: ``data: {...}\\n\\n``.
-    Lines without a ``data:`` prefix (comments, retry hints) are skipped.
-    """
-    for raw_line in response.iter_lines():
-        if not raw_line:
-            continue
-        if raw_line.startswith("data:"):
-            payload = raw_line[len("data:") :].strip()
-            if not payload:
-                continue
-            yield json.loads(payload)
 
 
 class BuildSessionManager:
@@ -107,25 +87,6 @@ class BuildSessionManager:
         return body
 
     @staticmethod
-    def get(user: DATestUser, session_id: UUID) -> dict[str, Any]:
-        response = client.get(
-            _sessions_url(str(session_id)),
-            headers=user.headers,
-            cookies=user.cookies,
-        )
-        response.raise_for_status()
-        return response.json()
-
-    @staticmethod
-    def delete(user: DATestUser, session_id: UUID) -> None:
-        response = client.delete(
-            _sessions_url(str(session_id)),
-            headers=user.headers,
-            cookies=user.cookies,
-        )
-        response.raise_for_status()
-
-    @staticmethod
     def restore(user: DATestUser, session_id: UUID) -> dict[str, Any]:
         response = client.post(
             _sessions_url(str(session_id), "restore"),
@@ -134,19 +95,6 @@ class BuildSessionManager:
         )
         response.raise_for_status()
         return response.json()
-
-    @staticmethod
-    def send_message(
-        user: DATestUser,
-        session_id: UUID,
-        content: str,
-    ) -> Iterator[dict[str, Any]]:
-        turn = BuildSessionManager.start_turn(user, session_id, content)
-        yield from BuildSessionManager.stream_turn_events(
-            user,
-            session_id,
-            UUID(turn["turn_id"]),
-        )
 
     @staticmethod
     def start_turn(
@@ -181,23 +129,6 @@ class BuildSessionManager:
         )
         response.raise_for_status()
         return response.json()
-
-    @staticmethod
-    def stream_turn_events(
-        user: DATestUser,
-        session_id: UUID,
-        turn_id: UUID,
-    ) -> Iterator[dict[str, Any]]:
-        with client.stream(
-            "GET",
-            _build_url("sessions", str(session_id), "turns", str(turn_id), "events"),
-            headers=user.headers,
-            cookies=user.cookies,
-        ) as response:
-            if response.status_code in (404, 409):
-                return
-            response.raise_for_status()
-            yield from _parse_sse_lines(response)
 
     @staticmethod
     def list_messages(user: DATestUser, session_id: UUID) -> list[dict[str, Any]]:

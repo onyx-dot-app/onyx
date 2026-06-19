@@ -350,7 +350,7 @@ this phase.
   `/api/build/approvals/{id}/decision` exposed under the `/build`
   prefix with `BASIC_ACCESS` and Craft-enabled checks.
 - SSE-piggyback shipped: `ApprovalRequestedPacket` defined in
-  `backend/onyx/server/features/build/api/packets.py`,
+  `backend/onyx/server/features/build/packets.py`,
   `_merge_acp_with_announces` in the session manager `BLPOP`ing the
   `approval:announce:{session_id}` list and emitting the packet on
   the chat stream, `parsePacket` handling the `approval_requested`

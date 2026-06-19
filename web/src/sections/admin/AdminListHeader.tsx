@@ -59,10 +59,14 @@ export default function AdminListHeader({
   onAction,
   actionLabel,
 }: AdminListHeaderProps) {
+  // Pin the button to its label width — the flexible sibling (search input /
+  // empty-state text) absorbs the row shrink; otherwise the button clips its label.
   const actionButton = (
-    <Button rightIcon={SvgPlusCircle} onClick={onAction}>
-      {actionLabel}
-    </Button>
+    <div className="shrink-0">
+      <Button rightIcon={SvgPlusCircle} onClick={onAction}>
+        {actionLabel}
+      </Button>
+    </div>
   );
 
   if (!hasItems) {

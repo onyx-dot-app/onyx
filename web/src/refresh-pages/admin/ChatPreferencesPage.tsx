@@ -31,13 +31,10 @@ import {
   InputHorizontal,
   InputVertical,
 } from "@opal/layouts";
-import {
-  useSettingsContext,
-  useVectorDbEnabled,
-} from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
-import { QueryHistoryType, Settings } from "@/interfaces/settings";
+import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
 import { toast } from "@/hooks/useToast";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import {
@@ -67,7 +64,7 @@ import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/tools/interfaces";
 import type { IconProps } from "@opal/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
@@ -373,10 +370,149 @@ function FileSizeLimitFields({
   );
 }
 
+// Retention presets offered directly in the dropdown. Any other (positive)
+// value is surfaced via the "Custom…" option. The backend stores
+// maximum_chat_retention_days as a free-form number, so these are purely UI.
+const RETENTION_PRESETS: number[] = [7, 30, 60, 90, 365];
+// FE-only guard: the backend imposes no upper bound, so cap absurd input.
+const MAX_RETENTION_DAYS = 36500; // ~100 years
+const CUSTOM_RETENTION_VALUE = "custom";
+const FOREVER_RETENTION_VALUE = "forever";
+
+// Pure predicate — lives at module scope so it can be referenced inside
+// useEffect without an exhaustive-deps suppression.
+const valueIsCustomRetention = (v: number | null): v is number =>
+  v !== null && !RETENTION_PRESETS.includes(v);
+
+// True only when the string is one or more digits within the allowed range.
+// parseInt alone would silently accept "1.5" → 1 or "7abc" → 7, so guard with
+// a digits-only check before persisting.
+const isValidCustomRetention = (raw: string): boolean =>
+  /^\d+$/.test(raw) &&
+  parseInt(raw, 10) > 0 &&
+  parseInt(raw, 10) <= MAX_RETENTION_DAYS;
+
+interface RetentionFieldProps {
+  value: number | null;
+  disabled: boolean;
+  onSave: (value: number | null) => void;
+}
+
+// Chat-retention control: a preset dropdown plus a "Custom…" option that
+// reveals a numeric "days" input. Drop-in replacement for the bare
+// <InputSelect>; the persisted shape (number | null) is unchanged, so any
+// existing value — preset or not — round-trips correctly.
+function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
+  const [showCustom, setShowCustom] = useState(valueIsCustomRetention(value));
+  const [customDays, setCustomDays] = useState(
+    valueIsCustomRetention(value) ? String(value) : ""
+  );
+
+  // Re-sync when the stored value changes externally (e.g. another admin),
+  // but only when our local state matches the last value we persisted.
+  const lastSavedRef = useRef(value);
+  useEffect(() => {
+    if (value === lastSavedRef.current) return;
+    lastSavedRef.current = value;
+    setShowCustom(valueIsCustomRetention(value));
+    setCustomDays(valueIsCustomRetention(value) ? String(value) : "");
+  }, [value]);
+
+  const selectValue = showCustom
+    ? CUSTOM_RETENTION_VALUE
+    : value === null
+      ? FOREVER_RETENTION_VALUE
+      : String(value);
+
+  const persist = (next: number | null) => {
+    lastSavedRef.current = next;
+    onSave(next);
+  };
+
+  const handleSelectChange = (next: string) => {
+    if (next === CUSTOM_RETENTION_VALUE) {
+      // Reveal the input; don't persist until a valid number is entered.
+      setShowCustom(true);
+      return;
+    }
+    setShowCustom(false);
+    setCustomDays("");
+    persist(next === FOREVER_RETENTION_VALUE ? null : parseInt(next, 10));
+  };
+
+  const handleCustomBlur = () => {
+    // Empty/invalid input reverts to the last persisted selection.
+    if (!isValidCustomRetention(customDays)) {
+      setShowCustom(valueIsCustomRetention(value));
+      setCustomDays(valueIsCustomRetention(value) ? String(value) : "");
+      return;
+    }
+
+    const parsed = parseInt(customDays, 10);
+    const normalized = String(parsed);
+    if (normalized !== customDays) setCustomDays(normalized);
+    if (parsed !== value) persist(parsed);
+  };
+
+  const customInvalid =
+    customDays !== "" && !isValidCustomRetention(customDays);
+
+  return (
+    <div className="flex flex-col gap-2 w-full">
+      <InputSelect
+        value={selectValue}
+        onValueChange={handleSelectChange}
+        disabled={disabled}
+      >
+        <InputSelect.Trigger />
+        <InputSelect.Content>
+          <InputSelect.Item value={FOREVER_RETENTION_VALUE}>
+            Forever
+          </InputSelect.Item>
+          {RETENTION_PRESETS.map((d) => (
+            <InputSelect.Item key={d} value={String(d)}>
+              {d} days
+            </InputSelect.Item>
+          ))}
+          <InputSelect.Item value={CUSTOM_RETENTION_VALUE}>
+            Custom…
+          </InputSelect.Item>
+        </InputSelect.Content>
+      </InputSelect>
+
+      {showCustom && (
+        <div className="flex flex-col gap-1 w-full">
+          <InputTypeIn
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="Enter number of days"
+            value={customDays}
+            onChange={(e) => setCustomDays(e.target.value)}
+            onBlur={handleCustomBlur}
+            variant={
+              disabled ? "disabled" : customInvalid ? "error" : undefined
+            }
+            rightChildren={
+              <Text font="secondary-body" color="text-03">
+                days
+              </Text>
+            }
+          />
+          {customInvalid && (
+            <Text font="secondary-body" color="text-03">
+              {`Enter a whole number of days between 1 and ${MAX_RETENTION_DAYS}.`}
+            </Text>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ChatPreferencesPage() {
   const router = useRouter();
-  const settings = useSettingsContext();
-  const s = settings.settings;
+  const settings = useSettings();
+  const s = settings;
   // Search Mode toggle is Business+; Chat Retention is Enterprise-only.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
@@ -412,7 +548,7 @@ export default function ChatPreferencesPage() {
 
   // Tools availability
   const { tools: availableTools } = useAvailableTools();
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = settings;
 
   const searchTool = availableTools.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
@@ -524,10 +660,13 @@ export default function ChatPreferencesPage() {
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
-      const currentSettings = settings?.settings;
+      const currentSettings = settings;
       if (!currentSettings) return;
 
-      const newSettings = { ...currentSettings, ...updates };
+      const newSettings: Settings = {
+        ...toSettings(currentSettings),
+        ...updates,
+      };
 
       try {
         const response = await fetch("/api/admin/settings", {
@@ -634,6 +773,20 @@ export default function ChatPreferencesPage() {
                   checked={s.auto_scroll ?? false}
                   onCheckedChange={(checked) => {
                     void saveSettings({ auto_scroll: checked });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
+                title="Temperature Control"
+                description="Let users adjust the temperature (creativity) of model responses from the model picker in chat."
+                withLabel
+              >
+                <Switch
+                  checked={s.temperature_override_enabled ?? false}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({
+                      temperature_override_enabled: checked,
+                    });
                   }}
                 />
               </InputHorizontal>
@@ -983,40 +1136,13 @@ export default function ChatPreferencesPage() {
                         disabled={!enterpriseTier}
                         withLabel
                       >
-                        <InputSelect
-                          value={
-                            s.maximum_chat_retention_days?.toString() ??
-                            "forever"
-                          }
-                          onValueChange={(value) => {
-                            void saveSettings({
-                              maximum_chat_retention_days:
-                                value === "forever"
-                                  ? null
-                                  : parseInt(value, 10),
-                            });
-                          }}
+                        <RetentionField
+                          value={s.maximum_chat_retention_days ?? null}
                           disabled={!enterpriseTier}
-                        >
-                          <InputSelect.Trigger />
-                          <InputSelect.Content>
-                            <InputSelect.Item value="forever">
-                              Forever
-                            </InputSelect.Item>
-                            <InputSelect.Item value="7">
-                              7 days
-                            </InputSelect.Item>
-                            <InputSelect.Item value="30">
-                              30 days
-                            </InputSelect.Item>
-                            <InputSelect.Item value="90">
-                              90 days
-                            </InputSelect.Item>
-                            <InputSelect.Item value="365">
-                              365 days
-                            </InputSelect.Item>
-                          </InputSelect.Content>
-                        </InputSelect>
+                          onSave={(maximum_chat_retention_days) =>
+                            void saveSettings({ maximum_chat_retention_days })
+                          }
+                        />
                       </InputHorizontal>
                     </Disabled>
 

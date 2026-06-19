@@ -86,7 +86,7 @@ jobs:
         "run-id=${{ github.run_id }}-build-backend-image",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 45
+    timeout-minutes: 10
     environment: ci-protected
 
     steps:
@@ -126,7 +126,7 @@ jobs:
         "run-id=${{ github.run_id }}-connectors-check",
         "extras=ecr-cache",
       ]
-    timeout-minutes: 60
+    timeout-minutes: 40
     environment: ci-protected
 
     steps:
@@ -138,7 +138,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # ratchet:aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # ratchet:aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2

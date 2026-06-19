@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import * as RootLayout from "@opal/layouts/root/components";
 
@@ -15,17 +14,13 @@ type Story = StoryObj;
 // Shared demo helpers
 // ---------------------------------------------------------------------------
 
-function DemoSidebar({ folded }: { folded: boolean }) {
+function DemoSidebar() {
   return (
     <div className="h-full w-60 bg-background-neutral-02 border-r border-border-01 p-4 flex flex-col gap-3">
-      {!folded && (
-        <>
-          <div className="h-6 w-24 rounded-04 bg-background-neutral-04" />
-          <div className="h-4 w-full rounded-04 bg-background-neutral-03" />
-          <div className="h-4 w-3/4 rounded-04 bg-background-neutral-03" />
-          <div className="h-4 w-5/6 rounded-04 bg-background-neutral-03" />
-        </>
-      )}
+      <div className="h-6 w-24 rounded-04 bg-background-neutral-04" />
+      <div className="h-4 w-full rounded-04 bg-background-neutral-03" />
+      <div className="h-4 w-3/4 rounded-04 bg-background-neutral-03" />
+      <div className="h-4 w-5/6 rounded-04 bg-background-neutral-03" />
     </div>
   );
 }
@@ -43,27 +38,13 @@ function DemoContent({ label }: { label: string }) {
 // ---------------------------------------------------------------------------
 
 function BasicDemo() {
-  const [folded, setFolded] = useState(false);
   return (
     <div className="w-full h-screen">
       <RootLayout.Root>
-        <RootLayout.Sidebar
-          folded={folded}
-          onFoldToggle={() => setFolded((p) => !p)}
-        >
-          <DemoSidebar folded={folded} />
-        </RootLayout.Sidebar>
+        <DemoSidebar />
         <RootLayout.App>
           <RootLayout.MainContent>
-            <div className="h-full flex flex-col items-center justify-center gap-3">
-              <DemoContent label="Main content" />
-              <button
-                className="px-3 py-1.5 rounded-08 bg-background-neutral-03 text-text-02 text-sm"
-                onClick={() => setFolded((p) => !p)}
-              >
-                Toggle sidebar
-              </button>
-            </div>
+            <DemoContent label="Main content" />
           </RootLayout.MainContent>
         </RootLayout.App>
       </RootLayout.Root>
@@ -76,16 +57,10 @@ export const Basic: Story = {
 };
 
 function WithPanelsDemo() {
-  const [folded, setFolded] = useState(false);
   return (
     <div className="w-full h-screen">
       <RootLayout.Root>
-        <RootLayout.Sidebar
-          folded={folded}
-          onFoldToggle={() => setFolded((p) => !p)}
-        >
-          <DemoSidebar folded={folded} />
-        </RootLayout.Sidebar>
+        <DemoSidebar />
         <RootLayout.LeftPanel className="w-56 bg-background-neutral-02 border-r border-border-01">
           <DemoContent label="Left panel" />
         </RootLayout.LeftPanel>
@@ -107,17 +82,10 @@ export const WithPanels: Story = {
 };
 
 function WithHeaderFooterDemo() {
-  const [folded, setFolded] = useState(false);
-  const [extraPadding, setExtraPadding] = useState(false);
   return (
     <div className="w-full h-screen">
       <RootLayout.Root>
-        <RootLayout.Sidebar
-          folded={folded}
-          onFoldToggle={() => setFolded((p) => !p)}
-        >
-          <DemoSidebar folded={folded} />
-        </RootLayout.Sidebar>
+        <DemoSidebar />
         <RootLayout.App>
           <RootLayout.Header>
             <div className="h-12 px-4 border-b border-border-01 bg-background-neutral-01 flex items-center">
@@ -129,15 +97,9 @@ function WithHeaderFooterDemo() {
           <RootLayout.MainContent>
             <DemoContent label="Scrollable page content" />
           </RootLayout.MainContent>
-          <RootLayout.Footer extraPadding={extraPadding}>
+          <RootLayout.Footer>
             <div className="h-12 px-4 border-t border-border-01 bg-background-neutral-01 flex items-center gap-3">
               <span className="text-text-03 text-xs">App footer</span>
-              <button
-                className="px-2 py-1 rounded-04 bg-background-neutral-03 text-text-02 text-xs"
-                onClick={() => setExtraPadding((p) => !p)}
-              >
-                extraPadding: {extraPadding ? "on" : "off"}
-              </button>
             </div>
           </RootLayout.Footer>
         </RootLayout.App>

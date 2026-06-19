@@ -37,18 +37,17 @@ jobs:
         run: |
           printf 'registry=https://registry.npmjs.org/\n' > "$HOME/.npmrc"
 
-      - name: Verify tag matches package.json version
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#opal/v}"
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version ($PKG_VERSION)"
-            exit 1
-          fi
-
       - name: Install workspace deps
         run: bun install --frozen-lockfile
         working-directory: web
+
+      # The repo keeps web/lib/opal/package.json at 0.0.0; the opal/v* tag is the
+      # source of truth. Stamp the version from the tag here — after the frozen
+      # install (which expects the committed 0.0.0) and before build/publish.
+      - name: Set version from tag
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#opal/v}"
+          npm version "${TAG_VERSION}" --no-git-tag-version --allow-same-version
 
       # Opal's CSS build inlines @onyx-ai/shared's generated design tokens, so
       # shared must be built first. The published opal is then self-contained.

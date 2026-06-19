@@ -85,7 +85,7 @@ sandbox-level data model.
 
 ### `SnapshotManager`
 
-`backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`
+`backend/onyx/server/features/build/sandbox/snapshot_manager.py`
 
 Owns FileStore persistence for both normal session snapshots and sandbox-global
 opencode history snapshots. Normal sidecar-created workspace snapshots keep the
@@ -360,7 +360,7 @@ should continue to restore the DB when possible and stay storage-focused.
 
 - `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/opencode_history.py`
 - `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/server.py`
-- `backend/onyx/server/features/build/sandbox/manager/snapshot_manager.py`
+- `backend/onyx/server/features/build/sandbox/snapshot_manager.py`
 - `backend/onyx/server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py`
 - `backend/onyx/server/features/build/sandbox/opencode/serve_client.py`
 - `backend/onyx/server/features/build/sandbox/serve_transport.py`
