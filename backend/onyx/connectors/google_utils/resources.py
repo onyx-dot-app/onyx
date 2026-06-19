@@ -72,15 +72,21 @@ def _get_google_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
-    service: Resource
-    if isinstance(creds, ServiceAccountCredentials):
-        # NOTE: https://developers.google.com/identity/protocols/oauth2/service-account#error-codes
-        creds = creds.with_subject(user_email)
-        service = build(service_name, service_version, credentials=creds)
-    elif isinstance(creds, OAuthCredentials):
-        service = build(service_name, service_version, credentials=creds)
-
+    creds = get_impersonated_creds(creds, user_email)
+    service: Resource = build(service_name, service_version, credentials=creds)
     return service
+
+
+def get_impersonated_creds(
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> ServiceAccountCredentials | OAuthCredentials:
+    """Service-account creds impersonating `user_email` (domain-wide delegation);
+    OAuth creds are returned unchanged."""
+    if isinstance(creds, ServiceAccountCredentials):
+        # https://developers.google.com/identity/protocols/oauth2/service-account#error-codes
+        return creds.with_subject(user_email)
+    return creds
 
 
 def get_google_docs_service(

@@ -893,6 +893,16 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
+# Cap the Google Docs advanced-parse (Docs-API structural JSON) response. Native
+# Docs report no `size`, so this is the one content fetch we can't size-check
+# upfront; bounding the streamed response keeps a structurally-huge Doc from
+# OOMing the worker. Docs over the cap fall back to the size-bounded basic text
+# export. Sized for json parse-expansion x conversion concurrency under the
+# per-worker memory limit.
+GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
+    os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
+)
+
 # Cap the total text retained per file across a connector's extracted sections,
 # bounding worker memory when a source can't be size-checked before fetch —
 # e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
