@@ -126,7 +126,6 @@ def test_env_false_short_circuits_without_consulting_provider(
             "get_current_tenant_id should not be called when ENABLE_CRAFT=False"
         ),
     )
-    provider = _StubPostHogProvider(enabled=True)
     monkeypatch.setattr(
         build_utils,
         "get_default_feature_flag_provider",
@@ -136,7 +135,6 @@ def test_env_false_short_circuits_without_consulting_provider(
     )
 
     assert is_onyx_craft_enabled(_make_user()) is False
-    assert provider.calls == []
 
 
 def test_posthog_flag_disables_when_false(monkeypatch: pytest.MonkeyPatch) -> None:
