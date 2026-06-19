@@ -7,11 +7,12 @@ import {
   SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
 } from "./lib/constants";
 
-// Authentication cookie names (matches backend constants)
-const ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user";
-
-// Protected route prefixes (require authentication)
-const PROTECTED_ROUTES = ["/app", "/admin", "/agents", "/connector"];
+// Route prefixes that never allow anonymous access, so we fast-fail at the edge
+// when no auth cookie is present. "/app" is intentionally excluded: it allows
+// anonymous access via a runtime (Redis-backed) setting the edge can't read from
+// cookies, so it's gated server-side by requireAuth() in
+// web/src/app/app/layout.tsx instead.
+const PROTECTED_ROUTES = ["/admin", "/agents", "/connector"];
 
 // Public route prefixes (no authentication required)
 const PUBLIC_ROUTES = ["/auth", "/anonymous", "/_next", "/api"];
@@ -87,10 +88,10 @@ export async function proxy(request: NextRequest) {
 
   if (isProtectedRoute && !isPublicRoute) {
     const authCookie = request.cookies.get(SERVER_SIDE_ONLY__AUTH_COOKIE_NAME);
-    const anonymousCookie = request.cookies.get(ANONYMOUS_USER_COOKIE_NAME);
 
-    // Allow access if user has either a regular auth cookie or anonymous user cookie
-    if (!authCookie && !anonymousCookie) {
+    // Require a real auth cookie; the anonymous-user cookie must not satisfy the
+    // edge gate for these routes (the server-side role checks reject it anyway).
+    if (!authCookie) {
       const loginUrl = new URL("/auth/login", request.url);
       // Preserve full URL including query params and hash for deep linking
       const fullPath = pathname + request.nextUrl.search + request.nextUrl.hash;
