@@ -4,26 +4,16 @@ import { useCallback, memo, useMemo, useState, useEffect, useRef } from "react";
 import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
 import { useSettings } from "@/lib/settings/hooks";
-import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
-import AgentButton from "@/sections/sidebar/AgentButton";
-import { DragEndEvent } from "@dnd-kit/core";
 import {
   DndContext,
-  closestCenter,
-  KeyboardSensor,
+  DragEndEvent,
   PointerSensor,
+  pointerWithin,
   useSensor,
   useSensors,
-  pointerWithin,
 } from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
 import {
   restrictToFirstScrollableAncestor,
@@ -31,11 +21,7 @@ import {
 } from "@dnd-kit/modifiers";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/hooks/useProjects";
-import {
-  useAgents,
-  useCurrentAgent,
-  usePinnedAgents,
-} from "@/lib/agents/hooks";
+import { useCurrentAgent } from "@/lib/agents/hooks";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
@@ -65,7 +51,6 @@ import {
   SvgDevKit,
   SvgEditBig,
   SvgFolderPlus,
-  SvgMoreHorizontal,
   SvgOnyxOctagon,
   SvgSearchMenu,
   SvgSettings,
@@ -81,26 +66,6 @@ import { dismissNotification } from "@/lib/notifications/api";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-
-// Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
-// OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
-function buildVisibleAgents(
-  pinnedAgents: MinimalAgent[],
-  currentAgent: MinimalAgent | null
-): [MinimalAgent[], boolean] {
-  /* NOTE: The unified agent (id = 0) is not visible in the sidebar,
-  so we filter it out. */
-  if (!currentAgent)
-    return [pinnedAgents.filter((agent) => agent.id !== 0), false];
-  const currentAgentIsPinned = pinnedAgents.some(
-    (pinnedAgent) => pinnedAgent.id === currentAgent.id
-  );
-  const visibleAgents = (
-    currentAgentIsPinned ? pinnedAgents : [...pinnedAgents, currentAgent]
-  ).filter((agent) => agent.id !== 0);
-
-  return [visibleAgents, currentAgentIsPinned];
-}
 
 const SKELETON_WIDTHS_BASE = ["w-4/5", "w-4/5", "w-3/5"];
 
@@ -218,20 +183,10 @@ const AppSidebar = memo(function AppSidebarInner() {
     refreshProjects,
     isLoading: isLoadingProjects,
   } = useProjects();
-  const { isLoading: isLoadingAgents } = useAgents();
   const currentAgent = useCurrentAgent();
-  const {
-    pinnedAgents,
-    updatePinnedAgents,
-    isLoading: isLoadingPinnedAgents,
-  } = usePinnedAgents();
 
   // Wait for ALL dynamic data before showing any sections
-  const isLoadingDynamicContent =
-    isLoadingChatSessions ||
-    isLoadingProjects ||
-    isLoadingAgents ||
-    isLoadingPinnedAgents;
+  const isLoadingDynamicContent = isLoadingChatSessions || isLoadingProjects;
 
   // Still need some context for stateful operations
   const { refreshCurrentProjectDetails, currentProjectId } =
@@ -307,71 +262,12 @@ const AppSidebar = memo(function AppSidebarInner() {
     }
   }, [buildModeNotification, mutateNotifications]);
 
-  const [visibleAgents, currentAgentIsPinned] = useMemo(
-    () => buildVisibleAgents(pinnedAgents, currentAgent),
-    [pinnedAgents, currentAgent]
-  );
-  const visibleAgentIds = useMemo(
-    () => visibleAgents.map((agent) => agent.id),
-    [visibleAgents]
-  );
-
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 8,
       },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
     })
-  );
-
-  // Handle agent drag and drop
-  const handleAgentDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over) return;
-      if (active.id === over.id) return;
-
-      const activeIndex = visibleAgentIds.findIndex(
-        (agentId) => agentId === active.id
-      );
-      const overIndex = visibleAgentIds.findIndex(
-        (agentId) => agentId === over.id
-      );
-
-      let newPinnedAgents: MinimalAgent[];
-
-      if (currentAgent && !currentAgentIsPinned) {
-        // This is the case in which the user is dragging the UNPINNED agent and moving it to somewhere else in the list.
-        // This is an indication that we WANT to pin this agent!
-        if (activeIndex === visibleAgentIds.length - 1) {
-          const pinnedWithCurrent = [...pinnedAgents, currentAgent];
-          newPinnedAgents = arrayMove(
-            pinnedWithCurrent,
-            activeIndex,
-            overIndex
-          );
-        } else {
-          // Use visibleAgents to ensure the indices match with `visibleAgentIds`
-          newPinnedAgents = arrayMove(visibleAgents, activeIndex, overIndex);
-        }
-      } else {
-        // Use visibleAgents to ensure the indices match with `visibleAgentIds`
-        newPinnedAgents = arrayMove(visibleAgents, activeIndex, overIndex);
-      }
-
-      updatePinnedAgents(newPinnedAgents);
-    },
-    [
-      visibleAgentIds,
-      visibleAgents,
-      pinnedAgents,
-      updatePinnedAgents,
-      currentAgent,
-      currentAgentIsPinned,
-    ]
   );
 
   // Perform the actual move
@@ -549,25 +445,20 @@ const AppSidebar = memo(function AppSidebarInner() {
     ),
     [folded, activeSidebarTab]
   );
-  const moreAgentsButton = useMemo(
+  const agentsButton = useMemo(
     () => (
-      <div data-testid="AppSidebar/more-agents">
+      <div data-testid="AppSidebar/agents">
         <SidebarTab
-          icon={
-            folded || visibleAgents.length === 0
-              ? SvgOnyxOctagon
-              : SvgMoreHorizontal
-          }
+          icon={SvgOnyxOctagon}
           href="/app/agents"
           folded={folded}
           selected={activeSidebarTab.isMoreAgents()}
-          variant={folded ? "sidebar-heavy" : "sidebar-light"}
         >
-          {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
+          智能体 Agent
         </SidebarTab>
       </div>
     ),
-    [folded, activeSidebarTab, visibleAgents]
+    [folded, activeSidebarTab]
   );
   const newProjectButton = useMemo(
     () => (
@@ -685,8 +576,8 @@ const AppSidebar = memo(function AppSidebarInner() {
             {newSessionButton}
             {searchChatsButton}
             {brandKnowledgeButton}
+            {agentsButton}
             {isOnyxCraftEnabled && buildButton}
-            {folded && moreAgentsButton}
             {folded && newProjectButton}
           </div>
         </SidebarLayouts.Header>
@@ -694,25 +585,6 @@ const AppSidebar = memo(function AppSidebarInner() {
         <SidebarLayouts.Body scrollKey="app-sidebar">
           {isLoadingDynamicContent ? null : (
             <>
-              {/* Agents */}
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleAgentDragEnd}
-              >
-                <SidebarLayouts.Section title="Agents">
-                  <SortableContext
-                    items={visibleAgentIds}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {visibleAgents.map((visibleAgent) => (
-                      <AgentButton key={visibleAgent.id} agent={visibleAgent} />
-                    ))}
-                  </SortableContext>
-                  {moreAgentsButton}
-                </SidebarLayouts.Section>
-              </DndContext>
-
               {/* Wrap Projects and Recents in a shared DndContext for chat-to-project drag */}
               <DndContext
                 sensors={sensors}
