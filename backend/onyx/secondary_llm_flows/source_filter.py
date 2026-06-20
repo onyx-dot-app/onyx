@@ -16,6 +16,10 @@ from onyx.utils.text_processing import parse_llm_json_response
 
 logger = setup_logger()
 
+# Only the most recent user turns feed the scope decision — older turns add
+# tokens and stale directives without helping the current request.
+MAX_SOURCE_FILTER_USER_TURNS = 5
+
 
 def strings_to_document_sources(source_strs: list[str]) -> list[DocumentSource]:
     sources = []
@@ -75,6 +79,8 @@ def decide_search_scope(
     ]
     if not user_turns:
         return None
+    # Keep only the most recent turns (the current request plus a little context).
+    user_turns = user_turns[-MAX_SOURCE_FILTER_USER_TURNS:]
 
     # Separate the current request from earlier turns so the model can judge
     # directive lifecycle (persist on a same-topic follow-up, drop a stale

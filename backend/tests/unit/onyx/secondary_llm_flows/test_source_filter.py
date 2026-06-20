@@ -136,3 +136,18 @@ def test_duplicated_json_output_still_scopes() -> None:
         history, [A, B], [], '{"sources":["zendesk"]}{"sources":["zendesk"]}'
     )
     assert scope == [A]
+
+
+def test_only_the_last_five_user_turns_reach_the_prompt() -> None:
+    """Older user turns are dropped so the decision sees only recent context."""
+    history = [
+        ChatMinimalTextMessage(message=f"msg {i}", message_type=MessageType.USER)
+        for i in range(8)
+    ]
+    _scope, prompt = _run_decision(history, [A, B], [], '{"sources": []}')
+
+    user_content = prompt[-1].content
+    # Last 5 (msgs 3-7) present; older ones (0-2) dropped.
+    assert "msg 7" in user_content and "msg 3" in user_content
+    assert "msg 2" not in user_content
+    assert "msg 0" not in user_content
