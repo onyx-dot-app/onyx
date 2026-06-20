@@ -203,3 +203,24 @@ def test_load_credentials_with_no_known_keys_raises() -> None:
 
     with pytest.raises(ConnectorMissingCredentialError):
         connector.load_credentials({})
+
+
+@patch("onyx.connectors.linear.connector.LINEAR_CLIENT_SECRET", "secret")
+@patch("onyx.connectors.linear.connector.LINEAR_CLIENT_ID", "client-id")
+def test_oauth_enabled_when_client_credentials_configured() -> None:
+    """OAuth is available only when both client id and secret are set."""
+    assert LinearConnector.oauth_enabled() is True
+
+
+@patch("onyx.connectors.linear.connector.LINEAR_CLIENT_SECRET", None)
+@patch("onyx.connectors.linear.connector.LINEAR_CLIENT_ID", None)
+def test_oauth_disabled_when_client_credentials_missing() -> None:
+    """Without client creds, OAuth is disabled so the UI uses linear_api_key."""
+    assert LinearConnector.oauth_enabled() is False
+
+
+@patch("onyx.connectors.linear.connector.LINEAR_CLIENT_SECRET", None)
+@patch("onyx.connectors.linear.connector.LINEAR_CLIENT_ID", "client-id")
+def test_oauth_disabled_when_secret_missing() -> None:
+    """Both client id and secret are required for OAuth."""
+    assert LinearConnector.oauth_enabled() is False

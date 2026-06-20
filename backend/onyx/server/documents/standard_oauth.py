@@ -101,6 +101,16 @@ def oauth_authorize(
         raise HTTPException(status_code=400, detail=f"Unknown OAuth source: {source}")
 
     connector_cls = oauth_connectors[source]
+
+    if not connector_cls.oauth_enabled():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"OAuth is not configured for {source} on this deployment. "
+                "Add a credential manually instead."
+            ),
+        )
+
     base_url = WEB_DOMAIN
 
     # get additional kwargs from request
@@ -227,6 +237,6 @@ def oauth_details(
         )
 
     return OAuthDetails(
-        oauth_enabled=True,
+        oauth_enabled=connector_cls.oauth_enabled(),
         additional_kwargs=additional_kwarg_descriptions,
     )

@@ -87,6 +87,15 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         return DocumentSource.LINEAR
 
     @classmethod
+    def oauth_client_id(cls) -> str | None:
+        # When unset (no OAuth app), the UI falls back to linear_api_key.
+        return LINEAR_CLIENT_ID
+
+    @classmethod
+    def oauth_client_secret(cls) -> str | None:
+        return LINEAR_CLIENT_SECRET
+
+    @classmethod
     def oauth_authorization_url(
         cls,
         base_domain: str,
