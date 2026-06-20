@@ -2,7 +2,6 @@
 # document index. For example, a filter for dates or a filter by source type such as GitHub
 # or Slack
 SOURCES_KEY = "sources"
-NEXT_KEY = "next"
 
 # Smaller followup prompts in time_filter.py
 TIME_FILTER_PROMPT = """
@@ -22,32 +21,46 @@ The valid values for "date" is a date in format MM/DD/YYYY, ALWAYS follow this f
 """.strip()
 
 
-# Used in source_filter.py: decide, per call, which connected source(s) THIS
-# internal search should cover, given the conversation and what's already been tried.
+# Used in source_filter.py: decide which connected source(s) an internal search
+# should cover, based on the routing instructions, the user's request, and the
+# source(s) already searched this turn.
 SOURCE_SCOPE_DECISION_PROMPT = f"""
 You route an internal search. Based on the conversation — the assistant/persona \
-instructions on where to look and what the user asks — and which sources have already \
-been searched for this request, decide which connected source(s) THIS search should cover.
+instructions on where to look and what the user asks — decide which connected source(s) \
+THIS search should cover.
 
-The default is NO filter (search everything). Only apply a source filter when the \
-conversation EXPLICITLY names or routes to that source. Filtering is the exception, not \
-the norm.
+The default is NO filter (search everything). Only scope when the conversation EXPLICITLY \
+names or routes to specific source(s). Scoping is the exception, not the norm.
 
-Output JSON with two keys, "{SOURCES_KEY}" and "{NEXT_KEY}":
-- "{SOURCES_KEY}": the source(s) to search now.
-  - Priority / fallback order that EXPLICITLY names sources ("check Zendesk first, then \
-Confluence"; "if nothing in the wiki, try GitHub"): return the FIRST named source in that \
-order that has NOT already been searched. Just that one source.
-  - Several sources EXPLICITLY named with no priority ("search Confluence and GitHub"): \
-return all of them.
-  - No source explicitly named or routed, OR every routed source has already been \
-searched: return an empty list (search everything).
-- "{NEXT_KEY}": for a priority/fallback order, the next not-yet-searched source a follow-up \
-search would cover after this one (or null if none remain). null otherwise.
+Routing comes in two shapes — read the instruction to tell them apart:
+- SEQUENTIAL / FALLBACK ("check A first, then B"; "try A; if nothing, then B"; "A, \
+otherwise B"): search ONE source at a time, in the stated order. Return the FIRST routed \
+source NOT already searched this turn. If every routed source has already been searched, \
+return the full routed set.
+- COMBINED ("search A and B"; "check both A and B"; "look in A, B and C"): search the \
+whole named set TOGETHER. Return all named sources on every call, including repeats (a \
+repeat re-runs the same set with new query terms).
+
+The conversation may span multiple turns — decide the scope for the CURRENT request:
+- A source directive applies to the current request AND to same-topic follow-ups. If the \
+current request continues the same task and names no new source, KEEP the earlier \
+directive's source(s).
+- A new, UNRELATED current request that names no source RESETS to unscoped — do not carry \
+a stale directive forward.
+- A later request naming a DIFFERENT source OVERRIDES the earlier one — scope to the \
+newly named source only.
+- If the current request explicitly says to search everywhere / not to filter / across \
+all sources, return an empty list, regardless of any earlier directive.
+
+Already searched this turn: {{already_searched}}
+
+Output JSON with one key, "{SOURCES_KEY}" — the connected source(s) to search now:
+- Source(s) named/routed (per the shapes above): the source(s) to search now.
+- No source named or routed: an empty list (search everything).
 
 Rules:
-- A source must be EXPLICITLY mentioned (by name) or routed to in the conversation to be \
-filtered on. Default to an empty list; when in doubt, return an empty list.
+- A source must be EXPLICITLY mentioned (by name) or routed to. Default to an empty list; \
+when in doubt, return an empty list.
 - NEVER infer or guess a source from the topic or subject of the request. The subject \
 matter of a question (e.g. an HR or billing question) is NOT a source — do not hallucinate \
 a filter from it.
@@ -56,10 +69,8 @@ a filter from it.
 The valid sources are:
 {{valid_sources}}
 
-Sources already searched for this request: {{tried_sources}}
-
-Answer with ONLY a json, e.g. {{{{"{SOURCES_KEY}": ["confluence"], "{NEXT_KEY}": "slack"}}}} \
-or {{{{"{SOURCES_KEY}": [], "{NEXT_KEY}": null}}}}.
+Answer with ONLY a json, e.g. {{{{"{SOURCES_KEY}": ["confluence"]}}}}, \
+{{{{"{SOURCES_KEY}": ["confluence", "github"]}}}}, or {{{{"{SOURCES_KEY}": []}}}}.
 """.strip()
 
 # Use the following for easy viewing of prompts

@@ -130,23 +130,17 @@ QUERIES_FIELD = "queries"
 
 
 def _build_scope_note(
-    scope: list[DocumentSource] | None, next_source: DocumentSource | None
+    scope: list[DocumentSource] | None, queries_run: list[str]
 ) -> str:
-    """Note telling the agent which source(s) this search ran on, and — if a
-    follow-up would scope to a different source — naming it so the agent knows to
-    search again. Returns "" for an unscoped search (default response unchanged)."""
+    """Note appended to a scoped search's response: which source(s) it covered
+    and the queries that ran, so a repeat can vary terms. "" when unscoped."""
     if not scope:
         return ""
     searched = ", ".join(source.value for source in scope)
-    if next_source is not None:
-        return (
-            f"(Internal search ran ONLY on source: {searched}. If these results "
-            f"are insufficient, call internal_search again and it will "
-            f"automatically search the next source: {next_source.value}.)"
-        )
+    queries_str = "; ".join(queries_run) or "(none)"
     return (
-        f"(Internal search ran ONLY on source: {searched}. No other sources "
-        "remain to try; searching again will not change the scope.)"
+        f"(This internal search covered only: {searched}. Queries run: {queries_str}. "
+        "Call internal_search again with different query terms to keep searching.)"
     )
 
 
@@ -290,12 +284,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
 
-        self._id = tool_id
+        # Source(s) scoped so far this turn (the tool is reused across the turn's
+        # calls), so decide_search_scope can advance a sequential directive.
+        self._searched_scopes: list[DocumentSource] = []
 
-        # Sources already searched this turn. Each call hands this to the filter
-        # flow, which decides what to search next; the walk lives here, not in a
-        # cached plan.
-        self._tried_scopes: set[DocumentSource] = set()
+        self._id = tool_id
 
     def _prefetch_slack_data(
         self, db_session: Session
@@ -711,9 +704,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Decide this call's source scope. Skip the LLM call unless there are 2+
         # candidate sources — with 0 or 1, scoping cannot change what gets searched.
         should_decide = len(candidate_sources) >= 2
-        decide_args = (message_history, self._tried_scopes, self.llm, candidate_sources)
+        # Snapshot the already-searched sources so a sequential directive
+        # advances to the next un-searched source on this call.
+        decide_args = (
+            message_history,
+            self.llm,
+            candidate_sources,
+            list(self._searched_scopes),
+        )
         plan_scope: list[DocumentSource] | None = None
-        next_source: DocumentSource | None = None
 
         # Skip query expansion if this is a repeat search call
         if override_kwargs.skip_query_expansion:
@@ -721,7 +720,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             semantic_query = None
             keyword_queries: list[str] = []
             if should_decide:
-                plan_scope, next_source = decide_search_scope(*decide_args)
+                plan_scope = decide_search_scope(*decide_args)
         else:
             # Start timing for query expansion/rephrase
             query_expansion_start_time = time.time()
@@ -754,11 +753,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 expansion_results[1] if expansion_results[1] is not None else []
             )  # list[str]
             if should_decide:
-                plan_scope, next_source = expansion_results[2]
-
-        # Record what we're about to search so the next call advances the walk.
-        if plan_scope:
-            self._tried_scopes.update(plan_scope)
+                plan_scope = expansion_results[2]
 
         # This call's scope: the filter flow's pick, else the persona/user
         # restriction (the outer bound), else everything.
@@ -767,14 +762,27 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
 
         logger.info(
-            "Internal search - source scope: %s (next=%s)",
+            "Internal search - source scope: %s",
             [s.value for s in resolved_scope] if resolved_scope else "all sources",
-            next_source.value if next_source else "none",
         )
 
-        # The note appended to the response so the agent knows what was searched
-        # and which source a follow-up search would scope to.
-        scope_note = _build_scope_note(resolved_scope, next_source)
+        # Record this call's scope so a later call in the turn can advance a
+        # sequential directive past the source(s) already covered.
+        if resolved_scope:
+            for source in resolved_scope:
+                if source not in self._searched_scopes:
+                    self._searched_scopes.append(source)
+
+        # A note appended to the response so the agent knows this search was
+        # scoped, and which queries actually ran (so a repeat can vary terms).
+        queries_run = list(
+            dict.fromkeys(
+                llm_queries
+                + ([semantic_query] if semantic_query else [])
+                + keyword_queries
+            )
+        )
+        scope_note = _build_scope_note(resolved_scope, queries_run)
 
         # Apply the resolved scope to this call's filters and federated backends.
         # Built locally so each call resolves its own scope.

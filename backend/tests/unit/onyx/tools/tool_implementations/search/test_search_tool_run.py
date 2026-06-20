@@ -14,8 +14,8 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 MODULE = "onyx.tools.tool_implementations.search.search_tool"
 
-# What decide_search_scope returns: (scope to apply now, next source).
-ScopeDecision = tuple[list[DocumentSource] | None, DocumentSource | None]
+# What decide_search_scope returns: the scope to apply now (or None for everything).
+ScopeDecision = list[DocumentSource] | None
 
 
 def _make_tool(user_selected_filters: BaseFilters | None = None) -> SearchTool:
@@ -96,7 +96,7 @@ def test_decided_scope_is_passed_to_search() -> None:
     tool = _make_tool()
     mock_search_pipeline = _run(
         tool,
-        decision=([DocumentSource.CONFLUENCE], None),
+        decision=[DocumentSource.CONFLUENCE],
         connected_sources=[
             DocumentSource.SLACK,
             DocumentSource.CONFLUENCE,
@@ -116,7 +116,7 @@ def test_no_decided_scope_leaves_search_unscoped() -> None:
     tool = _make_tool()
     mock_search_pipeline = _run(
         tool,
-        decision=(None, None),
+        decision=None,
         connected_sources=[DocumentSource.SLACK, DocumentSource.CONFLUENCE],
     )
 
@@ -140,7 +140,7 @@ def test_persona_restriction_is_refined_by_the_decision() -> None:
     )
     mock_search_pipeline = _run(
         tool,
-        decision=([DocumentSource.CONFLUENCE], None),
+        decision=[DocumentSource.CONFLUENCE],
         connected_sources=[
             DocumentSource.CONFLUENCE,
             DocumentSource.GITHUB,
@@ -155,6 +155,73 @@ def test_persona_restriction_is_refined_by_the_decision() -> None:
         assert applied.source_type == [DocumentSource.CONFLUENCE]
 
 
+def _run_with_decision_mock(
+    tool: SearchTool,
+    *,
+    decide_mock: MagicMock,
+    connected_sources: list[DocumentSource],
+) -> None:
+    """Run tool.run() once with decide_search_scope replaced by `decide_mock`
+    (so its call args, including already_searched, can be inspected)."""
+    with (
+        patch(f"{MODULE}.get_session_with_current_tenant") as mock_session_ctx,
+        patch(f"{MODULE}.build_access_filters_for_user", return_value=[]),
+        patch(f"{MODULE}.get_current_search_settings", return_value=MagicMock()),
+        patch(f"{MODULE}.EmbeddingModel"),
+        patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[]),
+        patch(
+            f"{MODULE}.fetch_unique_document_sources", return_value=connected_sources
+        ),
+        patch(f"{MODULE}.semantic_query_rephrase", return_value="rephrased query"),
+        patch(f"{MODULE}.keyword_query_expansion", return_value=[]),
+        patch(f"{MODULE}.decide_search_scope", decide_mock),
+        patch(f"{MODULE}.weighted_reciprocal_rank_fusion", return_value=[]),
+        patch(f"{MODULE}.merge_individual_chunks", return_value=[]),
+        patch(f"{MODULE}.search_pipeline", MagicMock(return_value=[])),
+    ):
+        mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
+        override_kwargs = SearchToolOverrideKwargs(
+            starting_citation_num=1,
+            original_query="resolve the ticket",
+            message_history=[
+                ChatMinimalTextMessage(
+                    message="Check Zendesk first, then Confluence.",
+                    message_type=MessageType.USER,
+                )
+            ],
+            skip_query_expansion=False,
+        )
+        tool.run(
+            placement=Placement(turn_index=0, tab_index=0),
+            override_kwargs=override_kwargs,
+            queries=["ticket"],
+        )
+
+
+def test_searched_scopes_accumulate_across_calls_for_the_walk() -> None:
+    """A sequential directive advances: the scope resolved on the first call is
+    passed back to decide_search_scope as already_searched on the second."""
+    tool = _make_tool()
+    connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
+
+    # Mimic the walk: first call routes to Zendesk, second to Confluence.
+    decide_mock = MagicMock(
+        side_effect=[[DocumentSource.ZENDESK], [DocumentSource.CONFLUENCE]]
+    )
+
+    _run_with_decision_mock(tool, decide_mock=decide_mock, connected_sources=connected)
+    _run_with_decision_mock(tool, decide_mock=decide_mock, connected_sources=connected)
+
+    # already_searched is the 4th positional arg.
+    first_already_searched = decide_mock.call_args_list[0].args[3]
+    second_already_searched = decide_mock.call_args_list[1].args[3]
+    assert first_already_searched == []
+    assert second_already_searched == [DocumentSource.ZENDESK], (
+        "the second call must know Zendesk was already searched this turn"
+    )
+
+
 def test_persona_restriction_applies_when_decision_does_not_route() -> None:
     """With a persona restriction and a no-scope decision, the search stays scoped
     to the restriction (never broadens to everything)."""
@@ -162,7 +229,7 @@ def test_persona_restriction_applies_when_decision_does_not_route() -> None:
     tool = _make_tool(BaseFilters(source_type=restriction))
     mock_search_pipeline = _run(
         tool,
-        decision=(None, None),
+        decision=None,
         connected_sources=[
             DocumentSource.CONFLUENCE,
             DocumentSource.GITHUB,
