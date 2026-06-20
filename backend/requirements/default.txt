@@ -2231,9 +2231,9 @@ pydantic-core==2.33.2 \
     --hash=sha256:e80b087132752f6b3d714f041ccf74403799d3b23a72722ea2e6ba2e892555b9 \
     --hash=sha256:f517ca031dfc037a9c07e748cefd8d96235088b83b4f4ba8939105d20fa1dcd6
     # via pydantic
-pydantic-settings==2.12.0 \
-    --hash=sha256:005538ef951e3c2a68e1c08b292b5f2e71490def8589d4221b95dab00dafcfd0 \
-    --hash=sha256:fddb9fd99a5b18da837b29710391e945b1e30c135477f484084ee513adb93809
+pydantic-settings==2.14.2 \
+    --hash=sha256:a20c97b37910b6550d5ea50fbcc2d4187defe58cd57070b73863d069419c9440 \
+    --hash=sha256:c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f
     # via mcp
 pydivert==2.1.0 ; sys_platform == 'win32' \
     --hash=sha256:382db488e3c37c03ec9ec94e061a0b24334d78dbaeebb7d4e4d32ce4355d9da1 \
