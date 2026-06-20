@@ -526,6 +526,10 @@ MISC_SHARED_DRIVE_FNAMES = [
     "bb2.txt",
 ]
 
+# A shared-drive Google Doc whose text export (~90 KB) exceeds the size threshold
+# used in test_include_shared_drives_only_with_size_threshold.
+OVERSIZED_DOC_NAME = "Untitled document"
+
 file_name_template = "file_{}.txt"
 file_text_template = "This is file {}"
 
