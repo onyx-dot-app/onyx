@@ -1,10 +1,22 @@
 import { mutate } from "swr";
-import { User, UserPersonalization } from "@/lib/types";
+import { MinimalUserSnapshot, User, UserPersonalization } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { CustomRefreshTokenResponse } from "@/lib/users/types";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
+}
+
+// A user's display name, falling back to email when personal_name is unset.
+export function userDisplayName(user: MinimalUserSnapshot): string {
+  return user.personal_name ?? user.email;
+}
+
+// Email for a secondary line, shown only when a display name holds the primary.
+export function userSecondaryEmail(
+  user: MinimalUserSnapshot
+): string | undefined {
+  return user.personal_name ? user.email : undefined;
 }
 
 export async function getCurrentUser(): Promise<User | null> {

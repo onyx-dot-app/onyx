@@ -16,6 +16,7 @@ import {
 } from "@/lib/agents/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { MinimalUserSnapshot } from "@/lib/types";
+import { userDisplayName, userSecondaryEmail } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import Modal from "@/refresh-components/Modal";
@@ -598,7 +599,8 @@ export default function ShareAgentModal({
 
         {agent?.owner ? (
           <ShareAccessRow
-            avatarInitial={agent.owner.email.charAt(0).toUpperCase()}
+            avatarInitial={userDisplayName(agent.owner).charAt(0).toUpperCase()}
+            description={userSecondaryEmail(agent.owner)}
             icon={SvgUser}
             rightChildren={
               <StaticPermissionLabel
@@ -616,8 +618,8 @@ export default function ShareAgentModal({
             }
             title={
               currentUser && agent.owner.id === currentUser.id
-                ? `${agent.owner.email} (you)`
-                : agent.owner.email
+                ? `${userDisplayName(agent.owner)} (you)`
+                : userDisplayName(agent.owner)
             }
           />
         ) : null}
@@ -649,7 +651,10 @@ export default function ShareAgentModal({
 
           return (
             <ShareAccessRow
-              avatarInitial={share.user.email.charAt(0).toUpperCase()}
+              avatarInitial={userDisplayName(share.user)
+                .charAt(0)
+                .toUpperCase()}
+              description={userSecondaryEmail(share.user)}
               icon={SvgUser}
               key={share.user.id}
               rightChildren={
@@ -674,7 +679,9 @@ export default function ShareAgentModal({
                 />
               }
               title={
-                isCurrentUser ? `${share.user.email} (you)` : share.user.email
+                isCurrentUser
+                  ? `${userDisplayName(share.user)} (you)`
+                  : userDisplayName(share.user)
               }
             />
           );

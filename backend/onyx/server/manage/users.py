@@ -875,7 +875,7 @@ def list_all_users_basic_info(
 
     users = get_all_users(db_session)
     return [
-        MinimalUserSnapshot(id=u.id, email=u.email)
+        MinimalUserSnapshot(id=u.id, email=u.email, personal_name=u.personal_name)
         for u in users
         if u.account_type != AccountType.BOT
         and (include_api_keys or not is_api_key_email_address(u.email))
