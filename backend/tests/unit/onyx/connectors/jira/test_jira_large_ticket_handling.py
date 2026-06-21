@@ -7,6 +7,7 @@ import pytest
 from jira.resources import Issue
 from pytest_mock import MockFixture
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import _perform_jql_search
 from onyx.connectors.jira.connector import process_jira_issue
 
@@ -98,6 +99,7 @@ def test_fetch_jira_issues_batch_small_ticket(
     assert len(docs) == 1
     doc = docs[0]
     assert doc is not None  # Type assertion for mypy
+    assert doc.source == DocumentSource.JIRA
     assert doc.id.endswith("/SMALL-1")
     assert doc.sections[0].text is not None
     assert "Small description" in doc.sections[0].text
