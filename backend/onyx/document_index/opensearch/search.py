@@ -1226,14 +1226,16 @@ class DocumentQuery:
         # persona_id_filter is a primary trigger — a persona with user files IS
         # explicit knowledge, so it can start a knowledge scope on its own.
         #
-        # project_id_filter is additive — it widens the scope to also cover
-        # overflowing project files but never restricts on its own (a chat
-        # inside a project should still search team knowledge).
+        # project_id_filter is a primary trigger — a chat inside a project is
+        # scoped to that project, so project_id_filter restricts the search to
+        # the project's files on its own (project chats do not search team
+        # knowledge).
         has_knowledge_scope = (
             attached_document_ids
             or hierarchy_node_ids
             or document_sets
             or persona_id_filter is not None
+            or project_id_filter is not None
         )
 
         if has_knowledge_scope:
