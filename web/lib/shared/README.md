@@ -29,8 +29,9 @@ When extending it:
   are compile errors here, by design.
 - A contract that needs no platform value stays plain (e.g. `InteractiveContract`
   in `contracts/interactive.ts`); one that carries a platform value (an icon, a
-  node) stays generic over it via the `Slot<T>` primitive rather than importing a
-  UI framework's type.
+  node) must stay generic over it — a type parameter the consumer supplies (web →
+  a React component, mobile → an RN component) — rather than importing a UI
+  framework's type.
 
 ## Tokens
 

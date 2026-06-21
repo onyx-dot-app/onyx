@@ -12,7 +12,7 @@
 // unsupported here, pending the mobile Text reconciliation noted in text.tsx.
 import { Pressable, View } from "react-native";
 import { router, type Href } from "expo-router";
-import type { A11yProps, InteractiveContract } from "@onyx-ai/shared/contracts";
+import type { InteractiveContract } from "@onyx-ai/shared/contracts";
 
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
@@ -27,27 +27,31 @@ import {
   type ButtonWidth,
 } from "@/components/ui/button.styles";
 
-type ButtonBaseProps = InteractiveContract &
-  Pick<A11yProps, "a11yLabel"> & {
-    /** Size preset — controls height, padding, rounding, label + icon size. @default "lg" */
-    size?: ButtonSize;
-    /** `"fit"` shrink-wraps to content; `"full"` stretches to parent. @default "fit" */
-    width?: ButtonWidth;
-    /**
-     * Forces the pressed visual without a touch (e.g. an open-popover trigger).
-     * Touch has no hover, so there is no `"hover"`. @default "rest"
-     */
-    interaction?: ButtonInteraction;
-    /** Trailing icon. */
-    rightIcon?: IconFunctionComponent;
-    onPress?: () => void;
-    /** Optional route to navigate to on press (expo-router). */
-    href?: Href;
-    /** Accepted for web API parity; a no-op on touch. */
-    tooltip?: string;
-    /** Layout/positioning overrides applied to the outer pressable. */
-    className?: string;
-  };
+type ButtonBaseProps = InteractiveContract & {
+  /** Size preset — controls height, padding, rounding, label + icon size. @default "lg" */
+  size?: ButtonSize;
+  /** `"fit"` shrink-wraps to content; `"full"` stretches to parent. @default "fit" */
+  width?: ButtonWidth;
+  /**
+   * Forces the pressed visual without a touch (e.g. an open-popover trigger).
+   * Touch has no hover, so there is no `"hover"`. @default "rest"
+   */
+  interaction?: ButtonInteraction;
+  /** Trailing icon. */
+  rightIcon?: IconFunctionComponent;
+  onPress?: () => void;
+  /** Optional route to navigate to on press (expo-router). */
+  href?: Href;
+  /** Accepted for web API parity; a no-op on touch. */
+  tooltip?: string;
+  /** Layout/positioning overrides applied to the outer pressable. */
+  className?: string;
+  /**
+   * Screen-reader name. Required for icon-only buttons (which have no text to
+   * derive a name from); labeled buttons name themselves from their text.
+   */
+  accessibilityLabel?: string;
+};
 
 // Mirrors web's discriminated `ButtonContentProps`: a button must have a label
 // OR a leading icon (an icon-only button omits children) — never neither.
@@ -64,7 +68,7 @@ function Button({
   width = "fit",
   interaction = "rest",
   disabled = false,
-  a11yLabel,
+  accessibilityLabel,
   icon,
   rightIcon,
   children,
@@ -86,7 +90,7 @@ function Button({
       disabled={disabled}
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={a11yLabel}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
       // RN flex children stretch on the cross axis by default, so `fit` needs an
       // explicit `self-start` to shrink-wrap like web's `w-fit` (RN has no
