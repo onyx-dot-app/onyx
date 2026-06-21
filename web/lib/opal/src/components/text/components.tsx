@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from "react";
-// TextFont + TextColor are the single canonical unions, shared with mobile. They
-// live in the neutral @onyx-ai/shared/contracts (NOT /native, which is RN-only).
+// Canonical TextFont/TextColor unions, shared with mobile via the neutral
+// @onyx-ai/shared/contracts (not the RN-only /native).
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
 import type { RichStr, WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";

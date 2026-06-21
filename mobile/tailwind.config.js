@@ -3,9 +3,8 @@
 // `var(--name)` (resolved at runtime by the vars() provider in src/app/_layout.tsx,
 // so they flip with the system light/dark scheme), and radius/spacing are px numbers.
 const sharedTheme = require("@onyx-ai/shared/nativewind-theme");
-// `nativewind-typography` is a `.font-*` -> RN-text-style map (the RN counterpart of
-// web/Opal's `@utility font-*` blocks). Registered as utilities so mobile can use
-// `font-heading-h1` etc. exactly like web.
+// `.font-*` → RN-text-style map (RN counterpart of web/Opal's `@utility font-*`
+// blocks), registered below so mobile can use `font-heading-h1` etc. like web.
 const typographyUtilities = require("@onyx-ai/shared/nativewind-typography");
 const plugin = require("tailwindcss/plugin");
 

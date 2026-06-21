@@ -1,21 +1,11 @@
-// Text — the React Native port of web's Opal `Text`
-// (web/lib/opal/src/components/text/components.tsx). Mirrors it 1:1:
-//   • `font` selects a typography preset by the SAME names as web ("main-ui-body",
-//     "heading-h3", …). Each maps to a `font-*` NativeWind utility (FONT_CONFIG),
-//     exactly like web's FONT_CONFIG maps to the `@utility font-*` classes — so the
-//     `font-` prefixed token name now exists on mobile too. The utilities are
-//     generated from the shared tokens (@onyx-ai/shared/nativewind-typography,
-//     registered in tailwind.config.js) and carry family + size + weight +
-//     line-height + letter-spacing, so we never hand-pick `font-semibold`/`text-base`.
-//   • `color` is a typed token (COLOR_CONFIG), default "text-04". `inherit` renders
-//     no color class (RN Text inherits its parent's color when nested).
-// TextFont + TextColor are the single canonical unions, shared with web Opal from
-// the neutral @onyx-ai/shared/contracts.
+// React Native port of web's Opal `Text` (web/lib/opal/src/components/text/components.tsx),
+// mirrored 1:1: `font` → a `font-*` NativeWind utility (FONT_CONFIG, generated from the
+// shared tokens); `color` → a token class (COLOR_CONFIG; default "text-04", "inherit" →
+// no class). TextFont/TextColor are the shared canonical unions from
+// @onyx-ai/shared/contracts (not the RN-only /native).
 //
-// Differences from web (no RN equivalent, intentionally omitted): the `as` tag prop
-// and inline-markdown `RichStr` children (web's `resolveStr`). `maxLines` maps to RN
-// `numberOfLines` + a tail ellipsis; `nowrap` clips one line with NO ellipsis (web's
-// `nowrap` overflows without one — RN can't overflow-visible, so clip is the closest).
+// Omitted vs web (no RN equivalent): the `as` tag and inline-markdown children.
+// `maxLines` → numberOfLines + tail ellipsis; `nowrap` clips one line without one.
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
 import * as React from "react";
 import { Text as RNText } from "react-native";
@@ -91,9 +81,8 @@ function Text({
   numberOfLines,
   ...props
 }: TextProps) {
-  // Web parity: `maxLines` truncates with a tail ellipsis; `nowrap` clips one line
-  // with no ellipsis. Non-positive `maxLines` is "no limit" (web treats it as falsy).
-  // A caller's own `numberOfLines` is honored when neither prop is set.
+  // maxLines<=0 means "no limit" (web treats it as falsy); fall back to the caller's
+  // own numberOfLines when neither maxLines nor nowrap is set.
   const clampLines =
     maxLines != null && maxLines > 0 ? maxLines : nowrap ? 1 : numberOfLines;
   const ellipsizeMode =
@@ -102,9 +91,8 @@ function Text({
     <RNText
       numberOfLines={clampLines}
       ellipsizeMode={ellipsizeMode}
-      // `px-2` = 2px here: mobile's NativeWind theme uses a pixel-valued spacing
-      // scale (@onyx-ai/shared), so `2` is 2px (NOT web Tailwind's 8px) — this
-      // matches web Opal Text's `px-[2px]`, using the on-scale token over `[2px]`.
+      // `px-2` = 2px: mobile's spacing scale is pixel-valued, not web Tailwind's 8px.
+      // Matches web Opal Text's `px-[2px]` — on-scale token, not `[2px]`.
       className={cn("px-2", FONT_CONFIG[font], COLOR_CONFIG[color], className)}
       {...props}
     />

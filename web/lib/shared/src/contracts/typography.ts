@@ -1,16 +1,12 @@
 /**
  * Typography type unions shared by web (Opal `Text`) and mobile (`Text`).
  *
- * These live here — a neutral, platform-agnostic contracts module — rather than
- * in `@onyx-ai/shared/native`, which carries RN-only runtime (`varsLight` /
- * `varsDark` / `textPresets`). Anything genuinely shared across both platforms
- * belongs in a neutral file like this one.
+ * They live in this neutral contracts module — not `@onyx-ai/shared/native`, which is
+ * RN-only runtime (`varsLight`/`varsDark`/`textPresets`). The generated `native.d.ts`
+ * imports `TextFont` from here so `textPresets` stays typed by this one union.
  *
- * `TextFont` mirrors the preset names in `tokens/typography-presets.json` (the
- * same set the token build resolves into web's `@utility font-*` blocks and
- * mobile's `font-*` NativeWind utilities). The generated `native.d.ts` imports
- * `TextFont` from here so `textPresets` stays typed by this one canonical union.
- * Keep this union in sync with `typography-presets.json` when presets change.
+ * `TextFont` mirrors the preset names in `tokens/typography-presets.json` — keep it in
+ * sync when presets change.
  */
 
 export type TextFont =
