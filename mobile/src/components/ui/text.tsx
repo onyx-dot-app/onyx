@@ -102,6 +102,9 @@ function Text({
     <RNText
       numberOfLines={clampLines}
       ellipsizeMode={ellipsizeMode}
+      // `px-2` = 2px here: mobile's NativeWind theme uses a pixel-valued spacing
+      // scale (@onyx-ai/shared), so `2` is 2px (NOT web Tailwind's 8px) — this
+      // matches web Opal Text's `px-[2px]`, using the on-scale token over `[2px]`.
       className={cn("px-2", FONT_CONFIG[font], COLOR_CONFIG[color], className)}
       {...props}
     />
