@@ -83,10 +83,9 @@ function Text({
 }: TextProps) {
   // maxLines<=0 means "no limit" (web treats it as falsy); fall back to the caller's
   // own numberOfLines when neither maxLines nor nowrap is set.
-  const clampLines =
-    maxLines != null && maxLines > 0 ? maxLines : nowrap ? 1 : numberOfLines;
-  const ellipsizeMode =
-    maxLines != null && maxLines > 0 ? "tail" : nowrap ? "clip" : undefined;
+  const clamped = maxLines != null && maxLines > 0;
+  const clampLines = clamped ? maxLines : nowrap ? 1 : numberOfLines;
+  const ellipsizeMode = clamped ? "tail" : nowrap ? "clip" : undefined;
   return (
     <RNText
       numberOfLines={clampLines}
