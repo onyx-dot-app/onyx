@@ -1,0 +1,90 @@
+---
+name: hubspot
+description: Read contacts, companies, and deals, search the CRM, and create or update contacts in HubSpot on the connected user's behalf via a light REST wrapper.
+---
+
+# HubSpot
+
+Call HubSpot's CRM as the connected user via the bundled helper. **You are
+already authenticated** — the egress proxy injects the user's HubSpot bearer
+token on the wire. Never send credentials from the script.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/hubspot/hubspot_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. `create-contact` and
+`update-contact` are the only writes. Use `--raw` to skip empty-field pruning;
+`python hubspot_api.py <command> -h` shows its flags.
+
+### The connected account
+
+```
+python hubspot_api.py me
+```
+
+### Contacts
+
+```
+python hubspot_api.py contacts [--limit N] [--properties email,firstname,lastname]
+python hubspot_api.py contact <contact_id> [--properties email,firstname]
+```
+
+### Companies
+
+```
+python hubspot_api.py companies [--limit N] [--properties name,domain]
+python hubspot_api.py company <company_id> [--properties name,domain]
+```
+
+### Deals
+
+```
+python hubspot_api.py deals [--limit N] [--properties dealname,amount]
+python hubspot_api.py deal <deal_id> [--properties dealname,amount]
+```
+
+### Search contacts
+
+```
+python hubspot_api.py search-contacts "acme" [--limit N]
+```
+
+### Create a contact (write)
+
+```
+python hubspot_api.py create-contact --property email=a@b.com --property firstname=Ada
+```
+
+### Update a contact (write)
+
+```
+python hubspot_api.py update-contact <contact_id> --property lastname=Lovelace
+```
+
+### Arbitrary API calls
+
+`call` reaches any HubSpot REST endpoint. Pass a JSON object body as the last
+argument for POST/PATCH/PUT.
+
+```
+python hubspot_api.py call GET /crm/v3/objects/deals
+python hubspot_api.py call POST /crm/v3/objects/contacts/search '{"query":"acme"}'
+```
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "results": [...], "count": N,
+"truncated": bool}` (`truncated` means more results existed past `--limit`).
+Failures print to stderr and exit non-zero — surface the error rather than
+retrying blindly.
+
+## Notes
+
+- **Scopes are fixed** by the admin (contacts read/write, companies read,
+  deals read). An operation needing a scope you don't have returns `403`; tell
+  the user rather than retrying.
+- A write that isn't pre-approved may pause for the user's approval; if a call
+  is blocked or returns `401`, report it instead of looping.
