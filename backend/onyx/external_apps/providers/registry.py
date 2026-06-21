@@ -3,6 +3,10 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.models import ActionPolicyView
+from onyx.external_apps.models import BuiltInExternalAppDescriptor
+from onyx.external_apps.models import EndpointDescriptor
+from onyx.external_apps.models import OrgCredentialFieldDescriptor
 from onyx.external_apps.providers.actions import EndpointSpec
 from onyx.external_apps.providers.base import ExternalAppProvider
 from onyx.external_apps.providers.base import OnyxManagedExtApp
@@ -12,10 +16,6 @@ from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 from onyx.external_apps.providers.google_drive import GoogleDriveProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.slack import SlackProvider
-from onyx.server.features.build.api.models import ActionPolicyView
-from onyx.server.features.build.api.models import BuiltInExternalAppDescriptor
-from onyx.server.features.build.api.models import EndpointDescriptor
-from onyx.server.features.build.api.models import OrgCredentialFieldDescriptor
 
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     SlackProvider,
@@ -198,13 +198,3 @@ def fetch_onyx_managed_built_in_apps() -> list[BuiltInExternalAppDescriptor]:
         for cls in _PROVIDER_CLASSES
         if issubclass(cls, OnyxManagedExtApp)
     ]
-
-
-def fetch_built_in_app(app_type: ExternalAppType) -> BuiltInExternalAppDescriptor:
-    for cls in _PROVIDER_CLASSES:
-        if cls.spec.app_type == app_type:
-            return _descriptor_for(cls)
-    raise OnyxError(
-        OnyxErrorCode.NOT_FOUND,
-        f"No built-in app for app_type={app_type}.",
-    )

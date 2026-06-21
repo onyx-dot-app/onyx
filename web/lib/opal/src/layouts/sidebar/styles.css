@@ -8,50 +8,39 @@
 */
 
 /* ---------------------------------------------------------------------------
-   SidebarWrapper
+   SidebarRoot — inner content wrapper (hosts Header / Body / Footer)
    --------------------------------------------------------------------------- */
 
-/* Outer wrapper — plain block context so transition-[width] fires correctly.
-   Without it the inner div is a flex item and the flex algorithm overrides
-   width before the transition can run (sidebar snaps instead of slides). */
-.opal-sidebar-wrapper {
-  /* intentionally empty; exists only to break the flex chain */
+.opal-sidebar-root__inner {
+  @apply flex flex-col min-h-0 h-full;
 }
 
-/* Visible sidebar chrome */
-.opal-sidebar-wrapper__inner {
-  @apply h-screen flex flex-col bg-background-tint-02 py-2 gap-4;
+/* ---------------------------------------------------------------------------
+   SidebarRoot — desktop column
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-root__column {
+  @apply h-screen flex flex-col bg-background-tint-02 pb-2 shrink-0;
   width: var(--sidebar-width-expanded);
   transition: width 200ms ease-in-out;
 }
-.opal-sidebar-wrapper__inner[data-folded="true"] {
+.opal-sidebar-root__column[data-folded="true"] {
   width: var(--sidebar-width-folded);
-}
-
-/* Logo + fold-button row */
-.opal-sidebar-wrapper__topbar {
-  @apply flex flex-row justify-between items-start pt-3 px-2;
-}
-
-/* Logo: visible by default, hidden when the sidebar is hovered while folded */
-.opal-sidebar-wrapper__logo-default {
-  display: block;
-}
-.opal-sidebar-wrapper__inner:hover .opal-sidebar-wrapper__logo-default {
-  display: none;
-}
-
-/* Fold button: hidden by default, revealed when the sidebar is hovered while folded */
-.opal-sidebar-wrapper__logo-hover {
-  display: none;
-}
-.opal-sidebar-wrapper__inner:hover .opal-sidebar-wrapper__logo-hover {
-  display: flex;
 }
 
 /* ---------------------------------------------------------------------------
    SidebarRoot — mobile / medium overlays
    --------------------------------------------------------------------------- */
+
+/* Shared visual column styles for overlaid sidebar */
+.opal-sidebar-root__overlay {
+  @apply flex flex-col bg-background-tint-02 pb-2;
+  width: var(--sidebar-width-expanded);
+  transition: width 200ms ease-in-out;
+}
+.opal-sidebar-root__overlay[data-folded="true"] {
+  width: var(--sidebar-width-folded);
+}
 
 /* Mobile: full-height overlay that slides in/out */
 .opal-sidebar-root__overlay[data-variant="mobile"] {
@@ -89,18 +78,46 @@
   @apply opacity-100 pointer-events-auto;
 }
 
-/* Inner content wrapper (Host of Header / Body / Footer) */
-.opal-sidebar-root__inner {
-  @apply flex flex-col min-h-0 h-full gap-3;
+/* ---------------------------------------------------------------------------
+   SidebarHeader — topbar row (logo + fold button) + optional pinned content
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-header {
+  @apply flex flex-col gap-4 pb-2;
+}
+
+.opal-sidebar-header__topbar {
+  @apply flex flex-row justify-between items-start pt-3 px-2;
+}
+
+.opal-sidebar-header__content {
+  @apply px-2;
+}
+
+/* Logo: visible by default, hidden on hover while folded */
+.opal-sidebar-root__logo-default {
+  display: block;
+}
+.opal-sidebar-root__overlay:hover .opal-sidebar-root__logo-default,
+.opal-sidebar-root__column:hover .opal-sidebar-root__logo-default {
+  display: none;
+}
+
+/* Fold button: hidden by default, revealed on hover while folded */
+.opal-sidebar-root__logo-hover {
+  display: none;
+}
+.opal-sidebar-root__overlay:hover .opal-sidebar-root__logo-hover,
+.opal-sidebar-root__column:hover .opal-sidebar-root__logo-hover {
+  display: flex;
 }
 
 /* ---------------------------------------------------------------------------
-   SidebarHeader / SidebarFooter
+   SidebarFooter
    --------------------------------------------------------------------------- */
 
-.opal-sidebar-header,
 .opal-sidebar-footer {
-  @apply px-2;
+  @apply pt-4 px-2;
 }
 
 /* ---------------------------------------------------------------------------
@@ -116,7 +133,7 @@
 }
 
 .opal-sidebar-body__content {
-  @apply flex-1 flex flex-col gap-3 px-2;
+  @apply flex-1 flex flex-col px-2 gap-2;
 }
 .opal-sidebar-body__content[data-folded="true"] {
   @apply hidden;
@@ -133,4 +150,16 @@
     transparent,
     var(--background-tint-02)
   );
+}
+
+/* ---------------------------------------------------------------------------
+   SidebarSection
+   --------------------------------------------------------------------------- */
+
+.opal-sidebar-section__header {
+  @apply pl-2 pb-1 pt-2 flex flex-row justify-between items-center;
+}
+
+.opal-sidebar-section__title {
+  @apply flex p-0.5;
 }

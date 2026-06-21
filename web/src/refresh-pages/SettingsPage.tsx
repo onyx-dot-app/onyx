@@ -33,7 +33,8 @@ import { useTheme } from "next-themes";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { toast } from "@/hooks/useToast";
-import LLMPopover from "@/refresh-components/popovers/LLMPopover";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
+import { structureValue } from "@/lib/languageModels/utils";
 import { deleteAllChatSessions } from "@/app/app/services/lib";
 import { useAuthType, useLlmManager } from "@/lib/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -64,11 +65,12 @@ import { SvgCheck } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { Tier } from "@/lib/settings/types";
+import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
+import { findModelConfigId } from "@/lib/languageModels/options";
 
 interface PAT {
   id: number;
@@ -951,8 +953,7 @@ function ChatPreferencesSettings() {
     updateUserVoiceSettings,
   } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const settings = useSettingsContext();
-  const { isSearchModeAvailable: searchUiEnabled } = settings;
+  const searchUiEnabled = useIsSearchModeAvailable();
   const llmManager = useLlmManager();
   const {
     enabled: smoothStreamingEnabled,
@@ -1034,11 +1035,33 @@ function ChatPreferencesSettings() {
             description="This model will be used by Onyx by default in your chats."
             withLabel
           >
-            <LLMPopover
-              llmManager={llmManager}
-              onSelect={(selected) => {
-                void updateUserDefaultModel(selected);
+            <ModelSelector
+              value={
+                user?.preferences?.default_model
+                  ? findModelConfigId(
+                      llmManager.llmProviders,
+                      llmManager.currentLlm.provider,
+                      llmManager.currentLlm.modelName
+                    )
+                  : null
+              }
+              onChange={(opt) => {
+                if (opt.modelConfigurationId === null) {
+                  void updateUserDefaultModel(null);
+                } else {
+                  llmManager.updateCurrentLlm({
+                    name: opt.name,
+                    provider: opt.provider,
+                    modelName: opt.modelName,
+                  });
+                  void updateUserDefaultModel(
+                    structureValue(opt.name, opt.provider, opt.modelName)
+                  );
+                }
               }}
+              temperatureManager={llmManager}
+              includeGlobalDefault
+              side="bottom"
             />
           </InputHorizontal>
 

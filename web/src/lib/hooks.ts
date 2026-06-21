@@ -13,20 +13,16 @@ import {
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import { parseLlmDescriptor } from "@/lib/languageModels/utils";
+import {
+  getProviderOverrideForAgent,
+  parseLlmDescriptor,
+} from "@/lib/languageModels/utils";
 import { ChatSession } from "@/app/app/interfaces";
 import { Credential } from "./connectors/credentials";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
   DefaultModel,
@@ -34,11 +30,15 @@ import {
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import { getSourceMetadataForSources } from "./sources";
-import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
+import {
+  AuthType,
+  DEFAULT_AGENT_ID,
+  NEXT_PUBLIC_CLOUD_ENABLED,
+} from "./constants";
 import { useUser } from "@/providers/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/app/services/lib";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -678,6 +678,18 @@ export function useLlmManager(
         llmProviders,
         defaultText
       );
+    } else if (liveAgent && liveAgent.id !== DEFAULT_AGENT_ID) {
+      // Custom agent — its configured default takes precedence. When the agent
+      // has no explicit default, fall to the global system default. The user's
+      // personal preference is irrelevant in an agent-scoped chat.
+      const agentOverride = getProviderOverrideForAgent(
+        liveAgent,
+        llmProviders
+      );
+      resolved =
+        agentOverride ??
+        getDefaultLlmDescriptor(llmProviders, defaultText) ??
+        manualLlm;
     } else if (user?.preferences?.default_model) {
       resolved = getValidLlmDescriptorForProviders(
         user.preferences.default_model,
@@ -705,6 +717,7 @@ export function useLlmManager(
     currentChatSession,
     userHasManuallyOverriddenLLM,
     manualLlm,
+    liveAgent?.default_model_configuration_id,
     user?.preferences?.default_model,
   ]);
 
@@ -870,12 +883,10 @@ export const useUserGroups = (): {
   error: string;
   refreshUserGroups: () => void;
 } => {
-  const combinedSettings = useContext(SettingsContext);
-  const isLoading = combinedSettings?.settingsLoading ?? false;
+  const settings = useSettings();
+  const isLoading = settings.isLoading;
   const isPaidEnterpriseFeaturesEnabled =
-    !isLoading &&
-    combinedSettings &&
-    combinedSettings.enterpriseSettings !== null;
+    !isLoading && settings.enterprise !== null;
 
   const swrResponse = useSWR<UserGroup[]>(
     isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,

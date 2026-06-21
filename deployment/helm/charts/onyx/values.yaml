@@ -1270,11 +1270,14 @@ auth:
       S3_AWS_ACCESS_KEY_ID: s3_aws_access_key_id
       S3_AWS_SECRET_ACCESS_KEY: s3_aws_secret_access_key
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used. Values will be base64 encoded in the k8s cluster.
+    # SECURITY: no defaults shipped — empty values fail closed (see
+    # auth-secrets.yaml) so prod can't run on minioadmin. Set these, or better,
+    # use existingSecret/externalSecret above. Keep s3_aws_* == rootUser/rootPassword.
     values:
-      s3_aws_access_key_id: "minioadmin"
-      s3_aws_secret_access_key: "minioadmin"
-      rootUser: "minioadmin"
-      rootPassword: "minioadmin"
+      s3_aws_access_key_id: ""
+      s3_aws_secret_access_key: ""
+      rootUser: ""
+      rootPassword: ""
   oauth:
     # -- Enable or disable this secret entirely. Will remove from env var configurations and remove any created secrets.
     enabled: false
@@ -1410,10 +1413,12 @@ configMap:
   # block. The compose stack uses underscored service names (e.g. `api_server`,
   # `cache`, `inference_model_server`) which are invalid in K8s DNS labels and
   # break inter-pod traffic in ways that look like a hung service.
-  # In particular, leave these UNSET and let the chart compute correct
-  # K8s-service hostnames:
+  # In particular, avoid copying these compose-only hostnames:
   #   REDIS_HOST, INTERNAL_URL, API_SERVER_HOST,
   #   MODEL_SERVER_HOST, INDEXING_MODEL_SERVER_HOST
+  # Leave SANDBOX_PROXY_PORT unset; the chart owns the internal proxy port.
+  # SANDBOX_PROXY_HOST defaults to the chart-managed Service DNS name and may be
+  # overridden only if sandboxes must reach a different proxy host.
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
 
   # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
@@ -1447,6 +1452,8 @@ configMap:
   # SMTP_PASS: ""
   # 'your-email@company.com' SMTP_USER missing used instead
   EMAIL_FROM: ""
+  # Optional comma-separated BCC archive recipients for all emails
+  EMAIL_ARCHIVE_BCC_ADDRESSES: ""
   # MinIO/S3 Configuration override
   S3_ENDPOINT_URL: ""  # only used if minio is not enabled
   S3_FILE_STORE_BUCKET_NAME: ""
@@ -1469,6 +1476,10 @@ configMap:
   MIN_THREADS_ML_MODELS: ""
   # Indexing Configs
   NUM_INDEXING_WORKERS: ""
+  # Fail an indexing attempt when its worker exceeds this RSS (MB) instead of
+  # letting the pod get OOM-killed; "" = disabled
+  INDEXING_WORKER_MEMORY_LIMIT_MB: ""
+  INDEXING_WORKER_TRACEMALLOC: ""
   DISABLE_INDEX_UPDATE_ON_SWAP: ""
   DASK_JOB_CLIENT_ENABLED: ""
   CONTINUE_ON_CONNECTOR_FAILURE: ""
@@ -1523,20 +1534,31 @@ craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
   extraBoundServiceAccounts: []
 
+# -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
+# Image/resources/ports come from the configMap.SANDBOX_* keys.
+sandboxPod:
+  nodeSelector:
+    onyx.app/workload: sandbox
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: sandbox
+      effect: NoSchedule
+
 # -- Sandbox egress proxy.
 sandboxProxy:
   replicaCount: 2
-  containerPorts:
-    proxy: 8080
-    healthz: 8081
-  service:
-    proxyPort: 8080
   terminationGracePeriodSeconds: 200
   progressDeadlineSeconds: 300
   confdirSizeLimit: 100Mi
   caSecretName: "sandbox-proxy-ca"
   caConfigMapName: "sandbox-proxy-ca-bundle"
   podAnnotations: {}
+  serviceAccount:
+    # Set IRSA annotations here when the sandbox proxy uses IAM-backed services,
+    # such as RDS IAM auth.
+    annotations: {}
+    automount: true
   # Matches the `onyx` user (uid 1001) baked into the backend image.
   runAsUser: 1001
   fsGroup: 1001

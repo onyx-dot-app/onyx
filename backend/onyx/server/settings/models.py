@@ -128,3 +128,6 @@ class UserSettings(Settings):
     # The frontend uses this to default local-service URLs (e.g. Ollama,
     # LM Studio) to host.docker.internal instead of localhost.
     is_containerized: bool = False
+    # PostHog client key + host for the web app; None = analytics off.
+    posthog_key: str | None = None
+    posthog_host: str | None = None

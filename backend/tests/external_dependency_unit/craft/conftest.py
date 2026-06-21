@@ -85,12 +85,18 @@ _DEV_PUSH_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 @pytest.fixture(scope="module", autouse=True)
 def _sandbox_push_key() -> Generator[None, None, None]:
     # Module-scoped so it's set before ``_pool_pod`` (also module-scoped)
-    # provisions its pod — the K8s manager reads the env var at pod-spec
-    # build time. Function-scoped ``monkeypatch`` runs *after* higher-scoped
-    # fixtures, which is what triggered the CI breakage when the first
-    # test in the file moved onto ``pool_session``.
+    # provisions its pod. ``sidecar_client`` imports the config value as a
+    # module constant, so patch both the process env and the already-imported
+    # modules.
+    from onyx.server.features.build import configs as build_configs
+    from onyx.server.features.build.sandbox.kubernetes import sidecar_client
+
     mp = pytest.MonkeyPatch()
     mp.setenv("ONYX_SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+    mp.setattr(build_configs, "SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+    mp.setattr(sidecar_client, "SANDBOX_PUSH_PRIVATE_KEY", _DEV_PUSH_KEY)
+    mp.setattr(sidecar_client, "_push_private_key", None)
+    mp.setattr(sidecar_client, "_push_public_key_b64", None)
     try:
         yield
     finally:
@@ -859,10 +865,10 @@ def _cleanup_pool_workspace(
 ) -> None:
     """Wipe mutable trees on the pool pod before the next test runs.
 
-    ``managed/`` is read-only in the sandbox container but writable from the
-    sidecar (see ``kubernetes_sandbox_manager._build_pod_spec``), so we exec
-    via the sidecar for the skills + user_library subtrees. ``sessions/`` is
-    on a shared emptyDir, writable from either container.
+    ``managed/`` is read-only in the sandbox app container but writable from
+    the native init sidecar, so we exec via the sidecar for the skills +
+    user_library subtrees. ``sessions/`` is on a shared emptyDir, writable from
+    either container.
     """
     # managed/{skills,user_library} live under the RO mount — clean via sidecar.
     # ``find -mindepth 1 -delete`` removes only the directory's contents
@@ -1259,7 +1265,7 @@ def session_manager_with_stub(
 
     Patches both ``session.manager.get_sandbox_manager`` (which
     ``SessionManager.__init__`` captures into ``self._sandbox_manager`` at
-    construction time) AND ``sandbox.base._sandbox_manager_instance`` so any
+    construction time) AND ``sandbox.factory._sandbox_manager_instance`` so any
     deferred lookup also lands on the stub. The LLM lookup runs for real
     against the provider from ``_seed_default_llm_provider``.
     """
@@ -1268,7 +1274,7 @@ def session_manager_with_stub(
         lambda: stub_sandbox_manager,
     )
     monkeypatch.setattr(
-        "onyx.server.features.build.sandbox.base._sandbox_manager_instance",
+        "onyx.server.features.build.sandbox.factory._sandbox_manager_instance",
         stub_sandbox_manager,
     )
     sm = SessionManager(db_session)
@@ -1280,8 +1286,6 @@ def session_manager_with_stub(
 def assert_lock_serializes_two_threads(
     redis_client: Redis | TenantRedisClient,  # type: ignore[type-arg]
     lock_key: str,
-    *,
-    acquire_fn: Callable[[], Any] | None = None,  # noqa: ARG001
 ) -> None:
     """Verify two concurrent acquirers contend on ``lock_key`` — one waits.
 
@@ -1289,12 +1293,6 @@ def assert_lock_serializes_two_threads(
     thread acquires + holds, the second observes that a non-blocking
     acquire fails (the serialization point). Cleans the key before and
     after.
-
-    ``acquire_fn`` is accepted for API parity with future variants that
-    may wrap a production acquire helper; the current implementation
-    always uses ``redis_client.lock(lock_key)`` so the test pins the same
-    contract that ``create_session_with_lock`` / ``provision_with_lock``
-    rely on.
     """
     redis_client.delete(lock_key)
 
@@ -1368,7 +1366,7 @@ def pod_exec(
     client: "k8s_client_module.CoreV1Api",
     pod_name: str,
     namespace: str,
-    command: str | list[str],
+    command: str,
     container: str = "sandbox",
 ) -> str:
     """Run a one-shot command in a pod container; return combined output.
@@ -1377,12 +1375,11 @@ def pod_exec(
     operations that need to write to ``/workspace/managed/`` (read-only in
     the sandbox container) or inspect the sidecar's environment.
 
-    ``command`` may be a shell-string (auto-wrapped in ``/bin/sh -c``) or an
-    explicit argv list passed straight through to ``connect_get_namespaced_pod_exec``.
+    ``command`` is a shell-string run via ``/bin/sh -c``.
     """
     from kubernetes.stream import stream as k8s_stream
 
-    argv = ["/bin/sh", "-c", command] if isinstance(command, str) else list(command)
+    argv = ["/bin/sh", "-c", command]
     resp = k8s_stream(
         client.connect_get_namespaced_pod_exec,
         name=pod_name,
@@ -1407,6 +1404,7 @@ def pod_exec_async(
     method: str = "POST",
     headers: dict[str, str] | None = None,
     body: str | None = None,
+    body_file: str | None = None,
     max_time_s: int = 240,
     container: str = "sandbox",
     proxy_session_id: str | None = None,
@@ -1419,11 +1417,22 @@ def pod_exec_async(
     tagging the request with the session id as ``Proxy-Authorization`` userinfo
     so the proxy can resolve the session. Omit it to exercise the untagged,
     fail-closed gate path.
+
+    ``body_file`` (mutually exclusive with ``body``) sends the body from an
+    in-pod path via ``--data-binary @path``; use this for payloads big enough to
+    trip the apiserver's exec URL size limit (e.g. > 1 MiB).
     """
+    if body is not None and body_file is not None:
+        raise ValueError("pass either body or body_file, not both")
     header_args = ""
     for key, value in (headers or {}).items():
         header_args += f" -H {json.dumps(f'{key}: {value}')}"
-    body_arg = f" --data {json.dumps(body)}" if body is not None else ""
+    if body is not None:
+        body_arg = f" --data {json.dumps(body)}"
+    elif body_file is not None:
+        body_arg = f" --data-binary @{body_file}"
+    else:
+        body_arg = ""
     # Override the ambient proxy with the session id as basic-auth userinfo.
     proxy_arg = (
         f" -x {json.dumps(f'http://{proxy_session_id}@sandbox-proxy:8080')}"
@@ -1554,9 +1563,8 @@ def wait_for_proxy_redeploy(
 # ``pytestmark = pytest.mark.skipif(SANDBOX_BACKEND != KUBERNETES, ...)`` —
 # the fixtures themselves do not gate.
 #
-# We don't use the test_kubernetes_sandbox.py ``_is_kubernetes_available``
-# call here — the cluster check happens implicitly when ``k8s_client`` or
-# the manager makes its first API call.
+# The cluster check happens implicitly when ``k8s_client`` or the manager makes
+# its first API call.
 # ---------------------------------------------------------------------------
 
 

@@ -122,3 +122,50 @@ export async function deleteCustomSkill(skillId: string): Promise<void> {
   });
   await handle<void>(res);
 }
+
+// ---------------------------------------------------------------------------
+// Personal (user-level) skill mutations
+// ---------------------------------------------------------------------------
+
+export async function createUserSkill(bundle: File): Promise<CustomSkill> {
+  const form = new FormData();
+  form.append("bundle", bundle);
+
+  const res = await fetch("/api/skills/custom", {
+    method: "POST",
+    body: form,
+  });
+  return handle<CustomSkill>(res);
+}
+
+export async function replaceUserSkillBundle(
+  skillId: string,
+  bundle: File
+): Promise<CustomSkill> {
+  const form = new FormData();
+  form.append("bundle", bundle);
+  const res = await fetch(`/api/skills/custom/${skillId}/bundle`, {
+    method: "PUT",
+    body: form,
+  });
+  return handle<CustomSkill>(res);
+}
+
+export async function patchUserSkill(
+  skillId: string,
+  enabled: boolean
+): Promise<CustomSkill> {
+  const res = await fetch(`/api/skills/custom/${skillId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  return handle<CustomSkill>(res);
+}
+
+export async function deleteUserSkill(skillId: string): Promise<void> {
+  const res = await fetch(`/api/skills/custom/${skillId}`, {
+    method: "DELETE",
+  });
+  await handle<void>(res);
+}

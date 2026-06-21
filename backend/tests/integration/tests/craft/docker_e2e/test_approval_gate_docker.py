@@ -38,15 +38,22 @@ from uuid import uuid4
 import pytest
 from httpx import Response
 
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecision
+from onyx.db.enums import ExternalAppType
+from onyx.db.external_app import get_built_in_external_app
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
+    SANDBOX_EXEC_USER,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
+from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.DOCKER,
@@ -58,73 +65,20 @@ _PROXY_CA_ISSUER_RE = re.compile(r"CN=Onyx Sandbox Proxy CA")
 _SANDBOX_BRIDGE_NETWORK = "onyx_craft_sandbox"
 
 
-# ------------------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------------------
-
-
-def _container_name(sandbox_id: str) -> str:
-    """Docker manager names containers ``sandbox-<id8>``."""
-    return f"sandbox-{sandbox_id.split('-')[0]}"
-
-
-def _docker_exec(
-    container: str,
-    cmd: list[str],
-    *,
-    timeout: float = 30.0,
-) -> subprocess.CompletedProcess[str]:
-    """Runs ``cmd`` inside ``container`` and capture stdout/stderr."""
-    return subprocess.run(
-        ["docker", "exec", container, *cmd],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
-
-
-def _provision_sandbox(user: DATestUser) -> tuple[UUID, str]:
-    """
-    Creates a session via the real API and return its (session_id, container).
-
-    The create endpoint is synchronous -- by the time it returns, the sandbox
-    container is RUNNING and opencode-serve has passed its health check. No
-    further wait needed.
-    """
-    session = BuildSessionManager.create(user)
-    sandbox = session["sandbox"]
-    assert sandbox is not None, f"Session response missing sandbox: {session!r}"
-    assert sandbox["status"].upper() == "RUNNING", (
-        f"Sandbox not RUNNING after create: {sandbox['status']!r}"
-    )
-    return UUID(session["id"]), _container_name(sandbox["id"])
-
-
-def _opencode_pid(container: str) -> int:
+def _opencode_pid(container: str, docker_exec: DockerExec) -> int:
     """Finds the opencode-serve PID inside the sandbox.
 
     Returns the integer PID; raises with a diagnostic if not found. We rely on
     this to assert capability + uid invariants on the actual agent process, not
     the entrypoint shell.
     """
-    proc = _docker_exec(container, ["pgrep", "-f", "opencode serve"])
+    proc = docker_exec(container, ["pgrep", "-f", "opencode serve"])
     pids = [int(p) for p in proc.stdout.split() if p.strip()]
     assert pids, (
         f"No opencode-serve PID in {container!r}; entrypoint likely crashed. Docker "
-        f"logs:\n{_docker_exec(container, ['cat', '/proc/1/status']).stdout}"
+        f"logs:\n{docker_exec(container, ['cat', '/proc/1/status']).stdout}"
     )
     return pids[0]
-
-
-def _proxy_session_url(session_id: UUID) -> str:
-    """
-    Mimics the session-tag opencode plugin: encode the session id as HTTP-Basic
-    userinfo on the proxy URL so the gate resolves the session.
-
-    Format mirrors ``session-proxy-tag.ts``: ``<session_id>:x@host``.
-    """
-    return f"http://{session_id}:x@sandbox-proxy:8080"
 
 
 def _start_slack_post_via_proxy(
@@ -203,9 +157,12 @@ def module_user() -> DATestUser:
 
 
 @pytest.fixture(scope="module")
-def module_sandbox(module_user: DATestUser) -> tuple[UUID, str]:
+def module_sandbox(
+    module_user: DATestUser,
+    provision_sandbox: ProvisionSandbox,
+) -> tuple[UUID, str]:
     """One sandbox provisioned via the real API; reused across posture tests."""
-    return _provision_sandbox(module_user)
+    return provision_sandbox(module_user)
 
 
 @pytest.fixture
@@ -218,9 +175,10 @@ def gated_user() -> DATestUser:
 @pytest.fixture
 def gated_session(
     gated_user: DATestUser,
+    provision_sandbox: ProvisionSandbox,
 ) -> Generator[tuple[DATestUser, UUID, str], None, None]:
     """Provisions a fresh sandbox via the real API for one gate-flow test."""
-    session_id, container = _provision_sandbox(gated_user)
+    session_id, container = provision_sandbox(gated_user)
     yield gated_user, session_id, container
 
 
@@ -231,6 +189,7 @@ def gated_session(
 
 def test_sandbox_runs_with_zero_caps_at_uid_1000(
     module_sandbox: tuple[UUID, str],
+    docker_exec: DockerExec,
 ) -> None:
     """
     The opencode-serve process must run as uid 1000 with an empty bounding set.
@@ -239,9 +198,9 @@ def test_sandbox_runs_with_zero_caps_at_uid_1000(
     bug (opencode-serve never starts -> no pid to check).
     """
     _session_id, container = module_sandbox
-    pid = _opencode_pid(container)
+    pid = _opencode_pid(container, docker_exec)
 
-    status = _docker_exec(container, ["cat", f"/proc/{pid}/status"]).stdout
+    status = docker_exec(container, ["cat", f"/proc/{pid}/status"]).stdout
     uid_line = next(line for line in status.splitlines() if line.startswith("Uid:"))
     cap_lines = {
         line.split(":")[0]: line
@@ -259,6 +218,7 @@ def test_sandbox_runs_with_zero_caps_at_uid_1000(
 
 def test_sandbox_https_is_mitmd_by_proxy_ca(
     module_sandbox: tuple[UUID, str],
+    docker_exec: DockerExec,
 ) -> None:
     """
     Public HTTPS gets MITM'd: leaf cert issued by the Onyx Sandbox Proxy CA.
@@ -266,7 +226,7 @@ def test_sandbox_https_is_mitmd_by_proxy_ca(
     + the proxy's MITM both work end-to-end.
     """
     _session_id, container = module_sandbox
-    proc = _docker_exec(
+    proc = docker_exec(
         container,
         ["curl", "-sS", "-v", "--max-time", "10", "https://example.com"],
         timeout=20.0,
@@ -286,6 +246,7 @@ def test_sandbox_https_is_mitmd_by_proxy_ca(
 def test_credentials_injected_on_wire_returns_real_user(
     module_user: DATestUser,
     module_sandbox: tuple[UUID, str],
+    docker_exec: DockerExec,
 ) -> None:
     """
     Sandbox env carries the placeholder PAT; calling api_server/me via the proxy
@@ -294,12 +255,12 @@ def test_credentials_injected_on_wire_returns_real_user(
     """
     _session_id, container = module_sandbox
 
-    env_check = _docker_exec(container, ["sh", "-c", "echo $ONYX_PAT"])
+    env_check = docker_exec(container, ["sh", "-c", "echo $ONYX_PAT"])
     assert env_check.stdout.strip() == SANDBOX_PROXY_INJECTED_PLACEHOLDER, (
         f"ONYX_PAT in sandbox env was not the placeholder: {env_check.stdout!r}"
     )
 
-    me_call = _docker_exec(
+    me_call = docker_exec(
         container,
         [
             "curl",
@@ -322,6 +283,7 @@ def test_credentials_injected_on_wire_returns_real_user(
 
 def test_iptables_rejects_bypass_attempts(
     module_sandbox: tuple[UUID, str],
+    docker_exec: DockerExec,
 ) -> None:
     """
     All four bypass classes are kernel-level rejected; the loopback embedded
@@ -329,7 +291,7 @@ def test_iptables_rejects_bypass_attempts(
     """
     _session_id, container = module_sandbox
 
-    direct_api = _docker_exec(
+    direct_api = docker_exec(
         container,
         [
             "curl",
@@ -349,7 +311,7 @@ def test_iptables_rejects_bypass_attempts(
         f"stderr={direct_api.stderr!r}"
     )
 
-    direct_internet = _docker_exec(
+    direct_internet = docker_exec(
         container,
         [
             "curl",
@@ -366,7 +328,7 @@ def test_iptables_rejects_bypass_attempts(
     )
     assert direct_internet.returncode == 7, "Direct external IP bypass not rejected."
 
-    udp_dns = _docker_exec(
+    udp_dns = docker_exec(
         container,
         [
             "python3",
@@ -390,13 +352,15 @@ def test_iptables_rejects_bypass_attempts(
         or "PermissionError" in udp_dns.stderr
     )
 
-    ipv6_egress = _docker_exec(
+    ipv6_egress = docker_exec(
         container,
         [
             "curl",
             "-sS",
             "-o",
             "/dev/null",
+            "--noproxy",
+            "*",
             "-6",
             "--max-time",
             "5",
@@ -410,7 +374,7 @@ def test_iptables_rejects_bypass_attempts(
     # via the loopback ACCEPT rule. Required so the sandbox can resolve
     # ``sandbox-proxy``. Asserting positively so a future "close all DNS"
     # over-correction would fail this test.
-    embedded_dns = _docker_exec(
+    embedded_dns = docker_exec(
         container,
         ["getent", "ahosts", "example.com"],
         timeout=10.0,
@@ -423,7 +387,7 @@ def test_iptables_rejects_bypass_attempts(
 def test_unlabeled_container_gets_unidentified_sandbox_403() -> None:
     """
     A non-sandbox container on the bridge that hits the proxy must get a 403 + a
-    ``gate.unidentified_sandbox`` warning in the proxy logs. Proves
+    ``identity_unknown_sandbox`` warning in the proxy logs. Proves
     DockerEventsLookup rejects unknown source IPs and the observability hook we
     added in branch 6 still fires.
     """
@@ -460,10 +424,54 @@ def test_unlabeled_container_gets_unidentified_sandbox_403() -> None:
         timeout=10,
         check=False,
     )
-    assert "gate.unidentified_sandbox" in proxy_logs.stderr + proxy_logs.stdout, (
-        f"Proxy did not log gate.unidentified_sandbox warning. Recent "
+    assert "identity_unknown_sandbox" in proxy_logs.stderr + proxy_logs.stdout, (
+        f"Proxy did not log identity_unknown_sandbox warning. Recent "
         f"logs:\n{proxy_logs.stdout[-2000:]}"
     )
+
+
+def test_sessions_directory_writable_by_sandbox_user(
+    module_sandbox: tuple[UUID, str],
+    docker_exec: DockerExec,
+) -> None:
+    """
+    The /workspace/sessions volume mount must be writable by UID 1000.
+
+    Regression test: Docker volumes are created with root:root ownership.
+    firewall-init.sh must chown the directory before dropping to UID 1000,
+    otherwise session workspace creation fails with EACCES.
+
+    This test verifies that UID 1000 can create a test directory inside
+    /workspace/sessions, proving the permissions fix in firewall-init.sh
+    works correctly.
+    """
+    _session_id, container = module_sandbox
+
+    # Verify /workspace/sessions exists and is owned by 1000:1000
+    stat_result = docker_exec(container, ["stat", "-c", "%u:%g", "/workspace/sessions"])
+    assert stat_result.returncode == 0, (
+        f"/workspace/sessions stat failed: {stat_result.stderr}"
+    )
+    assert stat_result.stdout.strip() == "1000:1000", (
+        f"/workspace/sessions not owned by 1000:1000: {stat_result.stdout.strip()}"
+    )
+
+    # Attempt to create a test directory as UID 1000. Must set the exec user
+    # explicitly because in proxy mode docker exec defaults to the container's
+    # configured root user, not the setpriv-dropped agent user.
+    test_dir = f"/workspace/sessions/test-{uuid4().hex[:8]}"
+    mkdir_result = docker_exec(
+        container,
+        ["mkdir", "-p", test_dir],
+        timeout=10.0,
+        user=SANDBOX_EXEC_USER,
+    )
+    assert mkdir_result.returncode == 0, (
+        f"mkdir failed as UID 1000: rc={mkdir_result.returncode} "
+        f"stderr={mkdir_result.stderr!r}"
+    )
+
+    docker_exec(container, ["rm", "-rf", test_dir], user=SANDBOX_EXEC_USER)
 
 
 # ------------------------------------------------------------------------------
@@ -482,6 +490,7 @@ def test_unlabeled_container_gets_unidentified_sandbox_403() -> None:
 def test_approve_decision_forwards_to_slack(
     slack_external_app: None,  # noqa: ARG001 -- side-effect fixture
     gated_session: tuple[DATestUser, UUID, str],
+    docker_exec: DockerExec,
 ) -> None:
     """
     A gated Slack request parks at the proxy, becomes a pending ActionApproval,
@@ -509,7 +518,7 @@ def test_approve_decision_forwards_to_slack(
             f"Forwarded curl did not return slack response (got {http_code!r})."
         )
 
-        body = _docker_exec(container, ["cat", "/tmp/slack_out"]).stdout
+        body = docker_exec(container, ["cat", "/tmp/slack_out"]).stdout
         payload = json.loads(body)
         assert payload.get("ok") is False
         assert payload.get("error") == "invalid_auth", (
@@ -522,6 +531,7 @@ def test_approve_decision_forwards_to_slack(
 def test_reject_decision_returns_403_user_rejected(
     slack_external_app: None,  # noqa: ARG001 -- side-effect fixture
     gated_session: tuple[DATestUser, UUID, str],
+    docker_exec: DockerExec,
 ) -> None:
     """
     REJECT causes the parked sandbox-side curl to return a 403 carrying the
@@ -544,10 +554,67 @@ def test_reject_decision_returns_403_user_rejected(
             f"Rejected forward did not return 403: {stdout!r}"
         )
 
-        body = _docker_exec(container, ["cat", "/tmp/slack_out"]).stdout
+        body = docker_exec(container, ["cat", "/tmp/slack_out"]).stdout
         payload = json.loads(body)
         assert payload.get("error") == "user_rejected", (
             f"Expected error='user_rejected', got {payload!r}"
         )
     finally:
         curl_proc.kill()
+
+
+def test_ask_with_uninvokable_app_forwards_bare(
+    slack_external_app: None,  # noqa: ARG001 -- side-effect fixture
+    gated_session: tuple[DATestUser, UUID, str],
+    docker_exec: DockerExec,
+) -> None:
+    """ASKs on an app whose auth template can't be filled forwards bare.
+
+    Documents the credential gate's short-circuit: With no credentials to inject
+    after approval, the gate skips the ASK prompt and forwards the request
+    as-is. Mirrors K8s ``test_ask_with_uninvokable_app_forwards_bare``.
+    """
+    user, session_id, container = gated_session
+
+    # Strip Slack's org credential so app_is_available -> False.
+    with get_session_with_tenant(tenant_id="public") as db:
+        app = get_built_in_external_app(db, ExternalAppType.SLACK)
+        assert app is not None, "slack_external_app fixture must seed the row"
+        app.organization_credentials = {}  # ty: ignore[invalid-assignment]
+        db.commit()
+
+    try:
+        curl_proc = _start_slack_post_via_proxy(container, session_id)
+        try:
+            stdout, _stderr = curl_proc.communicate(timeout=60)
+            # Slack returns HTTP 200 with `invalid_auth` in the body for the
+            # fake bearer -- the 200 + body is the proof the request actually
+            # reached slack.com bare (no injection from the gate).
+            assert stdout.strip() == "200", (
+                "Uninvokable ASK should forward bare to Slack and Slack should "
+                f"200 with invalid_auth in the body, got {stdout!r}"
+            )
+            body = docker_exec(container, ["cat", "/tmp/slack_out"]).stdout
+            payload = json.loads(body)
+            assert payload.get("error") == "invalid_auth", (
+                f"Bare-forwarded request should reach slack.com and get "
+                f"invalid_auth, got {payload!r}"
+            )
+
+            live_url = f"{API_SERVER_URL}/build/approvals/sessions/{session_id}/live"
+            resp = client.get(live_url, headers=user.headers, cookies=user.cookies)
+            resp.raise_for_status()
+            assert resp.json().get("items") == [], (
+                "Uninvokable ASK must not mint an approval row."
+            )
+        finally:
+            curl_proc.kill()
+    finally:
+        # Restore the seeded fake token so sibling tests still gate.
+        with get_session_with_tenant(tenant_id="public") as db:
+            app = get_built_in_external_app(db, ExternalAppType.SLACK)
+            assert app is not None
+            app.organization_credentials = {  # ty: ignore[invalid-assignment]
+                "access_token": "fake-test-token"
+            }
+            db.commit()

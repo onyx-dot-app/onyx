@@ -1,424 +1,77 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
+import { mutate } from "swr";
+import useShareableGroups, {
+  MinimalUserGroupSnapshot,
+} from "@/hooks/useShareableGroups";
+import useShareableUsers from "@/hooks/useShareableUsers";
+import { toast } from "@/hooks/useToast";
+import { useAgent } from "@/lib/agents/hooks";
 import {
+  PersonaGroupShare,
+  PersonaSharePermission,
+  PersonaUserShare,
+  type FullAgent,
+} from "@/lib/agents/types";
+import {
+  removeSelfFromAgentShares,
+  transferAgentOwnership,
+  updateAgentShares,
+} from "@/lib/agents/svc";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { MinimalUserSnapshot } from "@/lib/types";
+import { useUser } from "@/providers/UserProvider";
+import { useSettings } from "@/lib/settings/hooks";
+import Modal from "@/refresh-components/Modal";
+import { Button, Divider, Text } from "@opal/components";
+import {
+  SvgArrowExchange,
+  SvgArrowLeft,
+  SvgEdit,
   SvgLink,
+  SvgLock,
   SvgOrganization,
   SvgShare,
-  SvgTag,
   SvgUser,
+  SvgUserManage,
   SvgUsers,
-  SvgX,
 } from "@opal/icons";
-import InputChipField from "@/refresh-components/inputs/InputChipField";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
-import { ContentAction, InputHorizontal } from "@opal/layouts";
-import SwitchField from "@/refresh-components/form/SwitchField";
-import { Section } from "@/layouts/general-layouts";
-import useShareableUsers from "@/hooks/useShareableUsers";
-import useShareableGroups from "@/hooks/useShareableGroups";
+import type { IconFunctionComponent } from "@opal/types";
+import { Content } from "@opal/layouts";
+import { copyText, markdown } from "@opal/utils";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
-import { useUser } from "@/providers/UserProvider";
-import { Formik, useFormikContext } from "formik";
-import { useAgent, useLabels } from "@/lib/agents/hooks";
+import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
+import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
+import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";
 import {
-  Button,
-  Card,
-  Divider,
-  MessageCard,
-  Tabs,
-  Text,
-} from "@opal/components";
-import { Disabled } from "@opal/core";
-import { AgentLabel } from "@/lib/agents/types";
-import { FetchError } from "@/lib/fetcher";
+  PERMISSION_OPTIONS,
+  SCOPE_OPTIONS,
+} from "@/sections/modals/shareAccessConstants";
+import {
+  TransferOwnershipTarget,
+  TransferOwnershipView,
+} from "@/sections/modals/TransferOwnershipView";
 
-const YOUR_ORGANIZATION_TAB = "Your Organization";
-const USERS_AND_GROUPS_TAB = "Users & Groups";
+type ShareModalView = "share" | "transfer";
 
-// ============================================================================
-// Types
-// ============================================================================
-
-interface ShareAgentFormValues {
-  selectedUserIds: string[];
-  selectedGroupIds: number[];
+export interface ShareDraftState {
+  groupShares: PersonaGroupShare[];
   isPublic: boolean;
-  isFeatured: boolean;
-  labelIds: number[];
+  publicPermission: PersonaSharePermission;
+  userShares: PersonaUserShare[];
 }
-
-// ============================================================================
-// ShareAgentFormContent
-// ============================================================================
-
-interface ShareAgentFormContentProps {
-  agentId?: number;
-}
-
-function ShareAgentFormContent({ agentId }: ShareAgentFormContentProps) {
-  const { values, setFieldValue, handleSubmit, dirty, isSubmitting } =
-    useFormikContext<ShareAgentFormValues>();
-  const { data: usersData, error: usersError } = useShareableUsers({
-    includeApiKeys: true,
-  });
-  const { data: groupsData } = useShareableGroups();
-  const userDirectoryRestricted =
-    usersError instanceof FetchError && usersError.status === 403;
-  const { user: currentUser, isAdmin, isCurator } = useUser();
-  const { agent: fullAgent } = useAgent(agentId ?? null);
-  const shareAgentModal = useModal();
-  const { labels: allLabels, createLabel } = useLabels();
-  const [labelInputValue, setLabelInputValue] = useState("");
-
-  const acceptedUsers = usersData ?? [];
-  const groups = groupsData ?? [];
-  const canUpdateFeaturedStatus = isAdmin || isCurator;
-
-  // Create options for InputComboBox from all accepted users and groups
-  const comboBoxOptions = useMemo(() => {
-    const userOptions = userDirectoryRestricted
-      ? []
-      : acceptedUsers
-          .filter((user) => user.id !== currentUser?.id)
-          .map((user) => ({
-            value: `user-${user.id}`,
-            label: user.email,
-          }));
-
-    const groupOptions = groups.map((group) => ({
-      value: `group-${group.id}`,
-      label: group.name,
-    }));
-
-    return [...userOptions, ...groupOptions];
-  }, [acceptedUsers, groups, currentUser?.id, userDirectoryRestricted]);
-
-  const comboBoxDisabled =
-    userDirectoryRestricted && comboBoxOptions.length === 0;
-
-  // Compute owner and displayed users
-  const ownerId = fullAgent?.owner?.id;
-  const owner = ownerId
-    ? acceptedUsers.find((user) => user.id === ownerId)
-    : acceptedUsers.find((user) => user.id === currentUser?.id);
-  const otherUsers = owner
-    ? acceptedUsers.filter(
-        (user) =>
-          user.id !== owner.id && values.selectedUserIds.includes(user.id)
-      )
-    : acceptedUsers;
-  const displayedUsers = [...(owner ? [owner] : []), ...otherUsers];
-
-  // Compute displayed groups based on current form values
-  const displayedGroups = groups.filter((group) =>
-    values.selectedGroupIds.includes(group.id)
-  );
-
-  // Handlers
-  function handleClose() {
-    shareAgentModal.toggle(false);
-  }
-
-  function handleCopyLink() {
-    if (!agentId) return;
-    const url = `${window.location.origin}/chat?agentId=${agentId}`;
-    navigator.clipboard.writeText(url);
-  }
-
-  function handleComboBoxSelect(selectedValue: string) {
-    if (selectedValue.startsWith("user-")) {
-      const userId = selectedValue.replace("user-", "");
-      if (!values.selectedUserIds.includes(userId)) {
-        setFieldValue("selectedUserIds", [...values.selectedUserIds, userId]);
-      }
-    } else if (selectedValue.startsWith("group-")) {
-      const groupId = parseInt(selectedValue.replace("group-", ""));
-      if (!values.selectedGroupIds.includes(groupId)) {
-        setFieldValue("selectedGroupIds", [
-          ...values.selectedGroupIds,
-          groupId,
-        ]);
-      }
-    }
-  }
-
-  function handleRemoveUser(userId: string) {
-    setFieldValue(
-      "selectedUserIds",
-      values.selectedUserIds.filter((id) => id !== userId)
-    );
-  }
-
-  function handleRemoveGroup(groupId: number) {
-    setFieldValue(
-      "selectedGroupIds",
-      values.selectedGroupIds.filter((id) => id !== groupId)
-    );
-  }
-
-  const selectedLabels: AgentLabel[] = useMemo(() => {
-    if (!allLabels) return [];
-    return allLabels.filter((label) => values.labelIds.includes(label.id));
-  }, [allLabels, values.labelIds]);
-
-  function handleRemoveLabel(labelId: number) {
-    setFieldValue(
-      "labelIds",
-      values.labelIds.filter((id) => id !== labelId)
-    );
-  }
-
-  const addLabel = useCallback(
-    async (name: string) => {
-      const trimmed = name.trim();
-      if (!trimmed) return;
-
-      const existing = allLabels?.find(
-        (l) => l.name.toLowerCase() === trimmed.toLowerCase()
-      );
-      if (existing) {
-        if (!values.labelIds.includes(existing.id)) {
-          setFieldValue("labelIds", [...values.labelIds, existing.id]);
-        }
-      } else {
-        const newLabel = await createLabel(trimmed);
-        if (newLabel) {
-          setFieldValue("labelIds", [...values.labelIds, newLabel.id]);
-        }
-      }
-      setLabelInputValue("");
-    },
-    [allLabels, values.labelIds, setFieldValue, createLabel]
-  );
-
-  const chipItems = useMemo(
-    () =>
-      selectedLabels.map((label) => ({
-        id: String(label.id),
-        label: label.name,
-      })),
-    [selectedLabels]
-  );
-
-  return (
-    <Modal.Content width="sm" height="lg">
-      <Modal.Header icon={SvgShare} title="Share Agent" onClose={handleClose} />
-
-      <Modal.Body padding={0.5}>
-        <Card padding="sm">
-          <Tabs
-            defaultValue={
-              values.isPublic ? YOUR_ORGANIZATION_TAB : USERS_AND_GROUPS_TAB
-            }
-          >
-            <Tabs.List>
-              <Tabs.Trigger icon={SvgUsers} value={USERS_AND_GROUPS_TAB}>
-                {USERS_AND_GROUPS_TAB}
-              </Tabs.Trigger>
-              <Tabs.Trigger
-                icon={SvgOrganization}
-                value={YOUR_ORGANIZATION_TAB}
-              >
-                {YOUR_ORGANIZATION_TAB}
-              </Tabs.Trigger>
-            </Tabs.List>
-
-            <Tabs.Content value={USERS_AND_GROUPS_TAB}>
-              <Section gap={0.5} alignItems="start">
-                <Disabled
-                  disabled={comboBoxDisabled}
-                  tooltip={
-                    comboBoxDisabled
-                      ? "Your administrator has restricted the user directory. Contact an admin to share this agent with other users."
-                      : undefined
-                  }
-                >
-                  <div className="w-full">
-                    <InputComboBox
-                      placeholder={
-                        userDirectoryRestricted
-                          ? "Add groups"
-                          : "Add users and groups"
-                      }
-                      value=""
-                      onChange={() => {}}
-                      onValueChange={handleComboBoxSelect}
-                      options={comboBoxOptions}
-                      strict
-                      disabled={comboBoxDisabled}
-                    />
-                  </div>
-                </Disabled>
-                {(displayedUsers.length > 0 || displayedGroups.length > 0) && (
-                  <Section gap={0} alignItems="stretch">
-                    {/* Shared Users */}
-                    {displayedUsers.map((user) => {
-                      const isOwner = fullAgent?.owner?.id === user.id;
-                      const isCurrentUser = currentUser?.id === user.id;
-
-                      return (
-                        <div key={`user-${user.id}`} className="p-1">
-                          <ContentAction
-                            sizePreset="main-ui"
-                            variant="section"
-                            icon={SvgUser}
-                            title={user.email}
-                            description={isCurrentUser ? "You" : undefined}
-                            padding="fit"
-                            rightChildren={
-                              isOwner || (isCurrentUser && !agentId) ? (
-                                // Owner will always have the agent "shared" with it.
-                                // Therefore, we never render any SvgX button to remove it.
-                                //
-                                // Note:
-                                // This user, during creation, is assumed to be the "owner".
-                                // That is why the `(isCurrentUser && !agentId)` condition exists.
-                                <Text font="secondary-body" color="text-03">
-                                  Owner
-                                </Text>
-                              ) : (
-                                // For all other cases (including for "self-unsharing"),
-                                // we render a Button with SvgX to remove a person from the list.
-                                <Button
-                                  prominence="tertiary"
-                                  size="sm"
-                                  icon={SvgX}
-                                  onClick={() => handleRemoveUser(user.id)}
-                                />
-                              )
-                            }
-                          />
-                        </div>
-                      );
-                    })}
-
-                    {/* Shared Groups */}
-                    {displayedGroups.map((group) => (
-                      <ContentAction
-                        key={`group-${group.id}`}
-                        sizePreset="main-ui"
-                        variant="section"
-                        icon={SvgUsers}
-                        title={group.name}
-                        padding="sm"
-                        rightChildren={
-                          <Button
-                            prominence="tertiary"
-                            size="sm"
-                            icon={SvgX}
-                            onClick={() => handleRemoveGroup(group.id)}
-                          />
-                        }
-                      />
-                    ))}
-                  </Section>
-                )}
-              </Section>
-              {values.isPublic && (
-                <Section>
-                  <MessageCard
-                    icon={SvgOrganization}
-                    title="This agent is public to your organization."
-                    description="Everyone in your organization has access to this agent."
-                  />
-                </Section>
-              )}
-            </Tabs.Content>
-
-            <Tabs.Content value={YOUR_ORGANIZATION_TAB}>
-              <Section gap={1} alignItems="stretch" padding={0.5}>
-                <InputHorizontal
-                  title="Publish This Agent"
-                  description="Make this agent available to everyone in your organization."
-                  withLabel
-                >
-                  <SwitchField name="isPublic" />
-                </InputHorizontal>
-
-                {canUpdateFeaturedStatus && (
-                  <>
-                    <Divider paddingParallel="fit" paddingPerpendicular="fit" />
-
-                    <InputHorizontal
-                      title="Feature This Agent"
-                      description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
-                      withLabel
-                    >
-                      <SwitchField name="isFeatured" />
-                    </InputHorizontal>
-                  </>
-                )}
-
-                <Section gap={0.25} alignItems="stretch">
-                  <InputChipField
-                    chips={chipItems}
-                    onRemoveChip={(id) => handleRemoveLabel(Number(id))}
-                    onAdd={addLabel}
-                    value={labelInputValue}
-                    onChange={setLabelInputValue}
-                    placeholder="Add labels..."
-                    icon={SvgTag}
-                  />
-                  <Text font="secondary-body" color="text-03">
-                    Add labels and categories to help people better discover
-                    this agent.
-                  </Text>
-                </Section>
-              </Section>
-            </Tabs.Content>
-          </Tabs>
-        </Card>
-      </Modal.Body>
-
-      <Modal.Footer>
-        <BasicModalFooter
-          left={
-            agentId ? (
-              <Button
-                prominence="secondary"
-                icon={SvgLink}
-                onClick={handleCopyLink}
-              >
-                Copy Link
-              </Button>
-            ) : undefined
-          }
-          cancel={
-            <Button
-              disabled={isSubmitting}
-              prominence="secondary"
-              onClick={handleClose}
-            >
-              Cancel
-            </Button>
-          }
-          submit={
-            <Button
-              disabled={!dirty || isSubmitting}
-              onClick={() => handleSubmit()}
-            >
-              Save
-            </Button>
-          }
-        />
-      </Modal.Footer>
-    </Modal.Content>
-  );
-}
-
-// ============================================================================
-// ShareAgentModal
-// ============================================================================
 
 export interface ShareAgentModalProps {
   agentId?: number;
-  userIds: string[];
-  groupIds: number[];
-  isPublic: boolean;
-  isFeatured: boolean;
-  labelIds: number[];
+  /** Create-mode hydration: the full leveled draft from a prior open. */
+  draftShares?: ShareDraftState | null;
+  /** Create-mode save: receives the full leveled draft. */
+  onDraftSave?: (draft: ShareDraftState) => void;
+  groupIds?: number[];
+  isFeatured?: boolean;
+  isPublic?: boolean;
+  labelIds?: number[];
   onShare?: (
     userIds: string[],
     groupIds: number[],
@@ -426,61 +79,830 @@ export interface ShareAgentModalProps {
     isFeatured: boolean,
     labelIds: number[]
   ) => Promise<void> | void;
+  userIds?: string[];
+}
+
+function buildInitialDraftState(
+  agent: FullAgent | null,
+  props: ShareAgentModalProps
+): ShareDraftState {
+  if (agent) {
+    return {
+      groupShares: agent.group_shares,
+      isPublic: agent.is_public,
+      publicPermission: agent.public_permission,
+      userShares: agent.user_shares,
+    };
+  }
+
+  if (props.draftShares) {
+    return props.draftShares;
+  }
+
+  // No saved agent and no create-mode draft. The legacy userIds/groupIds
+  // props can't be hydrated into real users/groups synchronously here (the
+  // user list loads async), so don't fabricate rows that would render UUIDs
+  // as display names — start from an empty draft.
+  return {
+    groupShares: [],
+    isPublic: props.isPublic ?? false,
+    publicPermission: "VIEWER",
+    userShares: [],
+  };
+}
+
+function serializeDraftState(state: ShareDraftState): string {
+  const normalizedUsers = [...state.userShares]
+    .map((share) => ({ id: share.user.id, permission: share.permission }))
+    .sort((first, second) => first.id.localeCompare(second.id));
+  const normalizedGroups = [...state.groupShares]
+    .map((share) => ({ id: share.group_id, permission: share.permission }))
+    .sort((first, second) => first.id - second.id);
+
+  return JSON.stringify({
+    groupShares: normalizedGroups,
+    isPublic: state.isPublic,
+    publicPermission: state.publicPermission,
+    userShares: normalizedUsers,
+  });
+}
+
+function applyStagedShares(
+  draftState: ShareDraftState,
+  stagedUsers: MinimalUserSnapshot[],
+  stagedGroups: MinimalUserGroupSnapshot[],
+  stagedPermission: PersonaSharePermission
+): ShareDraftState {
+  const userShareMap = new Map(
+    draftState.userShares.map((share) => [share.user.id, share])
+  );
+  const groupShareMap = new Map(
+    draftState.groupShares.map((share) => [share.group_id, share])
+  );
+
+  stagedUsers.forEach((user) => {
+    userShareMap.set(user.id, {
+      permission: stagedPermission,
+      user,
+    });
+  });
+
+  stagedGroups.forEach((group) => {
+    groupShareMap.set(group.id, {
+      group_id: group.id,
+      group_name: group.name,
+      permission: stagedPermission,
+    });
+  });
+
+  return {
+    ...draftState,
+    groupShares: Array.from(groupShareMap.values()),
+    userShares: Array.from(userShareMap.values()),
+  };
+}
+
+async function refreshAgentShareCaches(agentId: number) {
+  await Promise.all([
+    mutate(SWR_KEYS.personas),
+    mutate(SWR_KEYS.persona(agentId)),
+    // Paginated admin list keys carry query params — match by prefix
+    mutate(
+      (key) => typeof key === "string" && key.startsWith(SWR_KEYS.adminAgents)
+    ),
+  ]);
+}
+
+interface StaticPermissionLabelProps {
+  icon: IconFunctionComponent;
+  label: string;
+  muted?: boolean;
+}
+
+// Non-interactive permission display sitting in the row's permission column
+function StaticPermissionLabel({
+  icon,
+  label,
+  muted = false,
+}: StaticPermissionLabelProps) {
+  return (
+    <Content
+      color={muted ? "muted" : undefined}
+      icon={icon}
+      sizePreset="main-ui"
+      title={label}
+      variant="section"
+    />
+  );
+}
+
+interface TransferTrailingButtonProps {
+  onTransfer: () => void;
+}
+
+function TransferTrailingButton({ onTransfer }: TransferTrailingButtonProps) {
+  return (
+    <Button
+      icon={SvgArrowExchange}
+      onClick={onTransfer}
+      prominence="tertiary"
+      size="sm"
+      tooltip="Transfer Ownership"
+    />
+  );
 }
 
 export default function ShareAgentModal({
   agentId,
-  userIds,
-  groupIds,
-  isPublic,
-  isFeatured,
-  labelIds,
+  draftShares = null,
+  groupIds = [],
+  isFeatured = false,
+  isPublic = false,
+  labelIds = [],
+  onDraftSave,
   onShare,
+  userIds = [],
 }: ShareAgentModalProps) {
   const shareAgentModal = useModal();
+  const { agent } = useAgent(agentId ?? null);
+  const { data: shareableUsersData } = useShareableUsers({
+    includeApiKeys: true,
+  });
+  const { data: transferableUsersData } = useShareableUsers({
+    includeApiKeys: false,
+  });
+  const { data: shareableGroupsData } = useShareableGroups();
+  const { isAdmin, user: currentUser } = useUser();
+  const settings = useSettings();
+
+  const shareableUsers = shareableUsersData ?? [];
+  const transferableUsers = transferableUsersData ?? [];
+  const shareableGroups = shareableGroupsData ?? [];
+  const isPaidEnterpriseFeaturesEnabled =
+    !settings.isLoading && settings.enterprise !== null;
 
   const initialValues = useMemo(
-    (): ShareAgentFormValues => ({
-      selectedUserIds: userIds,
-      selectedGroupIds: groupIds,
-      isPublic: isPublic,
-      isFeatured: isFeatured,
-      labelIds: labelIds,
-    }),
-    [userIds, groupIds, isPublic, isFeatured, labelIds]
+    () =>
+      buildInitialDraftState(agent, {
+        agentId,
+        draftShares,
+        groupIds,
+        isFeatured,
+        isPublic,
+        labelIds,
+        onShare,
+        userIds,
+      }),
+    [
+      agent,
+      agentId,
+      draftShares,
+      groupIds,
+      isFeatured,
+      isPublic,
+      labelIds,
+      onShare,
+      userIds,
+    ]
   );
-  const [modalInitialValues, setModalInitialValues] =
-    useState<ShareAgentFormValues>(initialValues);
+
+  const [draftState, setDraftState] = useState<ShareDraftState>(initialValues);
+  const [modalInitialState, setModalInitialState] =
+    useState<ShareDraftState>(initialValues);
+  const [stagedUsers, setStagedUsers] = useState<MinimalUserSnapshot[]>([]);
+  const [stagedGroups, setStagedGroups] = useState<MinimalUserGroupSnapshot[]>(
+    []
+  );
+  const [stagedPermission, setStagedPermission] =
+    useState<PersonaSharePermission>("VIEWER");
+  const [transferTarget, setTransferTarget] =
+    useState<TransferOwnershipTarget>(null);
+  const [view, setView] = useState<ShareModalView>("share");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRemovingSelf, setIsRemovingSelf] = useState(false);
   const wasOpenRef = useRef(false);
+  const hydratedFromAgentRef = useRef(false);
 
   useEffect(() => {
-    // Capture fresh props exactly when the modal opens, then keep them stable
-    // while open so in-flight parent updates don't reset form state.
     if (shareAgentModal.isOpen && !wasOpenRef.current) {
-      setModalInitialValues(initialValues);
-    }
-    wasOpenRef.current = shareAgentModal.isOpen;
-  }, [shareAgentModal.isOpen, initialValues]);
+      setView("share");
+      setTransferTarget(null);
+      setStagedUsers([]);
+      setStagedGroups([]);
+      setStagedPermission("VIEWER");
+      hydratedFromAgentRef.current = false;
 
-  async function handleSubmit(values: ShareAgentFormValues) {
-    await onShare?.(
-      values.selectedUserIds,
-      values.selectedGroupIds,
-      values.isPublic,
-      values.isFeatured,
-      values.labelIds
+      if (!agentId || agent) {
+        setDraftState(initialValues);
+        setModalInitialState(initialValues);
+        hydratedFromAgentRef.current = true;
+      }
+    }
+
+    if (
+      shareAgentModal.isOpen &&
+      agentId &&
+      agent &&
+      !hydratedFromAgentRef.current
+    ) {
+      setDraftState(initialValues);
+      setModalInitialState(initialValues);
+      hydratedFromAgentRef.current = true;
+    }
+
+    if (!shareAgentModal.isOpen) {
+      hydratedFromAgentRef.current = false;
+    }
+
+    wasOpenRef.current = shareAgentModal.isOpen;
+  }, [agent, agentId, initialValues, shareAgentModal.isOpen]);
+
+  const effectiveState = useMemo(
+    () =>
+      applyStagedShares(
+        draftState,
+        stagedUsers,
+        stagedGroups,
+        stagedPermission
+      ),
+    [draftState, stagedGroups, stagedPermission, stagedUsers]
+  );
+
+  const canEditShares = !agentId
+    ? true
+    : isAdmin ||
+      agent?.user_permission === "OWNER" ||
+      agent?.user_permission === "EDITOR";
+
+  const canTransfer =
+    !!agentId &&
+    (agent?.user_permission === "OWNER" ||
+      (isAdmin && agent?.ownership_vacant === true));
+
+  const isDirty =
+    serializeDraftState(effectiveState) !==
+    serializeDraftState(modalInitialState);
+
+  const existingUserIds = useMemo(
+    () => new Set(draftState.userShares.map((share) => share.user.id)),
+    [draftState.userShares]
+  );
+  const existingGroupIds = useMemo(
+    () => new Set(draftState.groupShares.map((share) => share.group_id)),
+    [draftState.groupShares]
+  );
+
+  const agentName = agent?.name ?? "Agent";
+
+  const closeModal = useCallback(() => {
+    setView("share");
+    shareAgentModal.toggle(false);
+  }, [shareAgentModal]);
+
+  const updateUserSharePermission = useCallback(
+    (userId: string, permission: PersonaSharePermission) => {
+      // Staged entries live outside the draft under one default permission —
+      // promote them into the draft so a per-row choice sticks
+      const stagedUser = stagedUsers.find((user) => user.id === userId);
+      if (stagedUser) {
+        setStagedUsers((currentUsers) =>
+          currentUsers.filter((user) => user.id !== userId)
+        );
+        setDraftState((currentDraftState) => ({
+          ...currentDraftState,
+          userShares: [
+            ...currentDraftState.userShares.filter(
+              (share) => share.user.id !== userId
+            ),
+            { permission, user: stagedUser },
+          ],
+        }));
+        return;
+      }
+      setDraftState((currentDraftState) => ({
+        ...currentDraftState,
+        userShares: currentDraftState.userShares.map((share) =>
+          share.user.id === userId ? { ...share, permission } : share
+        ),
+      }));
+    },
+    [stagedUsers]
+  );
+
+  const updateGroupSharePermission = useCallback(
+    (groupId: number, permission: PersonaSharePermission) => {
+      const stagedGroup = stagedGroups.find((group) => group.id === groupId);
+      if (stagedGroup) {
+        setStagedGroups((currentGroups) =>
+          currentGroups.filter((group) => group.id !== groupId)
+        );
+        setDraftState((currentDraftState) => ({
+          ...currentDraftState,
+          groupShares: [
+            ...currentDraftState.groupShares.filter(
+              (share) => share.group_id !== groupId
+            ),
+            {
+              group_id: stagedGroup.id,
+              group_name: stagedGroup.name,
+              permission,
+            },
+          ],
+        }));
+        return;
+      }
+      setDraftState((currentDraftState) => ({
+        ...currentDraftState,
+        groupShares: currentDraftState.groupShares.map((share) =>
+          share.group_id === groupId ? { ...share, permission } : share
+        ),
+      }));
+    },
+    [stagedGroups]
+  );
+
+  const removeUserShare = useCallback((userId: string) => {
+    // Covers staged entries too — Remove Access on a not-yet-saved row
+    setStagedUsers((currentUsers) =>
+      currentUsers.filter((user) => user.id !== userId)
+    );
+    setDraftState((currentDraftState) => ({
+      ...currentDraftState,
+      userShares: currentDraftState.userShares.filter(
+        (share) => share.user.id !== userId
+      ),
+    }));
+  }, []);
+
+  const removeGroupShare = useCallback((groupId: number) => {
+    setStagedGroups((currentGroups) =>
+      currentGroups.filter((group) => group.id !== groupId)
+    );
+    setDraftState((currentDraftState) => ({
+      ...currentDraftState,
+      groupShares: currentDraftState.groupShares.filter(
+        (share) => share.group_id !== groupId
+      ),
+    }));
+  }, []);
+
+  const handleCopyLink = useCallback(async () => {
+    if (!agentId) {
+      return;
+    }
+
+    try {
+      await copyText(`${window.location.origin}/app?agentId=${agentId}`);
+      toast.success("Copied link.");
+    } catch {
+      toast.error("Failed to copy link.");
+    }
+  }, [agentId]);
+
+  const handleSelfRemove = useCallback(async () => {
+    // Create mode (no saved agent): mutate the local draft only.
+    if (!agentId) {
+      if (currentUser) {
+        removeUserShare(currentUser.id);
+      }
+      closeModal();
+      return;
+    }
+    // Saved agent but the current user hasn't loaded yet: don't no-op-and-close
+    // (that would leave the share intact while signalling success).
+    if (!currentUser) {
+      return;
+    }
+
+    setIsRemovingSelf(true);
+    const error = await removeSelfFromAgentShares(agentId);
+    setIsRemovingSelf(false);
+
+    if (error) {
+      toast.error(error);
+      return;
+    }
+
+    await refreshAgentShareCaches(agentId);
+    toast.success("Access removed.");
+    closeModal();
+  }, [agentId, closeModal, currentUser, removeUserShare]);
+
+  async function handleSave() {
+    if (!isDirty) {
+      closeModal();
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      if (!agentId) {
+        if (onDraftSave) {
+          onDraftSave(effectiveState);
+        } else {
+          await onShare?.(
+            effectiveState.userShares.map((share) => share.user.id),
+            effectiveState.groupShares.map((share) => share.group_id),
+            effectiveState.isPublic,
+            isFeatured,
+            labelIds
+          );
+        }
+        closeModal();
+        return;
+      }
+
+      const error = await updateAgentShares(
+        agentId,
+        {
+          group_shares: effectiveState.groupShares
+            .filter((share) => share.group_id !== agent?.owner_group?.id)
+            .map((share) => ({
+              group_id: share.group_id,
+              permission: share.permission,
+            })),
+          is_public: effectiveState.isPublic,
+          label_ids: labelIds.length > 0 ? labelIds : undefined,
+          public_permission: effectiveState.publicPermission,
+          user_shares: effectiveState.userShares
+            .filter((share) => share.user.id !== agent?.owner?.id)
+            .map((share) => ({
+              permission: share.permission,
+              user_id: share.user.id,
+            })),
+        },
+        isPaidEnterpriseFeaturesEnabled
+      );
+
+      if (error) {
+        toast.error(error);
+        return;
+      }
+
+      await refreshAgentShareCaches(agentId);
+      toast.success("Sharing updated.");
+      closeModal();
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleTransfer() {
+    if (!agentId || !transferTarget) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const error =
+        transferTarget.type === "user"
+          ? await transferAgentOwnership(agentId, {
+              new_owner_user_id: transferTarget.value.replace("user-", ""),
+            })
+          : await transferAgentOwnership(agentId, {
+              new_owner_group_id: Number(
+                transferTarget.value.replace("group-", "")
+              ),
+            });
+
+      if (error) {
+        toast.error(error);
+        return;
+      }
+
+      await refreshAgentShareCaches(agentId);
+      toast.success("Ownership transferred.");
+      closeModal();
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function renderShareRows() {
+    // Mock's three-state status icon: public → organization, anything shared
+    // (rows or group ownership) → users, otherwise lock
+    const hasAnyShare =
+      effectiveState.userShares.length > 0 ||
+      effectiveState.groupShares.length > 0 ||
+      Boolean(agent?.owner_group);
+    const scopeIcon = effectiveState.isPublic
+      ? SvgOrganization
+      : hasAnyShare
+        ? SvgUsers
+        : SvgLock;
+
+    // The picker + status row + people table sit on a white plate over the
+    // modal's tinted body, per the mock
+    return (
+      <div className="flex w-full flex-col gap-2 rounded-12 bg-background-tint-00 p-1">
+        {canEditShares ? (
+          <AddPeoplePicker
+            existingGroupIds={existingGroupIds}
+            existingUserIds={existingUserIds}
+            groups={shareableGroups}
+            onAddGroup={(group) => {
+              setStagedGroups((currentGroups) => [...currentGroups, group]);
+            }}
+            onAddUser={(user) => {
+              setStagedUsers((currentUsers) => [...currentUsers, user]);
+            }}
+            onRemoveGroup={(groupId) => {
+              setStagedGroups((currentGroups) =>
+                currentGroups.filter((group) => group.id !== groupId)
+              );
+            }}
+            onRemoveUser={(userId) => {
+              setStagedUsers((currentUsers) =>
+                currentUsers.filter((user) => user.id !== userId)
+              );
+            }}
+            onStagedPermissionChange={setStagedPermission}
+            stagedGroups={stagedGroups}
+            stagedPermission={stagedPermission}
+            stagedUsers={stagedUsers}
+            users={shareableUsers}
+          />
+        ) : null}
+
+        {/* Mock anatomy: icon + scope trigger on the left, org-permission
+            trigger on the right — no label or description text */}
+        <ShareAccessRow
+          icon={scopeIcon}
+          titleSlot={
+            <SharePermissionMenu
+              ariaLabel="Change sharing scope"
+              disabled={!canEditShares}
+              menuWidth="2xl"
+              showTriggerIcon={false}
+              onChange={(scope) => {
+                setDraftState((currentDraftState) => ({
+                  ...currentDraftState,
+                  isPublic: scope === "PUBLIC",
+                }));
+              }}
+              options={SCOPE_OPTIONS}
+              value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
+            />
+          }
+          rightChildren={
+            <SharePermissionMenu
+              ariaLabel="Change public permission"
+              disabled={!canEditShares}
+              onChange={(permission) => {
+                setDraftState((currentDraftState) => ({
+                  ...currentDraftState,
+                  publicPermission: permission,
+                }));
+              }}
+              options={PERMISSION_OPTIONS}
+              value={effectiveState.publicPermission}
+            />
+          }
+        />
+
+        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+
+        {/* Admins always appear and always hold edit access (ENG-4175);
+            on vacant agents this row carries the transfer affordance */}
+        {agent ? (
+          <ShareAccessRow
+            description={`${agent.admin_count} user${
+              agent.admin_count === 1 ? "" : "s"
+            }`}
+            icon={SvgUserManage}
+            rightChildren={
+              agent.ownership_vacant ? (
+                <StaticPermissionLabel icon={SvgUserManage} label="Owner" />
+              ) : (
+                <StaticPermissionLabel icon={SvgEdit} label="Edit" muted />
+              )
+            }
+            trailing={
+              agent.ownership_vacant && canTransfer ? (
+                <TransferTrailingButton
+                  onTransfer={() => setView("transfer")}
+                />
+              ) : undefined
+            }
+            title="Admins"
+          />
+        ) : null}
+
+        {agent?.owner ? (
+          <ShareAccessRow
+            avatarInitial={agent.owner.email.charAt(0).toUpperCase()}
+            icon={SvgUser}
+            rightChildren={
+              <StaticPermissionLabel
+                icon={SvgUserManage}
+                label="Owner"
+                muted={!canTransfer}
+              />
+            }
+            trailing={
+              canTransfer ? (
+                <TransferTrailingButton
+                  onTransfer={() => setView("transfer")}
+                />
+              ) : undefined
+            }
+            title={
+              currentUser && agent.owner.id === currentUser.id
+                ? `${agent.owner.email} (you)`
+                : agent.owner.email
+            }
+          />
+        ) : null}
+
+        {agent?.owner_group ? (
+          <ShareAccessRow
+            avatarIcon={SvgUsers}
+            icon={SvgUsers}
+            rightChildren={
+              <StaticPermissionLabel
+                icon={SvgUserManage}
+                label="Owner"
+                muted={!canTransfer}
+              />
+            }
+            trailing={
+              canTransfer ? (
+                <TransferTrailingButton
+                  onTransfer={() => setView("transfer")}
+                />
+              ) : undefined
+            }
+            title={agent.owner_group.name}
+          />
+        ) : null}
+
+        {effectiveState.userShares.map((share) => {
+          const isCurrentUser = currentUser?.id === share.user.id;
+
+          return (
+            <ShareAccessRow
+              avatarInitial={share.user.email.charAt(0).toUpperCase()}
+              icon={SvgUser}
+              key={share.user.id}
+              rightChildren={
+                <SharePermissionMenu
+                  ariaLabel={`Update access for ${share.user.email}`}
+                  disabled={!canEditShares && !isCurrentUser}
+                  onChange={
+                    canEditShares
+                      ? (permission) =>
+                          updateUserSharePermission(share.user.id, permission)
+                      : undefined
+                  }
+                  onRemove={
+                    isCurrentUser
+                      ? handleSelfRemove
+                      : canEditShares
+                        ? () => removeUserShare(share.user.id)
+                        : undefined
+                  }
+                  options={PERMISSION_OPTIONS}
+                  value={share.permission}
+                />
+              }
+              title={
+                isCurrentUser ? `${share.user.email} (you)` : share.user.email
+              }
+            />
+          );
+        })}
+
+        {effectiveState.groupShares.map((share) => (
+          <ShareAccessRow
+            avatarIcon={SvgUsers}
+            icon={SvgUsers}
+            key={share.group_id}
+            rightChildren={
+              <SharePermissionMenu
+                ariaLabel={`Update access for ${share.group_name}`}
+                disabled={!canEditShares}
+                onChange={
+                  canEditShares
+                    ? (permission) =>
+                        updateGroupSharePermission(share.group_id, permission)
+                    : undefined
+                }
+                onRemove={
+                  canEditShares
+                    ? () => removeGroupShare(share.group_id)
+                    : undefined
+                }
+                options={PERMISSION_OPTIONS}
+                value={share.permission}
+              />
+            }
+            title={share.group_name}
+          />
+        ))}
+      </div>
     );
   }
 
   return (
     <Modal open={shareAgentModal.isOpen} onOpenChange={shareAgentModal.toggle}>
-      <Formik
-        initialValues={modalInitialValues}
-        onSubmit={handleSubmit}
-        enableReinitialize
-      >
-        <ShareAgentFormContent agentId={agentId} />
-      </Formik>
+      <Modal.Content height="lg" width={view === "transfer" ? "sm" : "md"}>
+        <Modal.Header
+          icon={view === "transfer" ? SvgArrowExchange : SvgShare}
+          onClose={closeModal}
+          title={
+            view === "transfer"
+              ? markdown(`Transfer *${agentName}*`)
+              : markdown(`Share *${agentName}*`)
+          }
+        />
+
+        <Modal.Body>
+          {view === "transfer" ? (
+            <TransferOwnershipView
+              agent={agent}
+              groups={shareableGroups}
+              onSelectedTargetChange={setTransferTarget}
+              selectedTarget={transferTarget}
+              users={transferableUsers}
+            />
+          ) : agentId && !agent && hydratedFromAgentRef.current === false ? (
+            <div className="flex w-full items-center justify-center py-6">
+              <Text color="text-03" font="secondary-body">
+                Loading sharing details...
+              </Text>
+            </div>
+          ) : (
+            renderShareRows()
+          )}
+        </Modal.Body>
+
+        {/* Mock footer: Copy Link (share) / Back (transfer) pinned left,
+            action group right; transfer's Cancel appears once a target is
+            picked */}
+        <Modal.Footer justifyContent="between">
+          {view === "transfer" ? (
+            <Button
+              disabled={isSaving}
+              icon={SvgArrowLeft}
+              onClick={() => {
+                setTransferTarget(null);
+                setView("share");
+              }}
+              prominence="secondary"
+            >
+              Back
+            </Button>
+          ) : agentId ? (
+            <Button
+              icon={SvgLink}
+              onClick={handleCopyLink}
+              prominence="secondary"
+            >
+              Copy Link
+            </Button>
+          ) : (
+            <span aria-hidden />
+          )}
+
+          <div className="flex items-center gap-2">
+            {view === "transfer" ? (
+              transferTarget ? (
+                <Button
+                  disabled={isSaving}
+                  onClick={closeModal}
+                  prominence="secondary"
+                >
+                  Cancel
+                </Button>
+              ) : null
+            ) : (
+              <Button
+                disabled={isSaving || isRemovingSelf}
+                onClick={closeModal}
+                prominence="secondary"
+              >
+                {canEditShares ? "Cancel" : "Done"}
+              </Button>
+            )}
+            {view === "transfer" ? (
+              <Button
+                disabled={!transferTarget || isSaving}
+                onClick={handleTransfer}
+              >
+                Transfer
+              </Button>
+            ) : canEditShares ? (
+              <Button
+                disabled={!isDirty || isSaving || isRemovingSelf}
+                onClick={handleSave}
+              >
+                Save
+              </Button>
+            ) : null}
+          </div>
+        </Modal.Footer>
+      </Modal.Content>
     </Modal>
   );
 }

@@ -1,0 +1,181 @@
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{/*
+Static shape of the per-user sandbox Pod. _create_sandbox_pod reads this and
+overlays the dynamic fields (name, sandbox/tenant labels, per-pod
+opencode-auth + push-key env, proxy hostAliases IP).
+*/}}
+{{- $cm := .Values.configMap }}
+{{- $sandboxNs := $cm.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- $saName := (index $cm "SANDBOX_SERVICE_ACCOUNT_NAME") | default "sandbox" }}
+{{- $image := (index $cm "SANDBOX_CONTAINER_IMAGE") | default (printf "onyxdotapp/sandbox:%s" (.Values.global.version | default .Chart.AppVersion)) }}
+{{- $pullPolicy := (index $cm "SANDBOX_IMAGE_PULL_POLICY") | default .Values.global.pullPolicy }}
+{{- $cpuReq := (index $cm "SANDBOX_POD_CPU_REQUEST") | default "1000m" }}
+{{- $memReq := (index $cm "SANDBOX_POD_MEMORY_REQUEST") | default "2Gi" }}
+{{- $cpuLim := (index $cm "SANDBOX_POD_CPU_LIMIT") | default "2000m" }}
+{{- $memLim := (index $cm "SANDBOX_POD_MEMORY_LIMIT") | default "10Gi" }}
+{{/* Without a request, the scheduler ignores sandbox disk usage and the
+kubelet evicts sandbox pods first under node disk pressure. */}}
+{{- $ephReq := (index $cm "SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST") | default "5Gi" }}
+{{- $ephLim := (index $cm "SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT") | default "20Gi" }}
+{{- $nextjsStart := (index $cm "SANDBOX_NEXTJS_PORT_START") | default "3010" | int }}
+{{- $nextjsEnd := (index $cm "SANDBOX_NEXTJS_PORT_END") | default "3100" | int }}
+{{- $opencodePort := (index $cm "OPENCODE_SERVE_PORT") | default "4096" | int }}
+{{/* Keep in sync with PUSH_DAEMON_PORT in sandbox_daemon/contract.py. */}}
+{{- $pushDaemonPort := include "onyx.sandboxPushDaemonPort" . }}
+{{- $proxyPort := include "onyx.sandboxProxyPort" . }}
+{{- $proxyHost := include "onyx.sandboxProxyHost" . }}
+{{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
+{{- $serverUrl := (index $cm "SANDBOX_API_SERVER_URL") }}
+{{- $sandboxPod := .Values.sandboxPod | default dict }}
+{{- $caBundleFile := "/etc/ssl/sandbox/ca-bundle.crt" }}
+apiVersion: v1
+kind: PodTemplate
+metadata:
+  name: sandbox-pod
+  namespace: {{ $sandboxNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox
+template:
+  metadata:
+    labels:
+      app.kubernetes.io/component: sandbox
+      app.kubernetes.io/managed-by: onyx
+      admission.datadoghq.com/enabled: "false"
+  spec:
+    serviceAccountName: {{ $saName }}
+    automountServiceAccountToken: false
+    restartPolicy: Never
+    terminationGracePeriodSeconds: 10
+    enableServiceLinks: false
+    shareProcessNamespace: false
+    hostNetwork: false
+    hostPID: false
+    hostIPC: false
+    nodeSelector:
+      {{- (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox")) | toYaml | nindent 6 }}
+    tolerations:
+      {{- (index $sandboxPod "tolerations" | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule"))) | toYaml | nindent 6 }}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    initContainers:
+      - name: sandbox-init
+        image: {{ $image }}
+        imagePullPolicy: {{ $pullPolicy }}
+        command: ["/workspace/firewall-init.sh"]
+        env:
+          - { name: SANDBOX_PROXY_HOST, value: "{{ $proxyHost }}" }
+          - { name: SANDBOX_PROXY_PORT, value: "{{ $proxyPort }}" }
+          - { name: SANDBOX_PROXY_BOOTSTRAP_MODE, value: "initcontainer" }
+          - { name: SANDBOX_PROXY_CA_BUNDLE_SRC, value: "/sandbox-ca/ca.crt" }
+          - { name: SANDBOX_PROXY_CA_BUNDLE_DST, value: "{{ $caBundleFile }}" }
+        volumeMounts:
+          - { name: sandbox-ca-source, mountPath: /sandbox-ca, readOnly: true }
+          - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox }
+        resources:
+          requests: { cpu: "50m", memory: "32Mi" }
+          limits: { cpu: "500m", memory: "128Mi" }
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          privileged: false
+          capabilities:
+            drop: ["ALL"]
+            add: ["NET_ADMIN"]
+      - name: sidecar
+        image: {{ $image }}
+        imagePullPolicy: {{ $pullPolicy }}
+        command: ["/workspace/sidecar-entrypoint.sh"]
+        restartPolicy: Always
+        ports:
+          - { name: push-daemon, containerPort: {{ $pushDaemonPort }} }
+        env:
+          {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
+        volumeMounts:
+          - { name: workspace, mountPath: /workspace/sessions }
+          - { name: opencode-data, mountPath: /workspace/opencode-data }
+          - { name: managed, mountPath: /workspace/managed }
+          - { name: sidecar-tmp, mountPath: /tmp }
+          - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
+        resources:
+          # Snapshot tar/stream runs through this sidecar, so give it headroom.
+          # Restore buffers the downloaded archive (<=100MB cap) in /tmp.
+          requests: { cpu: "100m", memory: "256Mi", ephemeral-storage: "512Mi" }
+          limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "2Gi" }
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          privileged: false
+          capabilities:
+            drop: ["ALL"]
+        livenessProbe:
+          httpGet: { path: /health, port: {{ $pushDaemonPort }} }
+          initialDelaySeconds: 5
+          periodSeconds: 30
+        startupProbe:
+          httpGet: { path: /ready, port: {{ $pushDaemonPort }} }
+          periodSeconds: 2
+          failureThreshold: 180
+        readinessProbe:
+          httpGet: { path: /health, port: {{ $pushDaemonPort }} }
+          initialDelaySeconds: 1
+          periodSeconds: 2
+          failureThreshold: 10
+    containers:
+      - name: sandbox
+        image: {{ $image }}
+        imagePullPolicy: {{ $pullPolicy }}
+        command: ["/workspace/entrypoint.sh"]
+        ports:
+          - { name: opencode, containerPort: {{ $opencodePort }} }
+          {{- range $p := untilStep $nextjsStart $nextjsEnd 1 }}
+          - { name: "nextjs-{{ $p }}", containerPort: {{ $p }} }
+          {{- end }}
+        env:
+          - { name: ONYX_PAT, value: "replaced_by_egress_proxy" }
+          - { name: ONYX_SERVER_URL, value: "{{ $serverUrl }}" }
+          - { name: GH_TOKEN, value: "replaced_by_egress_proxy" }
+          - { name: GH_NO_UPDATE_NOTIFIER, value: "1" }
+          - { name: OPENCODE_DATA_HOME, value: "/workspace/opencode-data" }
+          {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
+        volumeMounts:
+          - { name: workspace, mountPath: /workspace/sessions }
+          - { name: opencode-data, mountPath: /workspace/opencode-data }
+          - { name: managed, mountPath: /workspace/managed, readOnly: true }
+          - { name: tmp, mountPath: /tmp }
+          - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
+        resources:
+          requests:
+            { cpu: "{{ $cpuReq }}", memory: "{{ $memReq }}", ephemeral-storage: "{{ $ephReq }}" }
+          limits:
+            { cpu: "{{ $cpuLim }}", memory: "{{ $memLim }}", ephemeral-storage: "{{ $ephLim }}" }
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          privileged: false
+          capabilities:
+            drop: ["ALL"]
+    volumes:
+      - name: workspace
+        emptyDir: { sizeLimit: 50Gi }
+      - name: opencode-data
+        emptyDir: { sizeLimit: 5Gi }
+      - name: managed
+        emptyDir: { sizeLimit: 5Gi }
+      - name: tmp
+        emptyDir: { sizeLimit: 5Gi }
+      - name: sidecar-tmp
+        emptyDir: { sizeLimit: 5Gi }
+      - name: sandbox-ca-source
+        configMap:
+          name: {{ $caConfigMap }}
+          optional: false
+      - name: sandbox-ca-bundle
+        emptyDir: {}
+{{- end }}

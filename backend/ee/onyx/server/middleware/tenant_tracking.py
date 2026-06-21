@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import sys
 from collections.abc import Awaitable
 from collections.abc import Callable
 
@@ -19,10 +20,15 @@ from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.redis.redis_pool import retrieve_auth_token_data_from_bearer
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+# Unauthenticated, non-tenant-scoped endpoints (LB/Prometheus probes, API docs),
+# so tenant resolution is skipped for them.
+TENANT_RESOLUTION_SKIP_PATHS = frozenset({"/health", "/metrics", "/openapi.json"})
 
 
 def add_api_server_tenant_id_middleware(
@@ -38,6 +44,10 @@ def add_api_server_tenant_id_middleware(
         to use elsewhere.
         """
         try:
+            if request.url.path in TENANT_RESOLUTION_SKIP_PATHS:
+                CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
+                return await call_next(request)
+
             if MULTI_TENANT:
                 tenant_id = await _get_tenant_id_from_request(request, logger)
             else:
@@ -108,7 +118,8 @@ async def _get_tenant_id_from_request(
     """
     Attempt to extract tenant_id from:
     1) The API key or PAT (Personal Access Token) header
-    2) The Redis-based token (stored in Cookie: fastapiusersauth)
+    2) The Redis-based session token (Cookie: fastapiusersauth, or the
+       Authorization: Bearer header used by mobile clients)
     3) The anonymous user cookie
     Fallback: POSTGRES_DEFAULT_SCHEMA
     """
@@ -118,9 +129,12 @@ async def _get_tenant_id_from_request(
         return tenant_id
 
     try:
-        # Look up token data in Redis
-
+        # Look up the session token data in Redis. Web clients send it as the
+        # `fastapiusersauth` cookie; mobile clients send the same opaque token as
+        # an Authorization: Bearer header and carry no cookie.
         token_data = await retrieve_auth_token_data_from_redis(request)
+        if token_data is None:
+            token_data = await retrieve_auth_token_data_from_bearer(request)
 
         if token_data:
             tenant_id_from_payload = token_data.get(
@@ -172,13 +186,16 @@ async def _get_tenant_id_from_request(
         raise HTTPException(status_code=500, detail="Internal server error")
 
     finally:
-        if tenant_id:
-            return tenant_id
+        # Don't `return` while an exception is propagating — it would swallow it
+        # and fall back to the wrong tenant. Fall back only on the normal path.
+        if sys.exc_info()[0] is None:
+            if tenant_id:
+                return tenant_id
 
-        # As a final step, check for explicit tenant_id cookie
-        tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
-        if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
-            return tenant_id_cookie
+            # As a final step, check for explicit tenant_id cookie
+            tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
+            if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
+                return tenant_id_cookie
 
-        # If we've reached this point, return the default schema
-        return POSTGRES_DEFAULT_SCHEMA
+            # If we've reached this point, return the default schema
+            return POSTGRES_DEFAULT_SCHEMA

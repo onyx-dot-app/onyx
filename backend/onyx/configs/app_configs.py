@@ -16,6 +16,16 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
+def _non_negative_int_env(name: str, default: int) -> int:
+    """Parse an int env var, falling back to ``default`` when unset or negative."""
+    value = int(os.environ.get(name) or default)
+    if value < 0:
+        logger.warning("%s=%d is negative; falling back to %d", name, value, default)
+        return default
+    return value
+
+
 #####
 # App Configs
 #####
@@ -47,31 +57,21 @@ BLURB_SIZE = 128  # Number Encoder Tokens included in the chunk blurb
 
 # Hard ceiling for the admin-configurable file upload size (in MB).
 # Self-hosted customers can raise or lower this via the environment variable.
-_raw_max_upload_size_mb = int(os.environ.get("MAX_ALLOWED_UPLOAD_SIZE_MB", "250"))
-if _raw_max_upload_size_mb < 0:
-    logger.warning(
-        "MAX_ALLOWED_UPLOAD_SIZE_MB=%d is negative; falling back to 250",
-        _raw_max_upload_size_mb,
-    )
-    _raw_max_upload_size_mb = 250
-MAX_ALLOWED_UPLOAD_SIZE_MB = _raw_max_upload_size_mb
+MAX_ALLOWED_UPLOAD_SIZE_MB = _non_negative_int_env("MAX_ALLOWED_UPLOAD_SIZE_MB", 250)
 
 # Default fallback for the per-user file upload size limit (in MB) when no
 # admin-configured value exists.  Clamped to MAX_ALLOWED_UPLOAD_SIZE_MB at
 # runtime so this never silently exceeds the hard ceiling.
-_raw_default_upload_size_mb = int(
-    os.environ.get("DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", "100")
+DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = _non_negative_int_env(
+    "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", 100
 )
-if _raw_default_upload_size_mb < 0:
-    logger.warning(
-        "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB=%d is negative; falling back to 100",
-        _raw_default_upload_size_mb,
-    )
-    _raw_default_upload_size_mb = 100
-DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = _raw_default_upload_size_mb
 GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
+
+# Per-user cap on self-managed personal skills. Env-overridable so CI can lower
+# it without uploading the full quota of real bundles to exercise the limit.
+MAX_PERSONAL_SKILLS_PER_USER = _non_negative_int_env("MAX_PERSONAL_SKILLS_PER_USER", 50)
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
@@ -122,6 +122,11 @@ HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL = (
 # on Windows, try  setting this to `http://127.0.0.1:3000` instead and see if that
 # fixes it)
 WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
+
+# Surfaced to the web app via /api/settings so analytics can be enabled by env
+# var instead of a NEXT_PUBLIC_POSTHOG_KEY build arg. Client-side project key.
+POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY")
+POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
 
 
 #####
@@ -264,16 +269,42 @@ OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
 
+# Native mobile (Expo / React Native) SSO bridge. The app completes OAuth in the
+# system browser (reusing the existing registered IdP callback), then the backend
+# returns a single-use, PKCE-bound one-time code over a custom-scheme deep link —
+# never a token. The app swaps the code for the session token at
+# /auth/mobile/sso/exchange.
+MOBILE_SSO_CODE_PREFIX = "mobile_sso_code:"
+# Lifetime of the one-time code; intentionally short — it only has to survive the
+# system-browser -> app handoff plus the immediate exchange call. A non-positive
+# TTL would make Redis reject the SET, breaking every exchange — fail fast at boot.
+MOBILE_SSO_CODE_TTL_SECONDS = int(os.environ.get("MOBILE_SSO_CODE_TTL_SECONDS") or 60)
+if MOBILE_SSO_CODE_TTL_SECONDS < 1:
+    raise ValueError("MOBILE_SSO_CODE_TTL_SECONDS must be >= 1")
+# Deep-link URIs the SSO completion is allowed to 302 to. Defaults to the app's
+# custom scheme; override (comma-separated) to add Universal/App Links later.
+_DEFAULT_MOBILE_REDIRECT_URIS = frozenset({"onyx://auth/callback"})
+_MOBILE_ALLOWED_REDIRECT_URIS_RAW = os.environ.get("MOBILE_ALLOWED_REDIRECT_URIS", "")
+MOBILE_ALLOWED_REDIRECT_URIS: frozenset[str] = frozenset(
+    uri.strip() for uri in _MOBILE_ALLOWED_REDIRECT_URIS_RAW.split(",") if uri.strip()
+)
+if not MOBILE_ALLOWED_REDIRECT_URIS:
+    # An override that was set but parsed empty (e.g. just commas/whitespace) is a
+    # misconfig — warn rather than silently rejecting every mobile redirect. An
+    # unset value is the normal default, so don't warn there.
+    if _MOBILE_ALLOWED_REDIRECT_URIS_RAW.strip():
+        logger.warning(
+            "MOBILE_ALLOWED_REDIRECT_URIS=%r parsed to an empty set; "
+            "falling back to default %s",
+            _MOBILE_ALLOWED_REDIRECT_URIS_RAW,
+            _DEFAULT_MOBILE_REDIRECT_URIS,
+        )
+    MOBILE_ALLOWED_REDIRECT_URIS = _DEFAULT_MOBILE_REDIRECT_URIS
+
 # JWT Public Key URL for JWT token verification
 JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
-
-if AUTH_TYPE == AuthType.BASIC and not USER_AUTH_SECRET:
-    logger.warning(
-        "USER_AUTH_SECRET is not set. This is required for secure password reset "
-        "and email verification tokens. Please set USER_AUTH_SECRET in production."
-    )
 
 # Bearer token guarding the API server's /metrics endpoint. Auth is required by
 # default: scrapers must present this token as `Authorization: Bearer <token>`
@@ -312,6 +343,11 @@ SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "true").lower() not in (
     "no",
 )
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
+EMAIL_ARCHIVE_BCC_ADDRESSES = tuple(
+    email_address.strip()
+    for email_address in os.environ.get("EMAIL_ARCHIVE_BCC_ADDRESSES", "").split(",")
+    if email_address.strip()
+)
 
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
 EMAIL_CONFIGURED = (bool(SMTP_SERVER) and bool(EMAIL_FROM)) or bool(SENDGRID_API_KEY)
@@ -726,7 +762,6 @@ WEB_CONNECTOR_IGNORED_ELEMENTS = os.environ.get(
 WEB_CONNECTOR_OAUTH_CLIENT_ID = os.environ.get("WEB_CONNECTOR_OAUTH_CLIENT_ID")
 WEB_CONNECTOR_OAUTH_CLIENT_SECRET = os.environ.get("WEB_CONNECTOR_OAUTH_CLIENT_SECRET")
 WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
-WEB_CONNECTOR_VALIDATE_URLS = os.environ.get("WEB_CONNECTOR_VALIDATE_URLS")
 
 # When the OnyxWebCrawler (open_url tool) hits a 403 / Cloudflare challenge,
 # fall back to a one-shot Playwright (Chromium) render to bypass JS-based
@@ -735,6 +770,12 @@ WEB_CONNECTOR_VALIDATE_URLS = os.environ.get("WEB_CONNECTOR_VALIDATE_URLS")
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
 )
+
+# NOTE: the three SSRF env vars below (OPEN_URL_VALIDATE_SSRF,
+# MCP_SERVER_ALLOW_PRIVATE_NETWORK, MCP_SERVER_ALLOW_LOOPBACK) are no longer read
+# at their call sites. They only seed the default "SSRF Protection" level when no
+# override is saved; admins set the effective behavior on the Security Hardening
+# page.
 
 # Whether the open_url tool enforces SSRF protection (rejecting URLs that
 # resolve to private/internal IPs). Default true to keep multi-tenant SaaS
@@ -850,6 +891,15 @@ CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC = (
 
 GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
+# Cap the total text retained per file across a connector's extracted sections,
+# bounding worker memory when a source can't be size-checked before fetch —
+# e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
+# bypass GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD. Content past the cap is dropped
+# with a warning. 0 disables the cap.
+CONNECTOR_MAX_EXTRACTED_TEXT_CHARS = int(
+    os.environ.get("CONNECTOR_MAX_EXTRACTED_TEXT_CHARS") or 10_000_000
 )
 
 # Default size threshold for Drupal Wiki attachments (10MB)
@@ -1017,6 +1067,23 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # Documents exceeding this limit will surface a visible error rather than being silently dropped.
 # Default is 512MB worth of characters (536,870,912). Configurable via MAX_DOCUMENT_CHARS env var.
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 536_870_912)
+
+# Max RSS (in MB) for a spawned indexing worker process. When exceeded, the
+# docfetching watchdog terminates the worker and fails the attempt with a clear
+# error, pre-empting a kernel OOM kill of the whole pod — which would also kill
+# the attempt heartbeat (surfacing as an opaque "No heartbeat received" failure)
+# and any other tenants' tasks running on the pod. 0 disables the check.
+INDEXING_WORKER_MEMORY_LIMIT_MB = int(
+    os.environ.get("INDEXING_WORKER_MEMORY_LIMIT_MB") or 0
+)
+
+# Enable tracemalloc in spawned indexing workers so the near-limit memory report
+# (see INDEXING_WORKER_MEMORY_LIMIT_MB) includes allocation sites. Adds meaningful
+# per-allocation CPU/memory overhead — enable only while chasing a leak.
+INDEXING_WORKER_TRACEMALLOC = (
+    os.environ.get("INDEXING_WORKER_TRACEMALLOC", "").lower() == "true"
+)
+
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
@@ -1422,6 +1489,32 @@ S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 # S3/MinIO Access Keys
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+
+# Well-known MinIO default; deployments left on it expose all stored files.
+DEFAULT_OBJECT_STORAGE_CREDENTIAL = "minioadmin"
+
+
+def _uses_default_object_storage_credentials(
+    s3_endpoint_url: str | None,
+    access_key: str | None,
+    secret_key: str | None,
+) -> bool:
+    # Only for self-hosted MinIO (has an endpoint URL); real AWS S3 has none.
+    if not s3_endpoint_url:
+        return False
+    return DEFAULT_OBJECT_STORAGE_CREDENTIAL in (access_key, secret_key)
+
+
+if _uses_default_object_storage_credentials(
+    S3_ENDPOINT_URL, S3_AWS_ACCESS_KEY_ID, S3_AWS_SECRET_ACCESS_KEY
+):
+    logger.warning(
+        "Object storage is using the well-known default 'minioadmin' credentials. "
+        "Anyone who can reach the MinIO/S3 endpoint can read or modify stored files "
+        "(uploaded documents, file-store objects). Set S3_AWS_ACCESS_KEY_ID / "
+        "S3_AWS_SECRET_ACCESS_KEY (and MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) to "
+        "strong, unique values before deploying to production."
+    )
 
 # Should we force S3 local checksumming
 S3_GENERATE_LOCAL_CHECKSUM = (

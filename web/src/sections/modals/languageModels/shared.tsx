@@ -7,7 +7,7 @@ import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import type {
@@ -22,7 +22,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Switch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { Button, LineItemButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
@@ -428,6 +428,79 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 const FOLD_THRESHOLD = 3;
 
+interface ModelRowProps {
+  model: ModelConfiguration;
+  isAutoMode: boolean;
+  onToggleVisibility: (visible: boolean) => void;
+  onRename: (value: string | undefined) => void;
+}
+
+/**
+ * A single selectable model row.
+ *
+ * The row is a clickable `<div role="button">` rather than a real `<button>`,
+ * because the `editable` title renders its own nested edit `<button>` — and a
+ * `<button>` inside a `<button>` is invalid HTML that triggers a React
+ * hydration error. Rendering the row as a div keeps the inline rename pencil a
+ * real, keyboard-accessible button while preserving the original look and feel.
+ *
+ * This mirrors `LineItemButton`'s internals (Stateful → Container →
+ * ContentAction) but with a typeless `Interactive.Container`, which renders a
+ * `<div>` instead of a `<button>`.
+ */
+function ModelRow({
+  model,
+  isAutoMode,
+  onToggleVisibility,
+  onRename,
+}: ModelRowProps) {
+  const displayName =
+    model.custom_display_name || model.display_name || model.name;
+  // In auto mode every model is shown, so the row is always "selected" and the
+  // visibility toggle is disabled.
+  const isSelected = isAutoMode || model.is_visible;
+  const toggleVisibility = isAutoMode
+    ? undefined
+    : () => onToggleVisibility(!model.is_visible);
+
+  return (
+    <div data-model-name={model.name}>
+      <Interactive.Stateful
+        variant="select-heavy"
+        state={isSelected ? "selected" : "empty"}
+        onClick={toggleVisibility}
+        role={toggleVisibility ? "button" : undefined}
+        tabIndex={toggleVisibility ? 0 : undefined}
+        onKeyDown={
+          toggleVisibility
+            ? (e: React.KeyboardEvent) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleVisibility();
+                }
+              }
+            : undefined
+        }
+      >
+        <Interactive.Container width="full" size="fit" rounding="md">
+          <div className="w-full p-2">
+            <ContentAction
+              color="interactive"
+              variant="section"
+              sizePreset="main-ui"
+              icon={() => <Checkbox checked={isSelected} />}
+              title={displayName}
+              editable
+              onTitleChange={(newTitle) => onRename(newTitle || undefined)}
+              padding="fit"
+            />
+          </div>
+        </Interactive.Container>
+      </Interactive.Stateful>
+    </div>
+  );
+}
+
 export interface ModelSelectionFieldProps {
   shouldShowAutoUpdateToggle: boolean;
   onRefetch?: (signal: AbortSignal) => Promise<void> | void;
@@ -540,56 +613,19 @@ export function ModelSelectionField({
 
               return (
                 <>
-                  {shownModels.map((model) =>
-                    isAutoMode ? (
-                      <div key={model.name} data-model-name={model.name}>
-                        <LineItemButton
-                          variant="section"
-                          sizePreset="main-ui"
-                          selectVariant="select-heavy"
-                          state="selected"
-                          icon={() => <Checkbox checked />}
-                          title={
-                            model.custom_display_name ||
-                            model.display_name ||
-                            model.name
-                          }
-                          editable
-                          onTitleChange={(newTitle) =>
-                            setCustomDisplayName(
-                              model.name,
-                              newTitle || undefined
-                            )
-                          }
-                        />
-                      </div>
-                    ) : (
-                      <div key={model.name} data-model-name={model.name}>
-                        <LineItemButton
-                          variant="section"
-                          sizePreset="main-ui"
-                          selectVariant="select-heavy"
-                          state={model.is_visible ? "selected" : "empty"}
-                          icon={() => <Checkbox checked={model.is_visible} />}
-                          title={
-                            model.custom_display_name ||
-                            model.display_name ||
-                            model.name
-                          }
-                          onClick={() =>
-                            setVisibility(model.name, !model.is_visible)
-                          }
-                          editable
-                          onTitleChange={(newTitle) =>
-                            setCustomDisplayName(
-                              model.name,
-                              newTitle || undefined
-                            )
-                          }
-                        />
-                      </div>
-                    )
-                  )}
+                  {shownModels.map((model) => (
+                    <ModelRow
+                      key={model.name}
+                      model={model}
+                      isAutoMode={isAutoMode}
+                      onToggleVisibility={(visible) =>
+                        setVisibility(model.name, visible)
+                      }
+                      onRename={(value) =>
+                        setCustomDisplayName(model.name, value)
+                      }
+                    />
+                  ))}
                   {isFoldable && (
                     <Interactive.Stateless
                       prominence="tertiary"

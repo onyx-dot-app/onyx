@@ -31,6 +31,9 @@ export function useTokenRefresh(
     if (
       !user ||
       user.id === NO_AUTH_USER_ID ||
+      // Anonymous users have no session to refresh; a failed refresh churns the
+      // /me query and can bounce them to login.
+      user.is_anonymous_user ||
       authTypeMetadata.authType === AuthType.OIDC ||
       authTypeMetadata.authType === AuthType.SAML
     ) {
@@ -64,9 +67,16 @@ export function useTokenRefresh(
       }
     };
 
-    refreshTokenPeriodically();
+    // Hidden tabs skip refreshes entirely; the visibilitychange handler below
+    // catches the session up as soon as the user returns.
+    if (!document.hidden) {
+      refreshTokenPeriodically();
+    }
 
-    const intervalId = setInterval(refreshTokenPeriodically, REFRESH_INTERVAL);
+    const intervalId = setInterval(() => {
+      if (document.hidden) return;
+      refreshTokenPeriodically();
+    }, REFRESH_INTERVAL);
 
     const handleVisibilityChange = () => {
       if (

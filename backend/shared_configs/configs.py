@@ -72,6 +72,10 @@ LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "onyx"
 
 # Enable generating persistent log files for local dev environments
 DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true"
+# File logging is on by default. Set LOG_TO_FILE=false to disable it for a given
+# pod/process — it then logs to stdout only (e.g. read-only-root containers where
+# /var/log/onyx isn't writable).
+LOG_TO_FILE = os.environ.get("LOG_TO_FILE", "true").lower() != "false"
 # notset, debug, info, notice, warning, error, or critical
 LOG_LEVEL = os.environ.get("LOG_LEVEL") or "info"
 
@@ -139,28 +143,35 @@ def validate_cors_origin(origin: str) -> None:
 
 
 # Examples of valid values for the environment variable:
-# - "" (allow all origins)
+# - "" (allow all origins, credentials disabled)
 # - "http://example.com" (single origin)
 # - "http://example.com,https://example.org" (multiple origins)
-# - "*" (allow all origins)
+# - "*" (allow all origins, credentials disabled)
 CORS_ALLOWED_ORIGIN_ENV = os.environ.get("CORS_ALLOWED_ORIGIN", "")
 
-# Explicitly declare the type of CORS_ALLOWED_ORIGIN
-CORS_ALLOWED_ORIGIN: List[str]
 
-if CORS_ALLOWED_ORIGIN_ENV:
-    # Split the environment variable into a list of origins
-    CORS_ALLOWED_ORIGIN = [
-        origin.strip()
-        for origin in CORS_ALLOWED_ORIGIN_ENV.split(",")
-        if origin.strip()
-    ]
-    # Validate each origin in the list
-    for origin in CORS_ALLOWED_ORIGIN:
-        validate_cors_origin(origin)
-else:
-    # If the environment variable is empty, allow all origins
-    CORS_ALLOWED_ORIGIN = ["*"]
+def parse_cors_allowed_origins(env_value: str) -> List[str]:
+    origins = [origin.strip() for origin in env_value.split(",") if origin.strip()]
+    if not origins:
+        # If the environment variable is empty, allow all origins
+        return ["*"]
+    for origin in origins:
+        if origin != "*":
+            validate_cors_origin(origin)
+    return origins
+
+
+def cors_allow_credentials(allowed_origins: List[str]) -> bool:
+    # A wildcard origin must never be paired with allow_credentials=True:
+    # browsers reject "Access-Control-Allow-Origin: *" on credentialed
+    # responses, and Starlette compensates by echoing arbitrary request
+    # Origins on preflights, which would let any site make credentialed
+    # (cookie-authenticated) cross-origin requests.
+    return "*" not in allowed_origins
+
+
+CORS_ALLOWED_ORIGIN: List[str] = parse_cors_allowed_origins(CORS_ALLOWED_ORIGIN_ENV)
+CORS_ALLOW_CREDENTIALS: bool = cors_allow_credentials(CORS_ALLOWED_ORIGIN)
 
 
 # Multi-tenancy configuration

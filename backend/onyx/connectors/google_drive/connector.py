@@ -86,6 +86,7 @@ from onyx.connectors.models import HierarchyNode
 from onyx.connectors.models import SlimDocument
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import parallel_yield
@@ -99,7 +100,9 @@ logger = setup_logger()
 
 BATCHES_PER_CHECKPOINT = 1
 
-DRIVE_BATCH_SIZE = 80
+# Documents converted per sub-batch. At up to CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
+# (~10 MB) each, 50 caps resident docs near ~500 MB regardless of drive size.
+DRIVE_CONVERSION_BATCH_SIZE = 50
 
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
@@ -1677,60 +1680,138 @@ class GoogleDriveConnector(
         )
 
         files_batch: list[RetrievedDriveFile] = []
+        # Files awaiting their parent folder's node, keyed by folder raw id
+        # (lightweight metadata, never documents). Released when the node is
+        # emitted; whatever never resolves falls back to the source root.
+        pending_by_folder: dict[str, list[RetrievedDriveFile]] = {}
         for retrieved_file in drive_files_iter:
             if self.exclude_domain_link_only and has_link_only_permission(
                 retrieved_file.drive_file
             ):
                 continue
-            if retrieved_file.error is None:
-                files_batch.append(retrieved_file)
+            if retrieved_file.error is not None:
+                failure_stage = retrieved_file.completion_stage.value
+                logger.error(
+                    "retrieval failure during stage: %s, user: %s, "
+                    "parent drive/folder: %s, error: %s",
+                    failure_stage,
+                    retrieved_file.user_email,
+                    retrieved_file.parent_id,
+                    retrieved_file.error,
+                )
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=retrieved_file.drive_file.get("id", failure_stage),
+                    ),
+                    failure_message=(
+                        f"retrieval failure during stage: {failure_stage}, "
+                        f"user: {retrieved_file.user_email}, "
+                        f"parent drive/folder: {retrieved_file.parent_id}, "
+                        f"error: {retrieved_file.error}"
+                    ),
+                    exception=retrieved_file.error,
+                )
                 continue
 
-            failure_stage = retrieved_file.completion_stage.value
-            failure_message = f"retrieval failure during stage: {failure_stage},"
-            failure_message += f"user: {retrieved_file.user_email},"
-            failure_message += f"parent drive/folder: {retrieved_file.parent_id},"
-            failure_message += f"error: {retrieved_file.error}"
-            logger.error(failure_message)
-            yield ConnectorFailure(
-                failed_entity=EntityFailure(
-                    entity_id=retrieved_file.drive_file.get("id", failure_stage),
-                ),
-                failure_message=failure_message,
-                exception=retrieved_file.error,
+            files_batch.append(retrieved_file)
+            # Flush in bounded sub-batches so resident converted documents stay
+            # capped (pending metadata is bounded by one checkpoint's fetch).
+            if len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
+                yield from self._convert_files_sub_batch(
+                    files_batch,
+                    checkpoint,
+                    permission_sync_context,
+                    pending_by_folder,
+                )
+                files_batch = []
+
+        if files_batch or pending_by_folder:
+            yield from self._convert_files_sub_batch(
+                files_batch,
+                checkpoint,
+                permission_sync_context,
+                pending_by_folder,
+                force_flush=True,
             )
 
-        new_ancestors = self._get_new_ancestors_for_files(
-            files=files_batch,
-            seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
-            fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
-            failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
-            permission_sync_context=permission_sync_context,
-            add_prefix=True,
+    def _convert_files_sub_batch(
+        self,
+        files_batch: list[RetrievedDriveFile],
+        checkpoint: GoogleDriveCheckpoint,
+        permission_sync_context: PermissionSyncContext | None,
+        pending_by_folder: dict[str, list[RetrievedDriveFile]],
+        force_flush: bool = False,
+    ) -> Iterator[Document | ConnectorFailure | HierarchyNode]:
+        """Emit this sub-batch's new ancestor nodes, then convert the files whose
+        parent node is now in `seen`. Resolution fetches each parent folder by id
+        (file's user + admin), so a parent normally resolves in the file's own
+        sub-batch; parking is only the cross-user case — a folder reachable solely
+        by a later sub-batch's user — held in `pending_by_folder` until its node is
+        emitted. `force_flush` roots whatever never resolves."""
+        new_ancestors = (
+            self._get_new_ancestors_for_files(
+                files=files_batch,
+                seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
+                fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+                failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
+                permission_sync_context=permission_sync_context,
+                add_prefix=True,
+            )
+            if files_batch
+            else []
         )
         if new_ancestors:
             logger.debug("Yielding %s new hierarchy nodes", len(new_ancestors))
             yield from new_ancestors
 
-        func_with_args = [
-            (
-                self._convert_retrieved_file_to_document,
-                (retrieved_file, permission_sync_context),
+        # A folder enters `seen` only when its node is emitted (atomically, in
+        # _get_new_ancestors_for_files), so a parked file is always released the
+        # first time its folder appears below — no "seen but unemitted" stranding.
+        newly_ready: list[RetrievedDriveFile] = []
+        for retrieved_file in files_batch:
+            parent_id = _get_parent_id_from_file(retrieved_file.drive_file)
+            if not parent_id or parent_id in checkpoint.seen_hierarchy_node_raw_ids:
+                newly_ready.append(retrieved_file)
+            else:
+                pending_by_folder.setdefault(parent_id, []).append(retrieved_file)
+
+        # Release parked files whose folder node was just emitted (they came
+        # earlier in the stream), then this sub-batch's own ready files.
+        ready_files: list[RetrievedDriveFile] = []
+        for node in new_ancestors:
+            ready_files.extend(pending_by_folder.pop(node.raw_node_id, []))
+        if force_flush and pending_by_folder:
+            rooted = sum(len(waiters) for waiters in pending_by_folder.values())
+            # Surfaces hierarchy degradation: these files' folders never resolved,
+            # so they index under the source root instead of their real parent.
+            logger.warning(
+                "Rooting %s files under %s folders whose ancestor never resolved",
+                rooted,
+                len(pending_by_folder),
             )
-            for retrieved_file in files_batch
-        ]
-        raw_results = cast(
-            list[Document | ConnectorFailure | None],
-            run_functions_tuples_in_parallel(func_with_args, max_workers=8),
-        )
+            for waiters in pending_by_folder.values():
+                ready_files.extend(waiters)
+            pending_by_folder.clear()
+        ready_files.extend(newly_ready)
 
-        results: list[Document | ConnectorFailure] = [
-            r for r in raw_results if r is not None
-        ]
-        logger.debug("batch has %s docs or failures", len(results))
-        yield from results
-
-        checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
+        # Chunk so resident documents never exceed one chunk, however many resolved.
+        for chunk in batch_generator(ready_files, DRIVE_CONVERSION_BATCH_SIZE):
+            func_with_args = [
+                (
+                    self._convert_retrieved_file_to_document,
+                    (retrieved_file, permission_sync_context),
+                )
+                for retrieved_file in chunk
+            ]
+            raw_results = cast(
+                list[Document | ConnectorFailure | None],
+                run_functions_tuples_in_parallel(func_with_args, max_workers=8),
+            )
+            results: list[Document | ConnectorFailure] = [
+                r for r in raw_results if r is not None
+            ]
+            logger.debug("sub-batch has %s docs or failures", len(results))
+            yield from results
 
     def _convert_retrieved_file_to_document(
         self,

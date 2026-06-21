@@ -18,7 +18,6 @@ from urllib3.exceptions import MaxRetryError
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
-from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -35,6 +34,8 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.server.security.models import web_connector_ssrf_enforced
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
 # Re-exported for backwards compatibility with existing tests/callers that
@@ -114,7 +115,9 @@ def protected_url_check(url: str) -> None:
     - To be extra safe, all IPs associated with the URL must be global
     - This is to prevent misuse and not explicit attacks
     """
-    if not WEB_CONNECTOR_VALIDATE_URLS:
+    # The web connector is only guarded at the most restrictive SSRF level; at
+    # VALIDATE_LLM / DISABLED admin-configured connectors may reach private IPs.
+    if not web_connector_ssrf_enforced(get_security_settings().ssrf_protection_level):
         return
 
     parse = urlparse(url)
@@ -141,6 +144,10 @@ def protected_url_check(url: str) -> None:
 
 
 def check_internet_connection(url: str) -> None:
+    # SSRF guard on the fetch primitive itself, so no call site can reach an
+    # internal target. No-op unless SSRF protection is at its strictest level.
+    protected_url_check(url)
+
     try:
         # Use a more realistic browser-like request
         session = requests.Session()
@@ -237,6 +244,11 @@ def get_internal_links(
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
+    # SSRF guard. This fetch runs in __init__, before validation, so the check
+    # must live here. Placed before the try so it surfaces as the SSRF error
+    # rather than a wrapped sitemap-parse failure.
+    protected_url_check(sitemap_url)
+
     # Note: brotli compression is handled automatically by the requests library
     # as long as the brotli package is installed in the venv.
     try:
@@ -722,16 +734,11 @@ class WebConnector(LoadConnector, SlimConnector):
                 "No URL configured. Please provide at least one valid URL."
             )
 
-        if (
-            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
-            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
-        ):
-            return None
-
         # We'll just test the first URL for connectivity and correctness
         test_url = self.to_visit_list[0]
 
-        # Check that the URL is allowed and well-formed
+        # SSRF check runs for every connector type so an internal target is
+        # rejected at creation rather than at index time.
         try:
             protected_url_check(test_url)
         except ValueError as e:
@@ -742,7 +749,16 @@ class WebConnector(LoadConnector, SlimConnector):
             # Typically DNS or other network issues
             raise ConnectorValidationError(str(e))
 
-        # Make a quick request to see if we get a valid response
+        # Recursive/sitemap defer page fetches to index time; skip the connectivity
+        # probe for them (the SSRF check above still ran).
+        if (
+            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
+            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
+        ):
+            return None
+
+        # Make a quick request to see if we get a valid response. This re-runs the
+        # SSRF check internally (intentional, cheap defense-in-depth).
         try:
             check_internet_connection(test_url)
         except Exception as e:

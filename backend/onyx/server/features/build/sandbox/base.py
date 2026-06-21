@@ -1,7 +1,7 @@
-"""Abstract base class and factory for sandbox operations.
+"""Abstract base class for sandbox operations.
 
 SandboxManager is the abstract interface for sandbox lifecycle management.
-Use get_sandbox_manager() to get the appropriate implementation based on SANDBOX_BACKEND.
+Use sandbox.factory.get_sandbox_manager() to get the implementation for SANDBOX_BACKEND.
 
 IMPORTANT: SandboxManager implementations must NOT interface with the database directly.
 All database operations should be handled by the caller (SessionManager, Celery tasks, etc.).
@@ -14,7 +14,6 @@ Architecture Note (User-Shared Sandbox Model):
 - terminate() destroys the entire sandbox (all sessions)
 """
 
-import threading
 import time
 from abc import ABC
 from abc import abstractmethod
@@ -23,8 +22,6 @@ from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentPlanUpdate
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
@@ -108,6 +105,8 @@ class SandboxManager(_ServeMixin, ABC):
 
     Use get_sandbox_manager() to get the appropriate implementation.
     """
+
+    supports_opencode_history_persistence: bool = False
 
     @abstractmethod
     def provision(
@@ -196,7 +195,6 @@ class SandboxManager(_ServeMixin, ABC):
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,
     ) -> None:
         """Clean up a session workspace on session delete: stop the
         Next.js dev server and remove ``sessions/$session_id/``. Does NOT
@@ -245,7 +243,6 @@ class SandboxManager(_ServeMixin, ABC):
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
@@ -259,7 +256,6 @@ class SandboxManager(_ServeMixin, ABC):
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: Path to the snapshot in storage
-            tenant_id: Tenant identifier for storage access
             nextjs_port: Port number for the NextJS dev server, or None to
                 skip starting it (e.g. headless scheduled-task fires).
             llm_config: LLM provider configuration (used to regenerate AGENTS.md)
@@ -268,6 +264,25 @@ class SandboxManager(_ServeMixin, ABC):
             RuntimeError: If snapshot restoration fails
         """
         ...
+
+    def create_opencode_history_snapshot(
+        self,
+        sandbox_id: UUID,
+        tenant_id: str,
+        timeout_seconds: float = 300.0,
+    ) -> bool:
+        """Snapshot sandbox-global opencode history if this backend supports it.
+
+        Returns False when opencode has not created any data yet. By default,
+        an empty live store leaves any existing durable archive untouched so idle
+        and recovery snapshots do not discard the last known history.
+        Callers must gate on ``supports_opencode_history_persistence`` before
+        invoking this optional capability.
+        """
+        _ = sandbox_id, tenant_id, timeout_seconds
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support opencode history snapshots"
+        )
 
     @abstractmethod
     def session_workspace_exists(
@@ -670,60 +685,3 @@ class SandboxManager(_ServeMixin, ABC):
             ValueError: If file not found or conversion fails
         """
         ...
-
-    def ensure_nextjs_running(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        nextjs_port: int,
-    ) -> None:
-        """Ensure the Next.js server is running for a session.
-
-        Default is a no-op — only meaningful for backends that manage Next.js
-        process lifecycles directly from the api_server side. The kubernetes
-        backend starts Next.js inside the sandbox pod at workspace setup, so
-        nothing further is needed.
-
-        Args:
-            sandbox_id: The sandbox ID
-            session_id: The session ID
-            nextjs_port: The port the Next.js server should be listening on
-        """
-
-
-# Singleton instance cache for the factory
-_sandbox_manager_instance: SandboxManager | None = None
-_sandbox_manager_lock = threading.Lock()
-
-
-def get_sandbox_manager() -> SandboxManager:
-    """Get the appropriate SandboxManager implementation based on SANDBOX_BACKEND.
-
-    Returns:
-        SandboxManager instance:
-        - KubernetesSandboxManager for kubernetes backend (production + dev kind)
-        - DockerSandboxManager for self-hosted docker-compose
-    """
-    global _sandbox_manager_instance
-
-    if _sandbox_manager_instance is None:
-        with _sandbox_manager_lock:
-            if _sandbox_manager_instance is None:
-                if SANDBOX_BACKEND == SandboxBackend.KUBERNETES:
-                    from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-                        KubernetesSandboxManager,
-                    )
-
-                    _sandbox_manager_instance = KubernetesSandboxManager()
-                    logger.info("Using KubernetesSandboxManager for sandbox operations")
-                elif SANDBOX_BACKEND == SandboxBackend.DOCKER:
-                    from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
-                        DockerSandboxManager,
-                    )
-
-                    _sandbox_manager_instance = DockerSandboxManager()
-                    logger.info("Using DockerSandboxManager for sandbox operations")
-                else:
-                    raise ValueError(f"Unknown sandbox backend: {SANDBOX_BACKEND}")
-
-    return _sandbox_manager_instance

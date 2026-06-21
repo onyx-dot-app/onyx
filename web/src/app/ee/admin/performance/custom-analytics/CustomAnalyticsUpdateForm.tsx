@@ -2,25 +2,19 @@
 
 import { Label, SubLabel } from "@/components/Field";
 import { toast } from "@/hooks/useToast";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useCustomAnalyticsScript } from "@/lib/analytics/hooks";
 import { Button, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
-import { Callout } from "@/components/ui/callout";
-import { useContext, useState } from "react";
+import { useState } from "react";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { Spacer } from "@opal/components";
 
-export function CustomAnalyticsUpdateForm() {
-  const settings = useContext(SettingsContext);
-  const customAnalyticsScript = settings?.customAnalyticsScript;
+export default function CustomAnalyticsUpdateForm() {
+  const customAnalyticsScript = useCustomAnalyticsScript();
 
   const [newCustomAnalyticsScript, setNewCustomAnalyticsScript] =
     useState<string>(customAnalyticsScript || "");
   const [secretKey, setSecretKey] = useState<string>("");
-
-  if (!settings) {
-    return <Callout type="danger" title="Failed to fetch settings"></Callout>;
-  }
 
   return (
     <div>

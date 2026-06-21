@@ -46,10 +46,17 @@ def acquire_seat_lock(db_session: Session, tenant_id: str | None = None) -> None
     same transaction.
     """
     lock_id = seat_lock_id_for_tenant(tenant_id or get_current_tenant_id())
+    # Bounded wait: a double-acquisition bug or wedged holder should fail
+    # fast with lock_not_available, not hang until the idle-in-transaction
+    # reaper kills the session (observed as 10-minute invite freezes).
+    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
     db_session.execute(
         text("SELECT pg_advisory_xact_lock(:lock_id)"),
         {"lock_id": lock_id},
     )
+    # Restore the session default so the caller's later row-lock waits
+    # aren't capped by the advisory-acquisition bound.
+    db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))
 
 
 class SeatAvailabilityResult(NamedTuple):

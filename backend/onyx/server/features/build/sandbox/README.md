@@ -21,10 +21,12 @@ The sandbox system provides isolated execution environments where OpenCode agent
 
 1. **Kubernetes Mode** (`SANDBOX_BACKEND=kubernetes`) — default
    - Sandboxes run as Kubernetes pods, one per user
+   - Each pod has one app container (`sandbox`) plus one native restartable init sidecar (`sidecar`) for push/snapshot control-plane work
    - api_server talks to the Kubernetes API for pod lifecycle and `kubectl exec`
    - Automatic snapshots stream through the in-pod sidecar to the api_server-owned `FileStore`
    - Auto-cleanup of idle sandboxes
    - Production-ready with resource isolation, security context, and NetworkPolicies
+   - Requires Kubernetes `>= 1.33` for native restartable init sidecar containers
    - Used by Onyx's Helm chart / cloud deployment
    - For local-cluster development, see [docs/dev/local-kubernetes.md](/docs/dev/local-kubernetes.md).
 
@@ -78,26 +80,16 @@ On EC2 the Docker bridge by default routes to `169.254.169.254` (IMDS), which ca
 
 ## Setup
 
-### Running via Docker/Kubernetes (Zero Setup!) 🎉
+### Running via Docker/Kubernetes
 
-**No setup required!** Just build and deploy:
-
-```bash
-# Build backend image
-cd backend
-docker build -f Dockerfile -t onyxdotapp/backend:latest .
-
-# Build sandbox container (lightweight runner)
-cd onyx/server/features/build/sandbox/image
-docker build -t onyxdotapp/sandbox:latest .
-
-# Deploy with docker-compose or kubectl - sandboxes work immediately!
-```
+Deploy the normal Onyx application images with Craft enabled. The sandbox image
+is selected from the same application version by default, so app tag `vX.Y.Z`
+uses `onyxdotapp/sandbox:vX.Y.Z`.
 
 **How it works:**
 
-- **Sandbox image**: Bakes in the web template (`/workspace/templates/outputs`) and a pre-built Python venv (`/workspace/.venv`) from `initial-requirements.txt`
-- **Sidecar daemon** (Kubernetes only): Packages and restores session snapshots on the pod-local filesystem
+- **Sandbox image**: Published under the same tag as the app image and bakes in the web template (`/workspace/templates/outputs`) plus a pre-built Python venv (`/workspace/.venv`) from `initial-requirements.txt`
+- **Native init sidecar daemon** (Kubernetes only): Starts before the sandbox app container, stays running for the pod lifetime, and packages/restores session snapshots on the pod-local filesystem
 - **Sandbox startup**: Runs `bun install --frozen-lockfile` (hardlinks from the image's pre-warmed Bun cache) + `bun run dev`
 
 ## OpenCode Configuration
@@ -153,12 +145,17 @@ OPENCODE_DISABLED_TOOLS=question           # Comma-separated list, default: ques
 
 ### Kubernetes Settings
 
+Kubernetes Craft sandboxes require Kubernetes `>= 1.33` because sandbox pods
+use native restartable init sidecar containers (`initContainers[*].restartPolicy:
+Always`). Helm installs with `ENABLE_CRAFT=true` and `SANDBOX_BACKEND=kubernetes`
+fail during render/install on older clusters.
+
 ```bash
 # Kubernetes namespace
 SANDBOX_NAMESPACE=onyx-sandboxes          # Default: onyx-sandboxes
 
-# Container image
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:latest
+# Helm defaults the sandbox image to onyxdotapp/sandbox:${global.version}.
+# SANDBOX_CONTAINER_IMAGE is an internal override.
 
 # Snapshots use the normal Onyx FileStore configuration
 FILE_STORE_BACKEND=s3|gcs|postgres
@@ -171,8 +168,6 @@ SANDBOX_SERVICE_ACCOUNT_NAME=sandbox      # No storage credentials required
 ### Docker Settings
 
 ```bash
-# Container image (defaults to a pinned tag in docker-compose.yml)
-SANDBOX_CONTAINER_IMAGE=onyxdotapp/sandbox:v0.1.52
 
 # Public URL the sandbox agent uses to reach Onyx (HTTPS, externally resolvable —
 # compose hostnames like http://api_server:8080 will not resolve from inside the
@@ -254,7 +249,7 @@ uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandb
 ### Sandbox Isolation
 
 - **Kubernetes pods** run with restricted security context (non-root, no privilege escalation)
-- **Sandbox and sidecar containers** do not receive FileStore, S3, or MinIO credentials
+- **Sandbox app containers and sidecar init containers** do not receive FileStore, S3, or MinIO credentials
 - **Network policies** can restrict sandbox egress traffic
 - **Resource limits** prevent resource exhaustion
 - **Docker containers** run with `--security-opt no-new-privileges`, `--cap-drop ALL`, `user=1000:1000`, no Docker socket, and a fixed env allowlist (`ONYX_PAT` + `ONYX_SERVER_URL`)
@@ -313,7 +308,7 @@ This template provides a modern development environment without the complexity o
 
 The Python venv (built into the sandbox image at `/workspace/.venv`) includes packages from `image/initial-requirements.txt`:
 
-- Data processing: pandas, numpy, polars
+- Data processing: pandas, numpy, matplotlib
 - HTTP clients: requests, httpx
 - Utilities: python-dotenv, pydantic
 

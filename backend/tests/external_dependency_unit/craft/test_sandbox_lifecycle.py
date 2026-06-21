@@ -2,7 +2,7 @@
 
 DB-bound tests that pin the sandbox state machine: PROVISIONING → RUNNING,
 provision failures rolling back the row, idempotent provisioning, the
-health-check failure -> re-provision recovery path, the ``get_idle_sandboxes``
+health-check failure -> re-provision recovery path, the idle-selection
 query shape, and the Redis lock that serializes concurrent provision
 attempts for the same user.
 
@@ -21,18 +21,19 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.build.tasks import is_sandbox_idle
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.api.sessions_api import restore_session
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
-from onyx.server.features.build.db.sandbox import get_idle_sandboxes
+from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.sandbox.models import SandboxInfo
+from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
@@ -173,8 +174,16 @@ class TestIdempotentProvision:
 
 
 class TestHealthCheckFailureRecovery:
-    def test_health_check_failure_marks_terminated_and_reprovisions(
+    @pytest.mark.parametrize(
+        "history_snapshot_fails",
+        [
+            pytest.param(False, id="history-snapshot-succeeds"),
+            pytest.param(True, id="history-snapshot-fails"),
+        ],
+    )
+    def test_health_check_failure_snapshots_history_best_effort_then_reprovisions(
         self,
+        history_snapshot_fails: bool,
         db_session: Session,
         test_user: User,
         sandbox: Callable[..., Sandbox],
@@ -202,6 +211,28 @@ class TestHealthCheckFailureRecovery:
         session_id = idle_session.id
 
         stub_sandbox_manager.health_check_returns = False
+        stub_sandbox_manager.supports_opencode_history_persistence = True
+        if history_snapshot_fails:
+
+            def _boom(
+                sandbox_id: object,
+                tenant_id: object,
+                timeout_seconds: float = 300.0,
+            ) -> bool:
+                stub_sandbox_manager.create_opencode_history_snapshot_payloads.append(
+                    {
+                        "sandbox_id": sandbox_id,
+                        "tenant_id": tenant_id,
+                        "timeout_seconds": timeout_seconds,
+                    }
+                )
+                raise RuntimeError("history snapshot failed")
+
+            monkeypatch.setattr(
+                stub_sandbox_manager, "create_opencode_history_snapshot", _boom
+            )
+        else:
+            stub_sandbox_manager.create_opencode_history_snapshot_returns = True
         stub_sandbox_manager.terminate_silent = True
         stub_sandbox_manager.provision_returns = SandboxInfo(
             sandbox_id=row.id,
@@ -217,7 +248,7 @@ class TestHealthCheckFailureRecovery:
 
         # restore_session reads ``get_sandbox_manager`` from sessions_api.
         monkeypatch.setattr(
-            "onyx.server.features.build.api.sessions_api.get_sandbox_manager",
+            "onyx.server.features.build.session.api.get_sandbox_manager",
             lambda: stub_sandbox_manager,
         )
 
@@ -233,6 +264,11 @@ class TestHealthCheckFailureRecovery:
         # cycle (TERMINATED -> PROVISIONING -> RUNNING).
         assert refreshed is not None
         assert refreshed.status == SandboxStatus.RUNNING
+        assert {
+            "sandbox_id": row.id,
+            "tenant_id": TEST_TENANT_ID,
+            "timeout_seconds": 30.0,
+        } in stub_sandbox_manager.create_opencode_history_snapshot_payloads
 
 
 class TestRestoreFailureRecovery:
@@ -284,7 +320,7 @@ class TestRestoreFailureRecovery:
         stub_sandbox_manager.cleanup_session_workspace_silent = True
 
         monkeypatch.setattr(
-            "onyx.server.features.build.api.sessions_api.get_sandbox_manager",
+            "onyx.server.features.build.session.api.get_sandbox_manager",
             lambda: stub_sandbox_manager,
         )
 
@@ -386,9 +422,10 @@ class TestIdleCleanupSelection:
         ) - datetime.timedelta(hours=2)
         db_session.commit()
 
-        idle = get_idle_sandboxes(db_session, idle_threshold_seconds=3600)
-
-        idle_ids = {s.id for s in idle}
+        now = datetime.datetime.now(datetime.timezone.utc)
+        idle_ids = {
+            s.id for s in get_running_sandboxes(db_session) if is_sandbox_idle(s, now)
+        }
         assert row.id in idle_ids
 
     def test_idle_cleanup_excludes_sandbox_within_threshold(
@@ -404,9 +441,11 @@ class TestIdleCleanupSelection:
         ) - datetime.timedelta(minutes=30)
         db_session.commit()
 
-        idle = get_idle_sandboxes(db_session, idle_threshold_seconds=3600)
-
-        assert row.id not in {s.id for s in idle}
+        now = datetime.datetime.now(datetime.timezone.utc)
+        idle_ids = {
+            s.id for s in get_running_sandboxes(db_session) if is_sandbox_idle(s, now)
+        }
+        assert row.id not in idle_ids
 
 
 # NOTE: ``test_idle_cleanup_marks_sandbox_sleeping_and_sessions_idle`` was

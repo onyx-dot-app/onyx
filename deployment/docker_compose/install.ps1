@@ -94,7 +94,7 @@ function Prompt-DeploymentMode {
     param([string]$LiteOverlayPath)
     if ($script:LiteMode) { Print-Info "Deployment mode: Lite (set via -Lite flag)"; return }
     Print-Info "Which deployment mode would you like?"
-    Write-Host "  1) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
+    Write-Host "  1) Lite      - Minimal deployment (no OpenSearch, Redis, or model servers)"
     Write-Host "                  LLM chat, tools, file uploads, and Projects still work"
     Write-Host "  2) Standard  - Full deployment with search, connectors, and RAG"
     $modeChoice = Prompt-OrDefault "Choose a mode (1 or 2) [default: 1]" "1"

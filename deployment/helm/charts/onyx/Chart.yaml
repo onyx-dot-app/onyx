@@ -1,11 +1,11 @@
 apiVersion: v2
 name: onyx
-description: A Helm chart for Kubernetes
+description: Onyx application and Craft sandbox deployment chart
 home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.5.22
+version: 0.6.4
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,9 +16,11 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Store Craft sandbox snapshots in the Onyx filestore instead
-        of requiring sandbox pods to write directly to S3.
+    - kind: security
+      description: Set readOnlyRootFilesystem on the Craft sandbox egress proxy
+        (it holds tenant credentials) so an RCE cannot drop or persist a binary.
+        The proxy logs to stdout only (LOG_TO_FILE=false), leaving the mitmproxy
+        CA confdir as the single writable mount, which also serves as TMPDIR.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

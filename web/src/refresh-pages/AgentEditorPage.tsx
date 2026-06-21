@@ -6,7 +6,7 @@ import { SettingsLayouts } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Button, Card, Divider, MessageCard } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
-import { FullAgent } from "@/lib/agents/types";
+import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
 import { buildAgentAvatarUrl } from "@/lib/agents/utils";
 import { Formik, Form, FieldArray } from "formik";
 import * as Yup from "yup";
@@ -16,14 +16,13 @@ import InputTypeInElementField from "@/refresh-components/form/InputTypeInElemen
 import InputDatePickerField from "@/refresh-components/form/InputDatePickerField";
 import {
   Card as CardLayout,
+  Content,
   ContentAction,
   InputHorizontal,
   InputVertical,
 } from "@opal/layouts";
 import { useFormikContext } from "formik";
-import LLMSelector from "@/components/llm/LLMSelector";
-import { parseLlmDescriptor, structureValue } from "@/lib/languageModels/utils";
-import { useLLMProviders } from "@/hooks/useLanguageModels";
+import ModelSelector from "@/sections/model-selector/ModelSelector";
 import {
   STARTER_MESSAGES_EXAMPLES,
   MAX_CHARACTERS_STARTER_MESSAGE,
@@ -55,11 +54,15 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgActions,
   SvgExpand,
+  SvgEye,
+  SvgEyeOff,
   SvgFold,
   SvgImage,
   SvgLock,
   SvgOnyxOctagon,
+  SvgOrganization,
   SvgSliders,
+  SvgTag,
   SvgUsers,
   SvgTrash,
   SvgSimpleLoader,
@@ -69,8 +72,9 @@ import CustomAgentAvatar, {
 } from "@/refresh-components/avatars/CustomAgentAvatar";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
-import { useAgents } from "@/lib/agents/hooks";
+import { useAgents, useLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
+import InputChipField from "@/refresh-components/inputs/InputChipField";
 import { AgentUpsertParameters } from "@/lib/agents/types";
 import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
@@ -84,17 +88,20 @@ import { useAppRouter } from "@/hooks/appNavigation";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
   deleteAgent,
-  updateAgentFeaturedStatus,
-  updateAgentSharedStatus,
+  parseErrorDetail,
+  toggleAgentListed,
+  updateAgentShares,
 } from "@/lib/agents/svc";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import ShareAgentModal from "@/sections/modals/ShareAgentModal";
+import ShareAgentModal, {
+  ShareDraftState,
+} from "@/sections/modals/ShareAgentModal";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
-import { useVectorDbEnabled } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
 
 interface AgentIconEditorProps {
   existingAgent?: FullAgent | null;
@@ -489,10 +496,58 @@ export default function AgentEditorPage({
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
-  const { isAdmin, isCurator } = useUser();
-  const canUpdateFeaturedStatus = isAdmin || isCurator;
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { isAdmin } = useUser();
+  // Feature/unlist are admin-only surfaces — never shown to non-admin
+  // owners or editors (ENG-4179)
+  const canUpdateFeaturedStatus = isAdmin;
+  const { vectorDbEnabled } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
+
+  // Labels are edited in the Share Agent section and saved with the form
+  const { labels: allLabels, createLabel } = useLabels();
+  const [labelInputValue, setLabelInputValue] = useState("");
+  const addAgentLabel = useCallback(
+    async (
+      name: string,
+      labelIds: number[],
+      setFieldValue: (field: string, value: number[]) => void
+    ) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const existing = allLabels?.find(
+        (label) => label.name.toLowerCase() === trimmed.toLowerCase()
+      );
+      if (existing) {
+        if (!labelIds.includes(existing.id)) {
+          setFieldValue("label_ids", [...labelIds, existing.id]);
+        }
+      } else {
+        const newLabel = await createLabel(trimmed);
+        if (newLabel) {
+          setFieldValue("label_ids", [...labelIds, newLabel.id]);
+        }
+      }
+      setLabelInputValue("");
+    },
+    [allLabels, createLabel]
+  );
+
+  const [isTogglingListed, setIsTogglingListed] = useState(false);
+  const handleToggleListed = useCallback(async () => {
+    if (!existingAgent) return;
+    setIsTogglingListed(true);
+    try {
+      await toggleAgentListed(existingAgent.id, existingAgent.is_listed);
+      refreshAgent?.();
+      await refreshAgents();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to toggle visibility"
+      );
+    } finally {
+      setIsTogglingListed(false);
+    }
+  }, [existingAgent, refreshAgent, refreshAgents]);
 
   // Hooks for Knowledge section
   const { allRecentFiles, beginUpload } = useProjectsContext();
@@ -506,48 +561,6 @@ export default function AgentEditorPage({
   const { mcpData, isLoading: isMcpLoading } = useMcpServersForAgentEditor();
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
     useOpenApiTools();
-  const { llmProviders } = useLLMProviders(existingAgent?.id);
-
-  // LLM Model Selection — placed after llmProviders so the callbacks can close over it
-  const getCurrentLlm = useCallback((values: any, providers: any) => {
-    // Canonical path: resolve from model configuration ID.
-    if (values.default_model_configuration_id != null) {
-      for (const p of providers ?? []) {
-        const mc = p.model_configurations?.find(
-          (m: any) => m.id === values.default_model_configuration_id
-        );
-        if (mc) {
-          return structureValue(p.name ?? String(p.id), p.provider, mc.name);
-        }
-      }
-    }
-    return null;
-  }, []);
-
-  const onLlmSelect = useCallback(
-    (selected: string | null, setFieldValue: any) => {
-      if (selected === null) {
-        setFieldValue("default_model_configuration_id", null);
-      } else {
-        const { modelName, name } = parseLlmDescriptor(selected);
-        if (modelName) {
-          // `name` is either the display name or String(provider.id) for nameless
-          // providers, so we match by both.
-          const provider = llmProviders?.find(
-            (p: any) => p.name === name || String(p.id) === name
-          );
-          const modelConfig = provider?.model_configurations?.find(
-            (mc: any) => mc.name === modelName
-          );
-          setFieldValue(
-            "default_model_configuration_id",
-            modelConfig?.id ?? null
-          );
-        }
-      }
-    },
-    [llmProviders]
-  );
 
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
@@ -716,6 +729,9 @@ export default function AgentEditorPage({
     shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
     shared_group_ids: existingAgent?.groups ?? [],
     is_public: existingAgent?.is_public ?? false,
+    // Full leveled share draft captured by the dialog before the agent
+    // exists; applied via the share endpoint right after create
+    shared_draft: null as ShareDraftState | null,
     label_ids: existingAgent?.labels?.map((l) => l.id) ?? [],
     is_featured: existingAgent?.is_featured ?? false,
   };
@@ -856,12 +872,19 @@ export default function AgentEditorPage({
         document_set_ids: values.enable_knowledge
           ? values.document_set_ids
           : [],
-        is_public: values.is_public,
+        // Sharing on saved agents is managed by the share dialog — omitting
+        // the fields here keeps form saves from clobbering it. Creates carry
+        // the draft share state captured before the agent existed.
+        ...(existingAgent
+          ? {}
+          : {
+              is_public: values.is_public,
+              users: values.shared_user_ids,
+              groups: values.shared_group_ids,
+            }),
         default_model_configuration_id:
           (values as any).default_model_configuration_id ?? null,
         starter_messages: finalAgentStarterMessages,
-        users: values.shared_user_ids,
-        groups: values.shared_group_ids,
         tool_ids: toolIds,
         // uploaded_image: null, // Already uploaded separately
         remove_image: values.remove_image ?? false,
@@ -881,7 +904,7 @@ export default function AgentEditorPage({
         system_prompt: values.instructions,
         replace_base_system_prompt: values.replace_base_system_prompt,
         task_prompt: values.reminders || "",
-        datetime_aware: false,
+        datetime_aware: existingAgent ? existingAgent.datetime_aware : false,
       };
 
       // Call API
@@ -894,17 +917,41 @@ export default function AgentEditorPage({
 
       // Handle response
       if (!personaResponse || !personaResponse.ok) {
-        const error = personaResponse
-          ? await personaResponse.text()
-          : "No response received";
-        toast.error(
-          `Failed to ${existingAgent ? "update" : "create"} agent - ${error}`
-        );
+        const prefix = `Failed to ${existingAgent ? "update" : "create"} agent`;
+        const detail = personaResponse
+          ? await parseErrorDetail(personaResponse, "unknown error")
+          : "no response received";
+        toast.error(`${prefix} - ${detail}`);
         return;
       }
 
       // Success
       const agent = await personaResponse.json();
+
+      // Apply the leveled share draft captured in the dialog before the
+      // agent existed (the create payload only carries viewer-level ids)
+      if (!existingAgent && values.shared_draft) {
+        const draft = values.shared_draft;
+        const shareError = await updateAgentShares(
+          agent.id,
+          {
+            user_shares: draft.userShares.map((share) => ({
+              user_id: share.user.id,
+              permission: share.permission,
+            })),
+            group_shares: draft.groupShares.map((share) => ({
+              group_id: share.group_id,
+              permission: share.permission,
+            })),
+            is_public: draft.isPublic,
+            public_permission: draft.publicPermission,
+          },
+          businessTier
+        );
+        if (shareError) {
+          toast.error(`Agent created, but sharing failed: ${shareError}`);
+        }
+      }
       toast.success(
         `Agent "${agent.name}" ${
           existingAgent ? "updated" : "created"
@@ -1062,10 +1109,22 @@ export default function AgentEditorPage({
               (fileId: string) =>
                 fileStatusMap.get(fileId) === UserFileStatus.PROCESSING
             );
-            const isShared =
-              values.is_public ||
-              values.shared_user_ids.length > 0 ||
-              values.shared_group_ids.length > 0;
+            // Saved agents report their status (group ownership counts as
+            // shared); unsaved ones derive it from the draft form state.
+            const sharingStatus: PersonaSharingStatus = existingAgent
+              ? existingAgent.sharing_status
+              : values.is_public
+                ? "PUBLIC"
+                : values.shared_user_ids.length > 0 ||
+                    values.shared_group_ids.length > 0
+                  ? "SHARED"
+                  : "PRIVATE";
+            const shareStatusIcon =
+              sharingStatus === "PRIVATE"
+                ? SvgLock
+                : sharingStatus === "SHARED"
+                  ? SvgUsers
+                  : SvgOrganization;
 
             return (
               <>
@@ -1122,116 +1181,22 @@ export default function AgentEditorPage({
                 <shareAgentModal.Provider>
                   <ShareAgentModal
                     agentId={existingAgent?.id}
-                    userIds={values.shared_user_ids}
-                    groupIds={values.shared_group_ids}
-                    isPublic={values.is_public}
-                    isFeatured={values.is_featured}
-                    labelIds={values.label_ids}
-                    onShare={async (
-                      userIds,
-                      groupIds,
-                      isPublic,
-                      isFeatured,
-                      labelIds
-                    ) => {
-                      if (!existingAgent) {
-                        // New agents are not persisted until the main Create action.
-                        setFieldValue("shared_user_ids", userIds);
-                        setFieldValue("shared_group_ids", groupIds);
-                        setFieldValue("is_public", isPublic);
-                        setFieldValue("is_featured", isFeatured);
-                        setFieldValue("label_ids", labelIds);
-                        shareAgentModal.toggle(false);
-                        return;
-                      }
-
-                      const applySharingFields = () => {
-                        setFieldValue("shared_user_ids", userIds);
-                        setFieldValue("shared_group_ids", groupIds);
-                        setFieldValue("is_public", isPublic);
-                        setFieldValue("label_ids", labelIds);
-                      };
-
-                      const refreshSharedUi = async () => {
-                        try {
-                          await refreshAgents();
-                          refreshAgent?.();
-                        } catch (error) {
-                          console.error(
-                            "Refresh failed after successful share:",
-                            error
-                          );
-                          toast.error(
-                            "Agent sharing was saved, but failed to refresh. Please reload."
-                          );
-                        }
-                      };
-
-                      let shareError: string | null;
-                      try {
-                        shareError = await updateAgentSharedStatus(
-                          existingAgent.id,
-                          userIds,
-                          groupIds,
-                          isPublic,
-                          businessTier,
-                          labelIds
-                        );
-                      } catch (error) {
-                        console.error(
-                          "Share agent mutation failed unexpectedly:",
-                          error
-                        );
-                        toast.error("Failed to share agent. Please try again.");
-                        return;
-                      }
-
-                      if (shareError) {
-                        toast.error(`Failed to share agent: ${shareError}`);
-                        return;
-                      }
-
-                      if (canUpdateFeaturedStatus) {
-                        let featuredError: string | null;
-                        try {
-                          featuredError = await updateAgentFeaturedStatus(
-                            existingAgent.id,
-                            isFeatured
-                          );
-                        } catch (error) {
-                          console.error(
-                            "Featured mutation failed unexpectedly:",
-                            error
-                          );
-                          // Share succeeded; sync form and UI before returning.
-                          applySharingFields();
-                          await refreshSharedUi();
-                          toast.error(
-                            "Failed to update featured status. Please try again."
-                          );
-                          return;
-                        }
-
-                        if (featuredError) {
-                          // Share succeeded, featured failed: keep modal open for retry.
-                          applySharingFields();
-                          await refreshSharedUi();
-                          toast.error(
-                            `Failed to update featured status: ${featuredError}`
-                          );
-                          return;
-                        }
-
-                        applySharingFields();
-                        setFieldValue("is_featured", isFeatured);
-                        shareAgentModal.toggle(false);
-                        await refreshSharedUi();
-                        return;
-                      }
-
-                      applySharingFields();
+                    draftShares={values.shared_draft}
+                    onDraftSave={(draft) => {
+                      // Saved agents persist sharing inside the dialog; the
+                      // draft only exists for agents not yet created and is
+                      // applied via the share endpoint right after create.
+                      setFieldValue("shared_draft", draft);
+                      setFieldValue(
+                        "shared_user_ids",
+                        draft.userShares.map((share) => share.user.id)
+                      );
+                      setFieldValue(
+                        "shared_group_ids",
+                        draft.groupShares.map((share) => share.group_id)
+                      );
+                      setFieldValue("is_public", draft.isPublic);
                       shareAgentModal.toggle(false);
-                      await refreshSharedUi();
                     }}
                   />
                 </shareAgentModal.Provider>
@@ -1422,6 +1387,101 @@ export default function AgentEditorPage({
                         paddingPerpendicular="fit"
                       />
 
+                      <GeneralLayouts.Section
+                        gap={0.5}
+                        alignItems="stretch"
+                        height="auto"
+                      >
+                        <Content
+                          title="Share Agent"
+                          sizePreset="main-content"
+                          variant="section"
+                        />
+                        <Card border="solid" rounding="lg">
+                          <GeneralLayouts.Section>
+                            <InputHorizontal
+                              title="Share This Agent"
+                              description="with other users, groups, or everyone in your organization."
+                              center
+                            >
+                              <Button
+                                prominence="secondary"
+                                icon={shareStatusIcon}
+                                onClick={() => shareAgentModal.toggle(true)}
+                              >
+                                Share
+                              </Button>
+                            </InputHorizontal>
+                            {canUpdateFeaturedStatus && (
+                              <>
+                                <InputHorizontal
+                                  withLabel="is_featured"
+                                  title="Feature This Agent"
+                                  description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
+                                >
+                                  <SwitchField name="is_featured" />
+                                </InputHorizontal>
+                                {values.is_featured &&
+                                  sharingStatus === "PRIVATE" && (
+                                    <MessageCard title="This agent is private to you and will only be featured for yourself." />
+                                  )}
+                                {values.is_featured &&
+                                  existingAgent &&
+                                  !existingAgent.is_listed && (
+                                    <MessageCard
+                                      variant="warning"
+                                      title="This agent is unlisted and won't be shown in the featured list."
+                                    />
+                                  )}
+                              </>
+                            )}
+                            <GeneralLayouts.Section
+                              gap={0.25}
+                              alignItems="stretch"
+                            >
+                              <InputChipField
+                                chips={(allLabels ?? [])
+                                  .filter((label) =>
+                                    values.label_ids.includes(label.id)
+                                  )
+                                  .map((label) => ({
+                                    id: String(label.id),
+                                    label: label.name,
+                                  }))}
+                                onRemoveChip={(id) =>
+                                  setFieldValue(
+                                    "label_ids",
+                                    values.label_ids.filter(
+                                      (labelId) => labelId !== Number(id)
+                                    )
+                                  )
+                                }
+                                onAdd={(name) =>
+                                  addAgentLabel(
+                                    name,
+                                    values.label_ids,
+                                    setFieldValue
+                                  )
+                                }
+                                value={labelInputValue}
+                                onChange={setLabelInputValue}
+                                placeholder="Add labels..."
+                                icon={SvgTag}
+                              />
+                              <Text text03 secondaryBody>
+                                Add labels and categories to help people better
+                                discover this agent.
+                              </Text>
+                            </GeneralLayouts.Section>
+                          </GeneralLayouts.Section>
+                        </Card>
+                      </GeneralLayouts.Section>
+
+                      <Divider
+                        paddingParallel="fit"
+                        paddingPerpendicular="fit"
+                      />
+
                       <SimpleCollapsible>
                         <SimpleCollapsible.Header
                           title="Actions"
@@ -1570,52 +1630,23 @@ export default function AgentEditorPage({
                             <Card border="solid" rounding="lg">
                               <GeneralLayouts.Section>
                                 <InputHorizontal
-                                  title="Share This Agent"
-                                  description="with other users, groups, or everyone in your organization."
-                                  center
-                                >
-                                  <Button
-                                    prominence="secondary"
-                                    icon={isShared ? SvgUsers : SvgLock}
-                                    onClick={() => shareAgentModal.toggle(true)}
-                                  >
-                                    Share
-                                  </Button>
-                                </InputHorizontal>
-                                {canUpdateFeaturedStatus && (
-                                  <>
-                                    <InputHorizontal
-                                      withLabel="is_featured"
-                                      title="Feature This Agent"
-                                      description="Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access."
-                                    >
-                                      <SwitchField name="is_featured" />
-                                    </InputHorizontal>
-                                    {values.is_featured && !isShared && (
-                                      <MessageCard title="This agent is private to you and will only be featured for yourself." />
-                                    )}
-                                  </>
-                                )}
-                              </GeneralLayouts.Section>
-                            </Card>
-
-                            <Card border="solid" rounding="lg">
-                              <GeneralLayouts.Section>
-                                <InputHorizontal
                                   withLabel="llm_model"
                                   title="Default Model"
                                   description="This model will be used by Onyx by default in your chats."
                                 >
-                                  <LLMSelector
-                                    name="llm_model"
-                                    llmProviders={llmProviders ?? []}
-                                    currentLlm={getCurrentLlm(
-                                      values,
-                                      llmProviders
-                                    )}
-                                    onSelect={(selected) =>
-                                      onLlmSelect(selected, setFieldValue)
+                                  <ModelSelector
+                                    value={
+                                      (values.default_model_configuration_id as
+                                        | number
+                                        | null) ?? null
                                     }
+                                    onChange={(opt) =>
+                                      setFieldValue(
+                                        "default_model_configuration_id",
+                                        opt.modelConfigurationId ?? null
+                                      )
+                                    }
+                                    includeGlobalDefault
                                   />
                                 </InputHorizontal>
                                 <InputHorizontal
@@ -1671,19 +1702,51 @@ export default function AgentEditorPage({
                           />
 
                           <Card border="solid" rounding="lg">
-                            <InputHorizontal
-                              title="Delete This Agent"
-                              description="Anyone using this agent will no longer be able to access it."
-                              center
-                            >
-                              <Button
-                                variant="danger"
-                                prominence="secondary"
-                                onClick={() => deleteAgentModal.toggle(true)}
+                            <GeneralLayouts.Section>
+                              {canUpdateFeaturedStatus && (
+                                <InputHorizontal
+                                  title={
+                                    existingAgent.is_listed
+                                      ? "Unlist This Agent"
+                                      : "Relist This Agent"
+                                  }
+                                  description={
+                                    existingAgent.is_listed
+                                      ? "Unlisted agents don't appear in the explore agents list but remain accessible."
+                                      : "Relisted agents appear in the explore agents list again."
+                                  }
+                                  center
+                                >
+                                  <Button
+                                    prominence="tertiary"
+                                    icon={
+                                      existingAgent.is_listed
+                                        ? SvgEyeOff
+                                        : SvgEye
+                                    }
+                                    disabled={isTogglingListed}
+                                    onClick={handleToggleListed}
+                                  >
+                                    {existingAgent.is_listed
+                                      ? "Unlist Agent"
+                                      : "Relist Agent"}
+                                  </Button>
+                                </InputHorizontal>
+                              )}
+                              <InputHorizontal
+                                title="Delete This Agent"
+                                description="Anyone using this agent will no longer be able to access it."
+                                center
                               >
-                                Delete Agent
-                              </Button>
-                            </InputHorizontal>
+                                <Button
+                                  variant="danger"
+                                  prominence="secondary"
+                                  onClick={() => deleteAgentModal.toggle(true)}
+                                >
+                                  Delete Agent
+                                </Button>
+                              </InputHorizontal>
+                            </GeneralLayouts.Section>
                           </Card>
                         </>
                       )}

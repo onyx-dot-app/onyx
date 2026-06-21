@@ -23,6 +23,7 @@ NAMESPACE="onyx"
 OPENSEARCH_PASSWORD=""
 SKIP_CLUSTER_CREATE=0
 SKIP_HELM=0
+KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.33.1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "$SCRIPT_DIR/../charts/onyx" && pwd)"
@@ -65,8 +66,8 @@ if [[ "$SKIP_CLUSTER_CREATE" -eq 0 ]]; then
   if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
     echo "kind cluster '$CLUSTER_NAME' already exists; skipping create"
   else
-    echo "creating kind cluster '$CLUSTER_NAME' ..."
-    kind create cluster --name "$CLUSTER_NAME"
+    echo "creating kind cluster '$CLUSTER_NAME' with node image '$KIND_NODE_IMAGE' ..."
+    kind create cluster --name "$CLUSTER_NAME" --image "$KIND_NODE_IMAGE"
   fi
 fi
 

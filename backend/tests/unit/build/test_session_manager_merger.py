@@ -16,7 +16,7 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.server.features.build.api.packets import ApprovalRequestedPacket
+from onyx.server.features.build.packets import ApprovalRequestedPacket
 from onyx.server.features.build.session import streaming as streaming_mod
 
 

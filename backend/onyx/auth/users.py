@@ -45,6 +45,7 @@ from fastapi_users import models
 from fastapi_users import schemas
 from fastapi_users import UUIDIDMixin
 from fastapi_users.authentication import AuthenticationBackend
+from fastapi_users.authentication import BearerTransport
 from fastapi_users.authentication import CookieTransport
 from fastapi_users.authentication import JWTStrategy
 from fastapi_users.authentication import (
@@ -81,6 +82,9 @@ from onyx.auth.email_utils import send_user_verification_email
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
+from onyx.auth.mobile_sso.sso_completion import apply_mobile_state
+from onyx.auth.mobile_sso.sso_completion import complete_mobile_sso
+from onyx.auth.mobile_sso.sso_completion import is_mobile_sso
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend
 from onyx.auth.schemas import UserCreate
@@ -89,7 +93,9 @@ from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import EMAIL_CONFIGURED
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
@@ -137,9 +143,7 @@ from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import mt_cloud_alias
-from onyx.utils.telemetry import mt_cloud_get_anon_id
-from onyx.utils.telemetry import mt_cloud_identify
+from onyx.utils.telemetry import mt_cloud_identify_user
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -178,6 +182,34 @@ def verify_auth_setting() -> None:
         )
 
     logger.notice("Using Auth Type: %s", AUTH_TYPE.value)
+
+
+def verify_user_auth_secret() -> None:
+    """Refuse to start a real deployment without a USER_AUTH_SECRET.
+
+    The secret signs password-reset and email-verification tokens, OAuth login
+    state, and captcha cookies. An empty value makes all of them forgeable, so a
+    production deployment must provide one. DEV_MODE / INTEGRATION_TESTS_MODE
+    downgrade this to a warning so local and CI environments keep working.
+
+    This only runs on app startup, not during migrations/scripts.
+    """
+    if USER_AUTH_SECRET.strip():
+        return
+
+    message = (
+        "USER_AUTH_SECRET is empty. It signs password-reset and email-"
+        "verification tokens, OAuth login state, and captcha cookies, so an "
+        "empty value lets attackers forge them. Generate one with "
+        "`openssl rand -hex 32` and set USER_AUTH_SECRET."
+    )
+    if DEV_MODE or INTEGRATION_TESTS_MODE:
+        logger.warning(
+            "%s Allowed because DEV_MODE/INTEGRATION_TESTS_MODE is set.", message
+        )
+        return
+
+    raise ValueError(message)
 
 
 def get_display_email(email: str | None, space_less: bool = False) -> str:
@@ -1023,16 +1055,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         except Exception:
             logger.exception("Error deleting anonymous user cookie")
 
-        tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
-
-        # Link the anonymous PostHog session to the identified user so that
-        # pre-login session recordings and events merge into one person profile.
-        if anon_id := mt_cloud_get_anon_id(request):
-            mt_cloud_alias(distinct_id=str(user.id), anonymous_id=anon_id)
-
-        mt_cloud_identify(
+        mt_cloud_identify_user(
             distinct_id=str(user.id),
-            properties={"email": user.email, "tenant_id": tenant_id},
+            email=user.email,
+            request=request,
         )
 
     async def on_after_register(
@@ -1053,15 +1079,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_count = await get_user_count()
             logger.debug("Current tenant user count: %s", user_count)
 
-            # Link the anonymous PostHog session to the identified user so
-            # that pre-signup session recordings merge into one person profile.
-            if anon_id := mt_cloud_get_anon_id(request):
-                mt_cloud_alias(distinct_id=str(user.id), anonymous_id=anon_id)
-
-            # Ensure a PostHog person profile exists for this user.
-            mt_cloud_identify(
+            mt_cloud_identify_user(
                 distinct_id=str(user.id),
-                properties={"email": user.email, "tenant_id": tenant_id},
+                email=user.email,
+                request=request,
+                tenant_id=tenant_id,
             )
 
             mt_cloud_telemetry(
@@ -1299,6 +1321,17 @@ cookie_transport = CookieTransport(
     cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
 )
 
+# Native mobile clients can't use the HttpOnly auth cookie above, so they
+# authenticate with the SAME stateful session token returned/refreshed as a
+# Bearer value (Authorization header) via this transport. `tokenUrl` is only
+# used for OpenAPI docs. The token itself is identical to the web cookie value
+# (see `mobile_auth_backend` below).
+#
+# API keys / PATs also ride in the Authorization header; for those the session
+# strategy's read_token simply finds nothing and the request falls through to
+# Onyx's own API-key/PAT handlers (see `optional_user`).
+bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
+
 
 T = TypeVar("T", covariant=True)
 ID = TypeVar("ID", contravariant=True)
@@ -1529,6 +1562,17 @@ elif AUTH_BACKEND == AuthBackend.JWT:
 else:
     raise ValueError(f"Invalid auth backend: {AUTH_BACKEND}")
 
+# Second backend for native mobile clients: same strategy (so it mints/reads
+# the exact same stateful session token as the cookie backend), but delivered
+# as a Bearer token. fastapi-users namespaces router names by backend name
+# (`auth:mobile-bearer.*`), so the mobile login/refresh/logout routers never
+# collide with the cookie backend's routes.
+mobile_auth_backend = AuthenticationBackend(
+    name="mobile-bearer",
+    transport=bearer_transport,
+    get_strategy=auth_backend.get_strategy,
+)
+
 
 class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
     def get_logout_router(
@@ -1652,7 +1696,7 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
 
 
 fastapi_users = FastAPIUserWithLogoutRouter[User, uuid.UUID](
-    get_user_manager, [auth_backend]
+    get_user_manager, [auth_backend, mobile_auth_backend]
 )
 
 
@@ -2223,6 +2267,11 @@ def get_oauth_router(
         response: Response,
         redirect: bool = Query(False),
         scopes: List[str] = Query(None),
+        # Native-mobile SSO params (guarded/optional). Present => folded into the
+        # signed state so the callback returns a PKCE one-time code, not a cookie.
+        mobile_redirect_uri: str | None = Query(None),
+        app_state: str | None = Query(None),
+        app_code_challenge: str | None = Query(None),
     ) -> Response | OAuth2AuthorizeResponse:
         referral_source = request.cookies.get("referral_source", None)
 
@@ -2242,6 +2291,10 @@ def get_oauth_router(
             "referral_source": referral_source or "default_referral",
             CSRF_TOKEN_KEY: csrf_token,
         }
+        # No-op for web; for mobile, marks the signed state for complete_mobile_sso.
+        apply_mobile_state(
+            state_data, mobile_redirect_uri, app_state, app_code_challenge
+        )
         state = generate_state_token(state_data, state_secret)
         pkce_cookie: tuple[str, str] | None = None
 
@@ -2538,6 +2591,18 @@ def get_oauth_router(
                     OnyxErrorCode.VALIDATION_ERROR,
                     ErrorCode.LOGIN_BAD_CREDENTIALS,
                 )
+
+            # Mobile clients get a PKCE one-time code over a deep link, not a web
+            # cookie. Guarded on the signed-state marker, so the web path below is
+            # byte-for-byte unchanged.
+            if is_mobile_sso(state_data):
+                redirect_response = await complete_mobile_sso(
+                    user, state_data, strategy
+                )
+                # Fire analytics like the web/bearer-login paths (PostHog
+                # identify). No web response here, so its anon-cookie cleanup no-ops.
+                await user_manager.on_after_login(user, request)
+                return redirect_response
 
             # Login user
             response = await backend.login(strategy, user)

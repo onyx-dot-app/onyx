@@ -4,6 +4,20 @@ on:
   pull_request:
     types:
       - closed
+  workflow_dispatch:
+    inputs:
+      merge_commit_sha:
+        description: "Commit SHA to cherry-pick to the latest release branch"
+        required: true
+        type: string
+      pr_number:
+        description: "Source PR number (optional; used for Slack notifications)"
+        required: false
+        type: string
+      release:
+        description: "Target release version, e.g. 2.5 (optional; blank auto-detects the latest release)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -11,14 +25,18 @@ permissions:
 jobs:
   resolve-cherry-pick-request:
     if: >-
-      github.event.pull_request.merged == true
-      && github.event.pull_request.base.ref == 'main'
-      && github.event.pull_request.head.repo.full_name == github.repository
+      github.event_name == 'workflow_dispatch'
+      || (
+        github.event.pull_request.merged == true
+        && github.event.pull_request.base.ref == 'main'
+        && github.event.pull_request.head.repo.full_name == github.repository
+      )
     outputs:
       should_cherrypick: ${{ steps.gate.outputs.should_cherrypick }}
       pr_number: ${{ steps.gate.outputs.pr_number }}
       merge_commit_sha: ${{ steps.gate.outputs.merge_commit_sha }}
       merged_by: ${{ steps.gate.outputs.merged_by }}
+      release: ${{ steps.gate.outputs.release }}
       gate_error: ${{ steps.gate.outputs.gate_error }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -26,13 +44,21 @@ jobs:
       - name: Resolve merged PR and checkbox state
         id: gate
         env:
+          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
           MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
+          # workflow_dispatch inputs (empty for the pull_request path). The
+          # dispatcher is github.actor, used as both assignee and allowlist key.
+          DISPATCH_MERGE_COMMIT_SHA: ${{ github.event.inputs.merge_commit_sha }}
+          DISPATCH_PR_NUMBER: ${{ github.event.inputs.pr_number }}
+          DISPATCH_RELEASE: ${{ github.event.inputs.release }}
+          DISPATCH_ACTOR: ${{ github.actor }}
           # Explicit merger allowlist kept as defense-in-depth even though the
           # cherry-pick job runs with a GitHub App installation token rather
-          # than the default GITHUB_TOKEN.
+          # than the default GITHUB_TOKEN. Also enforced for workflow_dispatch
+          # against the dispatching actor.
           ALLOWED_MERGERS: |
             acaprau
             bo-onyx
@@ -50,23 +76,39 @@ jobs:
             weves
             yuhongsun96
         run: |
-          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
-          echo "merged_by=${MERGED_BY}" >> "$GITHUB_OUTPUT"
+          release=""
+          # workflow_dispatch is an explicit request, so there is no PR body /
+          # checkbox to inspect. Source the gate inputs from the dispatch inputs
+          # and treat the dispatching actor as the merger.
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            PR_NUMBER="${DISPATCH_PR_NUMBER}"
+            MERGE_COMMIT_SHA="${DISPATCH_MERGE_COMMIT_SHA}"
+            MERGED_BY="${DISPATCH_ACTOR}"
+            release="${DISPATCH_RELEASE}"
+          fi
 
-          if ! echo "${PR_BODY}" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
-            echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
-            echo "Cherry-pick checkbox not checked for PR #${PR_NUMBER}. Skipping."
-            exit 0
+          {
+            echo "pr_number=${PR_NUMBER}"
+            echo "merged_by=${MERGED_BY}"
+            echo "release=${release}"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "${EVENT_NAME}" != "workflow_dispatch" ]; then
+            if ! echo "${PR_BODY}" | grep -qiE "\\[x\\][[:space:]]*(\\[[^]]+\\][[:space:]]*)?Please cherry-pick this PR to the latest release version"; then
+              echo "should_cherrypick=false" >> "$GITHUB_OUTPUT"
+              echo "Cherry-pick checkbox not checked for PR #${PR_NUMBER}. Skipping."
+              exit 0
+            fi
           fi
 
           # Keep should_cherrypick output before any possible exit 1 below so
           # notify-slack can still gate on this output even if this job fails.
           echo "should_cherrypick=true" >> "$GITHUB_OUTPUT"
-          echo "Cherry-pick checkbox checked for PR #${PR_NUMBER}."
+          echo "Cherry-pick requested (event: ${EVENT_NAME}, PR #${PR_NUMBER})."
 
           if [ -z "${MERGE_COMMIT_SHA}" ] || [ "${MERGE_COMMIT_SHA}" = "null" ]; then
             echo "gate_error=missing-merge-commit-sha" >> "$GITHUB_OUTPUT"
-            echo "::error::PR #${PR_NUMBER} requested cherry-pick, but merge_commit_sha is missing."
+            echo "::error::Cherry-pick requested, but merge_commit_sha is missing."
             exit 1
           fi
 
@@ -102,6 +144,7 @@ jobs:
           private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
+          permission-workflows: write
 
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -133,10 +176,15 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           CHERRY_PICK_ASSIGNEE: ${{ needs.resolve-cherry-pick-request.outputs.merged_by }}
           MERGE_COMMIT_SHA: ${{ needs.resolve-cherry-pick-request.outputs.merge_commit_sha }}
+          RELEASE: ${{ needs.resolve-cherry-pick-request.outputs.release }}
         run: |
           output_file="$(mktemp)"
+          release_args=()
+          if [ -n "${RELEASE}" ]; then
+            release_args+=(--release "${RELEASE}")
+          fi
           set +e
-          uv run --no-sync --with onyx-devtools ods cherry-pick "${MERGE_COMMIT_SHA}" --yes --no-verify 2>&1 | tee "$output_file"
+          uv run --no-sync --with onyx-devtools ods cherry-pick "${MERGE_COMMIT_SHA}" "${release_args[@]}" --yes --no-verify 2>&1 | tee "$output_file"
           pipe_statuses=("${PIPESTATUS[@]}")
           exit_code="${pipe_statuses[0]}"
           tee_exit="${pipe_statuses[1]:-0}"
@@ -160,7 +208,15 @@ jobs:
           echo "status=failure" >> "$GITHUB_OUTPUT"
 
           reason="command-failed"
-          if grep -qiE "merge conflict during cherry-pick|CONFLICT|could not apply|cherry-pick in progress with staged changes" "$output_file"; then
+          # The token requests `workflows` write (see the create-github-app-token
+          # step), but that only takes effect if the GitHub App installation has
+          # actually been granted the Workflows permission. If it hasn't, pushing a
+          # cherry-pick that touches .github/workflows is still rejected by the
+          # remote. Keep detecting that specific rejection so the Slack alert can
+          # explain it clearly instead of surfacing a raw git error.
+          if grep -qiE "refusing to allow .* to (create or update|update) workflow|without [^[:space:]]*workflows[^[:space:]]* permission" "$output_file"; then
+            reason="workflow-permission"
+          elif grep -qiE "merge conflict during cherry-pick|CONFLICT|could not apply|cherry-pick in progress with staged changes" "$output_file"; then
             reason="merge-conflict"
           fi
           echo "reason=${reason}" >> "$GITHUB_OUTPUT"
@@ -209,8 +265,11 @@ jobs:
           MERGE_COMMIT_SHA: ${{ needs.resolve-cherry-pick-request.outputs.merge_commit_sha }}
           CHERRY_PICK_PR_URL: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_pr_url }}
         run: |
-          source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
-          details="*Cherry-pick PR opened successfully.*\\n• author: {mention}\\n• source PR: ${source_pr_url}"
+          details="*Cherry-pick PR opened successfully.*\\n• author: {mention}"
+          if [ -n "${SOURCE_PR_NUMBER}" ]; then
+            source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
+            details="${details}\\n• source PR: ${source_pr_url}"
+          fi
           if [ -n "${CHERRY_PICK_PR_URL}" ]; then
             details="${details}\\n• cherry-pick PR: ${CHERRY_PICK_PR_URL}"
           fi
@@ -261,8 +320,6 @@ jobs:
           CHERRY_PICK_REASON: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_reason }}
           CHERRY_PICK_DETAILS: ${{ needs.cherry-pick-to-latest-release.outputs.cherry_pick_details }}
         run: |
-          source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
-
           reason_text="cherry-pick command failed"
           if [ "${GATE_ERROR}" = "missing-merge-commit-sha" ]; then
             reason_text="requested cherry-pick but merge commit SHA was missing"
@@ -272,6 +329,8 @@ jobs:
             reason_text="failed to capture cherry-pick output for classification"
           elif [ "${CHERRY_PICK_REASON}" = "merge-conflict" ]; then
             reason_text="merge conflict during cherry-pick"
+          elif [ "${CHERRY_PICK_REASON}" = "workflow-permission" ]; then
+            reason_text="PR changes .github/workflows, which the cherry-pick GitHub App is not permitted to push — please cherry-pick this PR manually"
           fi
 
           details_excerpt="$(printf '%s' "${CHERRY_PICK_DETAILS}" | tail -n 8 | tr '\n' ' ' | sed "s/[[:space:]]\\+/ /g" | sed "s/\"/'/g" | cut -c1-350)"
@@ -280,7 +339,12 @@ jobs:
           else
             failed_job_label="cherry-pick-to-latest-release"
           fi
-          details="• author: {mention}\\n• ${failed_job_label}\\n• source PR: ${source_pr_url}\\n• reason: ${reason_text}"
+          details="• author: {mention}\\n• ${failed_job_label}"
+          if [ -n "${SOURCE_PR_NUMBER}" ]; then
+            source_pr_url="https://github.com/${GITHUB_REPOSITORY}/pull/${SOURCE_PR_NUMBER}"
+            details="${details}\\n• source PR: ${source_pr_url}"
+          fi
+          details="${details}\\n• reason: ${reason_text}"
           if [ -n "${MERGE_COMMIT_SHA}" ]; then
             details="${details}\\n• merge SHA: ${MERGE_COMMIT_SHA}"
           fi

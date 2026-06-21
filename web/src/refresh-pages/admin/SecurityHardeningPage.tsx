@@ -25,12 +25,21 @@ import type { RichStr } from "@opal/types";
 
 const route = ADMIN_ROUTES.SECURITY_HARDENING;
 
+// Outbound-request validation policy. Mirrors `SSRFProtectionLevel`
+// in backend/onyx/server/security/models.py.
+type SSRFProtectionLevel =
+  | "validate_all"
+  | "validate_llm"
+  | "allow_private_network"
+  | "disabled";
+
 // Read shape: the effective, env-merged settings returned by GET /admin/security.
 // Every field is concrete — the backend never returns null here (see
 // `SecuritySettings` in backend/onyx/server/security/models.py).
 interface SecuritySettings {
   user_directory_admin_only: boolean;
   track_external_idp_expiry: boolean;
+  ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
   valid_email_domains: string[];
   password_min_length: number;
@@ -428,6 +437,71 @@ export default function SecurityHardeningPage() {
             </Section>
           </Card>
         </div>
+
+        {/* Network Safety (single-tenant only — SSRF policy is operator-controlled,
+            so it stays env-driven in multi-tenant cloud). */}
+        {!isMultiTenant && (
+          <div className="flex w-full flex-col gap-3">
+            <Content
+              title="Network Safety"
+              sizePreset="main-content"
+              variant="section"
+            />
+
+            <Card border="solid" rounding="lg">
+              <Section>
+                <InputHorizontal
+                  title="SSRF Protection"
+                  description="Validate outbound requests against private or internal IPs for Server-Side Request Forgery (SSRF) protection."
+                  withLabel
+                >
+                  <div className="w-60">
+                    <InputSelect
+                      value={draft.ssrf_protection_level}
+                      onValueChange={(value) =>
+                        void saveSettings({
+                          ssrf_protection_level: value as SSRFProtectionLevel,
+                        })
+                      }
+                    >
+                      <InputSelect.Trigger />
+                      <InputSelect.Content>
+                        <InputSelect.Item
+                          value="validate_all"
+                          wrapDescription
+                          description="Most restrictive. All outbound requests refuse to reach private or internal IPs, including web connectors."
+                        >
+                          Validate All Requests
+                        </InputSelect.Item>
+                        <InputSelect.Item
+                          value="validate_llm"
+                          wrapDescription
+                          description="Validate all LLM-initiated URL fetches. Admin-configured connectors can still reach private or internal IPs."
+                        >
+                          Validate LLM Requests
+                        </InputSelect.Item>
+                        <InputSelect.Item
+                          value="allow_private_network"
+                          wrapDescription
+                          description="Like Validate LLM Requests, but admin-configured MCP/OAuth endpoints may also reach private LAN hosts. Loopback (the app host itself) and cloud-metadata stay blocked."
+                        >
+                          Allow Private Network
+                        </InputSelect.Item>
+                        <InputSelect.Item
+                          value="disabled"
+                          wrapDescription
+                          description="Use only in trusted networks. Allow all outbound requests — required for connecting to local LLM backends."
+                        >
+                          Disabled
+                        </InputSelect.Item>
+                      </InputSelect.Content>
+                    </InputSelect>
+                  </div>
+                </InputHorizontal>
+              </Section>
+            </Card>
+          </div>
+        )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

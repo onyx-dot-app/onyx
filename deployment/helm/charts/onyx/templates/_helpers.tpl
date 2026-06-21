@@ -202,6 +202,35 @@ Return the configured autoscaling engine; defaults to HPA when unset.
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}
 
+{{- define "onyx.sandboxProxyHost" -}}
+{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s-sandbox-proxy.%s.svc.cluster.local" (include "onyx.fullname" .) .Release.Namespace) -}}
+{{- end }}
+
+{{- define "onyx.sandboxProxyPort" -}}
+8080
+{{- end }}
+
+{{- define "onyx.sandboxPushDaemonPort" -}}
+8731
+{{- end }}
+
+{{/* Sandbox egress-proxy env. Mirrors _proxy_main_container_env_vars(). */}}
+{{- define "onyx.sandboxProxyEnv" -}}
+{{- $proxyUrl := printf "http://sandbox-proxy:%v" .proxyPort }}
+- { name: HTTPS_PROXY, value: "{{ $proxyUrl }}" }
+- { name: HTTP_PROXY, value: "{{ $proxyUrl }}" }
+- { name: https_proxy, value: "{{ $proxyUrl }}" }
+- { name: http_proxy, value: "{{ $proxyUrl }}" }
+- { name: NO_PROXY, value: "127.0.0.1,localhost" }
+- { name: no_proxy, value: "127.0.0.1,localhost" }
+- { name: NODE_EXTRA_CA_CERTS, value: "{{ .caBundleFile }}" }
+- { name: REQUESTS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
+- { name: SSL_CERT_FILE, value: "{{ .caBundleFile }}" }
+- { name: AWS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
+- { name: CURL_CA_BUNDLE, value: "{{ .caBundleFile }}" }
+- { name: GIT_SSL_CAINFO, value: "{{ .caBundleFile }}" }
+{{- end }}
+
 {{/*
 "true" when custom CA certificates are configured, empty otherwise.
 */}}

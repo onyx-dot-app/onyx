@@ -32,7 +32,10 @@ tests under ``tests/integration/tests/craft/`` keep the in-process model.
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Generator
+from typing import Protocol
+from uuid import UUID
 
 import httpx
 import pytest
@@ -44,8 +47,77 @@ from onyx.db.external_app import create_external_app
 from onyx.db.external_app import get_built_in_external_app
 from tests.integration.common_utils import http_client
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
+from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.test_models import DATestUser
+
+
+class DockerExec(Protocol):
+    def __call__(
+        self,
+        container: str,
+        cmd: list[str],
+        *,
+        timeout: float = 30.0,
+        user: str | None = None,
+    ) -> subprocess.CompletedProcess[str]: ...
+
+
+class ProvisionSandbox(Protocol):
+    def __call__(self, user: DATestUser) -> tuple[UUID, str]: ...
+
+
+def _container_name(sandbox_id: str) -> str:
+    """Docker manager names containers ``sandbox-<id8>``."""
+    return f"sandbox-{sandbox_id.split('-')[0]}"
+
+
+def _docker_exec(
+    container: str,
+    cmd: list[str],
+    *,
+    timeout: float = 30.0,
+    user: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Runs ``cmd`` inside ``container`` and captures stdout/stderr."""
+    command = ["docker", "exec"]
+    if user is not None:
+        command.extend(["--user", user])
+    command.extend([container, *cmd])
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def _provision_sandbox(user: DATestUser) -> tuple[UUID, str]:
+    """
+    Creates a session via the real API and returns its (session_id, container).
+
+    The create endpoint is synchronous -- by the time it returns, the sandbox
+    container is RUNNING and opencode-serve has passed its health check.
+    """
+    session = BuildSessionManager.create(user)
+    sandbox = session["sandbox"]
+    assert sandbox is not None, f"Session response missing sandbox: {session!r}"
+    assert sandbox["status"].upper() == "RUNNING", (
+        f"Sandbox not RUNNING after create: {sandbox['status']!r}"
+    )
+    return UUID(session["id"]), _container_name(sandbox["id"])
+
+
+@pytest.fixture(scope="session")
+def docker_exec() -> DockerExec:
+    return _docker_exec
+
+
+@pytest.fixture(scope="session")
+def provision_sandbox() -> ProvisionSandbox:
+    return _provision_sandbox
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -76,13 +148,14 @@ def _start_celery_workers() -> Generator[None, None, None]:
     yield None
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def _module_reset_and_seed() -> None:
     """
     Override: Skip the parent's ``reset_all()``. The dockerized api_server holds
     pooled postgres connections; an out-of-process ``alembic downgrade base``
-    deadlocks against those. Admin + LLM provider seed is retained because gate
-    tests need a configured provider.
+    deadlocks against those. Admin + LLM provider seeding is session-scoped
+    because this directory has multiple test modules and ``UserManager.create``
+    is not idempotent for the fixed admin email.
     """
     admin = UserManager.create(name=ADMIN_USER_NAME)
     LLMProviderManager.create(user_performing_action=admin, api_key="test-api-key")
@@ -111,9 +184,8 @@ def slack_external_app() -> None:
                 app_type=ExternalAppType.SLACK,
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
-                # Fake token so app_is_available -> True. An unfillable template
-                # short-circuits the ASK gate (forwards bare, no DB row), which
-                # breaks every gate-flow test.
+                # Fake token. An unfillable template short-circuits the ASK gate
+                # (forwards bare, no DB row), which breaks every gate-flow test.
                 organization_credentials={"access_token": "fake-test-token"},
                 enabled=True,
                 is_public=True,

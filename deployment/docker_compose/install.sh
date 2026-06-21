@@ -892,7 +892,7 @@ fi
 if [[ "$LITE_MODE" = false ]]; then
     print_info "Which deployment mode would you like?"
     echo ""
-    echo "  1) Lite      - Minimal deployment (no Vespa, Redis, or model servers)"
+    echo "  1) Lite      - Minimal deployment (no OpenSearch, Redis, or model servers)"
     echo "                  LLM chat, tools, file uploads, and Projects still work"
     echo "  2) Standard  - Full deployment with search, connectors, and RAG"
     echo ""
@@ -1105,11 +1105,14 @@ else
     sed -i.bak "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" "$ENV_FILE"
     print_success "IMAGE_TAG set to $VERSION"
 
-    # In lite mode, clear COMPOSE_PROFILES so profiled services (MinIO, etc.)
-    # stay disabled — the template ships with s3-filestore enabled by default.
+    # In lite mode, MinIO never starts (COMPOSE_PROFILES cleared) and the
+    # onyx-lite overlay forces FILE_STORE_BACKEND=postgres at runtime; set it in
+    # .env too so the file isn't misleadingly left on s3 (the MinIO/S3 creds
+    # generated below are then unused, but stay ready if s3-filestore is enabled).
     if [[ "$LITE_MODE" = true ]]; then
         sed -i.bak 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=/' "$ENV_FILE" 2>/dev/null || true
-        print_success "Cleared COMPOSE_PROFILES for lite mode"
+        sed -i.bak 's/^FILE_STORE_BACKEND=.*/FILE_STORE_BACKEND=postgres/' "$ENV_FILE" 2>/dev/null || true
+        print_success "Cleared COMPOSE_PROFILES and set FILE_STORE_BACKEND=postgres for lite mode"
     fi
 
     # Configure basic authentication (default)
@@ -1125,6 +1128,15 @@ else
     # Generate a secure USER_AUTH_SECRET
     USER_AUTH_SECRET=$(openssl rand -hex 32)
     sed -i.bak "s/^USER_AUTH_SECRET=.*/USER_AUTH_SECRET=\"$USER_AUTH_SECRET\"/" "$ENV_FILE" 2>/dev/null || true
+
+    # Random MinIO/S3 credentials instead of the minioadmin default. The app uses
+    # MinIO's root creds, so the same pair goes to both the server and app vars.
+    MINIO_ACCESS_KEY=$(openssl rand -hex 16)
+    MINIO_SECRET_KEY=$(openssl rand -hex 32)
+    sed -i.bak "s/^MINIO_ROOT_USER=.*/MINIO_ROOT_USER=$MINIO_ACCESS_KEY/" "$ENV_FILE" 2>/dev/null || true
+    sed -i.bak "s/^MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=$MINIO_SECRET_KEY/" "$ENV_FILE" 2>/dev/null || true
+    sed -i.bak "s/^S3_AWS_ACCESS_KEY_ID=.*/S3_AWS_ACCESS_KEY_ID=$MINIO_ACCESS_KEY/" "$ENV_FILE" 2>/dev/null || true
+    sed -i.bak "s/^S3_AWS_SECRET_ACCESS_KEY=.*/S3_AWS_SECRET_ACCESS_KEY=$MINIO_SECRET_KEY/" "$ENV_FILE" 2>/dev/null || true
 
     # Configure Craft based on --include-craft.
     # By default, env.template has Craft commented out (disabled).

@@ -41,6 +41,31 @@ class TestReadPdfFile:
         assert "Page one content" in text
         assert "Page two content" in text
 
+    def test_text_extraction_uses_pdfium(self) -> None:
+        """Text extraction goes through pypdfium2 (GIL-releasing), not pypdf."""
+        text = extract_file_text._extract_pdf_text_pdfium(
+            (FIXTURES / "multipage.pdf").read_bytes(), None
+        )
+        assert "Page one content" in text
+        assert "Page two content" in text
+
+    def test_falls_back_to_pypdf_when_pdfium_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PDFium is stricter than pypdf and rejects some PDFs pypdf can read.
+        When PDFium raises, text extraction falls back to pypdf so the document
+        is still indexed rather than silently dropped."""
+
+        from pypdfium2 import PdfiumError
+
+        def _raise(*_args: object, **_kwargs: object) -> str:
+            raise PdfiumError("Failed to load document (PDFium: Data format error).")
+
+        monkeypatch.setattr(extract_file_text, "_extract_pdf_text_pdfium", _raise)
+        text, _, _ = read_pdf_file(_load("multipage.pdf"))
+        assert "Page one content" in text
+        assert "Page two content" in text
+
     def test_metadata_extraction(self) -> None:
         _, pdf_metadata, _ = read_pdf_file(_load("with_metadata.pdf"))
         assert pdf_metadata.get("Title") == "My Title"

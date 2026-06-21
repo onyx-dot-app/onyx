@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
@@ -32,17 +33,17 @@ type Model struct {
 
 	// Chat state
 	chatSessionID   *string
-	agentID       int
-	agentName     string
-	agents        []models.AgentSummary
+	agentID         int
+	agentName       string
+	agents          []models.AgentSummary
 	parentMessageID *int
-	isStreaming      bool
+	isStreaming     bool
 	streamCancel    context.CancelFunc
 	streamCh        <-chan models.StreamEvent
 	citations       map[int]string
 	attachedFiles   []models.FileDescriptorPayload
 	needsRename     bool
-	agentStarted bool
+	agentStarted    bool
 
 	// Configure state
 	configState *configState
@@ -63,8 +64,8 @@ func NewModel(cfg config.OnyxCliConfig, client api.ClientAPI) Model {
 		viewport:        newViewport(80, cfg.Features.StreamMarkdownEnabled()),
 		input:           newInputModel(),
 		status:          newStatusBar(),
-		agentID:       cfg.DefaultAgentID,
-		agentName:     "Default",
+		agentID:         cfg.DefaultAgentID,
+		agentName:       "Default",
 		parentMessageID: &parentID,
 		citations:       make(map[int]string),
 	}
@@ -103,7 +104,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.viewport.setWidth(msg.Width)
 		m.status.setWidth(msg.Width)
-		m.input.textInput.Width = msg.Width - 4
+		m.input.textInput.SetWidth(msg.Width - 4)
 		if !m.splashShown {
 			m.splashShown = true
 			viewportHeight := msg.Height - 4
@@ -117,17 +118,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.MouseMsg:
-		switch msg.Button {
-		case tea.MouseButtonWheelUp:
+	case tea.MouseWheelMsg:
+		switch msg.Mouse().Button {
+		case tea.MouseWheelUp:
 			m.viewport.scrollUp(3, m.viewportHeight())
 			return m, nil
-		case tea.MouseButtonWheelDown:
+		case tea.MouseWheelDown:
 			m.viewport.scrollDown(3)
 			return m, nil
 		}
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
 	case submitMsg:
@@ -169,9 +170,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.textInput.SetValue("")
 		if m.startMode == startFirstRun {
 			m, cmd := enterConfigureMode(m)
-			return m, tea.Batch(m.input.textInput.Cursor.BlinkCmd(), cmd)
+			return m, tea.Batch(textinput.Blink, cmd)
 		}
-		return m, m.input.textInput.Cursor.BlinkCmd()
+		return m, textinput.Blink
 
 	case resetQuitMsg:
 		m.quitPending = false
@@ -206,9 +207,9 @@ func (m Model) viewportHeight() int {
 	return h
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	if m.width == 0 || m.height == 0 {
-		return ""
+		return appView("")
 	}
 
 	separator := lipgloss.NewStyle().Foreground(separatorColor).Render(
@@ -228,13 +229,20 @@ func (m Model) View() string {
 	parts = append(parts, separator)
 	parts = append(parts, m.status.view())
 
-	return strings.Join(parts, "\n")
+	return appView(strings.Join(parts, "\n"))
+}
+
+func appView(content string) tea.View {
+	view := tea.NewView(content)
+	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
+	return view
 }
 
 // handleKey processes keyboard input.
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEscape:
+func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
 		if m.input.menuVisible {
 			m.input.menuVisible = false
 			return m, nil
@@ -251,7 +259,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyCtrlD:
+	case "ctrl+d":
 		if m.configState != nil {
 			return m.cancelConfigure()
 		}
@@ -267,11 +275,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return resetQuitMsg{}
 		})
 
-	case tea.KeyCtrlO:
+	case "ctrl+o":
 		m.viewport.showSources = !m.viewport.showSources
 		return m, nil
 
-	case tea.KeyEnter:
+	case "enter":
 		if m.configState != nil {
 			text := strings.TrimSpace(m.input.textInput.Value())
 			m.input.textInput.SetValue("")
@@ -294,7 +302,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	case tea.KeyUp:
+	case "up":
 		if m.viewport.pickerActive {
 			if m.viewport.pickerIndex > 0 {
 				m.viewport.pickerIndex--
@@ -302,7 +310,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	case tea.KeyDown:
+	case "down":
 		if m.viewport.pickerActive {
 			if m.viewport.pickerIndex < len(m.viewport.pickerItems)-1 {
 				m.viewport.pickerIndex++
@@ -310,19 +318,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	case tea.KeyPgUp:
+	case "pgup":
 		m.viewport.scrollUp(m.viewportHeight()/2, m.viewportHeight())
 		return m, nil
 
-	case tea.KeyPgDown:
+	case "pgdown":
 		m.viewport.scrollDown(m.viewportHeight() / 2)
 		return m, nil
 
-	case tea.KeyShiftUp:
+	case "shift+up":
 		m.viewport.scrollUp(3, m.viewportHeight())
 		return m, nil
 
-	case tea.KeyShiftDown:
+	case "shift+down":
 		m.viewport.scrollDown(3)
 		return m, nil
 	}
@@ -667,4 +675,3 @@ func (m Model) handleFileUploaded(msg FileUploadedMsg) (tea.Model, tea.Cmd) {
 
 type inputReadyMsg struct{}
 type resetQuitMsg struct{}
-

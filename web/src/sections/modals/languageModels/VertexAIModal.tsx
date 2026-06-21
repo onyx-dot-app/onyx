@@ -22,7 +22,7 @@ import {
   BaseLLMFormValues,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
-import { LLMProviderConfiguredSource } from "@/lib/analytics";
+import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   ModelSelectionField,
   DisplayNameField,
@@ -31,7 +31,7 @@ import {
 } from "@/sections/modals/languageModels/shared";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { toast } from "@/hooks/useToast";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 
 const VERTEXAI_DEFAULT_LOCATION = "global";
 
@@ -63,8 +63,8 @@ function VertexAIModalInternals({
 }: VertexAIModalInternalsProps) {
   const formikProps = useFormikContext<VertexAIModalValues>();
   const authMethod = formikProps.values.custom_config?.vertex_auth_method;
-  const settingsContext = useSettingsContext();
-  const isMultiTenant = !settingsContext.settings.hooks_enabled;
+  const settings = useSettings();
+  const isMultiTenant = !settings.hooks_enabled;
 
   useEffect(() => {
     if (authMethod === AUTH_METHOD_WORKLOAD_IDENTITY) {

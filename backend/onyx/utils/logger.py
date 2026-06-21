@@ -11,6 +11,7 @@ from shared_configs.configs import DEV_LOGGING_ENABLED
 from shared_configs.configs import JSON_LOGGING
 from shared_configs.configs import LOG_FILE_NAME
 from shared_configs.configs import LOG_LEVEL
+from shared_configs.configs import LOG_TO_FILE
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SLACK_CHANNEL_ID
@@ -255,6 +256,44 @@ def get_standard_formatter() -> logging.Formatter:
     )
 
 
+def _add_file_handlers(logger: logging.Logger, formatter: logging.Formatter) -> None:
+    # Opt-out via LOG_TO_FILE: pods that can't write log files (e.g. read-only-root
+    # containers) set it false and rely on the stdout handler.
+    if not LOG_TO_FILE:
+        return
+
+    is_containerized = is_running_in_container()
+    if not LOG_FILE_NAME or not (is_containerized or DEV_LOGGING_ENABLED):
+        return
+
+    for level in ["debug", "info", "notice"]:
+        file_name = (
+            f"/var/log/onyx/{LOG_FILE_NAME}_{level}.log"
+            if is_containerized
+            else f"./log/{LOG_FILE_NAME}_{level}.log"
+        )
+        # Ensure the log directory exists
+        log_dir = os.path.dirname(file_name)
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+
+        # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
+        if DEV_LOGGING_ENABLED and os.path.exists(file_name):
+            try:
+                open(file_name, "w").close()  # Truncate the file
+            except Exception:
+                pass  # Ignore errors, just proceed with normal logging
+
+        file_handler = RotatingFileHandler(
+            file_name,
+            maxBytes=25 * 1024 * 1024,  # 25 MB
+            backupCount=5,  # Keep 5 backup files
+        )
+        file_handler.setLevel(get_log_level_from_str(level))
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
+
 def setup_logger(
     name: str = __name__,
     log_level: int = get_log_level_from_str(),
@@ -277,35 +316,7 @@ def setup_logger(
 
     logger.addHandler(handler)
 
-    is_containerized = is_running_in_container()
-    if LOG_FILE_NAME and (is_containerized or DEV_LOGGING_ENABLED):
-        log_levels = ["debug", "info", "notice"]
-        for level in log_levels:
-            file_name = (
-                f"/var/log/onyx/{LOG_FILE_NAME}_{level}.log"
-                if is_containerized
-                else f"./log/{LOG_FILE_NAME}_{level}.log"
-            )
-            # Ensure the log directory exists
-            log_dir = os.path.dirname(file_name)
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir, exist_ok=True)
-
-            # Truncate log file if DEV_LOGGING_ENABLED (for clean dev experience)
-            if DEV_LOGGING_ENABLED and os.path.exists(file_name):
-                try:
-                    open(file_name, "w").close()  # Truncate the file
-                except Exception:
-                    pass  # Ignore errors, just proceed with normal logging
-
-            file_handler = RotatingFileHandler(
-                file_name,
-                maxBytes=25 * 1024 * 1024,  # 25 MB
-                backupCount=5,  # Keep 5 backup files
-            )
-            file_handler.setLevel(get_log_level_from_str(level))
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
+    _add_file_handlers(logger, formatter)
 
     logger.notice = (  # type: ignore
         lambda msg, *args, **kwargs: logger.log(

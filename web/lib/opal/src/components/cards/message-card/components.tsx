@@ -35,6 +35,9 @@ interface MessageCardBaseProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
+  /** Let the title wrap to multiple lines instead of truncating to one. */
+  titleWrap?: boolean;
+
   /** Padding preset. @default "sm" */
   padding?: Extract<PaddingVariants, "sm" | "xs">;
 
@@ -124,6 +127,7 @@ function MessageCard({
   icon: iconOverride,
   title,
   description,
+  titleWrap,
   padding = "sm",
   headerPadding = "fit",
   bottomChildren,
@@ -160,6 +164,7 @@ function MessageCard({
           )}
           title={title}
           description={description}
+          titleWrap={titleWrap}
           sizePreset="main-ui"
           variant="section"
           padding="md"

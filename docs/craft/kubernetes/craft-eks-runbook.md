@@ -32,7 +32,7 @@ Craft provisions a sandbox + snapshot/restore, with no manual kubectl/RBAC/node 
 | `cluster_name` | `aws eks update-kubeconfig` (then helm targets the cluster) |
 | `postgres_endpoint` / redis / `opensearch_endpoint` | `configMap.POSTGRES_HOST` / `REDIS_HOST` / `OPENSEARCH_HOST` |
 | file-store bucket name | `configMap.S3_FILE_STORE_BUCKET_NAME` |
-| workload role ARN | `serviceAccount.annotations` (recommended) |
+| workload role ARN | `serviceAccount.annotations` and, when the proxy uses IAM-authenticated RDS, `sandboxProxy.serviceAccount.annotations` |
 
 Craft snapshots now use the normal Onyx FileStore from the API server/Celery
 path. Do not configure `SANDBOX_S3_BUCKET`, `craft.sandboxFileSyncRoleArn`, or
@@ -100,6 +100,7 @@ opencode auth/config.
 | `craft.extraBoundServiceAccounts` | Only for additional managers | Extra release-namespace ServiceAccounts that should manage sandboxes. |
 | `configMap.SANDBOX_SERVICE_ACCOUNT_NAME` | Optional | Defaults to `sandbox`; the chart renders the matching ServiceAccount in `onyx-sandboxes`. |
 | `sandboxProxy.*` | Existing Craft proxy config | Controls sandbox proxy replicas, ports, resources, CA names, scheduling, and security context. |
+| `sandboxProxy.serviceAccount.annotations` | Required for RDS IAM auth when the main workload SA is not Helm-created | Adds IRSA annotations to the chart-created sandbox-proxy ServiceAccount. |
 
 ## 2. How the sandbox node group works
 
@@ -197,16 +198,28 @@ so the app workload identity must have access to the main file-store bucket.
 ### Required managed-service wiring (chart `configMap`)
 Point at the terraform endpoints; disable in-cluster deps:
 - `postgresql.enabled/redis.enabled/opensearch.enabled/minio.enabled: false`; `serviceAccount.name: onyx-workload-access` (IRSA), `auth.objectstorage.enabled: false`.
-- RDS: `POSTGRES_HOST`, `PGSSLMODE=require`. ElastiCache: `REDIS_HOST`, `REDIS_SSL=true`, `REDIS_SSL_CERT_REQS=none`, `auth.redis.enabled=false` (no auth token).
+- RDS: `POSTGRES_HOST`, `PGSSLMODE=require`. If `USE_IAM_AUTH=true`, the sandbox-proxy ServiceAccount must also be trusted by the workload IRSA role and annotated with that same role ARN. Set Terraform `irsa_additional_service_account_names` to the rendered sandbox-proxy ServiceAccount name (`onyx-sandbox-proxy` for release `onyx`; verify with `helm template` for other release names). In Helm values, set the proxy annotation:
+
+```yaml
+sandboxProxy:
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: <workload_irsa_role_arn>
+```
+
+- ElastiCache: `REDIS_HOST`, `REDIS_SSL=true`, `REDIS_SSL_CERT_REQS=none`, `auth.redis.enabled=false` (no auth token).
 - OpenSearch (v4.0 search backend): `ONYX_DISABLE_VESPA=true`, `ENABLE_OPENSEARCH_INDEXING/RETRIEVAL_FOR_ONYX=true`, `USING_AWS_MANAGED_OPENSEARCH=true`, `OPENSEARCH_REST_API_PORT=443`, `OPENSEARCH_USE_SSL=true`, `OPENSEARCH_ADMIN_USERNAME=admin`.
 - S3: `S3_FILE_STORE_BUCKET_NAME`, `S3_ENDPOINT_URL=""`, `AWS_REGION_NAME`.
 - Craft: `ENABLE_CRAFT=true`, `SANDBOX_API_SERVER_URL=http://onyx-api-service.onyx.svc.cluster.local:8080`, `auth.sandboxPushSecret.enabled=true`. (`SANDBOX_SERVICE_ACCOUNT_NAME`/`SANDBOX_CONTAINER_IMAGE` default correctly.)
 
 ### Images
-`global.version: edge` (backend/web/model-server — the moving build from `main`; or a release
-`vX.Y.Z`). Craft is enabled at runtime via `ENABLE_CRAFT=true` — there are no craft-specific app
-images (see [image architecture](../image-architecture.md)). `code-interpreter`: `latest`. Sandbox
-image default tracks the current `onyxdotapp/sandbox:vX.Y.Z`.
+Use an immutable release tag for Kubernetes customer Craft deployments, e.g.
+`global.version: vX.Y.Z`. Internal mainline clusters may use `edge` with
+`SANDBOX_IMAGE_PULL_POLICY=Always`. Craft is enabled at runtime via
+`ENABLE_CRAFT=true` — there are no craft-specific app images (see
+[image architecture](../infra/image-architecture.md)). `code-interpreter`:
+`latest`. Sandbox image default tracks the same app tag via
+`onyxdotapp/sandbox:${global.version}`.
 
 ---
 
@@ -357,6 +370,12 @@ kubectl get nodes -l onyx.app/workload=sandbox
 
 # The sandbox SA exists, has no IRSA annotation, and does not automount tokens.
 kubectl -n onyx-sandboxes get sa sandbox -o yaml
+
+# The sandbox proxy is a DB client; with RDS IAM auth it must have the workload
+# role annotation and that role must trust this SA subject.
+kubectl -n onyx get sa onyx-sandbox-proxy -o yaml
+aws iam get-role --role-name AmazonEKSTFWorkloadAccessRole-<cluster-name> \
+  --query 'Role.AssumeRolePolicyDocument.Statement[].Condition.StringEquals'
 ```
 
 ## 5. Lead infra TODO coverage
@@ -414,8 +433,10 @@ The lead infra TODO list in `docs/craft/infra/todos.md` is accounted for as:
   `aws s3 rm` the buckets first, then destroy.
 - `sandbox-proxy` is a DB/Redis client, not just a forward proxy: its `gate.py` resolves tenant / sandbox /
   egress-policy from **RDS** (and uses **Redis**) on every request, so it needs the same managed-service
-  wiring + network reachability as the app pods. Verified: proxy node SG → RDS:5432 path open and an
-  authenticated query succeeds; the gate logs `tenant_id=…/sandbox_id=…` resolved per request.
+  wiring + network reachability as the app pods. With RDS IAM auth this includes both the IRSA annotation on
+  `ServiceAccount/onyx-sandbox-proxy` and the matching role trust policy subject. Verified: proxy node SG →
+  RDS:5432 path open and an authenticated query succeeds; the gate logs `tenant_id=…/sandbox_id=…` resolved
+  per request.
 - Teardown order/gotchas: `helm uninstall` before `terraform destroy` (else the `onyx` namespace hangs on
   finalizers). The VPC CNI can leave orphaned `available` `aws-K8S-*` ENIs that pin the node SG/subnets →
   `destroy` hangs ~15 min then fails on `DependencyViolation`; delete those ENIs, then re-run destroy.

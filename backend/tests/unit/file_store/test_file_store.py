@@ -697,7 +697,7 @@ class TestGCSFileStore:
             mock_db_session.rollback.assert_not_called()
 
     def test_gcs_change_file_id_mock(self) -> None:
-        """Test GCS change_file_id copies blob, upserts new record, and deletes old"""
+        """change_file_id repoints the record at the same blob — no copy/delete."""
         mock_record = Mock(
             bucket_name="test-bucket",
             object_key="onyx-files/public/old-id",
@@ -706,14 +706,7 @@ class TestGCSFileStore:
             file_type="text/plain",
             file_metadata=None,
         )
-        mock_source_blob = Mock()
-        mock_source_bucket = Mock()
-        mock_source_bucket.blob.return_value = mock_source_blob
-        mock_dest_bucket = Mock()
-
         mock_client = Mock()
-        # First call returns source bucket, second returns destination bucket
-        mock_client.bucket.side_effect = [mock_source_bucket, mock_dest_bucket]
 
         mock_db_session = MagicMock()
 
@@ -744,22 +737,19 @@ class TestGCSFileStore:
                 db_session=mock_db_session,
             )
 
-            new_key = "onyx-files/public/new-id"
-            mock_source_bucket.copy_blob.assert_called_once_with(
-                mock_source_blob, mock_dest_bucket, new_key
-            )
+            # New record reuses the old bucket/object — the blob never moves.
             mock_upsert.assert_called_once()
             assert mock_upsert.call_args.kwargs["file_id"] == "new-id"
             assert mock_upsert.call_args.kwargs["bucket_name"] == "test-bucket"
-            assert mock_upsert.call_args.kwargs["object_key"] == new_key
+            assert (
+                mock_upsert.call_args.kwargs["object_key"] == "onyx-files/public/old-id"
+            )
             mock_delete_record.assert_called_once_with(
                 file_id="old-id", db_session=mock_db_session
             )
             mock_db_session.commit.assert_called_once()
-            mock_source_blob.delete.assert_called_once()
-            # Source blob deletion must happen after the DB commit
-            commit_call_order = mock_db_session.commit.call_args_list
-            assert commit_call_order, "expected db_session.commit to have been called"
+            # The GCS client is never touched at all — no copy, no delete.
+            mock_client.bucket.assert_not_called()
 
     def test_gcs_get_file_size_mock(self) -> None:
         """Test GCS get_file_size returns the blob size"""

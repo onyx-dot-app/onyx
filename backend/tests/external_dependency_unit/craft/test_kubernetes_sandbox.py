@@ -35,11 +35,11 @@ from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    KubernetesSandboxManager,
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    PUSH_DAEMON_PORT,
 )
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
-    PUSH_DAEMON_PORT,
+    KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.utils.logger import setup_logger
@@ -63,11 +63,6 @@ TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 # Local helpers (file-scoped). Generic K8s helpers (``pod_exec``,
 # ``wait_for_pod_deletion``, ``k8s_client`` fixture) live in conftest.py.
 # ---------------------------------------------------------------------------
-
-
-def _is_kubernetes_available(k8s: client.CoreV1Api) -> None:
-    """Sanity-check that the cluster client is usable for this namespace."""
-    k8s.list_namespaced_pod(SANDBOX_NAMESPACE, limit=1)
 
 
 def _wait_until_healthy(
@@ -367,28 +362,36 @@ def test_health_check_returns_false_for_missing_pod(
 
 
 # ---------------------------------------------------------------------------
-# Sidecar contract: the two-container model is what enforces credential
-# isolation. These tests verify the live-cluster shape that the unit-level
-# pod-spec tests can't observe (IRSA injection happens at admission time).
+# Sidecar contract: the sandbox app container plus native init sidecar model
+# is what enforces credential isolation. These tests verify the live-cluster
+# shape that the unit-level pod-spec tests can't observe (IRSA injection
+# happens at admission time).
 # ---------------------------------------------------------------------------
 
 
-def test_pod_runs_sandbox_and_sidecar_containers(
+def test_pod_runs_sandbox_container_and_native_init_sidecar(
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    """After provision, the pod has both `sandbox` and `sidecar` containers
-    and the sidecar reports ready (its `/health` probe is what gates this).
+    """After provision, the pod has one `sandbox` app container and a running
+    `sidecar` init container. The sidecar's `/health` readiness probe gates
+    pod readiness.
     """
     _, _, pod_name = pool_session
     pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
 
-    statuses = {c.name: c for c in pod.status.container_statuses or []}
-    assert set(statuses) == {"sandbox", "sidecar"}, (
-        f"pod should have exactly 2 containers, got {set(statuses)}"
+    container_statuses = {c.name: c for c in pod.status.container_statuses or []}
+    init_statuses = {c.name: c for c in pod.status.init_container_statuses or []}
+    assert set(container_statuses) == {"sandbox"}, (
+        f"pod should have exactly 1 app container, got {set(container_statuses)}"
     )
-    assert statuses["sidecar"].ready, "sidecar should be ready via /health probe"
-    assert statuses["sandbox"].ready, "sandbox container should be ready"
+    assert {"sandbox-init", "sidecar"}.issubset(init_statuses), (
+        f"pod missing expected init containers, got {set(init_statuses)}"
+    )
+    assert init_statuses["sidecar"].ready, (
+        "sidecar init container should be ready via /health probe"
+    )
+    assert container_statuses["sandbox"].ready, "sandbox container should be ready"
 
 
 def test_irsa_credentials_stripped_from_sandbox_container(

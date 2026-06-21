@@ -7,7 +7,7 @@ How user-uploaded files (PDFs, spreadsheets, slides) get from the user's library
 Three layers, mirroring the skills pipeline:
 
 ```
-HTTP layer        backend/onyx/server/features/build/api/user_library.py
+HTTP layer        backend/onyx/server/features/build/user_library/api.py
   │ thin: validate input, call db helpers, return response
   ▼
 DB layer          backend/onyx/server/features/build/db/user_library.py
@@ -100,7 +100,7 @@ Encoded in the document_id prefix: `CRAFT_FILE__{user_id}__{hash}`. `fetch_user_
 
 **Modified:**
 - `backend/onyx/server/features/build/db/user_library.py` — added all the CRUD/storage helpers
-- `backend/onyx/server/features/build/api/user_library.py` — thinned to call db helpers; `PersistentDocumentWriter` usage removed; `HTTPException` → `OnyxError`
+- `backend/onyx/server/features/build/user_library/api.py` — thinned to call db helpers; `PersistentDocumentWriter` usage removed; `HTTPException` → `OnyxError`
 - `backend/onyx/server/features/build/session/manager.py` — `_hydrate_user_library` called in both `create_session__no_commit` and `get_or_create_empty_session`
 - `backend/onyx/skills/push.py` — per-failure logging (consistent with user_library push logging)
 - `backend/tests/external_dependency_unit/craft/conftest.py` — `SandboxHandle.provision_for` now returns `(Sandbox, Path)` tuple, eliminating duplicated `_provision_with_status` helpers

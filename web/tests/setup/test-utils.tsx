@@ -83,6 +83,22 @@ export { userEvent };
 export { customRender as render };
 
 /**
+ * Override jsdom's document visibility (always "visible" by default) so tests
+ * can exercise hidden-tab behavior. Dispatch a "visibilitychange" event after
+ * calling to notify listeners. Reset to visible in afterEach.
+ */
+export function setDocumentVisibility(visible: boolean) {
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    get: () => !visible,
+  });
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => (visible ? "visible" : "hidden"),
+  });
+}
+
+/**
  * Setup userEvent with optimized configuration for testing.
  * All user interactions are automatically wrapped in act() to prevent warnings.
  * Use this helper instead of userEvent.setup() directly.

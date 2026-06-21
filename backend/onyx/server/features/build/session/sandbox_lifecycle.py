@@ -15,7 +15,7 @@ from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
-from onyx.server.features.build.db.sandbox import get_running_sandbox_count_by_tenant
+from onyx.server.features.build.db.sandbox import get_running_sandbox_count
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
@@ -29,6 +29,29 @@ logger = setup_logger()
 
 
 _HEALTHCHECK_TIMEOUT_SECONDS = 5.0
+
+
+def snapshot_opencode_history_before_recovery(
+    sandbox_manager: SandboxManager,
+    sandbox_id: UUID,
+    tenant_id: str,
+) -> None:
+    """Best-effort history capture before terminating an unhealthy sandbox."""
+    if not sandbox_manager.supports_opencode_history_persistence:
+        return
+
+    try:
+        sandbox_manager.create_opencode_history_snapshot(
+            sandbox_id,
+            tenant_id,
+            timeout_seconds=30.0,
+        )
+    except Exception:
+        logger.warning(
+            "opencode history snapshot failed during recovery of sandbox %s",
+            sandbox_id,
+            exc_info=True,
+        )
 
 
 class ProvisioningPolicy(str, Enum):
@@ -114,12 +137,12 @@ def _wait_for_provisioning_to_complete(
         time.sleep(poll_interval_seconds)
 
 
-def _enforce_tenant_concurrency_limit(db_session: DBSession, tenant_id: str) -> None:
+def _enforce_tenant_concurrency_limit(db_session: DBSession) -> None:
     """No-op on self-hosted. On multi-tenant: raise if creating/waking a
     sandbox would exceed the per-tenant cap."""
     if not MULTI_TENANT:
         return
-    running_count = get_running_sandbox_count_by_tenant(db_session, tenant_id)
+    running_count = get_running_sandbox_count(db_session)
     if running_count >= SANDBOX_MAX_CONCURRENT_PER_ORG:
         raise ValueError(
             f"Maximum concurrent sandboxes ({SANDBOX_MAX_CONCURRENT_PER_ORG}) reached"
@@ -164,6 +187,7 @@ def ensure_sandbox_ready(
             under FAIL policy.
     """
     sandbox = get_sandbox_by_user_id(db_session, user_id)
+    tenant_id = get_current_tenant_id()
 
     # Resolve PROVISIONING upfront so the rest of the state machine sees a
     # stable status (or knows there isn't one).
@@ -187,6 +211,9 @@ def ensure_sandbox_ready(
             "Sandbox %s marked RUNNING but pod is unhealthy/missing; recovering.",
             sandbox.id,
         )
+        snapshot_opencode_history_before_recovery(
+            sandbox_manager, sandbox.id, tenant_id
+        )
         sandbox_manager.terminate(sandbox.id)
         update_sandbox_status__no_commit(
             db_session, sandbox.id, SandboxStatus.TERMINATED
@@ -204,8 +231,7 @@ def ensure_sandbox_ready(
         )
 
     # Everything below provisions a pod, which adds to the per-tenant cap.
-    tenant_id = get_current_tenant_id()
-    _enforce_tenant_concurrency_limit(db_session, tenant_id)
+    _enforce_tenant_concurrency_limit(db_session)
 
     if user is None:
         user = fetch_user_by_id(db_session, user_id)

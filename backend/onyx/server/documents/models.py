@@ -192,7 +192,7 @@ class IndexAttemptSnapshot(BaseModel):
 
     @classmethod
     def from_index_attempt_db_model(
-        cls, index_attempt: IndexAttempt
+        cls, index_attempt: IndexAttempt, error_count: int
     ) -> "IndexAttemptSnapshot":
         return IndexAttemptSnapshot(
             id=index_attempt.id,
@@ -202,7 +202,7 @@ class IndexAttemptSnapshot(BaseModel):
             total_docs_indexed=index_attempt.total_docs_indexed or 0,
             docs_removed_from_index=index_attempt.docs_removed_from_index or 0,
             error_msg=index_attempt.error_msg,
-            error_count=len(index_attempt.error_rows),
+            error_count=error_count,
             full_exception_trace=index_attempt.full_exception_trace,
             time_started=(
                 index_attempt.time_started.isoformat()

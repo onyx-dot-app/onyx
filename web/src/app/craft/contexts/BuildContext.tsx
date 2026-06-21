@@ -2,11 +2,14 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
+  useEffect,
   useState,
   useMemo,
   type ReactNode,
 } from "react";
+import { VIDEO_BACKGROUND_STORAGE_KEY } from "@/app/craft/components/video-background/constants";
 
 /**
  * Build UI Context
@@ -18,6 +21,8 @@ interface BuildContextValue {
   // UI state - left sidebar
   leftSidebarFolded: boolean;
   setLeftSidebarFolded: React.Dispatch<React.SetStateAction<boolean>>;
+  videoBackgroundEnabled: boolean;
+  toggleVideoBackground: () => void;
 }
 
 const BuildContext = createContext<BuildContextValue | null>(null);
@@ -28,13 +33,30 @@ export interface BuildProviderProps {
 
 export function BuildProvider({ children }: BuildProviderProps) {
   const [leftSidebarFolded, setLeftSidebarFolded] = useState(false);
+  const [videoBackgroundEnabled, setVideoBackgroundEnabled] = useState(false);
+
+  useEffect(() => {
+    setVideoBackgroundEnabled(
+      localStorage.getItem(VIDEO_BACKGROUND_STORAGE_KEY) === "true"
+    );
+  }, []);
+
+  const toggleVideoBackground = useCallback(() => {
+    setVideoBackgroundEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem(VIDEO_BACKGROUND_STORAGE_KEY, String(next));
+      return next;
+    });
+  }, []);
 
   const value = useMemo<BuildContextValue>(
     () => ({
       leftSidebarFolded,
       setLeftSidebarFolded,
+      videoBackgroundEnabled,
+      toggleVideoBackground,
     }),
-    [leftSidebarFolded]
+    [leftSidebarFolded, videoBackgroundEnabled, toggleVideoBackground]
   );
 
   return (

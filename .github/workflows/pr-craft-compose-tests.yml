@@ -41,7 +41,7 @@ env:
 jobs:
   craft-compose-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
 
     env:
       PYTHONPATH: ./backend

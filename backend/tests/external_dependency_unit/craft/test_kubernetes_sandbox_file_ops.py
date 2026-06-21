@@ -98,12 +98,6 @@ class TestListDirectory:
         pool_session: tuple[UUID, UUID, str],
     ) -> None:
         sandbox_id, session_id, pod_name = pool_session
-        # ``list_directory`` walks ``sessions/{id}/{path}`` with ``ls -laL``.
-        # The session root contains ``user_library`` (a symlink into the RO
-        # managed/ mount) which fails ``-L`` dereference and trips the
-        # function's ``ERROR_NOT_FOUND`` branch, so the contract in
-        # production is "list a subpath under outputs/" (the docstring's
-        # documented path). Seed + assert inside outputs/.
         outputs_dir = f"/workspace/sessions/{session_id}/outputs"
         pod_exec(
             k8s_client,
@@ -263,7 +257,7 @@ class TestCreateSnapshot:
             pod_name,
             SANDBOX_NAMESPACE,
             f"rm -rf {session_root}/outputs {session_root}/attachments "
-            f"{session_root}/.opencode-data 2>/dev/null; true",
+            "2>/dev/null; true",
         )
 
         result = k8s_manager.create_snapshot(

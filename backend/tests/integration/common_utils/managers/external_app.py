@@ -6,11 +6,13 @@ from uuid import uuid4
 
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
-from onyx.server.features.build.api.models import CreateBuiltInExternalAppRequest
-from onyx.server.features.build.api.models import ExternalAppAdminResponse
-from onyx.server.features.build.api.models import ExternalAppUserResponse
-from onyx.server.features.build.api.models import UpdateExternalAppRequest
-from onyx.server.features.build.api.models import UpsertUserCredentialsRequest
+from onyx.server.features.build.external_apps.models import (
+    CreateBuiltInExternalAppRequest,
+)
+from onyx.server.features.build.external_apps.models import ExternalAppAdminResponse
+from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
+from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
+from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
@@ -208,30 +210,6 @@ class ExternalAppManager:
             f"{_BUILD_PREFIX}/admin/apps/{app_id}",
             json=body.model_dump(mode="json"),
             headers=user_performing_action.headers,
-            cookies=user_performing_action.cookies,
-        )
-        response.raise_for_status()
-        return ExternalAppAdminResponse.model_validate(response.json())
-
-    @staticmethod
-    def replace_bundle(
-        user_performing_action: DATestUser,
-        app_id: int,
-    ) -> ExternalAppAdminResponse:
-        """PUT a fresh bundle onto a custom app, keyed by id."""
-        files: dict[str, tuple[str, bytes, str]] = {
-            "bundle": (
-                f"custom-{uuid4().hex[:8]}.zip",
-                _minimal_bundle_zip(),
-                "application/zip",
-            )
-        }
-        headers = user_performing_action.headers.copy()
-        headers.pop("Content-Type", None)
-        response = client.put(
-            f"{_BUILD_PREFIX}/admin/apps/{app_id}/bundle",
-            files=files,
-            headers=headers,
             cookies=user_performing_action.cookies,
         )
         response.raise_for_status()

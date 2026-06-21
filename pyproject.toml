@@ -20,8 +20,8 @@ dependencies = [
     "python-json-logger==4.1.0",
     "prometheus_client>=0.21.1",
     "prometheus_fastapi_instrumentator==8.0.0",
-    "retry==0.9.2",                             # This pulls in py which is in CVE-2022-42969, must remove py from image
     "sentry-sdk==2.14.0",
+    "tenacity==9.1.2",
     "uvicorn==0.35.0",
     "voyageai==0.2.3",
     "brotli>=1.2.0",
@@ -92,7 +92,8 @@ backend = [
     "python-docx==1.1.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
-    "pypdf==6.10.2",
+    "pypdf==6.12.0",
+    "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
     "pywikibot==9.0.0",
     "redis==5.0.8",
@@ -137,7 +138,7 @@ dev = [
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.31",
-    "onyx-devtools==0.8.0",
+    "onyx-devtools==0.8.2",
     "openapi-generator-cli==7.17.0",
     "pandas-stubs~=2.3.3",
     "pre-commit==3.2.2",
@@ -165,7 +166,6 @@ dev = [
     "types-pytz==2023.3.1.1",
     "types-regex==2023.3.23.1",
     "types-requests==2.32.0.20250328",
-    "types-retry==0.9.9.3",
     "types-setuptools==68.0.0.3",
     { include-group = "zizmor" },
 ]
@@ -233,6 +233,9 @@ all = "error"
 
 [tool.uv.workspace]
 members = ["tools/ods"]
+# loadtest/ is a standalone uv project (its locust/gevent pins must not enter
+# the shared lockfile); exclude it from workspace discovery.
+exclude = ["loadtest"]
 
 [tool.basedpyright]
 include = ["backend"]
@@ -264,7 +267,8 @@ ignore = [
     # cleaned up:
     "S113", # request-without-timeout (~463 existing violations).
 ]
-select = ["ARG", "E", "F", "I", "S", "W"]
+# G004: f-strings in logging break Sentry's message-pattern grouping.
+select = ["ARG", "E", "F", "G004", "I", "S", "W"]
 
 [tool.ruff.lint.isort]
 force-single-line = true

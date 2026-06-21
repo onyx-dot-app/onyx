@@ -147,6 +147,12 @@ variable "enable_iam_auth" {
   default     = false
 }
 
+variable "irsa_additional_service_account_names" {
+  type        = list(string)
+  description = "Additional service accounts in the Onyx namespace that may assume the workload IRSA role. Use the rendered ServiceAccount name for chart-created workloads, such as onyx-sandbox-proxy, that also need RDS IAM auth."
+  default     = []
+}
+
 variable "rds_db_connect_arn" {
   type        = string
   description = "Full rds-db:connect ARN to pass to the EKS module. Required when enable_rds_iam_auth is true."

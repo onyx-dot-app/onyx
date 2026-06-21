@@ -24,13 +24,13 @@ from typing import cast
 
 import httpx
 
-from onyx.server.features.build.api.packets import SubagentStartedPacket
 from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
+from onyx.server.features.build.packets import SubagentStartedPacket
 from onyx.server.features.build.sandbox.event_schema import AgentMessageChunk
 from onyx.server.features.build.sandbox.event_schema import AgentThoughtChunk
 from onyx.server.features.build.sandbox.event_schema import Error
@@ -190,7 +190,7 @@ def _tool_title(tool: str) -> str:
 
 # opencode's tool status values → ToolCallStatus literal.
 # Onyx schema: "pending" | "in_progress" | "completed" | "failed"
-# opencode emits: "pending", "running", "completed". "running" → "in_progress".
+# opencode emits: "pending", "running", "completed", "error". "running" → "in_progress".
 _TOOL_STATUS_MAP: dict[str, str] = {
     "pending": "pending",
     "running": "in_progress",
@@ -265,10 +265,17 @@ def _wrap_raw_output(state: dict[str, Any]) -> dict[str, Any] | None:
 
     Tools where ``state.output`` is already a dict (none observed in Phase 0
     but possible) get passed through unchanged.
+
+    Error-state tool parts carry their message in ``state.error`` instead of
+    ``state.output``.
     """
     out = state.get("output")
     if out is None:
-        return None
+        err = state.get("error")
+        if isinstance(err, str) and err:
+            out = err
+        else:
+            return None
     if isinstance(out, str):
         wrapped: dict[str, Any] = {"output": out}
         metadata = state.get("metadata")
@@ -757,6 +764,11 @@ def _emit_tool_events(
 
     raw_status = part_state.get("status", "pending")
     status = _tool_status(raw_status)
+    if status == "completed":
+        metadata = part_state.get("metadata")
+        exit_code = metadata.get("exit") if isinstance(metadata, dict) else None
+        if isinstance(exit_code, int) and exit_code != 0:
+            status = "failed"
     raw_input = part_state.get("input") or None
     raw_output = _wrap_raw_output(part_state)
     content = _synthesize_tool_content(tool, part_state)
@@ -1027,6 +1039,11 @@ class OpencodeServeClient:
     ) -> str:
         """Return a valid opencode session id. Idempotent across replicas.
 
+        A missing caller-supplied id is treated optimistically: the restored
+        history snapshot may not contain that opencode session yet, so we mint a
+        replacement id and let the caller persist it. Non-404 lookup failures
+        still raise instead of masking runtime outages.
+
         ``directory`` anchors the opencode Instance for this session.
         Opencode-serve scopes its session store per-directory via the
         ``?directory=`` query parameter on every route (the
@@ -1061,7 +1078,7 @@ class OpencodeServeClient:
             if r.status_code == 404:
                 logger.warning(
                     "[SESSION-LIFECYCLE] ensure_session: GET /session/%s -> 404 "
-                    "(persisted id stale; will create new)",
+                    "(persisted id missing from opencode store; will create new)",
                     opencode_session_id,
                 )
             else:
@@ -1099,24 +1116,35 @@ class OpencodeServeClient:
         )
         return new_id
 
-    def delete_session(self, opencode_session_id: str, *, directory: str) -> None:
+    def delete_session(self, opencode_session_id: str, *, directory: str) -> bool:
+        """Best-effort delete of an opencode session from the live serve process.
+
+        Product deletion is owned by Onyx's BuildSession row. This cleanup is
+        opportunistic: failure should not block deleting the Onyx session.
+        """
         try:
-            r = self._http.delete(
+            r = self._request(
+                "DELETE",
                 f"/session/{opencode_session_id}",
                 params={"directory": directory},
+                idempotent=True,
             )
-            if r.status_code not in (200, 204, 404):
-                logger.warning(
-                    "opencode-serve: delete_session(%s) → HTTP %s",
-                    opencode_session_id,
-                    r.status_code,
-                )
         except httpx.HTTPError as e:
             logger.warning(
                 "opencode-serve: delete_session(%s) failed: %s",
                 opencode_session_id,
                 e,
             )
+            return False
+
+        if r.status_code in (200, 204, 404):
+            return True
+        logger.warning(
+            "opencode-serve: delete_session(%s) -> HTTP %s",
+            opencode_session_id,
+            r.status_code,
+        )
+        return False
 
     def list_messages(
         self, opencode_session_id: str, *, directory: str

@@ -125,11 +125,3 @@ export function RunStatusBadge({ status }: RunStatusBadgeProps) {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Last-run badge: status badge with relative time, used in list row "Last run".
-// ---------------------------------------------------------------------------
-
-export function getRunStatusLabel(status: ScheduledTaskRunStatus): string {
-  return getRunStatusDisplay(status).label;
-}

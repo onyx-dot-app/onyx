@@ -194,6 +194,8 @@
         "--reload",
         "--reload-exclude",
         "${workspaceFolder}/backend/onyx/skills/builtin",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/server/features/build/sandbox/image",
         "--port",
         "8080"
       ],
@@ -222,6 +224,8 @@
         "--reload",
         "--reload-exclude",
         "${workspaceFolder}/backend/onyx/skills/builtin",
+        "--reload-exclude",
+        "${workspaceFolder}/backend/onyx/server/features/build/sandbox/image",
         "--port",
         "8080"
       ],

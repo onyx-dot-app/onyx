@@ -21,6 +21,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import ACCESS_MAPPING
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_hierarchy_nodes_match_expected,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
@@ -277,6 +280,7 @@ def test_gdrive_perm_sync_with_real_data(
             TEST_USER_1_EXTRA_FOLDER_ID,
             EXTERNAL_SHARED_FOLDER_ID,
             FOLDER_3_ID,
+            *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
         )
     )
     assert_hierarchy_nodes_match_expected(

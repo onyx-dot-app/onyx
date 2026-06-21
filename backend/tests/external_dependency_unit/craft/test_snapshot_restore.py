@@ -17,12 +17,11 @@ import io
 import shutil
 import tarfile
 from pathlib import Path
-from typing import Any
 from uuid import UUID
+from uuid import uuid4
 
 import pytest
 from kubernetes import client
-from kubernetes.client.rest import ApiException
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
@@ -32,9 +31,7 @@ from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-from onyx.server.features.build.sandbox.manager.snapshot_manager import (
-    SNAPSHOT_FILE_TYPE,
-)
+from onyx.server.features.build.sandbox.snapshot_manager import SNAPSHOT_FILE_TYPE
 from tests.external_dependency_unit.constants import TEST_TENANT_ID
 from tests.external_dependency_unit.craft._test_helpers import default_llm_config
 from tests.external_dependency_unit.craft.conftest import pod_exec
@@ -72,7 +69,6 @@ def _populate_session_workspace(
         "outputs/web/page.tsx": "// hello from outputs\n",
         "outputs/data/manifest.json": '{"v": 1}\n',
         "attachments/notes.txt": "user uploaded notes\n",
-        ".opencode-data/session.json": '{"id": "deadbeef"}\n',
     }
 
     script_lines = ["set -e", f"cd {session_path}"]
@@ -111,13 +107,6 @@ def _download_snapshot(storage_path: str, dest: Path) -> None:
         file_io.close()
 
 
-def _delete_snapshot(storage_path: str) -> None:
-    try:
-        get_default_file_store().delete_file(storage_path, error_on_missing=False)
-    except Exception:
-        pass
-
-
 def _put_snapshot_bytes(storage_path: str, body: bytes) -> None:
     """Upload arbitrary bytes to FileStore (used to forge corrupt
     or traversal-laden tarballs that real callers can't produce)."""
@@ -150,7 +139,7 @@ def _list_archive_members(tar_path: Path) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def test_snapshot_includes_outputs_and_attachments_and_opencode_data(
+def test_snapshot_includes_outputs_and_attachments_only(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
@@ -175,14 +164,13 @@ def test_snapshot_includes_outputs_and_attachments_and_opencode_data(
     assert any(m == "attachments" or m.startswith("attachments/") for m in members), (
         f"Expected attachments/ tree. Members: {members}"
     )
-    assert any(
+    assert not any(
         m == ".opencode-data" or m.startswith(".opencode-data/") for m in members
-    ), f"Expected .opencode-data/ tree. Members: {members}"
+    ), f".opencode-data/ must not appear in session snapshot. Members: {members}"
 
     # The specific seed files should round-trip.
     assert any(m.endswith("outputs/web/page.tsx") for m in members)
     assert any(m.endswith("attachments/notes.txt") for m in members)
-    assert any(m.endswith(".opencode-data/session.json") for m in members)
 
 
 def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
@@ -243,7 +231,7 @@ def test_restore_from_snapshot_recreates_workspace(
         pod_name,
         SANDBOX_NAMESPACE,
         f"cd /workspace/sessions/{session_id} && "
-        f"find outputs attachments .opencode-data -type f | sort | "
+        f"find outputs attachments -type f | sort | "
         f"xargs sha256sum",
     )
 
@@ -268,7 +256,6 @@ def test_restore_from_snapshot_recreates_workspace(
         sandbox_id=sandbox_id,
         session_id=session_id,
         snapshot_storage_path=result.storage_path,
-        tenant_id=TEST_TENANT_ID,
         nextjs_port=None,
         llm_config=default_llm_config(),
         skills_section="No skills available.",
@@ -279,7 +266,7 @@ def test_restore_from_snapshot_recreates_workspace(
         pod_name,
         SANDBOX_NAMESPACE,
         f"cd /workspace/sessions/{session_id} && "
-        f"find outputs attachments .opencode-data -type f | sort | "
+        f"find outputs attachments -type f | sort | "
         f"xargs sha256sum",
     )
     assert pre_hashes.strip() == post_hashes.strip(), (
@@ -326,7 +313,6 @@ def test_restore_re_pushes_skills(
         sandbox_id=sandbox_id,
         session_id=session_id,
         snapshot_storage_path=result.storage_path,
-        tenant_id=TEST_TENANT_ID,
         nextjs_port=None,
         llm_config=default_llm_config(),
         skills_section="No skills available.",
@@ -398,48 +384,45 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
     assert "AGENTS.md" in listing
 
 
-def test_snapshot_failure_does_not_block_pod_termination(
+def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
     live_pod: tuple[UUID, UUID, str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sandbox_id, session_id, pod_name = live_pod
+    sandbox_id, _session_id, pod_name = live_pod
+    marker_path = "/workspace/opencode-data/cache/history-roundtrip.txt"
 
-    _populate_session_workspace(k8s_client, pod_name, session_id)
-
-    # Break ``create_snapshot`` directly. The orchestration contract (see
-    # ``cleanup_idle_sandboxes_task``) is: snapshot failure is caught and
-    # termination still proceeds.
-    def _boom(*_args: Any, **_kwargs: Any) -> None:
-        raise RuntimeError("simulated storage outage")
-
-    monkeypatch.setattr(
-        KubernetesSandboxManager,
-        "create_snapshot",
-        _boom,
+    pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        "mkdir -p /workspace/opencode-data/cache && "
+        f"printf '%s' 'restored-opencode-history' > {marker_path}",
     )
 
-    # Mimic the orchestration block from cleanup_idle_sandboxes_task in a
-    # narrow form: try snapshot, swallow on failure, then terminate.
-    snapshot_failed = False
-    try:
-        k8s_manager.create_snapshot(sandbox_id, session_id, TEST_TENANT_ID)
-    except Exception:
-        snapshot_failed = True
+    assert k8s_manager.create_opencode_history_snapshot(
+        sandbox_id,
+        TEST_TENANT_ID,
+    )
 
-    assert snapshot_failed, "monkeypatched create_snapshot should have raised"
-
-    # Termination should still succeed.
     k8s_manager.terminate(sandbox_id)
     wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
 
-    # Pod is gone.
-    try:
-        pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
-        assert pod.metadata.deletion_timestamp is not None
-    except ApiException as e:
-        assert e.status == 404
+    k8s_manager.provision(
+        sandbox_id=sandbox_id,
+        user_id=uuid4(),
+        tenant_id=TEST_TENANT_ID,
+        llm_config=default_llm_config(),
+        onyx_pat="test-onyx-pat",
+    )
+
+    restored = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"cat {marker_path}",
+    )
+    assert restored == "restored-opencode-history"
 
 
 def test_restore_uses_data_filter_to_block_traversal(
@@ -495,7 +478,6 @@ def test_restore_uses_data_filter_to_block_traversal(
             sandbox_id=sandbox_id,
             session_id=session_id,
             snapshot_storage_path=storage_path,
-            tenant_id=TEST_TENANT_ID,
             nextjs_port=None,
             llm_config=default_llm_config(),
             skills_section="No skills available.",
@@ -564,7 +546,6 @@ def test_snapshot_corruption_detected_on_restore(
             sandbox_id=sandbox_id,
             session_id=session_id,
             snapshot_storage_path=storage_path,
-            tenant_id=TEST_TENANT_ID,
             nextjs_port=None,
             llm_config=default_llm_config(),
             skills_section="No skills available.",

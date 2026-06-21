@@ -22,13 +22,11 @@ from uuid import UUID
 from uuid import uuid4
 
 import httpx
-import pytest
 
 from onyx.db.enums import SharingScope
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 # ---------------------------------------------------------------------------
@@ -325,18 +323,3 @@ def test_webapp_assets_isolated_across_sessions(
     body_b = response_b.text
     assert str(session_b_id) not in body_a
     assert str(session_a_id) not in body_b
-
-
-# ---------------------------------------------------------------------------
-# Compat: keep the user fixtures importable
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def _user_manager_handle() -> type[UserManager]:
-    """Keep ``UserManager`` symbol referenced for IDE goto-def in this file.
-
-    No-op fixture. The ``admin_user`` / ``basic_user`` fixtures come from
-    ``tests/integration/conftest.py``.
-    """
-    return UserManager

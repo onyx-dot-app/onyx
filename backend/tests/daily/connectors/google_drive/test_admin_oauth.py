@@ -11,6 +11,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_expected_docs_in_retrieved_docs,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
@@ -119,6 +122,7 @@ def test_include_all(
             RESTRICTED_ACCESS_FOLDER_ID,
             TEST_USER_1_EXTRA_FOLDER_ID,
             FOLDER_3_ID,
+            *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
         )
     )
     assert_hierarchy_nodes_match_expected(
@@ -218,6 +222,7 @@ def test_include_my_drives_only(
         ADMIN_MY_DRIVE_ID,
         PILL_FOLDER_ID,
         TEST_USER_1_EXTRA_FOLDER_ID,
+        *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
     )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,

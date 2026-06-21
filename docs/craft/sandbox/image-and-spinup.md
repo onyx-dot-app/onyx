@@ -7,6 +7,7 @@ motivation isn't obvious from the diff.
 Related files:
 
 - `backend/onyx/server/features/build/sandbox/image/Dockerfile`
+- `backend/onyx/server/features/build/sandbox/image/initial-requirements.in`
 - `backend/onyx/server/features/build/sandbox/image/initial-requirements.txt`
 - `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/snapshot.py`
 - `backend/onyx/server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py`
@@ -15,9 +16,9 @@ Related files:
 
 ## SHA-pinned base + helper images
 
-`node:20-slim` and `oven/bun:1.3.14` are SHA-pinned in the Dockerfile
-(`@sha256:...`). Same precedent as `backend/Dockerfile` and
-`web/Dockerfile`. Bump via:
+`python:3.13-slim`, `node:24-trixie-slim`, and `oven/bun:1.3.14` are
+SHA-pinned in the Dockerfile (`@sha256:...`). Same precedent as
+`backend/Dockerfile` and `web/Dockerfile`. Bump via:
 
 ```
 docker pull <image>:<tag>
@@ -156,7 +157,7 @@ Sketch:
    pipeline, boot the base, run `crictl pull <sandbox-image>:<tag>`,
    and snapshot the disk.
 3. Point the sandbox node group at the new image ID.
-4. Re-bake whenever `SANDBOX_CONTAINER_IMAGE` bumps (or fall back to
+4. Re-bake whenever the app-aligned sandbox image tag changes (or fall back to
    pulling for that version).
 
 Tradeoff: adds a build pipeline keyed to sandbox image versions, and
@@ -281,7 +282,8 @@ overhead, not realistic prod cold-pull time. See the caveats under
 
 `sandbox_daemon/snapshot.py` runs inside the sidecar process and only touches
 the shared pod filesystem. It is responsible for session-level snapshots under
-`/workspace/sessions/<session_id>/{outputs,attachments,.opencode-data}`.
+`/workspace/sessions/<session_id>/{outputs,attachments}`. Sandbox-global
+opencode history lives outside the session tree and is snapshotted separately.
 Storage is handled by the API server through FileStore.
 
 `node_modules` and `.next` are deliberately excluded from snapshots

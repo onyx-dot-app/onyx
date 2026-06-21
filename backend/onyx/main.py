@@ -7,7 +7,6 @@ from contextlib import asynccontextmanager
 from typing import Any
 from typing import cast
 
-import sentry_sdk
 import uvicorn
 from fastapi import APIRouter
 from fastapi import FastAPI
@@ -32,6 +31,7 @@ from onyx.auth.schemas import UserUpdate
 from onyx.auth.users import auth_backend
 from onyx.auth.users import create_onyx_oauth_router
 from onyx.auth.users import fastapi_users
+from onyx.auth.users import verify_user_auth_secret
 from onyx.cache.interface import CacheBackendType
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
@@ -70,6 +70,7 @@ from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth.captcha_api import CaptchaCookieMiddleware
 from onyx.server.auth.captcha_api import LoginCaptchaMiddleware
 from onyx.server.auth.captcha_api import router as captcha_router
+from onyx.server.auth.mobile import router as mobile_auth_router
 from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
 from onyx.server.documents.connector import router as connector_router
@@ -77,8 +78,8 @@ from onyx.server.documents.credential import router as credential_router
 from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
 from onyx.server.documents.targeted_reindex import router as targeted_reindex_router
-from onyx.server.features.build.api.api import public_build_router
-from onyx.server.features.build.api.api import router as build_router
+from onyx.server.features.build.api import router as build_router
+from onyx.server.features.build.webapp_proxy import public_build_router
 from onyx.server.features.default_assistant.api import (
     router as default_assistant_router,
 )
@@ -168,6 +169,7 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import global_version
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
+from shared_configs.configs import CORS_ALLOW_CREDENTIALS
 from shared_configs.configs import CORS_ALLOWED_ORIGIN
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -359,6 +361,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     # Will throw exception if an issue is found
     verify_auth()
 
+    # Will throw exception if USER_AUTH_SECRET is missing on a real deployment
+    verify_user_auth_secret()
+
     if OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET:
         logger.notice("Both OAuth Client ID and Secret are configured.")
 
@@ -468,16 +473,12 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         lifespan=lifespan_override or lifespan,
     )
     if SENTRY_DSN:
-        from onyx.configs.sentry import _add_instance_tags
+        from onyx.configs.sentry import init_sentry
 
-        sentry_sdk.init(
-            dsn=SENTRY_DSN,
-            integrations=[StarletteIntegration(), FastApiIntegration()],
+        init_sentry(
             traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
-            release=__version__,
-            before_send=_add_instance_tags,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
         )
-        logger.info("Sentry initialized")
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 
@@ -593,6 +594,14 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             prefix="/users",
         )
 
+        # Native mobile clients: same email/password auth, but the session
+        # token is issued/refreshed/revoked as a Bearer instead of a cookie.
+        include_auth_router_with_prefix(
+            application,
+            mobile_auth_router,
+            prefix="/auth/mobile",
+        )
+
     # Register Google OAuth when AUTH_TYPE is GOOGLE_OAUTH, or when
     # AUTH_TYPE is BASIC and OAuth credentials are configured
     if AUTH_TYPE == AuthType.GOOGLE_OAUTH or (
@@ -691,10 +700,17 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     application.add_exception_handler(ValueError, value_error_handler)
 
+    if not CORS_ALLOW_CREDENTIALS:
+        logger.warning(
+            "CORS_ALLOWED_ORIGIN is unset or contains '*'; cross-origin "
+            "requests will be served without credentials. Set "
+            "CORS_ALLOWED_ORIGIN to your frontend origin(s) to allow "
+            "credentialed cross-origin requests."
+        )
     application.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ALLOWED_ORIGIN,  # Configurable via environment variable
-        allow_credentials=True,
+        allow_credentials=CORS_ALLOW_CREDENTIALS,
         allow_methods=["*"],
         allow_headers=["*"],
     )
