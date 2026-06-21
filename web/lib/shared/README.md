@@ -27,8 +27,10 @@ When extending it:
   `react-native` / `next` dependency or peer dependency.
 - **Do not** reference `window`, `document`, `process`, `Buffer`, etc. — these
   are compile errors here, by design.
-- Component contracts must stay generic over platform types (e.g.
-  `ButtonContract<TIcon>`) rather than importing a UI framework's types.
+- A contract that needs no platform value stays plain (e.g. `InteractiveContract`
+  in `contracts/interactive.ts`); one that carries a platform value (an icon, a
+  node) stays generic over it via the `Slot<T>` primitive rather than importing a
+  UI framework's type.
 
 ## Tokens
 

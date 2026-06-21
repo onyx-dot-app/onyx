@@ -5,38 +5,36 @@ import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@opal/utils";
 import { guardPortalClick } from "@opal/core/interactive/utils";
 import type { ButtonType, WithoutStyles } from "@opal/types";
+import type {
+  InteractiveContract,
+  InteractiveVariant,
+  InteractiveProminence,
+} from "@onyx-ai/shared/contracts";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type InteractiveStatelessVariant = "default" | "action" | "danger";
-type InteractiveStatelessProminence =
-  | "primary"
-  | "secondary"
-  | "tertiary"
-  | "internal";
+// `variant`/`prominence`/`disabled` come from the shared InteractiveContract (the
+// cross-platform source of truth). Opal is the facade: it re-exports the unions
+// under its own `InteractiveStateless*` names so web code imports the whole
+// Interactive family from `@opal/core` rather than reaching into `@onyx-ai/shared`
+// directly. `interaction` stays web-local — its `hover` has no meaning on touch.
+type InteractiveStatelessVariant = InteractiveVariant;
+type InteractiveStatelessProminence = InteractiveProminence;
 type InteractiveStatelessInteraction = "rest" | "hover" | "active";
 
 /**
  * Props for {@link InteractiveStateless}.
+ *
+ * `variant`, `prominence`, and `disabled` come from the shared
+ * {@link InteractiveContract}; the rest are web-specific wiring.
  */
-interface InteractiveStatelessProps extends WithoutStyles<
-  React.HTMLAttributes<HTMLElement>
-> {
+interface InteractiveStatelessProps
+  extends
+    InteractiveContract,
+    WithoutStyles<React.HTMLAttributes<HTMLElement>> {
   ref?: React.Ref<HTMLElement>;
-
-  /**
-   * Visual variant controlling the color palette.
-   * @default "default"
-   */
-  variant?: InteractiveStatelessVariant;
-
-  /**
-   * Prominence level controlling background intensity.
-   * @default "primary"
-   */
-  prominence?: InteractiveStatelessProminence;
 
   /**
    * JS-controllable interaction state override.
@@ -70,11 +68,6 @@ interface InteractiveStatelessProps extends WithoutStyles<
    * Link target (e.g. `"_blank"`). Only used when `href` is provided.
    */
   target?: string;
-
-  /**
-   * Applies variant-specific disabled colors and suppresses clicks.
-   */
-  disabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
