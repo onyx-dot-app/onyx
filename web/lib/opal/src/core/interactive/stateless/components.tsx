@@ -15,11 +15,10 @@ import type {
 // Types
 // ---------------------------------------------------------------------------
 
-// `variant`/`prominence`/`disabled` come from the shared InteractiveContract (the
-// cross-platform source of truth). Opal is the facade: it re-exports the unions
-// under its own `InteractiveStateless*` names so web code imports the whole
-// Interactive family from `@opal/core` rather than reaching into `@onyx-ai/shared`
-// directly. `interaction` stays web-local — its `hover` has no meaning on touch.
+// `variant`/`prominence`/`disabled` come from the shared InteractiveContract. Opal
+// re-exports the unions under its `InteractiveStateless*` names so web code imports
+// the Interactive family from `@opal/core`, not `@onyx-ai/shared`. `interaction`
+// stays web-local — `hover` has no meaning on touch.
 type InteractiveStatelessVariant = InteractiveVariant;
 type InteractiveStatelessProminence = InteractiveProminence;
 type InteractiveStatelessInteraction = "rest" | "hover" | "active";

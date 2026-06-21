@@ -7,7 +7,7 @@
  * platform extends this with its own event wiring + styling; the variant →
  * className color matrix is deliberately NOT shared (it stays per-platform).
  *
- * Note `interaction` (rest/hover/active) is intentionally absent: its value set
+ * `interaction` (rest/hover/active) is intentionally absent: its value set
  * diverges — web has `hover`, touch does not — so each platform declares its own.
  */
 

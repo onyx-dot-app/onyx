@@ -1,14 +1,9 @@
-// Pure style/state logic for the React Native Button — no RN imports, so it's
-// unit-testable on its own. The component (button.tsx) renders from these tables.
-//
-// Ported from web's Opal Button (web/lib/opal/src/components/buttons/button/
-// components.tsx) + its color matrix (web/lib/opal/src/core/interactive/stateless/
-// styles.css). Every class is a literal token class so NativeWind's compiler picks
-// it up, and resolves to the same Onyx token as web.
-//
-// Web `:hover` has no touch equivalent, so the mobile matrix carries only
-// rest / active / disabled (web's `active` palette ← natural press or forced
-// `interaction="active"`).
+// Pure style/state logic for the Button — no RN imports, so it's unit-testable.
+// Ported from web's Opal Button + its color matrix
+// (web/lib/opal/src/core/interactive/stateless/styles.css). Classes are literal
+// token strings (so NativeWind's compiler sees them) resolving to the same Onyx
+// tokens as web. Web `:hover` has no touch equivalent, so the matrix carries only
+// rest / active / disabled.
 import type { TextFont } from "@onyx-ai/shared/native";
 import type {
   InteractiveProminence,
@@ -28,15 +23,11 @@ export type ButtonInteraction = "rest" | "active";
 export type ButtonColorState = "rest" | "active" | "disabled";
 
 interface ButtonColorCell {
-  /** Background class. */
   bg: string;
-  /** Foreground class — applied to both label and icon. */
+  /** Foreground class — label and icon. */
   fg: string;
-  /**
-   * Border classes for `secondary` prominence (`""` otherwise). Web applies a
-   * bare `@apply border`, which in Tailwind v4 is `currentColor` → the
-   * foreground, so the border color tracks `fg` per state.
-   */
+  /** Secondary-prominence border (`""` otherwise); tracks `fg` because web's bare
+   *  `@apply border` is `currentColor` in Tailwind v4. */
   border: string;
 }
 
@@ -45,8 +36,8 @@ type ButtonColorMatrix = Record<
   Record<InteractiveProminence, Record<ButtonColorState, ButtonColorCell>>
 >;
 
-// Typed as the full Record so adding a shared variant/prominence fails to compile
-// here until the matrix is filled in — that's the cross-platform drift guard.
+// Full Record by type, so a new shared variant/prominence won't compile until its
+// cells are added — the cross-platform drift guard.
 export const BUTTON_COLORS: ButtonColorMatrix = {
   default: {
     primary: {
@@ -209,19 +200,16 @@ export const BUTTON_COLORS: ButtonColorMatrix = {
 };
 
 interface ButtonSizeSpec {
-  /** Height class (`""` for `fit` → content height). */
+  /** Height class (`""` = content height, for `fit`). */
   height: string;
-  /** Min-width class so icon-only buttons stay square (`""` for `fit`). */
+  /** Min-width class — keeps icon-only buttons square (`""` for `fit`). */
   minWidth: string;
-  /** Outer padding class. */
   padding: string;
-  /** Corner rounding class. */
   rounding: string;
-  /** Label typography preset. */
   font: TextFont;
   /** Padding around each icon (web's icon-wrapper padding). */
   iconPad: string;
-  /** Icon glyph size in px. */
+  /** Icon glyph size, px. */
   iconSize: number;
 }
 
@@ -285,7 +273,6 @@ export const BUTTON_SIZES: Record<ButtonSize, ButtonSizeSpec> = {
   },
 };
 
-/** Disabled wins, then a forced/natural active press, else rest. */
 export function resolveButtonState(
   disabled: boolean,
   interaction: ButtonInteraction,

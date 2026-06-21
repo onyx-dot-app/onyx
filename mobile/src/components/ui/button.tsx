@@ -1,15 +1,8 @@
-// Button — React Native port of web's Opal Button
-// (web/lib/opal/src/components/buttons/button/components.tsx), built on the
-// `Interactive.Stateless` variant × prominence color matrix. `variant` /
-// `prominence` / `disabled` come from the shared @onyx-ai/shared InteractiveContract
-// so the API can't drift from web; the color matrix + sizing live in button.styles.
-//
-// Web "hover" → RN "pressed" (Pressable's pressed state). All classes resolve to
-// the same Onyx token as web. Spacing uses explicit margins, not `gap-*`, which is
-// unreliable in RN/NativeWind (see SidebarTab).
-//
-// `children` is a plain string — web's `RichStr`/markdown is intentionally
-// unsupported here, pending the mobile Text reconciliation noted in text.tsx.
+// React Native port of web's Opal Button
+// (web/lib/opal/src/components/buttons/button/components.tsx); the color matrix
+// and sizing live in button.styles. Web "hover" maps to RN "pressed". Spacing
+// uses margins, not `gap-*` (unreliable in RN/NativeWind — see SidebarTab).
+// `children` is plain string; web's RichStr/markdown is intentionally unsupported.
 import { Pressable, View } from "react-native";
 import { router, type Href } from "expo-router";
 import type { InteractiveContract } from "@onyx-ai/shared/contracts";
@@ -28,35 +21,30 @@ import {
 } from "@/components/ui/button.styles";
 
 type ButtonBaseProps = InteractiveContract & {
-  /** Size preset — controls height, padding, rounding, label + icon size. @default "lg" */
+  /** Size preset. @default "lg" */
   size?: ButtonSize;
   /** `"fit"` shrink-wraps to content; `"full"` stretches to parent. @default "fit" */
   width?: ButtonWidth;
   /**
-   * Forces the pressed visual without a touch (e.g. an open-popover trigger).
-   * Touch has no hover, so there is no `"hover"`. @default "rest"
+   * Forces the pressed visual without a touch (e.g. an open popover trigger).
+   * @default "rest"
    */
   interaction?: ButtonInteraction;
-  /** Trailing icon. */
   rightIcon?: IconFunctionComponent;
   onPress?: () => void;
-  /** Optional route to navigate to on press (expo-router). */
+  /** Navigates here on press (expo-router). */
   href?: Href;
   /** Accepted for web API parity; a no-op on touch. */
   tooltip?: string;
-  /** Layout/positioning overrides applied to the outer pressable. */
+  /** Layout overrides, applied to the outer pressable. */
   className?: string;
-  /**
-   * Screen-reader name. Required for icon-only buttons (which have no text to
-   * derive a name from); labeled buttons name themselves from their text.
-   */
+  /** Screen-reader name — required for icon-only buttons (they have no text). */
   accessibilityLabel?: string;
 };
 
-// Mirrors web's discriminated `ButtonContentProps`: a button must have a label
-// OR a leading icon (an icon-only button omits children) — never neither. An
-// icon-only button must also supply `accessibilityLabel`: it has no visible text,
-// so without one a screen reader would announce just "button".
+// Mirrors web's discriminated `ButtonContentProps`: a label or a leading icon,
+// never neither. Icon-only (no children) must supply `accessibilityLabel` —
+// with no text, a screen reader would otherwise announce just "button".
 type ButtonProps = ButtonBaseProps &
   (
     | { icon?: IconFunctionComponent; children: string }
@@ -86,7 +74,7 @@ function Button({
   const hasLabel = children != null;
 
   function handlePress() {
-    // A disabled Pressable already blocks onPress, so no guard is needed here.
+    // disabled Pressable already blocks onPress — no guard needed
     onPress?.();
     if (href != null) router.navigate(href);
   }
@@ -98,9 +86,8 @@ function Button({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
-      // RN flex children stretch on the cross axis by default, so `fit` needs an
-      // explicit `self-start` to shrink-wrap like web's `w-fit` (RN has no
-      // `fit-content`); `full` stretches. Caller `className` (layout only) wins last.
+      // RN stretches flex children on the cross axis, so `fit` needs `self-start`
+      // to shrink-wrap like web's `w-fit` (RN has no `fit-content`).
       className={cn(width === "full" ? "w-full" : "self-start", className)}
     >
       {({ pressed }) => {
@@ -126,12 +113,9 @@ function Button({
             ) : null}
 
             {hasLabel ? (
-              // `mx-4` reproduces web's `gap-1` (4px) on each side of the label —
-              // the gap to a leading/trailing icon, or the symmetric inset web
-              // gets from its empty spacer divs when an icon is absent. `shrink`
-              // lets the label clip (not push the trailing icon out) in a
-              // constrained width; `ellipsizeMode="clip"` matches web's hard clip
-              // (no ellipsis) instead of RN's default tail "…".
+              // `mx-4` reproduces web's `gap-1` around the label (RN `gap-*` is
+              // unreliable). `shrink` + `ellipsizeMode="clip"` clip a long label
+              // (matching web) instead of pushing the trailing icon out.
               <Text
                 font={spec.font}
                 numberOfLines={1}
@@ -147,8 +131,7 @@ function Button({
                 className={cn(
                   "items-center justify-center",
                   spec.iconPad,
-                  // With a label, its `mx-4` already spaces the trailing icon;
-                  // for an icon-only pair, add the 4px gap here.
+                  // a label's `mx-4` already spaces this; only an icon-only pair needs it
                   !hasLabel && icon != null && "ml-4",
                 )}
               >
