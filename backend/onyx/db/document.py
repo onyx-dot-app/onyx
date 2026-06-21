@@ -1125,8 +1125,7 @@ def prepare_to_modify_documents(
 
     db_session.commit()  # ensure that we're not in a transaction
 
-    # Time only the lock acquisition (incl. retry sleeps) as DOC_LOCK_ACQUIRE_WAIT,
-    # not the caller's held body after yield.
+    # Time only the lock acquisition (incl. retry sleeps), not the held body.
     acquire_start = time.monotonic()
     lock_acquired = False
     for i in range(_NUM_LOCK_ATTEMPTS):
@@ -1137,9 +1136,7 @@ def prepare_to_modify_documents(
                     db_session=db_session, document_ids=document_ids
                 )
                 if lock_acquired:
-                    # Capture the acquire wait now (excludes the held body), but
-                    # record it after the caller commits below (lock released) so
-                    # the metric write doesn't extend the held lock.
+                    # Capture now (excludes held body); record after release (below).
                     acquire_ms = max(0, int((time.monotonic() - acquire_start) * 1000))
                     yielded = True
                     yield transaction

@@ -270,18 +270,16 @@ class IndexAttemptStageMetricSnapshot(BaseModel):
 
 
 class IndexAttemptStageMetricsResponse(BaseModel):
-    """Per-attempt stage-metrics payload: real per-stage rows in pipeline order,
-    then the synthesized BATCH_UNACCOUNTED residual appended last. The frontend
-    re-sorts client-side, so array order isn't load-bearing.
+    """Per-attempt stage rows (pipeline order) plus the BATCH_UNACCOUNTED residual
+    appended last; the frontend re-sorts, so array order isn't load-bearing.
     """
 
     index_attempt_id: int
     stages: list[IndexAttemptStageMetricSnapshot]
 
 
-# Stages inside the BATCH_TOTAL span; residual = BATCH_TOTAL - sum(these).
-# Excludes QUEUE_WAIT / DOCPROCESSING_SETUP / BATCH_LOAD (they precede
-# batch_total_start), docfetching stages, and BATCH_TOTAL / BATCH_UNACCOUNTED.
+# In-span stages for the residual (BATCH_TOTAL - sum). Excludes pre-span
+# stages (QUEUE_WAIT/SETUP/BATCH_LOAD), docfetching, and the aggregates.
 _BATCH_TOTAL_COMPONENT_STAGES: frozenset[IndexAttemptStage] = frozenset(
     {
         IndexAttemptStage.DOC_DB_PREPARE,
@@ -304,11 +302,9 @@ _BATCH_TOTAL_COMPONENT_STAGES: frozenset[IndexAttemptStage] = frozenset(
 def synthesize_unaccounted(
     snapshots: list[IndexAttemptStageMetricSnapshot],
 ) -> IndexAttemptStageMetricSnapshot | None:
-    """Residual = BATCH_TOTAL.total - sum(component totals), clamped at 0.
+    """Residual = BATCH_TOTAL minus in-span component totals, clamped at 0.
 
-    Returns None when BATCH_TOTAL is absent. Subtracts totals (not averages),
-    so it's robust to stages that fire multiple times (EMBEDDING) or
-    conditionally (IMAGE_PROCESSING).
+    None if BATCH_TOTAL is absent. Uses totals (not averages).
     """
     batch_total = next(
         (s for s in snapshots if s.stage == IndexAttemptStage.BATCH_TOTAL),
@@ -323,8 +319,7 @@ def synthesize_unaccounted(
         if s.stage in _BATCH_TOTAL_COMPONENT_STAGES
     )
     if component_total > batch_total.total_duration_ms:
-        # Components exceeding the total means double-counting or failed-batch
-        # skew (sub-stages record on failure, BATCH_TOTAL does not); clamp to 0.
+        # Components > total = double-counting or failed-batch skew; clamp to 0.
         logger.warning(
             "Stage components (%d ms) exceed BATCH_TOTAL (%d ms) for an index "
             "attempt; clamping BATCH_UNACCOUNTED to 0.",

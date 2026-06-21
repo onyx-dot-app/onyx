@@ -1859,11 +1859,8 @@ def _docprocessing_task(
 
         # Update batch completion and document counts atomically using database coordination
 
-        # All batches serialize on this one lock, so the acquire wait is the key
-        # contention signal — timed separately from the held section, and
-        # recorded after release (below) so the metric write doesn't extend the
-        # critical section. acquire() blocks until granted (or raises), matching
-        # the original `with cross_batch_db_lock` semantics.
+        # Time the lock-acquire wait (the contention signal); record it after
+        # release (below) so the metric write doesn't extend this shared lock.
         lock_acquire_start = time.monotonic()
         cross_batch_db_lock.acquire()
         lock_acquire_ms = max(0, int((time.monotonic() - lock_acquire_start) * 1000))
@@ -1891,8 +1888,7 @@ def _docprocessing_task(
             IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT, index_attempt_id, lock_acquire_ms
         )
 
-        # Post-coordination tail (failure recording, telemetry, storage cleanup);
-        # anything here not timed falls into the BATCH_UNACCOUNTED residual.
+        # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.
         _finalization_start = time.monotonic()
         coordination_status = None
         # Record failures in the database

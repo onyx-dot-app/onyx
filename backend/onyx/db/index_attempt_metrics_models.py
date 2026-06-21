@@ -53,8 +53,7 @@ class IndexAttemptStage(str, PyEnum):
     FINALIZATION = "FINALIZATION"
     GC_COLLECT = "GC_COLLECT"
 
-    # Residual (BATCH_TOTAL minus the in-span stages); computed at read time,
-    # never written.
+    # Residual (BATCH_TOTAL minus in-span stages); read-time, never written.
     BATCH_UNACCOUNTED = "BATCH_UNACCOUNTED"
 
     # --- Aggregate ---

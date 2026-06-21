@@ -162,8 +162,7 @@ def get_index_attempt_stage_metrics(
         index_attempt_id=index_attempt_id,
     )
     stages = [IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics]
-    # Append the BATCH_UNACCOUNTED residual; the frontend re-sorts by pipeline
-    # order, so order here doesn't matter.
+    # Append the BATCH_UNACCOUNTED residual (frontend re-sorts, so order is fine).
     unaccounted = synthesize_unaccounted(stages)
     if unaccounted is not None:
         stages.append(unaccounted)
