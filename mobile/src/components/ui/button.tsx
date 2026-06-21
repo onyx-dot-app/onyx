@@ -54,11 +54,17 @@ type ButtonBaseProps = InteractiveContract & {
 };
 
 // Mirrors web's discriminated `ButtonContentProps`: a button must have a label
-// OR a leading icon (an icon-only button omits children) — never neither.
+// OR a leading icon (an icon-only button omits children) — never neither. An
+// icon-only button must also supply `accessibilityLabel`: it has no visible text,
+// so without one a screen reader would announce just "button".
 type ButtonProps = ButtonBaseProps &
   (
     | { icon?: IconFunctionComponent; children: string }
-    | { icon: IconFunctionComponent; children?: string }
+    | {
+        icon: IconFunctionComponent;
+        children?: string;
+        accessibilityLabel: string;
+      }
   );
 
 function Button({
