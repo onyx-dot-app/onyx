@@ -1,0 +1,78 @@
+---
+name: hubspot
+description: Read, search, create, and edit CRM contacts, companies, and deals in HubSpot on the user's behalf.
+---
+
+# HubSpot
+
+Use the bundled `hubspot_api.py` helper to act as the connected user against
+HubSpot's CRM API. **You are already authenticated** — the egress proxy injects
+the user's HubSpot access token on the wire, so there is no token handling here.
+Run the helper with the Python interpreter on PATH:
+
+```
+python hubspot_api.py <object> <verb> [args]
+```
+
+`<object>` is one of `contacts`, `companies`, or `deals`. Output is JSON on
+stdout; a non-zero exit means the call failed — surface the error rather than
+retrying blindly. Pass `--raw` to keep empty fields (they are pruned by default).
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+### Read (list / get)
+
+```
+python hubspot_api.py contacts list [--limit N] [--after CURSOR] [--properties email,firstname,lastname]
+python hubspot_api.py contacts get 12345 [--properties email,firstname]
+python hubspot_api.py companies list [--limit N]
+python hubspot_api.py deals get 67890
+```
+
+### Search
+
+Filter on a single property. `--operator` defaults to `EQ` (other useful values:
+`CONTAINS_TOKEN`, `GT`, `LT`, `GTE`, `LTE`, `NEQ`).
+
+```
+python hubspot_api.py contacts search email "jane@example.com"
+python hubspot_api.py companies search name "Acme" --operator CONTAINS_TOKEN
+python hubspot_api.py deals search dealstage appointmentscheduled --limit 50
+```
+
+### Create (write)
+
+Pass one or more `name=value` property pairs.
+
+```
+python hubspot_api.py contacts create email=jane@example.com firstname=Jane lastname=Doe
+python hubspot_api.py companies create name="Acme Inc" domain=acme.com
+python hubspot_api.py deals create dealname="New deal" amount=5000
+```
+
+### Update (write)
+
+```
+python hubspot_api.py contacts update 12345 lifecyclestage=customer
+python hubspot_api.py deals update 67890 amount=7500
+```
+
+### Arbitrary API calls
+
+`call` reaches any CRM endpoint under `https://api.hubapi.com`:
+
+```
+python hubspot_api.py call GET /crm/v3/objects/contacts/12345/associations/companies
+python hubspot_api.py call POST /crm/v3/objects/contacts/search '{"filterGroups":[]}'
+```
+
+## Notes
+
+- **Scopes are fixed** by the admin (CRM contacts, companies, and deals
+  read/write). An operation needing a scope you don't have returns `403`; tell
+  the user rather than retrying.
+- Reads (list/get/search) are auto-approved. Every write (create/update) may
+  pause for the user's approval; if a call is blocked or returns `401`, report it
+  instead of looping.
