@@ -47,6 +47,12 @@
   color: var(--content-foreground);
 }
 
+[data-content-color="warning"] {
+  --content-foreground: var(--status-warning-05);
+  --content-foreground-icon: var(--status-warning-05);
+  color: var(--content-foreground);
+}
+
 [data-content-color="interactive"] {
   color: inherit;
   --content-foreground-icon: var(--interactive-foreground-icon);

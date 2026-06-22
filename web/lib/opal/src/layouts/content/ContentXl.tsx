@@ -44,6 +44,9 @@ interface ContentXlProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
+  /** Clamp the title to N lines with ellipsis. Default: `1`. Pass `undefined` to wrap freely. */
+  titleMaxLines?: number;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 
@@ -102,6 +105,7 @@ function ContentXl({
   icon: Icon,
   title,
   description,
+  titleMaxLines = 1,
   descriptionMaxLines,
   editable,
   onTitleChange,
@@ -207,7 +211,7 @@ function ContentXl({
           <Text
             font={config.titleFont}
             color="inherit"
-            maxLines={1}
+            maxLines={titleMaxLines}
             title={toPlainString(title)}
             onClick={editable ? startEditing : undefined}
           >
