@@ -121,10 +121,6 @@ export interface SlabCredentialJson {
   slab_bot_token: string;
 }
 
-export interface CanvasCredentialJson {
-  canvas_access_token: string;
-}
-
 export interface CodaCredentialJson {
   coda_bearer_token: string;
 }
@@ -145,6 +141,7 @@ export interface GuruCredentialJson {
 export interface GongCredentialJson {
   gong_access_key: string;
   gong_access_key_secret: string;
+  gong_base_url: string | null;
 }
 
 export interface LoopioCredentialJson {
@@ -319,13 +316,13 @@ export const credentialTemplates: Record<ValidSources, any> = {
   } as JiraCredentialJson,
   productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
   slab: { slab_bot_token: "" } as SlabCredentialJson,
-  canvas: { canvas_access_token: "" } as CanvasCredentialJson,
   coda: { coda_bearer_token: "" } as CodaCredentialJson,
   notion: { notion_integration_token: "" } as NotionCredentialJson,
   guru: { guru_user: "", guru_user_token: "" } as GuruCredentialJson,
   gong: {
     gong_access_key: "",
     gong_access_key_secret: "",
+    gong_base_url: null,
   } as GongCredentialJson,
   zulip: { zuliprc_content: "" } as ZulipCredentialJson,
   linear: { linear_access_token: "" } as LinearCredentialJson,
@@ -545,9 +542,6 @@ export const credentialDisplayNames: Record<string, string> = {
   // Slab
   slab_bot_token: "Slab Bot Token",
 
-  // Canvas
-  canvas_access_token: "Canvas Access Token",
-
   // Coda
   coda_bearer_token: "Coda Bearer Token",
 
@@ -564,6 +558,8 @@ export const credentialDisplayNames: Record<string, string> = {
   // Gong
   gong_access_key: "Gong Access Key",
   gong_access_key_secret: "Gong Access Key Secret",
+  gong_base_url:
+    "Gong API Base URL (optional; set your region-specific host like https://<region>.api.gong.io for non-US data residency)",
 
   // Loopio
   loopio_subdomain: "Loopio Subdomain",

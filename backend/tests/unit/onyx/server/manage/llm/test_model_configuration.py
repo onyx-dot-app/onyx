@@ -129,15 +129,30 @@ class TestModelConfigurationViewVisionFallback:
 
         assert view.supports_image_input is True
 
-    def test_strict_dynamic_provider_does_not_fall_back(self) -> None:
-        """Strict dynamic providers trust the synced flow — no cost-map fallback."""
+    def test_strict_dynamic_provider_falls_back_to_cost_map(self) -> None:
+        """Dynamic/aggregator providers (e.g. Bifrost) also fall back to the cost
+        map when no VISION flow is stored — a model synced before the source
+        reported vision still resolves to True."""
         mc = _make_model_config(
-            name="gpt-4o",
-            display_name="GPT-4o",
+            name="vertex/gemini-3-pro-image-preview",
+            display_name="Gemini 3 Pro Image Preview",
             flow_types=[LLMModelFlowType.CHAT],
         )
 
         view = self._view(mc, self.STRICT_DYNAMIC_PROVIDER, False, litellm_vision=True)
+
+        assert view.supports_image_input is True
+
+    def test_strict_dynamic_provider_false_when_cost_map_unaware(self) -> None:
+        """Dynamic provider with no VISION flow and a cost map that doesn't know
+        the model → False (no spurious vision support)."""
+        mc = _make_model_config(
+            name="my-internal-model",
+            display_name="My Internal Model",
+            flow_types=[LLMModelFlowType.CHAT],
+        )
+
+        view = self._view(mc, self.STRICT_DYNAMIC_PROVIDER, False, litellm_vision=False)
 
         assert view.supports_image_input is False
 
