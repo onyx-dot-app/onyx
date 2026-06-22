@@ -49,11 +49,17 @@ def _mock_course(
 def _build_connector(
     base_url: str = FAKE_BASE_URL,
     credentials: dict[str, Any] | None = None,
+    course_ids: list[int | str] | None = None,
+    batch_size: int = 16,
 ) -> CanvasConnector:
     """Build a connector with mocked credential validation."""
     with patch("onyx.connectors.canvas.client.rl_requests") as mock_req:
         mock_req.get.return_value = _mock_response(json_data=[_mock_course()])
-        connector = CanvasConnector(canvas_base_url=base_url)
+        connector = CanvasConnector(
+            canvas_base_url=base_url,
+            course_ids=course_ids,
+            batch_size=batch_size,
+        )
         connector.load_credentials(
             {"canvas_access_token": FAKE_TOKEN, **(credentials or {})}
         )
@@ -2364,6 +2370,38 @@ class TestReleasedMaterialsFiltering:
 
 class TestSlimDocsNewTypes:
     """Test retrieve_all_slim_docs_perm_sync includes new content types."""
+
+    @patch("onyx.connectors.canvas.connector.get_course_permissions")
+    @patch("onyx.connectors.canvas.client.rl_requests")
+    def test_perm_sync_uses_configured_courses_and_flushes_final_batch(
+        self, mock_requests: MagicMock, mock_perms: MagicMock
+    ) -> None:
+        mock_perms.return_value = ExternalAccess(
+            external_user_emails={"prof@school.edu"},
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        mock_requests.get.side_effect = _make_url_dispatcher(
+            courses=[_mock_course(2)],
+            pages=[_mock_page(10)],
+            assignments=[],
+            announcements=[],
+            files=[],
+            quizzes=[],
+            discussions=[],
+        )
+        connector = _build_connector(course_ids=[2], batch_size=100)
+
+        batches = list(connector.retrieve_all_slim_docs_perm_sync())
+        all_items = [item for batch in batches for item in batch]
+        slim_ids = {doc.id for doc in all_items if isinstance(doc, SlimDocument)}
+
+        assert "canvas-page-2-10" in slim_ids
+        assert mock_requests.get.call_count > 0
+        assert not any(
+            call.args and call.args[0].rstrip("/").endswith("/courses")
+            for call in mock_requests.get.call_args_list
+        )
 
     @patch("onyx.connectors.canvas.connector.get_course_permissions")
     @patch("onyx.connectors.canvas.client.rl_requests")
