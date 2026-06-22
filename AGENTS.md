@@ -1,148 +1,85 @@
-# PROJECT KNOWLEDGE BASE
+# CLAUDE.md
 
-This file provides guidance to AI agents when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## KEY NOTES
 
-- Python deps live in a `uv`-managed virtualenv at `.venv` (repo root). If it doesn't exist yet, create it \
-  with `uv sync --frozen`, then `source .venv/bin/activate`.
+- This repo is **GlomiAI**, a hard fork of Onyx. **Never click GitHub "Sync fork"** — the fork is intentionally diverged.
+- Python deps live in a `uv`-managed virtualenv at `.venv` (repo root). If it doesn't exist yet, create it with `uv sync --frozen`, then `source .venv/bin/activate`.
 - To make tests work, check the `.env` file at the root of the project to find an OpenAI key.
-- If using `playwright` to explore the frontend, you can usually log in with username `a@example.com` and password
-  `a`. The app can be accessed at `http://localhost:3000`.
-- You should assume that all Onyx services are running. To verify, you can check the `backend/log` directory to
-  make sure we see logs coming out from the relevant service.
+- If using `playwright` to explore the frontend, you can usually log in with username `a@example.com` and password `a`. The app can be accessed at `http://localhost:3000`.
+- You should assume that all Onyx services are running. To verify, you can check the `backend/log` directory to make sure we see logs coming out from the relevant service.
 - To connect to the Postgres database, use: `docker exec -it onyx-relational_db-1 psql -U postgres -c "<SQL>"`
 - When making calls to the backend, always go through the frontend. E.g. make a call to `http://localhost:3000/api/persona` not `http://localhost:8080/api/persona`
-- Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run queries
-  outside of those directories.
+- Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run queries outside of those directories.
+
+## Common Commands
+
+### Backend
+
+```bash
+# Activate virtualenv (always do this first)
+source .venv/bin/activate
+
+# Run unit tests
+pytest -xv backend/tests/unit
+
+# Run a single test file
+pytest -xv backend/tests/unit/path/to/test_file.py
+
+# Run external dependency tests (requires running services)
+python -m dotenv -f .vscode/.env run -- pytest backend/tests/external_dependency_unit
+
+# Run integration tests
+python -m dotenv -f .vscode/.env run -- pytest backend/tests/integration
+
+# Type checking
+uv run ty check backend/
+
+# Linting / formatting
+uv run pre-commit run --all-files
+```
+
+### Frontend
+
+```bash
+# Install deps
+cd web && bun install
+
+# Start dev server
+cd web && bun dev
+
+# Type checking
+cd web && npm run types:check
+
+# Linting
+cd web && npm run lint
+
+# Run a specific test
+cd web && bun test <path/to/test>
+
+# E2E tests
+bunx playwright test <TEST_NAME>
+```
 
 ## Project Overview
 
-**Onyx** (formerly Danswer) is an open-source Gen-AI and Enterprise Search platform that connects to company documents, apps, and people. It features a modular architecture with both Community Edition (MIT licensed) and Enterprise Edition offerings.
+**GlomiAI** is a C-end consumer AI agent platform (Chinese market), built on Onyx (MIT). It features deep research, super-conversation with tool use, and Craft (code/artifact generation sandbox).
 
-### Background Workers (Celery)
+Current phase: **Phase B** — Craft as delivery runtime + share pages + orchestrator routing.
 
-Onyx uses Celery for asynchronous task processing with multiple specialized workers:
+### Architecture Overview
 
-#### Worker Types
-
-1. **Primary Worker** (`celery_app.py`)
-
-   - Coordinates core background tasks and system-wide operations
-   - Handles connector management, document sync, pruning, and periodic checks
-   - Runs with 4 threads concurrency
-   - Tasks: connector deletion, vespa sync, pruning, LLM model updates, user file sync
-
-2. **Docfetching Worker** (`docfetching`)
-
-   - Fetches documents from external data sources (connectors)
-   - Spawns docprocessing tasks for each document batch
-   - Implements watchdog monitoring for stuck connectors
-   - Configurable concurrency (default from env)
-
-3. **Docprocessing Worker** (`docprocessing`)
-
-   - Processes fetched documents through the indexing pipeline:
-     - Upserts documents to PostgreSQL
-     - Chunks documents and adds contextual information
-     - Embeds chunks via model server
-     - Writes chunks to Vespa vector database
-     - Updates document metadata
-   - Configurable concurrency (default from env)
-
-4. **Light Worker** (`light`)
-
-   - Handles lightweight, fast operations
-   - Tasks: vespa metadata sync, connector deletion, doc permissions upsert, checkpoint cleanup, index attempt cleanup
-   - Higher concurrency for quick tasks
-
-5. **Heavy Worker** (`heavy`)
-
-   - Handles resource-intensive operations
-   - Tasks: connector pruning, document permissions sync, external group sync, CSV generation
-   - Runs with 4 threads concurrency
-
-6. **Monitoring Worker** (`monitoring`)
-
-   - System health monitoring and metrics collection
-   - Monitors Celery queues, process memory, and system status
-   - Single thread (monitoring doesn't need parallelism)
-   - Cloud-specific monitoring tasks
-
-7. **User File Processing Worker** (`user_file_processing`)
-
-   - Processes user-uploaded files
-   - Handles user file indexing and project synchronization
-   - Configurable concurrency
-
-8. **Beat Worker** (`beat`)
-   - Celery's scheduler for periodic tasks
-   - Uses DynamicTenantScheduler for multi-tenant support
-   - Schedules tasks like:
-     - Indexing checks (every 15 seconds)
-     - Connector deletion checks (every 20 seconds)
-     - Vespa sync checks (every 20 seconds)
-     - Pruning checks (every 20 seconds)
-     - Monitoring tasks (every 5 minutes)
-     - Cleanup tasks (hourly)
-
-#### Key Features
-
-- **Thread-based Workers**: All workers use thread pools (not processes) for stability
-- **Tenant Awareness**: Multi-tenant support with per-tenant task isolation. There is a
-  middleware layer that automatically finds the appropriate tenant ID when sending tasks
-  via Celery Beat.
-- **Task Prioritization**: High, Medium, Low priority queues
-- **Monitoring**: Built-in heartbeat and liveness checking
-- **Failure Handling**: Automatic retry and failure recovery mechanisms
-- **Redis Coordination**: Inter-process communication via Redis
-- **PostgreSQL State**: Task state and metadata stored in PostgreSQL
-
-#### Important Notes
-
-**Defining Tasks**:
-
-- Always use `@shared_task` rather than `@celery_app`
-- Put tasks under `background/celery/tasks/` or `ee/background/celery/tasks`
-- Never enqueue a task without an expiration. Always supply `expires=` when
-  sending tasks, either from the beat schedule or directly from another task. It
-  should never be acceptable to submit code which enqueues tasks without an
-  expiration, as doing so can lead to unbounded task queue growth.
-
-**Defining APIs**:
-When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
-function.
-
-**Testing Updates**:
-If you make any updates to a celery worker and you want to test these changes, you will need
-to ask me to restart the celery worker. There is no auto-restart on code-change mechanism.
-
-**Task Time Limits**:
-Since all tasks are executed in thread pools, the time limit features of Celery are silently
-disabled and won't work. Timeout logic must be implemented within the task itself.
-
-### Code Quality
-
-```bash
-# Install and run pre-commit hooks
-pre-commit install
-pre-commit run --all-files
-```
-
-NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
-
-## Architecture Overview
-
-### Technology Stack
+**Technology Stack**
 
 - **Backend**: Python 3.13, FastAPI, SQLAlchemy, Alembic, Celery
 - **Frontend**: Next.js 15+, React 18, TypeScript, Tailwind CSS
 - **Database**: PostgreSQL with Redis caching
-- **Search**: Vespa vector database
+- **Search**: Vespa vector database + Glomi Search Gateway (proxies to Tavily)
 - **Auth**: OAuth2, SAML, multi-provider support
 - **AI/ML**: LangChain, LiteLLM, multiple embedding models
 
-### Directory Structure
+**Directory Structure**
 
 ```
 backend/
@@ -154,196 +91,120 @@ backend/
 │   ├── document_index/          # Vespa integration
 │   ├── federated_connectors/    # External search connectors
 │   ├── llm/                     # LLM provider integrations
+│   ├── search_gateway/          # Glomi Search Gateway (FastAPI, proxies Tavily)
 │   └── server/                  # API endpoints & routers
+│       └── features/build/      # Craft sandbox feature
 ├── ee/                          # Enterprise Edition features
 ├── alembic/                     # Database migrations
 └── tests/                       # Test suites
 
 web/
+├── lib/opal/src/                # Opal design system (preferred for all new components)
 ├── src/app/                     # Next.js app router pages
-├── src/components/              # Reusable React components
+├── src/refresh-components/      # Production components (not yet in Opal)
+├── src/sections/                # Feature-specific composite components
+├── src/layouts/                 # Page-level layout components
+├── src/components/              # LEGACY — do not use
 └── src/lib/                     # Utilities & business logic
 ```
 
+### Background Workers (Celery)
+
+Onyx uses Celery for asynchronous task processing with multiple specialized workers:
+
+1. **Primary Worker** (`celery_app.py`) — connector management, document sync, pruning, periodic checks; 4 threads
+2. **Docfetching Worker** — fetches documents from external sources; spawns docprocessing tasks
+3. **Docprocessing Worker** — indexes pipeline: upsert to PG → chunk → embed → write to Vespa
+4. **Light Worker** — vespa metadata sync, connector deletion, permissions upsert, cleanup
+5. **Heavy Worker** — connector pruning, permissions sync, external group sync, CSV generation; 4 threads
+6. **Monitoring Worker** — health monitoring and metrics; single thread
+7. **User File Processing Worker** — user-uploaded file indexing
+8. **Beat Worker** — Celery scheduler using DynamicTenantScheduler; fires indexing checks every 15s, connector checks every 20s
+
+**Celery Task Rules**:
+- Always use `@shared_task` (not `@celery_app`)
+- Put tasks under `background/celery/tasks/` or `ee/background/celery/tasks`
+- Always supply `expires=` when enqueuing — never enqueue without expiration
+- Time limit features are silently disabled (thread pools); implement timeouts within the task itself
+- To test celery changes, ask the user to restart the worker (no auto-restart)
+
 ## Frontend Standards
 
-Frontend standards for the `web/` and `desktop/` projects live in `web/AGENTS.md`.
+Full standards live in `web/AGENTS.md`. Key rules:
+
+### Component Hierarchy (most → least preferred)
+1. `web/lib/opal/src/` — Opal design system; use for all new components
+2. `web/src/refresh-components/` — production components not yet migrated to Opal
+3. **Never use `web/src/components/`** — legacy, being phased out
+
+### Colors
+Always use custom Tailwind overrides from `web/tailwind-themes/tailwind.config.js` — never standard Tailwind colors. They use CSS variables that handle dark mode automatically.
+
+```typescript
+// ✅ Good
+<div className="bg-background-neutral-01 border border-border-02 text-text-01" />
+
+// ❌ Bad
+<div className="bg-gray-100 border border-gray-300 text-gray-600" />
+```
+
+### Other Key Rules
+- **Imports**: always use absolute `@/` prefix, not relative paths
+- **Components**: regular `function` syntax, not arrow functions
+- **Props**: extract into a named interface in the same file; shared types go in `interfaces.ts`
+- **Class names**: use `cn()` utility, not template strings
+- **Data fetching**: prefer `useSWR`; load data at the component level, not at the top and passed down
+- **Spacing**: prefer `padding` over `margin`; use component `padding` prop when available
+- **Hooks**: one hook per file in `web/src/hooks/`
+- **Settings pages**: use `SettingsLayouts.Root/Header/Body` from `@/layouts/settings-layouts`
 
 ## Database & Migrations
 
-### Running Migrations
-
 ```bash
-# Standard migrations
+# Run migrations
 alembic upgrade head
 
 # Multi-tenant (Enterprise)
 alembic -n schema_private upgrade head
-```
 
-### Creating Migrations
-
-```bash
-# Create migration
+# Create migration (write migration content manually in the generated file)
 alembic revision -m "description"
-
-# Multi-tenant migration
 alembic -n schema_private revision -m "description"
 ```
 
-Write the migration manually and place it in the file that alembic creates when running the above command.
-
 ## Testing Strategy
 
-First, activate the virtualenv: `source .venv/bin/activate`. If `.venv` doesn't exist yet, create it first with `uv sync --frozen`.
-
-There are 4 main types of tests within Onyx:
+First, activate the virtualenv: `source .venv/bin/activate`. If `.venv` doesn't exist yet, run `uv sync --frozen` first.
 
 ### Model choice for tests that make real LLM calls
-
-When a test makes a real LLM call (e.g. External Dependency Unit / integration tests
-that hit a live provider), use the cheap-and-fast tier for each provider:
 
 - **OpenAI**: `gpt-5-mini` (never `gpt-4o` / `gpt-4o-mini`)
 - **Anthropic**: `claude-haiku-4-5`
 
-### Unit Tests
+### Test Types (in preference order)
 
-These should not assume any Onyx/external services are available to be called.
-Interactions with the outside world should be mocked using `unittest.mock`. Generally, only
-write these for complex, isolated modules e.g. `citation_processing.py`.
+1. **Integration tests** — run against real Onyx deployment, no mocks; preferred for most features
+   - Check root `conftest.py` for fixtures; use `common_utils/` Manager classes over raw `requests`
+   - Example: `backend/tests/integration/tests/streaming_endpoints/test_chat_stream.py`
 
-To run them:
+2. **External Dependency Unit tests** — real external services (Postgres, Redis, etc.) but Onyx containers not running; allows targeted mocking
+   - Example: `backend/tests/external_dependency_unit/connectors/confluence/test_confluence_group_sync.py`
 
-```bash
-pytest -xv backend/tests/unit
-```
+3. **Unit tests** — no external services; mock everything with `unittest.mock`; only for complex isolated modules
 
-### External Dependency Unit Tests
+4. **Playwright (E2E)** — full stack including web server; tests in `web/tests/e2e`
 
-These tests assume that all external dependencies of Onyx are available and callable (e.g. Postgres, Redis,
-MinIO/S3, Vespa are running + OpenAI can be called + any request to the internet is fine + etc.).
-
-However, the actual Onyx containers are not running and with these tests we call the function to test directly.
-We can also mock components/calls at will.
-
-The goal with these tests are to minimize mocking while giving some flexibility to mock things that are flakey,
-need strictly controlled behavior, or need to have their internal behavior validated (e.g. verify a function is called
-with certain args, something that would be impossible with proper integration tests).
-
-A great example of this type of test is `backend/tests/external_dependency_unit/connectors/confluence/test_confluence_group_sync.py`.
-
-To run them:
-
-```bash
-python -m dotenv -f .vscode/.env run -- pytest backend/tests/external_dependency_unit
-```
-
-### Integration Tests
-
-Standard integration tests. Every test in `backend/tests/integration` runs against a real Onyx deployment. We cannot
-mock anything in these tests. Prefer writing integration tests (or External Dependency Unit Tests if mocking/internal
-verification is necessary) over any other type of test.
-
-Tests are parallelized at a directory level.
-
-When writing integration tests, make sure to check the root `conftest.py` for useful fixtures + the `backend/tests/integration/common_utils` directory for utilities. Prefer (if one exists), calling the appropriate Manager
-class in the utils over directly calling the APIs with a library like `requests`. Prefer using fixtures rather than
-calling the utilities directly (e.g. do NOT create admin users with
-`admin_user = UserManager.create(name="admin_user")`, instead use the `admin_user` fixture).
-
-A great example of this type of test is `backend/tests/integration/tests/streaming_endpoints/test_chat_stream.py`.
-
-To run them:
-
-```bash
-python -m dotenv -f .vscode/.env run -- pytest backend/tests/integration
-```
-
-### Playwright (E2E) Tests
-
-These tests are an even more complete version of the Integration Tests mentioned above. Has all services of Onyx
-running, _including_ the Web Server.
-
-Use these tests for anything that requires significant frontend <-> backend coordination.
-
-Tests are located at `web/tests/e2e`. Tests are written in TypeScript.
-
-To run them:
-
-```bash
-bunx playwright test <TEST_NAME>
-```
-
-For shared fixtures, best practices, and detailed guidance, see `backend/tests/README.md`.
+For shared fixtures and best practices, see `backend/tests/README.md`.
 
 ## Logs
 
-When (1) writing integration tests or (2) doing live tests (e.g. curl / playwright) you can get access
-to logs via the `backend/log/<service_name>_debug.log` file. All Onyx services (api_server, web_server, celery_X)
-will be tailing their logs to this file.
+Access service logs at `backend/log/<service_name>_debug.log` (api_server, web_server, celery_X).
 
-## Security Considerations
+## API & Error Handling
 
-- Never commit API keys or secrets to repository
-- Use encrypted credential storage for connector credentials
-- Follow RBAC patterns for new features
-- Implement proper input validation with Pydantic models
-- Use parameterized queries to prevent SQL injection
+**Defining APIs**: Do NOT use the `response_model` field on FastAPI routes — just type the function.
 
-## AI/LLM Integration
-
-- Multiple LLM providers supported via LiteLLM
-- Configurable models per feature (chat, search, embeddings)
-- Streaming support for real-time responses
-- Token management and rate limiting
-- Custom prompts and agent actions
-
-### Tracing — every LLM invocation must be tagged
-
-Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-classification call must open a generation span tagged with a value from the `LLMFlow` registry in `backend/onyx/tracing/flows.py`. Use one of:
-
-- `llm_generation_span(llm=..., flow=LLMFlow.X, input_messages=...)` for calls going through an `LLM` subclass.
-- `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., input_messages=...)` for direct provider SDK / `litellm` / model_server HTTP calls that bypass the `LLM` abstraction.
-
-Rules:
-
-1. Add a new `LLMFlow` enum value before instrumenting a new operation. Don't pass raw strings.
-2. Flow tags name the **operation** (e.g. `IMAGE_EDIT`, `RERANK`) — not the provider. Provider lives in `model_config["model_provider"]`.
-3. The auto-wrap fallback in `onyx/llm/tracing_wrap.py` emits `LLMFlow.UNTAGGED_INVOKE` / `UNTAGGED_STREAM` for calls that reach `LLM.invoke` / `LLM.stream` without an explicit span. These sentinels are visible in dashboards and indicate missing instrumentation — fix the call site, don't rely on the fallback.
-
-## Creating a Plan
-
-When creating a plan in the `plans` directory, make sure to include at least these elements:
-
-**Issues to Address**
-What the change is meant to do.
-
-**Important Notes**
-Things you come across in your research that are important to the implementation.
-
-**Implementation strategy**
-How you are going to make the changes happen. High level approach.
-
-**Tests**
-What unit (use rarely), external dependency unit, integration, and playwright tests you plan to write to
-verify the correct behavior. Don't overtest. Usually, a given change only needs one type of test.
-
-Do NOT include these: _Timeline_, _Rollback plan_
-
-This is a minimal list - feel free to include more. Do NOT write code as part of your plan.
-Keep it high level. You can reference certain files or functions though.
-
-Before writing your plan, make sure to do research. Explore the relevant sections in the codebase.
-
-## Error Handling
-
-**Always raise `OnyxError` from `onyx.error_handling.exceptions` instead of `HTTPException`.
-Never hardcode status codes or use `starlette.status` / `fastapi.status` constants directly.**
-
-A global FastAPI exception handler converts `OnyxError` into a JSON response with the standard
-`{"error_code": "...", "detail": "..."}` shape. This eliminates boilerplate and keeps error
-handling consistent across the entire backend.
+**Error handling**: Always raise `OnyxError` instead of `HTTPException`:
 
 ```python
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -351,36 +212,54 @@ from onyx.error_handling.exceptions import OnyxError
 
 # ✅ Good
 raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
-
-# ✅ Good — no extra message needed
 raise OnyxError(OnyxErrorCode.UNAUTHENTICATED)
-
-# ✅ Good — upstream service with dynamic status code
 raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=upstream_status)
 
-# ❌ Bad — using HTTPException directly
+# ❌ Bad
 raise HTTPException(status_code=404, detail="Session not found")
-
-# ❌ Bad — starlette constant
-raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 ```
 
-Available error codes are defined in `backend/onyx/error_handling/error_codes.py`. If a new error
-category is needed, add it there first — do not invent ad-hoc codes.
+Add new error codes to `backend/onyx/error_handling/error_codes.py` — don't invent ad-hoc codes.
 
-**Upstream service errors:** When forwarding errors from an upstream service where the HTTP
-status code is dynamic (comes from the upstream response), use `status_code_override`:
+## AI/LLM Integration
 
-```python
-raise OnyxError(OnyxErrorCode.BAD_GATEWAY, detail, status_code_override=e.response.status_code)
+### Tracing — every LLM invocation must be tagged
+
+Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-classification call must open a generation span tagged with a value from the `LLMFlow` registry in `backend/onyx/tracing/flows.py`:
+
+- `llm_generation_span(llm=..., flow=LLMFlow.X, input_messages=...)` for `LLM` subclass calls
+- `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., input_messages=...)` for direct SDK/litellm calls
+
+Rules:
+1. Add a new `LLMFlow` enum value before instrumenting a new operation.
+2. Flow tags name the **operation** (e.g. `IMAGE_EDIT`, `RERANK`), not the provider.
+3. `LLMFlow.UNTAGGED_INVOKE` / `UNTAGGED_STREAM` in dashboards means missing instrumentation — fix the call site.
+
+## Creating a Plan
+
+Plans go in `docs/superpowers/plans/`. Required sections:
+
+**Issues to Address** — what the change is meant to do.
+
+**Important Notes** — non-obvious findings from codebase research.
+
+**Implementation strategy** — high-level approach; reference files/functions but no code.
+
+**Tests** — which test type(s) and what to verify. Don't overtest; usually one type suffices.
+
+Do NOT include: Timeline, Rollback plan.
+
+## Code Quality
+
+```bash
+# Install and run pre-commit hooks (ruff / ruff format)
+pre-commit install
+pre-commit run --all-files
 ```
 
-## Best Practices
+Everything must be strictly typed (Python and TypeScript). See `CONTRIBUTING.md` → "Engineering Best Practices" for full style and maintainability guidelines.
 
-In addition to the other content in this file, best practices for contributing
-to the codebase can be found in the "Engineering Best Practices" section of
-`CONTRIBUTING.md`. Understand its contents and follow them.
+## Change Tracking
 
-# 所有相关的变动都需要记录在summary.md中，包括坑，经验，变动等等；
-
-# 关于产品相关的文档在docs/GlomiAI.md，有产品相关变动了需要同步更新这个文件
+- All changes, pitfalls, and learnings must be recorded in `summary.md`.
+- Product-related changes must also be reflected in `docs/GlomiAI.md`.

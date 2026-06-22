@@ -283,6 +283,8 @@ class AvailableChatModel(BaseModel):
     provider_name: str | None
     provider_type: str
     provider_display_name: str
+    supplier_id: str | None = None
+    supplier_display_name: str | None = None
     model_configuration_id: int | None
     model_id: str
     display_name: str

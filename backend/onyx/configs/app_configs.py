@@ -1493,6 +1493,20 @@ CONSUMER_DEFAULT_LLM_PROVIDER_TYPE = "openai_compatible"
 CONSUMER_DEFAULT_LLM_API_BASE = os.environ.get("CONSUMER_DEFAULT_LLM_API_BASE")
 CONSUMER_DEFAULT_LLM_API_KEY = os.environ.get("CONSUMER_DEFAULT_LLM_API_KEY")
 CONSUMER_DEFAULT_LLM_MODEL_NAME = os.environ.get("CONSUMER_DEFAULT_LLM_MODEL_NAME")
+GLOMI_MINIMAX_LLM_ENABLED = (
+    os.environ.get("GLOMI_MINIMAX_LLM_ENABLED", "false").lower() == "true"
+)
+GLOMI_MINIMAX_LLM_PROVIDER_NAME = "Glomi MiniMax"
+GLOMI_MINIMAX_LLM_PROVIDER_TYPE = "openai_compatible"
+GLOMI_MINIMAX_LLM_API_BASE = os.environ.get("GLOMI_MINIMAX_LLM_API_BASE")
+GLOMI_MINIMAX_LLM_API_KEY = os.environ.get("GLOMI_MINIMAX_LLM_API_KEY")
+GLOMI_MINIMAX_LLM_MODEL_NAMES = tuple(
+    model_name.strip()
+    for model_name in os.environ.get(
+        "GLOMI_MINIMAX_LLM_MODEL_NAMES", "MiniMax-M3"
+    ).split(",")
+    if model_name.strip()
+)
 GLOMI_DEFAULT_WEB_SEARCH_ENABLED = (
     os.environ.get("GLOMI_DEFAULT_WEB_SEARCH_ENABLED", "false").lower() == "true"
 )

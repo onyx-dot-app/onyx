@@ -174,11 +174,17 @@ def build_available_chat_models_response(
     default_model: ModelConfiguration | None,
     user: User,
 ) -> AvailableChatModelsResponse:
+    from onyx.db.glomi_model_catalog import get_glomi_supplier_metadata_for_provider
+
     selected_descriptor = getattr(user, "default_model", None)
     models: list[AvailableChatModel] = []
 
     for provider in providers:
         provider_display_name = get_provider_display_name(provider.provider)
+        supplier_metadata = get_glomi_supplier_metadata_for_provider(
+            provider_name=provider.name,
+            provider_type=provider.provider,
+        )
         for model_config in provider.model_configurations:
             if not model_config.is_visible:
                 continue
@@ -199,6 +205,16 @@ def build_available_chat_models_response(
                     provider_name=provider.name,
                     provider_type=provider.provider,
                     provider_display_name=provider_display_name,
+                    supplier_id=(
+                        supplier_metadata.supplier_id
+                        if supplier_metadata is not None
+                        else None
+                    ),
+                    supplier_display_name=(
+                        supplier_metadata.supplier_display_name
+                        if supplier_metadata is not None
+                        else None
+                    ),
                     model_configuration_id=model_config.id,
                     model_id=model_config.name,
                     display_name=_model_display_name(model_config),

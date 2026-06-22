@@ -5,6 +5,8 @@ export interface LLMOption {
   name: string;
   provider: string;
   providerDisplayName: string;
+  supplierId?: string | null;
+  supplierDisplayName?: string | null;
   modelName: string;
   modelConfigurationId?: number | null;
   displayName: string;

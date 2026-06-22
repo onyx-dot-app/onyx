@@ -18,6 +18,8 @@ interface LLMOption {
   providerId: number;
   providerName: string;
   provider: string;
+  supplierId: string | null;
+  supplierDisplayName: string | null;
   supportsImageInput: boolean;
   vendor: string | null;
 }
@@ -84,7 +86,9 @@ export default function LLMSelector({
         // For nameless providers, fall back to the provider ID so the
         // structured value is always unique and non-empty.
         const providerLabel =
-          provider.name ?? getProvider(provider.provider).productName;
+          provider.supplier_display_name ??
+          provider.name ??
+          getProvider(provider.provider).productName;
         const option: LLMOption = {
           name: displayName,
           value: structureValue(
@@ -97,6 +101,8 @@ export default function LLMSelector({
           providerId: provider.id,
           providerName: providerLabel,
           provider: provider.provider,
+          supplierId: provider.supplier_id ?? null,
+          supplierDisplayName: provider.supplier_display_name ?? null,
           supportsImageInput,
           vendor: modelConfiguration.vendor || null,
         };
@@ -114,34 +120,37 @@ export default function LLMSelector({
     requiresImageGeneration,
   ]);
 
-  // Group options by configured provider instance so multiple instances of the
-  // same provider type (e.g., two Anthropic API keys) appear as separate groups
-  // labeled with their user-given names.
+  // Group options by backend supplier when available; otherwise keep the
+  // configured provider instance grouping for custom/admin providers.
   const groupedOptions = useMemo(() => {
     const groups = new Map<
-      number,
-      { displayName: string; options: LLMOption[] }
+      string,
+      { providerId: number; displayName: string; options: LLMOption[] }
     >();
 
     llmOptions.forEach((option) => {
-      if (!groups.has(option.providerId)) {
-        groups.set(option.providerId, {
+      const groupKey = option.supplierId
+        ? `supplier:${option.supplierId}`
+        : `provider:${option.providerId}`;
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          providerId: option.providerId,
           displayName: option.providerName,
           options: [],
         });
       }
-      groups.get(option.providerId)!.options.push(option);
+      groups.get(groupKey)!.options.push(option);
     });
 
     // Sort groups alphabetically by display name
-    const sortedProviderIds = Array.from(groups.keys()).sort((a, b) =>
+    const sortedGroupKeys = Array.from(groups.keys()).sort((a, b) =>
       groups.get(a)!.displayName.localeCompare(groups.get(b)!.displayName)
     );
 
-    return sortedProviderIds.map((providerId) => {
-      const group = groups.get(providerId)!;
+    return sortedGroupKeys.map((groupKey) => {
+      const group = groups.get(groupKey)!;
       return {
-        providerId,
+        providerId: group.providerId,
         displayName: group.displayName,
         options: group.options,
       };

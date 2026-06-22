@@ -193,3 +193,4 @@
 - 处理策略：Craft 长任务优先切到更适合中文长输出且更稳定的 `qwen3.7-plus`；backend 与 frontend 的 OpenAI-compatible Craft 模型优先级均改为 `qwen3.7-plus -> glm-5.2 -> gpt-5.5 -> deepseek-v4-pro`，并把本地 compose 默认模型从 `gpt-5.5` 改为 `qwen3.7-plus`。
 - 经验：这次不是 nginx/backend/sandbox 初始化不可用，而是 LLM 上游流式响应中断；前端显示为任务中断，后端 `serve_transport` 看到 `GeneratorExit` 是客户端/上游错误后的清理结果。
 - 用户确认当前 `qwen3.7-plus` 路由不通，因此撤回刚才的 Craft 默认切 Qwen 操作：backend/frontend Craft 优先级与 compose 默认模型恢复为 `gpt-5.5`。后续应先排查 `gpt-5.5` 长流中断或选择其它已验证可用模型，不直接切 Qwen。
+- 模型目录调整为后端控制的供应商分组结构：GPT 供应商继续使用既有 `CONSUMER_DEFAULT_LLM_*` OpenAI-compatible gateway，MiniMax 供应商新增 `GLOMI_MINIMAX_LLM_*` 官方 endpoint/key 配置（默认模型 `MiniMax-M3`）。`/api/chat/available-models` 新增 `supplier_id` / `supplier_display_name`，前端模型选择器优先按后端供应商字段分组，避免把 GPT 和 MiniMax 都折叠进同一个 `openai_compatible` 组；文档与 env 模板已同步。

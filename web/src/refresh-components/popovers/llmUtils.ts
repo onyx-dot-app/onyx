@@ -39,6 +39,10 @@ export function buildLlmOptions(
           provider: llmProvider.provider,
           providerDisplayName:
             llmProvider.provider_display_name || llmProvider.provider,
+          supplierId: modelConfiguration.supplier_id ?? llmProvider.supplier_id,
+          supplierDisplayName:
+            modelConfiguration.supplier_display_name ??
+            llmProvider.supplier_display_name,
           modelName: modelConfiguration.name,
           modelConfigurationId: modelConfiguration.id ?? null,
           displayName:

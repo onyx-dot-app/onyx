@@ -63,7 +63,7 @@
 | # | Epic | 期次 | 说明 |
 |---|---|---|---|
 | **E1** | i18n + 品牌替换 | ✅ Phase A 已验证 | 已有 spec+plan。复用现有 web,中文优先；当前 `brand.png` / `logo.png` 品牌资源已接入默认 wordmark、Logo mark、favicon、公开 logo/logotype 静态资源和默认助手头像 |
-| **E2** | 平台模型目录与模型选择 | ✅ Phase A 已验证，Phase B 继续服务 Craft | 从“每账户一个默认模型”升级为平台内置 Glomi Model Catalog：默认同步 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2 等可选模型到每个 tenant，并由后端返回模型能力（视觉、推理、角色标签）给前端选择器；已有账户通过幂等同步补齐缺失模型，用户选择不被覆盖；Craft 需要复用同一模型目录并做沙箱侧 provider 映射 |
+| **E2** | 平台模型目录与模型选择 | ✅ Phase A 已验证，Phase B 继续服务 Craft | 从“每账户一个默认模型”升级为后端控制的供应商分组 Glomi Model Catalog：供应商下挂 provider 配置与模型 ID 数组，当前测试支持 GPT（既有平台 OpenAI-compatible gateway）和 MiniMax（官方 `https://api.minimax.io/v1` OpenAI-compatible endpoint）；后端返回供应商分组、模型能力（视觉、推理、角色标签）给前端选择器；已有账户通过幂等同步补齐缺失 provider/model，用户选择不被覆盖；Craft 需要复用同一模型目录并做沙箱侧 provider 映射 |
 | **E3** | 超级对话调优 | ✅ Phase A 已验证，Phase B 转为主控入口 | 默认 Persona 的中文 system prompt、工具使用策略、回答体验打磨；搜索由 Agent 在 `web_search` 调用中选择 `lite` / `medium` / `deep`；普通 chat 研究型回答采用自适应但克制的表达策略；Phase B 要把“生成交付意图”路由到 Craft |
 | **E4** | 深度研究中文化 | ✅ Phase A 已验证，继续增强 | 与 E3 共享“中文 Agent 搜索与研究能力层”：问题拆解、query portfolio、来源路由、证据评估、中文报告成稿；默认搜索 provider 第一期接入 Glomi Search Gateway |
 | **E5** | Craft C 端化 | 🚀 Phase B 当前重心 | 去 `subscription_check`、沙箱镜像/网络国内化（远端 Compose / k8s）、支持平台模型目录里的 OpenAI-compatible 模型、资源限额与回收、消费级生成入口 + 模板 |
@@ -85,7 +85,7 @@
 ## 6. 分期路线
 
 ### Phase A —— 核心能力验证（已完成）
-- **内容**：E1 i18n + E2 平台模型目录与模型选择（默认同步 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2 等模型能力画像到 tenant）+ E3/E4 中文 Agent 搜索与研究能力层（平台默认 Glomi Search Gateway + Agent 自动选择 Lite/Medium/Deep 搜索 + 深度研究中文报告）+ 聊天运行态刷新恢复 + 基于后端模型能力的图片粘贴/上传入口。
+- **内容**：E1 i18n + E2 平台模型目录与模型选择（后端按供应商同步 GPT / MiniMax provider 与模型能力画像到 tenant）+ E3/E4 中文 Agent 搜索与研究能力层（平台默认 Glomi Search Gateway + Agent 自动选择 Lite/Medium/Deep 搜索 + 深度研究中文报告）+ 聊天运行态刷新恢复 + 基于后端模型能力的图片粘贴/上传入口。
 - **结论**：核心中文对话、搜索、深度研究和平台默认模型能力已经完成验证，允许产品路线进入 Phase B。
 - **鉴权/支付**：Phase A 未做，仍不作为 Phase B 起步阻塞项。继续用 `AUTH_TYPE=basic` / 单用户 / 内测白名单即可；公网开放前再进入 Phase C 补齐。
 - **交付物**：一个**中文、接国产模型、对话 + 深度研究可用**的内测版（本地或小范围内测）。
@@ -129,7 +129,7 @@
 
 | 决策 | 现状 | 倾向/建议 |
 |---|---|---|
-| **对话模型** | ✅ 已定 | Phase A 已从单主模型升级为平台内置模型目录：前期默认 GPT-5.5、Qwen3.7 Plus、DeepSeek V4 Pro、GLM-5.2；后端同步到每个 tenant 的 LLMProvider/ModelConfiguration，并返回 `supports_image_input`、推理能力和角色标签给前端模型选择器。C 端不暴露 API key/base URL/provider 配置，只选择平台开放的模型；Phase B 继续让 Craft 复用这套目录 |
+| **对话模型** | ✅ 已定 | Phase A 已从单主模型升级为平台内置模型目录；当前进一步收敛为“供应商 → provider 配置 → 模型 ID 数组”的后端控制结构。第一期测试只开放 GPT（既有平台 gateway，默认 `gpt-5.5`）和 MiniMax（官方 OpenAI-compatible endpoint，默认 `MiniMax-M3`），后端同步到每个 tenant 的 LLMProvider/ModelConfiguration，并返回 `supplier_id`、`supplier_display_name`、`supports_image_input`、推理能力和角色标签给前端模型选择器。C 端不暴露 API key/base URL/provider 配置，只选择平台开放的模型；Phase B 继续让 Craft 复用这套目录 |
 | **默认搜索服务** | ✅ 已定 | Onyx 侧自动 seed `Glomi Search / glomi` provider，配置只暴露 Gateway base URL、API key、可选 channel；仓库内提供本地 `onyx.search_gateway.server`，第一期把 `channel=tavily` 转成 Tavily 搜索；Agent 在 `web_search` 工具调用中选择 `lite` / `medium` / `deep`，不做代码规则匹配，不增加前置 LLM router；Gateway 的 `medium` / `deep` 会做限量 query fan-out、Tavily advanced search、raw-content snippet fallback；`open_url` 抓取失败时可使用最近 web_search snippet 作为标注过的 fallback evidence；Gateway 内部用 adapter capability matrix 支持未来 Tavily / Brave / 国内搜索 / 自研源切换 |
 | **Craft 集成路线** | ✅ 已定 | Phase B 已启动。先跑稳独立 Craft 和资源治理，再做消费级模板入口与生成物分享，最后把 Craft 包成主控可派发的生成子 agent。短问答/研究不进 sandbox，需要可预览、可迭代、可分享成品时才派发 Craft |
 | **embedding 检索模型** | forward note | 仅当做「文档/知识库 RAG」时才需换中文 embedding（BGE / Qwen-embedding / 云端中文）。纯深度研究（走 web 搜索）暂不依赖，Phase B 起步先不作为 Craft 阻塞项 |

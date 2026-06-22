@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import replace
 from typing import Protocol
 
 from sqlalchemy.orm import Session
@@ -12,6 +13,7 @@ from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_ENABLED
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_MODEL_NAME
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_PROVIDER_NAME
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_PROVIDER_TYPE
+from onyx.configs.app_configs import GLOMI_MINIMAX_LLM_ENABLED
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.utils.logger import setup_logger
@@ -108,12 +110,12 @@ def seed_consumer_default_llm_provider(
     db_session: Session,
     config: ConsumerDefaultLLMConfig | None = None,
 ) -> ConsumerDefaultLLMSeedResult:
-    from onyx.db.glomi_model_catalog import GLOMI_PLATFORM_MODELS
-    from onyx.db.glomi_model_catalog import GlomiPlatformModelCatalog
+    from onyx.db.glomi_model_catalog import get_glomi_platform_model_catalog
+    from onyx.db.glomi_model_catalog import GLOMI_GPT_SUPPLIER_ID
     from onyx.db.glomi_model_catalog import sync_glomi_platform_model_catalog
 
     config = config or get_consumer_default_llm_config()
-    if not config.enabled:
+    if not config.enabled and not GLOMI_MINIMAX_LLM_ENABLED:
         logger.info("Skipping consumer default LLM provider seed: disabled")
         return ConsumerDefaultLLMSeedResult(seeded=False, reason="disabled")
 
@@ -125,27 +127,21 @@ def seed_consumer_default_llm_provider(
             seeded=False, reason="auto_provision_disabled"
         )
 
-    if not config.api_key:
-        logger.warning(
-            "Skipping consumer default LLM provider seed: "
-            "CONSUMER_DEFAULT_LLM_API_KEY is unset"
-        )
-        return ConsumerDefaultLLMSeedResult(seeded=False, reason="missing_api_key")
-
-    if not config.api_base:
-        logger.warning(
-            "Skipping consumer default LLM provider seed: "
-            "CONSUMER_DEFAULT_LLM_API_BASE is unset"
-        )
-        return ConsumerDefaultLLMSeedResult(seeded=False, reason="missing_api_base")
-
-    catalog = GlomiPlatformModelCatalog(
-        provider_name=CONSUMER_DEFAULT_LLM_PROVIDER_NAME,
-        provider_type=CONSUMER_DEFAULT_LLM_PROVIDER_TYPE,
-        api_base=config.api_base,
-        api_key=config.api_key,
+    base_catalog = get_glomi_platform_model_catalog()
+    catalog = replace(
+        base_catalog,
         enabled=True,
-        models=GLOMI_PLATFORM_MODELS,
+        providers=tuple(
+            replace(
+                provider,
+                api_base=config.api_base,
+                api_key=config.api_key,
+                enabled=config.enabled,
+            )
+            if provider.supplier_id == GLOMI_GPT_SUPPLIER_ID
+            else provider
+            for provider in base_catalog.providers
+        ),
     )
     result = sync_glomi_platform_model_catalog(db_session, catalog)
     return ConsumerDefaultLLMSeedResult(

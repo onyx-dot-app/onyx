@@ -32,6 +32,19 @@ export function groupLlmOptions(
 
   filteredOptions.forEach((option) => {
     const provider = option.provider.toLowerCase();
+    if (option.supplierId && option.supplierDisplayName) {
+      const groupKey = `supplier/${option.supplierId.toLowerCase()}`;
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          displayName: option.supplierDisplayName,
+          options: [],
+          Icon: getModelIcon(option.provider, option.modelName),
+        });
+      }
+      groups.get(groupKey)!.options.push(option);
+      return;
+    }
+
     const isAggregator = AGGREGATOR_PROVIDERS.has(provider);
     const groupKey =
       isAggregator && option.vendor

@@ -13,6 +13,8 @@ export interface ModelConfiguration {
   /** Admin-set override that takes precedence over display_name everywhere in the UI. */
   custom_display_name?: string;
   provider_display_name?: string;
+  supplier_id?: string;
+  supplier_display_name?: string;
   vendor?: string;
   version?: string;
   region?: string;
@@ -77,6 +79,8 @@ export interface LLMProviderDescriptor {
   name: string | null;
   provider: string;
   provider_display_name: string;
+  supplier_id?: string | null;
+  supplier_display_name?: string | null;
   model_configurations: ModelConfiguration[];
 }
 
@@ -125,6 +129,8 @@ export interface AvailableChatModel {
   provider_name: string | null;
   provider_type: string;
   provider_display_name: string;
+  supplier_id?: string | null;
+  supplier_display_name?: string | null;
   model_configuration_id: number | null;
   model_id: string;
   display_name: string;

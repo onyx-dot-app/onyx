@@ -16,6 +16,7 @@
     ]
   },
   "enabledPlugins": {
-    "security-guidance@claude-plugins-official": true
+    "security-guidance@claude-plugins-official": true,
+    "superpowers@superpowers-marketplace": true
   }
 }

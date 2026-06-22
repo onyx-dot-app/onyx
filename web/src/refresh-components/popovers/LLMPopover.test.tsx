@@ -111,4 +111,40 @@ describe("LLMPopover helpers", () => {
     expect(grouped[0]?.options).toHaveLength(1);
     expect(grouped[1]?.options).toHaveLength(1);
   });
+
+  test("groups Glomi platform options by backend supplier metadata", () => {
+    const options: LLMOption[] = [
+      {
+        name: "Glomi Default",
+        provider: "openai_compatible",
+        providerDisplayName: "OpenAI-Compatible",
+        supplierId: "gpt",
+        supplierDisplayName: "GPT",
+        modelName: "gpt-5.5",
+        displayName: "GPT-5.5",
+        vendor: null,
+      },
+      {
+        name: "Glomi MiniMax",
+        provider: "openai_compatible",
+        providerDisplayName: "OpenAI-Compatible",
+        supplierId: "minimax",
+        supplierDisplayName: "MiniMax",
+        modelName: "MiniMax-M3",
+        displayName: "MiniMax-M3",
+        vendor: null,
+      },
+    ];
+
+    const grouped = groupLlmOptions(options);
+
+    expect(grouped.map((group) => group.key)).toEqual([
+      "supplier/gpt",
+      "supplier/minimax",
+    ]);
+    expect(grouped.map((group) => group.displayName)).toEqual([
+      "GPT",
+      "MiniMax",
+    ]);
+  });
 });

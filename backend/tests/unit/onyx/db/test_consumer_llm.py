@@ -44,6 +44,20 @@ def test_seed_skips_when_disabled() -> None:
     assert result.reason == "disabled"
 
 
+def test_seed_allows_minimax_when_legacy_gpt_provider_disabled(monkeypatch) -> None:
+    monkeypatch.setattr("onyx.db.consumer_llm.GLOMI_MINIMAX_LLM_ENABLED", True)
+    sync_mock = Mock(return_value=SimpleNamespace(synced=True, reason="synced"))
+    monkeypatch.setattr(
+        "onyx.db.glomi_model_catalog.sync_glomi_platform_model_catalog",
+        sync_mock,
+    )
+
+    result = seed_consumer_default_llm_provider(Mock(), _config(enabled=False))
+
+    assert result.seeded is True
+    assert result.reason == "synced"
+
+
 def test_seed_skips_when_auto_provisioning_disabled() -> None:
     result = seed_consumer_default_llm_provider(
         Mock(), _config(auto_provision_enabled=False)

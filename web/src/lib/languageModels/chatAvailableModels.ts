@@ -19,6 +19,8 @@ export function availableChatModelsToProviderResponse(
         name: model.provider_name,
         provider: model.provider_type,
         provider_display_name: model.provider_display_name,
+        supplier_id: model.supplier_id,
+        supplier_display_name: model.supplier_display_name,
         model_configurations: [],
       });
     }
@@ -35,6 +37,8 @@ export function availableChatModelsToProviderResponse(
       display_name: model.display_name,
       custom_display_name: undefined,
       provider_display_name: model.provider_display_name,
+      supplier_id: model.supplier_id ?? undefined,
+      supplier_display_name: model.supplier_display_name ?? undefined,
       vendor: undefined,
       version: undefined,
       region: undefined,
