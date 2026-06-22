@@ -35,7 +35,7 @@ interface ContentSmProps {
   /** Layout orientation. Default: `"inline"`. */
   orientation?: ContentSmOrientation;
 
-  /** Clamp the title to N lines with ellipsis. Default: `1`. Pass `undefined` to wrap freely. */
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
   /** ARIA role forwarded to the title text element. */

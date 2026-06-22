@@ -70,7 +70,7 @@ interface ContentMdProps {
   /** Tag rendered beside the title. */
   tag?: TagProps;
 
-  /** Clamp the title to N lines with ellipsis. Default: `1`. Pass `undefined` to wrap freely. */
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
   /** Size preset. Default: `"main-ui"`. */
