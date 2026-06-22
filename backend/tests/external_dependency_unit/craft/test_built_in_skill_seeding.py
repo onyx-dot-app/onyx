@@ -32,8 +32,8 @@ from onyx.server.features.skill.api import _ensure_custom
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import BuiltInSkillDefinition
-from tests.external_dependency_unit.craft._test_helpers import make_built_in_skill_row
-from tests.external_dependency_unit.craft._test_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import make_skill
 
 
 @pytest.fixture(autouse=True)

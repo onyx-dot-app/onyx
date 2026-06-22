@@ -31,9 +31,9 @@ from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
 )
 from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
-from tests.external_dependency_unit.craft._test_helpers import make_external_app
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import make_external_app
+from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import reset_built_in_skill_row
 
 _AUTH_TEMPLATE = {"Authorization": "Bearer {token}"}
 

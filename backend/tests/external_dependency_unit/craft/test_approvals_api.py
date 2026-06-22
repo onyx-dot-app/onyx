@@ -29,15 +29,13 @@ from onyx.server.features.build.approvals.api import list_live_approvals
 from onyx.server.features.build.approvals.api import submit_decision
 from onyx.server.features.build.approvals.api import submit_session_grant
 from onyx.server.features.build.db import action_approval
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import _set_created_at
-from tests.external_dependency_unit.craft._test_helpers import action_entry
-from tests.external_dependency_unit.craft._test_helpers import (
-    default_action_entries as _default_actions,
-)
-from tests.external_dependency_unit.craft._test_helpers import make_external_app
-from tests.external_dependency_unit.craft._test_helpers import make_skill
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.payloads import action_entry
+from tests.common.craft.payloads import default_action_entries as _default_actions
+from tests.external_dependency_unit.craft.db_helpers import make_external_app
+from tests.external_dependency_unit.craft.db_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import set_session_created_at
 
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -97,7 +95,7 @@ def test_list_live_approvals_filter_logic(
 
     # Push the stale row just past the 180s spec cutoff (hardcoded, not derived).
     stale_when = datetime.now(timezone.utc) - timedelta(seconds=190)
-    _set_created_at(db_session, ActionApproval, stale.approval_id, stale_when)
+    set_session_created_at(db_session, ActionApproval, stale.approval_id, stale_when)
 
     response = list_live_approvals(
         session_id=session.id, user=user, db_session=db_session
@@ -323,7 +321,7 @@ def test_submit_decision_pushes_wake_on_redis(
     )
     db_session.commit()
 
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     # Pre-clean so a leftover from a prior failed run can't mask the bug.
     cache.delete(approval_cache._wake_key(approval.approval_id))
 
@@ -425,7 +423,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         (str(matching.approval_id), ApprovalDecision.APPROVED),
     ]
 
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert approval_cache.cached_session_grants_cover(
         session_id=session.id,
         external_app_id=app.id,
@@ -458,7 +456,7 @@ def test_submit_decision_swallows_transient_wake_failure(
     )
     db_session.commit()
 
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     # Pre-clean so the post-call assertion isn't poisoned by a leftover.
     cache.delete(approval_cache._wake_key(approval.approval_id))
 

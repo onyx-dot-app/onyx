@@ -26,10 +26,10 @@ from onyx.server.features.build.db.action_approval import (
     list_session_pending_action_approvals,
 )
 from onyx.server.features.build.db.action_approval import try_record_decision
-from tests.external_dependency_unit.craft._test_helpers import _set_created_at
-from tests.external_dependency_unit.craft._test_helpers import action_entry
-from tests.external_dependency_unit.craft._test_helpers import default_action_entries
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.common.craft.payloads import action_entry
+from tests.common.craft.payloads import default_action_entries
+from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import set_session_created_at
 
 
 def _seed_pending(
@@ -215,7 +215,9 @@ def test_list_session_pending_action_approvals_filters_by_created_after(
     new_row = _seed_pending(db_session, bs.id, payload={"cmd": "new"})
 
     one_hour_ago = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
-    _set_created_at(db_session, ActionApproval, old_row.approval_id, one_hour_ago)
+    set_session_created_at(
+        db_session, ActionApproval, old_row.approval_id, one_hour_ago
+    )
 
     cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)
     rows = list_session_pending_action_approvals(

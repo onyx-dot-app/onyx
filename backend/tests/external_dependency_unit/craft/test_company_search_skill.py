@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import User
 from onyx.skills.rendering import build_available_sources_section
-from tests.external_dependency_unit.craft._test_helpers import make_cc_pair
+from tests.external_dependency_unit.craft.db_helpers import make_cc_pair
 
 
 class TestBuildAvailableSourcesSection:

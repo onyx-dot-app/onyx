@@ -76,14 +76,23 @@ def get_filerecord(db_session: Session, file_id: str) -> FileRecord | None:
     return get_filerecord_by_file_id_optional(file_id=file_id, db_session=db_session)
 
 
-def make_cc_pair(db_session: Session) -> ConnectorCredentialPair:
+def make_cc_pair(
+    db_session: Session,
+    source: DocumentSource = DocumentSource.MOCK_CONNECTOR,
+    *,
+    commit: bool = True,
+) -> ConnectorCredentialPair:
     """Create a Connector + Credential + ConnectorCredentialPair for a test.
 
-    All names are UUID-suffixed so parallel test runs don't collide.
+    All names are UUID-suffixed so parallel test runs don't collide. Pass
+    ``commit=False`` to flush only (no commit) for lanes that rely on the
+    surrounding transaction rollback for cleanup; the default commits +
+    refreshes for callers whose work spans separate sessions.
     """
+    suffix = uuid4().hex[:8]
     connector = Connector(
-        name=f"test-connector-{uuid4().hex[:8]}",
-        source=DocumentSource.MOCK_CONNECTOR,
+        name=f"test-connector-{suffix}",
+        source=source,
         input_type=InputType.LOAD_STATE,
         connector_specific_config={},
         refresh_freq=None,
@@ -94,7 +103,7 @@ def make_cc_pair(db_session: Session) -> ConnectorCredentialPair:
     db_session.flush()
 
     credential = Credential(
-        source=DocumentSource.MOCK_CONNECTOR,
+        source=source,
         credential_json={},
     )
     db_session.add(credential)
@@ -103,14 +112,17 @@ def make_cc_pair(db_session: Session) -> ConnectorCredentialPair:
     pair = ConnectorCredentialPair(
         connector_id=connector.id,
         credential_id=credential.id,
-        name=f"test-cc-pair-{uuid4().hex[:8]}",
+        name=f"test-cc-pair-{suffix}",
         status=ConnectorCredentialPairStatus.ACTIVE,
         access_type=AccessType.PUBLIC,
         auto_sync_options=None,
     )
     db_session.add(pair)
-    db_session.commit()
-    db_session.refresh(pair)
+    if commit:
+        db_session.commit()
+        db_session.refresh(pair)
+    else:
+        db_session.flush()
     return pair
 
 
