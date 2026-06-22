@@ -78,6 +78,26 @@ export interface BuiltInExternalAppDescriptor {
   actions: EndpointDescriptor[];
 }
 
+// Mirrors `onyx.external_apps.oauth_handler.TokenEndpointAuthMethod`.
+export type TokenEndpointAuthMethod =
+  | "client_secret_post"
+  | "client_secret_basic";
+
+// Mirrors `onyx.external_apps.custom_oauth.CustomOAuthConfig`. No secrets —
+// client creds live in `organization_credentials`.
+export interface CustomOAuthConfig {
+  authorize_url: string;
+  token_url: string;
+  scope: string;
+  scope_param: string;
+  extra_authorize_params: Record<string, string>;
+  token_endpoint_auth_method: TokenEndpointAuthMethod;
+}
+
+// How a user connects. Server-derived — `app_type` alone can't tell, since
+// CUSTOM covers both flows.
+export type ExternalAppAuthFlow = "oauth" | "manual";
+
 export interface ExternalAppAdminResponse {
   id: number;
   name: string;
@@ -91,6 +111,9 @@ export interface ExternalAppAdminResponse {
   // Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked here; the
   // admin may only enable/disable + set policies (the UI hides the rest).
   is_onyx_managed: boolean;
+  // Admin-defined OAuth flow for CUSTOM apps; null for static-credential
+  // custom apps and all built-ins.
+  oauth_config: CustomOAuthConfig | null;
 }
 
 export interface ExternalAppUserResponse {
@@ -102,6 +125,7 @@ export interface ExternalAppUserResponse {
   credential_keys: string[];
   credential_values: Record<string, string>;
   authenticated: boolean;
+  auth_flow: ExternalAppAuthFlow;
 }
 
 /**

@@ -1,9 +1,11 @@
 from typing import Any
+from typing import Literal
 
 from pydantic import BaseModel
 
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
+from onyx.external_apps.custom_oauth import CustomOAuthConfig
 from onyx.external_apps.models import ActionPolicyView
 
 
@@ -56,6 +58,9 @@ class UpdateExternalAppRequest(BaseModel):
     organization_credentials: dict[str, str] | None = None
     # Full-replace stored overrides when present (empty clears); None leaves them.
     action_policies: dict[str, EndpointPolicy] | None = None
+    # CUSTOM apps only. Unlike the fields above, explicit null clears the
+    # config; the route distinguishes omitted vs null via `model_fields_set`.
+    oauth_config: CustomOAuthConfig | None = None
 
 
 class ExternalAppAdminResponse(BaseModel):
@@ -74,6 +79,9 @@ class ExternalAppAdminResponse(BaseModel):
     # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;
     # admin may only enable/disable + set policies. UI hides the rest.
     is_onyx_managed: bool = False
+    # Admin-defined OAuth flow for CUSTOM apps (holds no secrets); None for
+    # static-credential custom apps and all built-ins.
+    oauth_config: CustomOAuthConfig | None = None
 
 
 class UpsertUserCredentialsRequest(BaseModel):
@@ -106,10 +114,20 @@ class ExternalAppUserResponse(BaseModel):
     credential_keys: list[str]
     credential_values: dict[str, Any]
     authenticated: bool
+    # How the user connects. Server-derived — `app_type` alone can't tell,
+    # since CUSTOM covers both flows.
+    auth_flow: Literal["oauth", "manual"]
 
 
 class OAuthStartResponse(BaseModel):
     authorize_url: str
+
+
+class OAuthRedirectUriResponse(BaseModel):
+    """The redirect URI the OAuth flow sends, derived from WEB_DOMAIN — the
+    browser origin can differ (proxies, tunnels)."""
+
+    redirect_uri: str
 
 
 class OAuthCallbackRequest(BaseModel):
