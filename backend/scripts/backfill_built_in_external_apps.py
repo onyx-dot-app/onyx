@@ -56,13 +56,14 @@ from onyx.external_apps.providers.registry import (  # noqa: E402
     get_onyx_managed_provider,
 )
 from onyx.utils.variable_functionality import global_version  # noqa: E402
+from shared_configs.configs import MULTI_TENANT  # noqa: E402
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA  # noqa: E402
 
 DEFAULT_WORKERS = 16
 
 # Descriptor (code-defined) + env-sourced credentials, None when unconfigured.
 # Env is global, so this is resolved once and reused across tenants.
-ManagedAppConfig = tuple[BuiltInExternalAppDescriptor, dict[str, str] | None]
+type ManagedAppConfig = tuple[BuiltInExternalAppDescriptor, dict[str, str] | None]
 
 
 class TenantResult(BaseModel):
@@ -260,7 +261,15 @@ def _resolve_app_type(raw: str | None) -> ExternalAppType | None:
 def _resolve_tenant_ids(args: argparse.Namespace) -> list[str]:
     if args.all_tenants:
         return get_all_tenant_ids()
-    return [args.tenant_id or POSTGRES_DEFAULT_SCHEMA]
+    if args.tenant_id:
+        return [args.tenant_id]
+    if MULTI_TENANT:
+        raise SystemExit(
+            "Multi-tenant deployment: pass --tenant-id <schema> or --all-tenants. "
+            "Refusing to silently target the shared schema "
+            f"('{POSTGRES_DEFAULT_SCHEMA}')."
+        )
+    return [POSTGRES_DEFAULT_SCHEMA]
 
 
 def _print_preamble(managed_apps: list[ManagedAppConfig], dry_run: bool) -> None:
@@ -302,7 +311,10 @@ def main() -> None:
 
     print()
     if failed_tenants:
-        print(f"FAILED tenants ({len(failed_tenants)}): {failed_tenants}")
+        print(
+            f"FAILED tenants ({len(failed_tenants)}): {failed_tenants}",
+            file=sys.stderr,
+        )
         sys.exit(1)
     print("Done.")
 
