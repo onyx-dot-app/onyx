@@ -141,7 +141,7 @@ function ContentMd({
   suffix,
   auxIcon,
   tag,
-  titleMaxLines = 1,
+  titleMaxLines,
   sizePreset = "main-ui",
   ref,
 }: ContentMdProps) {

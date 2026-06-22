@@ -87,7 +87,7 @@ function ContentLg({
   icon: Icon,
   title,
   description,
-  titleMaxLines = 1,
+  titleMaxLines,
   descriptionMaxLines,
   editable,
   onTitleChange,

@@ -45,7 +45,7 @@ interface ContentBaseProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
-  /** Clamp the title to N lines with ellipsis. Default: `1`. Pass `undefined` to wrap freely. */
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */

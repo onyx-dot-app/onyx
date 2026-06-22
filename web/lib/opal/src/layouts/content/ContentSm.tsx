@@ -76,7 +76,7 @@ function ContentSm({
   title,
   sizePreset = "main-ui",
   orientation = "inline",
-  titleMaxLines = 1,
+  titleMaxLines,
   role,
   ref,
 }: ContentSmProps) {

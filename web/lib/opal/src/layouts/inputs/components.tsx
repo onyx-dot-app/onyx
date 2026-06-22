@@ -234,7 +234,6 @@ function InputErrorText({
         title={children}
         color={color}
         role="alert"
-        titleMaxLines={undefined}
       />
     </div>
   );

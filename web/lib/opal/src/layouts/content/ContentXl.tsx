@@ -105,7 +105,7 @@ function ContentXl({
   icon: Icon,
   title,
   description,
-  titleMaxLines = 1,
+  titleMaxLines,
   descriptionMaxLines,
   editable,
   onTitleChange,
