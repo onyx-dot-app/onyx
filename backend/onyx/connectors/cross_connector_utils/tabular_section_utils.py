@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 from onyx.connectors.models import TabularSection
 from onyx.file_processing.extract_file_text import file_io_to_text
+from onyx.file_processing.extract_file_text import iter_xlsx_sheets_streamed
+from onyx.file_processing.extract_file_text import xlsx_has_large_sheet
 from onyx.file_processing.extract_file_text import xlsx_sheet_extraction
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import RawFileCallback
@@ -34,16 +36,39 @@ def _tsv_to_csv(tsv_text: str) -> str:
     return out.getvalue().rstrip("\n")
 
 
+def _xlsx_to_file_backed_sections(
+    file: IO[bytes],
+    file_name: str,
+    link: str,
+    raw_file_callback: RawFileCallback,
+) -> list[TabularSection]:
+    """Stream each worksheet's CSV to the file store and reference it from a
+    file-backed TabularSection, so a huge sheet never lands on the worker heap."""
+    sections: list[TabularSection] = []
+    for sheet_title, csv_bytes in iter_xlsx_sheets_streamed(file):
+        csv_file_id = raw_file_callback(csv_bytes, "text/csv")
+        sections.append(
+            TabularSection(
+                link=link or file_name,
+                csv_file_id=csv_file_id,
+                heading=f"{file_name} :: {sheet_title}",
+            )
+        )
+    return sections
+
+
 def tabular_file_to_sections(
     file: IO[bytes],
     file_name: str,
     link: str = "",
+    raw_file_callback: RawFileCallback | None = None,
 ) -> list[TabularSection]:
     """Convert a tabular file into one or more TabularSections.
 
-    - .xlsx → one TabularSection per non-empty sheet.
-    - .csv / .tsv → a single TabularSection containing the full decoded
-      file.
+    - .xlsx → one TabularSection per non-empty sheet. A workbook with a very
+      large sheet (and a `raw_file_callback`) is streamed to file-backed
+      sections; otherwise it's rendered inline.
+    - .csv / .tsv → a single TabularSection containing the full decoded file.
 
     Returns an empty list when the file yields no extractable content.
     """
@@ -53,6 +78,13 @@ def tabular_file_to_sections(
         raise ValueError(f"{file_name!r} is not a tabular file")
 
     if lowered.endswith(tuple(OnyxFileExtensions.SPREADSHEET_EXTENSIONS)):
+        if raw_file_callback is not None and xlsx_has_large_sheet(file):
+            return _xlsx_to_file_backed_sections(
+                file,
+                file_name=file_name,
+                link=link,
+                raw_file_callback=raw_file_callback,
+            )
         return [
             TabularSection(
                 link=link or file_name,
@@ -89,6 +121,7 @@ def extract_and_stage_tabular_file(
         file=file,
         file_name=file_name,
         link=link,
+        raw_file_callback=raw_file_callback,
     )
     # rewind so the callback can re-read what extraction consumed
     file.seek(0)

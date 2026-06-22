@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import tempfile
 import zipfile
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -26,6 +27,7 @@ from PIL import Image
 
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_XLSX_CELLS_PER_SHEET
+from onyx.configs.app_configs import XLSX_STREAM_SHEET_BYTES
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -701,6 +703,63 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
         workbook.close()
 
     return sheets
+
+
+def xlsx_has_large_sheet(
+    file: IO[bytes], threshold: int = XLSX_STREAM_SHEET_BYTES
+) -> bool:
+    """True if any worksheet's *uncompressed* XML exceeds `threshold` — a cheap
+    pre-parse check read straight from the xlsx zip directory (no decompression).
+    Routes a huge workbook to streamed, file-backed extraction."""
+    try:
+        file.seek(0)
+        with zipfile.ZipFile(file) as zf:
+            return any(
+                info.file_size > threshold
+                for info in zf.infolist()
+                if info.filename.startswith("xl/worksheets/")
+                and info.filename.endswith(".xml")
+            )
+    except BadZipFile:
+        return False
+    finally:
+        file.seek(0)
+
+
+def iter_xlsx_sheets_streamed(file: IO[bytes]) -> Iterator[tuple[str, IO[bytes]]]:
+    """Stream each non-empty worksheet to a temp CSV file and yield
+    `(sheet_title, csv_bytes)` — peak RAM is one row, not the whole sheet.
+
+    Each yielded handle is a binary temp file positioned at 0; consume it before
+    requesting the next sheet (it is closed afterward). Unlike
+    `xlsx_sheet_extraction`, this does no column trimming or empty-run collapsing
+    — those need a full in-memory pass, which is exactly what this avoids.
+    """
+    workbook = openpyxl.load_workbook(file, read_only=True)
+    try:
+        for sheet in workbook.worksheets:
+            ro_sheet = cast(ReadOnlyWorksheet, sheet)
+            ro_sheet.reset_dimensions()
+            tmp = tempfile.TemporaryFile(mode="w+", encoding="utf-8", newline="")
+            writer = csv.writer(tmp, lineterminator="\n")
+            wrote = False
+            for row in ro_sheet.iter_rows(values_only=True):
+                if not any(v is not None and v != "" for v in row):
+                    continue
+                writer.writerow(["" if v is None else str(v) for v in row])
+                wrote = True
+            tmp.flush()
+            if not wrote:
+                tmp.close()
+                continue
+            binary = cast(IO[bytes], tmp.buffer)
+            binary.seek(0)
+            try:
+                yield ro_sheet.title, binary
+            finally:
+                tmp.close()
+    finally:
+        workbook.close()
 
 
 def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
