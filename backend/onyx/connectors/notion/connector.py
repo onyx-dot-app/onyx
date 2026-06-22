@@ -41,6 +41,21 @@ _NOTION_PAGE_SIZE = 100
 _NOTION_CALL_TIMEOUT = 30  # 30 seconds
 _MAX_PAGES = 1000
 
+# Per-workspace bucket for databases whose real parent page never became a node.
+# Raw id derives from the workspace id so re-syncs update one row per workspace.
+_UNFILED_NODE_SUFFIX = "__unfiled"
+_UNFILED_DATABASES_DISPLAY_NAME = "Unfiled databases"
+
+
+def _notion_link(raw_id: str) -> str:
+    """Notion web URL for an object; Notion URLs omit the UUID's dashes."""
+    return f"https://notion.so/{raw_id.replace('-', '')}"
+
+
+def _unfiled_node_raw_id(workspace_id: str) -> str:
+    """Stable raw id for a workspace's Unfiled-databases node."""
+    return f"{workspace_id}{_UNFILED_NODE_SUFFIX}"
+
 
 # TODO: Pages need to have their metadata ingested
 
@@ -66,6 +81,16 @@ class NotionDataSource(BaseModel):
 
     id: str
     name: str = ""
+
+
+class _TrackedDatabase(BaseModel):
+    """A non-workspace-parented database held from the prepass so its parent can be
+    re-resolved once every page node for the run exists."""
+
+    raw_node_id: str
+    parent_raw_id: str
+    display_name: str
+    link: str | None
 
 
 class NotionBlock(BaseModel):
@@ -157,6 +182,9 @@ class NotionConnector(LoadConnector, PollConnector):
         # Maps data_source_id -> database_id (populated in _read_pages_from_database).
         # Used to resolve data_source_id parent types back to the database.
         self._data_source_to_database_map: dict[str, str] = {}
+        # Non-workspace-parented databases discovered in the prepass, held so their
+        # parent can be re-resolved at end-of-run (see _reconcile_database_parents).
+        self._tracked_databases: list[_TrackedDatabase] = []
 
     @classmethod
     @override
@@ -407,7 +435,7 @@ class NotionConnector(LoadConnector, PollConnector):
             raw_node_id=self.workspace_id,
             raw_parent_id=None,  # Parent is SOURCE (auto-created by system)
             display_name=self.workspace_name or "Notion Workspace",
-            link=f"https://notion.so/{self.workspace_id.replace('-', '')}",
+            link=_notion_link(self.workspace_id),
             node_type=HierarchyNodeType.WORKSPACE,
         )
 
@@ -588,12 +616,11 @@ class NotionConnector(LoadConnector, PollConnector):
         hierarchy_nodes: list[HierarchyNode] = []
 
         # Create hierarchy node for this database if not already yielded.
-        # Notion URLs omit dashes from UUIDs: https://notion.so/17ab3186873d418fb899c3f6a43f68de
         db_node = self._maybe_yield_hierarchy_node(
             raw_node_id=database_id,
             raw_parent_id=database_parent_raw_id or self.workspace_id,
             display_name=database_name or f"Database {database_id}",
-            link=f"https://notion.so/{database_id.replace('-', '')}",
+            link=_notion_link(database_id),
             node_type=HierarchyNodeType.DATABASE,
         )
         if db_node:
@@ -1025,9 +1052,7 @@ class NotionConnector(LoadConnector, PollConnector):
                     db_page = self._fetch_database_as_page(db_id)
                     db_name = db_page.database_name or f"Database {db_id}"
                     parent_raw_id = self._get_parent_raw_id(db_page.parent)
-                    db_url = (
-                        db_page.url or f"https://notion.so/{db_id.replace('-', '')}"
-                    )
+                    db_url = db_page.url or _notion_link(db_id)
                 except requests.exceptions.RequestException as e:
                     logger.warning(
                         "Could not fetch database '%s', "
@@ -1037,24 +1062,75 @@ class NotionConnector(LoadConnector, PollConnector):
                     )
                     db_name = f"Database {db_id}"
                     parent_raw_id = self.workspace_id
-                    db_url = f"https://notion.so/{db_id.replace('-', '')}"
+                    db_url = _notion_link(db_id)
 
                 # _maybe_yield_hierarchy_node deduplicates by raw_node_id,
                 # so multiple data sources under one database produce one node.
+                effective_parent = parent_raw_id or self.workspace_id
                 node = self._maybe_yield_hierarchy_node(
                     raw_node_id=db_id,
-                    raw_parent_id=parent_raw_id or self.workspace_id,
+                    raw_parent_id=effective_parent,
                     display_name=db_name,
                     link=db_url,
                     node_type=HierarchyNodeType.DATABASE,
                 )
-                if node:
-                    yield node
+                if not node:
+                    continue
+                yield node
+
+                # Workspace-parented databases already resolve; others need their
+                # parent re-resolved at end-of-run (parent page may come later, or never).
+                if effective_parent and effective_parent != self.workspace_id:
+                    self._tracked_databases.append(
+                        _TrackedDatabase(
+                            raw_node_id=db_id,
+                            parent_raw_id=effective_parent,
+                            display_name=db_name,
+                            link=db_url,
+                        )
+                    )
 
             if not db_res.has_more:
                 break
             query_dict["start_cursor"] = db_res.next_cursor
             pages_seen += 1
+
+    def _reconcile_database_parents(
+        self,
+    ) -> Generator[HierarchyNode, None, None]:
+        """Re-emit tracked databases with their final parent once every page node
+        exists: the real page if it became a node, else a synthetic per-workspace
+        "Unfiled" node so orphans sit under the workspace instead of SOURCE.
+
+        The re-emit (idempotent on ``(raw_node_id, source)``) also corrects the
+        prepass-before-pages ordering that otherwise strands page-parented databases.
+        """
+        if not self._tracked_databases:
+            return
+
+        seen = self.seen_hierarchy_node_raw_ids
+        has_orphan = any(td.parent_raw_id not in seen for td in self._tracked_databases)
+
+        unfiled_raw_id: str | None = None
+        if has_orphan and self.workspace_id:
+            unfiled_raw_id = _unfiled_node_raw_id(self.workspace_id)
+            yield HierarchyNode(
+                raw_node_id=unfiled_raw_id,
+                raw_parent_id=self.workspace_id,
+                display_name=_UNFILED_DATABASES_DISPLAY_NAME,
+                link=_notion_link(self.workspace_id),
+                node_type=HierarchyNodeType.PAGE,
+            )
+
+        for td in self._tracked_databases:
+            resolved = td.parent_raw_id in seen
+            yield HierarchyNode(
+                raw_node_id=td.raw_node_id,
+                raw_parent_id=td.parent_raw_id if resolved else unfiled_raw_id,
+                display_name=td.display_name,
+                link=td.link,
+                node_type=HierarchyNodeType.DATABASE,
+            )
 
     def _filter_pages_by_time(
         self,
@@ -1141,6 +1217,10 @@ class NotionConnector(LoadConnector, PollConnector):
             else:
                 break
 
+        # Re-emit database nodes now that all page nodes exist, fixing parent
+        # ordering and collecting unparentable databases under the Unfiled node.
+        yield from batch_generator(self._reconcile_database_parents(), self.batch_size)
+
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
@@ -1185,6 +1265,10 @@ class NotionConnector(LoadConnector, PollConnector):
                     break
             else:
                 break
+
+        # Re-emit database nodes now that all page nodes exist, fixing parent
+        # ordering and collecting unparentable databases under the Unfiled node.
+        yield from batch_generator(self._reconcile_database_parents(), self.batch_size)
 
     def validate_connector_settings(self) -> None:
         if not self.headers.get("Authorization"):
