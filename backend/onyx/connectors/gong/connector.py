@@ -419,9 +419,10 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
         base_url = credentials.get("gong_base_url")
         if base_url:
             base_url = base_url.strip().rstrip("/")
-            if base_url.startswith("http://"):
+            lower_url = base_url.lower()
+            if lower_url.startswith("http://"):
                 raise ValueError("gong_base_url must use https")
-            if not base_url.startswith("https://"):
+            if not lower_url.startswith("https://"):
                 base_url = f"https://{base_url}"
             # Restrict to Gong API hosts to avoid pointing requests (which carry
             # the credential) at arbitrary or internal addresses.

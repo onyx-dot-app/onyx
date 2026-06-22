@@ -686,9 +686,10 @@ def test_base_url_rejects_host_spoofing_gong_suffix() -> None:
         )
 
 
-def test_base_url_rejects_http_scheme() -> None:
+@pytest.mark.parametrize("scheme", ["http", "HTTP", "HtTp"])
+def test_base_url_rejects_http_scheme(scheme: str) -> None:
     connector = GongConnector()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="must use https"):
         connector.load_credentials(
-            {**_GONG_CREDS, "gong_base_url": "http://eu-99999.api.gong.io"}
+            {**_GONG_CREDS, "gong_base_url": f"{scheme}://eu-99999.api.gong.io"}
         )
