@@ -50,15 +50,16 @@ from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
 
 
-def set_session_created_at(
+def force_approval_created_at(
     db_session: Session,
-    model: type[ActionApproval],
-    pk: UUID,
+    approval_id: UUID,
     when: datetime,
 ) -> None:
-    """Force a row's ``created_at`` to ``when``, bypassing ``server_default``."""
+    """Force an ``ActionApproval`` row's ``created_at`` timestamp."""
     db_session.execute(
-        update(model).where(model.approval_id == pk).values(created_at=when)
+        update(ActionApproval)
+        .where(ActionApproval.approval_id == approval_id)
+        .values(created_at=when)
     )
     db_session.commit()
 

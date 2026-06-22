@@ -30,7 +30,13 @@ def _column_keys(model: type[Any]) -> list[str]:
 
 
 def _pk_keys(model: type[Any]) -> list[str]:
-    return [col.key for col in class_mapper(model).primary_key]  # ty: ignore[invalid-return-type]
+    mapper = class_mapper(model)
+    pk_columns = set(mapper.primary_key)
+    return [
+        attr.key
+        for attr in mapper.column_attrs
+        if any(column in pk_columns for column in attr.columns)
+    ]
 
 
 def snapshot_skill_tables(

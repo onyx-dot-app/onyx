@@ -18,7 +18,6 @@ from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
-from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -32,10 +31,10 @@ from onyx.server.features.build.db import action_approval
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import action_entry
 from tests.common.craft.payloads import default_action_entries as _default_actions
+from tests.external_dependency_unit.craft.db_helpers import force_approval_created_at
 from tests.external_dependency_unit.craft.db_helpers import make_external_app
 from tests.external_dependency_unit.craft.db_helpers import make_skill
 from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.db_helpers import set_session_created_at
 
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -95,7 +94,7 @@ def test_list_live_approvals_filter_logic(
 
     # Push the stale row just past the 180s spec cutoff (hardcoded, not derived).
     stale_when = datetime.now(timezone.utc) - timedelta(seconds=190)
-    set_session_created_at(db_session, ActionApproval, stale.approval_id, stale_when)
+    force_approval_created_at(db_session, stale.approval_id, stale_when)
 
     response = list_live_approvals(
         session_id=session.id, user=user, db_session=db_session
