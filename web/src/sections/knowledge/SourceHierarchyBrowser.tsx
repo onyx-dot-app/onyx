@@ -725,15 +725,12 @@ export default function SourceHierarchyBrowser({
     onToggleDocument(docId);
   };
 
-  // Get the icon for a hierarchy item row
-  const getItemIcon = (item: HierarchyItem, isSelected: boolean) => {
+  // Get the type icon for a hierarchy item row
+  const getItemTypeIcon = (item: HierarchyItem) => {
     if (item.type === "folder") {
-      return <SvgFolder size={16} />;
+      return <SvgFolder className="shrink-0" size={18} />;
     }
-    if (isSelected) {
-      return <Checkbox checked={true} />;
-    }
-    return <SvgFileText size={16} />;
+    return <SvgFileText className="shrink-0" size={18} />;
   };
 
   // Render loading state
@@ -945,17 +942,23 @@ export default function SourceHierarchyBrowser({
                   onClick={() => handleItemClick(item)}
                 >
                   <TableLayouts.CheckboxCell>
-                    {getItemIcon(item, isSelected)}
+                    <Checkbox
+                      checked={isSelected}
+                      aria-label={`Select ${isFolder ? "folder" : "document"} ${
+                        item.data.title
+                      }`}
+                    />
                   </TableLayouts.CheckboxCell>
                   <TableLayouts.TableCell flex>
                     <GeneralLayouts.Section
                       flexDirection="row"
                       justifyContent="start"
                       alignItems="center"
-                      gap={0.25}
+                      gap={0.5}
                       height="auto"
                       width="fit"
                     >
+                      {getItemTypeIcon(item)}
                       <Truncated>{item.data.title}</Truncated>
                       {isFolder && (
                         <Button
