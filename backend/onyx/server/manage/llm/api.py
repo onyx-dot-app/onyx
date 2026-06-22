@@ -1,14 +1,17 @@
-import os
 from collections import defaultdict
 from datetime import datetime
 from datetime import timezone
 from typing import Any
 
 import boto3
+import botocore.session
 import httpx
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError
 from botocore.exceptions import ClientError
 from botocore.exceptions import NoCredentialsError
+from botocore.tokens import FrozenAuthToken
+from botocore.tokens import TokenProviderChain
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Query
@@ -1050,6 +1053,37 @@ def get_provider_contextual_cost(
     return costs
 
 
+class _StaticBedrockBearerTokenProvider:
+    """Supplies a fixed bearer token for the ``bedrock`` signing name only.
+
+    Scoped to a single botocore session so concurrent requests can't observe
+    each other's token — unlike ``AWS_BEARER_TOKEN_BEDROCK``, which is
+    process-global and races across the threaded API server.
+    """
+
+    METHOD = "static-bedrock-bearer"
+
+    def __init__(self, token: str) -> None:
+        self._token = token
+
+    def load_token(self, **kwargs: Any) -> FrozenAuthToken | None:
+        if kwargs.get("signing_name") != "bedrock":
+            return None
+        return FrozenAuthToken(self._token)
+
+
+def _build_bedrock_bearer_token_session(token: str, region_name: str) -> boto3.Session:
+    """Build a boto3 session that authenticates Bedrock calls with the given
+    bearer token, without touching process-wide environment state."""
+    botocore_session = botocore.session.Session()
+    botocore_session.set_config_variable("region", region_name)
+    botocore_session.register_component(
+        "token_provider",
+        TokenProviderChain(providers=[_StaticBedrockBearerTokenProvider(token)]),
+    )
+    return boto3.Session(botocore_session=botocore_session)
+
+
 @admin_router.post("/bedrock/available-models")
 def get_bedrock_available_models(
     request: BedrockModelsRequest,
@@ -1067,18 +1101,15 @@ def get_bedrock_available_models(
         request.aws_bearer_token_bedrock, request.provider_name, db_session
     )
 
-    # boto3 reads AWS_BEARER_TOKEN_BEDROCK lazily at API call time, not at
-    # Session construction — so the env var must stay set through the actual
-    # list_foundation_models / list_inference_profiles calls below, not just
-    # while building the Session.
-    prev_bearer_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
-    if bearer_token:
-        os.environ["AWS_BEARER_TOKEN_BEDROCK"] = bearer_token
-
     try:
         # Precedence: bearer → keys → IAM
+        client_config: Config | None = None
         if bearer_token:
-            session = boto3.Session(region_name=request.aws_region_name)
+            session = _build_bedrock_bearer_token_session(
+                token=bearer_token,
+                region_name=request.aws_region_name,
+            )
+            client_config = Config(signature_version="bearer")
         elif request.aws_access_key_id and request.aws_secret_access_key:
             session = boto3.Session(
                 aws_access_key_id=request.aws_access_key_id,
@@ -1089,7 +1120,7 @@ def get_bedrock_available_models(
             session = boto3.Session(region_name=request.aws_region_name)
 
         try:
-            bedrock = session.client("bedrock")
+            bedrock = session.client("bedrock", config=client_config)
         except Exception as e:
             raise OnyxError(
                 OnyxErrorCode.CREDENTIAL_INVALID,
@@ -1214,12 +1245,6 @@ def get_bedrock_available_models(
             OnyxErrorCode.INTERNAL_ERROR,
             f"Unexpected error fetching Bedrock models: {e}",
         )
-    finally:
-        if bearer_token:
-            if prev_bearer_token is None:
-                os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
-            else:
-                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = prev_bearer_token
 
 
 def _get_ollama_available_model_names(api_base: str) -> set[str]:
