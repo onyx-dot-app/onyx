@@ -69,18 +69,21 @@ class TestTabularFileToSections:
 
 
 class TestFileBackedXlsx:
-    """A workbook with a large sheet streams to file-backed TabularSections
-    (CSV staged via the callback, no inline text) and is not truncated."""
+    """Within a workbook routed to streaming, each sheet is handled by size:
+    oversized sheets are file-backed (no inline text, not truncated); small
+    sheets stay inline so they keep their descriptor chunks downstream."""
 
-    def test_large_xlsx_routes_to_file_backed_no_truncation(
+    def test_oversized_sheet_is_file_backed_no_truncation(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         import onyx.connectors.cross_connector_utils.tabular_section_utils as mod
 
         rows = [["name", "score"]] + [[f"user{i}", str(i)] for i in range(200)]
         xlsx = _make_xlsx_bytes({"Sheet1": rows})
-        # Force the large-sheet route without needing a multi-MB fixture.
+        # Enter the streaming path and force this sheet over the inline threshold
+        # without needing a multi-MB fixture.
         monkeypatch.setattr(mod, "xlsx_has_large_sheet", lambda _f: True)
+        monkeypatch.setattr(mod, "XLSX_STREAM_SHEET_BYTES", 10)
 
         staged: dict[str, tuple[bytes, str]] = {}
 
@@ -108,7 +111,24 @@ class TestFileBackedXlsx:
         data_rows = [line for line in csv_text.splitlines() if line.strip()]
         assert len(data_rows) == 201  # header + 200 rows
 
-    def test_small_xlsx_stays_inline(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_small_sheet_in_streaming_workbook_stays_inline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import onyx.connectors.cross_connector_utils.tabular_section_utils as mod
+
+        xlsx = _make_xlsx_bytes({"Sheet1": [["a", "b"], ["1", "2"]]})
+        # Streaming path, but this sheet is tiny -> inline (keeps descriptors).
+        monkeypatch.setattr(mod, "xlsx_has_large_sheet", lambda _f: True)
+        sections = mod.tabular_file_to_sections(
+            xlsx, file_name="mixed.xlsx", raw_file_callback=lambda _c, _t: "unused"
+        )
+        assert len(sections) == 1
+        assert sections[0].csv_file_id is None
+        assert "a,b" in (sections[0].text or "")
+
+    def test_small_workbook_uses_inline_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import onyx.connectors.cross_connector_utils.tabular_section_utils as mod
 
         xlsx = _make_xlsx_bytes({"Sheet1": [["a", "b"], ["1", "2"]]})

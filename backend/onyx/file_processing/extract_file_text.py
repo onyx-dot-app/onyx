@@ -726,40 +726,58 @@ def xlsx_has_large_sheet(
         file.seek(0)
 
 
-def iter_xlsx_sheets_streamed(file: IO[bytes]) -> Iterator[tuple[str, IO[bytes]]]:
-    """Stream each non-empty worksheet to a temp CSV file and yield
-    `(sheet_title, csv_bytes)` — peak RAM is one row, not the whole sheet.
+class StreamedSheet(NamedTuple):
+    """One worksheet rendered to CSV. Small sheets are returned inline (`text`);
+    larger ones are staged in the file store (`csv_file_id`) so they never land
+    on the heap. Exactly one of the two is populated."""
 
-    Each yielded handle is a binary temp file positioned at 0; consume it before
-    requesting the next sheet (it is closed afterward). Unlike
-    `xlsx_sheet_extraction`, this does no column trimming or empty-run collapsing
-    — those need a full in-memory pass, which is exactly what this avoids.
-    """
+    title: str
+    text: str | None
+    csv_file_id: str | None
+
+
+def stage_or_inline_xlsx_sheets(
+    file: IO[bytes],
+    stage: Callable[[IO[bytes], str], str],
+    max_inline_bytes: int,
+) -> list[StreamedSheet]:
+    """Render each non-empty worksheet to a temp CSV, streaming rows so peak RAM
+    is one row rather than the whole sheet. A sheet whose CSV is at most
+    `max_inline_bytes` is returned inline; a larger one is staged via `stage` and
+    referenced by id. The temp handle never escapes this function. No column
+    trimming or empty-run collapsing — those need a full in-memory pass."""
+    sheets: list[StreamedSheet] = []
     workbook = openpyxl.load_workbook(file, read_only=True)
     try:
         for sheet in workbook.worksheets:
             ro_sheet = cast(ReadOnlyWorksheet, sheet)
             ro_sheet.reset_dimensions()
-            tmp = tempfile.TemporaryFile(mode="w+", encoding="utf-8", newline="")
-            writer = csv.writer(tmp, lineterminator="\n")
-            wrote = False
-            for row in ro_sheet.iter_rows(values_only=True):
-                if not any(v is not None and v != "" for v in row):
+            with tempfile.TemporaryFile(mode="w+", encoding="utf-8", newline="") as tmp:
+                writer = csv.writer(tmp, lineterminator="\n")
+                wrote = False
+                for row in ro_sheet.iter_rows(values_only=True):
+                    if not any(v is not None and v != "" for v in row):
+                        continue
+                    writer.writerow(["" if v is None else str(v) for v in row])
+                    wrote = True
+                if not wrote:
                     continue
-                writer.writerow(["" if v is None else str(v) for v in row])
-                wrote = True
-            tmp.flush()
-            if not wrote:
-                tmp.close()
-                continue
-            binary = cast(IO[bytes], tmp.buffer)
-            binary.seek(0)
-            try:
-                yield ro_sheet.title, binary
-            finally:
-                tmp.close()
+                tmp.flush()
+                binary = cast(IO[bytes], tmp.buffer)
+                size = binary.seek(0, io.SEEK_END)
+                binary.seek(0)
+                if size <= max_inline_bytes:
+                    text = binary.read().decode("utf-8").strip()
+                    if not text:
+                        continue
+                    sheets.append(StreamedSheet(ro_sheet.title, text, None))
+                else:
+                    sheets.append(
+                        StreamedSheet(ro_sheet.title, None, stage(binary, "text/csv"))
+                    )
     finally:
         workbook.close()
+    return sheets
 
 
 def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:

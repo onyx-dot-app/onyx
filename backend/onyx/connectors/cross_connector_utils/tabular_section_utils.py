@@ -4,9 +4,10 @@ from typing import IO
 
 from pydantic import BaseModel
 
+from onyx.configs.app_configs import XLSX_STREAM_SHEET_BYTES
 from onyx.connectors.models import TabularSection
 from onyx.file_processing.extract_file_text import file_io_to_text
-from onyx.file_processing.extract_file_text import iter_xlsx_sheets_streamed
+from onyx.file_processing.extract_file_text import stage_or_inline_xlsx_sheets
 from onyx.file_processing.extract_file_text import xlsx_has_large_sheet
 from onyx.file_processing.extract_file_text import xlsx_sheet_extraction
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -36,25 +37,27 @@ def _tsv_to_csv(tsv_text: str) -> str:
     return out.getvalue().rstrip("\n")
 
 
-def _xlsx_to_file_backed_sections(
+def _xlsx_to_streamed_sections(
     file: IO[bytes],
     file_name: str,
     link: str,
     raw_file_callback: RawFileCallback,
 ) -> list[TabularSection]:
-    """Stream each worksheet's CSV to the file store and reference it from a
-    file-backed TabularSection, so a huge sheet never lands on the worker heap."""
-    sections: list[TabularSection] = []
-    for sheet_title, csv_bytes in iter_xlsx_sheets_streamed(file):
-        csv_file_id = raw_file_callback(csv_bytes, "text/csv")
-        sections.append(
-            TabularSection(
-                link=link or file_name,
-                csv_file_id=csv_file_id,
-                heading=f"{file_name} :: {sheet_title}",
-            )
+    """Render each worksheet's CSV with bounded memory: small sheets stay inline
+    (keeping their descriptor chunks downstream); sheets larger than
+    `XLSX_STREAM_SHEET_BYTES` are file-backed in the file store so a huge sheet
+    never lands on the worker heap."""
+    return [
+        TabularSection(
+            link=link or file_name,
+            text=sheet.text,
+            csv_file_id=sheet.csv_file_id,
+            heading=f"{file_name} :: {sheet.title}",
         )
-    return sections
+        for sheet in stage_or_inline_xlsx_sheets(
+            file, raw_file_callback, XLSX_STREAM_SHEET_BYTES
+        )
+    ]
 
 
 def tabular_file_to_sections(
@@ -66,8 +69,9 @@ def tabular_file_to_sections(
     """Convert a tabular file into one or more TabularSections.
 
     - .xlsx → one TabularSection per non-empty sheet. A workbook with a very
-      large sheet (and a `raw_file_callback`) is streamed to file-backed
-      sections; otherwise it's rendered inline.
+      large sheet (and a `raw_file_callback`) is streamed per sheet — small
+      sheets stay inline, oversized sheets are file-backed; otherwise the whole
+      workbook is rendered inline.
     - .csv / .tsv → a single TabularSection containing the full decoded file.
 
     Returns an empty list when the file yields no extractable content.
@@ -79,7 +83,7 @@ def tabular_file_to_sections(
 
     if lowered.endswith(tuple(OnyxFileExtensions.SPREADSHEET_EXTENSIONS)):
         if raw_file_callback is not None and xlsx_has_large_sheet(file):
-            return _xlsx_to_file_backed_sections(
+            return _xlsx_to_streamed_sections(
                 file,
                 file_name=file_name,
                 link=link,

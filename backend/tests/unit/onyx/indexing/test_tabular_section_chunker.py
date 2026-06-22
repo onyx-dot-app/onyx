@@ -939,36 +939,6 @@ class TestBuildTotalDescriptorChunks:
         # --- ACT / ASSERT ---------------------------------------------
         assert self._build(csv_text) == expected
 
-
-def test_file_backed_section_streams_all_rows(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A file-backed TabularSection (csv_file_id) is chunked by streaming the
-    staged CSV from the file store — every row appears, nothing is truncated."""
-    import onyx.indexing.chunking.tabular_section_chunker.tabular_section_chunker as mod
-
-    csv_text = "name,score\n" + "\n".join(f"user{i},{i}" for i in range(60))
-
-    class _FakeStore:
-        def read_file(
-            self, file_id: str, mode: str | None = None, use_tempfile: bool = False
-        ) -> io.BytesIO:
-            del file_id, mode, use_tempfile  # stub: signature parity only
-            return io.BytesIO(csv_text.encode("utf-8"))
-
-    monkeypatch.setattr(mod, "get_default_file_store", lambda: _FakeStore())
-
-    chunker = _make_chunker_no_metadata()
-    section = TabularSection(link="x", csv_file_id="csv-1", heading="big :: Sheet1")
-    out = chunker.chunk_section(
-        section, AccumulatorState(), content_token_limit=100_000
-    )
-
-    assert out.payloads
-    joined = "\n".join(p.text for p in out.payloads)
-    assert "user0" in joined
-    assert "user59" in joined  # last row present -> no truncation
-
     def test_numeric_only_sheet_has_no_categorical_line(self) -> None:
         # --- INPUT -----------------------------------------------------
         # Both columns are all-numeric → no "most frequent value" lines.
@@ -1094,3 +1064,33 @@ def test_file_backed_section_streams_all_rows(
         assert "Column b: total (sum across all rows) = 7" in body
         assert "Column c: total (sum across all rows) = 9" in body
         assert "Total row count: 2." in body
+
+
+def test_file_backed_section_streams_all_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A file-backed TabularSection (csv_file_id) is chunked by streaming the
+    staged CSV from the file store — every row appears, nothing is truncated."""
+    import onyx.indexing.chunking.tabular_section_chunker.tabular_section_chunker as mod
+
+    csv_text = "name,score\n" + "\n".join(f"user{i},{i}" for i in range(60))
+
+    class _FakeStore:
+        def read_file(
+            self, file_id: str, mode: str | None = None, use_tempfile: bool = False
+        ) -> io.BytesIO:
+            del file_id, mode, use_tempfile  # stub: signature parity only
+            return io.BytesIO(csv_text.encode("utf-8"))
+
+    monkeypatch.setattr(mod, "get_default_file_store", lambda: _FakeStore())
+
+    chunker = _make_chunker_no_metadata()
+    section = TabularSection(link="x", csv_file_id="csv-1", heading="big :: Sheet1")
+    out = chunker.chunk_section(
+        section, AccumulatorState(), content_token_limit=100_000
+    )
+
+    assert out.payloads
+    joined = "\n".join(p.text for p in out.payloads)
+    assert "user0" in joined
+    assert "user59" in joined  # last row present -> no truncation

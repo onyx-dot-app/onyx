@@ -326,8 +326,11 @@ class TabularChunker(SectionChunker):
         content_token_limit: int,
     ) -> SectionChunkerOutput:
         """Stream the CSV staged at ``csv_file_id`` straight into row chunks so a
-        huge sheet is never materialized. Descriptor/analysis chunks are skipped
-        here — those would need a second full pass over the rows."""
+        huge sheet is never materialized. A section is only file-backed when its
+        CSV exceeds the inline threshold, so descriptor/analysis chunks are
+        skipped: ``analyze_sheet`` transposes the whole sheet into memory, which
+        would defeat the streaming bound. Smaller sheets keep the inline path and
+        its descriptor chunks."""
         heading = section.heading or ""
         file_store = get_default_file_store()
         with file_store.read_file(csv_file_id, use_tempfile=True) as raw:
