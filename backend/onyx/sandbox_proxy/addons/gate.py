@@ -111,8 +111,9 @@ def destination_is_blocked(host: str) -> bool:
     """True if the sandbox must not be relayed to ``host``.
 
     Allowed: the api-server host and any public address. Denied: anything that is,
-    or resolves to, an internal address. An unresolvable host is allowed — the
-    upstream connection would fail anyway, so there is no internal target to protect.
+    or resolves to, an internal address. Fail closed: a resolution failure denies
+    (with a warning) rather than allowing relay — a transient resolver error must
+    not become an opening to an internal service.
     """
     host = (host or "").strip().lower()
     if not host:
@@ -126,8 +127,11 @@ def destination_is_blocked(host: str) -> bool:
         pass
     try:
         infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
-    except OSError:
-        return False
+    except OSError as exc:
+        logger.warning(
+            "egress_destination_resolution_failed host=%s error=%s", host, exc
+        )
+        return True
     # getaddrinfo types sockaddr[0] as `str | int`; the address element is always
     # a str at runtime (AF_INET/AF_INET6), so coerce to satisfy the type checker.
     return any(_ip_is_internal(str(info[4][0])) for info in infos)
@@ -235,7 +239,7 @@ class GateAddon:
     # mitmproxy hooks
     # ------------------------------------------------------------------
 
-    def http_connect(self, flow: http.HTTPFlow) -> None:
+    async def http_connect(self, flow: http.HTTPFlow) -> None:
         """Capture the per-session tag from the CONNECT's Proxy-Authorization.
 
         For MITM'd HTTPS the header rides on the CONNECT, not the decrypted
@@ -245,11 +249,14 @@ class GateAddon:
         """
         # Refuse to open a tunnel to an internal address, with a clear 403 the
         # agent can act on. This is a best-effort early deny on the CONNECT host; the
-        # authoritative, rebinding-proof enforcement + IP pin runs in `server_connect`
-        # on the actually-resolved peer. We do NOT rewrite flow.request.host here:
-        # repointing the CONNECT to a bare IP disables mitmproxy's TLS interception,
-        # which would skip credential injection on the decrypted inner request.
-        if destination_is_blocked(flow.request.host):
+        # authoritative, rebinding-proof enforcement runs in `server_connect` on the
+        # actually-resolved peer. We do NOT rewrite flow.request.host here: repointing
+        # the CONNECT to a bare IP disables mitmproxy's TLS interception, which would
+        # skip credential injection on the decrypted inner request. The check can do a
+        # blocking DNS lookup, so run it off the event loop.
+        if await asyncio.get_running_loop().run_in_executor(
+            None, destination_is_blocked, flow.request.host
+        ):
             logger.info(
                 "egress_denied_internal_destination phase=connect host=%s port=%s",
                 flow.request.host,
@@ -302,7 +309,7 @@ class GateAddon:
         if server.error or not server.address:
             return
         host, port = server.address[0], server.address[1]
-        blocked = await asyncio.get_event_loop().run_in_executor(
+        blocked = await asyncio.get_running_loop().run_in_executor(
             None, destination_is_blocked, host
         )
         if blocked:
@@ -336,7 +343,7 @@ class GateAddon:
         # Resolution can block, so run it off the event loop.
         if (
             flow.request.scheme == "http"
-            and await asyncio.get_event_loop().run_in_executor(
+            and await asyncio.get_running_loop().run_in_executor(
                 None, destination_is_blocked, flow.request.host
             )
         ):

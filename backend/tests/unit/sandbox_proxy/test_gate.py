@@ -1002,22 +1002,77 @@ def test_parse_proxy_auth_username(header: str | None, expected: str | None) -> 
     assert gate._parse_proxy_auth_username(header) == expected
 
 
-def test_http_connect_caches_tag_and_client_disconnected_evicts() -> None:
+@pytest.mark.asyncio
+async def test_http_connect_caches_tag_and_client_disconnected_evicts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host: False)
     addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
     flow = make_flow(conn_id="conn-xyz", proxy_auth=_basic_auth(_TAG_UUID))
 
-    addon.http_connect(flow)
+    await addon.http_connect(flow)
     assert addon._conn_session_tags == {"conn-xyz": _TAG_UUID}
 
     addon.client_disconnected(flow.client_conn)
     assert addon._conn_session_tags == {}
 
 
-def test_http_connect_ignores_missing_or_garbled_header() -> None:
+@pytest.mark.asyncio
+async def test_http_connect_ignores_missing_or_garbled_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host: False)
     addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
-    addon.http_connect(make_flow(conn_id="c1"))  # no Proxy-Authorization
-    addon.http_connect(make_flow(conn_id="c2", proxy_auth="Bearer nope"))
+    await addon.http_connect(make_flow(conn_id="c1"))  # no Proxy-Authorization
+    await addon.http_connect(make_flow(conn_id="c2", proxy_auth="Bearer nope"))
     assert addon._conn_session_tags == {}
+
+
+# ---------------------------------------------------------------------------
+# destination_is_blocked — internal-egress guard
+# ---------------------------------------------------------------------------
+
+
+def _addrinfo(ip: str) -> list[Any]:
+    return [(2, 1, 6, "", (ip, 0))]
+
+
+def test_destination_is_blocked_literal_ips() -> None:
+    assert gate.destination_is_blocked("10.0.0.1") is True
+    assert gate.destination_is_blocked("169.254.169.254") is True  # IMDS
+    assert gate.destination_is_blocked("::ffff:10.0.0.1") is True  # mapped v4
+    assert gate.destination_is_blocked("8.8.8.8") is False
+    assert gate.destination_is_blocked("") is False
+
+
+def test_destination_is_blocked_resolves_to_internal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("10.1.2.3")
+    )
+    assert gate.destination_is_blocked("intra.svc.cluster.local") is True
+
+
+def test_destination_is_blocked_resolves_to_public(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("93.184.216.34")
+    )
+    assert gate.destination_is_blocked("example.com") is False
+
+
+def test_destination_is_blocked_fails_closed_on_resolution_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A resolver failure must deny (fail closed), not allow relay."""
+
+    def _boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise OSError("temporary DNS failure")
+
+    monkeypatch.setattr(gate.socket, "getaddrinfo", _boom)
+    assert gate.destination_is_blocked("flaky-host.example") is True
 
 
 # ---------------------------------------------------------------------------
@@ -1047,9 +1102,12 @@ async def test_resolve_and_match_exact_tag_on_http_request() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_and_match_exact_tag_on_https_connect() -> None:
+async def test_resolve_and_match_exact_tag_on_https_connect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """HTTPS: the tag rode on the CONNECT (captured via http_connect)
     and is read back off the connection, not the MITM'd request."""
+    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host: False)
     user_id = uuid4()
     tagged_id = UUID(_TAG_UUID)
     sandbox = make_resolved_sandbox(user_id=user_id)
@@ -1057,7 +1115,7 @@ async def test_resolve_and_match_exact_tag_on_https_connect() -> None:
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
 
     connect_flow = make_flow(conn_id="conn-1", proxy_auth=_basic_auth(_TAG_UUID))
-    addon.http_connect(connect_flow)
+    await addon.http_connect(connect_flow)
     # Decrypted request has no Proxy-Authorization of its own.
     request_flow = make_flow(conn_id="conn-1")
 
