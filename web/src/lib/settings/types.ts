@@ -156,6 +156,7 @@ export interface CombinedSettings {
 export function toSettings({
   enterprise: _enterprise,
   appName: _appName,
+  logoUrl: _logoUrl,
   vectorDbEnabled: _vectorDbEnabled,
   isLoading: _isLoading,
   error: _error,
@@ -176,6 +177,13 @@ export interface AppSettings extends Settings {
   enterprise: EnterpriseSettings | null;
   /** Resolved display name: enterprise.application_name || "Onyx". */
   appName: string;
+  /**
+   * URL of the logo image to render, or `null` to use the default Onyx SVG.
+   * Includes a cache-buster that updates whenever enterprise settings are
+   * revalidated, forcing the browser to re-fetch after an admin uploads a
+   * new logo.
+   */
+  logoUrl: string | null;
   /** False when DISABLE_VECTOR_DB is set server-side. */
   vectorDbEnabled: boolean;
   isLoading: boolean;
