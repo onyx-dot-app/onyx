@@ -440,8 +440,12 @@ async def websocket_transcribe(
                 chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
                 await handle_chunked_transcription(websocket, chunked_transcriber)
         else:
-            # Fall back to chunked transcription
-            if VOICE_DISABLE_STREAMING_FALLBACK:
+            # Here either the provider lacks streaming support, or streaming was
+            # explicitly disabled via VOICE_DISABLE_STREAMING_STT. In the latter
+            # case chunked/REST is the intended path, so the no-fallback guard
+            # (which is about not silently degrading from streaming) must not turn
+            # it into an error.
+            if VOICE_DISABLE_STREAMING_FALLBACK and not VOICE_DISABLE_STREAMING_STT:
                 await websocket.send_json(
                     {
                         "type": "error",
@@ -449,9 +453,7 @@ async def websocket_transcribe(
                     }
                 )
                 return
-            logger.info(
-                "WebSocket transcribe: using chunked STT (provider doesn't support streaming)"
-            )
+            logger.info("WebSocket transcribe: using chunked STT")
             chunked_transcriber = ChunkedTranscriber(provider, audio_format="pcm16")
             await handle_chunked_transcription(websocket, chunked_transcriber)
 
