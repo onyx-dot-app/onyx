@@ -367,10 +367,10 @@ def sync_model_configurations(
 ) -> int:
     """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama, etc.).
 
-    Inserts NEW models from the source API and, for models that already exist,
-    upgrades their capability flows (VISION/REASONING) when the source newly
-    reports support. Flags are only ever added, never removed, so admin overrides
-    and user preferences (is_visible, max_input_tokens) are preserved.
+    Inserts NEW models and, for existing ones, adds any newly-reported capability
+    flag (VISION/REASONING). Flags are only added, never removed; is_visible and
+    max_input_tokens are preserved. Caveat: an admin-removed flow is re-added on
+    the next sync (ENG-4233).
 
     Args:
         db_session: Database session
@@ -410,8 +410,8 @@ def sync_model_configurations(
             new_count += 1
             continue
 
-        # Existing model: add any newly-reported capability flows so a re-fetch
-        # repairs rows that were synced before the source exposed the capability.
+        # Existing model: add newly-reported capability flags (additive only).
+        # TODO(ENG-4233): durable admin flow removals; avoid per-model lazy-load.
         existing_flows = set(existing.llm_model_flow_types)
         missing_flows: list[LLMModelFlowType] = []
         if model.supports_image_input and LLMModelFlowType.VISION not in existing_flows:

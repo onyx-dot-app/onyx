@@ -257,9 +257,8 @@ class ModelConfigurationView(BaseModel):
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
-                # Dynamic/aggregator providers (Bifrost, OpenRouter, etc.) and
-                # custom-config providers (LiteLLM Proxy) under-report vision;
-                # fall back to the LiteLLM cost map when no VISION flow is stored.
+                # Dynamic/custom-config providers under-report vision; fall back
+                # to the LiteLLM cost map when no VISION flow is stored.
                 supports_image_input=(
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types

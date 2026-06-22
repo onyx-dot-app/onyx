@@ -301,8 +301,7 @@ def litellm_exception_to_error_msg(
     elif str(getattr(core_exception, "status_code", "")) == "413" or (
         "413" in error_msg and "request entity too large" in error_msg.lower()
     ):
-        # An upstream proxy/gateway (e.g. nginx) rejected the request body as too
-        # large. Most common when sending images to a model behind a gateway.
+        # Upstream proxy/gateway (e.g. nginx) rejected the request body as too large.
         error_msg = (
             "Request too large: The LLM endpoint rejected the request because it "
             "exceeded the maximum allowed size (HTTP 413). This commonly happens "
