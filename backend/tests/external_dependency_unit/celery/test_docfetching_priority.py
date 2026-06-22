@@ -32,7 +32,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import SearchSettings
 from onyx.redis.redis_pool import get_redis_client
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 def _create_test_connector(db_session: Session, name: str) -> Connector:
@@ -176,7 +176,9 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         mock_celery_app.send_task.return_value = MagicMock()
 
         # Use real Redis client
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
 
         # Call the function with real objects
         result = try_creating_docfetching_task(
@@ -186,7 +188,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
             reindex=False,
             db_session=db_session,
             r=redis_client,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         )
 
         # Verify task was created
@@ -227,7 +229,9 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         )
 
         mock_celery_app = MagicMock()
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
 
         result = try_creating_docfetching_task(
             celery_app=mock_celery_app,
@@ -236,7 +240,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
             reindex=False,
             db_session=db_session,
             r=redis_client,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         )
 
         # Verify no task was created
@@ -280,7 +284,9 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         mock_celery_app = MagicMock()
         mock_celery_app.send_task.return_value = MagicMock()
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
 
         # Acquire the lock before calling the function
         from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
@@ -302,7 +308,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
                 reindex=False,
                 db_session=db_session,
                 r=redis_client,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
 
             # Should return None because lock couldn't be acquired
@@ -348,7 +354,9 @@ class TestDocfetchingTaskPriorityWithRealObjects:
         mock_celery_app = MagicMock()
         mock_celery_app.send_task.return_value = MagicMock()
 
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
 
         # First call should succeed
         result1 = try_creating_docfetching_task(
@@ -358,7 +366,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
             reindex=False,
             db_session=db_session,
             r=redis_client,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         )
         assert result1 == 12345
 
@@ -375,7 +383,7 @@ class TestDocfetchingTaskPriorityWithRealObjects:
             reindex=False,
             db_session=db_session,
             r=redis_client,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         )
         assert result2 == 67890
 

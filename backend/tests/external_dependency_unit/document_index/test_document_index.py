@@ -23,7 +23,7 @@ from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.document_index.conftest import EMBEDDING_DIM
 from tests.external_dependency_unit.document_index.conftest import make_chunk
 from tests.external_dependency_unit.document_index.conftest import (
@@ -77,7 +77,9 @@ def opensearch_document_index(
     test_index_name: str,
 ) -> Generator[OpenSearchDocumentIndex, None, None]:
     yield OpenSearchDocumentIndex(
-        tenant_state=TenantState(tenant_id=TEST_TENANT_ID, multitenant=False),
+        tenant_state=TenantState(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, multitenant=False
+        ),
         index_name=test_index_name,
         embedding_dim=EMBEDDING_DIM,
         embedding_precision=EmbeddingPrecision.FLOAT,
@@ -299,7 +301,9 @@ class TestDocumentIndexNew:
             assert mock_verify_and_create_index_if_necessary.call_count == 0
 
             test_index_name = "test_index_name_for_mt_cloud_index_verification"
-            tenant_state = TenantState(tenant_id=TEST_TENANT_ID, multitenant=True)
+            tenant_state = TenantState(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, multitenant=True
+            )
             _ = OpenSearchDocumentIndex(
                 tenant_state=tenant_state,
                 index_name=test_index_name,
@@ -361,7 +365,7 @@ class TestDocumentIndexNew:
             # OpenSearch's ~1s refresh window.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
             retrieved_doc1 = _retrieve_chunks_with_expected_boost(
                 document_index=document_index,
@@ -426,7 +430,7 @@ class TestDocumentIndexNew:
             # OpenSearch's ~1s refresh window.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
             retrieved_doc1 = _retrieve_chunks_with_expected_boost(
                 document_index=document_index,
@@ -480,7 +484,7 @@ class TestDocumentIndexNew:
             # Postcondition - chunks still retrievable with their default boost.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
             retrieved = document_index.id_based_retrieval(
                 chunk_requests=[DocumentSectionRequest(document_id=doc_id)],
@@ -530,7 +534,7 @@ class TestDocumentIndexNew:
             # doc being skipped.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
             retrieved = _retrieve_chunks_with_expected_boost(
                 document_index=document_index,
@@ -583,7 +587,7 @@ class TestDocumentIndexNew:
             # doc being skipped.
             filters = IndexFilters(
                 access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             )
             retrieved = _retrieve_chunks_with_expected_boost(
                 document_index=document_index,

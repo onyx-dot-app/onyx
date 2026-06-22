@@ -39,11 +39,11 @@ from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
 from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft.conftest import (
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.stubs import StubSandboxManager
+from tests.external_dependency_unit.craft.redis_helpers import (
     assert_lock_serializes_two_threads,
 )
-from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
 # Built-in skill rows are seeded by ``setup_postgres`` (run once per
 # tenant in ``full_setup``) and persist across tests. The session
@@ -882,7 +882,9 @@ class TestConcurrentCreateLock:
         # Same lock contract as sessions_api.create_session: lock key is
         # ``session_create:{user_id}``. Two threads contend; the second
         # observes the first holding it.
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         lock_key = f"session_create:{test_user.id}"
 
         assert_lock_serializes_two_threads(redis_client, lock_key)
@@ -971,7 +973,7 @@ class TestRestoreSession:
         snapshot = Snapshot(
             id=uuid4(),
             session_id=idle_session.id,
-            storage_path=f"{TEST_TENANT_ID}/snapshots/{idle_session.id}/latest.tar.gz",
+            storage_path=f"{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/snapshots/{idle_session.id}/latest.tar.gz",
             size_bytes=123,
         )
         db_session.add(snapshot)

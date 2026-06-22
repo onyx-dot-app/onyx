@@ -41,8 +41,8 @@ from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.sandbox_proxy import request_evaluator as request_evaluator_mod
 from onyx.sandbox_proxy.request_evaluator import ExternalAppRequestEvaluator
-from tests.external_dependency_unit.craft._test_helpers import make_external_app
-from tests.external_dependency_unit.craft._test_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import make_external_app
+from tests.external_dependency_unit.craft.db_helpers import make_skill
 
 
 def _connect_app(

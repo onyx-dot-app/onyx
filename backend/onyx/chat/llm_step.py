@@ -1015,7 +1015,7 @@ def translate_history_to_llm_format(
             suffix=messages[last_cacheable_msg_idx + 1 :],
             continuation=False,
         )
-        assert isinstance(processed_messages, list)  # for mypy
+        assert isinstance(processed_messages, list)  # for type-checking
         messages = processed_messages
 
     return messages

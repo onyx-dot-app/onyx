@@ -20,9 +20,9 @@ from onyx.server.features.build.db.build_session import (
 )
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from tests.external_dependency_unit.craft._test_helpers import add_user_to_group
-from tests.external_dependency_unit.craft._test_helpers import make_group
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
+from tests.external_dependency_unit.craft.db_helpers import make_group
+from tests.external_dependency_unit.craft.db_helpers import make_user
 
 
 def _make_group_restricted_anthropic_provider(

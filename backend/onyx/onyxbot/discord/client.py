@@ -118,7 +118,7 @@ class OnyxDiscordClient(commands.Bot):
 
     async def on_message(self, message: discord.Message) -> None:
         """Main message handler."""
-        # mypy
+        # for type-checking
         if not self.user:
             raise RuntimeError("Critical error: Discord Bot user not found")
 

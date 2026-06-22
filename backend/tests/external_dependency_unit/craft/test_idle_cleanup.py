@@ -30,11 +30,11 @@ from onyx.db.models import Snapshot
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import make_sandbox
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft.stubs import StubSandboxManager
+from tests.common.craft.stubs import StubSandboxManager
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox
+from tests.external_dependency_unit.craft.db_helpers import make_user
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -94,7 +94,7 @@ def _isolated_redis_lock() -> Generator[None, None, None]:
     A leftover lock would cause the task to short-circuit at the
     ``lock.acquire`` step and silently skip the work we want to assert.
     """
-    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     redis_client.delete(OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK)
     try:
         yield
@@ -159,7 +159,7 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
     )
     stubbed_cleanup.terminate_silent = True
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -176,7 +176,7 @@ def test_idle_sandbox_snapshotted_then_terminated_then_sleep_status(
     assert all(s.size_bytes == 1234 for s in snapshots)
     assert {
         "sandbox_id": sandbox.id,
-        "tenant_id": TEST_TENANT_ID,
+        "tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         "timeout_seconds": 300.0,
     } in stubbed_cleanup.create_opencode_history_snapshot_payloads
     assert stubbed_cleanup.terminate_count >= 1
@@ -199,7 +199,7 @@ def test_active_sandbox_within_threshold_not_touched(
     # workspace listing makes it a no-op so we can assert "not touched".
     stubbed_cleanup.list_session_workspaces_returns = []
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -228,7 +228,7 @@ def test_null_heartbeat_sandbox_past_created_at_included(
     stubbed_cleanup.list_session_workspaces_returns = []
     stubbed_cleanup.terminate_silent = True
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -274,7 +274,9 @@ def test_snapshot_failure_on_healthy_pod_aborts_sleep(
     stubbed_cleanup.health_check_returns = True  # pod still reachable
 
     with caplog.at_level(logging.WARNING):
-        cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+        cleanup_idle_sandboxes_task.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -313,7 +315,7 @@ def test_opencode_history_snapshot_failure_on_healthy_pod_aborts_sleep(
         stubbed_cleanup.create_opencode_history_snapshot_payloads.append(
             {
                 "sandbox_id": sandbox_id,
-                "tenant_id": TEST_TENANT_ID,
+                "tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 "timeout_seconds": 300.0,
             }
         )
@@ -322,7 +324,9 @@ def test_opencode_history_snapshot_failure_on_healthy_pod_aborts_sleep(
     monkeypatch.setattr(stubbed_cleanup, "create_opencode_history_snapshot", _boom)
 
     with caplog.at_level(logging.ERROR):
-        cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+        cleanup_idle_sandboxes_task.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -334,7 +338,7 @@ def test_opencode_history_snapshot_failure_on_healthy_pod_aborts_sleep(
     assert sandbox.id not in stubbed_cleanup.terminated_sandbox_ids
     assert {
         "sandbox_id": sandbox.id,
-        "tenant_id": TEST_TENANT_ID,
+        "tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         "timeout_seconds": 300.0,
     } in stubbed_cleanup.create_opencode_history_snapshot_payloads
     assert any(
@@ -366,7 +370,7 @@ def test_opencode_history_snapshot_failure_on_unreachable_pod_still_terminates(
         stubbed_cleanup.create_opencode_history_snapshot_payloads.append(
             {
                 "sandbox_id": sandbox_id,
-                "tenant_id": TEST_TENANT_ID,
+                "tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 "timeout_seconds": 300.0,
             }
         )
@@ -374,7 +378,7 @@ def test_opencode_history_snapshot_failure_on_unreachable_pod_still_terminates(
 
     monkeypatch.setattr(stubbed_cleanup, "create_opencode_history_snapshot", _boom)
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -421,7 +425,7 @@ def test_snapshot_failure_on_unreachable_pod_still_terminates(
     stubbed_cleanup.health_check_returns = False  # pod unreachable
     stubbed_cleanup.terminate_silent = True
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     db_session.expire_all()
     refreshed = db_session.get(Sandbox, sandbox.id)
@@ -463,7 +467,7 @@ def test_sessions_marked_idle_and_nextjs_ports_cleared(
     stubbed_cleanup.list_session_workspaces_returns = []
     stubbed_cleanup.terminate_silent = True
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     db_session.expire_all()
     refreshed_a = db_session.get(BuildSession, session_a.id)
@@ -612,9 +616,11 @@ def test_task_holds_redis_lock_for_duration(
     _backdate_heartbeat(db_session, sandbox, seconds_ago=short_idle_threshold * 4)
 
     # Bind tenant context for the redis client lookup.
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         external_lock = redis_client.lock(
             OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK,
             timeout=60,
@@ -622,7 +628,9 @@ def test_task_holds_redis_lock_for_duration(
         assert external_lock.acquire(blocking=False) is True
 
         try:
-            cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+            cleanup_idle_sandboxes_task.run(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            )
 
             # Task must have bailed without doing any work.
             assert stubbed_cleanup.terminate_count == 0

@@ -25,10 +25,10 @@ from onyx.db.models import User
 from onyx.external_apps.providers.slack import SlackAction
 from onyx.skills.built_in import SLACK
 from onyx.skills.push import build_skills_fileset_for_user
-from tests.external_dependency_unit.craft._test_helpers import make_external_app
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft._test_helpers import make_user_credential
-from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import make_external_app
+from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_user_credential
+from tests.external_dependency_unit.craft.db_helpers import reset_built_in_skill_row
 
 # Slack ships on-disk skill content; require a single user-supplied key.
 _AUTH_TEMPLATE = {"Authorization": "Bearer {token}"}

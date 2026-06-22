@@ -21,7 +21,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.file_store.staging import reap_prior_attempt_staged_files
 from onyx.file_store.staging import stage_raw_file
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
@@ -98,13 +98,22 @@ def test_sweep_skips_files_owned_by_non_terminal_attempt(
     )
 
     file_for_terminal = _stage_file(
-        cc_pair.id, terminal_old.id, TEST_TENANT_ID, b"terminal payload"
+        cc_pair.id,
+        terminal_old.id,
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        b"terminal payload",
     )
     file_for_in_progress = _stage_file(
-        cc_pair.id, in_progress_concurrent.id, TEST_TENANT_ID, b"concurrent payload"
+        cc_pair.id,
+        in_progress_concurrent.id,
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        b"concurrent payload",
     )
     file_for_current = _stage_file(
-        cc_pair.id, current.id, TEST_TENANT_ID, b"current payload"
+        cc_pair.id,
+        current.id,
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        b"current payload",
     )
     db_session.commit()
 
@@ -112,7 +121,7 @@ def test_sweep_skips_files_owned_by_non_terminal_attempt(
     deleted_count = reap_prior_attempt_staged_files(
         current_attempt_id=current.id,
         cc_pair_id=cc_pair.id,
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         db_session=db_session,
     )
 
@@ -164,14 +173,17 @@ def test_sweep_skips_files_owned_by_not_started_attempt(
     )
 
     file_for_not_started = _stage_file(
-        cc_pair.id, not_started.id, TEST_TENANT_ID, b"not started payload"
+        cc_pair.id,
+        not_started.id,
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        b"not started payload",
     )
     db_session.commit()
 
     deleted_count = reap_prior_attempt_staged_files(
         current_attempt_id=current.id,
         cc_pair_id=cc_pair.id,
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         db_session=db_session,
     )
 
@@ -213,14 +225,17 @@ def test_sweep_reaps_orphan_with_no_owning_attempt(
     # Use an attempt id that doesn't correspond to any IndexAttempt row.
     orphan_attempt_id = 999_999_999
     file_for_orphan = _stage_file(
-        cc_pair.id, orphan_attempt_id, TEST_TENANT_ID, b"orphan payload"
+        cc_pair.id,
+        orphan_attempt_id,
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        b"orphan payload",
     )
     db_session.commit()
 
     deleted_count = reap_prior_attempt_staged_files(
         current_attempt_id=current.id,
         cc_pair_id=cc_pair.id,
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         db_session=db_session,
     )
 
