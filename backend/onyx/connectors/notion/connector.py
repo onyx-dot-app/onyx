@@ -1098,12 +1098,15 @@ class NotionConnector(LoadConnector, PollConnector):
     def _reconcile_database_parents(
         self,
     ) -> Generator[HierarchyNode, None, None]:
-        """Re-emit tracked databases with their final parent once every page node
-        exists: the real page if it became a node, else a synthetic per-workspace
-        "Unfiled" node so orphans sit under the workspace instead of SOURCE.
+        """Re-emit tracked databases with their final parent: the real page if it
+        became a node this run, else a synthetic per-workspace "Unfiled" node so
+        orphans sit under the workspace instead of SOURCE. The re-emit (idempotent
+        on ``(raw_node_id, source)``) also corrects the prepass-before-pages
+        ordering that otherwise strands page-parented databases.
 
-        The re-emit (idempotent on ``(raw_node_id, source)``) also corrects the
-        prepass-before-pages ordering that otherwise strands page-parented databases.
+        Only valid after a full page pass (load_from_state): orphan detection uses
+        ``seen_hierarchy_node_raw_ids``, so a partial pass (poll) would misclassify
+        unchanged parents as orphans.
         """
         if not self._tracked_databases:
             return
@@ -1124,9 +1127,14 @@ class NotionConnector(LoadConnector, PollConnector):
 
         for td in self._tracked_databases:
             resolved = td.parent_raw_id in seen
+            # Orphans go under Unfiled when it exists; without a workspace_id we
+            # can't build it, so keep the original parent rather than yield None.
+            final_parent = (
+                td.parent_raw_id if resolved else (unfiled_raw_id or td.parent_raw_id)
+            )
             yield HierarchyNode(
                 raw_node_id=td.raw_node_id,
-                raw_parent_id=td.parent_raw_id if resolved else unfiled_raw_id,
+                raw_parent_id=final_parent,
                 display_name=td.display_name,
                 link=td.link,
                 node_type=HierarchyNodeType.DATABASE,
@@ -1266,9 +1274,11 @@ class NotionConnector(LoadConnector, PollConnector):
             else:
                 break
 
-        # Re-emit database nodes now that all page nodes exist, fixing parent
-        # ordering and collecting unparentable databases under the Unfiled node.
-        yield from batch_generator(self._reconcile_database_parents(), self.batch_size)
+        # No reconciliation here: poll only processes recently-edited pages, so
+        # `seen` is incomplete and can't distinguish a true orphan from a parent
+        # page that simply wasn't edited this window. The prepass already parents
+        # databases via their real page id, which resolves against page nodes
+        # persisted by a prior full sync. Reconciliation runs in load_from_state.
 
     def validate_connector_settings(self) -> None:
         if not self.headers.get("Authorization"):

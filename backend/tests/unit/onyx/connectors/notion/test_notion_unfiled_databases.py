@@ -125,6 +125,28 @@ class TestReconcileDatabaseParents:
         connector.workspace_id = "ws-1"
         assert list(connector._reconcile_database_parents()) == []
 
+    def test_missing_workspace_id_keeps_original_parent_not_none(self) -> None:
+        """Without a workspace_id we can't build the Unfiled node; orphans must
+        keep their original parent rather than be re-parented to None (SOURCE)."""
+        connector = _make_connector()
+        connector.workspace_id = None
+        connector.seen_hierarchy_node_raw_ids = {"db-1"}
+        connector._tracked_databases = [
+            _TrackedDatabase(
+                raw_node_id="db-1",
+                parent_raw_id="page-x",
+                display_name="Orphan DB",
+                link=None,
+            )
+        ]
+
+        nodes = list(connector._reconcile_database_parents())
+
+        assert all(not n.raw_node_id.endswith(_UNFILED_NODE_SUFFIX) for n in nodes)
+        db_node = [n for n in nodes if n.raw_node_id == "db-1"]
+        assert len(db_node) == 1
+        assert db_node[0].raw_parent_id == "page-x"
+
     def test_unfiled_id_is_workspace_scoped(self) -> None:
         connector_a = _make_connector()
         connector_a.workspace_id = "ws-a"
@@ -246,3 +268,45 @@ class TestLoadFromStateReconciliation:
         assert len(db_nodes) == 2
         assert db_nodes[0].raw_parent_id == "page-x"
         assert db_nodes[-1].raw_parent_id == unfiled_id
+
+
+class TestPollSourceReconciliation:
+    def test_poll_does_not_orphan_unchanged_parents(self) -> None:
+        """Poll only sees recently-edited pages, so reconciliation must NOT run:
+        a database whose parent page is unchanged this window keeps its real page
+        parent and is never routed under Unfiled."""
+        connector = _make_connector()
+
+        def fake_search(query_dict: dict) -> NotionSearchResponse:
+            if query_dict["filter"]["value"] == "data_source":
+                return NotionSearchResponse(
+                    results=[{"id": "ds-1", "parent": {"database_id": "db-1"}}],
+                    next_cursor=None,
+                    has_more=False,
+                )
+            # No recently-edited pages this window.
+            return NotionSearchResponse(results=[], next_cursor=None, has_more=False)
+
+        def fake_fetch_db_as_page(db_id: str) -> NotionPage:
+            return _make_db_page(db_id, {"type": "page_id", "page_id": "page-x"})
+
+        with (
+            patch.object(
+                connector, "_fetch_workspace_info", return_value=("ws-1", "WS")
+            ),
+            patch.object(connector, "_search_notion", side_effect=fake_search),
+            patch.object(
+                connector, "_fetch_database_as_page", side_effect=fake_fetch_db_as_page
+            ),
+        ):
+            nodes: list[HierarchyNode] = [
+                item
+                for batch in connector.poll_source(0, 1_000_000_000)
+                for item in batch
+                if isinstance(item, HierarchyNode)
+            ]
+
+        assert all(not n.raw_node_id.endswith(_UNFILED_NODE_SUFFIX) for n in nodes)
+        db_nodes = [n for n in nodes if n.raw_node_id == "db-1"]
+        assert len(db_nodes) == 1
+        assert db_nodes[0].raw_parent_id == "page-x"
