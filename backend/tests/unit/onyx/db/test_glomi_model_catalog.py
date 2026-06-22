@@ -53,6 +53,8 @@ def test_catalog_can_include_minimax_provider_when_configured(mocker) -> None:
         "MiniMax-M3",
         "MiniMax-M2",
     ]
+    assert all(model.supports_image_input for model in minimax_provider.models)
+    assert all("vision" in model.roles for model in minimax_provider.models)
 
 
 def test_phase_a_model_capabilities_are_explicit() -> None:
@@ -68,6 +70,7 @@ def test_phase_a_model_capabilities_are_explicit() -> None:
     assert minimax_models["MiniMax-M3"].supports_image_input is True
     assert minimax_models["MiniMax-M3"].supports_reasoning is True
     assert "research" in minimax_models["MiniMax-M3"].roles
+    assert "vision" in minimax_models["MiniMax-M3"].roles
 
 
 def test_sync_skips_when_credentials_missing() -> None:
@@ -187,6 +190,7 @@ def test_sync_builds_multiple_provider_requests(mocker) -> None:
     assert [model.name for model in requests[1].model_configurations] == [
         "MiniMax-M3"
     ]
+    assert requests[1].model_configurations[0].supports_image_input is True
     update_default_mock.assert_called_once_with(7, "gpt-5.5", db_session)
 
 

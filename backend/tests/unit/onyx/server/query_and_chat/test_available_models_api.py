@@ -112,4 +112,5 @@ def test_available_chat_models_response_marks_default_and_selected() -> None:
     assert minimax_model.is_selected is True
     assert minimax_model.supplier_id == "minimax"
     assert minimax_model.supplier_display_name == "MiniMax"
+    assert minimax_model.supports_image_input is True
     assert "vision" in minimax_model.roles

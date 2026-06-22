@@ -119,5 +119,10 @@ describe("availableChatModelsToProviderResponse", () => {
       "gpt",
       "minimax",
     ]);
+    expect(response.providers[1]!.model_configurations[0]).toMatchObject({
+      name: "MiniMax-M3",
+      supports_image_input: true,
+      roles: ["balanced", "vision"],
+    });
   });
 });

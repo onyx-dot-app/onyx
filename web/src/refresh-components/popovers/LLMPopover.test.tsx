@@ -147,4 +147,36 @@ describe("LLMPopover helpers", () => {
       "MiniMax",
     ]);
   });
+
+  test("preserves MiniMax image-input capability in selector options", () => {
+    const providers: LLMProviderDescriptor[] = [
+      makeProvider({
+        name: "Glomi MiniMax",
+        provider: "openai_compatible",
+        supplier_id: "minimax",
+        supplier_display_name: "MiniMax",
+        model_configurations: [
+          {
+            name: "MiniMax-M3",
+            is_visible: true,
+            max_input_tokens: null,
+            supports_image_input: true,
+            supports_reasoning: true,
+            roles: ["balanced", "vision"],
+          },
+        ],
+      }),
+    ];
+
+    const options = buildLlmOptions(providers);
+
+    expect(options).toHaveLength(1);
+    expect(options[0]).toMatchObject({
+      supplierId: "minimax",
+      supplierDisplayName: "MiniMax",
+      modelName: "MiniMax-M3",
+      supportsImageInput: true,
+      roles: ["balanced", "vision"],
+    });
+  });
 });
