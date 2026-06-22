@@ -10,9 +10,12 @@ import { Spinner } from "@/components/Spinner";
 import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
 import { validateInternalRedirect } from "@/lib/auth/redirectValidation";
-import { SvgArrowRightCircle } from "@opal/icons";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
-import { AuthLayouts, InputVertical } from "@opal/layouts";
+import {
+  AuthLayouts,
+  InputVertical,
+  type AuthSubmitLabel,
+} from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 
@@ -21,23 +24,24 @@ interface FormValues {
   password: string;
 }
 
-interface EmailPasswordFormProps {
-  isSignup?: boolean;
+export interface EmailPasswordFormProps {
   shouldVerify?: boolean;
   referralSource?: string;
   nextUrl?: string | null;
   defaultEmail?: string | null;
-  isJoin?: boolean;
+  label: AuthSubmitLabel;
 }
 
 export default function EmailPasswordForm({
-  isSignup = false,
   shouldVerify,
   referralSource,
   nextUrl,
   defaultEmail,
-  isJoin = false,
+  label,
 }: EmailPasswordFormProps) {
+  const isSignup = label !== "submit";
+  const isJoin = label === "join";
+
   const { user, authTypeMetadata } = useUser();
   const passwordMinLength = authTypeMetadata?.passwordMinLength ?? 8;
   const [isWorking, setIsWorking] = useState(false);
@@ -145,7 +149,7 @@ export default function EmailPasswordForm({
         {({ isSubmitting, isValid, dirty }) => {
           return (
             <Form className="flex flex-col gap-4">
-              <AuthLayouts.FormFields>
+              <AuthLayouts.Fields>
                 <InputVertical title="Email Address" withLabel="email">
                   <InputTypeInField
                     name="email"
@@ -174,14 +178,12 @@ export default function EmailPasswordForm({
                     }
                   />
                 </InputVertical>
-              </AuthLayouts.FormFields>
+              </AuthLayouts.Fields>
 
               <AuthLayouts.Submit
+                label={label}
                 disabled={isSubmitting || !isValid || !dirty}
-                rightIcon={SvgArrowRightCircle}
-              >
-                {isJoin ? "Join" : isSignup ? "Create Account" : "Sign In"}
-              </AuthLayouts.Submit>
+              />
 
               {user?.is_anonymous_user && (
                 <Link

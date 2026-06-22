@@ -1,13 +1,8 @@
 "use client";
 
 import "@opal/layouts/auth/styles.css";
-import {
-  Button,
-  Card as OpalCard,
-  EndOfList,
-  Text,
-  type ButtonProps,
-} from "@opal/components";
+import { Button, Card as OpalCard, EndOfList, Text } from "@opal/components";
+import SvgArrowRightCircle from "@opal/icons/arrow-right-circle";
 import { Content } from "@opal/layouts";
 import { SvgOnyxLogo } from "@opal/logos";
 import type { RichStr } from "@opal/types";
@@ -46,7 +41,7 @@ function Card({
   return (
     <div className="opal-auth-card-outer">
       <OpalCard padding="lg" rounding="lg">
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3">
             <div className="p-0.5">
               {logoSrc ? (
@@ -92,39 +87,55 @@ function OrSeparator() {
 }
 
 // ---------------------------------------------------------------------------
-// FormFields — consistent-gap container for form inputs
+// Fields — consistent-gap container for form inputs
 // ---------------------------------------------------------------------------
 
-interface FormFieldsProps {
+interface FieldsProps {
   children: React.ReactNode;
 }
 
-function FormFields({ children }: FormFieldsProps) {
-  return <div className="opal-auth-form-fields">{children}</div>;
+function Fields({ children }: FieldsProps) {
+  return <div className="opal-auth-fields">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------
 // Submit — full-width submit button
 // ---------------------------------------------------------------------------
 
+type SubmitLabel = "submit" | "create" | "join";
+
 interface SubmitProps {
-  children: string;
+  label: SubmitLabel;
   disabled?: boolean;
-  rightIcon?: ButtonProps["rightIcon"];
 }
 
-function Submit({ children, disabled, rightIcon }: SubmitProps) {
+const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
+  submit: "Submit",
+  create: "Create",
+  join: "Join",
+};
+
+function Submit({ label, disabled }: SubmitProps) {
   return (
     <Button
       type="submit"
       width="full"
       disabled={disabled}
-      rightIcon={rightIcon}
+      rightIcon={SvgArrowRightCircle}
     >
-      {children}
+      {SUBMIT_LABEL_TEXT[label]}
     </Button>
   );
 }
 
-export { Root, Card, OrSeparator, FormFields, Submit };
-export type { CardProps, FormFieldsProps, SubmitProps };
+export {
+  Root,
+  type CardProps,
+  Card,
+  OrSeparator,
+  type FieldsProps,
+  Fields,
+  type SubmitLabel,
+  type SubmitProps,
+  Submit,
+};

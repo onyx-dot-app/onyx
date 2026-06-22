@@ -37,7 +37,7 @@ describe("Email/Password Login Workflow", () => {
       json: async () => ({}),
     } as Response);
 
-    render(<EmailPasswordForm isSignup={false} />);
+    render(<EmailPasswordForm label="submit" />);
 
     // User fills out the form using placeholder text
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
@@ -83,7 +83,7 @@ describe("Email/Password Login Workflow", () => {
       json: async () => ({ detail: "LOGIN_BAD_CREDENTIALS" }),
     } as Response);
 
-    render(<EmailPasswordForm isSignup={false} />);
+    render(<EmailPasswordForm label="submit" />);
 
     // User fills out form with invalid credentials
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
@@ -132,7 +132,7 @@ describe("Email/Password Signup Workflow", () => {
       json: async () => ({}),
     } as Response);
 
-    render(<EmailPasswordForm isSignup={true} />);
+    render(<EmailPasswordForm label="create" />);
 
     // User fills out the signup form
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
@@ -198,7 +198,7 @@ describe("Email/Password Signup Workflow", () => {
       json: async () => ({ detail: "REGISTER_USER_ALREADY_EXISTS" }),
     } as Response);
 
-    render(<EmailPasswordForm isSignup={true} />);
+    render(<EmailPasswordForm label="create" />);
 
     // User fills out form with existing email
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
@@ -233,7 +233,7 @@ describe("Email/Password Signup Workflow", () => {
       json: async () => ({ detail: "Too many requests" }),
     } as Response);
 
-    render(<EmailPasswordForm isSignup={true} />);
+    render(<EmailPasswordForm label="create" />);
 
     // User fills out form
     const emailInput = screen.getByPlaceholderText(/email@yourcompany.com/i);
@@ -262,7 +262,7 @@ describe("Email/Password autofill attributes", () => {
   // native `type="password"` fields, and pair the identifier via
   // autocomplete="username". See issue #11578.
   test("login form exposes password-manager-friendly attributes", () => {
-    render(<EmailPasswordForm isSignup={false} />);
+    render(<EmailPasswordForm label="submit" />);
 
     const emailInput = screen.getByTestId("email");
     expect(emailInput).toHaveAttribute("autocomplete", "username");
@@ -273,7 +273,7 @@ describe("Email/Password autofill attributes", () => {
   });
 
   test("signup form requests a new password from the manager", () => {
-    render(<EmailPasswordForm isSignup={true} />);
+    render(<EmailPasswordForm label="create" />);
 
     const passwordInput = screen.getByTestId("password");
     expect(passwordInput).toHaveAttribute("type", "password");

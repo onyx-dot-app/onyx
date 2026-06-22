@@ -73,7 +73,7 @@ export default function SignupPage() {
         searchParams={Object.fromEntries(searchParams.entries())}
       />
       <EmailPasswordForm
-        isSignup
+        label="create"
         shouldVerify={authTypeMetadata.requiresVerification}
         nextUrl={nextUrl}
         defaultEmail={defaultEmail}

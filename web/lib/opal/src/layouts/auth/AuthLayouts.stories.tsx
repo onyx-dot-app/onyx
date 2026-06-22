@@ -30,11 +30,11 @@ export const BasicLogin: Story = {
           "New to Onyx? [Create an Account](/auth/signup)"
         )}
       >
-        <AuthLayouts.FormFields>
+        <AuthLayouts.Fields>
           <FieldPlaceholder label="Email" />
           <FieldPlaceholder label="Password" />
-        </AuthLayouts.FormFields>
-        <AuthLayouts.Submit>Sign in</AuthLayouts.Submit>
+        </AuthLayouts.Fields>
+        <AuthLayouts.Submit label="submit" />
       </AuthLayouts.Card>
     </AuthLayouts.Root>
   ),
@@ -52,11 +52,11 @@ export const WithSSOAndSeparator: Story = {
       >
         <Button width="full">Continue with Google</Button>
         <AuthLayouts.OrSeparator />
-        <AuthLayouts.FormFields>
+        <AuthLayouts.Fields>
           <FieldPlaceholder label="Email" />
           <FieldPlaceholder label="Password" />
-        </AuthLayouts.FormFields>
-        <AuthLayouts.Submit>Sign in</AuthLayouts.Submit>
+        </AuthLayouts.Fields>
+        <AuthLayouts.Submit label="submit" />
       </AuthLayouts.Card>
     </AuthLayouts.Root>
   ),
@@ -72,11 +72,11 @@ export const Signup: Story = {
           "Already have an account? [Sign In](/auth/login?autoRedirectToSignup=false)"
         )}
       >
-        <AuthLayouts.FormFields>
+        <AuthLayouts.Fields>
           <FieldPlaceholder label="Email" />
           <FieldPlaceholder label="Password" />
-        </AuthLayouts.FormFields>
-        <AuthLayouts.Submit>Create account</AuthLayouts.Submit>
+        </AuthLayouts.Fields>
+        <AuthLayouts.Submit label="create" />
       </AuthLayouts.Card>
     </AuthLayouts.Root>
   ),
@@ -90,10 +90,10 @@ export const ForgotPassword: Story = {
         description="Enter your email address and we'll send you a reset link."
         bottomPrompt={markdown("[Back to Login](/auth/login)")}
       >
-        <AuthLayouts.FormFields>
+        <AuthLayouts.Fields>
           <FieldPlaceholder label="Email" />
-        </AuthLayouts.FormFields>
-        <AuthLayouts.Submit>Reset Password</AuthLayouts.Submit>
+        </AuthLayouts.Fields>
+        <AuthLayouts.Submit label="submit" />
       </AuthLayouts.Card>
     </AuthLayouts.Root>
   ),
@@ -103,11 +103,11 @@ export const DisabledSubmit: Story = {
   render: () => (
     <AuthLayouts.Root>
       <AuthLayouts.Card title="Sign in" description="Submitting…">
-        <AuthLayouts.FormFields>
+        <AuthLayouts.Fields>
           <FieldPlaceholder label="Email" />
           <FieldPlaceholder label="Password" />
-        </AuthLayouts.FormFields>
-        <AuthLayouts.Submit disabled>Sign in</AuthLayouts.Submit>
+        </AuthLayouts.Fields>
+        <AuthLayouts.Submit label="submit" disabled />
       </AuthLayouts.Card>
     </AuthLayouts.Root>
   ),

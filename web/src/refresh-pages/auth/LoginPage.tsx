@@ -130,14 +130,20 @@ export default function LoginPage() {
               <AuthLayouts.OrSeparator />
             </>
           )}
-          <EmailPasswordForm shouldVerify nextUrl={effectiveNextUrl} />
+          <EmailPasswordForm
+            label="submit"
+            shouldVerify
+            nextUrl={effectiveNextUrl}
+          />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
             <Button href="/auth/forgot-password">Reset Password</Button>
           )}
         </>
       )}
 
-      {isBasic && <EmailPasswordForm nextUrl={effectiveNextUrl} />}
+      {isBasic && (
+        <EmailPasswordForm label="submit" nextUrl={effectiveNextUrl} />
+      )}
     </AuthLayouts.Card>
   );
 }

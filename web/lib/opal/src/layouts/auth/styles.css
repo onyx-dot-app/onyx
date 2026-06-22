@@ -19,7 +19,7 @@
   @apply mt-6 text-center;
 }
 
-.opal-auth-form-fields {
+.opal-auth-fields {
   @apply flex flex-col w-full;
   gap: 0.75rem;
 }

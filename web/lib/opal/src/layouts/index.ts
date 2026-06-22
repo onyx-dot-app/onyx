@@ -73,6 +73,7 @@ export { type SidebarRootProps } from "@opal/layouts/sidebar/components";
 export * as AuthLayouts from "@opal/layouts/auth/components";
 export type {
   CardProps as AuthCardProps,
-  FormFieldsProps as AuthFormFieldsProps,
+  FieldsProps as AuthFieldsProps,
   SubmitProps as AuthSubmitProps,
+  SubmitLabel as AuthSubmitLabel,
 } from "@opal/layouts/auth/components";
