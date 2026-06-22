@@ -562,6 +562,68 @@ POSTGRES_TCP_KEEPALIVES_COUNT = int(
 # RDS IAM authentication - enables IAM-based authentication for PostgreSQL
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
+# TLS for non-IAM PostgreSQL connections.
+#
+# POSTGRES_SSLMODE follows libpq's vocabulary. Only `verify-ca` / `verify-full`
+# authenticate the server (and require POSTGRES_SSLROOTCERT to verify against);
+# `require` encrypts but does NOT protect against a man-in-the-middle. All of
+# this is ignored when USE_IAM_AUTH is true (IAM enforces its own TLS).
+POSTGRES_SSLMODE: str | None = os.environ.get("POSTGRES_SSLMODE") or None
+# Path to the CA bundle used to verify the server certificate for `verify-ca` /
+# `verify-full`. Required by managed providers (RDS, Cloud SQL, Azure) whose
+# server certs don't chain to a system-trusted CA; point it at the system bundle
+# if the server uses a publicly-trusted certificate.
+POSTGRES_SSLROOTCERT: str | None = os.environ.get("POSTGRES_SSLROOTCERT") or None
+
+_VALID_POSTGRES_SSLMODES = frozenset(
+    {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
+)
+_CA_VERIFYING_SSLMODES = frozenset({"verify-ca", "verify-full"})
+
+if USE_IAM_AUTH:
+    # IAM auth manages the database TLS connection itself, so the explicit
+    # POSTGRES_SSL* settings are ignored — warn rather than silently drop them.
+    if POSTGRES_SSLMODE or POSTGRES_SSLROOTCERT:
+        logger.warning(
+            "USE_IAM_AUTH is enabled; ignoring POSTGRES_SSLMODE / "
+            "POSTGRES_SSLROOTCERT (IAM auth manages the database TLS connection)."
+        )
+elif POSTGRES_SSLMODE:
+    if POSTGRES_SSLMODE not in _VALID_POSTGRES_SSLMODES:
+        raise ValueError(
+            f"Invalid POSTGRES_SSLMODE={POSTGRES_SSLMODE!r}. "
+            f"Must be one of: {sorted(_VALID_POSTGRES_SSLMODES)}"
+        )
+    if POSTGRES_SSLMODE in _CA_VERIFYING_SSLMODES and not POSTGRES_SSLROOTCERT:
+        # Without a CA bundle these modes can't verify the server cert: libpq
+        # errors out and asyncpg silently falls back to the system trust store.
+        # Fail loudly so the intended CA-pinned trust model is explicit.
+        raise ValueError(
+            f"POSTGRES_SSLMODE={POSTGRES_SSLMODE!r} verifies the server "
+            "certificate and requires POSTGRES_SSLROOTCERT (path to the CA "
+            "bundle). Set it to your provider's CA, or to the system CA bundle "
+            "if the server uses a publicly-trusted certificate."
+        )
+    if POSTGRES_SSLROOTCERT and not os.path.exists(POSTGRES_SSLROOTCERT):
+        raise ValueError(
+            f"POSTGRES_SSLROOTCERT={POSTGRES_SSLROOTCERT!r} does not exist."
+        )
+    if POSTGRES_SSLMODE == "require" and POSTGRES_SSLROOTCERT:
+        logger.warning(
+            "POSTGRES_SSLROOTCERT is set but POSTGRES_SSLMODE=require does not "
+            "verify the server certificate; use verify-ca or verify-full to "
+            "verify against the CA bundle."
+        )
+elif POSTGRES_SSLROOTCERT:
+    # A CA bundle without a mode is dead config: SSL stays off and the
+    # connection runs unverified despite the operator supplying a cert. Fail
+    # loudly so this can't masquerade as a verified connection.
+    raise ValueError(
+        "POSTGRES_SSLROOTCERT is set but POSTGRES_SSLMODE is not. The CA bundle "
+        "is only used by a verifying mode; set POSTGRES_SSLMODE=verify-ca or "
+        "verify-full (or unset POSTGRES_SSLROOTCERT)."
+    )
+
 # Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
 # Note: This is separate from RDS IAM auth as they use different authentication mechanisms
 USE_REDIS_IAM_AUTH = os.getenv("USE_REDIS_IAM_AUTH", "False").lower() == "true"

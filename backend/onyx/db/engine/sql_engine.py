@@ -32,6 +32,7 @@ from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
 from onyx.db.engine.iam_auth import provide_iam_token
+from onyx.db.engine.pg_ssl import pg_ssl_psycopg2_connect_args
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -89,6 +90,7 @@ def _merge_psycopg2_connect_args(
     caller_connect_args = extra_engine_kwargs.pop("connect_args", None) or {}
     merged: dict[str, Any] = {
         **psycopg2_keepalive_connect_args(),
+        **pg_ssl_psycopg2_connect_args(),
         **caller_connect_args,
     }
     return merged or None
