@@ -79,14 +79,6 @@ VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 _verified_index_names_for_current_process: set[str] = set()
 
 
-class ChunkCountNotFoundError(ValueError):
-    """Raised when a document has no chunk count."""
-
-
-class ChunkCountZeroError(ValueError):
-    """Raised when a document has a chunk count of 0."""
-
-
 def generate_opensearch_filtered_access_control_list(
     access: DocumentAccess,
 ) -> list[str]:
@@ -549,8 +541,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
         This may be due to a concurrent ongoing indexing operation. In that
         event callers are expected to retry after a bit once the state of the
         document index is updated.
-        NOTE: Requires document chunk count be known; will raise if it is not.
-        This may be caused by the same situation outlined above.
+        NOTE: Documents whose chunk count is unknown (not yet indexed) or 0
+        (e.g. concurrently deleted) are skipped with a warning rather than
+        raising. The indexing pipeline will write the latest metadata shortly.
         NOTE: Will no-op if an update request has no fields to update.
 
         TODO(andrei): Consider exploring a batch API for OpenSearch for this
@@ -615,26 +608,30 @@ class OpenSearchDocumentIndex(DocumentIndex):
             for doc_id in update_request.document_ids:
                 doc_chunk_count = update_request.doc_id_to_chunk_cnt.get(doc_id, -1)
                 if doc_chunk_count < 0:
-                    # This means the chunk count is not known. This is due to a
-                    # race condition between doc indexing and updating steps
-                    # which run concurrently when a doc is indexed. The indexing
-                    # step should update chunk count shortly. This could also
-                    # have been due to an older version of the indexing pipeline
-                    # which did not compute chunk count, but that codepath has
-                    # since been deprecated and should no longer be the case
-                    # here.
+                    # The chunk count is not known. This is a benign race between
+                    # doc indexing and this update step, which run concurrently
+                    # when a doc is indexed. The indexing step will set the chunk
+                    # count (and write the latest metadata/permissions) shortly,
+                    # so skip this doc rather than failing the whole update.
                     # TODO(andrei): Fix the aforementioned race condition.
-                    raise ChunkCountNotFoundError(
-                        f"Tried to update document {doc_id} but its chunk count is not known. "
-                        "Older versions of the application used to permit this but is not a "
-                        "supported state for a document when using OpenSearch. The document was "
-                        "likely just added to the indexing pipeline and the chunk count will be "
-                        "updated shortly."
+                    logger.warning(
+                        "[OpenSearchDocumentIndex] Skipping update for document %s: "
+                        "its chunk count is not yet known. The document was likely just "
+                        "added to the indexing pipeline and the chunk count will be "
+                        "updated shortly.",
+                        doc_id,
                     )
+                    continue
                 if doc_chunk_count == 0:
-                    raise ChunkCountZeroError(
-                        f"Tried to update document {doc_id} but its chunk count was 0."
+                    # A chunk count of 0 typically reflects a concurrent delete +
+                    # metadata sync. There are no chunks to update, so skip this
+                    # doc rather than failing the whole update.
+                    logger.warning(
+                        "[OpenSearchDocumentIndex] Skipping update for document %s: "
+                        "its chunk count is 0.",
+                        doc_id,
                     )
+                    continue
 
                 for chunk_index in range(doc_chunk_count):
                     document_chunk_id = get_opensearch_doc_chunk_id(
