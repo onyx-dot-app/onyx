@@ -162,6 +162,13 @@ def oauth_callback(
 
     connector_cls = oauth_connectors[source]
 
+    if not connector_cls.oauth_enabled():
+        raise OnyxError(
+            OnyxErrorCode.ENV_VAR_GATED,
+            f"OAuth is not configured for {source} on this deployment. "
+            "Add a credential manually instead.",
+        )
+
     # get state from redis
     redis_client = get_redis_client()
     oauth_state_bytes = cast(
