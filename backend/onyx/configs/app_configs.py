@@ -893,6 +893,13 @@ GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
 
+# Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
+# fetch. Native Docs report no `size`, so the fetch can't be checked from
+# metadata; larger Docs are indexed via the basic text export.
+GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
+    os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
+)
+
 # Cap the total text retained per file across a connector's extracted sections,
 # bounding worker memory when a source can't be size-checked before fetch —
 # e.g. Google-native files (Docs/Slides/Sheets) report no `size` metadata and
