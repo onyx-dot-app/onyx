@@ -70,7 +70,7 @@ interface InputLayoutProps {
 // Vertical
 // ---------------------------------------------------------------------------
 
-export interface VerticalProps extends InputLayoutProps {
+interface VerticalProps extends InputLayoutProps {
   subDescription?: string | RichStr;
 }
 
@@ -120,7 +120,7 @@ function Vertical({
 // Horizontal
 // ---------------------------------------------------------------------------
 
-export interface HorizontalProps extends InputLayoutProps {
+interface HorizontalProps extends InputLayoutProps {
   /** Align input to the center (middle) of the label/description. */
   center?: boolean;
   /** Optional icon rendered beside the title. */
@@ -199,7 +199,7 @@ function FormikInputErrorInner({ name }: FormikInputErrorProps) {
   const hasWarning = warning;
 
   if (hasError)
-    return <InputErrorText type="error">{meta.error}</InputErrorText>;
+    return <InputErrorText type="error">{meta.error!}</InputErrorText>;
   else if (hasWarning)
     return <InputErrorText type="warning">{warning}</InputErrorText>;
   else return null;
@@ -209,10 +209,10 @@ function FormikInputErrorInner({ name }: FormikInputErrorProps) {
 // InputErrorText
 // ---------------------------------------------------------------------------
 
-export type InputErrorType = "error" | "warning";
+type InputErrorType = "error" | "warning";
 
 interface InputErrorTextProps {
-  children?: string | RichStr;
+  children: string | RichStr;
   type?: InputErrorType;
   ref?: React.Ref<HTMLDivElement>;
 }
@@ -231,7 +231,7 @@ function InputErrorText({
         sizePreset="secondary"
         variant="body"
         icon={Icon}
-        title={children ?? ""}
+        title={children}
         color={color}
         role="alert"
         titleMaxLines={undefined}
@@ -267,12 +267,15 @@ function InputPadder({ ref, ...props }: InputPadderProps) {
 export {
   Label,
   type LabelProps,
+  type VerticalProps,
   Vertical,
+  type HorizontalProps,
   Horizontal,
   FormikInputError,
   type FormikInputErrorProps,
-  InputErrorText,
+  type InputErrorType,
   type InputErrorTextProps,
+  InputErrorText,
   InputDivider,
   InputPadder,
   type InputPadderProps,
