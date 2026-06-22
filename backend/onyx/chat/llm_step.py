@@ -1156,6 +1156,9 @@ def run_llm_step_pkt_generator(
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history
         )
+        span_generation.span_data.tools = cast(
+            Sequence[Mapping[str, Any]], tool_definitions
+        )
         stream_start_time = time.monotonic()
         first_action_recorded = False
 
