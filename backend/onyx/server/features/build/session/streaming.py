@@ -53,7 +53,7 @@ from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 
 logger = setup_logger()
 
@@ -275,17 +275,12 @@ def merge_events_with_announces(
     done_sentinel = object()
 
     def drive_events() -> None:
-        # New threads don't inherit contextvars; re-set the tenant so DB access
-        # inside the event iterator (e.g. lazy event-bus creation) resolves the
-        # right schema instead of raising "Tenant ID is not set".
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             for evt in event_iter:
                 output.put(evt)
         except Exception as e:
             output.put(e)
         finally:
-            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
             output.put(done_sentinel)
 
     def drive_announces() -> None:
@@ -307,16 +302,15 @@ def merge_events_with_announces(
                 ApprovalRequestedPacket(approval_id=approval_id, session_id=session_id)
             )
 
-    events_thread = threading.Thread(
-        target=drive_events, name=f"events-pump-{session_id}", daemon=True
+    # Spawn via the context-preserving helper so the event iterator's lazy
+    # tenant-scoped DB access (e.g. event-bus creation) sees the caller's
+    # contextvars instead of raising "Tenant ID is not set".
+    start_thread_with_context(
+        drive_events, name=f"events-pump-{session_id}", daemon=True
     )
-    announce_thread = threading.Thread(
-        target=drive_announces,
-        name=f"announce-pump-{session_id}",
-        daemon=True,
+    start_thread_with_context(
+        drive_announces, name=f"announce-pump-{session_id}", daemon=True
     )
-    events_thread.start()
-    announce_thread.start()
     try:
         while True:
             item = output.get()

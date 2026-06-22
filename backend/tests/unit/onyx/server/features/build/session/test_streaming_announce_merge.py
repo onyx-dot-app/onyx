@@ -12,12 +12,12 @@ from onyx.server.features.build.session import streaming
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
-def test_drive_events_thread_inherits_tenant_id(
+def test_drive_events_thread_inherits_caller_tenant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The events-pump thread must re-set the tenant contextvar so lazy DB
-    access inside the event iterator (e.g. event-bus creation) resolves the
-    right schema instead of raising "Tenant ID is not set"."""
+    """The events-pump thread is spawned via the context-preserving helper, so
+    lazy DB access inside the event iterator (e.g. event-bus creation) sees the
+    caller's tenant contextvar instead of raising "Tenant ID is not set"."""
     monkeypatch.setattr(streaming, "get_cache_backend", lambda **_: object())
     monkeypatch.setattr(
         streaming.approval_cache,
@@ -33,9 +33,9 @@ def test_drive_events_thread_inherits_tenant_id(
         seen_in_thread.append(CURRENT_TENANT_ID_CONTEXTVAR.get())
         yield "event-1"
 
-    # Ensure the calling thread has no tenant set so we only observe what
-    # drive_events explicitly propagated.
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
+    # The helper snapshots the caller's context, so the spawned thread must
+    # observe the tenant set here — not the contextvar's default.
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
         events = list(
             streaming.merge_events_with_announces(
