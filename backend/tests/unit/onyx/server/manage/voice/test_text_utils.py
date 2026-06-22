@@ -53,5 +53,18 @@ def test_collapses_whitespace_and_trims() -> None:
     assert strip_markdown_for_tts("  hello\n\n   world  ") == "hello world"
 
 
+def test_drops_fenced_code_blocks() -> None:
+    # Reading a code block aloud is noise; keep the surrounding prose only.
+    assert strip_markdown_for_tts("Run this:\n```python\nprint(1)\n```\nDone.") == (
+        "Run this: Done."
+    )
+
+
+def test_flattens_lists() -> None:
+    assert strip_markdown_for_tts("Steps:\n- first\n- second") == (
+        "Steps: first second"
+    )
+
+
 def test_empty_string() -> None:
     assert strip_markdown_for_tts("") == ""
