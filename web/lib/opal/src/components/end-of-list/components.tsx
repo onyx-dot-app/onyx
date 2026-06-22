@@ -1,7 +1,7 @@
 "use client";
 
 import "@opal/components/end-of-list/styles.css";
-import { Text } from "@opal/components";
+import { Divider, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 
 interface EndOfListProps {
@@ -11,11 +11,11 @@ interface EndOfListProps {
 function EndOfList({ title }: EndOfListProps) {
   return (
     <div className="opal-end-of-list">
-      <div className="opal-end-of-list-line" />
+      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
       <Text font="secondary-body" color="text-03" nowrap>
         {title}
       </Text>
-      <div className="opal-end-of-list-line" />
+      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
     </div>
   );
 }

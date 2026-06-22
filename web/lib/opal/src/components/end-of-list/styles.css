@@ -1,18 +1,12 @@
 @reference "#reference.css";
 
-/* ---------------------------------------------------------------------------
-   EndOfList
-
-   Centered label flanked by two horizontal divider lines.
-   --------------------------------------------------------------------------- */
+/**
+ * EndOfList
+ *
+ * Centered label flanked by two horizontal divider lines.
+ */
 
 .opal-end-of-list {
   @apply flex flex-row items-center w-full;
   gap: 0.5rem;
-}
-
-.opal-end-of-list-line {
-  @apply flex-1;
-  height: 1px;
-  background-color: var(--border-01);
 }
