@@ -20,6 +20,8 @@ from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
@@ -103,12 +105,10 @@ def oauth_authorize(
     connector_cls = oauth_connectors[source]
 
     if not connector_cls.oauth_enabled():
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"OAuth is not configured for {source} on this deployment. "
-                "Add a credential manually instead."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.ENV_VAR_GATED,
+            f"OAuth is not configured for {source} on this deployment. "
+            "Add a credential manually instead.",
         )
 
     base_url = WEB_DOMAIN
