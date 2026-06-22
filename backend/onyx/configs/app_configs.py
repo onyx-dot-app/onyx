@@ -574,19 +574,35 @@ POSTGRES_SSLMODE: str | None = os.environ.get("POSTGRES_SSLMODE") or None
 # server certs don't chain to a system-trusted CA; point it at the system bundle
 # if the server uses a publicly-trusted certificate.
 POSTGRES_SSLROOTCERT: str | None = os.environ.get("POSTGRES_SSLROOTCERT") or None
+# Client certificate + key for mutual TLS (the server authenticating us). Both
+# must be set together, and are only used when POSTGRES_SSLMODE negotiates SSL
+# (require / verify-ca / verify-full).
+POSTGRES_SSLCERT: str | None = os.environ.get("POSTGRES_SSLCERT") or None
+POSTGRES_SSLKEY: str | None = os.environ.get("POSTGRES_SSLKEY") or None
+POSTGRES_SSLKEY_PASSWORD: str | None = (
+    os.environ.get("POSTGRES_SSLKEY_PASSWORD") or None
+)
 
 _VALID_POSTGRES_SSLMODES = frozenset(
     {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
 )
 _CA_VERIFYING_SSLMODES = frozenset({"verify-ca", "verify-full"})
+# Modes that always negotiate SSL — a client certificate is only reliably
+# presented under one of these.
+_SSL_NEGOTIATING_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
+_POSTGRES_SSL_FILE_SETTINGS = (
+    ("POSTGRES_SSLROOTCERT", POSTGRES_SSLROOTCERT),
+    ("POSTGRES_SSLCERT", POSTGRES_SSLCERT),
+    ("POSTGRES_SSLKEY", POSTGRES_SSLKEY),
+)
 
 if USE_IAM_AUTH:
     # IAM auth manages the database TLS connection itself, so the explicit
     # POSTGRES_SSL* settings are ignored — warn rather than silently drop them.
-    if POSTGRES_SSLMODE or POSTGRES_SSLROOTCERT:
+    if POSTGRES_SSLMODE or any(value for _, value in _POSTGRES_SSL_FILE_SETTINGS):
         logger.warning(
-            "USE_IAM_AUTH is enabled; ignoring POSTGRES_SSLMODE / "
-            "POSTGRES_SSLROOTCERT (IAM auth manages the database TLS connection)."
+            "USE_IAM_AUTH is enabled; ignoring POSTGRES_SSLMODE / POSTGRES_SSL* "
+            "(IAM auth manages the database TLS connection)."
         )
 elif POSTGRES_SSLMODE:
     if POSTGRES_SSLMODE not in _VALID_POSTGRES_SSLMODES:
@@ -604,24 +620,36 @@ elif POSTGRES_SSLMODE:
             "bundle). Set it to your provider's CA, or to the system CA bundle "
             "if the server uses a publicly-trusted certificate."
         )
-    if POSTGRES_SSLROOTCERT and not os.path.exists(POSTGRES_SSLROOTCERT):
-        raise ValueError(
-            f"POSTGRES_SSLROOTCERT={POSTGRES_SSLROOTCERT!r} does not exist."
-        )
     if POSTGRES_SSLMODE == "require" and POSTGRES_SSLROOTCERT:
         logger.warning(
             "POSTGRES_SSLROOTCERT is set but POSTGRES_SSLMODE=require does not "
             "verify the server certificate; use verify-ca or verify-full to "
             "verify against the CA bundle."
         )
-elif POSTGRES_SSLROOTCERT:
-    # A CA bundle without a mode is dead config: SSL stays off and the
-    # connection runs unverified despite the operator supplying a cert. Fail
-    # loudly so this can't masquerade as a verified connection.
+    # Mutual TLS: client cert + key must be provided together, under a mode that
+    # actually negotiates SSL.
+    if bool(POSTGRES_SSLCERT) != bool(POSTGRES_SSLKEY):
+        raise ValueError(
+            "POSTGRES_SSLCERT and POSTGRES_SSLKEY must both be set (mutual TLS "
+            "needs a client certificate and its private key)."
+        )
+    if POSTGRES_SSLCERT and POSTGRES_SSLMODE not in _SSL_NEGOTIATING_SSLMODES:
+        raise ValueError(
+            f"POSTGRES_SSLCERT / POSTGRES_SSLKEY require POSTGRES_SSLMODE to be "
+            f"one of {sorted(_SSL_NEGOTIATING_SSLMODES)} so TLS is negotiated; "
+            f"got {POSTGRES_SSLMODE!r}."
+        )
+    for _name, _path in _POSTGRES_SSL_FILE_SETTINGS:
+        if _path and not os.path.exists(_path):
+            raise ValueError(f"{_name}={_path!r} does not exist.")
+elif any(value for _, value in _POSTGRES_SSL_FILE_SETTINGS):
+    # CA bundle / client cert without a mode is dead config: SSL stays off and
+    # the connection runs unverified despite the operator supplying certs. Fail
+    # loudly so this can't masquerade as a verified/mutually-authenticated link.
     raise ValueError(
-        "POSTGRES_SSLROOTCERT is set but POSTGRES_SSLMODE is not. The CA bundle "
-        "is only used by a verifying mode; set POSTGRES_SSLMODE=verify-ca or "
-        "verify-full (or unset POSTGRES_SSLROOTCERT)."
+        "POSTGRES_SSLROOTCERT / POSTGRES_SSLCERT / POSTGRES_SSLKEY are set but "
+        "POSTGRES_SSLMODE is not. Set a POSTGRES_SSLMODE (e.g. verify-full) so "
+        "TLS is actually negotiated."
     )
 
 # Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
