@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { useTranslation } from "react-i18next";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -79,6 +80,7 @@ function ToggleRow({
 }
 
 export default function SecurityHardeningPage() {
+  const { t } = useTranslation();
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
 
   const { data: settings, isLoading: settingsLoading } =
@@ -132,7 +134,7 @@ export default function SecurityHardeningPage() {
       await mutate(SWR_KEYS.adminSecuritySettings, effective, {
         revalidate: false,
       });
-      toast.success("Security settings updated");
+      toast.success(t("admin.security.settings_updated", "Security settings updated"));
     } catch (error) {
       // Re-sync from the server (the source of truth) rather than a possibly
       // stale local snapshot — a late failure must not clobber other edits
@@ -149,15 +151,21 @@ export default function SecurityHardeningPage() {
       const message =
         error instanceof Error
           ? error.message
-          : "Failed to update security settings";
+          : t("admin.security.settings_update_failed", "Failed to update security settings");
       toast.error(message);
     }
-  }, []);
+  }, [t]);
+
+  const routeTranslationKey = route.path.replace(/^\/admin\//, "").replace(/[/-]/g, "_");
 
   if (settingsLoading || !draft) {
     return (
       <SettingsLayouts.Root>
-        <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+        <SettingsLayouts.Header
+          icon={route.icon}
+          title={t(`admin.sidebar.routes.${routeTranslationKey}`, route.title)}
+          divider
+        />
         <SettingsLayouts.Body />
       </SettingsLayouts.Root>
     );
@@ -195,8 +203,8 @@ export default function SecurityHardeningPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
-        description="Runtime-configurable security settings. Unset values fall back to your deployment's environment configuration."
+        title={t(`admin.sidebar.routes.${routeTranslationKey}`, route.title)}
+        description={t("admin.security.header_description", "Runtime-configurable security settings. Unset values fall back to your deployment's environment configuration.")}
         divider
       />
 
@@ -204,7 +212,7 @@ export default function SecurityHardeningPage() {
         {/* Authentication */}
         <div className="flex w-full flex-col gap-3">
           <Content
-            title="Authentication"
+            title={t("admin.security.authentication", "Authentication")}
             sizePreset="main-content"
             variant="section"
           />
@@ -212,8 +220,8 @@ export default function SecurityHardeningPage() {
           <Card border="solid" rounding="lg">
             <Section>
               <ToggleRow
-                title="Sync Session Expiry with Identity Provider"
-                description="Log users out when the upstream OAuth/OIDC provider session expires."
+                title={t("admin.security.sync_expiry", "Sync Session Expiry with Identity Provider")}
+                description={t("admin.security.sync_expiry_description", "Log users out when the upstream OAuth/OIDC provider session expires.")}
                 checked={draft.track_external_idp_expiry}
                 onCheckedChange={(checked) =>
                   void saveSettings({ track_external_idp_expiry: checked })
@@ -223,8 +231,8 @@ export default function SecurityHardeningPage() {
               {!isMultiTenant && (
                 <>
                   <ToggleRow
-                    title="Restrict Email Domains"
-                    description="Limit new user registrations to specific email domains."
+                    title={t("admin.security.restrict_email_domains", "Restrict Email Domains")}
+                    description={t("admin.security.restrict_email_domains_description", "Limit new user registrations to specific email domains.")}
                     checked={showDomains}
                     onCheckedChange={(checked) => {
                       if (checked) {
@@ -239,8 +247,8 @@ export default function SecurityHardeningPage() {
 
                   {showDomains && (
                     <InputVertical
-                      title="Allowed Email Domains"
-                      subDescription="New users can only register new accounts with emails in this domain list."
+                      title={t("admin.security.allowed_email_domains", "Allowed Email Domains")}
+                      subDescription={t("admin.security.allowed_email_domains_description", "New users can only register new accounts with emails in this domain list.")}
                       withLabel
                     >
                       <InputChipField
@@ -249,7 +257,7 @@ export default function SecurityHardeningPage() {
                         onAdd={addDomain}
                         value={domainInput}
                         onChange={setDomainInput}
-                        placeholder="Add a domain (e.g. onyx.app)"
+                        placeholder={t("admin.security.add_domain_placeholder", "Add a domain (e.g. onyx.app)")}
                       />
                     </InputVertical>
                   )}
@@ -263,8 +271,8 @@ export default function SecurityHardeningPage() {
             <Card border="solid" rounding="lg">
               <Section>
                 <Content
-                  title="Password Policy"
-                  description="Requirements for all new passwords. Applies to basic auth only."
+                  title={t("admin.security.password_policy", "Password Policy")}
+                  description={t("admin.security.password_policy_description", "Requirements for all new passwords. Applies to basic auth only.")}
                   sizePreset="main-ui"
                   variant="section"
                 />
@@ -272,8 +280,8 @@ export default function SecurityHardeningPage() {
                 <div className="flex w-full items-start gap-4">
                   <div className="flex-1">
                     <InputVertical
-                      title="Minimum Password Length"
-                      suffix="(characters)"
+                      title={t("admin.security.min_password_length", "Minimum Password Length")}
+                      suffix={t("admin.security.characters", "(characters)")}
                       withLabel
                     >
                       <InputNumber
@@ -283,14 +291,14 @@ export default function SecurityHardeningPage() {
                         }
                         min={1}
                         max={1024}
-                        placeholder="Default"
+                        placeholder={t("admin.security.default_placeholder", "Default")}
                       />
                     </InputVertical>
                   </div>
                   <div className="flex-1">
                     <InputVertical
-                      title="Maximum Password Length"
-                      suffix="(characters)"
+                      title={t("admin.security.max_password_length", "Maximum Password Length")}
+                      suffix={t("admin.security.characters", "(characters)")}
                       withLabel
                     >
                       <InputNumber
@@ -300,14 +308,14 @@ export default function SecurityHardeningPage() {
                         }
                         min={1}
                         max={1024}
-                        placeholder="Default"
+                        placeholder={t("admin.security.default_placeholder", "Default")}
                       />
                     </InputVertical>
                   </div>
                 </div>
 
                 <ToggleRow
-                  title="Require Uppercase Letter"
+                  title={t("admin.security.require_uppercase", "Require Uppercase Letter")}
                   checked={draft.password_require_uppercase}
                   onCheckedChange={(checked) =>
                     void saveSettings({ password_require_uppercase: checked })
@@ -315,7 +323,7 @@ export default function SecurityHardeningPage() {
                 />
 
                 <ToggleRow
-                  title="Require Lowercase Letter"
+                  title={t("admin.security.require_lowercase", "Require Lowercase Letter")}
                   checked={draft.password_require_lowercase}
                   onCheckedChange={(checked) =>
                     void saveSettings({ password_require_lowercase: checked })
@@ -323,7 +331,7 @@ export default function SecurityHardeningPage() {
                 />
 
                 <ToggleRow
-                  title="Require Number"
+                  title={t("admin.security.require_number", "Require Number")}
                   checked={draft.password_require_digit}
                   onCheckedChange={(checked) =>
                     void saveSettings({ password_require_digit: checked })
@@ -331,9 +339,9 @@ export default function SecurityHardeningPage() {
                 />
 
                 <ToggleRow
-                  title="Require Special Characters"
+                  title={t("admin.security.require_special_char", "Require Special Characters")}
                   description={markdown(
-                    "Accepted characters: `!@#$%^&*()_+-=[]{}|;:,.<>?`"
+                    t("admin.security.special_chars_description", "Accepted characters: `!@#$%^&*()_+-=[]{}|;:,.<>?`")
                   )}
                   checked={draft.password_require_special_char}
                   onCheckedChange={(checked) =>
@@ -350,7 +358,7 @@ export default function SecurityHardeningPage() {
         {/* Admin Controls */}
         <div className="flex w-full flex-col gap-3">
           <Content
-            title="Admin Controls"
+            title={t("admin.security.admin_controls", "Admin Controls")}
             sizePreset="main-content"
             variant="section"
           />
@@ -358,8 +366,8 @@ export default function SecurityHardeningPage() {
           <Card border="solid" rounding="lg">
             <Section>
               <InputHorizontal
-                title="Full User Directory Visibility"
-                description="Exact name and email lookups work regardless of this setting."
+                title={t("admin.security.user_dir_visibility", "Full User Directory Visibility")}
+                description={t("admin.security.user_dir_visibility_description", "Exact name and email lookups work regardless of this setting.")}
                 withLabel
               >
                 <div className="w-60">
@@ -380,16 +388,16 @@ export default function SecurityHardeningPage() {
                       <InputSelect.Item
                         value="all_users"
                         wrapDescription
-                        description="Anyone signed in can see the full user list when sharing resources."
+                        description={t("admin.security.user_dir_visible_all_description", "Anyone signed in can see the full user list when sharing resources.")}
                       >
-                        Visible to All Users
+                        {t("admin.security.user_dir_visible_all", "Visible to All Users")}
                       </InputSelect.Item>
                       <InputSelect.Item
                         value="admins_only"
                         wrapDescription
-                        description="Only admins can see the full user list."
+                        description={t("admin.security.user_dir_admins_only_description", "Only admins can see the full user list.")}
                       >
-                        Visible to Admins Only
+                        {t("admin.security.user_dir_admins_only", "Visible to Admins Only")}
                       </InputSelect.Item>
                     </InputSelect.Content>
                   </InputSelect>
@@ -398,8 +406,8 @@ export default function SecurityHardeningPage() {
 
               {!isMultiTenant && (
                 <InputHorizontal
-                  title="Mask Stored Credentials"
-                  description="Display format for saved API keys and credentials for admins."
+                  title={t("admin.security.mask_credentials", "Mask Stored Credentials")}
+                  description={t("admin.security.mask_credentials_description", "Display format for saved API keys and credentials for admins.")}
                   withLabel
                 >
                   <div className="w-60">
@@ -418,16 +426,16 @@ export default function SecurityHardeningPage() {
                         <InputSelect.Item
                           value="masked"
                           wrapDescription
-                          description="Show only the first and last few characters (e.g. abcd...wxyz)."
+                          description={t("admin.security.credentials_partially_masked_description", "Show only the first and last few characters (e.g. abcd...wxyz).")}
                         >
-                          Partially Masked
+                          {t("admin.security.credentials_partially_masked", "Partially Masked")}
                         </InputSelect.Item>
                         <InputSelect.Item
                           value="visible"
                           wrapDescription
-                          description="Show the full credential value to admins."
+                          description={t("admin.security.credentials_fully_visible_description", "Show the full credential value to admins.")}
                         >
-                          Fully Visible
+                          {t("admin.security.credentials_fully_visible", "Fully Visible")}
                         </InputSelect.Item>
                       </InputSelect.Content>
                     </InputSelect>
@@ -443,7 +451,7 @@ export default function SecurityHardeningPage() {
         {!isMultiTenant && (
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Network Safety"
+              title={t("admin.security.network_safety", "Network Safety")}
               sizePreset="main-content"
               variant="section"
             />
@@ -451,8 +459,8 @@ export default function SecurityHardeningPage() {
             <Card border="solid" rounding="lg">
               <Section>
                 <InputHorizontal
-                  title="SSRF Protection"
-                  description="Validate outbound requests against private or internal IPs for Server-Side Request Forgery (SSRF) protection."
+                  title={t("admin.security.ssrf_protection", "SSRF Protection")}
+                  description={t("admin.security.ssrf_protection_description", "Validate outbound requests against private or internal IPs for Server-Side Request Forgery (SSRF) protection.")}
                   withLabel
                 >
                   <div className="w-60">
@@ -469,30 +477,30 @@ export default function SecurityHardeningPage() {
                         <InputSelect.Item
                           value="validate_all"
                           wrapDescription
-                          description="Most restrictive. All outbound requests refuse to reach private or internal IPs, including web connectors."
+                          description={t("admin.security.ssrf_validate_all_description", "Most restrictive. All outbound requests refuse to reach private or internal IPs, including web connectors.")}
                         >
-                          Validate All Requests
+                          {t("admin.security.ssrf_validate_all", "Validate All Requests")}
                         </InputSelect.Item>
                         <InputSelect.Item
                           value="validate_llm"
                           wrapDescription
-                          description="Validate all LLM-initiated URL fetches. Admin-configured connectors can still reach private or internal IPs."
+                          description={t("admin.security.ssrf_validate_llm_description", "Validate all LLM-initiated URL fetches. Admin-configured connectors can still reach private or internal IPs.")}
                         >
-                          Validate LLM Requests
+                          {t("admin.security.ssrf_validate_llm", "Validate LLM Requests")}
                         </InputSelect.Item>
                         <InputSelect.Item
                           value="allow_private_network"
                           wrapDescription
-                          description="Like Validate LLM Requests, but admin-configured MCP/OAuth endpoints may also reach private LAN hosts. Loopback (the app host itself) and cloud-metadata stay blocked."
+                          description={t("admin.security.ssrf_allow_private_description", "Like Validate LLM Requests, but admin-configured MCP/OAuth endpoints may also reach private LAN hosts. Loopback (the app host itself) and cloud-metadata stay blocked.")}
                         >
-                          Allow Private Network
+                          {t("admin.security.ssrf_allow_private", "Allow Private Network")}
                         </InputSelect.Item>
                         <InputSelect.Item
                           value="disabled"
                           wrapDescription
-                          description="Use only in trusted networks. Allow all outbound requests — required for connecting to local LLM backends."
+                          description={t("admin.security.ssrf_disabled_description", "Use only in trusted networks. Allow all outbound requests — required for connecting to local LLM backends.")}
                         >
-                          Disabled
+                          {t("admin.security.ssrf_disabled", "Disabled")}
                         </InputSelect.Item>
                       </InputSelect.Content>
                     </InputSelect>
