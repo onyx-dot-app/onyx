@@ -68,7 +68,7 @@ logger = setup_logger()
 PARSER_MAX_BODY_BYTES = 1_048_576
 
 
-# --- internal-destination egress lockdown (Fix 1: closes the proxy-relay path) ---
+# --- internal-destination egress lockdown: closes the proxy-relay path ---
 # A sandbox can only egress via the proxy, so the proxy is the single layer that can
 # stop it relaying (CONNECT-tunneling) to internal services (databases, caches, search,
 # metadata endpoints) — that destination is invisible at the sandbox's own egress (it sees
@@ -243,7 +243,7 @@ class GateAddon:
         connection id (one tunnel per subprocess = one session); evicted in
         `client_disconnected`. Best-effort.
         """
-        # Fix 1: refuse to open a tunnel to an internal address, with a clear 403 the
+        # Refuse to open a tunnel to an internal address, with a clear 403 the
         # agent can act on. This is a best-effort early deny on the CONNECT host; the
         # authoritative, rebinding-proof enforcement + IP pin runs in `server_connect`
         # on the actually-resolved peer. We do NOT rewrite flow.request.host here:
@@ -283,7 +283,7 @@ class GateAddon:
             self._conn_session_tags.pop(conn_id, None)
 
     async def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
-        """Fix 1: deny internal destinations at connection-setup time (backstop).
+        """Deny internal destinations at connection-setup time (backstop).
 
         Runs for every upstream connection, just before mitmproxy resolves and opens
         it. Re-checking the destination here — closer to the actual connect than the
@@ -330,7 +330,7 @@ class GateAddon:
             self._inflight_tasks.add(task)
             task.add_done_callback(self._inflight_tasks.discard)
 
-        # Fix 1: deny plain-HTTP forwards (GET http://internal/...) to internal
+        # Deny plain-HTTP forwards (GET http://internal/...) to internal
         # addresses, with a clear 403. Best-effort early deny on the request host;
         # `server_connect` is the authoritative rebinding-proof backstop + pin.
         # Resolution can block, so run it off the event loop.
