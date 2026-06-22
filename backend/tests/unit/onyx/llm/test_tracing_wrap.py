@@ -204,7 +204,7 @@ def test_outer_guard_false_for_finished_span_leaked_into_contextvar() -> None:
 
 # `functools.wraps` sets __wrapped__ on the auto-wrapped methods so the
 # underlying (undecorated) function is reachable for signature introspection.
-# mypy doesn't know about this attribute on the Callable type, so we access
+# The type-checker doesn't know about this attribute on the Callable type, so we access
 # it via getattr below.
 
 
