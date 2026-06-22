@@ -411,9 +411,15 @@ class TestGetOpenRouterAvailableModels:
 
         mock_session = MagicMock()
 
-        # Provider already has claude model
+        # Provider already has claude model, with capability flows already
+        # up to date so the sync leaves it untouched.
         existing_model = MagicMock()
         existing_model.name = "anthropic/claude-3.5-sonnet"
+        existing_model.llm_model_flow_types = [
+            LLMModelFlowType.CHAT,
+            LLMModelFlowType.VISION,
+            LLMModelFlowType.REASONING,
+        ]
 
         mock_provider = MagicMock()
         mock_provider.id = 1
