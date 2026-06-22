@@ -18,6 +18,7 @@ from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider
 from onyx.db.voice import fetch_default_tts_provider
+from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
 from onyx.voice.interface import StreamingSynthesizerProtocol
@@ -33,6 +34,11 @@ router = APIRouter(prefix="/voice")
 MIN_CHUNK_BYTES = 1500
 VOICE_DISABLE_STREAMING_FALLBACK = (
     os.environ.get("VOICE_DISABLE_STREAMING_FALLBACK", "").lower() == "true"
+)
+# Force STT onto the chunked/REST path where a provider's native streaming SDK
+# transport is unavailable in the runtime (else it yields empty transcripts).
+VOICE_DISABLE_STREAMING_STT = (
+    os.environ.get("VOICE_DISABLE_STREAMING_STT", "").lower() == "true"
 )
 
 # WebSocket size limits to prevent memory exhaustion attacks
@@ -410,8 +416,8 @@ async def websocket_transcribe(
                 await websocket.send_json({"type": "error", "message": str(e)})
                 return
 
-        # Use native streaming if provider supports it
-        if provider.supports_streaming_stt():
+        # Use native streaming if provider supports it (unless forced off)
+        if provider.supports_streaming_stt() and not VOICE_DISABLE_STREAMING_STT:
             logger.info("WebSocket transcribe: using native streaming STT")
             try:
                 streaming_transcriber = await provider.create_streaming_transcriber()
@@ -573,7 +579,7 @@ async def handle_streaming_synthesis(
                                 "Streaming synthesis: forwarding text chunk (%s chars)",
                                 len(text),
                             )
-                            await synthesizer.send_text(text)
+                            await synthesizer.send_text(strip_markdown_for_tts(text))
 
                     elif data.get("type") == "end":
                         logger.info("Streaming synthesis: end signal received")
@@ -707,7 +713,7 @@ async def handle_chunked_synthesis(
                     speed = float(data["speed"])
             elif msg_data_type == "end":
                 logger.info("Chunked synthesis: end signal received")
-                full_text = " ".join(text_buffer).strip()
+                full_text = strip_markdown_for_tts(" ".join(text_buffer))
                 if not full_text:
                     await websocket.send_json({"type": "audio_done"})
                     logger.info("Chunked synthesis: no text, sent audio_done")
