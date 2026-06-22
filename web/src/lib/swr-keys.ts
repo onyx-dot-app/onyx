@@ -147,6 +147,7 @@ export const SWR_KEYS = {
   buildExternalApps: "/api/build/apps",
   buildExternalAppsAdmin: "/api/build/admin/apps",
   buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
+  buildExternalAppsOAuthRedirectUri: "/api/build/admin/apps/oauth/redirect-uri",
   buildSessionLiveApprovals: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}/live`,
 
