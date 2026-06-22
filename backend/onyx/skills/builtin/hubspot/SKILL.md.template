@@ -1,0 +1,75 @@
+---
+name: hubspot
+description: Read, create, and update contacts, companies, and deals in the connected user's HubSpot via a light CRM API wrapper.
+---
+
+# HubSpot
+
+Call the HubSpot CRM API as the connected user via the bundled helper. **You are
+already authenticated** — the egress proxy injects the user's HubSpot OAuth token
+on the wire, so this script sends no credentials itself.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/hubspot/hubspot_api.py <command> [args]
+
+Read commands auto-paginate and prune empty fields. The writes are
+`*-create` and `*-update`. Use `--raw` to skip empty-field pruning; `python
+hubspot_api.py <command> -h` shows its flags.
+
+### Contacts
+
+```
+python hubspot_api.py contacts [--properties email,firstname,lastname] [--limit N]
+python hubspot_api.py contact <contact_id> [--properties email,firstname]
+python hubspot_api.py contact-create --properties '{"email":"a@x.com","firstname":"A"}'
+python hubspot_api.py contact-update <contact_id> --properties '{"firstname":"B"}'
+```
+
+### Companies
+
+```
+python hubspot_api.py companies [--properties name,domain] [--limit N]
+python hubspot_api.py company <company_id> [--properties name,domain]
+python hubspot_api.py company-create --properties '{"name":"Acme","domain":"acme.com"}'
+python hubspot_api.py company-update <company_id> --properties '{"domain":"acme.io"}'
+```
+
+### Deals
+
+```
+python hubspot_api.py deals [--properties dealname,amount,dealstage] [--limit N]
+python hubspot_api.py deal <deal_id> [--properties dealname,amount]
+python hubspot_api.py deal-create --properties '{"dealname":"New deal","amount":"1000"}'
+python hubspot_api.py deal-update <deal_id> --properties '{"dealstage":"closedwon"}'
+```
+
+### Arbitrary API calls
+
+`call` reaches any HubSpot endpoint. Pass user input as a JSON body, not by
+string-formatting into the path.
+
+```
+python hubspot_api.py call GET /crm/v3/objects/contacts
+python hubspot_api.py call POST /crm/v3/objects/contacts '{"properties":{"email":"a@x.com"}}'
+```
+
+## Output
+
+JSON on stdout. List commands return `{"ok": true, "results": [...], "count":
+N, "truncated": bool}` (`truncated` means more results existed past `--limit`).
+Failures return `{"ok": false, "status": <code>, "error": "<message>"}` and exit
+non-zero — surface the error rather than retrying blindly.
+
+## Notes
+
+- `--properties` on a write takes a JSON object; on a read it takes a
+  comma-separated list of property names to fetch (HubSpot returns a small
+  default set otherwise).
+- Object ids are HubSpot's numeric record ids; resolve them from a list/search
+  first if you only have an email or name.
+- Scopes are fixed by the admin (contacts, companies, deals read/write). An
+  operation needing a scope you don't have returns `403` — tell the user rather
+  than retrying.
