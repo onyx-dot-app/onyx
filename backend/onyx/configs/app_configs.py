@@ -614,6 +614,15 @@ elif POSTGRES_SSLMODE:
             "verify the server certificate; use verify-ca or verify-full to "
             "verify against the CA bundle."
         )
+elif POSTGRES_SSLROOTCERT:
+    # A CA bundle without a mode is dead config: SSL stays off and the
+    # connection runs unverified despite the operator supplying a cert. Fail
+    # loudly so this can't masquerade as a verified connection.
+    raise ValueError(
+        "POSTGRES_SSLROOTCERT is set but POSTGRES_SSLMODE is not. The CA bundle "
+        "is only used by a verifying mode; set POSTGRES_SSLMODE=verify-ca or "
+        "verify-full (or unset POSTGRES_SSLROOTCERT)."
+    )
 
 # Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
 # Note: This is separate from RDS IAM auth as they use different authentication mechanisms

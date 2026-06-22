@@ -192,6 +192,19 @@ def test_nonexistent_rootcert_raises() -> None:
     importlib.reload(app_configs)
 
 
+def test_rootcert_without_sslmode_raises() -> None:
+    """A CA bundle with no mode is dead config (SSL stays off); fail loudly so
+    it can't masquerade as a verified connection."""
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLROOTCERT"] = _CA_BUNDLE
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="POSTGRES_SSLMODE is not"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
 def test_invalid_sslmode_ignored_under_iam() -> None:
     """IAM enforces its own TLS, so an ignored (even invalid) POSTGRES_SSLMODE
     must not fail startup — validation is gated behind the non-IAM path."""
