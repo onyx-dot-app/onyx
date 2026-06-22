@@ -1067,6 +1067,10 @@ class _StaticBedrockBearerTokenProvider:
         self._token = token
 
     def load_token(self, **kwargs: Any) -> FrozenAuthToken | None:
+        # botocore forwards `signing_name` into the token-provider chain at
+        # client-creation time. This is an internal botocore contract, not a
+        # published API — re-validate on botocore upgrades. The end-to-end
+        # `test_real_client_signs_with_bearer_token` guards against drift.
         if kwargs.get("signing_name") != "bedrock":
             return None
         return FrozenAuthToken(self._token)
