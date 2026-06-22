@@ -672,9 +672,20 @@ except ValueError:
 # liveness touch so the pod gets restarted. This value is both the opt-in switch
 # and the per-fleet staleness threshold in seconds; 0 (default) disables it. The
 # queues to watch are derived from the worker's own -Q at runtime.
-CELERY_LIVENESS_WEDGE_STALE_THRESHOLD_S = int(
-    os.environ.get("CELERY_LIVENESS_WEDGE_STALE_THRESHOLD_S", "0")
+_CELERY_LIVENESS_WEDGE_STALE_THRESHOLD = os.environ.get(
+    "CELERY_LIVENESS_WEDGE_STALE_THRESHOLD_S", "0"
 )
+try:
+    CELERY_LIVENESS_WEDGE_STALE_THRESHOLD_S = int(
+        _CELERY_LIVENESS_WEDGE_STALE_THRESHOLD
+    )
+except ValueError:
+    logger.warning(
+        "CELERY_LIVENESS_WEDGE_STALE_THRESHOLD_S=%s is invalid; disabling "
+        "consumer-wedge liveness.",
+        _CELERY_LIVENESS_WEDGE_STALE_THRESHOLD,
+    )
+    CELERY_LIVENESS_WEDGE_STALE_THRESHOLD_S = 0
 
 _CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT = 6
 try:
