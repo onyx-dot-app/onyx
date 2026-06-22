@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "next dev",
     "dev:profile": "NEXT_PUBLIC_ENABLE_STATS=true next dev",
+    "dev:clean": "bun run clean && next dev",
+    "clean": "rm -rf .next node_modules/.cache *.tsbuildinfo",
     "build": "next build",
     "start": "next start",
     "lint": "oxlint",
