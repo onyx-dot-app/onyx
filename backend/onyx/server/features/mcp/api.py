@@ -1807,7 +1807,7 @@ def _list_mcp_tools_by_id(
 
     if mcp_server.auth_type == MCPAuthenticationType.OAUTH:
         # TODO: just pass this in, but should work when auth is set already
-        assert connection_config  # for mypy
+        assert connection_config  # for type-checking
         auth = make_oauth_provider(
             mcp_server,
             user_id,
@@ -2139,7 +2139,7 @@ def _upsert_mcp_server(
 
     elif request.auth_performer == MCPAuthenticationPerformer.PER_USER:
         if request.auth_type == MCPAuthenticationType.API_TOKEN:
-            # handled by model validation, this is just for mypy
+            # handled by model validation, this is just for type-checking
             assert request.auth_template and request.admin_credentials
 
             # Per-user server: create template and save creator's per-user config

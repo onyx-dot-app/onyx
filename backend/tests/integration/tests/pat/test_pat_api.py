@@ -364,7 +364,7 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
         user_performing_action=global_curator_user,
     )
 
-    # Verify all tokens are present (type narrowing for mypy)
+    # Verify all tokens are present (type narrowing for the type-checker)
     assert admin_pat.token is not None
     assert basic_pat.token is not None
     assert curator_pat.token is not None
