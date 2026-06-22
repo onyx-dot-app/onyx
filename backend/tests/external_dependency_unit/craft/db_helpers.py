@@ -1,8 +1,9 @@
-"""Shared row factories for craft external-dependency tests.
+"""Shared Craft database row factories.
 
-Underscore-prefixed module so pytest does not collect it. Helpers live here
-(not in ``conftest.py``) because they're plain functions — callers want to
-import them, not receive them as fixtures.
+Helpers live here, not in a ``conftest.py``, because they're plain functions:
+external-dependency tests import row factories directly. Pure payload builders
+live in ``tests.common.craft.payloads`` so integration tests do not depend on
+DB factory modules for value construction.
 
 Conventions:
 
@@ -47,19 +48,18 @@ from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
-from onyx.external_apps.matching.engine import MatchedAction
-from onyx.server.features.build.sandbox.models import LLMProviderConfig
 
 
-def _set_created_at(
+def force_approval_created_at(
     db_session: Session,
-    model: type[ActionApproval],
-    pk: UUID,
+    approval_id: UUID,
     when: datetime,
 ) -> None:
-    """Force a row's ``created_at`` to ``when``, bypassing ``server_default``."""
+    """Force an ``ActionApproval`` row's ``created_at`` timestamp."""
     db_session.execute(
-        update(model).where(model.approval_id == pk).values(created_at=when)
+        update(ActionApproval)
+        .where(ActionApproval.approval_id == approval_id)
+        .values(created_at=when)
     )
     db_session.commit()
 
@@ -336,46 +336,3 @@ def make_cc_pair(
         db_session.flush()
 
     return cc_pair
-
-
-def default_llm_config(
-    provider: str = "openai",
-    model_name: str = "gpt-5-mini",
-    api_key: str = "test-key",
-) -> LLMProviderConfig:
-    """Standard ``LLMProviderConfig`` for tests that don't care about specifics."""
-    return LLMProviderConfig(
-        provider=provider,
-        model_name=model_name,
-        api_key=api_key,
-        api_base=None,
-    )
-
-
-def action_entry(
-    action_type: str,
-    *,
-    display_name: str = "Action",
-    description: str = "An action.",
-    policy: EndpointPolicy = EndpointPolicy.ASK,
-) -> dict[str, Any]:
-    """JSONB-shape dict for one `ActionApproval.actions` entry. Routes
-    through `MatchedAction` so the shape can't drift from the production
-    model."""
-    return MatchedAction(
-        action_type=action_type,
-        display_name=display_name,
-        description=description,
-        policy=policy,
-    ).model_dump(mode="json")
-
-
-def default_action_entries() -> list[dict[str, Any]]:
-    """Single ASK entry for tests that don't care about catalog specifics."""
-    return [
-        action_entry(
-            "shell.exec",
-            display_name="Run command",
-            description="Run a shell command.",
-        )
-    ]

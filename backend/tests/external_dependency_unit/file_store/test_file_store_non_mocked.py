@@ -21,8 +21,8 @@ from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_store.file_store import S3BackedFileStore
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 logger = setup_logger()
 
@@ -212,7 +212,7 @@ class TestS3BackedFileStore:
             file_record.bucket_name == file_store._get_bucket_name()
         )  # Use actual bucket name
         # The object key should include the tenant ID
-        expected_object_key = f"{file_store._s3_prefix}/{TEST_TENANT_ID}/{file_id}"
+        expected_object_key = f"{file_store._s3_prefix}/{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/{file_id}"
         assert file_record.object_key == expected_object_key
 
     def test_change_file_id_is_metadata_only(
@@ -866,7 +866,9 @@ class TestS3BackedFileStore:
             """Worker function to save a file with its own database session"""
             try:
                 # Set up tenant context for this worker
-                token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+                token = CURRENT_TENANT_ID_CONTEXTVAR.set(
+                    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                )
                 try:
                     # Create a new database session for each worker to avoid conflicts
                     with get_session_with_current_tenant() as worker_session:

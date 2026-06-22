@@ -31,7 +31,7 @@ from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
-from tests.external_dependency_unit.craft.stubs import StubSandboxManager
+from tests.common.craft.stubs import StubSandboxManager
 
 
 def _text_chunk(text: str) -> AgentMessageChunk:
