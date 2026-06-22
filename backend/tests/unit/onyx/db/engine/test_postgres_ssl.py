@@ -60,11 +60,11 @@ def test_psycopg2_args_verify_full_includes_rootcert() -> None:
     with patch.dict(os.environ, {}, clear=False):
         _clear_ssl_env()
         os.environ["POSTGRES_SSLMODE"] = "verify-full"
-        os.environ["POSTGRES_SSLROOTCERT"] = "/etc/ssl/rds-ca.pem"
+        os.environ["POSTGRES_SSLROOTCERT"] = _CA_BUNDLE
         module = _reload_pg_ssl()
         assert module.pg_ssl_psycopg2_connect_args() == {
             "sslmode": "verify-full",
-            "sslrootcert": "/etc/ssl/rds-ca.pem",
+            "sslrootcert": _CA_BUNDLE,
         }
 
 
@@ -155,10 +155,52 @@ def test_asyncpg_not_none_with_explicit_ssl_regression_guard() -> None:
 
 
 def test_invalid_sslmode_raises_at_config_import() -> None:
-    with patch.dict(os.environ, {"POSTGRES_SSLMODE": "bogus"}):
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLMODE"] = "bogus"
         import onyx.configs.app_configs as app_configs
 
         with pytest.raises(ValueError, match="Invalid POSTGRES_SSLMODE"):
             importlib.reload(app_configs)
     # restore a clean module for any later tests in the session
+    importlib.reload(app_configs)
+
+
+def test_verify_full_without_rootcert_raises() -> None:
+    """verify-ca/verify-full must fail loudly without a CA bundle rather than
+    silently fall back to the system trust store."""
+    import onyx.configs.app_configs as app_configs
+
+    for mode in ("verify-ca", "verify-full"):
+        with patch.dict(os.environ, {}, clear=False):
+            _clear_ssl_env()
+            os.environ["POSTGRES_SSLMODE"] = mode
+            with pytest.raises(ValueError, match="requires POSTGRES_SSLROOTCERT"):
+                importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
+def test_nonexistent_rootcert_raises() -> None:
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLMODE"] = "verify-full"
+        os.environ["POSTGRES_SSLROOTCERT"] = "/no/such/ca-bundle.pem"
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="does not exist"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
+def test_invalid_sslmode_ignored_under_iam() -> None:
+    """IAM enforces its own TLS, so an ignored (even invalid) POSTGRES_SSLMODE
+    must not fail startup — validation is gated behind the non-IAM path."""
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["USE_IAM_AUTH"] = "true"
+        os.environ["POSTGRES_SSLMODE"] = "bogus"
+        import onyx.configs.app_configs as app_configs
+
+        importlib.reload(app_configs)  # must NOT raise
+        assert app_configs.USE_IAM_AUTH is True
     importlib.reload(app_configs)

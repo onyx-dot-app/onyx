@@ -63,15 +63,19 @@ def create_pg_ssl_context() -> ssl.SSLContext | str | None:
         # allow / prefer — let asyncpg decide, with plaintext fallback.
         return POSTGRES_SSLMODE
 
-    context = ssl.create_default_context(cafile=POSTGRES_SSLROOTCERT or None)
-    if POSTGRES_SSLMODE == "verify-full":
-        context.check_hostname = True
-        context.verify_mode = ssl.CERT_REQUIRED
-    elif POSTGRES_SSLMODE == "verify-ca":
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_REQUIRED
-    else:  # require — encrypt without verifying the server identity.
-        # check_hostname must be cleared before relaxing verify_mode.
+    if POSTGRES_SSLMODE == "require":
+        # Encrypt without verifying the server identity. No CA bundle is loaded
+        # because `require` never verifies it. check_hostname must be cleared
+        # before relaxing verify_mode.
+        context = ssl.create_default_context()
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
+        return context
+
+    # verify-ca / verify-full — verify the server cert against the CA bundle.
+    # POSTGRES_SSLROOTCERT is guaranteed set for these modes by the config
+    # validation in app_configs.
+    context = ssl.create_default_context(cafile=POSTGRES_SSLROOTCERT)
+    context.check_hostname = POSTGRES_SSLMODE == "verify-full"
+    context.verify_mode = ssl.CERT_REQUIRED
     return context
