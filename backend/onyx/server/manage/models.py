@@ -80,6 +80,7 @@ class UserPreferences(BaseModel):
     auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
     theme_preference: ThemePreference | None = None
+    language: str | None = None
     chat_background: str | None = None
     default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
 
@@ -171,6 +172,7 @@ class UserInfo(BaseModel):
                     auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,
                     theme_preference=user.theme_preference,
+                    language=user.language,
                     chat_background=user.chat_background,
                     default_app_mode=user.default_app_mode,
                     paste_as_tile=user.paste_as_tile,
@@ -240,6 +242,10 @@ class AutoScrollRequest(BaseModel):
 
 class ThemePreferenceRequest(BaseModel):
     theme_preference: ThemePreference
+
+
+class LanguageRequest(BaseModel):
+    language: str
 
 
 class DefaultAppModeRequest(BaseModel):

@@ -30,6 +30,7 @@ import InputTextArea from "@/refresh-components/inputs/InputTextArea";
 import { Switch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
+import { useTranslation } from "react-i18next";
 import { MemoryItem, ThemePreference } from "@/lib/types";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import { toast } from "@/hooks/useToast";
@@ -364,9 +365,11 @@ function GeneralSettings() {
     user,
     updateUserPersonalization,
     updateUserThemePreference,
+    updateUserLanguagePreference,
     updateUserChatBackground,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
+  const { t } = useTranslation();
 
   const applyBackground = useCallback(
     async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
@@ -576,6 +579,25 @@ function GeneralSettings() {
                   >
                     Dark
                   </InputSelect.Item>
+                </InputSelect.Content>
+              </InputSelect>
+            </InputHorizontal>
+            <InputHorizontal
+              title={t("general.language")}
+              description={t("settings.language_description")}
+              center
+              withLabel
+            >
+              <InputSelect
+                value={user?.preferences?.language ?? "en"}
+                onValueChange={(value) => {
+                  updateUserLanguagePreference(value);
+                }}
+              >
+                <InputSelect.Trigger />
+                <InputSelect.Content>
+                  <InputSelect.Item value="en">English</InputSelect.Item>
+                  <InputSelect.Item value="es">Español (Latinoamérica)</InputSelect.Item>
                 </InputSelect.Content>
               </InputSelect>
             </InputHorizontal>

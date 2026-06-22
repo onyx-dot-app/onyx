@@ -25,6 +25,8 @@
 
 import { useState } from "react";
 import Cookies from "js-cookie";
+import { I18nextProvider } from "react-i18next";
+import i18n from "@/lib/i18n";
 import { UserProvider } from "@/providers/UserProvider";
 import { ProviderContextProvider } from "@/components/chat/ProviderContext";
 import { SettingsProvider } from "@/providers/SettingsProvider";
@@ -71,20 +73,22 @@ interface AppProviderProps {
 
 export default function AppProvider({ children }: AppProviderProps) {
   return (
-    <SettingsProvider>
-      <UserProvider>
-        <AppBackgroundProvider>
-          <ProviderContextProvider>
-            <ModalProvider>
-              <SidebarPersistenceProvider>
-                <QueryControllerProvider>
-                  <ToastProvider>{children}</ToastProvider>
-                </QueryControllerProvider>
-              </SidebarPersistenceProvider>
-            </ModalProvider>
-          </ProviderContextProvider>
-        </AppBackgroundProvider>
-      </UserProvider>
-    </SettingsProvider>
+    <I18nextProvider i18n={i18n}>
+      <SettingsProvider>
+        <UserProvider>
+          <AppBackgroundProvider>
+            <ProviderContextProvider>
+              <ModalProvider>
+                <SidebarPersistenceProvider>
+                  <QueryControllerProvider>
+                    <ToastProvider>{children}</ToastProvider>
+                  </QueryControllerProvider>
+                </SidebarPersistenceProvider>
+              </ModalProvider>
+            </ProviderContextProvider>
+          </AppBackgroundProvider>
+        </UserProvider>
+      </SettingsProvider>
+    </I18nextProvider>
   );
 }

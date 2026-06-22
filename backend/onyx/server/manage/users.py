@@ -74,6 +74,7 @@ from onyx.db.user_preferences import update_user_personalization
 from onyx.db.user_preferences import update_user_pinned_assistants
 from onyx.db.user_preferences import update_user_role
 from onyx.db.user_preferences import update_user_shortcut_enabled
+from onyx.db.user_preferences import update_user_language
 from onyx.db.user_preferences import update_user_temperature_override_enabled
 from onyx.db.user_preferences import update_user_theme_preference
 from onyx.db.users import batch_get_user_groups
@@ -103,6 +104,7 @@ from onyx.server.manage.models import EmailInviteStatus
 from onyx.server.manage.models import MemoryItem
 from onyx.server.manage.models import PersonalizationUpdateRequest
 from onyx.server.manage.models import TenantInfo
+from onyx.server.manage.models import LanguageRequest
 from onyx.server.manage.models import TenantSnapshot
 from onyx.server.manage.models import ThemePreferenceRequest
 from onyx.server.manage.models import UserByEmail
@@ -1006,6 +1008,15 @@ def update_user_theme_preference_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_theme_preference(user.id, request.theme_preference, db_session)
+
+
+@router.patch("/user/language")
+def update_user_language_api(
+    request: LanguageRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_language(user.id, request.language, db_session)
 
 
 @router.patch("/user/chat-background")

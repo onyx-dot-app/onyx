@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Button } from "@opal/components";
@@ -10,12 +11,13 @@ interface ResubmitProps {
 }
 
 export const Resubmit: React.FC<ResubmitProps> = ({ resubmit }) => {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center justify-center gap-y-2 mt-4">
       <p className="text-sm text-neutral-700 dark:text-neutral-300">
-        There was an error with the response.
+        {t("chat.error_with_response")}
       </p>
-      <Button onClick={resubmit}>Regenerate</Button>
+      <Button onClick={resubmit}>{t("chat.regenerate")}</Button>
     </div>
   );
 };
@@ -35,13 +37,14 @@ export const ErrorBanner = ({
   stackTrace?: string | null;
   resubmit?: () => void;
 }) => {
+  const { t } = useTranslation();
   const [isStackTraceExpanded, setIsStackTraceExpanded] = useState(false);
 
   return (
     <div className="text-red-700 mt-4 text-sm my-auto">
       <Alert variant="broken">
         {getErrorIcon(errorCode)}
-        <AlertTitle>{getErrorTitle(errorCode)}</AlertTitle>
+        <AlertTitle>{t(getErrorTitle(errorCode))}</AlertTitle>
         <AlertDescription className="flex flex-col gap-y-1">
           <span>{error}</span>
           {details?.model && (
@@ -63,7 +66,7 @@ export const ErrorBanner = ({
                   icon={isStackTraceExpanded ? SvgChevronDown : SvgChevronRight}
                   onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
                 >
-                  Stack trace
+                  {t("chat.stack_trace")}
                 </Button>
                 <CopyButton
                   prominence="tertiary"
@@ -83,3 +86,4 @@ export const ErrorBanner = ({
     </div>
   );
 };
+

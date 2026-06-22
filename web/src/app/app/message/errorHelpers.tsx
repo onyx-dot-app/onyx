@@ -22,39 +22,40 @@ export const getErrorIcon = (errorCode?: string) => {
 };
 
 /**
- * Get a human-readable title for a given error code
+ * Get a human-readable translation key for a given error code
  */
 export const getErrorTitle = (errorCode?: string) => {
   switch (errorCode) {
     case "RATE_LIMIT":
-      return "Rate Limit Exceeded";
+      return "chat.errors.rate_limit";
     case "AUTH_ERROR":
-      return "Authentication Error";
+      return "chat.errors.auth_error";
     case "PERMISSION_DENIED":
-      return "Permission Denied";
+      return "chat.errors.permission_denied";
     case "CONTEXT_TOO_LONG":
-      return "Message Too Long";
+      return "chat.errors.context_too_long";
     case "TOOL_CALL_FAILED":
-      return "Tool Error";
+      return "chat.errors.tool_call_failed";
     case "CONNECTION_ERROR":
-      return "Connection Error";
+      return "chat.errors.connection_error";
     case "SERVICE_UNAVAILABLE":
-      return "Service Unavailable";
+      return "chat.errors.service_unavailable";
     case "INIT_FAILED":
-      return "Initialization Error";
+      return "chat.errors.init_failed";
     case "VALIDATION_ERROR":
-      return "Validation Error";
+      return "chat.errors.validation_error";
     case "BUDGET_EXCEEDED":
-      return "Budget Exceeded";
+      return "chat.errors.budget_exceeded";
     case "CONTENT_POLICY":
-      return "Content Policy Violation";
+      return "chat.errors.content_policy";
     case "BAD_REQUEST":
-      return "Invalid Request";
+      return "chat.errors.bad_request";
     case "NOT_FOUND":
-      return "Resource Not Found";
+      return "chat.errors.not_found";
     case "API_ERROR":
-      return "API Error";
+      return "chat.errors.api_error";
     default:
-      return "Error";
+      return "chat.errors.generic_error";
   }
 };
+

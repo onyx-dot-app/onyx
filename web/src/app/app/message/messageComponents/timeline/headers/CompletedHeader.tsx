@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
 import { Button } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
@@ -30,10 +31,11 @@ function MemoryTagWithTooltip({
   memoryId,
   memoryIndex,
 }: MemoryTagWithTooltipProps) {
+  const { t } = useTranslation();
   const memoriesModal = useCreateModal();
 
   const operationLabel =
-    memoryOperation === "add" ? "Added to memories" : "Updated memory";
+    memoryOperation === "add" ? t("chat.added_to_memories") : t("chat.updated_memory");
 
   const tag = <Tag icon={SvgAddLines} label={operationLabel} />;
 
@@ -128,6 +130,8 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   memoryId = null,
   memoryIndex = null,
 }: CompletedHeaderProps) {
+  const { t } = useTranslation();
+
   if (isMemoryOnly) {
     return (
       <div className="flex w-full justify-between">
@@ -148,7 +152,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
             aria-label="Expand timeline"
             aria-expanded={isExpanded}
           >
-            {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
+            {totalSteps === 1 ? t("chat.step_count_single") : t("chat.step_count_plural", { count: totalSteps })}
           </Button>
         )}
       </div>
@@ -156,14 +160,12 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   }
 
   const durationText = processingDurationSeconds
-    ? `Thought for ${formatDurationSeconds(processingDurationSeconds)}`
-    : "Thought for some time";
+    ? t("chat.thought_for", { duration: formatDurationSeconds(processingDurationSeconds) })
+    : t("chat.thought_for_some_time");
 
   const imageText =
     generatedImageCount > 0
-      ? `Generated ${generatedImageCount} ${
-          generatedImageCount === 1 ? "image" : "images"
-        }`
+      ? generatedImageCount === 1 ? t("chat.generated_image_single") : t("chat.generated_image_plural", { count: generatedImageCount })
       : null;
 
   return (
@@ -195,7 +197,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
           aria-label="Expand timeline"
           aria-expanded={isExpanded}
         >
-          {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
+          {totalSteps === 1 ? t("chat.step_count_single") : t("chat.step_count_plural", { count: totalSteps })}
         </Button>
       )}
     </div>

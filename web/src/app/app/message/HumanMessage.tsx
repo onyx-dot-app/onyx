@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { FileDescriptor } from "@/app/app/interfaces";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
@@ -24,6 +25,7 @@ function MessageEditing({
   onSubmitEdit,
   onCancelEdit,
 }: MessageEditingProps) {
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [editedContent, setEditedContent] = useState(content);
 
@@ -75,9 +77,9 @@ function MessageEditing({
           }}
         />
         <div className="flex justify-end gap-1">
-          <Button onClick={handleSubmit}>Submit</Button>
+          <Button onClick={handleSubmit}>{t("chat.submit")}</Button>
           <Button prominence="secondary" onClick={handleCancel}>
-            Cancel
+            {t("general.cancel")}
           </Button>
         </div>
       </div>
@@ -132,6 +134,7 @@ const HumanMessage = React.memo(function HumanMessage({
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
 }: HumanMessageProps) {
+  const { t } = useTranslation();
   // TODO (@raunakab):
   //
   // This is some duplicated state that is patching a memoization issue with `HumanMessage`.
@@ -183,7 +186,7 @@ const HumanMessage = React.memo(function HumanMessage({
           <Button
             icon={SvgEdit}
             prominence="tertiary"
-            tooltip="Edit"
+            tooltip={t("chat.edit")}
             onClick={() => setIsEditing(true)}
             data-testid="HumanMessage/edit-button"
           />
