@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { Content, InputErrorText, InputVertical } from "@opal/layouts";
