@@ -53,6 +53,8 @@ from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import start_thread_with_context
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -274,6 +276,12 @@ def merge_events_with_announces(
     done_sentinel = object()
 
     def drive_events() -> None:
+        logger.debug(
+            "[ANNOUNCE-MERGE] drive_events thread=%s session_id=%s observed_tenant=%s",
+            threading.current_thread().name,
+            session_id,
+            CURRENT_TENANT_ID_CONTEXTVAR.get(),
+        )
         try:
             for evt in event_iter:
                 output.put(evt)
@@ -301,16 +309,21 @@ def merge_events_with_announces(
                 ApprovalRequestedPacket(approval_id=approval_id, session_id=session_id)
             )
 
-    events_thread = threading.Thread(
-        target=drive_events, name=f"events-pump-{session_id}", daemon=True
+    # Spawn via the context-preserving helper so the event iterator's lazy
+    # tenant-scoped DB access (e.g. event-bus creation) sees the caller's
+    # contextvars instead of raising "Tenant ID is not set".
+    logger.debug(
+        "[ANNOUNCE-MERGE] spawning producers thread=%s session_id=%s expected_tenant=%s",
+        threading.current_thread().name,
+        session_id,
+        tenant_id,
     )
-    announce_thread = threading.Thread(
-        target=drive_announces,
-        name=f"announce-pump-{session_id}",
-        daemon=True,
+    start_thread_with_context(
+        drive_events, name=f"events-pump-{session_id}", daemon=True
     )
-    events_thread.start()
-    announce_thread.start()
+    start_thread_with_context(
+        drive_announces, name=f"announce-pump-{session_id}", daemon=True
+    )
     try:
         while True:
             item = output.get()
