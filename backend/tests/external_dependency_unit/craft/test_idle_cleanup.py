@@ -13,6 +13,7 @@ from __future__ import annotations
 import datetime
 import logging
 from collections.abc import Generator
+from uuid import UUID
 
 import pytest
 from sqlalchemy import update
@@ -472,6 +473,105 @@ def test_sessions_marked_idle_and_nextjs_ports_cleared(
     assert refreshed_b.status == BuildSessionStatus.IDLE
     assert refreshed_a.nextjs_port is None
     assert refreshed_b.nextjs_port is None
+
+
+def test_idle_reaped_before_non_idle_background_snapshot(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    stubbed_cleanup: StubSandboxManager,
+    short_idle_threshold: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A single sweep reaps the idle sandbox (snapshot + terminate) before it
+    background-snapshots a non-idle-but-stale one.
+
+    The non-idle sandbox is committed first so DB order alone would process it
+    first; idle-first partitioning must override that.
+    """
+    nonidle_user = make_user(db_session)
+    nonidle_sandbox = make_sandbox(db_session, nonidle_user)
+    nonidle_session = BuildSession(
+        user_id=nonidle_user.id,
+        name="nonidle-stale-session",
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add(nonidle_session)
+    db_session.commit()
+    db_session.refresh(nonidle_session)
+
+    idle_user = make_user(db_session)
+    idle_sandbox = make_sandbox(db_session, idle_user)
+    idle_session = BuildSession(
+        user_id=idle_user.id,
+        name="idle-session",
+        status=BuildSessionStatus.ACTIVE,
+    )
+    db_session.add(idle_session)
+    db_session.commit()
+    db_session.refresh(idle_session)
+
+    # Idle: heartbeat well past the threshold. Non-idle: fresh heartbeat, but
+    # its snapshot-less ACTIVE session defeats the staleness prefilter.
+    _backdate_heartbeat(db_session, idle_sandbox, seconds_ago=short_idle_threshold * 4)
+    _backdate_heartbeat(
+        db_session, nonidle_sandbox, seconds_ago=short_idle_threshold // 2
+    )
+
+    def _list_workspaces(sandbox_id: UUID) -> list[UUID]:
+        if sandbox_id == idle_sandbox.id:
+            return [idle_session.id]
+        if sandbox_id == nonidle_sandbox.id:
+            return [nonidle_session.id]
+        return []
+
+    monkeypatch.setattr(stubbed_cleanup, "list_session_workspaces", _list_workspaces)
+    stubbed_cleanup.create_snapshot_returns = SnapshotResult(
+        storage_path="s3://snapshots/ordering.tar.gz",
+        size_bytes=1234,
+    )
+    stubbed_cleanup.terminate_silent = True
+
+    # Record the (method, sandbox_id) sequence by wrapping the stub methods.
+    call_log: list[tuple[str, UUID]] = []
+    real_create_snapshot = stubbed_cleanup.create_snapshot
+    real_terminate = stubbed_cleanup.terminate
+
+    def _recording_create_snapshot(
+        sandbox_id: UUID, session_id: UUID, tenant_id: str
+    ) -> SnapshotResult | None:
+        call_log.append(("create_snapshot", sandbox_id))
+        return real_create_snapshot(sandbox_id, session_id, tenant_id)
+
+    def _recording_terminate(sandbox_id: UUID) -> None:
+        call_log.append(("terminate", sandbox_id))
+        real_terminate(sandbox_id)
+
+    monkeypatch.setattr(stubbed_cleanup, "create_snapshot", _recording_create_snapshot)
+    monkeypatch.setattr(stubbed_cleanup, "terminate", _recording_terminate)
+
+    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+
+    idle_snapshot_idx = call_log.index(("create_snapshot", idle_sandbox.id))
+    idle_terminate_idx = call_log.index(("terminate", idle_sandbox.id))
+    nonidle_snapshot_idx = call_log.index(("create_snapshot", nonidle_sandbox.id))
+
+    # The idle sandbox is fully reaped (snapshot, then terminate) before the
+    # non-idle sandbox is background-snapshotted.
+    assert idle_snapshot_idx < idle_terminate_idx < nonidle_snapshot_idx
+
+    # The non-idle sandbox is never terminated.
+    assert ("terminate", nonidle_sandbox.id) not in call_log
+
+    db_session.expire_all()
+    refreshed_idle = db_session.get(Sandbox, idle_sandbox.id)
+    refreshed_nonidle = db_session.get(Sandbox, nonidle_sandbox.id)
+    assert (
+        refreshed_idle is not None and refreshed_idle.status == SandboxStatus.SLEEPING
+    )
+    assert (
+        refreshed_nonidle is not None
+        and refreshed_nonidle.status == SandboxStatus.RUNNING
+    )
 
 
 def test_task_holds_redis_lock_for_duration(
