@@ -1,6 +1,7 @@
 """Celery tasks for sandbox operations (cleanup, etc.)."""
 
 import datetime
+import time
 
 from celery import shared_task
 from celery import Task
@@ -188,9 +189,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                             prior_snapshots = get_snapshots_for_session(
                                 db_session, session_id
                             )
+                            snapshot_start = time.monotonic()
                             snapshot_result = sandbox_manager.create_snapshot(
                                 sandbox_id, session_id, tenant_id
                             )
+                            snapshot_elapsed = time.monotonic() - snapshot_start
                             if snapshot_result:
                                 create_snapshot__no_commit(
                                     db_session,
@@ -204,7 +207,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                                 db_session.commit()
                                 snapshots_created += 1
                                 task_logger.info(
-                                    f"Snapshot created for session {session_id}"
+                                    f"Snapshot created for session {session_id}: "
+                                    f"{snapshot_result.size_bytes / 1_048_576:.1f} MiB "
+                                    f"in {snapshot_elapsed:.1f}s"
                                 )
                         except Exception as e:
                             snapshot_failed = True

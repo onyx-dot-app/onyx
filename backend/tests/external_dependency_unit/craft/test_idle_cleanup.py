@@ -567,7 +567,7 @@ def test_idle_reaped_before_non_idle_background_snapshot(
     monkeypatch.setattr(stubbed_cleanup, "create_snapshot", _recording_create_snapshot)
     monkeypatch.setattr(stubbed_cleanup, "terminate", _recording_terminate)
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     assert ("create_snapshot", idle_sandbox.id) in call_log, "idle never snapshotted"
     assert ("terminate", idle_sandbox.id) in call_log, "idle never terminated"
