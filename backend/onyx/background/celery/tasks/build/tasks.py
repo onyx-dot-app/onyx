@@ -122,13 +122,18 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
             # Partition in a single pass so idle sandboxes are reaped first
             # (reclaiming pods is time-sensitive) before the rest are
             # background-snapshotted.
-            idle_sandboxes: list[tuple[bool, Sandbox]] = []
-            non_idle_sandboxes: list[tuple[bool, Sandbox]] = []
+            idle_sandboxes: list[Sandbox] = []
+            non_idle_sandboxes: list[Sandbox] = []
             for sandbox in running_sandboxes:
-                idle = is_sandbox_idle(sandbox, now)
-                (idle_sandboxes if idle else non_idle_sandboxes).append((idle, sandbox))
+                (
+                    idle_sandboxes
+                    if is_sandbox_idle(sandbox, now)
+                    else non_idle_sandboxes
+                ).append(sandbox)
 
-            for idle, sandbox in idle_sandboxes + non_idle_sandboxes:
+            for idle, sandbox in [(True, s) for s in idle_sandboxes] + [
+                (False, s) for s in non_idle_sandboxes
+            ]:
                 sandbox_id = sandbox.id
 
                 try:

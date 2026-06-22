@@ -485,8 +485,9 @@ def test_idle_reaped_before_non_idle_background_snapshot(
     """A single sweep reaps the idle sandbox (snapshot + terminate) before it
     background-snapshots a non-idle-but-stale one.
 
-    The non-idle sandbox is committed first so DB order alone would process it
-    first; idle-first partitioning must override that.
+    ``get_running_sandboxes`` is forced to return the non-idle sandbox first,
+    so a regression to interleaved processing would background-snapshot it
+    before the idle one is reaped; idle-first partitioning must override that.
     """
     nonidle_user = make_user(db_session)
     nonidle_sandbox = make_sandbox(db_session, nonidle_user)
@@ -525,6 +526,19 @@ def test_idle_reaped_before_non_idle_background_snapshot(
         return []
 
     monkeypatch.setattr(stubbed_cleanup, "list_session_workspaces", _list_workspaces)
+
+    # The sweep query has no ORDER BY, so force the adversarial order rather
+    # than relying on physical row order matching commit order.
+    real_get_running_sandboxes = tasks_module.get_running_sandboxes
+
+    def _nonidle_first(session: Session) -> list[Sandbox]:
+        return sorted(
+            real_get_running_sandboxes(session),
+            key=lambda s: s.id != nonidle_sandbox.id,
+        )
+
+    monkeypatch.setattr(tasks_module, "get_running_sandboxes", _nonidle_first)
+
     stubbed_cleanup.create_snapshot_returns = SnapshotResult(
         storage_path="s3://snapshots/ordering.tar.gz",
         size_bytes=1234,
@@ -551,6 +565,12 @@ def test_idle_reaped_before_non_idle_background_snapshot(
 
     cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
 
+    assert ("create_snapshot", idle_sandbox.id) in call_log, "idle never snapshotted"
+    assert ("terminate", idle_sandbox.id) in call_log, "idle never terminated"
+    assert (
+        "create_snapshot",
+        nonidle_sandbox.id,
+    ) in call_log, "non-idle never background-snapshotted"
     idle_snapshot_idx = call_log.index(("create_snapshot", idle_sandbox.id))
     idle_terminate_idx = call_log.index(("terminate", idle_sandbox.id))
     nonidle_snapshot_idx = call_log.index(("create_snapshot", nonidle_sandbox.id))
