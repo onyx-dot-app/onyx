@@ -24,10 +24,21 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatter
 from onyx.background.celery.apps.task_formatters import CeleryTaskJsonFormatter
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
+from onyx.background.celery.celery_consumer_liveness import active_request_count
+from onyx.background.celery.celery_consumer_liveness import BACKLOG_UNKNOWN
+from onyx.background.celery.celery_consumer_liveness import mark_task_consumed
+from onyx.background.celery.celery_consumer_liveness import reserved_request_count
+from onyx.background.celery.celery_consumer_liveness import seconds_since_last_consumed
+from onyx.background.celery.celery_consumer_liveness import (
+    should_withhold_liveness_touch,
+)
+from onyx.background.celery.celery_redis import celery_get_broker_client
+from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_utils import celery_is_worker_primary
 from onyx.background.celery.celery_utils import make_probe_path
 from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_PREFIX
 from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_TASKSET_KEY
+from onyx.configs.app_configs import CELERY_LIVENESS_WEDGE_STALE_THRESHOLD_S
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_OPENSEARCH_INDEXING_FOR_ONYX
 from onyx.configs.app_configs import ONYX_DISABLE_VESPA
@@ -124,6 +135,10 @@ def on_task_prerun(
     # runs in the same process.
 
     LoggerContextVars.reset()
+
+    # Record that this worker just started a task; the liveness probe uses this
+    # to tell a wedged consumer apart from a healthy idle one.
+    mark_task_consumed()
 
 
 def on_task_postrun(
@@ -643,8 +658,22 @@ class LivenessProbe(bootsteps.StartStopStep):
         self.requests: list[Any] = []
         self.task_tref = None
         self.path = make_probe_path("liveness", worker.hostname)
+        self._wedge_threshold_s = CELERY_LIVENESS_WEDGE_STALE_THRESHOLD_S
+        # The worker's own -Q set, snapshotted in start() once Celery has
+        # selected it. Empty leaves wedge detection off.
+        self._wedge_queues: list[str] = []
 
     def start(self, worker: Any) -> None:
+        # Reset the consumption clock so a slow first task after boot isn't read
+        # as a wedge, and snapshot the queues this worker consumes.
+        mark_task_consumed()
+        if self._wedge_threshold_s > 0:
+            self._wedge_queues = sorted(worker.app.amqp.queues.consume_from.keys())
+            task_logger.info(
+                "Consumer-wedge liveness enabled: threshold=%ss queues=%s",
+                self._wedge_threshold_s,
+                self._wedge_queues,
+            )
         self.task_tref = worker.timer.call_repeatedly(
             15.0,
             self.update_liveness_file,
@@ -657,8 +686,61 @@ class LivenessProbe(bootsteps.StartStopStep):
         if self.task_tref:
             self.task_tref.cancel()
 
-    def update_liveness_file(self, worker: Any) -> None:  # noqa: ARG002
+    def update_liveness_file(self, worker: Any) -> None:
+        try:
+            wedged = self._consumer_wedged(worker)
+        except Exception:
+            # Fail open: any error in the wedge check must not stop the touch.
+            task_logger.warning(
+                "Consumer-wedge liveness: wedge check errored; "
+                "treating worker as healthy.",
+                exc_info=True,
+            )
+            wedged = False
+        if wedged:
+            task_logger.error(
+                "Consumer-wedge liveness: no task started in %.0fs, nothing "
+                "running, and work is queued; withholding liveness touch so "
+                "Kubernetes restarts this pod.",
+                seconds_since_last_consumed(),
+            )
+            return
         self.path.touch()
+
+    def _consumer_wedged(self, worker: Any) -> bool:
+        if self._wedge_threshold_s <= 0 or not self._wedge_queues:
+            return False
+        age = seconds_since_last_consumed()
+        if age <= self._wedge_threshold_s:
+            # Fast path: a task started recently — no broker round-trip.
+            return False
+        active = active_request_count()
+        if active != 0:
+            # Threads are busy (or the count is unreadable): not wedged.
+            return False
+        broker_backlog = self._queue_backlog(worker)
+        if broker_backlog == BACKLOG_UNKNOWN:
+            return False
+        return should_withhold_liveness_touch(
+            seconds_since_consumed=age,
+            stale_threshold_s=self._wedge_threshold_s,
+            active_requests=active,
+            backlog=broker_backlog + reserved_request_count(),
+        )
+
+    def _queue_backlog(self, worker: Any) -> int:
+        """Total tasks queued across this worker's queues, or BACKLOG_UNKNOWN if
+        the broker can't be reached (so the check fails open)."""
+        try:
+            r = celery_get_broker_client(worker.app)
+            return sum(celery_get_queue_length(q, r) for q in self._wedge_queues)
+        except Exception:
+            task_logger.warning(
+                "Consumer-wedge liveness: broker queue check failed; "
+                "treating worker as healthy.",
+                exc_info=True,
+            )
+            return BACKLOG_UNKNOWN
 
 
 def get_bootsteps() -> list[type]:

@@ -667,6 +667,15 @@ except ValueError:
         _CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER_DEFAULT
     )
 
+# Consumer-wedge liveness detection (see celery_consumer_liveness.py). A worker
+# that stops consuming while its queues still hold work withholds its k8s
+# liveness touch so the pod gets restarted. This value is both the opt-in switch
+# and the per-fleet staleness threshold in seconds; 0 (default) disables it. The
+# queues to watch are derived from the worker's own -Q at runtime.
+CELERY_LIVENESS_WEDGE_STALE_THRESHOLD_S = int(
+    os.environ.get("CELERY_LIVENESS_WEDGE_STALE_THRESHOLD_S", "0")
+)
+
 _CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT = 6
 try:
     env_value = os.environ.get("CELERY_WORKER_DOCPROCESSING_CONCURRENCY")
