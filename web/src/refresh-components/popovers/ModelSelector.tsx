@@ -3,8 +3,8 @@
 import { useState, useMemo, useRef } from "react";
 import { LlmManager } from "@/lib/hooks";
 import { getModelIcon } from "@/lib/languageModels";
-import { Button, SelectButton, Popover, Divider } from "@opal/components";
-import { SvgPlusCircle, SvgX } from "@opal/icons";
+import { SelectButton, Popover, Divider } from "@opal/components";
+import { SvgX } from "@opal/icons";
 import { useSettingsContext } from "@/providers/SettingsProvider";
 import { LLMOption } from "@/refresh-components/popovers/interfaces";
 import ModelListContent from "@/refresh-components/popovers/ModelListContent";
@@ -131,32 +131,11 @@ export default function ModelSelector({
         data-testid="model-selector"
         className="flex items-center justify-end gap-1 p-1"
       >
-        {!atMax && (
-          <Button
-            prominence="tertiary"
-            icon={SvgPlusCircle}
-            size="sm"
-            tooltip="Add Model"
-            onClick={(e: React.MouseEvent) => {
-              anchorRef.current = e.currentTarget as HTMLElement;
-              setReplacingIndex(null);
-              setOpen(true);
-            }}
-          />
-        )}
-
         <Popover.Anchor
           virtualRef={anchorRef as React.RefObject<HTMLElement>}
         />
         {selectedModels.length > 0 && (
           <>
-            {!atMax && (
-              <Divider
-                orientation="vertical"
-                paddingParallel="sm"
-                paddingPerpendicular="sm"
-              />
-            )}
             <div className="flex items-center shrink-0">
               {selectedModels.map((model, index) => {
                 const ProviderIcon = getModelIcon(

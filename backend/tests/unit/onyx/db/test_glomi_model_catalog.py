@@ -1,8 +1,9 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from onyx.db.glomi_model_catalog import get_glomi_supplier_metadata_for_provider
+from onyx.db.glomi_model_catalog import get_enabled_glomi_platform_models
 from onyx.db.glomi_model_catalog import get_glomi_platform_model_catalog
+from onyx.db.glomi_model_catalog import get_glomi_supplier_metadata_for_provider
 from onyx.db.glomi_model_catalog import GLOMI_GPT_PLATFORM_MODELS
 from onyx.db.glomi_model_catalog import GLOMI_MINIMAX_PLATFORM_MODELS
 from onyx.db.glomi_model_catalog import GlomiPlatformProviderCatalog
@@ -37,6 +38,10 @@ def test_catalog_can_include_minimax_provider_when_configured(mocker) -> None:
         "onyx.db.glomi_model_catalog.GLOMI_MINIMAX_LLM_MODEL_NAMES",
         ("MiniMax-M3", "MiniMax-M2"),
     )
+    mocker.patch(
+        "onyx.db.glomi_model_catalog.GLOMI_ENABLED_LLM_MODELS",
+        "gpt-5.5,MiniMax-M3,MiniMax-M2",
+    )
 
     catalog = get_glomi_platform_model_catalog()
     minimax_provider = next(
@@ -55,6 +60,42 @@ def test_catalog_can_include_minimax_provider_when_configured(mocker) -> None:
     ]
     assert all(model.supports_image_input for model in minimax_provider.models)
     assert all("vision" in model.roles for model in minimax_provider.models)
+
+
+def test_enabled_catalog_models_are_env_driven() -> None:
+    models = get_enabled_glomi_platform_models("gpt-5.5, GLM-5.2")
+
+    assert [model.model_name for model in models] == ["gpt-5.5", "glm-5.2"]
+
+
+def test_catalog_filters_minimax_provider_by_default_env(mocker) -> None:
+    mocker.patch("onyx.db.glomi_model_catalog.GLOMI_MINIMAX_LLM_ENABLED", True)
+    mocker.patch(
+        "onyx.db.glomi_model_catalog.GLOMI_MINIMAX_LLM_API_BASE",
+        "https://api.minimax.io/v1",
+    )
+    mocker.patch(
+        "onyx.db.glomi_model_catalog.GLOMI_MINIMAX_LLM_API_KEY",
+        "minimax-key",
+    )
+    mocker.patch(
+        "onyx.db.glomi_model_catalog.GLOMI_MINIMAX_LLM_MODEL_NAMES",
+        ("MiniMax-M3",),
+    )
+    # Default GLOMI_ENABLED_LLM_MODELS = "gpt-5.5" must hide MiniMax provider
+    # models from the user-facing selector.
+    mocker.patch(
+        "onyx.db.glomi_model_catalog.GLOMI_ENABLED_LLM_MODELS", "gpt-5.5"
+    )
+
+    catalog = get_glomi_platform_model_catalog()
+    minimax_provider = next(
+        provider
+        for provider in catalog.providers
+        if provider.supplier_id == "minimax"
+    )
+
+    assert minimax_provider.models == ()
 
 
 def test_phase_a_model_capabilities_are_explicit() -> None:

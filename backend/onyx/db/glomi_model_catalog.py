@@ -11,6 +11,7 @@ from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_API_KEY
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_ENABLED
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_PROVIDER_NAME
 from onyx.configs.app_configs import CONSUMER_DEFAULT_LLM_PROVIDER_TYPE
+from onyx.configs.app_configs import GLOMI_ENABLED_LLM_MODELS
 from onyx.configs.app_configs import GLOMI_MINIMAX_LLM_API_BASE
 from onyx.configs.app_configs import GLOMI_MINIMAX_LLM_API_KEY
 from onyx.configs.app_configs import GLOMI_MINIMAX_LLM_ENABLED
@@ -154,6 +155,75 @@ def _minimax_models_from_env() -> tuple[GlomiPlatformModel, ...]:
     )
 
 
+def _parse_enabled_model_names(raw_model_names: str) -> set[str]:
+    return {
+        model_name.strip().lower()
+        for model_name in raw_model_names.split(",")
+        if model_name.strip()
+    }
+
+
+def get_enabled_glomi_platform_models(
+    raw_model_names: str | None = None,
+) -> tuple[GlomiPlatformModel, ...]:
+    """Return catalog models whose ID is opted in via env.
+
+    The catalog remains fixed in code; deployments control which IDs are
+    actually exposed to end users through ``GLOMI_ENABLED_LLM_MODELS``
+    (comma-separated, case-insensitive).
+    """
+    enabled_model_names = _parse_enabled_model_names(
+        raw_model_names if raw_model_names is not None else GLOMI_ENABLED_LLM_MODELS
+    )
+    if not enabled_model_names:
+        return ()
+
+    return tuple(
+        model
+        for model in GLOMI_PLATFORM_MODELS
+        if model.model_name.lower() in enabled_model_names
+    )
+
+
+def _filter_provider_models(
+    candidate_models: tuple[GlomiPlatformModel, ...],
+) -> tuple[GlomiPlatformModel, ...]:
+    """Apply ``GLOMI_ENABLED_LLM_MODELS`` to a per-provider model list."""
+    enabled_model_names = _parse_enabled_model_names(GLOMI_ENABLED_LLM_MODELS)
+    if not enabled_model_names:
+        return candidate_models
+
+    return tuple(
+        model
+        for model in candidate_models
+        if model.model_name.lower() in enabled_model_names
+    )
+
+
+def _parse_enabled_model_names(raw_model_names: str) -> set[str]:
+    return {
+        model_name.strip().lower()
+        for model_name in raw_model_names.split(",")
+        if model_name.strip()
+    }
+
+
+def get_enabled_glomi_platform_models(
+    raw_model_names: str | None = None,
+) -> tuple[GlomiPlatformModel, ...]:
+    enabled_model_names = _parse_enabled_model_names(
+        raw_model_names if raw_model_names is not None else GLOMI_ENABLED_LLM_MODELS
+    )
+    if not enabled_model_names:
+        return ()
+
+    return tuple(
+        model
+        for model in GLOMI_PLATFORM_MODELS
+        if model.model_name.lower() in enabled_model_names
+    )
+
+
 def get_glomi_platform_model_catalog() -> GlomiPlatformModelCatalog:
     return GlomiPlatformModelCatalog(
         enabled=CONSUMER_DEFAULT_LLM_ENABLED or GLOMI_MINIMAX_LLM_ENABLED,
@@ -166,7 +236,7 @@ def get_glomi_platform_model_catalog() -> GlomiPlatformModelCatalog:
                 api_base=CONSUMER_DEFAULT_LLM_API_BASE,
                 api_key=CONSUMER_DEFAULT_LLM_API_KEY,
                 enabled=CONSUMER_DEFAULT_LLM_ENABLED,
-                models=GLOMI_GPT_PLATFORM_MODELS,
+                models=_filter_provider_models(GLOMI_GPT_PLATFORM_MODELS),
             ),
             GlomiPlatformProviderCatalog(
                 provider_name=GLOMI_MINIMAX_LLM_PROVIDER_NAME,
@@ -176,7 +246,7 @@ def get_glomi_platform_model_catalog() -> GlomiPlatformModelCatalog:
                 api_base=GLOMI_MINIMAX_LLM_API_BASE,
                 api_key=GLOMI_MINIMAX_LLM_API_KEY,
                 enabled=GLOMI_MINIMAX_LLM_ENABLED,
-                models=_minimax_models_from_env(),
+                models=_filter_provider_models(_minimax_models_from_env()),
             ),
         ),
     )
@@ -236,13 +306,9 @@ def _preserve_existing_provider_settings(
     request.deployment_name = existing_provider.deployment_name
     request.api_key_changed = False
 
-    catalog_model_names = {model.name for model in request.model_configurations}
-    for existing_model_config in existing_provider.model_configurations:
-        if existing_model_config.name in catalog_model_names:
-            continue
-        request.model_configurations.append(
-            ModelConfigurationUpsertRequest.from_model(existing_model_config)
-        )
+    # Keep the Glomi platform provider constrained to the fixed catalog. Older
+    # deployments may have fetched many upstream models into this provider; do
+    # not carry those forward into the user-facing selector.
 
 
 def _provider_skip_reason(

@@ -1507,6 +1507,9 @@ GLOMI_MINIMAX_LLM_MODEL_NAMES = tuple(
     ).split(",")
     if model_name.strip()
 )
+# Comma-separated Glomi platform model IDs exposed to end users. The catalog
+# remains fixed in code, while deployments opt models in via env.
+GLOMI_ENABLED_LLM_MODELS = os.environ.get("GLOMI_ENABLED_LLM_MODELS", "gpt-5.5")
 GLOMI_DEFAULT_WEB_SEARCH_ENABLED = (
     os.environ.get("GLOMI_DEFAULT_WEB_SEARCH_ENABLED", "false").lower() == "true"
 )

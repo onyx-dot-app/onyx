@@ -92,11 +92,19 @@ export const parseLlmDescriptor = (value: string): LlmDescriptor => {
   };
 };
 
+const normalizeModelNameForLookup = (modelName: string): string =>
+  modelName.toLowerCase().replace(/[^a-z0-9]/g, "");
+
 export const findModelInModelConfigurations = (
   modelConfigurations: ModelConfiguration[],
   modelName: string
 ): ModelConfiguration | null => {
-  return modelConfigurations.find((m) => m.name === modelName) || null;
+  const normalizedModelName = normalizeModelNameForLookup(modelName);
+  return (
+    modelConfigurations.find(
+      (m) => normalizeModelNameForLookup(m.name) === normalizedModelName
+    ) || null
+  );
 };
 
 export const findModelConfiguration = (

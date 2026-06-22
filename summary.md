@@ -1,5 +1,13 @@
 # 所有相关的变动都需要记录在summary.md中，包括坑，经验，变动等等；关于产品相关的文档在docs/GlomiAI.md，有产品相关变动了需要同步更新这个文件
 
+## 2026-06-17
+
+- 模型下拉收敛：Glomi 平台 provider 仍固定维护四个候选模型（`gpt-5.5`、`qwen3.7-plus`、`deepseek-v4-pro`、`glm-5.2`），但新增 `GLOMI_ENABLED_LLM_MODELS` 启动环境变量控制实际开放模型，默认仅开放 `gpt-5.5`。如要开放 DeepSeek/GLM，可设 `GLOMI_ENABLED_LLM_MODELS=gpt-5.5,deepseek-v4-pro,glm-5.2` 并重启后端/相关 worker 触发同步。
+- 修复已有 Glomi provider 可能保留历史额外模型的问题：同步平台模型目录时只保留固定 catalog 内且 env 允许的模型，不再把旧 provider 上 fetch 到的 legacy/上游模型继续带到用户模型选择器。
+- 对话输入框模型切换入口去重：移除模型选择器里的额外“Add Model”加号入口，保留当前模型 pill 作为唯一切换入口，避免同一区域两个按钮都能打开模型下拉。
+- 图片上传误判修复：前端模型能力查找改为大小写/符号归一化匹配，避免 `GPT-5.5` / `gpt5.5` / `gpt-5.5` 这类显示名或格式差异导致明明支持图片的 GPT-5.5 被误判为不支持。
+- 产品文档同步：`docs/GlomiAI.md` 的“对话模型”决策补充 `GLOMI_ENABLED_LLM_MODELS` 配置方式和默认仅开放 GPT-5.5 的当前策略。
+
 ## 2026-06-16
 
 - 产品路线切换记录：用户确认 Phase A 核心能力已经验证完成，当前正式进入 Phase B，开始把 Craft 作为 GlomiAI 的生成交付运行时来集成和改造。
