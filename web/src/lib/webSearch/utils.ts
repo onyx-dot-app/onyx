@@ -3,6 +3,7 @@ import {
   SvgExa,
   SvgFirecrawl,
   SvgGoogle,
+  SvgKeenable,
   SvgSearxng,
   SvgSerper,
   SvgTavily,
@@ -73,6 +74,7 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     subtitle: "Keenable",
     helper:
       "Connect to Keenable to set up web search. Works without an API key (keyless free tier); add a key to lift rate limits.",
+    logo: SvgKeenable,
     apiKeyUrl: "https://keenable.ai/console",
   },
 };
