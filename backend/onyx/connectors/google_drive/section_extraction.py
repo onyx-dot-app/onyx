@@ -2,11 +2,8 @@ import json
 from typing import Any
 
 from google.auth.transport.requests import AuthorizedSession
-from google.oauth2.credentials import Credentials as OAuthCredentials
-from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from pydantic import BaseModel
 
-from onyx.connectors.google_utils.resources import get_impersonated_creds
 from onyx.connectors.models import TextSection
 
 HEADING_DELIMITER = "\n"
@@ -89,31 +86,28 @@ _DOCS_FETCH_CHUNK_SIZE = 1024 * 1024
 
 
 def get_document_sections(
-    creds: ServiceAccountCredentials | OAuthCredentials,
+    authorized_session: AuthorizedSession,
     doc_id: str,
-    user_email: str,
     max_response_bytes: int,
 ) -> list[TextSection] | None:
     """Extract heading-aware sections from a Google Doc.
 
     Streams the Docs-API response; returns None if it exceeds `max_response_bytes`.
     """
-    impersonated_creds = get_impersonated_creds(creds, user_email)
-    with AuthorizedSession(impersonated_creds) as session:
-        with session.get(
-            DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
-            params={"includeTabsContent": "true"},
-            stream=True,
-            timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
-        ) as response:
-            response.raise_for_status()
-            buffer = bytearray()
-            for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
-                if not chunk:
-                    continue
-                if len(buffer) + len(chunk) > max_response_bytes:
-                    return None
-                buffer.extend(chunk)
+    with authorized_session.get(
+        DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),
+        params={"includeTabsContent": "true"},
+        stream=True,
+        timeout=_DOCS_FETCH_TIMEOUT_SECONDS,
+    ) as response:
+        response.raise_for_status()
+        buffer = bytearray()
+        for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
+            if not chunk:
+                continue
+            if len(buffer) + len(chunk) > max_response_bytes:
+                return None
+            buffer.extend(chunk)
 
     doc = json.loads(buffer)
     tabs = doc.get("tabs", {})

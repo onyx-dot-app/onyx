@@ -29,6 +29,7 @@ from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import get_document_sections
 from onyx.connectors.google_drive.section_extraction import HEADING_DELIMITER
 from onyx.connectors.google_utils.resources import get_drive_service
+from onyx.connectors.google_utils.resources import get_google_authorized_session
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
@@ -773,12 +774,14 @@ def _convert_drive_item_to_document(
             # the size cap). Falls back to the basic sections on any failure.
             try:
                 logger.debug("starting advanced parsing for %s", file.get("name"))
-                doc_sections = get_document_sections(
-                    creds=creds,
-                    doc_id=file.get("id", ""),
-                    user_email=retriever_email,
-                    max_response_bytes=GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
-                )
+                with get_google_authorized_session(
+                    creds, retriever_email
+                ) as authorized_session:
+                    doc_sections = get_document_sections(
+                        authorized_session=authorized_session,
+                        doc_id=file.get("id", ""),
+                        max_response_bytes=GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
+                    )
                 if doc_sections is None:
                     logger.info(
                         "Advanced parse of %s exceeds %s bytes; keeping basic text.",
