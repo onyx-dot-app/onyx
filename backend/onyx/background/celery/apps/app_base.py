@@ -708,23 +708,18 @@ class LivenessProbe(bootsteps.StartStopStep):
         self.path.touch()
 
     def _consumer_wedged(self, worker: Any) -> bool:
+        # Only enabled fleets pay for the broker check; disabled ones (the
+        # default) short-circuit here. should_withhold_liveness_touch owns the
+        # wedge decision so the logic lives in one place.
         if self._wedge_threshold_s <= 0 or not self._wedge_queues:
-            return False
-        age = seconds_since_last_consumed()
-        if age <= self._wedge_threshold_s:
-            # Fast path: a task started recently — no broker round-trip.
-            return False
-        active = active_request_count()
-        if active != 0:
-            # Threads are busy (or the count is unreadable): not wedged.
             return False
         broker_backlog = self._queue_backlog(worker)
         if broker_backlog == BACKLOG_UNKNOWN:
-            return False
+            return False  # broker unreachable — fail open
         return should_withhold_liveness_touch(
-            seconds_since_consumed=age,
+            seconds_since_consumed=seconds_since_last_consumed(),
             stale_threshold_s=self._wedge_threshold_s,
-            active_requests=active,
+            active_requests=active_request_count(),
             backlog=broker_backlog + reserved_request_count(),
         )
 
