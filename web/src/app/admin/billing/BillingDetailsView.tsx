@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { Content, InputErrorText, InputVertical } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
@@ -484,16 +484,9 @@ function SeatsCard({
 
             {isBelowMinimum ? (
               <InputErrorText type="error">
-                You cannot set seats below current{" "}
-                <span className="font-semibold">{minRequiredSeats}</span> seats
-                in use/pending.{" "}
-                <Link
-                  href="/admin/users"
-                  className="underline hover:no-underline"
-                >
-                  Remove users
-                </Link>{" "}
-                first before adjusting seats.
+                {markdown(
+                  `You cannot set seats below current **${minRequiredSeats}** seats in use/pending. [Remove users](/admin/users) first before adjusting seats.`
+                )}
               </InputErrorText>
             ) : seatDifference !== 0 ? (
               <Text secondaryBody text03>
