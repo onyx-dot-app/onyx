@@ -71,8 +71,9 @@ repos:
         types_or: [python]
         # sandbox_daemon ships in the sandbox image (own runtime); skills/builtin
         # are sandbox-only scripts importing deps absent from the backend venv
-        # (lxml, PIL, office.*). loadtest/ is a standalone uv project with its
-        # own venv (locust). All are excluded from the full ty run via
+        # (lxml, PIL, office.*). loadtest/ imports locust/gevent, which live in
+        # the non-default `loadtest` dependency group and so aren't in the venv
+        # ty runs against. All are excluded from the full ty run via
         # [tool.ty.src] in pyproject; repeat here because pre-commit passes
         # explicit filenames, which bypass that discovery-time exclude.
         exclude: ^(backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)|loadtest/)

@@ -177,6 +177,16 @@ zizmor = ["zizmor==1.25.2"]
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]
 
+# Locust load-test runtime (the loadtest/ project). Kept OUT of default-groups
+# so a normal `uv sync` doesn't pull locust's heavy gevent/flask/socketio tree.
+# Opt in with `uv sync --group loadtest`. See loadtest/README.md.
+loadtest = [
+    "locust>=2.32",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "prometheus-client>=0.21",
+]
+
 # Model server specific dependencies (ML packages)
 model_server = [
     "accelerate==1.6.0",
@@ -233,9 +243,6 @@ all = "error"
 
 [tool.uv.workspace]
 members = ["tools/ods"]
-# loadtest/ is a standalone uv project (its locust/gevent pins must not enter
-# the shared lockfile); exclude it from workspace discovery.
-exclude = ["loadtest"]
 
 [tool.basedpyright]
 include = ["backend"]
