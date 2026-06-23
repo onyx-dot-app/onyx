@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
-from onyx.utils.ssl import build_ssl_context
+from onyx.utils.tls import build_ssl_context
 
 _CA_BUNDLE = certifi.where()
 

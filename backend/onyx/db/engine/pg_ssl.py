@@ -27,7 +27,7 @@ from onyx.configs.app_configs import POSTGRES_SSLMODE
 from onyx.configs.app_configs import POSTGRES_SSLROOTCERT
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.db.engine.iam_auth import create_ssl_context_if_iam
-from onyx.utils.ssl import build_ssl_context
+from onyx.utils.tls import build_ssl_context
 
 # Modes that require an encrypted connection and therefore an explicit
 # SSLContext on the asyncpg side.
