@@ -32,7 +32,10 @@ from onyx.db.models import IndexAttemptStageMetric
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
 from onyx.server.federated.models import FederatedConnectorStatus
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+
+logger = setup_logger()
 
 
 class DocumentSyncStatus(BaseModel):
@@ -267,16 +270,77 @@ class IndexAttemptStageMetricSnapshot(BaseModel):
 
 
 class IndexAttemptStageMetricsResponse(BaseModel):
-    """Response payload for the per-attempt stage-metrics endpoint.
-
-    ``stages`` is returned in the canonical pipeline order (the declaration
-    order of ``IndexAttemptStage``); the frontend renders that order
-    verbatim for the default "Pipeline order" sort and re-sorts client-side
-    for the "Time taken" sort.
+    """Per-attempt stage rows (pipeline order) plus the BATCH_UNACCOUNTED residual
+    appended last; the frontend re-sorts, so array order isn't load-bearing.
     """
 
     index_attempt_id: int
     stages: list[IndexAttemptStageMetricSnapshot]
+
+
+# In-span stages for the residual (BATCH_TOTAL - sum). Excludes pre-span
+# stages (QUEUE_WAIT/SETUP/BATCH_LOAD), docfetching, and the aggregates.
+_BATCH_TOTAL_COMPONENT_STAGES: frozenset[IndexAttemptStage] = frozenset(
+    {
+        IndexAttemptStage.DOC_DB_PREPARE,
+        IndexAttemptStage.IMAGE_PROCESSING,
+        IndexAttemptStage.CHUNKING,
+        IndexAttemptStage.CONTEXTUAL_RAG,
+        IndexAttemptStage.EMBEDDING,
+        IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT,
+        IndexAttemptStage.ENRICHMENT_PREP,
+        IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT,
+        IndexAttemptStage.VECTOR_DB_WRITE,
+        IndexAttemptStage.POST_INDEX_DB_UPDATE,
+        IndexAttemptStage.COORDINATION_UPDATE,
+        IndexAttemptStage.FINALIZATION,
+        IndexAttemptStage.GC_COLLECT,
+    }
+)
+
+
+def synthesize_unaccounted(
+    snapshots: list[IndexAttemptStageMetricSnapshot],
+) -> IndexAttemptStageMetricSnapshot | None:
+    """Residual = BATCH_TOTAL minus in-span component totals, clamped at 0.
+
+    None if BATCH_TOTAL is absent. Uses totals (not averages).
+    """
+    batch_total = next(
+        (s for s in snapshots if s.stage == IndexAttemptStage.BATCH_TOTAL),
+        None,
+    )
+    if batch_total is None:
+        return None
+
+    component_total = sum(
+        s.total_duration_ms
+        for s in snapshots
+        if s.stage in _BATCH_TOTAL_COMPONENT_STAGES
+    )
+    if component_total > batch_total.total_duration_ms:
+        # Components > total = double-counting or failed-batch skew; clamp to 0.
+        logger.warning(
+            "Stage components (%d ms) exceed BATCH_TOTAL (%d ms) for an index "
+            "attempt; clamping BATCH_UNACCOUNTED to 0.",
+            component_total,
+            batch_total.total_duration_ms,
+        )
+    residual_total = max(0, batch_total.total_duration_ms - component_total)
+    event_count = batch_total.event_count
+    avg = residual_total / event_count if event_count > 0 else None
+    return IndexAttemptStageMetricSnapshot(
+        stage=IndexAttemptStage.BATCH_UNACCOUNTED,
+        scope=STAGE_SCOPE[IndexAttemptStage.BATCH_UNACCOUNTED],
+        event_count=event_count,
+        total_duration_ms=residual_total,
+        avg_duration_ms=avg,
+        std_dev_duration_ms=None,
+        min_duration_ms=None,
+        max_duration_ms=None,
+        time_first_event=batch_total.time_first_event,
+        time_last_event=batch_total.time_last_event,
+    )
 
 
 # These are the types currently supported by the pagination hook
