@@ -732,14 +732,21 @@ def _parse_sentinel_hosts(raw: str) -> list[tuple[str, int]]:
             raise ValueError(
                 f"Invalid REDIS_SENTINEL_HOSTS entry {entry!r}; expected host:port."
             )
-        hosts.append((host, int(port)))
+        port_num = int(port)
+        if not 1 <= port_num <= 65535:
+            raise ValueError(
+                f"Invalid REDIS_SENTINEL_HOSTS port {port!r}; must be 1-65535."
+            )
+        hosts.append((host, port_num))
     return hosts
 
 
 REDIS_SENTINEL_HOSTS: list[tuple[str, int]] = _parse_sentinel_hosts(
     _REDIS_SENTINEL_HOSTS_STR
 )
-REDIS_SENTINEL_MASTER_NAME = os.environ.get("REDIS_SENTINEL_MASTER_NAME", "mymaster")
+REDIS_SENTINEL_MASTER_NAME = os.environ.get(
+    "REDIS_SENTINEL_MASTER_NAME", "mymaster"
+).strip()
 REDIS_SENTINEL_PASSWORD = os.environ.get("REDIS_SENTINEL_PASSWORD") or None
 
 # Fail loudly rather than silently falling back to a direct connection when the

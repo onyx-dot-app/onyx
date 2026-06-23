@@ -156,3 +156,26 @@ def test_celery_sentinel_kwargs_enable_ssl_under_tls() -> None:
         finally:
             importlib.reload(app_configs)
             importlib.reload(celery_base)
+
+
+def test_out_of_range_sentinel_port_raises() -> None:
+    import pytest
+
+    with patch.dict(os.environ, {"REDIS_SENTINEL_HOSTS": "s1:99999"}):
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="must be 1-65535"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
+def test_whitespace_master_name_raises() -> None:
+    import pytest
+
+    env = {"REDIS_SENTINEL_HOSTS": "s1:26379", "REDIS_SENTINEL_MASTER_NAME": "   "}
+    with patch.dict(os.environ, env):
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="MASTER_NAME is empty"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
