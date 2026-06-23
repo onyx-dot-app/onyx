@@ -1,0 +1,81 @@
+---
+name: hubspot
+description: Read, search, create, and update HubSpot CRM contacts, companies, and deals on the connected user's behalf via a light REST wrapper.
+---
+
+# HubSpot
+
+Call the HubSpot CRM (v3 REST API) as the connected user via the bundled helper.
+**You are already authenticated** — the egress proxy injects the user's HubSpot
+OAuth token on the wire, so never pass credentials.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/hubspot/hubspot_api.py <command> <object> [args]
+
+`<object>` is one of `contacts`, `companies`, or `deals`. `list`, `get`, and
+`search` are reads; `create` and `update` are writes. `list` auto-paginates up
+to `--limit`. `python hubspot_api.py <command> -h` shows a command's flags.
+
+### List objects (read)
+
+```
+python hubspot_api.py list contacts [--limit N] [--properties firstname,lastname,email]
+python hubspot_api.py list companies [--limit N]
+python hubspot_api.py list deals [--limit N]
+```
+
+### Fetch one object by id (read)
+
+```
+python hubspot_api.py get contacts 12345 [--properties email,firstname]
+python hubspot_api.py get companies 67890
+python hubspot_api.py get deals 24680
+```
+
+### Search objects (read)
+
+```
+python hubspot_api.py search contacts --query "jane@example.com" [--limit N]
+python hubspot_api.py search companies --query "Acme" [--limit N]
+python hubspot_api.py search deals --query "renewal" [--limit N]
+```
+
+### Create an object (write)
+
+`--properties` is a JSON object of CRM property names → values.
+
+```
+python hubspot_api.py create contacts --properties '{"email":"jane@example.com","firstname":"Jane"}'
+python hubspot_api.py create companies --properties '{"name":"Acme Inc","domain":"acme.com"}'
+python hubspot_api.py create deals --properties '{"dealname":"Acme renewal","amount":"5000"}'
+```
+
+### Update an object by id (write)
+
+```
+python hubspot_api.py update contacts 12345 --properties '{"phone":"+15551234567"}'
+python hubspot_api.py update companies 67890 --properties '{"industry":"Software"}'
+python hubspot_api.py update deals 24680 --properties '{"dealstage":"closedwon"}'
+```
+
+## Output
+
+JSON on stdout. List/search commands return `{"ok": true, "<object>": [...],
+"count": N, "truncated": bool}` (`truncated` means more results existed past
+`--limit`). `get`/`create`/`update` return the single object under its singular
+key. A non-zero exit means the call failed — surface the error rather than
+retrying blindly.
+
+## Notes
+
+- Property names are HubSpot's internal names (e.g. `firstname`, `dealname`,
+  `dealstage`). Pass user input as `--properties` JSON, not by string-formatting
+  into the request.
+- Scopes are fixed by the admin (CRM contacts, companies, and deals,
+  read+write). An operation needing a scope you don't have returns a 403 — tell
+  the user rather than retrying.
+- A write that isn't pre-approved may pause for the user's approval; if a call
+  is blocked or returns `401`, report it instead of looping.
