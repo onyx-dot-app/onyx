@@ -665,22 +665,19 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     return buf.getvalue().rstrip("\n")
 
 
-def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
-    """
-    Converts each sheet in the excel file to a csv condensed string.
-    Returns a string and the worksheet title for each worksheet
-
-    Returns a list of (csv_text, sheet)
-    """
+def _load_readonly_workbook(file: IO[Any], file_name: str) -> openpyxl.Workbook | None:
+    """Load a read-only workbook, returning None (and logging) for the BadZipFile
+    / known-openpyxl-bug cases the xlsx indexers treat as skip-and-continue rather
+    than a hard failure."""
     try:
-        workbook = openpyxl.load_workbook(file, read_only=True)
+        return openpyxl.load_workbook(file, read_only=True)
     except BadZipFile as e:
         error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
         if file_name.startswith("~"):
             logger.debug(error_str + " (this is expected for files with ~)")
         else:
             logger.warning(error_str)
-        return []
+        return None
     except Exception as e:
         if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
             logger.warning(
@@ -688,8 +685,20 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
                 file_name or "xlsx file",
                 e,
             )
-            return []
+            return None
         raise
+
+
+def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
+    """
+    Converts each sheet in the excel file to a csv condensed string.
+    Returns a string and the worksheet title for each worksheet
+
+    Returns a list of (csv_text, sheet)
+    """
+    workbook = _load_readonly_workbook(file, file_name)
+    if workbook is None:
+        return []
 
     sheets: list[tuple[str, str]] = []
     try:
@@ -748,24 +757,9 @@ def stage_or_inline_xlsx_sheets(
     referenced by id. The temp handle never escapes this function. No column
     trimming or empty-run collapsing — those need a full in-memory pass."""
     sheets: list[StreamedSheet] = []
-    try:
-        workbook = openpyxl.load_workbook(file, read_only=True)
-    except BadZipFile as e:
-        error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
-        if file_name.startswith("~"):
-            logger.debug(error_str + " (this is expected for files with ~)")
-        else:
-            logger.warning(error_str)
-        return []
-    except Exception as e:
-        if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
-            logger.warning(
-                "Failed to extract text from %s. This happens due to a bug in openpyxl. %s",
-                file_name or "xlsx file",
-                e,
-            )
-            return []
-        raise
+    workbook = _load_readonly_workbook(file, file_name)
+    if workbook is None:
+        return sheets
     try:
         for sheet in workbook.worksheets:
             ro_sheet = cast(ReadOnlyWorksheet, sheet)
