@@ -55,6 +55,7 @@ import { toast } from "@/hooks/useToast";
 import { UserRole } from "@/lib/types";
 import Modal from "@/refresh-components/Modal";
 import { getProvider } from "@/lib/languageModels";
+import { useTranslation } from "react-i18next";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -63,17 +64,19 @@ export interface DisplayNameFieldProps {
 }
 
 export function DisplayNameField({ disabled }: DisplayNameFieldProps = {}) {
+  const { t } = useTranslation();
+
   return (
     <InputPadder>
       <InputVertical
         withLabel="name"
-        title="Display Name"
-        suffix="optional"
-        subDescription="Used to identify this provider in the app."
+        title={t("admin.llm.form.display_name")}
+        suffix={t("admin.llm.form.optional_suffix")}
+        subDescription={t("admin.llm.form.display_name_desc")}
       >
         <InputTypeInField
           name="name"
-          placeholder="Display Name"
+          placeholder={t("admin.llm.form.display_name_placeholder")}
           variant={disabled ? "disabled" : undefined}
         />
       </InputVertical>
@@ -96,19 +99,21 @@ export function APIKeyField({
   providerName,
   subDescription,
 }: APIKeyFieldProps) {
+  const { t } = useTranslation();
+
   return (
     <InputPadder>
       <InputVertical
         withLabel={name}
-        title="API Key"
+        title={t("admin.llm.form.api_key")}
         subDescription={
           subDescription
             ? subDescription
             : providerName
-              ? `Paste your API key from ${providerName} to access your models.`
-              : "Paste your API key to access your models."
+              ? t("admin.llm.form.api_key_desc", { providerName })
+              : t("admin.llm.form.api_key_desc_generic")
         }
-        suffix={optional ? "optional" : undefined}
+        suffix={optional ? t("admin.llm.form.optional_suffix") : undefined}
       >
         <PasswordInputTypeInField name={name} />
       </InputVertical>
@@ -134,17 +139,22 @@ export interface APIBaseFieldProps {
 export function APIBaseField({
   optional = false,
   subDescription,
-  placeholder = "https://",
+  placeholder,
 }: APIBaseFieldProps) {
+  const { t } = useTranslation();
+
   return (
     <InputPadder>
       <InputVertical
         withLabel="api_base"
-        title="API Base URL"
+        title={t("admin.llm.form.api_base")}
         subDescription={subDescription}
-        suffix={optional ? "optional" : undefined}
+        suffix={optional ? t("admin.llm.form.optional_suffix") : undefined}
       >
-        <InputTypeInField name="api_base" placeholder={placeholder} />
+        <InputTypeInField
+          name="api_base"
+          placeholder={placeholder ?? t("admin.llm.form.api_base_placeholder")}
+        />
       </InputVertical>
     </InputPadder>
   );
@@ -157,6 +167,7 @@ const GROUP_PREFIX = "group:";
 const AGENT_PREFIX = "agent:";
 
 export function ModelAccessField() {
+  const { t } = useTranslation();
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const { agents } = useAgents();
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
@@ -176,14 +187,14 @@ export function ModelAccessField() {
       ? userGroups.map((g) => ({
           value: `${GROUP_PREFIX}${g.id}`,
           label: g.name,
-          description: "Group",
+          description: t("admin.llm.form.group"),
         }))
       : [];
 
   const agentOptions = agents.map((a) => ({
     value: `${AGENT_PREFIX}${a.id}`,
     label: a.name,
-    description: "Agent",
+    description: t("admin.llm.form.agent"),
   }));
 
   // Exclude already-selected items from the dropdown
@@ -243,20 +254,22 @@ export function ModelAccessField() {
       <InputPadder>
         <InputHorizontal
           withLabel="is_public"
-          title="Models Access"
-          description="Who can access this provider."
+          title={t("admin.llm.form.models_access")}
+          description={t("admin.llm.form.models_access_desc")}
         >
           <InputSelect
             value={isPublic ? "public" : "private"}
             onValueChange={handleAccessChange}
           >
-            <InputSelect.Trigger placeholder="Select access level" />
+            <InputSelect.Trigger
+              placeholder={t("admin.llm.form.select_access_placeholder")}
+            />
             <InputSelect.Content>
               <InputSelect.Item value="public" icon={SvgOrganization}>
-                All Users & Agents
+                {t("admin.llm.form.access_all")}
               </InputSelect.Item>
               <InputSelect.Item value="private" icon={SvgUsers}>
-                Named Groups & Agents
+                {t("admin.llm.form.access_named")}
               </InputSelect.Item>
             </InputSelect.Content>
           </InputSelect>
@@ -267,7 +280,7 @@ export function ModelAccessField() {
         <Card background="light" border="none" padding="sm">
           <Section gap={0.5}>
             <InputComboBox
-              placeholder="Add groups and agents"
+              placeholder={t("admin.llm.form.add_groups_agents")}
               value=""
               onChange={() => {}}
               onValueChange={handleSelect}
@@ -279,15 +292,17 @@ export function ModelAccessField() {
             <Card background="heavy" border="none" padding="sm">
               <ContentAction
                 icon={SvgUserManage}
-                title="Admin"
+                title={t("admin.llm.form.admin")}
                 description={`${adminCount} ${
-                  adminCount === 1 ? "member" : "members"
+                  adminCount === 1
+                    ? t("admin.llm.form.member")
+                    : t("admin.llm.form.members")
                 }`}
                 sizePreset="main-ui"
                 variant="section"
                 rightChildren={
                   <Text secondaryBody text03>
-                    Always shared
+                    {t("admin.llm.form.always_shared")}
                   </Text>
                 }
                 padding="fit"
@@ -305,7 +320,9 @@ export function ModelAccessField() {
                           icon={SvgUsers}
                           title={group?.name ?? `Group ${id}`}
                           description={`${memberCount} ${
-                            memberCount === 1 ? "member" : "members"
+                            memberCount === 1
+                              ? t("admin.llm.form.member")
+                              : t("admin.llm.form.members")
                           }`}
                           sizePreset="main-ui"
                           variant="section"
@@ -343,7 +360,7 @@ export function ModelAccessField() {
                               : SvgSparkle
                           }
                           title={agent?.name ?? `Agent ${id}`}
-                          description="Agent"
+                          description={t("admin.llm.form.agent")}
                           sizePreset="main-ui"
                           variant="section"
                           rightChildren={
@@ -366,8 +383,8 @@ export function ModelAccessField() {
               <div className="w-full p-2">
                 <Content
                   icon={SvgOnyxOctagon}
-                  title="No agents added"
-                  description="This provider will not be used by any agents."
+                  title={t("admin.llm.form.no_agents_added")}
+                  description={t("admin.llm.form.no_agents_added_desc")}
                   variant="section"
                   sizePreset="main-ui"
                 />
@@ -390,6 +407,7 @@ interface RefetchButtonProps {
   onRefetch: (signal: AbortSignal) => Promise<void> | void;
 }
 function RefetchButton({ onRefetch }: RefetchButtonProps) {
+  const { t } = useTranslation();
   const abortRef = useRef<AbortController | null>(null);
   const [isFetching, setIsFetching] = useState(false);
 
@@ -411,7 +429,9 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
         } catch (err) {
           if (err instanceof DOMException && err.name === "AbortError") return;
           toast.error(
-            err instanceof Error ? err.message : "Failed to fetch models"
+            err instanceof Error
+              ? err.message
+              : t("admin.llm.form.failed_fetch_models")
           );
         } finally {
           if (!controller.signal.aborted) {
@@ -512,6 +532,7 @@ export function ModelSelectionField({
   onRefetch,
   onAddModel,
 }: ModelSelectionFieldProps) {
+  const { t } = useTranslation();
   const formikProps = useFormikContext<BaseLLMFormValues>();
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -582,8 +603,8 @@ export function ModelSelectionField({
     <Card background="light" border="none" padding="sm">
       <Section gap={0.5}>
         <InputHorizontal
-          title="Models"
-          description="Select models to make available for this provider."
+          title={t("admin.llm.form.models")}
+          description={t("admin.llm.form.models_desc")}
           center
         >
           <Section flexDirection="row" gap={0}>
@@ -593,14 +614,16 @@ export function ModelSelectionField({
               size="md"
               onClick={handleToggleSelectAll}
             >
-              {allSelected ? "Deselect All" : "Select All"}
+              {allSelected
+                ? t("admin.llm.form.deselect_all")
+                : t("admin.llm.form.select_all")}
             </Button>
             {onRefetch && <RefetchButton onRefetch={onRefetch} />}
           </Section>
         </InputHorizontal>
 
         {models.length === 0 ? (
-          <EmptyMessageCard title="No models available." padding="sm" />
+          <EmptyMessageCard title={t("admin.llm.form.no_models")} padding="sm" />
         ) : (
           <Section gap={0.25} alignItems="stretch">
             {(() => {
@@ -635,7 +658,11 @@ export function ModelSelectionField({
                         <Content
                           sizePreset="secondary"
                           variant="body"
-                          title={isExpanded ? "Fold Models" : "More Models"}
+                          title={
+                            isExpanded
+                              ? t("admin.llm.form.fold_models")
+                              : t("admin.llm.form.more_models")
+                          }
                           icon={() => (
                             <SvgChevronDown
                               className={cn(
@@ -659,7 +686,7 @@ export function ModelSelectionField({
           <Section flexDirection="row" gap={0.5}>
             <div className="flex-1">
               <InputTypeIn
-                placeholder="Enter model name"
+                placeholder={t("admin.llm.form.enter_model_name")}
                 value={newModelName}
                 onChange={(e) => setNewModelName(e.target.value)}
                 onKeyDown={(e) => {
@@ -690,15 +717,15 @@ export function ModelSelectionField({
                 }
               }}
             >
-              Add Model
+              {t("admin.llm.form.add_model")}
             </Button>
           </Section>
         )}
 
         {shouldShowAutoUpdateToggle && (
           <InputHorizontal
-            title="Auto Update"
-            description="Update the available models when new models are released."
+            title={t("admin.llm.form.auto_update")}
+            description={t("admin.llm.form.auto_update_desc")}
             withLabel
           >
             <Switch
@@ -774,6 +801,7 @@ function ModalWrapperInner({
   children,
   description: descriptionOverride,
 }: ModalWrapperInnerProps) {
+  const { t } = useTranslation();
   const { isValid, dirty, isSubmitting, status, setFieldValue, values } =
     useFormikContext<BaseLLMFormValues>();
 
@@ -796,9 +824,9 @@ function ModalWrapperInner({
   const disabledTooltip = busy
     ? undefined
     : !isValid
-      ? "Please fill in all required fields."
+      ? t("admin.llm.form.fill_required")
       : !dirty
-        ? "No changes to save."
+        ? t("admin.llm.form.no_changes")
         : undefined;
 
   const {
@@ -808,11 +836,18 @@ function ModalWrapperInner({
   } = getProvider(providerName);
 
   const title = llmProvider
-    ? markdown(`Configure *${llmProvider.name ?? providerProductName}*`)
-    : `Set up ${providerProductName}`;
+    ? markdown(
+        t("admin.llm.form.configure_title", {
+          name: llmProvider.name ?? providerProductName,
+        })
+      )
+    : t("admin.llm.form.set_up_title", { productName: providerProductName });
   const description =
     descriptionOverride ??
-    `Connect to ${providerDisplayName} and set up your ${providerProductName} models.`;
+    t("admin.llm.form.connect_description", {
+      companyName: providerDisplayName,
+      productName: providerProductName,
+    });
 
   return (
     <Modal open onOpenChange={onClose}>
@@ -831,7 +866,7 @@ function ModalWrapperInner({
           </Modal.Body>
           <Modal.Footer>
             <Button prominence="secondary" onClick={onClose} type="button">
-              Cancel
+              {t("general.cancel")}
             </Button>
             <Button
               disabled={!isValid || !dirty || busy}
@@ -839,7 +874,7 @@ function ModalWrapperInner({
               icon={busy ? SvgSimpleLoader : undefined}
               tooltip={disabledTooltip}
             >
-              {llmProvider ? "Update" : "Connect"}
+              {llmProvider ? t("admin.llm.form.update") : t("admin.llm.connect")}
             </Button>
           </Modal.Footer>
         </Form>

@@ -38,7 +38,58 @@
       "config_disabled_title": "New LLM configuration temporarily unavailable.",
       "config_disabled_desc": "Existing LLM providers can still be used and updated.",
       "add_provider": "Add Provider",
-      "add_provider_description": "Onyx supports both popular providers and self-hosted models."
+      "add_provider_description": "Onyx supports both popular providers and self-hosted models.",
+      "provider_updated": "Provider updated successfully!",
+      "provider_enabled": "Provider enabled successfully!",
+      "form": {
+        "set_up_title": "Set up {{productName}}",
+        "configure_title": "Configure *{{name}}*",
+        "connect_description": "Connect to {{companyName}} and set up your {{productName}} models.",
+        "display_name": "Display Name",
+        "display_name_desc": "Used to identify this provider in the app.",
+        "display_name_placeholder": "Display Name",
+        "optional_suffix": "(Optional)",
+        "api_key": "API Key",
+        "api_key_desc": "Paste your API key from {{providerName}} to access your models.",
+        "api_key_desc_generic": "Paste your API key to access your models.",
+        "api_key_required": "API Key is required",
+        "api_base": "API Base URL",
+        "api_base_required": "API Base URL is required",
+        "api_base_openrouter_desc": "Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly.",
+        "api_base_openrouter_placeholder": "Your OpenRouter base URL",
+        "api_base_placeholder": "https://",
+        "containerized_host_note": "With Onyx running in a container, `host.docker.internal` acts like `localhost` inside the container.",
+        "models": "Models",
+        "models_desc": "Select models to make available for this provider.",
+        "select_all": "Select All",
+        "deselect_all": "Deselect All",
+        "no_models": "No models available.",
+        "fold_models": "Fold Models",
+        "more_models": "More Models",
+        "enter_model_name": "Enter model name",
+        "add_model": "Add Model",
+        "auto_update": "Auto Update",
+        "auto_update_desc": "Update the available models when new models are released.",
+        "models_access": "Models Access",
+        "models_access_desc": "Who can access this provider.",
+        "select_access_placeholder": "Select access level",
+        "access_all": "All Users & Agents",
+        "access_named": "Named Groups & Agents",
+        "add_groups_agents": "Add groups and agents",
+        "admin": "Admin",
+        "member": "member",
+        "members": "members",
+        "always_shared": "Always shared",
+        "group": "Group",
+        "agent": "Agent",
+        "no_agents_added": "No agents added",
+        "no_agents_added_desc": "This provider will not be used by any agents.",
+        "failed_fetch_models": "Failed to fetch models",
+        "update": "Update",
+        "fill_required": "Please fill in all required fields.",
+        "no_changes": "No changes to save.",
+        "model_name_required": "Model name is required"
+      }
     },
     "chat_preferences": {
       "auth_tooltip": "Authenticate this MCP server before enabling its tools.",
@@ -307,6 +358,24 @@
       "documents_feedback": "Document Feedback",
       "groups": "Manage User Groups"
     },
+    "actions_mcp": {
+      "desc": "Connect MCP (Model Context Protocol) servers to add custom actions and tools for your agents."
+    },
+    "actions_open_api": {
+      "desc": "Connect OpenAPI servers to add custom actions and tools for your agents."
+    },
+    "scim": {
+      "desc": "Configure SCIM (System for Cross-domain Identity Management) to synchronize users from your identity provider."
+    },
+    "billing": {
+      "desc": "Manage your subscription, usage, and billing settings."
+    },
+    "discord_bot": {
+      "desc": "Configure a Discord bot to answer questions inside your Discord server."
+    },
+    "bots": {
+      "desc": "Setup Slack bots that connect to Onyx. Once setup, you will be able to ask questions to Onyx directly from Slack."
+    },
     "agents": {
       "description": "Customize AI behavior and knowledge with agents. Manage agents in your organization.",
       "new_agent": "New Agent",
@@ -325,6 +394,14 @@
       "priorities_updated": "Agent display priorities updated"
     },
     "users": {
+      "column_name": "Name",
+      "column_groups": "Groups",
+      "column_account_type": "Account Type",
+      "column_status": "Status",
+      "column_last_updated": "Last Updated",
+      "scim_synced": "SCIM synced",
+      "load_failed": "Failed to load users. Please try refreshing the page.",
+      "download_csv": "Download CSV",
       "invite_title": "Invite Users",
       "email_placeholder": "Add an email and press enter",
       "invalid_emails_warning": "Some email addresses are invalid and will be skipped.",

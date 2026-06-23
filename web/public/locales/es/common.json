@@ -38,7 +38,58 @@
       "config_disabled_title": "La configuración de nuevos LLM no está disponible temporalmente.",
       "config_disabled_desc": "Los proveedores de LLM existentes aún se pueden usar y actualizar.",
       "add_provider": "Agregar Proveedor",
-      "add_provider_description": "Onyx es compatible tanto con proveedores populares como con modelos autohospedados."
+      "add_provider_description": "Onyx es compatible tanto con proveedores populares como con modelos autohospedados.",
+      "provider_updated": "¡Proveedor actualizado con éxito!",
+      "provider_enabled": "¡Proveedor habilitado con éxito!",
+      "form": {
+        "set_up_title": "Configurar {{productName}}",
+        "configure_title": "Configurar *{{name}}*",
+        "connect_description": "Conéctate a {{companyName}} y configura tus modelos de {{productName}}.",
+        "display_name": "Nombre para mostrar",
+        "display_name_desc": "Se usa para identificar este proveedor en la aplicación.",
+        "display_name_placeholder": "Nombre para mostrar",
+        "optional_suffix": "(Opcional)",
+        "api_key": "Clave API",
+        "api_key_desc": "Pega tu clave API de {{providerName}} para acceder a tus modelos.",
+        "api_key_desc_generic": "Pega tu clave API para acceder a tus modelos.",
+        "api_key_required": "La clave API es obligatoria",
+        "api_base": "URL base de la API",
+        "api_base_required": "La URL base de la API es obligatoria",
+        "api_base_openrouter_desc": "Pega tu URL de endpoint compatible con OpenRouter o usa la API de OpenRouter directamente.",
+        "api_base_openrouter_placeholder": "Tu URL base de OpenRouter",
+        "api_base_placeholder": "https://",
+        "containerized_host_note": "Con Onyx ejecutándose en un contenedor, `host.docker.internal` actúa como `localhost` dentro del contenedor.",
+        "models": "Modelos",
+        "models_desc": "Selecciona los modelos que estarán disponibles para este proveedor.",
+        "select_all": "Seleccionar todo",
+        "deselect_all": "Deseleccionar todo",
+        "no_models": "No hay modelos disponibles.",
+        "fold_models": "Contraer modelos",
+        "more_models": "Más modelos",
+        "enter_model_name": "Ingresa el nombre del modelo",
+        "add_model": "Agregar modelo",
+        "auto_update": "Actualización automática",
+        "auto_update_desc": "Actualiza los modelos disponibles cuando se publiquen nuevos modelos.",
+        "models_access": "Acceso a modelos",
+        "models_access_desc": "Quién puede acceder a este proveedor.",
+        "select_access_placeholder": "Selecciona el nivel de acceso",
+        "access_all": "Todos los usuarios y agentes",
+        "access_named": "Grupos y agentes específicos",
+        "add_groups_agents": "Agregar grupos y agentes",
+        "admin": "Administrador",
+        "member": "miembro",
+        "members": "miembros",
+        "always_shared": "Siempre compartido",
+        "group": "Grupo",
+        "agent": "Agente",
+        "no_agents_added": "No se agregaron agentes",
+        "no_agents_added_desc": "Este proveedor no será usado por ningún agente.",
+        "failed_fetch_models": "Error al obtener los modelos",
+        "update": "Actualizar",
+        "fill_required": "Completa todos los campos obligatorios.",
+        "no_changes": "No hay cambios que guardar.",
+        "model_name_required": "El nombre del modelo es obligatorio"
+      }
     },
     "chat_preferences": {
       "auth_tooltip": "Autentica este servidor de MCP antes de habilitar sus herramientas.",
@@ -307,6 +358,24 @@
       "documents_feedback": "Retroalimentación de documentos",
       "groups": "Administrar grupos de usuarios"
     },
+    "actions_mcp": {
+      "desc": "Conecta servidores MCP (Model Context Protocol) para añadir acciones y herramientas personalizadas para tus agentes."
+    },
+    "actions_open_api": {
+      "desc": "Conecta servidores OpenAPI para añadir acciones y herramientas personalizadas para tus agentes."
+    },
+    "scim": {
+      "desc": "Configura SCIM (System for Cross-domain Identity Management) para sincronizar usuarios desde tu proveedor de identidad."
+    },
+    "billing": {
+      "desc": "Gestiona tu suscripción, uso y ajustes de facturación."
+    },
+    "discord_bot": {
+      "desc": "Configura un bot de Discord para responder preguntas dentro de tu servidor de Discord."
+    },
+    "bots": {
+      "desc": "Configura bots de Slack que se conecten a Onyx. Una vez configurados, podrás hacer preguntas a Onyx directamente desde Slack."
+    },
     "agents": {
       "description": "Personaliza el comportamiento y el conocimiento de la IA con agentes. Administra los agentes de tu organización.",
       "new_agent": "Nuevo agente",
@@ -325,6 +394,14 @@
       "priorities_updated": "Prioridades de visualización de agentes actualizadas"
     },
     "users": {
+      "column_name": "Nombre",
+      "column_groups": "Grupos",
+      "column_account_type": "Tipo de cuenta",
+      "column_status": "Estado",
+      "column_last_updated": "Última actualización",
+      "scim_synced": "Sincronizado por SCIM",
+      "load_failed": "Error al cargar los usuarios. Por favor, intenta recargar la página.",
+      "download_csv": "Descargar CSV",
       "invite_title": "Invitar usuarios",
       "email_placeholder": "Escribe un correo y presiona enter",
       "invalid_emails_warning": "Algunas direcciones de correo no son válidas y serán omitidas.",

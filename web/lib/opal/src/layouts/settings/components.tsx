@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { cn } from "@opal/utils";
 import { Divider, Button, Spacer } from "@opal/components";
 import type {
@@ -12,6 +12,7 @@ import type {
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 import { Content } from "@opal/layouts";
 import { SvgArrowLeft } from "@opal/icons";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Root
@@ -82,6 +83,8 @@ function SettingsHeader({
   divider,
 }: SettingsHeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const { t } = useTranslation();
   const [showShadow, setShowShadow] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
 
@@ -89,6 +92,25 @@ function SettingsHeader({
   const showBackButton = !!backButton;
   const onBack =
     typeof backButton === "function" ? backButton : () => router.back();
+
+  let displayTitle = title;
+  let displayDescription = description;
+
+  if (pathname && pathname.startsWith("/admin/")) {
+    const key = pathname.replace(/^\/admin\//, "").replace(/[/-]/g, "_");
+    if (typeof title === "string") {
+      displayTitle = t(`admin.page_titles.${key}`, t(`admin.sidebar.routes.${key}`, title));
+    }
+    if (typeof description === "string") {
+      displayDescription = t(
+        `admin.${key}.desc`,
+        t(
+          `admin.${key}.description`,
+          t(`admin.${key}.page_description`, description)
+        )
+      );
+    }
+  }
 
   useEffect(() => {
     if (!isSticky) return;
@@ -132,8 +154,8 @@ function SettingsHeader({
           <div aria-label="admin-page-title">
             <Content
               icon={Icon}
-              title={title}
-              description={description}
+              title={displayTitle}
+              description={displayDescription}
               sizePreset="headline"
               variant="heading"
             />
