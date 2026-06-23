@@ -1,14 +1,15 @@
 """Provision Onyx-managed built-in external apps for existing tenants (cloud only)
 
 Backfills the built-in external apps (Slack, Linear, GitHub, Gmail, Google
-Calendar, Google Drive) for tenants created before those apps existed, matching
-what tenant-creation provisioning seeds.
+Calendar, Google Drive, HubSpot) for tenants created before those apps existed,
+matching what tenant-creation provisioning seeds.
 
 Cloud only: in multi-tenant mode Alembic invokes this once per tenant schema
 (the env sets search_path per schema). In self-hosted single-tenant mode it is a
-no-op. Existing apps are left untouched; only missing apps are created (disabled)
-with credentials sourced from the populated ``EXT_APP_<APP_TYPE>_<FIELD>`` env
-vars.
+no-op. Every existing external app is deleted first (clean slate), then the full
+catalog is re-created (disabled) with credentials sourced from the populated
+``EXT_APP_<APP_TYPE>_<FIELD>`` env vars. Re-seeding this way also clears any
+admin enabled-state and per-action policy overrides on the built-in apps.
 
 Self-contained by design: the app catalog, env parsing, and credential
 encryption are inlined rather than imported from application code, so the
@@ -112,6 +113,16 @@ _BUILT_IN_APPS: list[dict] = [
         ),
         "upstream_url_patterns": ["https://api\\.github\\.com/.*"],
     },
+    {
+        "app_type": "HUBSPOT",
+        "slug": "hubspot",
+        "name": "HubSpot",
+        "description": (
+            "Read and manage HubSpot CRM contacts, companies, and deals "
+            "on the user's behalf."
+        ),
+        "upstream_url_patterns": ["https://api\\.hubapi\\.com/.*"],
+    },
 ]
 
 
@@ -156,8 +167,19 @@ def _is_cloud() -> bool:
 
 def upgrade() -> None:
     if not _is_cloud():
-        logger.info("Not a cloud deployment; skipping built-in app seed.")
         return
+
+    bind = op.get_bind()
+
+    # Clean slate: delete every existing external app so the rows seeded below
+    # always match the current frozen catalog (config / URL patterns / auth /
+    # credentials) rather than whatever a prior seed left. Deleting the backing
+    # skill cascades to the external_app row and its policies + credentials.
+    # Cloud blocks admin-created (CUSTOM) apps, so the only rows here are these
+    # built-ins.
+    bind.execute(
+        sa.text("DELETE FROM skill WHERE id IN (SELECT skill_id FROM external_app)")
+    )
 
     insert_skill = sa.text(
         "INSERT INTO skill "
@@ -179,18 +201,11 @@ def upgrade() -> None:
         sa.bindparam("creds", type_=sa.LargeBinary()),
     )
 
-    bind = op.get_bind()
     created = 0
     for app in _BUILT_IN_APPS:
         app_type = app["app_type"]
-        if bind.execute(
-            sa.text("SELECT 1 FROM external_app WHERE app_type = :t LIMIT 1"),
-            {"t": app_type},
-        ).first():
-            continue
-
-        # The built-in skill and its external_app are created together, but
-        # tolerate a pre-existing orphan skill (slug is unique) by reusing it.
+        # An orphan built-in skill (unique slug, no external_app) can survive the
+        # delete above; reuse it rather than collide on the unique slug.
         existing_skill = bind.execute(
             sa.text("SELECT id FROM skill WHERE slug = :slug"),
             {"slug": app["slug"]},
