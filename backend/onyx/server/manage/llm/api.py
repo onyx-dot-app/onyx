@@ -88,6 +88,8 @@ from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import LMStudioFinalModelResponse
 from onyx.server.manage.llm.models import LMStudioModelsRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import NebiusTokenfactoryFinalModelResponse
+from onyx.server.manage.llm.models import NebiusTokenfactoryModelsRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -132,22 +134,27 @@ def _resolve_api_key(
     provider_name: str | None,
     api_base: str | None,
     db_session: Session,
+    provider_id: int | None = None,
 ) -> str | None:
     """Return the real API key for model-fetch endpoints.
 
     When editing an existing provider the form value is masked (e.g.
-    ``sk-a****b1c2``).  If *provider_name* is supplied we can look up
-    the unmasked key from the database so the external request succeeds.
+    ``sk-a****b1c2``). We look up the unmasked key from the database so the
+    external request succeeds; a freshly typed (non-masked) key is used as-is.
 
-    The stored key is only returned when the request's *api_base*
-    matches the value stored in the database.
+    The provider is resolved by *provider_id* when given (reliable — the edit
+    form always has it, and well-known providers are frequently saved with a
+    NULL name), otherwise by *provider_name*. The stored key is only returned
+    when the request's *api_base* matches the value stored in the database.
     """
-    if not provider_name:
-        return api_key
+    existing_provider = None
+    if provider_id is not None:
+        existing_provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
+    elif provider_name:
+        existing_provider = fetch_existing_llm_provider(
+            name=provider_name, db_session=db_session
+        )
 
-    existing_provider = fetch_existing_llm_provider(
-        name=provider_name, db_session=db_session
-    )
     if existing_provider and existing_provider.api_key:
         # Normalise both URLs before comparing so trailing-slash
         # differences don't cause a false mismatch.
@@ -1856,6 +1863,153 @@ def _get_bifrost_models_response(api_base: str, api_key: str | None = None) -> d
         source_name="Bifrost",
         api_key=api_key,
     )
+
+
+def _get_nebius_tokenfactory_models_response(
+    api_base: str, api_key: str | None = None
+) -> dict:
+    """GET Nebius TokenFactory /v1/models?verbose=true and return parsed JSON.
+
+    The verbose flag is what surfaces per-model `context_length`,
+    `architecture.modality`, and `supported_features` (which lists "tools",
+    "reasoning", etc.).
+    """
+    cleaned_api_base = api_base.strip().rstrip("/")
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models"
+    else:
+        url = f"{cleaned_api_base}/v1/models"
+
+    return _get_openai_compatible_models_response(
+        url=f"{url}?verbose=true",
+        source_name="Nebius TokenFactory",
+        api_key=api_key,
+    )
+
+
+def _nebius_modality_supports_image(model: dict) -> bool:
+    """Vision support = the model's input modality includes images.
+
+    `architecture.modality` looks like "text->text" or "text+image->text".
+    """
+    architecture = model.get("architecture") or {}
+    modality = architecture.get("modality") or ""
+    input_modality = modality.split("->")[0] if "->" in modality else modality
+    return "image" in input_modality.lower()
+
+
+@admin_router.post("/nebius-tokenfactory/available-models")
+def get_nebius_tokenfactory_available_models(
+    request: NebiusTokenfactoryModelsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[NebiusTokenfactoryFinalModelResponse]:
+    """Fetch chat models from Nebius TokenFactory, with per-model context
+    length and tool/vision capabilities read straight from the source API."""
+    api_key = _resolve_api_key(
+        request.api_key,
+        request.provider_name,
+        request.api_base,
+        db_session,
+        provider_id=request.provider_id,
+    )
+
+    response_json = _get_nebius_tokenfactory_models_response(
+        api_base=request.api_base, api_key=api_key
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Nebius TokenFactory endpoint",
+        )
+
+    results: list[NebiusTokenfactoryFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            if not model_id:
+                continue
+            if is_embedding_model(model_id):
+                continue
+
+            # Only keep models whose output modality is text (chat / vision-chat);
+            # this drops embeddings/rerankers that slip past the name check.
+            architecture = model.get("architecture") or {}
+            modality = architecture.get("modality") or "text->text"
+            output_modality = modality.split("->")[-1] if "->" in modality else "text"
+            if output_modality.strip().lower() != "text":
+                continue
+
+            display_name = model.get("name") or model_id
+            context_length = model.get("context_length") or None
+
+            features = model.get("supported_features")
+            if isinstance(features, list):
+                feature_list = [str(f) for f in features]
+                supports_reasoning = "reasoning" in feature_list
+            else:
+                feature_list = []
+                supports_reasoning = is_reasoning_model(model_id, display_name)
+
+            # Display-only metadata for the model picker.
+            regions = model.get("regions") or []
+            country_code = (
+                regions[0].get("country_code")
+                if regions and isinstance(regions[0], dict)
+                else None
+            )
+            limits = model.get("per_request_limits") or {}
+            requests_per_minute = (
+                limits.get("requests_per_minute") if isinstance(limits, dict) else None
+            )
+
+            results.append(
+                NebiusTokenfactoryFinalModelResponse(
+                    name=model_id,
+                    display_name=display_name,
+                    max_input_tokens=context_length,
+                    supports_image_input=_nebius_modality_supports_image(model),
+                    supports_reasoning=supports_reasoning,
+                    quantization=model.get("quantization"),
+                    country_code=country_code,
+                    requests_per_minute=requests_per_minute,
+                    supported_features=feature_list,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Nebius TokenFactory model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from Nebius TokenFactory",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    if request.provider_name:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_name=request.provider_name,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Nebius TokenFactory",
+        )
+
+    return sorted_results
 
 
 @admin_router.post("/openai-compatible/available-models")

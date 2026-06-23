@@ -53,6 +53,7 @@ export { default as SvgMediawiki } from "@opal/logos/mediawiki";
 export { default as SvgMicrosoft } from "@opal/logos/microsoft";
 export { default as SvgMistral } from "@opal/logos/mistral";
 export { default as SvgMixedbread } from "@opal/logos/mixedbread";
+export { default as SvgNebius } from "@opal/logos/nebius";
 export { default as SvgNetflix } from "@opal/logos/netflix";
 export { default as SvgNomic } from "@opal/logos/nomic";
 export { default as SvgNotion } from "@opal/logos/notion";

@@ -27,6 +27,7 @@ class LlmProviderNames(str, Enum):
     LITELLM_PROXY = "litellm_proxy"
     BIFROST = "bifrost"
     OPENAI_COMPATIBLE = "openai_compatible"
+    NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
 
     def __str__(self) -> str:
         """Needed so things like:
@@ -48,6 +49,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.LITELLM_PROXY,
     LlmProviderNames.BIFROST,
     LlmProviderNames.OPENAI_COMPATIBLE,
+    LlmProviderNames.NEBIUS_TOKENFACTORY,
 ]
 
 
@@ -67,6 +69,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
     LlmProviderNames.BIFROST: "Bifrost",
     LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI-Compatible",
+    LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     "groq": "Groq",
     "anyscale": "Anyscale",
     "deepseek": "DeepSeek",
@@ -158,6 +161,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.LITELLM_PROXY,
     LlmProviderNames.BIFROST,
     LlmProviderNames.OPENAI_COMPATIBLE,
+    LlmProviderNames.NEBIUS_TOKENFACTORY,
 }
 
 # Model family name mappings for display name generation
