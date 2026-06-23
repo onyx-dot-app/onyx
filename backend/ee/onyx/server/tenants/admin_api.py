@@ -66,8 +66,6 @@ async def impersonate_user(
             )
             raise HTTPException(status_code=422, detail=detail)
 
-        # Capture the id while the session is open; the success event is emitted
-        # only once the response is built (below).
         impersonated_user_id = str(user_to_impersonate.id)
         token = await get_redis_strategy().write_token(user_to_impersonate)
 
