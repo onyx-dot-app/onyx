@@ -25,7 +25,9 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
+from mitmproxy import connection
 from mitmproxy import http
+from mitmproxy.proxy import server_hooks
 from redis.exceptions import RedisError
 
 from onyx.db.enums import ApprovalDecidedVia
@@ -1002,22 +1004,148 @@ def test_parse_proxy_auth_username(header: str | None, expected: str | None) -> 
     assert gate._parse_proxy_auth_username(header) == expected
 
 
-def test_http_connect_caches_tag_and_client_disconnected_evicts() -> None:
+@pytest.mark.asyncio
+async def test_http_connect_caches_tag_and_client_disconnected_evicts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host, _port: False)
     addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
     flow = make_flow(conn_id="conn-xyz", proxy_auth=_basic_auth(_TAG_UUID))
 
-    addon.http_connect(flow)
+    await addon.http_connect(flow)
     assert addon._conn_session_tags == {"conn-xyz": _TAG_UUID}
 
     addon.client_disconnected(flow.client_conn)
     assert addon._conn_session_tags == {}
 
 
-def test_http_connect_ignores_missing_or_garbled_header() -> None:
+@pytest.mark.asyncio
+async def test_http_connect_ignores_missing_or_garbled_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host, _port: False)
     addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
-    addon.http_connect(make_flow(conn_id="c1"))  # no Proxy-Authorization
-    addon.http_connect(make_flow(conn_id="c2", proxy_auth="Bearer nope"))
+    await addon.http_connect(make_flow(conn_id="c1"))  # no Proxy-Authorization
+    await addon.http_connect(make_flow(conn_id="c2", proxy_auth="Bearer nope"))
     assert addon._conn_session_tags == {}
+
+
+# ---------------------------------------------------------------------------
+# destination_is_blocked — internal-egress guard
+# ---------------------------------------------------------------------------
+
+
+def _addrinfo(*ips: str) -> list[Any]:
+    return [(2, 1, 6, "", (ip, 0)) for ip in ips]
+
+
+def test_destination_is_blocked_literal_ips() -> None:
+    assert gate.destination_is_blocked("10.0.0.1", 443) is True
+    assert gate.destination_is_blocked("169.254.169.254", 80) is True  # IMDS
+    assert gate.destination_is_blocked("::ffff:10.0.0.1", 443) is True  # mapped v4
+    assert gate.destination_is_blocked("8.8.8.8", 443) is False
+    assert gate.destination_is_blocked("", 443) is False
+
+
+def test_destination_is_blocked_resolves_to_internal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("10.1.2.3")
+    )
+    assert gate.destination_is_blocked("intra.svc.cluster.local", 443) is True
+
+
+def test_destination_is_blocked_resolves_to_public(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("93.184.216.34")
+    )
+    assert gate.destination_is_blocked("example.com", 443) is False
+
+
+def test_destination_is_blocked_fails_closed_on_resolution_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A resolver failure must deny (fail closed), not allow relay."""
+
+    def _boom(*_args: Any, **_kwargs: Any) -> Any:
+        raise OSError("temporary DNS failure")
+
+    monkeypatch.setattr(gate.socket, "getaddrinfo", _boom)
+    assert gate.destination_is_blocked("flaky-host.example", 443) is True
+
+
+def test_api_server_exception_is_port_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The api-server bypass must match host AND port; other ports on the same
+    internal host (Redis/Postgres) stay blocked."""
+    monkeypatch.setattr(gate, "_API_SERVER_HOST", "api.internal")
+    monkeypatch.setattr(gate, "_API_SERVER_PORT", 443)
+    # api host resolves to an internal IP, like a real in-cluster service name.
+    monkeypatch.setattr(
+        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("10.5.5.5")
+    )
+    assert gate.destination_is_blocked("api.internal", 443) is False  # allowed
+    assert gate.destination_is_blocked("api.internal", 6379) is True  # Redis: blocked
+    assert gate.destination_is_blocked("api.internal", 5432) is True  # PG: blocked
+
+
+def test_destination_is_blocked_blocks_if_any_resolved_ip_internal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If a name resolves to a mix of public and internal IPs, deny — an attacker
+    can otherwise steer mitmproxy to the internal one."""
+    monkeypatch.setattr(
+        gate.socket,
+        "getaddrinfo",
+        lambda *_a, **_k: _addrinfo("93.184.216.34", "10.0.0.9"),
+    )
+    assert gate.destination_is_blocked("rebind.example", 443) is True
+
+
+def _server_hook_data(host: str, port: int) -> server_hooks.ServerConnectionHookData:
+    server = connection.Server(address=(host, port))
+    server.sni = host  # mitmproxy sets sni to the hostname before server_connect
+    return server_hooks.ServerConnectionHookData(
+        server=server, client=connection.Client(peername=("c", 0), sockname=("s", 0))
+    )
+
+
+@pytest.mark.asyncio
+async def test_server_connect_allows_public_without_pinning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Public host: allowed through untouched. We must NOT pin the IP or alter
+    sni — pinning breaks eager-mode TLS interception and credential injection."""
+    monkeypatch.setattr(
+        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("93.184.216.34")
+    )
+    addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
+    data = _server_hook_data("example.com", 443)
+
+    await addon.server_connect(data)
+
+    assert data.server.error is None
+    assert data.server.address == ("example.com", 443)  # hostname left intact
+    assert data.server.sni == "example.com"
+
+
+@pytest.mark.asyncio
+async def test_server_connect_blocks_rebind_to_internal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Backstop: a name that resolves to internal at connect-time is killed."""
+    monkeypatch.setattr(
+        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("10.1.2.3")
+    )
+    addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
+    data = _server_hook_data("rebind.example", 443)
+
+    await addon.server_connect(data)
+
+    assert data.server.error is not None
+    assert data.server.address == ("rebind.example", 443)
 
 
 # ---------------------------------------------------------------------------
@@ -1047,9 +1175,12 @@ async def test_resolve_and_match_exact_tag_on_http_request() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_and_match_exact_tag_on_https_connect() -> None:
+async def test_resolve_and_match_exact_tag_on_https_connect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """HTTPS: the tag rode on the CONNECT (captured via http_connect)
     and is read back off the connection, not the MITM'd request."""
+    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host, _port: False)
     user_id = uuid4()
     tagged_id = UUID(_TAG_UUID)
     sandbox = make_resolved_sandbox(user_id=user_id)
@@ -1057,7 +1188,7 @@ async def test_resolve_and_match_exact_tag_on_https_connect() -> None:
     addon = _build(resolver=resolver, matcher=_StubMatcher(result=_MATCH))
 
     connect_flow = make_flow(conn_id="conn-1", proxy_auth=_basic_auth(_TAG_UUID))
-    addon.http_connect(connect_flow)
+    await addon.http_connect(connect_flow)
     # Decrypted request has no Proxy-Authorization of its own.
     request_flow = make_flow(conn_id="conn-1")
 
