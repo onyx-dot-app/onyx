@@ -90,14 +90,16 @@ HIDDEN_PATTERNS = {
     ".gitignore",
 }
 
-ZIP_EXCLUDED_DIR_NAMES = frozenset({"node_modules"})
-
 
 def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
     """Replace filesystem-unsafe characters in a zip filename stem. ``allow_dots``
     keeps version-suffixed directory names like ``my.lib`` intact."""
     safe = {"-", "_", "."} if allow_dots else {"-", "_"}
     return "".join(c if c.isalnum() or c in safe else "_" for c in name)
+
+
+def _is_hidden_workspace_entry(entry: FilesystemEntry) -> bool:
+    return entry.name in HIDDEN_PATTERNS or entry.name.startswith(".")
 
 
 class SessionManager:
@@ -910,9 +912,9 @@ class SessionManager:
             except ValueError:
                 return
             for entry in entries:
+                if _is_hidden_workspace_entry(entry):
+                    continue
                 if entry.is_directory:
-                    if entry.name in ZIP_EXCLUDED_DIR_NAMES:
-                        continue
                     _walk(entry.path)
                 else:
                     collected.append((entry.path, arcname_for(entry.path)))
@@ -1340,9 +1342,7 @@ class SessionManager:
 
         # Filter hidden files and directories
         entries: list[FilesystemEntry] = [
-            entry
-            for entry in raw_entries
-            if entry.name not in HIDDEN_PATTERNS and not entry.name.startswith(".")
+            entry for entry in raw_entries if not _is_hidden_workspace_entry(entry)
         ]
 
         # Sort: directories first, then files, both alphabetically

@@ -13,11 +13,12 @@ def _manager(sandbox_manager: StubSandboxManager) -> SessionManager:
     return manager
 
 
-def test_archive_walk_skips_node_modules_directories() -> None:
+def test_archive_walk_skips_hidden_entries() -> None:
     sandbox_manager = StubSandboxManager()
     sandbox_manager.list_directory_returns_by_path = {
         "outputs/web": [
             FilesystemEntry(name="app", path="outputs/web/app", is_directory=True),
+            FilesystemEntry(name=".next", path="outputs/web/.next", is_directory=True),
             FilesystemEntry(
                 name="node_modules",
                 path="outputs/web/node_modules",
@@ -31,9 +32,21 @@ def test_archive_walk_skips_node_modules_directories() -> None:
                 is_directory=False,
             ),
             FilesystemEntry(
+                name=".env",
+                path="outputs/web/app/.env",
+                is_directory=False,
+            ),
+            FilesystemEntry(
                 name="node_modules",
                 path="outputs/web/app/node_modules",
                 is_directory=True,
+            ),
+        ],
+        "outputs/web/.next": [
+            FilesystemEntry(
+                name="server.js",
+                path="outputs/web/.next/server.js",
+                is_directory=False,
             ),
         ],
         "outputs/web/node_modules": [
