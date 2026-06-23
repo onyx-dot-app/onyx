@@ -57,4 +57,22 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # 2b. NodeLocal DNS (or any non-pod cluster DNS listener), when configured. A NodeLocal DNS
+    #     cache is a hostNetwork endpoint, NOT a CoreDNS pod, so the kube-dns podSelector above
+    #     can't match it; its listen IP is cluster-specific (commonly 169.254.20.10 but not fixed).
+    #     Without an allow here its query hits the default-deny, failing firewall-init.sh's getent
+    #     and bricking sandbox init. Operators on such clusters set craft.dnsExtraCIDRs to the
+    #     actual listener IP(s); empty by default (plain CoreDNS resolves via the podSelector alone).
+    #     Each CIDR is its OWN egress rule per the IPv4/IPv6 ipBlock fail-closed caveat on AWS VPC
+    #     CNI (one IPv4+IPv6 `to:` list drops all egress) — see the proxy-side policy.
+    {{- range (index (.Values.craft | default (dict)) "dnsExtraCIDRs" | default list) }}
+    - to:
+        - ipBlock:
+            cidr: {{ . | quote }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
 {{- end }}

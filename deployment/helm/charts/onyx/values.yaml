@@ -1535,6 +1535,14 @@ configMap:
 craft:
   # Extra SAs (release ns) to also grant sandbox RBAC, e.g. a separate worker SA.
   extraBoundServiceAccounts: []
+  # CIDR(s) of any non-pod cluster DNS listener the sandbox must reach for firewall-init.sh's
+  # proxy-FQDN getent lookup. A NodeLocal DNS cache is a hostNetwork endpoint (its listen IP is
+  # cluster-specific — commonly 169.254.20.10, but configurable), so it is not a CoreDNS pod and
+  # the kube-dns podSelector in the sandbox-egress NetworkPolicy can't match it; without an allow
+  # here its DNS query hits the default-deny and bricks sandbox init. Set this to the actual
+  # listener IP(s), e.g. ["169.254.20.10/32"]. Empty (default) = standard CoreDNS, resolved via
+  # the podSelector alone (no NodeLocal DNS).
+  dnsExtraCIDRs: []
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.
