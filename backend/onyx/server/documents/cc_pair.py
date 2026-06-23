@@ -519,7 +519,7 @@ def update_cc_pair_status(
         actor=actor_from_user(user),
         resource_type="cc_pair",
         resource_id=cc_pair_id,
-        extra={"status": str(status_update_request.status)},
+        extra={"status": status_update_request.status.value},
     )
 
     # this speeds up the start of indexing by firing the check immediately

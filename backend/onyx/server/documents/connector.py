@@ -1578,7 +1578,7 @@ def create_connector_from_model(
             actor=actor_from_user(user),
             resource_type="connector",
             resource_id=connector_response.id,
-            extra={"source": str(connector_data.source)},
+            extra={"source": connector_data.source.value},
         )
         return connector_response
     except ValueError as e:

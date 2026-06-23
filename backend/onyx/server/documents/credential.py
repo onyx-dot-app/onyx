@@ -177,7 +177,7 @@ def create_credential_from_model(
         actor=actor_from_user(user),
         resource_type="credential",
         resource_id=credential.id,
-        extra={"source": str(credential_info.source)},
+        extra={"source": credential_info.source.value},
     )
     return ObjectCreationIdResponse(
         id=credential.id,
@@ -252,7 +252,7 @@ def create_credential_with_private_key(
         actor=actor_from_user(user),
         resource_type="credential",
         resource_id=credential.id,
-        extra={"source": str(credential_info.source)},
+        extra={"source": credential_info.source.value},
     )
     return ObjectCreationIdResponse(
         id=credential.id,
