@@ -14,6 +14,7 @@ from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 from onyx.external_apps.providers.google_drive import GoogleDriveProvider
+from onyx.external_apps.providers.hubspot import HubspotProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.slack import SlackProvider
 
@@ -24,6 +25,7 @@ _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     GmailProvider,
     LinearProvider,
     GitHubProvider,
+    HubspotProvider,
 ]
 
 

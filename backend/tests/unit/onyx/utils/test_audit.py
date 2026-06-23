@@ -5,9 +5,12 @@ OCSF-shaped schema, never logging a secret, never raising on missing context,
 and Redis-backed dedup that degrades safely when Redis is unavailable.
 """
 
+import io
 import json
 import logging
 from typing import Any
+from typing import cast
+from typing import TextIO
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,6 +18,8 @@ import pytest
 from onyx.utils import audit
 from onyx.utils.audit import _OCSF_CLASS_BY_ACTION
 from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AUDIT_HANDLER_NAME
+from onyx.utils.audit import AUDIT_LOGGER_ROOT
 from onyx.utils.audit import AuditAction
 from onyx.utils.audit import AuditActor
 from onyx.utils.audit import AuditOutcome
@@ -172,6 +177,39 @@ def test_no_dedup_key_always_emits(caplog: pytest.LogCaptureFixture) -> None:
         emit_audit_event(AuditAction.USER_ROLE_CHANGE, AuditOutcome.SUCCESS)
 
     assert len(_capture(caplog)) == 2
+
+
+def test_audit_logger_self_contained_without_root_handler() -> None:
+    """Regression: events must reach the subsystem's handler even with no root
+    handler (the uvicorn condition that silently dropped every api-server event).
+    """
+    audit_root = logging.getLogger(AUDIT_LOGGER_ROOT)
+
+    own_handlers = [h for h in audit_root.handlers if h.name == AUDIT_HANDLER_NAME]
+    assert own_handlers, "onyx.audit must attach its own handler"
+    assert audit_root.propagate is False
+
+    # Simulate uvicorn (no root handlers); capture via a temporary handler.
+    buf = io.StringIO()
+    capture = logging.StreamHandler(cast(TextIO, buf))
+    audit_root.addHandler(capture)
+    root = logging.getLogger()
+    saved_root_handlers = root.handlers[:]
+    root.handlers = []
+    try:
+        emit_audit_event(
+            AuditAction.LOGIN,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id="u-1", email="a@example.com"),
+        )
+    finally:
+        root.handlers = saved_root_handlers
+        audit_root.removeHandler(capture)
+
+    lines = [ln for ln in buf.getvalue().splitlines() if ln.strip()]
+    assert lines, "audit event must reach onyx.audit handlers without root"
+    payload = json.loads(lines[-1])
+    assert payload["action"] == "auth.login"
 
 
 def test_actor_from_user_none_returns_none() -> None:

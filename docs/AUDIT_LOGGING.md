@@ -70,7 +70,7 @@ them). Current taxonomy (`AuditAction` in `backend/onyx/utils/audit.py`):
 
 - **Authentication:** `auth.login`, `auth.login_failure`, `auth.logout`,
   `auth.register`, `auth.password_forgot`, `auth.password_reset`,
-  `auth.email_verify`
+  `auth.email_verify`, `auth.impersonate`
 - **Account change:** `user.create`, `user.delete`, `user.deactivate`,
   `user.reactivate`, `user.role_change`, `user.group_change`
 - **API activity (admin config / resource CRUD):** `llm_provider.{create,update,delete}`,
@@ -78,10 +78,7 @@ them). Current taxonomy (`AuditAction` in `backend/onyx/utils/audit.py`):
   `api_key.{create,regenerate,delete}`, `credential.{create,update,delete}`,
   `credential.access`
 
-> Most actions are wired to call sites. A few (`user.create`,
-> `user.group_change`, `auth.password_reset`) are defined ahead of their
-> instrumentation and land in follow-up PRs, so consumers can build dashboards
-> against the full taxonomy now.
+> All actions in the taxonomy are wired to call sites.
 
 ### Example event
 

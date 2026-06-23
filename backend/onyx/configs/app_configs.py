@@ -209,6 +209,12 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 # lifetime, so a paired-up cookie + token never outlive each other.
 CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
 
+# Redis TTL for cached control-plane billing/trial lookups. 24h default —
+# trial→paid conversions propagate within this window in the worst case,
+# and the admin panel call sites invalidate on write so immediate UI
+# refreshes are not stale. Env-tunable for emergency tightening.
+BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "86400"))
+
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
 OAUTH_CLIENT_ID = (
@@ -1746,6 +1752,8 @@ EXT_APP_LINEAR_CLIENT_ID = os.environ.get("EXT_APP_LINEAR_CLIENT_ID", "")
 EXT_APP_LINEAR_CLIENT_SECRET = os.environ.get("EXT_APP_LINEAR_CLIENT_SECRET", "")
 EXT_APP_GITHUB_CLIENT_ID = os.environ.get("EXT_APP_GITHUB_CLIENT_ID", "")
 EXT_APP_GITHUB_CLIENT_SECRET = os.environ.get("EXT_APP_GITHUB_CLIENT_SECRET", "")
+EXT_APP_HUBSPOT_CLIENT_ID = os.environ.get("EXT_APP_HUBSPOT_CLIENT_ID", "")
+EXT_APP_HUBSPOT_CLIENT_SECRET = os.environ.get("EXT_APP_HUBSPOT_CLIENT_SECRET", "")
 
 INSTANCE_TYPE = (
     "managed"
