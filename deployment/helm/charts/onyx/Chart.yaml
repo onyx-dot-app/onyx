@@ -17,9 +17,11 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: security
-      description: Add an egress NetworkPolicy on the Craft sandbox egress proxy that blocks the
-        link-local / cloud-metadata range (169.254.0.0/16), so a sandbox can't use the proxy as an
-        SSRF pivot to the node's IMDS credentials. Internet, DNS, and datastores remain reachable.
+      description: Add an egress NetworkPolicy on the Craft sandbox pods restricting their egress to
+        the sandbox proxy (:8080) and kube-dns (:53) only. CNI-layer backstop to the in-pod iptables
+        in firewall-init.sh, so a sandbox that bypasses that iptables still cannot reach anything but
+        the proxy. DNS is allowed because sandbox-init resolves the proxy FQDN before its iptables
+        closes DNS.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0
