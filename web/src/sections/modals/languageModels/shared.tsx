@@ -428,6 +428,68 @@ function RefetchButton({ onRefetch }: RefetchButtonProps) {
 
 const FOLD_THRESHOLD = 3;
 
+// ─── Model metadata helpers (Nebius TokenFactory picker) ────────────────────
+
+function formatContextSize(tokens: number | null | undefined): string {
+  if (!tokens || tokens <= 0) return "";
+  if (tokens >= 1_000_000) {
+    const m = tokens / 1_000_000;
+    return `${Number.isInteger(m) ? m : m.toFixed(1)}M`;
+  }
+  if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
+  return String(tokens);
+}
+
+// Common non-ISO-3166 codes the provider may report → the ISO alpha-2 code
+// whose regional-indicator sequence actually has a flag glyph.
+const COUNTRY_CODE_ALIASES: Record<string, string> = {
+  UK: "GB", // United Kingdom is "GB" in ISO 3166-1; "UK" has no flag glyph
+};
+
+function countryCodeToFlag(code: string | null | undefined): string {
+  if (!code || code.length !== 2) return "";
+  const upper = code.toUpperCase();
+  const normalized = COUNTRY_CODE_ALIASES[upper] ?? upper;
+  const first = 0x1f1e6 + normalized.charCodeAt(0) - 65;
+  const second = 0x1f1e6 + normalized.charCodeAt(1) - 65;
+  return String.fromCodePoint(first, second);
+}
+
+/** Models that ship extra picker metadata (e.g. Nebius TokenFactory); most
+ *  providers don't, in which case the row renders without a metadata line. */
+function hasModelMetadata(model: ModelConfiguration): boolean {
+  return (
+    model.quantization != null ||
+    model.country_code != null ||
+    (model.supported_features?.length ?? 0) > 0
+  );
+}
+
+/** Compact "128K · 🇫🇮 · fp8 · tools, reasoning" metadata line. */
+function buildModelDescription(model: ModelConfiguration): string | undefined {
+  if (!hasModelMetadata(model)) return undefined;
+  const parts: string[] = [];
+  const context = formatContextSize(model.max_input_tokens);
+  if (context) parts.push(context);
+  const flag = countryCodeToFlag(model.country_code);
+  if (flag) parts.push(flag);
+  if (model.quantization) parts.push(model.quantization);
+  if (model.supported_features?.length) {
+    parts.push(model.supported_features.join(", "));
+  }
+  return parts.length > 0 ? parts.join("  ·  ") : undefined;
+}
+
+/** Eye marker for vision models, shown on the right of the picker row. */
+function modelRightChildren(model: ModelConfiguration): React.ReactNode {
+  if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
+  return (
+    <Text secondaryBody text03 title="Vision">
+      👁
+    </Text>
+  );
+}
+
 interface ModelRowProps {
   model: ModelConfiguration;
   isAutoMode: boolean;
@@ -490,6 +552,8 @@ function ModelRow({
               sizePreset="main-ui"
               icon={() => <Checkbox checked={isSelected} />}
               title={displayName}
+              description={buildModelDescription(model)}
+              rightChildren={modelRightChildren(model)}
               editable
               onTitleChange={(newTitle) => onRename(newTitle || undefined)}
               padding="fit"
@@ -604,7 +668,13 @@ export function ModelSelectionField({
         ) : (
           <Section gap={0.25} alignItems="stretch">
             {(() => {
-              const displayModels = isAutoMode ? visibleModels : models;
+              const baseModels = isAutoMode ? visibleModels : models;
+              // Sort alphabetically by id for providers that ship rich model
+              // metadata (Nebius TokenFactory) so the order is stable across
+              // refetches; otherwise keep the given order.
+              const displayModels = baseModels.some((m) => hasModelMetadata(m))
+                ? [...baseModels].sort((a, b) => a.name.localeCompare(b.name))
+                : baseModels;
               const isFoldable = displayModels.length > FOLD_THRESHOLD;
               const shownModels =
                 isFoldable && !isExpanded
