@@ -52,7 +52,10 @@ from onyx.db.scheduled_task import get_run
 from onyx.db.scheduled_task import mark_run_status
 from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.db.build_session import get_session_messages
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
 from onyx.server.features.build.sandbox.event_schema import RequestPermissionRequest
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.utils.logger import setup_logger
@@ -374,6 +377,14 @@ def _drive_agent(
         # that lets scheduled and interactive runs share a build_session
         # inherits the protection without needing to remember to add it.
         approval_required = False
+        # A turn ends with exactly one terminal event from the sandbox stream:
+        # a PromptResponse (the agent finished) or an Error (timeout / session
+        # / transport failure). persist_sandbox_event drops both, so without
+        # tracking them here a timed-out turn — whose only stream output is a
+        # terminal Error — would fall through to the SUCCEEDED path with an
+        # empty transcript (ENG-4234).
+        terminal_error: Error | None = None
+        got_prompt_response = False
         final_event_count = 0
         # Acquire the per-build_session lock for the duration of the
         # agent loop. __enter__/__exit__ used directly (rather than a
@@ -407,6 +418,18 @@ def _drive_agent(
                 # "terminal for display" until it ships.
                 if isinstance(sandbox_event, RequestPermissionRequest):
                     approval_required = True
+                    break
+
+                # Error is terminal (the stream's last event), so break and let
+                # the post-loop branch classify the failure.
+                if isinstance(sandbox_event, Error):
+                    terminal_error = sandbox_event
+                    break
+                # PromptResponse is terminal too: break before the budget check
+                # so a deadline that trips exactly as the agent finishes can't
+                # mis-mark a successful turn as timed-out.
+                if isinstance(sandbox_event, PromptResponse):
+                    got_prompt_response = True
                     break
 
                 # Budget check happens before persistence so a runaway
@@ -463,6 +486,48 @@ def _drive_agent(
                 )
                 db_session.commit()
                 return True
+
+            # Failure path: terminal Error, or the stream ended with no
+            # PromptResponse. Flush any partial output, then FAIL + notify.
+            if terminal_error is not None or not got_prompt_response:
+                session_manager.finalize_persist(session_id, state)
+                db_session.commit()
+                if terminal_error is not None:
+                    error_class = (
+                        ScheduledTaskErrorClass.TIMEOUT
+                        if terminal_error.code == TURN_ERROR_CODE_TIMEOUT
+                        else ScheduledTaskErrorClass.AGENT_EXCEPTION
+                    )
+                    error_detail = (
+                        terminal_error.message or "agent turn ended with an error"
+                    )
+                else:
+                    error_class = ScheduledTaskErrorClass.AGENT_EXCEPTION
+                    error_detail = "agent stream ended without a completion response"
+                mark_run_status(
+                    db_session=db_session,
+                    run_id=run_id,
+                    status=ScheduledTaskRunStatus.FAILED,
+                    error_class=error_class,
+                    error_detail=error_detail[:1000],
+                )
+                _notify(
+                    db_session=db_session,
+                    user_id=task_user_id,
+                    task_name=task_name,
+                    task_id=task_id,
+                    run_id=run_id,
+                    notif_type=NotificationType.SCHEDULED_TASK_FAILED,
+                )
+                db_session.commit()
+                logger.warning(
+                    "Scheduled run %s failed (events=%d, error_class=%s): %s",
+                    run_id,
+                    final_event_count,
+                    error_class.value,
+                    error_detail,
+                )
+                return False
 
             # Clean completion path.
             summary_from_chunks = _summary_from_state(state)

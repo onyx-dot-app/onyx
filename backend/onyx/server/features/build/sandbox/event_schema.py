@@ -17,6 +17,14 @@ from acp.schema import RequestPermissionRequest
 from acp.schema import ToolCallProgress
 from acp.schema import ToolCallStart
 
+# Onyx-synthesized ``Error.code`` sentinels for turn-terminating failures.
+# Negative so they never collide with opencode / JSON-RPC error codes.
+# Consumers (the scheduled-task executor, the interactive frontend) branch on
+# these to classify *why* a turn ended without a ``PromptResponse``.
+TURN_ERROR_CODE_SESSION = -1  # opencode reported an error during the turn
+TURN_ERROR_CODE_TIMEOUT = -2  # wall-clock turn timeout: no response within budget
+TURN_ERROR_CODE_TRANSPORT = -3  # event-bus / stream transport failure
+
 __all__ = [
     "AgentMessageChunk",
     "AgentPlanUpdate",
@@ -27,4 +35,7 @@ __all__ = [
     "RequestPermissionRequest",
     "ToolCallProgress",
     "ToolCallStart",
+    "TURN_ERROR_CODE_SESSION",
+    "TURN_ERROR_CODE_TIMEOUT",
+    "TURN_ERROR_CODE_TRANSPORT",
 ]
