@@ -119,6 +119,7 @@ function TextInputField<
       subDescription={subDescription}
       suffix={suffix}
       error={error}
+      disabled={disabled}
     >
       <TextInput
         {...input}
@@ -173,6 +174,7 @@ function PasswordInputField<
       subDescription={subDescription}
       suffix={suffix}
       error={error}
+      disabled={disabled}
     >
       <PasswordTextInput
         {...input}
