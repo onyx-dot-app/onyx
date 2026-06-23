@@ -61,6 +61,21 @@ def test_cgroup_v2_sub_core_floors_to_one(tmp_path: Path) -> None:
     )
 
 
+def test_cgroup_v2_max_does_not_fall_through_to_v1(tmp_path: Path) -> None:
+    # When v2 reports unlimited, a populated v1 quota (hybrid host) must be ignored:
+    # the v2 hierarchy is authoritative.
+    v2 = tmp_path / "cpu.max"
+    v2.write_text("max 100000")
+    quota = tmp_path / "cpu.cfs_quota_us"
+    period = tmp_path / "cpu.cfs_period_us"
+    quota.write_text("400000")
+    period.write_text("100000")
+    assert (
+        get_cgroup_cpu_limit(v2_cpu_max=v2, v1_cpu_quota=quota, v1_cpu_period=period)
+        is None
+    )
+
+
 def test_cgroup_v1_fallback(tmp_path: Path) -> None:
     quota = tmp_path / "cpu.cfs_quota_us"
     period = tmp_path / "cpu.cfs_period_us"

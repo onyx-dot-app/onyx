@@ -94,14 +94,19 @@ def get_cgroup_cpu_limit(
     Returns None when no quota is set (unlimited) or the cgroup files are unavailable.
     """
     # cgroup v2: single file formatted as "<quota> <period>"; "max" means unlimited.
+    # When the v2 file is present it is authoritative, so we never fall back to v1
+    # (a hybrid host can have stale non-zero v1 quota files that don't reflect reality).
     try:
         quota_str, period_str = v2_cpu_max.read_text().split()
-        if quota_str != "max":
-            period = int(period_str)
-            if period > 0:
-                return max(1, round(int(quota_str) / period))
-    except (OSError, ValueError):
-        pass
+        if quota_str == "max":
+            return None
+        period = int(period_str)
+        if period > 0:
+            return max(1, round(int(quota_str) / period))
+    except FileNotFoundError:
+        pass  # not a cgroup v2 host; try v1
+    except (OSError, ValueError) as e:
+        logger.debug("Could not parse cgroup v2 cpu.max (%s): %s", v2_cpu_max, e)
 
     # cgroup v1: separate quota/period files; quota <= 0 means unlimited.
     try:
@@ -109,7 +114,9 @@ def get_cgroup_cpu_limit(
         period = int(v1_cpu_period.read_text())
         if quota > 0 and period > 0:
             return max(1, round(quota / period))
-    except (OSError, ValueError):
-        pass
+    except FileNotFoundError:
+        pass  # no cgroup cpu controller available; treat as unlimited
+    except (OSError, ValueError) as e:
+        logger.debug("Could not parse cgroup v1 cpu quota/period: %s", e)
 
     return None
