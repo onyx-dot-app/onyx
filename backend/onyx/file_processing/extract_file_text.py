@@ -751,11 +751,13 @@ def stage_or_inline_xlsx_sheets(
     max_inline_bytes: int,
     file_name: str = "",
 ) -> list[StreamedSheet]:
-    """Render each non-empty worksheet to a temp CSV, streaming rows so peak RAM
-    is one row rather than the whole sheet. A sheet whose CSV is at most
-    `max_inline_bytes` is returned inline; a larger one is staged via `stage` and
-    referenced by id. The temp handle never escapes this function. No column
-    trimming or empty-run collapsing — those need a full in-memory pass."""
+    """Render each non-empty worksheet to a temp CSV, writing rows one at a time
+    so no worksheet is fully held in memory during conversion. A worksheet whose
+    CSV is at most `max_inline_bytes` is read back inline; a larger one is staged
+    via `stage` and referenced by `csv_file_id` so it stays off the heap
+    downstream. The returned list thus holds full CSV text for inline sheets
+    (each bounded by `max_inline_bytes`) and only an id for file-backed ones.
+    Empty rows are dropped; columns are not trimmed (that needs a second pass)."""
     sheets: list[StreamedSheet] = []
     workbook = _load_readonly_workbook(file, file_name)
     if workbook is None:
