@@ -42,7 +42,7 @@ from onyx.server.features.build.external_apps.models import ExternalAppAdminResp
 from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
 from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
 from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
-from onyx.server.features.skill.api import _read_bundle_upload
+from onyx.skills.bundle import read_bundle_file
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
@@ -279,7 +279,7 @@ def create_custom_external_app(
 
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
-        _read_bundle_upload(bundle), bundle.filename, file_store
+        read_bundle_file(bundle.file), bundle.filename, file_store
     )
     try:
         app = create_external_app(
@@ -326,7 +326,7 @@ def replace_custom_app_bundle(
 
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
-        _read_bundle_upload(bundle), bundle.filename, file_store, slug=app.skill.slug
+        read_bundle_file(bundle.file), bundle.filename, file_store, slug=app.skill.slug
     )
     try:
         app, old_bundle_file_id = update_external_app(

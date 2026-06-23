@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
-import onyx.server.features.skill.api as skill_api
+import onyx.skills.bundle as skill_bundle
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import Skill
@@ -348,7 +348,7 @@ def test_create_rejects_bundle_over_skill_upload_size_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
-    monkeypatch.setattr(skill_api, "DEFAULT_TOTAL_MAX_BYTES", 1)
+    monkeypatch.setattr(skill_bundle, "DEFAULT_TOTAL_MAX_BYTES", 1)
     slug = f"custom-test-{uuid4().hex[:8]}"
 
     with pytest.raises(OnyxError) as exc:
@@ -377,7 +377,7 @@ def test_replace_rejects_bundle_over_skill_upload_size_limit(
     slug = f"custom-test-{uuid4().hex[:8]}"
     created = _create(db_session, test_user, slug)
 
-    monkeypatch.setattr(skill_api, "DEFAULT_TOTAL_MAX_BYTES", 1)
+    monkeypatch.setattr(skill_bundle, "DEFAULT_TOTAL_MAX_BYTES", 1)
 
     with pytest.raises(OnyxError) as exc:
         api.replace_custom_app_bundle(
