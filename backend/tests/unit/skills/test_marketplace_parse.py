@@ -84,6 +84,18 @@ from onyx.skills.marketplace import ParsedSource
                 skill_filters=[],
             ),
         ),
+        # GitLab /-/tree/<ref>/<subpath> — the "-" separator is handled
+        (
+            "https://gitlab.com/o/r/-/tree/main/skills/foo",
+            ParsedSource(
+                host="gitlab.com",
+                owner="o",
+                repo="r",
+                ref="main",
+                subpath="skills/foo",
+                skill_filters=[],
+            ),
+        ),
     ],
 )
 def test_parse_skill_source_ok(raw: str, expected: ParsedSource) -> None:

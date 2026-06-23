@@ -197,16 +197,22 @@ def _parse_url_source(url: str, skill_filters: list[str]) -> ParsedSource:
     ref: str | None = None
     subpath: str | None = None
 
-    # /owner/repo/tree/<ref>[/<subpath>...]
-    if len(path_parts) > 2 and path_parts[2] == "tree":
-        if len(path_parts) < 4:
+    # Tree/ref form: GitHub /owner/repo/tree/<ref>[/<subpath>...] and GitLab
+    # /owner/repo/-/tree/<ref>[/<subpath>...] (GitLab inserts a "-" separator
+    # before tree/blob). A slash-containing ref is not disambiguated from the
+    # subpath — the first segment after tree is taken as the ref.
+    rest = path_parts[2:]
+    if rest and rest[0] == "-":
+        rest = rest[1:]
+    if rest and rest[0] == "tree":
+        if len(rest) < 2:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 f"malformed tree URL '{url}': missing ref after /tree/",
             )
-        ref = path_parts[3]
-        if len(path_parts) > 4:
-            subpath = "/".join(path_parts[4:])
+        ref = rest[1]
+        if len(rest) > 2:
+            subpath = "/".join(rest[2:])
 
     return ParsedSource(
         host=host,
@@ -248,37 +254,41 @@ def fetch_repo_archive(source: ParsedSource) -> bytes:
             f"failed to reach '{url}': {exc}",
         ) from exc
 
-    if response.status_code == 404:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"Repository or ref not found: {source.owner}/{source.repo}@{ref}",
-        )
-    if response.status_code != 200:
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"unexpected status {response.status_code} fetching '{url}'",
-        )
+    # Context-manage the streamed response so the connection is released on
+    # every exit path (status raises, size-cap, stream error, or success)
+    # rather than leaking until GC.
+    with response:
+        if response.status_code == 404:
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"Repository or ref not found: {source.owner}/{source.repo}@{ref}",
+            )
+        if response.status_code != 200:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                f"unexpected status {response.status_code} fetching '{url}'",
+            )
 
-    chunks: list[bytes] = []
-    total = 0
-    try:
-        for chunk in response.iter_content(chunk_size=64 * 1024):
-            if not chunk:
-                continue
-            total += len(chunk)
-            if total > SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES:
-                raise OnyxError(
-                    OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                    f"archive exceeds {SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES // (1024 * 1024)} MiB",
-                )
-            chunks.append(chunk)
-    except requests.RequestException as exc:
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            f"error streaming archive from '{url}': {exc}",
-        ) from exc
+        chunks: list[bytes] = []
+        total = 0
+        try:
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if total > SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES:
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        f"archive exceeds {SKILL_MARKETPLACE_ARCHIVE_MAX_BYTES // (1024 * 1024)} MiB",
+                    )
+                chunks.append(chunk)
+        except requests.RequestException as exc:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                f"error streaming archive from '{url}': {exc}",
+            ) from exc
 
-    return b"".join(chunks)
+        return b"".join(chunks)
 
 
 def _safe_extract_tar(
