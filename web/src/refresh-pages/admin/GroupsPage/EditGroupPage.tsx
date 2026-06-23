@@ -506,9 +506,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           }
         >
           <Text as="p" text03>
-            {markdown(
-              t("admin.groups.delete_modal_body", { name: group?.name })
-            )}
+            {t("admin.groups.delete_modal_body_pre")}{" "}
+            <Text as="span" text05>
+              {group?.name}
+            </Text>{" "}
+            {t("admin.groups.delete_modal_body_post")}
           </Text>
         </ConfirmationModalLayout>
       )}
