@@ -16,7 +16,7 @@
 
 ---
 
-# 1. BuildSession 领域模型
+# 1. ForgeSession 领域模型
 
 如果你是 FastAPI，我建议：
 - **对外 API / 内部编排输入输出**：Pydantic
@@ -29,7 +29,7 @@
 from enum import Enum
 
 
-class BuildArtifactType(str, Enum):
+class ForgeArtifactType(str, Enum):
     LANDING_PAGE = "landing_page"
     SLIDES = "slides"
     REPORT = "report"
@@ -37,7 +37,7 @@ class BuildArtifactType(str, Enum):
     TOOL = "tool"
 
 
-class BuildSessionStatus(str, Enum):
+class GlomiForgeStatus(str, Enum):
     QUEUED = "queued"
     SPEC_READY = "spec_ready"
     PROVISIONING = "provisioning"
@@ -65,25 +65,25 @@ class BuilderType(str, Enum):
 
 ---
 
-## 1.2 BuildSpec
+## 1.2 ForgeSpec
 
 ```python
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
 
-class BuildSpecInputs(BaseModel):
+class ForgeSpecInputs(BaseModel):
     uploaded_files: List[str] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
     external_urls: List[str] = Field(default_factory=list)
 
 
-class BuildSpecOutputs(BaseModel):
+class ForgeSpecOutputs(BaseModel):
     primary_format: str
     extra_formats: List[str] = Field(default_factory=list)
 
 
-class BuildSpec(BaseModel):
+class ForgeSpec(BaseModel):
     title: str
     goal: str
 
@@ -95,8 +95,8 @@ class BuildSpec(BaseModel):
     brand_rules: List[str] = Field(default_factory=list)
     visual_style: List[str] = Field(default_factory=list)
 
-    inputs: BuildSpecInputs = Field(default_factory=BuildSpecInputs)
-    outputs: BuildSpecOutputs
+    inputs: ForgeSpecInputs = Field(default_factory=ForgeSpecInputs)
+    outputs: ForgeSpecOutputs
     acceptance_criteria: List[str] = Field(default_factory=list)
 ```
 
@@ -152,7 +152,7 @@ class ReviewResult(BaseModel):
     next_action: str  # publish / rebuild / ask_user
 
 
-class BuildError(BaseModel):
+class ForgeError(BaseModel):
     code: str
     message: str
     retryable: bool = False
@@ -162,14 +162,14 @@ class BuildError(BaseModel):
 
 ---
 
-## 1.4 BuildSession
+## 1.4 ForgeSession
 
 ```python
 from pydantic import BaseModel
 from typing import Optional
 
 
-class BuildSession(BaseModel):
+class ForgeSession(BaseModel):
     id: str
 
     parent_chat_session_id: str
@@ -178,17 +178,17 @@ class BuildSession(BaseModel):
     user_id: str
     org_id: Optional[str] = None
 
-    artifact_type: BuildArtifactType
+    artifact_type: ForgeArtifactType
     template_id: str
     template_version: str
 
     title: str
     summary: Optional[str] = None
 
-    status: BuildSessionStatus
+    status: GlomiForgeStatus
     status_reason: Optional[str] = None
 
-    spec: BuildSpec
+    spec: ForgeSpec
     evidence_pack_ref: Optional[str] = None
 
     sandbox_provider: SandboxProviderType = SandboxProviderType.DAYTONA
@@ -211,7 +211,7 @@ class BuildSession(BaseModel):
     latest_review: Optional[ReviewResult] = None
 
     retry_count: int = 0
-    last_error: Optional[BuildError] = None
+    last_error: Optional[ForgeError] = None
 
     created_at: str
     updated_at: str
@@ -257,7 +257,7 @@ class SandboxCommand(BaseModel):
 class CreateSandboxInput(BaseModel):
     session_id: str
     snapshot_id: str
-    artifact_type: BuildArtifactType
+    artifact_type: ForgeArtifactType
 
     mounts: List[VolumeMount] = Field(default_factory=list)
     env: Dict[str, str] = Field(default_factory=dict)
@@ -414,7 +414,7 @@ class BuilderFinishedEvent(BaseModel):
     success: bool
 
 
-BuilderEvent = Union[
+ForgeEvent = Union[
     BuilderStartedEvent,
     MessageDeltaEvent,
     ToolCallStartedEvent,
@@ -473,7 +473,7 @@ class BuilderAdapter(Protocol):
     async def subscribe(
         self,
         builder_session_id: str,
-        on_event: Callable[[BuilderEvent], Awaitable[None]]
+        on_event: Callable[[ForgeEvent], Awaitable[None]]
     ) -> Callable[[], Awaitable[None]]:
         ...
 
@@ -489,28 +489,28 @@ class BuilderAdapter(Protocol):
 
 ---
 
-## 4.1 BuildSessionService
+## 4.1 ForgeSessionService
 
 ```python
-class BuildSessionService(Protocol):
+class ForgeSessionService(Protocol):
     async def create(
         self,
         *,
         parent_chat_session_id: str,
         user_id: str,
-        artifact_type: BuildArtifactType,
+        artifact_type: ForgeArtifactType,
         template_id: str,
-        spec: BuildSpec,
-    ) -> BuildSession:
+        spec: ForgeSpec,
+    ) -> ForgeSession:
         ...
 
-    async def get(self, session_id: str) -> BuildSession:
+    async def get(self, session_id: str) -> ForgeSession:
         ...
 
     async def update_status(
         self,
         session_id: str,
-        status: BuildSessionStatus,
+        status: GlomiForgeStatus,
         reason: Optional[str] = None,
     ) -> None:
         ...
@@ -543,7 +543,7 @@ class BuildSessionService(Protocol):
     async def set_review(self, session_id: str, review: ReviewResult) -> None:
         ...
 
-    async def fail(self, session_id: str, error: BuildError) -> None:
+    async def fail(self, session_id: str, error: ForgeError) -> None:
         ...
 
     async def archive(self, session_id: str) -> None:
@@ -555,15 +555,15 @@ class BuildSessionService(Protocol):
 
 ---
 
-## 4.2 BuildOrchestrator
+## 4.2 ForgeOrchestrator
 
 这个类才是你主控交付模式真正的中枢。
 
 ```python
-class BuildOrchestrator:
+class ForgeOrchestrator:
     def __init__(
         self,
-        build_session_service: BuildSessionService,
+        build_session_service: ForgeSessionService,
         sandbox_provider: SandboxProvider,
         builder_adapter: BuilderAdapter,
     ) -> None:
@@ -571,12 +571,12 @@ class BuildOrchestrator:
         self.sandbox_provider = sandbox_provider
         self.builder_adapter = builder_adapter
 
-    async def create_and_start_build(self, spec: BuildSpec, artifact_type: BuildArtifactType) -> BuildSession:
+    async def create_and_start_build(self, spec: ForgeSpec, artifact_type: ForgeArtifactType) -> ForgeSession:
         ...
 ```
 
 ### 它主要做 6 件事
-1. 创建 `BuildSession`
+1. 创建 `ForgeSession`
 2. 选择 template / snapshot
 3. 创建 Daytona sandbox
 4. 写入 `task.json / AGENTS.md / SYSTEM.md`
@@ -594,22 +594,22 @@ class BuildOrchestrator:
 ```python
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/api/build", tags=["build"])
+router = APIRouter(prefix="/api/glomi-forge", tags=["glomi-forge"])
 ```
 
 你可以先做 4 个核心接口：
 
-### 创建 BuildSession
-`POST /api/build/sessions`
+### 创建 ForgeSession
+`POST /api/glomi-forge/sessions`
 
-### 查询 BuildSession
-`GET /api/build/sessions/{session_id}`
+### 查询 ForgeSession
+`GET /api/glomi-forge/sessions/{session_id}`
 
 ### 继续修改
-`POST /api/build/sessions/{session_id}/instruction`
+`POST /api/glomi-forge/sessions/{session_id}/instruction`
 
 ### 终止任务
-`POST /api/build/sessions/{session_id}/terminate`
+`POST /api/glomi-forge/sessions/{session_id}/terminate`
 
 这样主控层和前端画布都能挂上去。
 
@@ -620,10 +620,10 @@ router = APIRouter(prefix="/api/build", tags=["build"])
 你前面那份架构如果用 Python 落地，我建议这样切：
 
 ```text
-backend/glomi/build_runtime/
+backend/onyx/glomi_forge/
   schemas/
-    build_session.py
-    build_spec.py
+    forge_session.py
+    forge_spec.py
     output_manifest.py
     review_result.py
     sandbox.py
@@ -635,7 +635,7 @@ backend/glomi/build_runtime/
     build_session_service.py
 
   services/
-    build_orchestrator.py
+    forge_orchestrator.py
     review_service.py
     template_service.py
 
