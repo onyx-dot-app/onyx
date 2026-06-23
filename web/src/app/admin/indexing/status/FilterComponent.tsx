@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useImperativeHandle, forwardRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +33,7 @@ export const FilterComponent = forwardRef<
   { resetFilters: () => void },
   FilterComponentProps
 >(({ onFilterChange }, ref) => {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
     accessType: null,
@@ -140,14 +142,14 @@ export const FilterComponent = forwardRef<
         >
           <div className="flex items-center justify-between px-2 py-1.5">
             <DropdownMenuLabel className="text-base font-medium">
-              Filter Connectors
+              {t("admin.connector_setup.filter_connectors")}
             </DropdownMenuLabel>
           </div>
           <DropdownMenuSeparator />
 
           <DropdownMenuGroup>
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
-              Access Type
+              {t("admin.connector_setup.access_type")}
             </DropdownMenuLabel>
             <div onClick={(e) => e.stopPropagation()}>
               <DropdownMenuCheckboxItem
@@ -156,7 +158,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Public
+                {t("admin.connector_setup.access_public")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedAccessTypes.includes("private")}
@@ -164,7 +166,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Private
+                {t("admin.connector_setup.access_private")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedAccessTypes.includes("sync")}
@@ -172,7 +174,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Auto-Sync
+                {t("admin.connector_setup.access_auto_sync")}
               </DropdownMenuCheckboxItem>
             </div>
           </DropdownMenuGroup>
@@ -181,7 +183,7 @@ export const FilterComponent = forwardRef<
 
           <DropdownMenuGroup>
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
-              Last Status
+              {t("admin.connector_setup.last_status")}
             </DropdownMenuLabel>
             <div onClick={(e) => e.stopPropagation()}>
               <DropdownMenuCheckboxItem
@@ -190,7 +192,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Success
+                {t("admin.connector_setup.status_success")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("failed")}
@@ -198,7 +200,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Failed
+                {t("admin.connector_setup.status_failed")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("in_progress")}
@@ -206,7 +208,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                In Progress
+                {t("admin.connector_setup.status_in_progress")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("not_started")}
@@ -214,7 +216,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Not Started
+                {t("admin.connector_setup.status_not_started")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={selectedStatuses.includes("completed_with_errors")}
@@ -224,7 +226,7 @@ export const FilterComponent = forwardRef<
                 className="flex items-center justify-between"
                 onSelect={(e) => e.preventDefault()}
               >
-                Completed with Errors
+                {t("admin.connector_setup.status_completed_with_errors")}
               </DropdownMenuCheckboxItem>
             </div>
           </DropdownMenuGroup>
@@ -233,7 +235,7 @@ export const FilterComponent = forwardRef<
 
           <DropdownMenuGroup>
             <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
-              Document Count
+              {t("admin.connector_setup.document_count")}
             </DropdownMenuLabel>
             <div
               className="flex items-center px-2 py-2 gap-2"
@@ -276,7 +278,7 @@ export const FilterComponent = forwardRef<
               </div>
               <Input
                 type="number"
-                placeholder="Count"
+                placeholder={t("admin.connector_setup.count_placeholder")}
                 value={docsValue}
                 onChange={(e) => setDocsValue(e.target.value)}
                 className="h-8 w-full"
@@ -293,7 +295,7 @@ export const FilterComponent = forwardRef<
                 }}
                 type="button"
               >
-                Apply
+                {t("admin.connector_setup.apply")}
               </Button>
             </div>
           </DropdownMenuGroup>

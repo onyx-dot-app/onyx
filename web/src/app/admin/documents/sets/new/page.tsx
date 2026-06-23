@@ -1,6 +1,7 @@
 "use client";
 
 import { SettingsLayouts } from "@opal/layouts";
+import { useTranslation } from "react-i18next";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
 import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
@@ -60,11 +61,12 @@ function Main() {
 }
 
 export default function Page() {
+  const { t } = useTranslation();
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title="New Document Set"
+        title={t("admin.document_sets.new")}
         divider
         backButton
       />

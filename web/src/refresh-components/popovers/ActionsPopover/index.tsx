@@ -49,6 +49,7 @@ import {
   SvgSimpleLoader,
 } from "@opal/icons";
 import { Button } from "@opal/components";
+import { getLocalizedToolLabel } from "@/lib/tool-i18n";
 
 function buildTooltipMessage(
   actionDescription: string,
@@ -676,7 +677,7 @@ export default function ActionsPopover({
 
   const mcpToggleItems: SwitchListItem[] = selectedMcpTools.map((tool) => ({
     id: tool.id.toString(),
-    label: tool.display_name || tool.name,
+    label: getLocalizedToolLabel(tool, t),
     description: tool.description,
     isEnabled: !disabledToolIds.includes(tool.id),
     onToggle: () => toggleToolForCurrentAgent(tool.id),

@@ -239,7 +239,9 @@ function ProjectChatItem({
           icon={icon}
           title={chat.name || UNNAMED_CHAT}
           description={
-            lastUpdateTime ? `Last message ${lastUpdateTime}` : undefined
+            lastUpdateTime
+              ? t("projects.last_message", { time: lastUpdateTime })
+              : undefined
           }
           sizePreset="main-ui"
           interaction={popoverOpen ? "active" : undefined}
@@ -278,6 +280,7 @@ function ProjectChatItem({
 }
 
 export default function ProjectChatSessionList() {
+  const { t } = useTranslation();
   const {
     currentProjectDetails,
     currentProjectId,
@@ -301,7 +304,7 @@ export default function ProjectChatSessionList() {
       <div>
         <div className="px-3 py-2">
           <Text as="p" font="secondary-body" color="text-02">
-            Recent Chats
+            {t("projects.recent_chats")}
           </Text>
         </div>
 

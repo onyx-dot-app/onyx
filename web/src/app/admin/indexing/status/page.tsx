@@ -5,6 +5,7 @@ import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import { SettingsLayouts } from "@opal/layouts";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
@@ -209,9 +210,12 @@ function Main() {
 }
 
 export default function Status() {
+  const { t } = useTranslation();
+  const title = useAdminPageTitle(route);
+
   useToastFromQuery({
     "connector-created": {
-      message: "Connector created successfully",
+      message: t("admin.connector_setup.connector_created"),
       type: "success",
     },
   });
@@ -220,9 +224,11 @@ export default function Status() {
     <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={title}
         rightChildren={
-          <Button href="/admin/add-connector">Add Connector</Button>
+          <Button href="/admin/add-connector">
+            {t("admin.connector_setup.add_connector")}
+          </Button>
         }
         divider
       />

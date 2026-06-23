@@ -180,6 +180,7 @@ const HumanMessage = React.memo(function HumanMessage({
         <CopyButton
           getCopyText={() => content}
           prominence="tertiary"
+          tooltip={t("chat.copy")}
           data-testid="HumanMessage/copy-button"
         />
         {onEdit && (
@@ -193,7 +194,7 @@ const HumanMessage = React.memo(function HumanMessage({
         )}
       </div>
     ),
-    [content, onEdit]
+    [content, onEdit, t]
   );
 
   const copyEditButton = (
