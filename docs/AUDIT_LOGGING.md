@@ -78,9 +78,10 @@ them). Current taxonomy (`AuditAction` in `backend/onyx/utils/audit.py`):
   `api_key.{create,regenerate,delete}`, `credential.{create,update,delete}`,
   `credential.access`
 
-> Not every action is wired to a call site yet — the taxonomy is defined ahead
-> of the call-site instrumentation so consumers can build dashboards against the
-> full set.
+> Most actions are wired to call sites. A few (`user.create`,
+> `user.group_change`, `auth.password_reset`) are defined ahead of their
+> instrumentation and land in follow-up PRs, so consumers can build dashboards
+> against the full taxonomy now.
 
 ### Example event
 

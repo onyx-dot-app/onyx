@@ -83,6 +83,10 @@ from onyx.server.documents.models import PaginatedReturn
 from onyx.server.documents.models import synthesize_unaccounted
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
@@ -508,6 +512,15 @@ def update_cc_pair_status(
 
     db_session.commit()
 
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={"status": str(status_update_request.status)},
+    )
+
     # this speeds up the start of indexing by firing the check immediately
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
@@ -779,6 +792,14 @@ def associate_credential_to_connector(
             response.data,
         )
 
+        emit_audit_event(
+            AuditAction.CC_PAIR_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="cc_pair",
+            resource_id=response.data,
+            extra={"connector_id": connector_id, "credential_id": credential_id},
+        )
         return response
     except ValidationError as e:
         # If validation fails, delete the connector and commit the changes
@@ -813,6 +834,14 @@ def dissociate_credential_from_connector(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
-    return remove_credential_from_connector(
+    result = remove_credential_from_connector(
         connector_id, credential_id, user, db_session
     )
+    emit_audit_event(
+        AuditAction.CC_PAIR_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        extra={"connector_id": connector_id, "credential_id": credential_id},
+    )
+    return result

@@ -44,8 +44,9 @@ class AuditOutcome(str, Enum):
 
 class AuditAction(str, Enum):
     """Audited-action taxonomy. Values are an append-only schema contract
-    (consumers filter on them); only ``CREDENTIAL_ACCESS`` is wired up so far,
-    the rest land on call sites in follow-up PRs."""
+    (consumers filter on them). A few members (``USER_CREATE``,
+    ``USER_GROUP_CHANGE``, ``PASSWORD_RESET``) are defined ahead of their call
+    sites and land in follow-up PRs."""
 
     # Authentication
     LOGIN = "auth.login"
@@ -141,6 +142,25 @@ class AuditActor:
             "api_key_id": self.api_key_id,
             "auth_type": self.auth_type,
         }
+
+
+def actor_from_user(
+    user: Any | None, *, auth_type: str | None = None
+) -> AuditActor | None:
+    """Build an ``AuditActor`` from a fastapi-users ``User`` (best-effort).
+
+    Returns ``None`` when there's no user. Typed ``Any`` so this module stays
+    free of an import dependency on the ORM/User model. Never raises."""
+    if user is None:
+        return None
+    try:
+        return AuditActor(
+            user_id=str(user.id),
+            email=getattr(user, "email", None),
+            auth_type=auth_type,
+        )
+    except Exception:
+        return None
 
 
 # Best-effort context gathering: each degrades to ``None`` rather than raising,

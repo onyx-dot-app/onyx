@@ -110,6 +110,10 @@ from onyx.server.manage.llm.utils import is_reasoning_model
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.encryption import mask_string as mask_with_ellipsis
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -536,7 +540,7 @@ def put_llm_provider(
         False,
         description="True if creating a new one, False if updating an existing provider",
     ),
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
@@ -652,6 +656,16 @@ def put_llm_provider(
                     result = LLMProviderView.from_model(updated_provider)
 
         _mask_provider_credentials(result)
+        emit_audit_event(
+            AuditAction.LLM_PROVIDER_CREATE
+            if is_creation
+            else AuditAction.LLM_PROVIDER_UPDATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="llm_provider",
+            resource_id=result.id,
+            extra={"name": result.name, "provider": result.provider},
+        )
         return result
     except ValueError as e:
         logger.exception("Failed to upsert LLM Provider")
@@ -666,7 +680,7 @@ def put_llm_provider(
 def delete_llm_provider(
     provider_id: int,
     force: bool = Query(False),
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     if not force:
@@ -683,6 +697,13 @@ def delete_llm_provider(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
+    emit_audit_event(
+        AuditAction.LLM_PROVIDER_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="llm_provider",
+        resource_id=provider_id,
+    )
     invalidate_provider_listing_cache()
 
 
