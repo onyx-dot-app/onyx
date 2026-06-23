@@ -7,6 +7,7 @@ import Card from "@/refresh-components/cards/Card";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
+import { useTranslation } from "react-i18next";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import { AuthType } from "@/lib/constants";
@@ -23,6 +24,7 @@ type StatCellProps = {
 };
 
 function StatCell({ value, label, onFilter }: StatCellProps) {
+  const { t } = useTranslation();
   const display = value === null ? "\u2014" : value.toLocaleString();
 
   return (
@@ -45,7 +47,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
               <IconButton
                 tertiary
                 icon={SvgFilterPlus}
-                tooltip="Add Filter"
+                tooltip={t("admin.common.add_filter")}
                 toolTipPosition="left"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -65,19 +67,21 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
 // ---------------------------------------------------------------------------
 
 function ScimCard() {
+  const { t } = useTranslation();
+
   return (
     <Card gap={0.5} padding={0.75}>
       <ContentAction
         icon={SvgUserSync}
-        title="SCIM Sync"
-        description="Users are synced from your identity provider."
+        title={t("admin.users.scim_sync")}
+        description={t("admin.users.scim_sync_desc")}
         sizePreset="main-ui"
         variant="section"
         padding="fit"
         rightChildren={
           <Link href={ADMIN_ROUTES.SCIM.path}>
             <Button prominence="tertiary" rightIcon={SvgArrowUpRight} size="sm">
-              Manage
+              {t("admin.common.manage")}
             </Button>
           </Link>
         }
@@ -109,6 +113,7 @@ export default function UsersSummary({
   onFilterInvites,
   onFilterRequests,
 }: UsersSummaryProps) {
+  const { t } = useTranslation();
   const { authTypeMetadata } = useAuthTypeMetadata();
   const showInviteOnly =
     !showScim &&
@@ -121,18 +126,18 @@ export default function UsersSummary({
       <Section flexDirection="row" gap={0}>
         <StatCell
           value={activeUsers}
-          label="active users"
+          label={t("admin.users.active_users")}
           onFilter={onFilterActive}
         />
         <StatCell
           value={pendingInvites}
-          label="pending invites"
+          label={t("admin.users.pending_invites")}
           onFilter={onFilterInvites}
         />
         {showRequests && (
           <StatCell
             value={requests}
-            label="requests to join"
+            label={t("admin.users.requests_to_join")}
             onFilter={onFilterRequests}
           />
         )}

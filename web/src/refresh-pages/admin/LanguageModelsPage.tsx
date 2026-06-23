@@ -19,6 +19,7 @@ import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { getProvider } from "@/lib/languageModels";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
@@ -303,6 +304,7 @@ function NewCustomProviderCard({
 
 export default function LanguageModelsPage() {
   const { t } = useTranslation();
+  const title = useAdminPageTitle(route);
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
@@ -367,13 +369,11 @@ export default function LanguageModelsPage() {
     }
   }
 
-  const routeTranslationKey = route.path.replace(/^\/admin\//, "").replace(/[/-]/g, "_");
-
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={t(`admin.sidebar.routes.${routeTranslationKey}`, route.title)}
+        title={title}
         divider
       />
 

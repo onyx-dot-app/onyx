@@ -13,6 +13,7 @@ import { SvgGlobe } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { MessageCard } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
 import { useTranslation } from "react-i18next";
 import {
   WebSearchSetupModal,
@@ -52,6 +53,7 @@ const route = ADMIN_ROUTES.WEB_SEARCH;
 
 export default function WebSearchPage() {
   const { t } = useTranslation();
+  const title = useAdminPageTitle(route);
   const [activeProvider, setActiveProvider] =
     useState<ProviderModalState | null>(null);
   const [disconnectTarget, setDisconnectTarget] =
@@ -239,14 +241,14 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
+          title={title}
           description={t("admin.web_search.desc", "Search settings for external search across the internet.")}
           divider
         />
         <SettingsLayouts.Body>
           <MessageCard
             variant="error"
-            title="Failed to load web search settings"
+            title={t("admin.web_search.load_failed")}
             description={detail ?? message}
           />
         </SettingsLayouts.Body>
@@ -259,7 +261,7 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
+          title={title}
           description={t("admin.web_search.desc", "Search settings for external search across the internet.")}
           divider
         />
@@ -324,7 +326,7 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
+          title={title}
           description={t("admin.web_search.desc", "Search settings for external search across the internet.")}
           divider
         />
