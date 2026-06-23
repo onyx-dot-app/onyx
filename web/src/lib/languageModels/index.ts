@@ -200,6 +200,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.LITELLM_PROXY]: SvgLitellm,
   [LLMProviderName.BIFROST]: SvgBifrost,
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
+  [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
 
   amazon: SvgAws,
   phi: SvgMicrosoft,
