@@ -5,7 +5,10 @@ the stored key is only returned when the request's api_base matches the stored
 one."""
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
+
+from sqlalchemy.orm import Session
 
 from onyx.server.manage.llm.api import _resolve_api_key
 
@@ -27,7 +30,9 @@ def test_masked_key_resolves_to_stored_by_name() -> None:
         return_value=_provider(),
     ):
         assert (
-            _resolve_api_key(_MASKED, "Nebius TokenFactory", _BASE, db_session=None)  # type: ignore[arg-type]
+            _resolve_api_key(
+                _MASKED, "Nebius TokenFactory", _BASE, db_session=cast(Session, None)
+            )
             == _STORED
         )
 
@@ -44,7 +49,7 @@ def test_masked_key_resolves_to_stored_by_id_when_name_is_null() -> None:
                 _MASKED,
                 None,
                 _BASE,
-                db_session=None,  # type: ignore[arg-type]
+                db_session=cast(Session, None),
                 provider_id=7,
             )
             == _STORED
@@ -61,7 +66,7 @@ def test_fresh_key_used_as_is() -> None:
                 "sk-brand-new-key-123456",
                 "Nebius TokenFactory",
                 _BASE,
-                db_session=None,  # type: ignore[arg-type]
+                db_session=cast(Session, None),
             )
             == "sk-brand-new-key-123456"
         )
@@ -69,7 +74,8 @@ def test_fresh_key_used_as_is() -> None:
 
 def test_no_provider_returns_input() -> None:
     assert (
-        _resolve_api_key(_MASKED, None, _BASE, db_session=None) == _MASKED  # type: ignore[arg-type]
+        _resolve_api_key(_MASKED, None, _BASE, db_session=cast(Session, None))
+        == _MASKED
     )
 
 
@@ -83,7 +89,7 @@ def test_mismatched_api_base_returns_input() -> None:
                 _MASKED,
                 "Nebius TokenFactory",
                 "https://other.example/v1",
-                db_session=None,  # type: ignore[arg-type]
+                db_session=cast(Session, None),
             )
             == _MASKED
         )

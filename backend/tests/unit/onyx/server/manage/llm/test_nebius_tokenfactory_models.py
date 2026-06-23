@@ -4,8 +4,12 @@ Verifies the mapping from the provider's /v1/models?verbose response to
 Onyx model configs: context length and vision (from architecture.modality).
 """
 
+from typing import cast
 from unittest.mock import patch
 
+from sqlalchemy.orm import Session
+
+from onyx.db.models import User
 from onyx.server.manage.llm.api import get_nebius_tokenfactory_available_models
 from onyx.server.manage.llm.models import NebiusTokenfactoryModelsRequest
 
@@ -74,8 +78,8 @@ def _fetch() -> dict:
                 api_key="k",
                 provider_name=None,  # skip DB sync
             ),
-            _=None,  # type: ignore[arg-type]
-            db_session=None,  # type: ignore[arg-type]
+            _=cast(User, None),
+            db_session=cast(Session, None),
         )
     return {r.name: r for r in results}
 
