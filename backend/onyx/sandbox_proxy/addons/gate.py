@@ -78,14 +78,29 @@ PARSER_MAX_BODY_BYTES = 1_048_576
 # catches internal services we never enumerated. The proxy's OWN cred-resolution DB
 # client connects directly (not through the mitmproxy listener), so it is unaffected here.
 
+
 # The single allowed internal destination: the api-server the sandbox calls via the
-# proxy (PAT-injected). Matched by hostname so it works even when it's an in-cluster
-# name resolving to an internal IP.
-_API_SERVER_HOST = (
-    ((urlparse(SANDBOX_API_SERVER_URL).hostname or "").lower() or None)
-    if SANDBOX_API_SERVER_URL
-    else None
-)
+# proxy (PAT-injected). Matched by host AND port so it works even when it's an
+# in-cluster name resolving to an internal IP, while still denying every other port
+# on that host (e.g. a co-located Redis/Postgres reachable at the same hostname).
+def _parse_api_server() -> tuple[str | None, int | None]:
+    if not SANDBOX_API_SERVER_URL:
+        return None, None
+    parsed = urlparse(SANDBOX_API_SERVER_URL)
+    host = (parsed.hostname or "").lower() or None
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return host, port
+
+
+_API_SERVER_HOST, _API_SERVER_PORT = _parse_api_server()
+
+
+def _is_api_server(host: str, port: int) -> bool:
+    return (
+        _API_SERVER_HOST is not None
+        and host == _API_SERVER_HOST
+        and port == _API_SERVER_PORT
+    )
 
 
 def _ip_is_internal(ip_str: str) -> bool:
@@ -107,34 +122,53 @@ def _ip_is_internal(ip_str: str) -> bool:
     return not ip.is_global
 
 
-def destination_is_blocked(host: str) -> bool:
-    """True if the sandbox must not be relayed to ``host``.
+def classify_destination(host: str, port: int) -> tuple[bool, str | None]:
+    """Resolve ``host`` once and classify it for egress.
 
-    Allowed: the api-server host and any public address. Denied: anything that is,
-    or resolves to, an internal address. Fail closed: a resolution failure denies
-    (with a warning) rather than allowing relay — a transient resolver error must
-    not become an opening to an internal service.
+    Returns ``(blocked, pin_ip)``:
+
+    - ``blocked`` — the sandbox must not be relayed here. Denied: anything that
+      is, or resolves to, an internal address. Allowed: the api-server (host +
+      port) and any public address. Fail closed: a resolution failure denies
+      (with a warning) — a transient resolver error must not become an opening
+      to an internal service.
+    - ``pin_ip`` — the single vetted public IP the caller should pin the upstream
+      connection to so mitmproxy can't re-resolve the name to an internal address
+      (DNS rebinding). ``None`` when there is nothing to pin: a literal-IP
+      destination, the api-server, or a blocked/unresolvable host.
+
+    Resolving here exactly once — and connecting to the returned ``pin_ip`` — is
+    what makes the guard rebinding-proof: there is no second name lookup between
+    the check and the connect.
     """
     host = (host or "").strip().lower()
     if not host:
-        return False
-    if _API_SERVER_HOST and host == _API_SERVER_HOST:
-        return False
+        return False, None
+    if _is_api_server(host, port):
+        return False, None
     try:
         ipaddress.ip_address(host)  # literal-IP destination: check directly, no DNS
-        return _ip_is_internal(host)
+        return _ip_is_internal(host), None
     except ValueError:
         pass
     try:
-        infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except OSError as exc:
         logger.warning(
             "egress_destination_resolution_failed host=%s error=%s", host, exc
         )
-        return True
+        return True, None
     # getaddrinfo types sockaddr[0] as `str | int`; the address element is always
     # a str at runtime (AF_INET/AF_INET6), so coerce to satisfy the type checker.
-    return any(_ip_is_internal(str(info[4][0])) for info in infos)
+    ips = [str(info[4][0]) for info in infos]
+    if any(_ip_is_internal(ip) for ip in ips):
+        return True, None
+    return False, ips[0] if ips else None
+
+
+def destination_is_blocked(host: str, port: int) -> bool:
+    """True if the sandbox must not be relayed to ``host:port``."""
+    return classify_destination(host, port)[0]
 
 
 class _IdentityResolver(Protocol):
@@ -248,14 +282,12 @@ class GateAddon:
         `client_disconnected`. Best-effort.
         """
         # Refuse to open a tunnel to an internal address, with a clear 403 the
-        # agent can act on. This is a best-effort early deny on the CONNECT host; the
-        # authoritative, rebinding-proof enforcement runs in `server_connect` on the
-        # actually-resolved peer. We do NOT rewrite flow.request.host here: repointing
-        # the CONNECT to a bare IP disables mitmproxy's TLS interception, which would
-        # skip credential injection on the decrypted inner request. The check can do a
-        # blocking DNS lookup, so run it off the event loop.
+        # agent can act on. Best-effort early deny on the CONNECT host; the decrypted
+        # inner request is re-checked in `request`, and `server_connect` is the
+        # authoritative rebinding-proof enforcement (resolve-once + IP pin). The check
+        # can do a blocking DNS lookup, so run it off the event loop.
         if await asyncio.get_running_loop().run_in_executor(
-            None, destination_is_blocked, flow.request.host
+            None, destination_is_blocked, flow.request.host, flow.request.port
         ):
             logger.info(
                 "egress_denied_internal_destination phase=connect host=%s port=%s",
@@ -290,27 +322,29 @@ class GateAddon:
             self._conn_session_tags.pop(conn_id, None)
 
     async def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
-        """Deny internal destinations at connection-setup time (backstop).
+        """Authoritatively enforce the internal-destination boundary, rebinding-proof.
 
-        Runs for every upstream connection, just before mitmproxy resolves and opens
-        it. Re-checking the destination here — closer to the actual connect than the
-        earlier `http_connect`/`request` deny — shrinks the DNS-rebinding window in
-        which a host that vetted as public could re-resolve to an internal address.
+        This is the last hook before mitmproxy opens the upstream socket. We resolve
+        the destination here exactly once and act on that single result:
 
-        We do NOT override `connection.address` to pin the resolved IP: under this
-        proxy's eager connection strategy mitmproxy opens the upstream (and, for an
-        intercepted host, completes its TLS handshake) before the client's ClientHello
-        is available, so a bare-IP address has no SNI, the upstream cert check fails,
-        and mitmproxy silently falls back to a raw passthrough tunnel — which skips
-        credential injection on the decrypted request. Leaving the hostname in place
-        keeps interception (and key injection) working; this hook only denies.
+        - internal → kill the connection (`server.error`). This is a TCP-level deny;
+          the structured `destination_blocked` 403 is delivered by the earlier
+          `http_connect`/`request` checks for every normal request. Reaching a deny
+          *here* means the name re-resolved to an internal address after those checks
+          saw it as public (a genuine DNS-rebind) — a rare backstop case where a
+          connection error, not a 403, is the only signal available at this layer.
+        - public → pin `server.address` to the resolved IP so mitmproxy connects to
+          exactly the address we vetted instead of re-resolving the name (which is
+          what the rebinding attack exploits). `server.sni` was already set to the
+          hostname before this hook fires, so TLS interception — and therefore
+          credential injection — keeps working even though we connect by IP.
         """
         server = data.server
         if server.error or not server.address:
             return
         host, port = server.address[0], server.address[1]
-        blocked = await asyncio.get_running_loop().run_in_executor(
-            None, destination_is_blocked, host
+        blocked, pin_ip = await asyncio.get_running_loop().run_in_executor(
+            None, classify_destination, host, port
         )
         if blocked:
             logger.info(
@@ -319,6 +353,10 @@ class GateAddon:
                 port,
             )
             server.error = "destination_blocked: internal address"
+            return
+        if pin_ip is not None and pin_ip != host:
+            server.sni = server.sni or host
+            server.address = (pin_ip, port)
 
     def responseheaders(self, flow: http.HTTPFlow) -> None:
         """
@@ -337,19 +375,18 @@ class GateAddon:
             self._inflight_tasks.add(task)
             task.add_done_callback(self._inflight_tasks.discard)
 
-        # Deny plain-HTTP forwards (GET http://internal/...) to internal
-        # addresses, with a clear 403. Best-effort early deny on the request host;
-        # `server_connect` is the authoritative rebinding-proof backstop + pin.
-        # Resolution can block, so run it off the event loop.
-        if (
-            flow.request.scheme == "http"
-            and await asyncio.get_running_loop().run_in_executor(
-                None, destination_is_blocked, flow.request.host
-            )
+        # Deny forwards to internal addresses with a clear 403 — both plain-HTTP
+        # (GET http://internal/...) and the decrypted inner request of a MITM'd
+        # HTTPS tunnel, so the structured error reaches the agent regardless of
+        # scheme. `server_connect` is the authoritative rebinding-proof backstop +
+        # pin. Resolution can block, so run it off the event loop.
+        if await asyncio.get_running_loop().run_in_executor(
+            None, destination_is_blocked, flow.request.host, flow.request.port
         ):
             logger.info(
-                "egress_denied_internal_destination phase=request host=%s",
+                "egress_denied_internal_destination phase=request host=%s port=%s",
                 flow.request.host,
+                flow.request.port,
             )
             flow.response = http_403(SandboxProxyError.DESTINATION_BLOCKED)
             return
