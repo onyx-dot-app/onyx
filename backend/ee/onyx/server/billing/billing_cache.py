@@ -57,12 +57,23 @@ def _serialize(info: BillingInformation | SubscriptionStatusResponse) -> str:
 
 def _deserialize(raw: bytes | str) -> BillingInformation | SubscriptionStatusResponse:
     envelope = json.loads(raw)
+    if not isinstance(envelope, dict):
+        raise ValueError("Billing cache envelope must be a JSON object.")
+
     kind = envelope.get("type")
-    payload = envelope.get("payload") or {}
+
+    payload = envelope.get("payload")
+    if payload is None:
+        payload_dict: dict[str, Any] = {}
+    elif isinstance(payload, dict):
+        payload_dict = payload
+    else:
+        raise ValueError("Billing cache payload must be a JSON object.")
+
     if kind == _TYPE_BILLING:
-        return BillingInformation(**payload)
+        return BillingInformation(**payload_dict)
     if kind == _TYPE_STATUS:
-        return SubscriptionStatusResponse(**payload)
+        return SubscriptionStatusResponse(**payload_dict)
     raise ValueError(f"Unknown billing cache envelope type: {kind!r}")
 
 

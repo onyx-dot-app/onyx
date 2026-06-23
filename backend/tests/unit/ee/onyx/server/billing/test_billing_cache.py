@@ -197,6 +197,23 @@ def test_pydantic_validation_error_on_deserialize_refetches_and_overwrites() -> 
     redis.setex.assert_called_once()
 
 
+def test_non_mapping_payload_refetches_and_overwrites() -> None:
+    """Payload must be an object — other JSON types are treated as corrupt."""
+    cached_bytes = b'{"type":"billing","payload":"not-a-mapping"}'
+    redis = _fake_redis(get_return=cached_bytes)
+    billing = _billing("active")
+
+    with (
+        patch.object(bc, "get_shared_redis_client", return_value=redis),
+        patch.object(bc, "fetch_billing_information", return_value=billing) as cp_fetch,
+    ):
+        result = cached_fetch_billing_information("tenant_abc")
+
+    assert result == billing
+    cp_fetch.assert_called_once_with("tenant_abc")
+    redis.setex.assert_called_once()
+
+
 def test_tenant_keys_are_isolated() -> None:
     """Cache keys must not collide across tenants."""
     redis = _fake_redis(get_return=None)
