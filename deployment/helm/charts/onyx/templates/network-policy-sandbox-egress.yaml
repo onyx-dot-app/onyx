@@ -1,5 +1,5 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
-{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- $sandboxNs := (index (.Values.configMap | default (dict)) "SANDBOX_NAMESPACE") | default "onyx-sandboxes" }}
 # Egress lockdown for the Craft sandbox pods themselves (CNI-layer defense-in-depth).
 #
 # A sandbox is only supposed to reach the network through the egress proxy. At runtime that is
