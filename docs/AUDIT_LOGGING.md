@@ -70,7 +70,7 @@ them). Current taxonomy (`AuditAction` in `backend/onyx/utils/audit.py`):
 
 - **Authentication:** `auth.login`, `auth.login_failure`, `auth.logout`,
   `auth.register`, `auth.password_forgot`, `auth.password_reset`,
-  `auth.email_verify`
+  `auth.email_verify`, `auth.impersonate`
 - **Account change:** `user.create`, `user.delete`, `user.deactivate`,
   `user.reactivate`, `user.role_change`, `user.group_change`
 - **API activity (admin config / resource CRUD):** `llm_provider.{create,update,delete}`,

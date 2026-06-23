@@ -59,6 +59,7 @@ class AuditAction(str, Enum):
     PASSWORD_FORGOT = "auth.password_forgot"
     PASSWORD_RESET = "auth.password_reset"
     EMAIL_VERIFY = "auth.email_verify"
+    IMPERSONATE = "auth.impersonate"  # cloud superuser assuming another user's session
 
     # Account change
     USER_CREATE = "user.create"
@@ -95,6 +96,7 @@ _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
     AuditAction.PASSWORD_FORGOT: OCSFEventClass.AUTHENTICATION,
     AuditAction.PASSWORD_RESET: OCSFEventClass.AUTHENTICATION,
     AuditAction.EMAIL_VERIFY: OCSFEventClass.AUTHENTICATION,
+    AuditAction.IMPERSONATE: OCSFEventClass.AUTHENTICATION,
     AuditAction.USER_CREATE: OCSFEventClass.ACCOUNT_CHANGE,
     AuditAction.USER_DELETE: OCSFEventClass.ACCOUNT_CHANGE,
     AuditAction.USER_DEACTIVATE: OCSFEventClass.ACCOUNT_CHANGE,
