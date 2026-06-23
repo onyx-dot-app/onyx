@@ -243,9 +243,15 @@ def downgrade() -> None:
     if not _is_cloud():
         return
 
-    # These migrations are the source of truth for external apps, so undoing the
-    # seed removes them entirely. Deleting the backing skills cascades to the
-    # external_app rows and their policies/credentials.
+    # Undo only what this migration seeds: the built-in app types in the catalog
+    # above. Scoping by app_type leaves any other external app (e.g. a CUSTOM
+    # one) untouched. Deleting the backing skill cascades to the external_app row
+    # and its policies/credentials.
+    built_in_types = [app["app_type"] for app in _BUILT_IN_APPS]
     op.get_bind().execute(
-        sa.text("DELETE FROM skill WHERE id IN (SELECT skill_id FROM external_app)")
+        sa.text(
+            "DELETE FROM skill WHERE id IN ("
+            "SELECT skill_id FROM external_app WHERE app_type = ANY(:types))"
+        ).bindparams(sa.bindparam("types", type_=postgresql.ARRAY(sa.String()))),
+        {"types": built_in_types},
     )
