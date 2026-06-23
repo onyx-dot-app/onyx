@@ -218,8 +218,7 @@ async def test_resolve_and_match_body_at_cap_is_allowed() -> None:
     resolver = StubResolver(sandbox=make_resolved_sandbox())
     matcher = _StubMatcher(result=None)
     addon = _build(resolver=resolver, matcher=matcher)
-    # Sized off the cap constant so the test follows it, not a literal. Built
-    # inside the test so the multi-MB allocation is deferred past collection.
+    # Built inside the test so the multi-MB allocation is deferred past collection.
     flow = make_flow(raw_content=b"\x00" * gate.PARSER_MAX_BODY_BYTES)
 
     result = await addon._resolve_and_match(flow)
