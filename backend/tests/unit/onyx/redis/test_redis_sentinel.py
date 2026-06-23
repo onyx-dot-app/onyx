@@ -1,5 +1,6 @@
 import importlib
 import os
+from typing import cast
 from unittest.mock import patch
 
 import onyx.redis.redis_pool as redis_pool
@@ -106,6 +107,52 @@ def test_celery_uses_sentinel_urls_and_master_name() -> None:
                 celery_base.result_backend_transport_options["master_name"]
                 == "mymaster"
             )
+        finally:
+            importlib.reload(app_configs)
+            importlib.reload(celery_base)
+
+
+# --- config validation + Celery TLS ---------------------------------------
+
+
+def test_malformed_sentinel_hosts_raises() -> None:
+    import pytest
+
+    with patch.dict(os.environ, {"REDIS_SENTINEL_HOSTS": "no-port-here"}):
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="expected host:port"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
+def test_sentinel_with_iam_auth_raises() -> None:
+    import pytest
+
+    env = {"REDIS_SENTINEL_HOSTS": "s1:26379", "USE_REDIS_IAM_AUTH": "true"}
+    with patch.dict(os.environ, env):
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="cannot be combined"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
+def test_celery_sentinel_kwargs_enable_ssl_under_tls() -> None:
+    env = {"REDIS_SENTINEL_HOSTS": "s1:26379", "REDIS_SSL": "true"}
+    with patch.dict(os.environ, env):
+        import onyx.background.celery.configs.base as celery_base
+        import onyx.configs.app_configs as app_configs
+
+        importlib.reload(app_configs)
+        importlib.reload(celery_base)
+        try:
+            sk = cast(dict, celery_base.broker_transport_options["sentinel_kwargs"])
+            # cert params are inert without the explicit ssl flag
+            assert sk["ssl"] is True
+            # broker_use_ssl is a Celery setting; its presence enables TLS and it
+            # must NOT carry the ssl key
+            assert "ssl" not in celery_base.broker_use_ssl
         finally:
             importlib.reload(app_configs)
             importlib.reload(celery_base)

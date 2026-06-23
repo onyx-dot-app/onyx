@@ -722,16 +722,41 @@ REDIS_REPLICA_HOST = os.environ.get("REDIS_REPLICA_HOST") or REDIS_HOST
 # sentinel nodes themselves if they require separate auth. TLS (REDIS_SSL +
 # certs) applies to both the sentinel and the data connections.
 _REDIS_SENTINEL_HOSTS_STR = os.environ.get("REDIS_SENTINEL_HOSTS", "").strip()
-REDIS_SENTINEL_HOSTS: list[tuple[str, int]] = [
-    (host.rsplit(":", 1)[0], int(host.rsplit(":", 1)[1]))
-    for host in (h.strip() for h in _REDIS_SENTINEL_HOSTS_STR.split(",") if h.strip())
-]
+
+
+def _parse_sentinel_hosts(raw: str) -> list[tuple[str, int]]:
+    hosts: list[tuple[str, int]] = []
+    for entry in (h.strip() for h in raw.split(",") if h.strip()):
+        host, sep, port = entry.rpartition(":")
+        if not sep or not host or not port.isdigit():
+            raise ValueError(
+                f"Invalid REDIS_SENTINEL_HOSTS entry {entry!r}; expected host:port."
+            )
+        hosts.append((host, int(port)))
+    return hosts
+
+
+REDIS_SENTINEL_HOSTS: list[tuple[str, int]] = _parse_sentinel_hosts(
+    _REDIS_SENTINEL_HOSTS_STR
+)
 REDIS_SENTINEL_MASTER_NAME = os.environ.get("REDIS_SENTINEL_MASTER_NAME", "mymaster")
 REDIS_SENTINEL_PASSWORD = os.environ.get("REDIS_SENTINEL_PASSWORD") or None
 
+# Fail loudly rather than silently falling back to a direct connection when the
+# operator clearly intended Sentinel.
+if _REDIS_SENTINEL_HOSTS_STR and not REDIS_SENTINEL_HOSTS:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS is set but no valid host:port pairs were parsed."
+    )
 if REDIS_SENTINEL_HOSTS and not REDIS_SENTINEL_MASTER_NAME:
     raise ValueError(
         "REDIS_SENTINEL_HOSTS is set but REDIS_SENTINEL_MASTER_NAME is empty."
+    )
+if REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH cannot be combined: Sentinel "
+        "is for self-managed HA Redis, while IAM auth targets AWS ElastiCache "
+        "(which manages failover itself)."
     )
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"

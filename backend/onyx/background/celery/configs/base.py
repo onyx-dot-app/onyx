@@ -69,13 +69,23 @@ _SENTINEL_NODES = ";".join(
     for host, port in REDIS_SENTINEL_HOSTS
 )
 _SENTINEL_TRANSPORT_OPTIONS: dict = {}
+# Celery TLS settings for the Sentinel data connections. Always defined (empty =
+# no SSL, matching Celery's default) so they're not conditionally-present module
+# globals.
+broker_use_ssl: dict[str, str] = {}
+redis_backend_use_ssl: dict[str, str] = {}
 if USE_SENTINEL:
     _SENTINEL_TRANSPORT_OPTIONS["master_name"] = REDIS_SENTINEL_MASTER_NAME
     _sentinel_kwargs: dict = {}
     if REDIS_SENTINEL_PASSWORD:
         _sentinel_kwargs["password"] = REDIS_SENTINEL_PASSWORD
     if _SENTINEL_USE_SSL:
+        # sentinel_kwargs are redis-py connection kwargs, so they need the
+        # explicit `ssl` flag to actually negotiate TLS (the cert settings are
+        # inert without it). broker_use_ssl below is a Celery setting whose mere
+        # presence enables TLS, so it must NOT carry the `ssl` key.
         _sentinel_kwargs.update(_redis_ssl_settings())
+        _sentinel_kwargs["ssl"] = True
     if _sentinel_kwargs:
         _SENTINEL_TRANSPORT_OPTIONS["sentinel_kwargs"] = _sentinel_kwargs
     # TLS for the master/replica data connections.
