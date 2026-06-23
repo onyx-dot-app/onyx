@@ -213,17 +213,14 @@ async def test_resolve_and_match_sandbox_resolution_fails_closed(
     assert matcher.calls == 0
 
 
-# Sized off the cap constant so the test follows it, not a literal.
-_MAX_BODY = b"\x00" * gate.PARSER_MAX_BODY_BYTES
-_OVERSIZE_BODY = b"\x00" * (gate.PARSER_MAX_BODY_BYTES + 1)
-
-
 @pytest.mark.asyncio
 async def test_resolve_and_match_body_at_cap_is_allowed() -> None:
     resolver = StubResolver(sandbox=make_resolved_sandbox())
     matcher = _StubMatcher(result=None)
     addon = _build(resolver=resolver, matcher=matcher)
-    flow = make_flow(raw_content=_MAX_BODY)
+    # Sized off the cap constant so the test follows it, not a literal. Built
+    # inside the test so the multi-MB allocation is deferred past collection.
+    flow = make_flow(raw_content=b"\x00" * gate.PARSER_MAX_BODY_BYTES)
 
     result = await addon._resolve_and_match(flow)
 
@@ -232,19 +229,18 @@ async def test_resolve_and_match_body_at_cap_is_allowed() -> None:
     assert matcher.calls == 1
 
 
-@pytest.mark.parametrize(
-    "raw_content",
-    [None, _OVERSIZE_BODY],
-    ids=["streamed", "oversize"],
-)
+@pytest.mark.parametrize("oversize", [False, True], ids=["streamed", "oversize"])
 @pytest.mark.asyncio
 async def test_resolve_and_match_body_too_large_fails_closed(
-    raw_content: bytes | None,
+    oversize: bool,
 ) -> None:
     """Streamed (None) and oversize bodies both fail closed."""
     resolver = StubResolver(sandbox=make_resolved_sandbox())
     matcher = _StubMatcher(result=_MATCH)
     addon = _build(resolver=resolver, matcher=matcher)
+    # Built here, not at module scope, so the over-cap allocation only happens
+    # for the test that needs it.
+    raw_content = b"\x00" * (gate.PARSER_MAX_BODY_BYTES + 1) if oversize else None
     flow = make_flow(raw_content=raw_content)
 
     result = await addon._resolve_and_match(flow)
