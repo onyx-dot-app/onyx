@@ -377,12 +377,8 @@ def _drive_agent(
         # that lets scheduled and interactive runs share a build_session
         # inherits the protection without needing to remember to add it.
         approval_required = False
-        # A turn ends with exactly one terminal event from the sandbox stream:
-        # a PromptResponse (the agent finished) or an Error (timeout / session
-        # / transport failure). persist_sandbox_event drops both, so without
-        # tracking them here a timed-out turn — whose only stream output is a
-        # terminal Error — would fall through to the SUCCEEDED path with an
-        # empty transcript (ENG-4234).
+        # persist_sandbox_event drops Error/PromptResponse, so a timed-out turn
+        # (terminal Error only) would otherwise be recorded SUCCEEDED (ENG-4234).
         terminal_error: Error | None = None
         got_prompt_response = False
         final_event_count = 0
@@ -420,14 +416,11 @@ def _drive_agent(
                     approval_required = True
                     break
 
-                # Error is terminal (the stream's last event), so break and let
-                # the post-loop branch classify the failure.
                 if isinstance(sandbox_event, Error):
                     terminal_error = sandbox_event
                     break
-                # PromptResponse is terminal too: break before the budget check
-                # so a deadline that trips exactly as the agent finishes can't
-                # mis-mark a successful turn as timed-out.
+                # Break before the budget check: a deadline tripping exactly as
+                # the agent finishes must not mis-mark a success as timed-out.
                 if isinstance(sandbox_event, PromptResponse):
                     got_prompt_response = True
                     break
@@ -487,8 +480,6 @@ def _drive_agent(
                 db_session.commit()
                 return True
 
-            # Failure path: terminal Error, or the stream ended with no
-            # PromptResponse. Flush any partial output, then FAIL + notify.
             if terminal_error is not None or not got_prompt_response:
                 session_manager.finalize_persist(session_id, state)
                 db_session.commit()

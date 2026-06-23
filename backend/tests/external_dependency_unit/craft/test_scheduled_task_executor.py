@@ -347,18 +347,8 @@ def test_timeout_error_event_marks_run_failed_with_timeout_class(
     stub_sandbox_manager: StubSandboxManager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression for ENG-4234: terminal timeout Error → FAILED/timeout.
-
-    When the sandbox event stream yields only a terminal ``Error`` with
-    ``code == TURN_ERROR_CODE_TIMEOUT`` (and never a ``PromptResponse``),
-    ``run_scheduled_task_logic`` must mark the run ``FAILED`` with
-    ``error_class == ScheduledTaskErrorClass.TIMEOUT.value``.
-
-    Before the fix the run fell through to the SUCCEEDED path because the
-    terminal Error was the last event and ``persist_sandbox_event`` drops it.
-    """
-    # Bypass skill-payload assembly — it reads ExternalApp rows that may
-    # have encrypted credentials incompatible with the local MIT key.
+    """Regression for ENG-4234: terminal timeout Error → FAILED/timeout."""
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.build_user_skills_payload",
         lambda *_: ("", {}),
@@ -393,14 +383,8 @@ def test_prompt_response_marks_run_succeeded(
     stub_sandbox_manager: StubSandboxManager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Happy-path regression: clean PromptResponse → SUCCEEDED.
-
-    Ensures the ENG-4234 fix did not break the clean-completion path: a
-    stream that yields exactly one ``PromptResponse`` (and no ``Error``) must
-    still transition the run to ``SUCCEEDED``.
-    """
-    # Bypass skill-payload assembly — it reads ExternalApp rows that may
-    # have encrypted credentials incompatible with the local MIT key.
+    """Happy-path regression: clean PromptResponse → SUCCEEDED, not FAILED."""
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.build_user_skills_payload",
         lambda *_: ("", {}),
@@ -433,14 +417,8 @@ def test_transport_error_event_marks_run_failed_with_agent_exception_class(
     stub_sandbox_manager: StubSandboxManager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Non-timeout terminal Error → FAILED with ``error_class=agent_exception``.
-
-    The TIMEOUT class is reserved for ``TURN_ERROR_CODE_TIMEOUT``; any other
-    terminal Error (here a transport failure) falls into the default
-    AGENT_EXCEPTION branch.
-    """
-    # Bypass skill-payload assembly — it reads ExternalApp rows that may
-    # have encrypted credentials incompatible with the local MIT key.
+    """Non-timeout terminal Error → FAILED with error_class=agent_exception."""
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.build_user_skills_payload",
         lambda *_: ("", {}),
@@ -475,13 +453,8 @@ def test_stream_without_prompt_response_marks_run_failed(
     stub_sandbox_manager: StubSandboxManager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A stream that ends with no PromptResponse (and no Error) → FAILED.
-
-    Guards the ``not got_prompt_response`` half of the failure branch: an
-    empty/truncated stream must not be recorded as SUCCEEDED.
-    """
-    # Bypass skill-payload assembly — it reads ExternalApp rows that may
-    # have encrypted credentials incompatible with the local MIT key.
+    """Stream ending with no PromptResponse (and no Error) → FAILED, not SUCCEEDED."""
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
     monkeypatch.setattr(
         "onyx.server.features.build.session.manager.build_user_skills_payload",
         lambda *_: ("", {}),
