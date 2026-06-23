@@ -218,7 +218,7 @@ def _sync_fetched_models(
         )
         if new_count > 0:
             logger.info(
-                "Added %s new %s models to provider '%s'",
+                "Added %s new %s models to provider id=%s",
                 new_count,
                 source_label,
                 provider_id,

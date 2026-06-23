@@ -382,7 +382,7 @@ def sync_model_configurations(
     """
     provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
     if not provider:
-        raise ValueError(f"LLM Provider '{provider_id}' not found")
+        raise ValueError(f"LLM Provider with id={provider_id} not found")
 
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 
