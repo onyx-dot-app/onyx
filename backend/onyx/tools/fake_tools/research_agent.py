@@ -313,8 +313,7 @@ def run_research_agent_call(
                     message_type=MessageType.SYSTEM,
                 )
 
-                # Only remind the model to open_url when that tool is actually
-                # available; otherwise it gets nudged toward a tool it doesn't have.
+                # Gate the open_url nudge on the tool actually being available.
                 if just_ran_web_search and has_open_url_tool:
                     reminder_message = ChatMessageSimple(
                         message=OPEN_URL_REMINDER_RESEARCH_AGENT,
