@@ -6,10 +6,10 @@ from typing import Any
 from typing import cast
 
 from onyx.db.enums import ExternalAppType
+from onyx.db.external_app import mask_external_app_user_credentials
 from onyx.db.models import ExternalApp
 from onyx.db.models import ExternalAppUserCredential
 from onyx.server.features.build.external_apps.api import _to_user_response
-from onyx.utils.encryption import mask_credential_dict
 from onyx.utils.sensitive import SensitiveValue
 
 
@@ -57,21 +57,26 @@ def test_user_response_masks_stored_user_credentials() -> None:
         auth_template={
             "Authorization": "Bearer {access_token}",
             "X-Refresh": "{refresh_token}",
+            "X-Cloud": "{cloud_id}",
             "X-Client": "{client_id}",
         },
         organization_credentials={"client_id": "org-client-id"},
     )
     user_credentials = {
         "access_token": "USER_ACCESS_TOKEN",
+        "cloud_id": "cloud-id-should-still-mask",
         "refresh_token": "USER_REFRESH_TOKEN",
     }
 
     response = _to_user_response(app, _user_credential(user_credentials))
 
     assert response.authenticated is True
-    assert response.credential_keys == ["access_token", "refresh_token"]
-    assert response.credential_values == mask_credential_dict(user_credentials)
+    assert response.credential_keys == ["access_token", "cloud_id", "refresh_token"]
+    assert response.credential_values == mask_external_app_user_credentials(
+        user_credentials
+    )
     assert "USER_ACCESS_TOKEN" not in response.credential_values.values()
+    assert "cloud-id-should-still-mask" not in response.credential_values.values()
     assert "USER_REFRESH_TOKEN" not in response.credential_values.values()
 
 
@@ -91,7 +96,9 @@ def test_user_response_masks_built_in_oauth_bearer_token() -> None:
     assert response.authenticated is True
     assert response.credential_keys == ["access_token"]
     assert response.credential_values == {
-        "access_token": mask_credential_dict(user_credentials)["access_token"]
+        "access_token": mask_external_app_user_credentials(user_credentials)[
+            "access_token"
+        ]
     }
     assert (
         response.credential_values["access_token"] != user_credentials["access_token"]
@@ -114,7 +121,7 @@ def test_user_response_uses_raw_presence_for_authentication() -> None:
 
     assert response.authenticated is False
     assert response.credential_values == {
-        "access_token": mask_credential_dict({"access_token": "USER_ACCESS_TOKEN"})[
-            "access_token"
-        ]
+        "access_token": mask_external_app_user_credentials(
+            {"access_token": "USER_ACCESS_TOKEN"}
+        )["access_token"]
     }

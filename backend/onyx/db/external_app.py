@@ -21,6 +21,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.encryption import is_masked_credential
+from onyx.utils.encryption import mask_credential_dict
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 
@@ -80,16 +81,16 @@ def validate_auth_template(
 
 
 def resolve_masked_credentials(
-    incoming: dict[str, str],
+    incoming: dict[str, Any],
     existing: SensitiveValue[dict[str, Any]] | None,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Restore real secret values when the caller submits masked placeholders."""
     existing_values = (
         existing.get_value(apply_mask=False) if existing is not None else {}
     )
-    resolved: dict[str, str] = {}
+    resolved: dict[str, Any] = {}
     for key, value in incoming.items():
-        if is_masked_credential(value):
+        if isinstance(value, str) and is_masked_credential(value):
             if key not in existing_values:
                 raise OnyxError(
                     OnyxErrorCode.INVALID_INPUT,
@@ -100,6 +101,12 @@ def resolve_masked_credentials(
         else:
             resolved[key] = value
     return resolved
+
+
+def mask_external_app_user_credentials(
+    credentials: dict[str, Any],
+) -> dict[str, Any]:
+    return mask_credential_dict(credentials, whitelist=set())
 
 
 def is_user_authenticated_for_app(
@@ -443,16 +450,32 @@ def upsert_external_app_user_credential(
     external_app_id: int,
     user_id: UUID,
     user_credentials: dict[str, Any],
+    resolve_masked_values: bool = False,
 ) -> ExternalAppUserCredential:
     """Create or replace the calling user's credentials for the app, and commit.
     Atomic via ON CONFLICT on (external_app_id, user_id). Raises
-    ``OnyxError(NOT_FOUND)`` if the app doesn't exist.
+    ``OnyxError(NOT_FOUND)`` if the app doesn't exist. ``resolve_masked_values``
+    is for user form submissions that may echo masked display values; internal
+    OAuth writers should store provider-returned values as-is.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"External app with id {external_app_id} not found.",
+        )
+
+    if resolve_masked_values:
+        existing_credential = get_external_app_user_credential(
+            db_session,
+            external_app_id=external_app_id,
+            user_id=user_id,
+        )
+        user_credentials = resolve_masked_credentials(
+            user_credentials,
+            existing_credential.user_credentials
+            if existing_credential is not None
+            else None,
         )
 
     stmt = pg_insert(ExternalAppUserCredential).values(

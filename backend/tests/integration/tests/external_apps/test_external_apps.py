@@ -291,7 +291,10 @@ def test_user_credentials_are_isolated_between_users(
     assert view_2.authenticated is False
     assert view_2.credential_values == mask_credential_dict(second_user_creds)
     # And critically — user 2 does not see user 1's access_token value.
-    assert view_2.credential_values["access_token"] != _USER_CREDENTIALS["access_token"]
+    assert (
+        view_2.credential_values["access_token"]
+        != _MASKED_USER_CREDENTIALS["access_token"]
+    )
 
 
 # =============================================================================
@@ -487,9 +490,7 @@ def test_partial_credentials_keep_app_unauthenticated_full_org_template_is_immed
     )
     assert partial_view.authenticated is False
     assert partial_view.credential_values == {
-        "access_token": mask_credential_dict({"access_token": "USER_ACCESS_TOKEN"})[
-            "access_token"
-        ],
+        "access_token": _MASKED_USER_CREDENTIALS["access_token"],
     }
     assert set(partial_view.credential_keys) == _EXPECTED_USER_KEYS
 
