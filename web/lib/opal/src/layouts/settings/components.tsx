@@ -96,8 +96,8 @@ function SettingsHeader({
   let displayTitle = title;
   let displayDescription = description;
 
-  if (pathname && pathname.startsWith("/admin/")) {
-    const key = pathname.replace(/^\/admin\//, "").replace(/[/-]/g, "_");
+  if (pathname && (pathname.startsWith("/admin/") || pathname.startsWith("/ee/admin/"))) {
+    const key = pathname.replace(/^\/(ee\/)?admin\//, "").replace(/[/-]/g, "_");
     if (typeof title === "string") {
       displayTitle = t(`admin.page_titles.${key}`, t(`admin.sidebar.routes.${key}`, title));
     }

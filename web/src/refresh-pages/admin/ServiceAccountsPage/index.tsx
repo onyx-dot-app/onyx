@@ -30,6 +30,7 @@ import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { markdown } from "@opal/utils";
+import { useTranslation } from "react-i18next";
 
 import { useBillingInformation } from "@/hooks/useBillingInformation";
 import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
@@ -59,6 +60,7 @@ const tc = createTableColumns<APIKey>();
 // ---------------------------------------------------------------------------
 
 export default function ServiceAccountsPage() {
+  const { t } = useTranslation();
   const {
     data: apiKeys,
     isLoading,
@@ -328,10 +330,10 @@ export default function ServiceAccountsPage() {
       <Modal open={!!fullApiKey}>
         <Modal.Content width="sm" height="sm">
           <Modal.Header
-            title="Service Account API Key"
+            title={t("admin.service_accounts.api_key_title", "Service Account API Key")}
             icon={SvgKey}
             onClose={() => setFullApiKey(null)}
-            description="Save this key before continuing. It won't be shown again."
+            description={t("admin.service_accounts.api_key_desc", "Save this key before continuing. It won't be shown again.")}
           />
           <Modal.Body>
             <Code showCopyButton={false}>{fullApiKey ?? ""}</Code>
@@ -355,7 +357,7 @@ export default function ServiceAccountsPage() {
                     URL.revokeObjectURL(url);
                   }}
                 >
-                  Download
+                  {t("admin.service_accounts.download", "Download")}
                 </Button>
               }
               submit={
@@ -368,7 +370,7 @@ export default function ServiceAccountsPage() {
                     }
                   }}
                 >
-                  Copy API Key
+                  {t("admin.service_accounts.copy_api_key", "Copy API Key")}
                 </Button>
               }
             />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LOGOUT_DISABLED } from "@/lib/constants";
 import { preload } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -45,6 +46,7 @@ function SettingsPopover({
   onOpenNotifications,
   undismissedCount,
 }: SettingsPopoverProps) {
+  const { t } = useTranslation();
   const { user } = useUser();
   const settings = useSettings();
   const enterpriseSettings = settings.enterprise;
@@ -68,7 +70,7 @@ function SettingsPopover({
     logout()
       .then((response) => {
         if (!response?.ok) {
-          alert("Failed to logout");
+          alert(t("account.logout_failed"));
           return;
         }
 
@@ -84,7 +86,7 @@ function SettingsPopover({
       })
 
       .catch(() => {
-        toast.error("Failed to logout");
+        toast.error(t("account.logout_failed"));
       });
   };
 
@@ -101,7 +103,7 @@ function SettingsPopover({
             variant="section"
             rounding="sm"
             icon={SvgSliders}
-            title="Settings"
+            title={t("general.settings")}
             href="/app/settings"
             onClick={onUserSettingsClick}
           />
@@ -112,7 +114,7 @@ function SettingsPopover({
           variant="section"
           rounding="sm"
           icon={SvgBell}
-          title="Notifications"
+          title={t("account.notifications")}
           onClick={onOpenNotifications}
           rightChildren={
             undismissedCount ? (
@@ -126,7 +128,7 @@ function SettingsPopover({
           variant="section"
           rounding="sm"
           icon={SvgHelpCircle}
-          title="Help & FAQ"
+          title={t("account.help_faq")}
           href="https://docs.onyx.app"
           target="_blank"
         />,
@@ -152,7 +154,7 @@ function SettingsPopover({
             variant="section"
             rounding="sm"
             icon={SvgUser}
-            title="Log in"
+            title={t("account.log_in")}
             onClick={handleLogin}
           />
         ),
@@ -164,7 +166,7 @@ function SettingsPopover({
             color="danger"
             rounding="sm"
             icon={SvgLogOut}
-            title="Log Out"
+            title={t("general.logout")}
             onClick={handleLogout}
           />
         ),

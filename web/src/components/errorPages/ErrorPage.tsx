@@ -2,47 +2,53 @@ import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import Text from "@/refresh-components/texts/Text";
 import { DOCS_BASE_URL } from "@/lib/constants";
 import { SvgAlertCircle } from "@opal/icons";
+import { useTranslation, Trans } from "react-i18next";
 
 export default function Error() {
+  const { t } = useTranslation();
+
   return (
     <ErrorPageLayout>
       <div className="flex flex-row items-center gap-2">
         <Text as="p" headingH2>
-          We encountered an issue
+          {t("error_page.title")}
         </Text>
         <SvgAlertCircle className="w-6 h-6 stroke-text-04" />
       </div>
 
       <Text as="p" text03>
-        It seems there was a problem loading your Onyx settings. This could be
-        due to a configuration issue or incomplete setup.
+        {t("error_page.onyx_settings_error")}
       </Text>
 
       <Text as="p" text03>
-        If you&apos;re an admin, please review our{" "}
-        <a
-          className="text-action-link-05"
-          href={`${DOCS_BASE_URL}?utm_source=app&utm_medium=error_page&utm_campaign=config_error`}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          documentation
-        </a>{" "}
-        for proper configuration steps. If you&apos;re a user, please contact
-        your admin for assistance.
+        <Trans i18nKey="error_page.admin_documentation">
+          If you&apos;re an admin, please review our{" "}
+          <a
+            className="text-action-link-05"
+            href={`${DOCS_BASE_URL}?utm_source=app&utm_medium=error_page&utm_campaign=config_error`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            documentation
+          </a>{" "}
+          for proper configuration steps. If you&apos;re a user, please contact
+          your admin for assistance.
+        </Trans>
       </Text>
 
       <Text as="p" text03>
-        Need help? Join our{" "}
-        <a
-          className="text-action-link-05"
-          href="https://discord.gg/4NA5SbzrWb"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Discord community
-        </a>{" "}
-        for support.
+        <Trans i18nKey="error_page.discord_support">
+          Need help? Join our{" "}
+          <a
+            className="text-action-link-05"
+            href="https://discord.gg/4NA5SbzrWb"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Discord community
+          </a>{" "}
+          for support.
+        </Trans>
       </Text>
     </ErrorPageLayout>
   );

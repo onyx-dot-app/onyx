@@ -15,6 +15,7 @@ import CharacterCount from "@/refresh-components/CharacterCount";
 import InputImage from "@/refresh-components/inputs/InputImage";
 import { Disabled } from "@opal/core";
 import { useFormikContext } from "formik";
+import { useTranslation } from "react-i18next";
 import {
   forwardRef,
   useEffect,
@@ -55,6 +56,7 @@ export const AppearanceThemeSettings = forwardRef<
   { selectedLogo, setSelectedLogo, logoVersion, charLimits },
   ref
 ) {
+  const { t } = useTranslation();
   const { values, errors, setFieldValue } = useFormikContext<any>();
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -231,7 +233,7 @@ export const AppearanceThemeSettings = forwardRef<
                 />
               }
             >
-              Application Display Name
+              {t("admin.theme.app_name")}
             </FormField.Label>
             <FormField.Control asChild>
               <InputTypeIn
@@ -247,7 +249,7 @@ export const AppearanceThemeSettings = forwardRef<
               />
             </FormField.Control>
             <FormField.Description>
-              This name will show across the app and replace "Onyx" in the UI.
+              {t("admin.theme.app_name_desc")}
             </FormField.Description>
             <FormField.Message
               messages={{ error: errors.application_name as string }}
@@ -255,7 +257,7 @@ export const AppearanceThemeSettings = forwardRef<
           </FormField>
 
           <FormField state="idle">
-            <FormField.Label>Logo Display Style</FormField.Label>
+            <FormField.Label>{t("admin.theme.logo_style")}</FormField.Label>
             <FormField.Control>
               <Tabs
                 value={values.logo_display_style}
@@ -266,50 +268,49 @@ export const AppearanceThemeSettings = forwardRef<
                 <Tabs.List>
                   <Tabs.Trigger
                     value="logo_and_name"
-                    tooltip="Show both your application logo and name."
+                    tooltip={t("admin.theme.tooltip_logo_and_name")}
                     tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
-                    Logo & Name
+                    {t("admin.theme.logo_and_name")}
                   </Tabs.Trigger>
                   <Tabs.Trigger
                     value="logo_only"
                     disabled={!hasLogo}
                     tooltip={
                       hasLogo
-                        ? "Show only your application logo."
-                        : "Upload a logo to enable this option."
+                        ? t("admin.theme.tooltip_logo_only")
+                        : t("admin.theme.tooltip_logo_only_disabled")
                     }
                     tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
-                    Logo Only
+                    {t("admin.theme.logo_only")}
                   </Tabs.Trigger>
                   <Tabs.Trigger
                     value="name_only"
                     disabled={!hasApplicationName}
                     tooltip={
                       hasApplicationName
-                        ? "Show only your application name."
-                        : "Enter an application name to enable this option."
+                        ? t("admin.theme.tooltip_name_only")
+                        : t("admin.theme.tooltip_name_only_disabled")
                     }
                     tooltipSide="top"
                     {...getPreviewHandlers("sidebar")}
                   >
-                    Name Only
+                    {t("admin.theme.name_only")}
                   </Tabs.Trigger>
                 </Tabs.List>
               </Tabs>
             </FormField.Control>
             <FormField.Description>
-              Choose what to display at the top of the sidebar. Options become
-              available once you add a logo or application name.
+              {t("admin.theme.logo_style_desc")}
             </FormField.Description>
           </FormField>
         </div>
 
         <FormField state="idle">
-          <FormField.Label>Application Logo</FormField.Label>
+          <FormField.Label>{t("admin.theme.app_logo")}</FormField.Label>
           <FormField.Control>
             <InputImage
               src={logoSrc}
@@ -329,7 +330,7 @@ export const AppearanceThemeSettings = forwardRef<
               onClick={handleLogoEdit}
               icon={SvgEdit}
             >
-              Update
+              {t("admin.theme.update_btn")}
             </Button>
           </div>
         </FormField>
@@ -363,7 +364,7 @@ export const AppearanceThemeSettings = forwardRef<
             />
           }
         >
-          Greeting Message
+          {t("admin.theme.greeting")}
         </FormField.Label>
         <FormField.Control asChild>
           <InputTypeIn
@@ -379,7 +380,7 @@ export const AppearanceThemeSettings = forwardRef<
           />
         </FormField.Control>
         <FormField.Description>
-          Add a short message to the home page.
+          {t("admin.theme.greeting_desc")}
         </FormField.Description>
         <FormField.Message
           messages={{ error: errors.custom_greeting_message as string }}
@@ -395,7 +396,7 @@ export const AppearanceThemeSettings = forwardRef<
             />
           }
         >
-          Chat Header Text
+          {t("admin.theme.header_text")}
         </FormField.Label>
         <FormField.Control asChild>
           <InputTypeIn
@@ -426,14 +427,14 @@ export const AppearanceThemeSettings = forwardRef<
             />
           }
         >
-          Chat Footer Text
+          {t("admin.theme.footer_text")}
         </FormField.Label>
         <FormField.Control asChild>
           <InputTextArea
             ref={lowerDisclaimerInputRef}
             data-label="chat-footer-textarea"
             rows={3}
-            placeholder="Add markdown content"
+            placeholder={t("admin.theme.add_markdown_placeholder")}
             variant={
               errors.custom_lower_disclaimer_content ? "error" : undefined
             }
@@ -445,7 +446,7 @@ export const AppearanceThemeSettings = forwardRef<
           />
         </FormField.Control>
         <FormField.Description>
-          Add markdown content for disclaimers or additional information.
+          {t("admin.theme.footer_text_desc")}
         </FormField.Description>
         <FormField.Message
           messages={{ error: errors.custom_lower_disclaimer_content as string }}
@@ -454,7 +455,7 @@ export const AppearanceThemeSettings = forwardRef<
 
       <Disabled
         disabled={!enterpriseTier}
-        tooltip="Custom help link is an Enterprise Plan feature."
+        tooltip={t("admin.theme.help_link_disabled_tooltip")}
       >
         <div className="flex gap-2 items-start">
           <FormField
@@ -462,7 +463,7 @@ export const AppearanceThemeSettings = forwardRef<
             className="flex-1"
           >
             <FormField.Label>
-              Custom Help Link
+              {t("admin.theme.help_link")}
               {!enterpriseTier && (
                 <Tag {...planTagProps("enterprise")} size="sm" />
               )}
@@ -487,8 +488,7 @@ export const AppearanceThemeSettings = forwardRef<
               />
             </FormField.Control>
             <FormField.Description>
-              Add a custom help link in the user menu in addition to the Onyx
-              documentation.
+              {t("admin.theme.help_link_desc")}
             </FormField.Description>
             <FormField.Message
               messages={{ error: errors.custom_help_link_url as string }}
@@ -503,7 +503,7 @@ export const AppearanceThemeSettings = forwardRef<
                 aria-label="Custom Help Link Label"
                 data-label="custom-help-link-label-input"
                 clearButton
-                placeholder="Link label"
+                placeholder={t("admin.theme.help_link_label_placeholder")}
                 variant={!enterpriseTier ? "disabled" : undefined}
                 value={values.custom_help_link_label}
                 onChange={(e) =>
@@ -517,12 +517,12 @@ export const AppearanceThemeSettings = forwardRef<
 
       <Disabled
         disabled={!enterpriseTier}
-        tooltip="Hiding Onyx branding is an Enterprise Plan feature."
+        tooltip={t("admin.theme.hide_branding_disabled_tooltip")}
       >
         <FormField state="idle" className="gap-0">
           <div className="flex justify-between items-center">
             <FormField.Label>
-              Hide Onyx Branding
+              {t("admin.theme.hide_branding")}
               {!enterpriseTier && (
                 <Tag {...planTagProps("enterprise")} size="sm" />
               )}
@@ -540,8 +540,7 @@ export const AppearanceThemeSettings = forwardRef<
             </FormField.Control>
           </div>
           <FormField.Description>
-            Remove &ldquo;powered by Onyx&rdquo; and other Onyx branding
-            presence in the app.
+            {t("admin.theme.hide_branding_desc")}
           </FormField.Description>
         </FormField>
       </Disabled>
@@ -551,7 +550,7 @@ export const AppearanceThemeSettings = forwardRef<
       <div className="flex flex-col gap-4 p-4 bg-background-tint-00 rounded-16">
         <FormField state="idle" className="gap-0">
           <div className="flex justify-between items-center">
-            <FormField.Label>Show First Visit Notice</FormField.Label>
+            <FormField.Label>{t("admin.theme.first_visit")}</FormField.Label>
             <FormField.Control>
               <Switch
                 aria-label="Show First Visit Notice"
@@ -564,7 +563,7 @@ export const AppearanceThemeSettings = forwardRef<
             </FormField.Control>
           </div>
           <FormField.Description>
-            Show a one-time pop-up for new users at their first visit.
+            {t("admin.theme.first_visit_desc")}
           </FormField.Description>
         </FormField>
 
@@ -580,7 +579,7 @@ export const AppearanceThemeSettings = forwardRef<
                   />
                 }
               >
-                Notice Header
+                {t("admin.theme.notice_header")}
               </FormField.Label>
               <FormField.Control asChild>
                 <InputTypeIn
@@ -609,14 +608,14 @@ export const AppearanceThemeSettings = forwardRef<
                   />
                 }
               >
-                Notice Content
+                {t("admin.theme.notice_content")}
               </FormField.Label>
               <FormField.Control asChild>
                 <InputTextArea
                   ref={noticeContentInputRef}
                   data-label="notice-content-textarea"
                   rows={3}
-                  placeholder="Add markdown content"
+                  placeholder={t("admin.theme.add_markdown_placeholder")}
                   variant={errors.custom_popup_content ? "error" : undefined}
                   value={values.custom_popup_content}
                   onChange={(e) =>
@@ -631,7 +630,7 @@ export const AppearanceThemeSettings = forwardRef<
 
             <FormField state="idle" className="gap-0">
               <div className="flex justify-between items-center">
-                <FormField.Label>Require Consent to Notice</FormField.Label>
+                <FormField.Label>{t("admin.theme.require_consent")}</FormField.Label>
                 <FormField.Control>
                   <Switch
                     aria-label="Require Consent to Notice"
@@ -644,8 +643,7 @@ export const AppearanceThemeSettings = forwardRef<
                 </FormField.Control>
               </div>
               <FormField.Description>
-                Require the user to read and agree to the notice before
-                accessing the application.
+                {t("admin.theme.require_consent_desc")}
               </FormField.Description>
             </FormField>
 
@@ -662,14 +660,14 @@ export const AppearanceThemeSettings = forwardRef<
                     />
                   }
                 >
-                  Notice Consent Prompt
+                  {t("admin.theme.consent_prompt")}
                 </FormField.Label>
                 <FormField.Control asChild>
                   <InputTextArea
                     ref={consentPromptTextAreaRef}
                     data-label="consent-prompt-textarea"
                     rows={3}
-                    placeholder="Add markdown content"
+                    placeholder={t("admin.theme.add_markdown_placeholder")}
                     variant={errors.consent_screen_prompt ? "error" : undefined}
                     value={values.consent_screen_prompt}
                     onChange={(e) => {

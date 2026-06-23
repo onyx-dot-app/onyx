@@ -8,11 +8,14 @@ import Title from "@/components/ui/title";
 import { Text } from "@opal/components";
 import CardSection from "@/components/admin/CardSection";
 
+import { useTranslation } from "react-i18next";
+
 export function QueryPerformanceChart({
   timeRange,
 }: {
   timeRange: DateRangePickerValue;
 }) {
+  const { t } = useTranslation();
   const {
     data: queryAnalyticsData,
     isLoading: isQueryAnalyticsLoading,
@@ -40,7 +43,7 @@ export function QueryPerformanceChart({
   ) {
     chart = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch query data...</p>
+        <p className="m-auto">{t("admin.usage.failed_to_fetch")}</p>
       </div>
     );
   } else {
@@ -69,11 +72,11 @@ export function QueryPerformanceChart({
           const userAnalyticsForDate = dateToUserAnalytics.get(dateStr);
           return {
             Day: dateStr,
-            Queries: queryAnalyticsForDate?.total_queries || 0,
-            "Unique Users": userAnalyticsForDate?.total_active_users || 0,
+            [t("admin.usage.queries")]: queryAnalyticsForDate?.total_queries || 0,
+            [t("admin.usage.unique_users")]: userAnalyticsForDate?.total_active_users || 0,
           };
         })}
-        categories={["Queries", "Unique Users"]}
+        categories={[t("admin.usage.queries"), t("admin.usage.unique_users")]}
         index="Day"
         colors={["indigo", "fuchsia"]}
         yAxisFormatter={(number: number) =>
@@ -97,8 +100,8 @@ export function QueryPerformanceChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>Usage</Title>
-      <Text as="p">Usage over time</Text>
+      <Title>{t("admin.usage.usage_title")}</Title>
+      <Text as="p">{t("admin.usage.usage_over_time")}</Text>
       {chart}
     </CardSection>
   );

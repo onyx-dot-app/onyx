@@ -127,6 +127,7 @@ function FormWarningsEffect() {
 }
 
 function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
+  const { t } = useTranslation();
   const { values, setFieldValue } = useFormikContext<{
     name: string;
     icon_name: string | null;
@@ -247,7 +248,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
                 onClick={() => fileInputRef.current?.click()}
                 emphasized
               >
-                Upload Image
+                {t("agents.upload_image")}
               </LineItem>,
               null,
               <div key="icon-grid" className="grid grid-cols-4 gap-1">
