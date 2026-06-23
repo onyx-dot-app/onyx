@@ -524,7 +524,7 @@ services:
       - /data
 
   code-interpreter:
-    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-latest}
+    image: onyxdotapp/code-interpreter:${CODE_INTERPRETER_IMAGE_TAG:-0.4.4}
     command: ["bash", "./entrypoint.sh", "code-interpreter-api"]
     restart: unless-stopped
     env_file:

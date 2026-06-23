@@ -1089,7 +1089,7 @@ codeInterpreter:
   image:
     repository: onyxdotapp/code-interpreter
     pullPolicy: Always
-    tag: ""  # Empty uses chart appVersion
+    tag: "0.4.4"  # Pinned code-interpreter release; empty would fall back to chart appVersion
 
   # Service configuration
   service:
