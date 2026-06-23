@@ -4,9 +4,11 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: security
-          description: Add an egress NetworkPolicy on the Craft sandbox egress proxy that blocks the
-            link-local / cloud-metadata range (169.254.0.0/16), so a sandbox can't use the proxy as an
-            SSRF pivot to the node's IMDS credentials. Internet, DNS, and datastores remain reachable.
+          description: Add an egress NetworkPolicy on the Craft sandbox pods restricting their egress to
+            the sandbox proxy (:8080) and kube-dns (:53) only. CNI-layer backstop to the in-pod iptables
+            in firewall-init.sh, so a sandbox that bypasses that iptables still cannot reach anything but
+            the proxy. DNS is allowed because sandbox-init resolves the proxy FQDN before its iptables
+            closes DNS.
       category: Productivity
       images: |
         - name: webserver
@@ -16,7 +18,7 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: latest
-    created: "2026-06-23T23:00:29.096006642Z"
+    created: "2026-06-23T23:02:04.132946638Z"
     dependencies:
     - alias: postgresql
       condition: postgresql.enabled
@@ -49,7 +51,7 @@ entries:
       repository: https://onyx-dot-app.github.io/python-sandbox/
       version: 0.4.3
     description: Onyx application and Craft sandbox deployment chart
-    digest: 8841fb02b345216f712ae27baef2945cd3e74c8cee7ee1f9a92d3d3130dca918
+    digest: c32106685332f3e2fcf75b7c1db36ee09f607d0263c664df7b0d1f603a4d7b3d
     home: https://www.onyx.app/
     name: onyx
     sources:
@@ -5363,4 +5365,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-06-23T23:00:29.068512634Z"
+generated: "2026-06-23T23:02:04.104513398Z"
