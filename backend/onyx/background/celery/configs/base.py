@@ -123,6 +123,7 @@ task_acks_late = True
 # region Task result backend settings
 # It's possible we don't even need celery's result backend, in which case all of the optimization below
 # might be irrelevant
+result_backend_transport_options: dict = {}
 if USE_SENTINEL:
     result_backend = f"{_SENTINEL_NODES}/{REDIS_DB_NUMBER_CELERY_RESULT_BACKEND}"
     result_backend_transport_options = _SENTINEL_TRANSPORT_OPTIONS
