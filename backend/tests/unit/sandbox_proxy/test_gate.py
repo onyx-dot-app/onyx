@@ -213,9 +213,9 @@ async def test_resolve_and_match_sandbox_resolution_fails_closed(
     assert matcher.calls == 0
 
 
-# Spec value hardcoded so this test exercises the documented 1 MiB cap.
-_MAX_BODY = b"\x00" * 1_048_576
-_OVERSIZE_BODY = b"\x00" * 1_048_577
+# Sized off the cap constant so the test follows it, not a literal.
+_MAX_BODY = b"\x00" * gate.PARSER_MAX_BODY_BYTES
+_OVERSIZE_BODY = b"\x00" * (gate.PARSER_MAX_BODY_BYTES + 1)
 
 
 @pytest.mark.asyncio

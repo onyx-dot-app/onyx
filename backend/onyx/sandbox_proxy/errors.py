@@ -54,7 +54,7 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
         "action could not be authorized and ask how they want to proceed."
     ),
     SandboxProxyError.BODY_TOO_LARGE: (
-        "The request body is larger than the 1 MiB limit the proxy allows, so it "
+        "The request body is larger than the size limit the proxy allows, so it "
         "was blocked. Shrink the payload and try again — for example, send fewer "
         "items per request, paginate, or break the work into smaller calls. "
         "Large file uploads should go through a dedicated upload flow rather "
