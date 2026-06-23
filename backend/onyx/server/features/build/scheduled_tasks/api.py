@@ -34,6 +34,7 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import Permission
 from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.enums import ScheduledTaskStatus
@@ -51,6 +52,7 @@ from onyx.db.scheduled_task import soft_delete_scheduled_task
 from onyx.db.scheduled_task import update_scheduled_task
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.credentials import app_is_available
 from onyx.server.features.build.scheduled_tasks.schedule import compile_to_cron
 from onyx.server.features.build.scheduled_tasks.schedule import EDITOR_PAYLOAD_MODELS
 from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
@@ -202,6 +204,17 @@ class ScheduledTaskListItem(BaseModel):
     updated_at: datetime
 
 
+class ScheduledTaskPreApprovedAppDisplay(BaseModel):
+    """Stable display metadata for a task's stored app grants."""
+
+    id: int
+    name: str
+    description: str
+    slug: str
+    app_type: ExternalAppType
+    enabled: bool
+
+
 class ScheduledTaskDetail(BaseModel):
     """Response for ``GET /scheduled-tasks/{id}`` and the mutating endpoints
     that return the full task.
@@ -218,6 +231,7 @@ class ScheduledTaskDetail(BaseModel):
     next_runs: list[datetime]
     last_run: RunSummary | None
     pre_approved_app_ids: list[int]
+    pre_approved_apps: list[ScheduledTaskPreApprovedAppDisplay]
     created_at: datetime
     updated_at: datetime
 
@@ -306,26 +320,62 @@ def _detail(
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
         pre_approved_app_ids=task.pre_approved_app_ids,
+        pre_approved_apps=_pre_approved_app_display_metadata(
+            db_session, task.pre_approved_app_ids
+        ),
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
 
 
-def _validated_app_ids(db_session: Session, app_ids: list[int]) -> list[int]:
-    """Dedupe (order-preserving) and verify each id is a configured app.
+def _pre_approved_app_display_metadata(
+    db_session: Session,
+    app_ids: list[int],
+) -> list[ScheduledTaskPreApprovedAppDisplay]:
+    """Return grant display metadata in grant order.
 
-    Existence-only: a grant on an app that never produces an ASK match is
-    inert, so credential / has-ASK-action filtering stays editor-side.
+    Uses the unfiltered app list so already-saved grants still render names
+    when an app is later disabled or unavailable to the author.
+    """
+    if not app_ids:
+        return []
+    ids = set(app_ids)
+    apps_by_id = {app.id: app for app in get_external_apps(db_session) if app.id in ids}
+    return [
+        ScheduledTaskPreApprovedAppDisplay(
+            id=app.id,
+            name=app.skill.name,
+            description=app.skill.description,
+            slug=app.skill.slug,
+            app_type=app.app_type,
+            enabled=app.skill.enabled,
+        )
+        for app_id in app_ids
+        if (app := apps_by_id.get(app_id)) is not None
+    ]
+
+
+def _validated_app_ids(
+    db_session: Session, app_ids: list[int], user_id: UUID
+) -> list[int]:
+    """Dedupe (order-preserving) and verify each id is available to the user.
+
+    This mirrors the sandbox gateway's availability predicate: enabled apps
+    with everything needed to inject credentials, or credentialless apps.
     """
     deduped = list(dict.fromkeys(app_ids))
     if not deduped:
         return []
-    known_ids = {app.id for app in get_external_apps(db_session)}
-    unknown = [app_id for app_id in deduped if app_id not in known_ids]
-    if unknown:
+    available_ids = {
+        app.id
+        for app in get_external_apps(db_session)
+        if app_is_available(db_session, app, user_id)
+    }
+    unavailable = [app_id for app_id in deduped if app_id not in available_ids]
+    if unavailable:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"Unknown external app id(s): {unknown}",
+            f"Unavailable external app id(s): {unavailable}",
         )
     return deduped
 
@@ -412,7 +462,7 @@ def create_task(
         editor_mode=request.editor_mode,
         status=request.status,
         pre_approved_app_ids=_validated_app_ids(
-            db_session, request.pre_approved_app_ids
+            db_session, request.pre_approved_app_ids, user.id
         ),
     )
 
@@ -475,7 +525,7 @@ def patch_task(
         editor_mode=request.editor_mode,
         status=request.status,
         pre_approved_app_ids=(
-            _validated_app_ids(db_session, request.pre_approved_app_ids)
+            _validated_app_ids(db_session, request.pre_approved_app_ids, user.id)
             if request.pre_approved_app_ids is not None
             else None
         ),

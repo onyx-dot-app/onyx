@@ -7,7 +7,6 @@
  */
 
 import type {
-  ScheduledTaskListItem,
   ScheduledTaskDetail,
   ScheduledTaskCreateBody,
   ScheduledTaskPatchBody,
@@ -40,14 +39,14 @@ async function readError(res: Response, fallback: string): Promise<never> {
 
 export async function createScheduledTask(
   body: ScheduledTaskCreateBody
-): Promise<ScheduledTaskListItem> {
+): Promise<ScheduledTaskDetail> {
   const res = await fetch(API_BASE, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) await readError(res, "Failed to create scheduled task");
-  return (await res.json()) as ScheduledTaskListItem;
+  return (await res.json()) as ScheduledTaskDetail;
 }
 
 export async function updateScheduledTask(

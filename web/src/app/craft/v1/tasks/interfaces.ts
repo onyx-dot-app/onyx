@@ -19,6 +19,15 @@ export type ScheduledTaskTriggerSource = "SCHEDULED" | "MANUAL_RUN_NOW";
 
 export type EditorMode = "interval" | "daily_weekly" | "advanced";
 
+export type ExternalAppType =
+  | "SLACK"
+  | "GOOGLE_CALENDAR"
+  | "GOOGLE_DRIVE"
+  | "GMAIL"
+  | "LINEAR"
+  | "GITHUB"
+  | "CUSTOM";
+
 export type IntervalUnit = "minutes" | "hours" | "days";
 
 export interface IntervalPayload {
@@ -67,6 +76,15 @@ export interface ScheduledTaskListItem {
   updated_at: string;
 }
 
+export interface ScheduledTaskPreApprovedAppDisplay {
+  id: number;
+  name: string;
+  description: string;
+  slug: string;
+  app_type: ExternalAppType;
+  enabled: boolean;
+}
+
 export interface ScheduledTaskDetail {
   id: string;
   name: string;
@@ -79,6 +97,7 @@ export interface ScheduledTaskDetail {
   next_runs: string[];
   last_run: ScheduledRunSummary | null;
   pre_approved_app_ids: number[];
+  pre_approved_apps: ScheduledTaskPreApprovedAppDisplay[];
   created_at: string;
   updated_at: string;
 }

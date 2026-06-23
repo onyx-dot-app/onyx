@@ -9,6 +9,7 @@ this file pins the queries those stubs stand in for.
 from __future__ import annotations
 
 from typing import Callable
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
+from onyx.db.enums import ExternalAppType
 from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
@@ -38,6 +40,7 @@ from tests.common.craft.payloads import default_action_entries
 from tests.external_dependency_unit.craft.db_helpers import make_external_app
 from tests.external_dependency_unit.craft.db_helpers import make_skill
 from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_user_credential
 
 
 def _make_app(db_session: Session) -> int:
@@ -356,17 +359,17 @@ def test_deleting_app_nulls_action_approval_fk(
 
 
 # ---------------------------------------------------------------------------
-# API validation helper
+# API helpers
 # ---------------------------------------------------------------------------
 
 
-def test_validated_app_ids_rejects_unknown_and_dedupes(
+def test_validated_app_ids_rejects_unavailable_and_dedupes(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Dedupe is order-preserving; any id outside the tenant's apps raises
-    INVALID_INPUT. Apps are stubbed — only the validation logic is under
+    """Dedupe is order-preserving; any id outside the user's available apps
+    raises INVALID_INPUT. Apps are stubbed — only the validation logic is under
     test, not ``get_external_apps``'s SQL."""
 
     class _App:
@@ -376,12 +379,130 @@ def test_validated_app_ids_rejects_unknown_and_dedupes(
     monkeypatch.setattr(
         scheduled_tasks_api,
         "get_external_apps",
-        lambda _db: [_App(7), _App(9)],
+        lambda _db: [_App(7), _App(9), _App(11)],
+    )
+    monkeypatch.setattr(
+        scheduled_tasks_api,
+        "app_is_available",
+        lambda _db, app, _user_id: app.id in {7, 9},
     )
 
-    assert scheduled_tasks_api._validated_app_ids(db_session, []) == []
-    assert scheduled_tasks_api._validated_app_ids(db_session, [9, 7, 9]) == [9, 7]
+    user_id = make_user(db_session).id
+
+    assert scheduled_tasks_api._validated_app_ids(db_session, [], user_id) == []
+    assert scheduled_tasks_api._validated_app_ids(db_session, [9, 7, 9], user_id) == [
+        9,
+        7,
+    ]
 
     with pytest.raises(OnyxError) as exc_info:
-        scheduled_tasks_api._validated_app_ids(db_session, [7, 123])
+        scheduled_tasks_api._validated_app_ids(db_session, [7, 11, 123], user_id)
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+def test_validated_app_ids_uses_gateway_availability(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session)
+    credentialless_app = make_external_app(
+        db_session,
+        skill=make_skill(db_session),
+        auth_template={},
+        app_type=ExternalAppType.CUSTOM,
+    )
+    disabled_app = make_external_app(
+        db_session,
+        skill=make_skill(db_session, enabled=False),
+        auth_template={},
+        app_type=ExternalAppType.CUSTOM,
+    )
+    missing_credential_app = make_external_app(
+        db_session,
+        skill=make_skill(db_session),
+        auth_template={"Authorization": "Bearer {access_token}"},
+        app_type=ExternalAppType.CUSTOM,
+    )
+    user_credential_app = make_external_app(
+        db_session,
+        skill=make_skill(db_session),
+        auth_template={"Authorization": "Bearer {access_token}"},
+        app_type=ExternalAppType.CUSTOM,
+    )
+    make_user_credential(
+        db_session,
+        app=user_credential_app,
+        user=user,
+        user_credentials={"access_token": "test-token"},
+    )
+    db_session.commit()
+
+    assert scheduled_tasks_api._validated_app_ids(
+        db_session,
+        [credentialless_app.id, user_credential_app.id, credentialless_app.id],
+        user.id,
+    ) == [credentialless_app.id, user_credential_app.id]
+
+    with pytest.raises(OnyxError) as exc_info:
+        scheduled_tasks_api._validated_app_ids(
+            db_session,
+            [credentialless_app.id, disabled_app.id, missing_credential_app.id],
+            user.id,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+def test_detail_includes_metadata_for_disabled_granted_apps(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session)
+    app = make_external_app(
+        db_session,
+        skill=make_skill(
+            db_session,
+            slug=f"disabled-preapproved-app-{uuid4().hex[:8]}",
+            enabled=False,
+        ),
+        auth_template={},
+        app_type=ExternalAppType.CUSTOM,
+    )
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app.id])
+
+    detail = scheduled_tasks_api._detail(db_session, task, user.id)
+
+    assert detail.pre_approved_app_ids == [app.id]
+    assert len(detail.pre_approved_apps) == 1
+    [display_app] = detail.pre_approved_apps
+    assert display_app.id == app.id
+    assert display_app.name == app.skill.name
+    assert display_app.slug == app.skill.slug
+    assert display_app.app_type == ExternalAppType.CUSTOM
+    assert display_app.enabled is False
+
+
+def test_create_task_route_returns_detail_shape(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session)
+    request = scheduled_tasks_api.ScheduledTaskCreate.model_validate(
+        {
+            "name": "route-contract",
+            "prompt": "Run the route contract check",
+            "editor_mode": "interval",
+            "editor_payload": {"unit": "hours", "every": 1},
+        }
+    )
+
+    response = scheduled_tasks_api.create_task(
+        request=request,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert isinstance(response, scheduled_tasks_api.ScheduledTaskDetail)
+    assert response.prompt == "Run the route contract check"
+    assert response.next_runs
+    assert response.pre_approved_app_ids == []
+    assert response.pre_approved_apps == []
