@@ -76,7 +76,7 @@ backend = [
     "oauthlib==3.2.2",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147
     "openpyxl==3.0.10",
-    "opensearch-py==3.0.0",
+    "opensearch-py==3.2.0",
     # libpass is the maintained drop-in fork of passlib (same `passlib.*`
     # import namespace). passlib 1.7.4 is unmaintained and imports the stdlib
     # `crypt` module, which was removed in Python 3.13.
