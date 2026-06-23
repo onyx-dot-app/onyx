@@ -1,4 +1,5 @@
 import os
+import secrets
 from datetime import datetime
 from datetime import timezone
 
@@ -42,8 +43,13 @@ async def current_cloud_superuser(
     request: Request,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> User:
+    if SUPER_CLOUD_API_KEY is None:
+        raise HTTPException(
+            status_code=401, detail="Cloud superuser API key not configured"
+        )
+
     api_key = request.headers.get("Authorization", "").replace("Bearer ", "")
-    if api_key != SUPER_CLOUD_API_KEY:
+    if not secrets.compare_digest(api_key, SUPER_CLOUD_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     if user and user.email not in SUPER_USERS:
