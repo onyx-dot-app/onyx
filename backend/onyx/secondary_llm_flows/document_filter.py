@@ -1,6 +1,7 @@
 import json
 import re
 
+from onyx.configs.chat_configs import SECONDARY_LLM_FLOW_TIMEOUT_S
 from onyx.context.search.models import ContextExpansionType
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
@@ -15,6 +16,7 @@ from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
@@ -90,6 +92,7 @@ def select_chunks_for_relevance(
     return all_chunks[start_index:end_index]
 
 
+@log_function_time(print_only=True)
 def classify_section_relevance(
     document_title: str,
     section_text: str,
@@ -133,6 +136,7 @@ def classify_section_relevance(
             response = llm.invoke(
                 prompt=prompt_msg,
                 reasoning_effort=ReasoningEffort.OFF,
+                timeout_override=SECONDARY_LLM_FLOW_TIMEOUT_S,
             )
             record_llm_response(span_generation, response)
             llm_response = response.choice.message.content
@@ -179,6 +183,7 @@ def classify_section_relevance(
     return classification
 
 
+@log_function_time(print_only=True)
 def select_sections_for_expansion(
     sections: list[InferenceSection],
     user_query: str,
@@ -283,7 +288,9 @@ def select_sections_for_expansion(
             input_messages=[prompt_text],
         ) as span_generation:
             response = llm.invoke(
-                prompt=[prompt_text], reasoning_effort=ReasoningEffort.OFF
+                prompt=[prompt_text],
+                reasoning_effort=ReasoningEffort.OFF,
+                timeout_override=SECONDARY_LLM_FLOW_TIMEOUT_S,
             )
             record_llm_response(span_generation, response)
             llm_response = response.choice.message.content
