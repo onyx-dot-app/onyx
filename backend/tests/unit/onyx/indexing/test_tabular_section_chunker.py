@@ -1094,3 +1094,35 @@ def test_file_backed_section_streams_all_rows(
     joined = "\n".join(p.text for p in out.payloads)
     assert "user0" in joined
     assert "user59" in joined  # last row present -> no truncation
+
+
+def test_file_backed_section_emits_descriptor_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A file-backed (streamed) section also gets descriptor/total chunks, built
+    by the bounded streaming analyze pass — not just row chunks."""
+    import onyx.indexing.chunking.tabular_section_chunker.tabular_section_chunker as mod
+
+    rows = ["1,US,10", "2,US,20", "3,EU,30", "4,US,40", "5,EU,50", "6,US,60"]
+    csv_text = "id,region,amount\n" + "\n".join(rows)
+
+    class _FakeStore:
+        def read_file(
+            self, file_id: str, mode: str | None = None, use_tempfile: bool = False
+        ) -> io.BytesIO:
+            del file_id, mode, use_tempfile  # stub: signature parity only
+            return io.BytesIO(csv_text.encode("utf-8"))
+
+    monkeypatch.setattr(mod, "get_default_file_store", lambda: _FakeStore())
+
+    chunker = _make_chunker_with_metadata()
+    section = TabularSection(link="x", csv_file_id="csv-1", heading="S")
+    out = chunker.chunk_section(
+        section, AccumulatorState(), content_token_limit=100_000
+    )
+
+    joined = "\n".join(p.text for p in out.payloads)
+    assert "id=1" in joined  # row chunks
+    assert "Sheet overview." in joined  # sheet descriptor
+    assert "total (sum across all rows)" in joined  # numeric totals
+    assert "most frequent value: US (4 occurrences)" in joined  # categorical top

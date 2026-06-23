@@ -12,6 +12,7 @@ from onyx.indexing.chunking.section_chunker import ChunkPayload
 from onyx.indexing.chunking.section_chunker import SectionChunker
 from onyx.indexing.chunking.section_chunker import SectionChunkerOutput
 from onyx.indexing.chunking.tabular_section_chunker.analysis import analyze_sheet
+from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
 from onyx.indexing.chunking.tabular_section_chunker.sheet_descriptor import (
     build_sheet_descriptor_chunks,
 )
@@ -247,20 +248,28 @@ class TabularChunker(SectionChunker):
             section.csv_file_id if isinstance(section, TabularSection) else None
         )
         if csv_file_id:
-            # Huge sheet: stream rows straight from the staged CSV so it is never
-            # fully materialized. Descriptor/analysis chunks are omitted here —
-            # analyze_sheet needs the whole sheet in memory, which would defeat
-            # the streaming bound. Smaller sheets stay inline and keep them.
+            # Huge sheet: never fully materialized. One streaming pass over the
+            # staged CSV for row chunks, plus a second bounded streaming pass
+            # through analyze_sheet for descriptor/total chunks.
             file_store = get_default_file_store()
+            chunk_texts: list[str] = []
             with file_store.read_file(csv_file_id, use_tempfile=True) as raw:
                 rows = io.TextIOWrapper(raw, encoding="utf-8", newline="")
-                streamed_chunks = parse_to_chunks(
-                    rows=parse_csv_stream(rows),
-                    sheet_header=heading,
-                    tokenizer=self.tokenizer,
-                    max_tokens=content_token_limit,
+                chunk_texts.extend(
+                    parse_to_chunks(
+                        rows=parse_csv_stream(rows),
+                        sheet_header=heading,
+                        tokenizer=self.tokenizer,
+                        max_tokens=content_token_limit,
+                    )
                 )
-            return self._build_output(streamed_chunks, section, payloads)
+            if not self.ignore_metadata_chunks:
+                chunk_texts.extend(
+                    self._streamed_descriptor_chunks(
+                        csv_file_id, heading, content_token_limit
+                    )
+                )
+            return self._build_output(chunk_texts, section, payloads)
 
         # Inline sheet: small enough to materialize, so it also gets descriptors.
         text = section.text or ""
@@ -280,24 +289,53 @@ class TabularChunker(SectionChunker):
         if not self.ignore_metadata_chunks and headers:
             analysis = analyze_sheet(headers, parsed_rows)
             inline_chunks.extend(
-                build_sheet_descriptor_chunks(
-                    headers=headers,
-                    analysis=analysis,
-                    heading=heading,
-                    tokenizer=self.tokenizer,
-                    max_tokens=content_token_limit,
-                )
-            )
-            inline_chunks.extend(
-                build_total_descriptor_chunks(
-                    headers=headers,
-                    analysis=analysis,
-                    heading=heading,
-                    tokenizer=self.tokenizer,
-                    max_tokens=content_token_limit,
-                )
+                self._descriptor_chunks(headers, analysis, heading, content_token_limit)
             )
         return self._build_output(inline_chunks, section, payloads)
+
+    def _descriptor_chunks(
+        self,
+        headers: list[str],
+        analysis: SheetAnalysis,
+        heading: str,
+        content_token_limit: int,
+    ) -> list[str]:
+        chunks = list(
+            build_sheet_descriptor_chunks(
+                headers=headers,
+                analysis=analysis,
+                heading=heading,
+                tokenizer=self.tokenizer,
+                max_tokens=content_token_limit,
+            )
+        )
+        chunks.extend(
+            build_total_descriptor_chunks(
+                headers=headers,
+                analysis=analysis,
+                heading=heading,
+                tokenizer=self.tokenizer,
+                max_tokens=content_token_limit,
+            )
+        )
+        return chunks
+
+    def _streamed_descriptor_chunks(
+        self, csv_file_id: str, heading: str, content_token_limit: int
+    ) -> list[str]:
+        """Second bounded streaming pass over the staged CSV: derive descriptor
+        and total chunks via analyze_sheet (one row plus capped per-column state
+        in memory)."""
+        file_store = get_default_file_store()
+        with file_store.read_file(csv_file_id, use_tempfile=True) as raw:
+            rows = parse_csv_stream(io.TextIOWrapper(raw, encoding="utf-8", newline=""))
+            try:
+                first = next(rows)
+            except StopIteration:
+                return []
+            headers = first.header
+            analysis = analyze_sheet(headers, chain([first], rows))
+        return self._descriptor_chunks(headers, analysis, heading, content_token_limit)
 
     def _build_output(
         self,
