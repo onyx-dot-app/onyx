@@ -869,17 +869,17 @@ const AppInputBar = React.memo(
                       }}
                       aria-multiline={true}
                       aria-disabled={disabled}
-                      aria-placeholder="How can I help you today?"
+                      aria-placeholder={t("chat.input.placeholder_help", "How can I help you today?")}
                       data-placeholder={
                         queuedMessages.length > 0 && !message
-                          ? "Press up to edit queued messages"
+                          ? t("chat.input.press_up_to_edit", "Press up to edit queued messages")
                           : isRecording
-                            ? "Listening..."
+                            ? t("chat.input.listening", "Listening...")
                             : isVoicePlaybackActive
-                              ? "Onyx is speaking..."
+                              ? t("chat.input.speaking", "Onyx is speaking...")
                               : isSearchMode
-                                ? "Search connected sources"
-                                : "How can I help you today?"
+                                ? t("chat.input.search_sources", "Search connected sources")
+                                : t("chat.input.placeholder_help", "How can I help you today?")
                       }
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {

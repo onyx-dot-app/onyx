@@ -10,6 +10,7 @@ import {
 } from "@/app/app/components/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Popover, PopoverMenu } from "@opal/components";
+import { useTranslation } from "react-i18next";
 import SwitchList, {
   SwitchListItem,
 } from "@/refresh-components/popovers/ActionsPopover/SwitchList";
@@ -52,10 +53,11 @@ import { Button } from "@opal/components";
 function buildTooltipMessage(
   actionDescription: string,
   isConfigured: boolean,
-  canManageAction: boolean
+  canManageAction: boolean,
+  t: any
 ) {
-  const _CONFIGURE_MESSAGE = "Press the settings cog to enable.";
-  const _USER_NOT_ADMIN_MESSAGE = "Ask an admin to configure.";
+  const _CONFIGURE_MESSAGE = t("chat.actions.configure_msg", "Press the settings cog to enable.");
+  const _USER_NOT_ADMIN_MESSAGE = t("chat.actions.user_not_admin_msg", "Ask an admin to configure.");
 
   if (isConfigured) {
     return actionDescription;
@@ -68,58 +70,57 @@ function buildTooltipMessage(
   return actionDescription + " " + _USER_NOT_ADMIN_MESSAGE;
 }
 
-const TOOL_DESCRIPTIONS: Record<string, string> = {
-  [SEARCH_TOOL_ID]: "Search through connected knowledge to inform the answer.",
-  [IMAGE_GENERATION_TOOL_ID]: "Generate images based on a prompt.",
-  [WEB_SEARCH_TOOL_ID]: "Search the web for up-to-date information.",
-  [PYTHON_TOOL_ID]: "Execute code for complex analysis.",
-  [CODING_AGENT_TOOL_ID]:
-    "Investigate a GitHub repository and answer questions about its code.",
-};
-
-const DEFAULT_TOOL_DESCRIPTION = "This action is not configured yet.";
-
 function getToolTooltip(
   tool: ToolSnapshot,
   isConfigured: boolean,
-  canManageAction: boolean
+  canManageAction: boolean,
+  t: any
 ): string {
-  const description =
-    (tool.in_code_tool_id && TOOL_DESCRIPTIONS[tool.in_code_tool_id]) ||
-    tool.description ||
-    DEFAULT_TOOL_DESCRIPTION;
-  return buildTooltipMessage(description, isConfigured, canManageAction);
+  let description = tool.description || t("chat.actions.default_desc", "This action is not configured yet.");
+  if (tool.in_code_tool_id) {
+    if (tool.in_code_tool_id === SEARCH_TOOL_ID) {
+      description = t("chat.actions.search_desc", "Search through connected knowledge to inform the answer.");
+    } else if (tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID) {
+      description = t("chat.actions.image_gen_desc", "Generate images based on a prompt.");
+    } else if (tool.in_code_tool_id === WEB_SEARCH_TOOL_ID) {
+      description = t("chat.actions.web_search_desc", "Search the web for up-to-date information.");
+    } else if (tool.in_code_tool_id === PYTHON_TOOL_ID) {
+      description = t("chat.actions.python_desc", "Execute code for complex analysis.");
+    } else if (tool.in_code_tool_id === CODING_AGENT_TOOL_ID) {
+      description = t("chat.actions.coding_agent_desc", "Investigate a GitHub repository and answer questions about its code.");
+    }
+  }
+  return buildTooltipMessage(description, isConfigured, canManageAction, t);
 }
 
-const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
-  [IMAGE_GENERATION_TOOL_ID]: {
-    href: "/admin/configuration/image-generation",
-    tooltip: "Configure Image Generation",
-  },
-  [WEB_SEARCH_TOOL_ID]: {
-    href: "/admin/configuration/web-search",
-    tooltip: "Configure Web Search",
-  },
-  [PYTHON_TOOL_ID]: {
-    href: "/admin/configuration/code-interpreter",
-    tooltip: "Configure Code Interpreter",
-  },
-};
-
-const OPENAPI_ADMIN_CONFIG = {
-  href: "/admin/actions/open-api",
-  tooltip: "Manage OpenAPI Actions",
-};
-
 const getAdminConfigureInfo = (
-  tool: ToolSnapshot
+  tool: ToolSnapshot,
+  t: any
 ): { href: string; tooltip: string } | null => {
-  if (tool.in_code_tool_id && ADMIN_CONFIG_LINKS[tool.in_code_tool_id]) {
-    return ADMIN_CONFIG_LINKS[tool.in_code_tool_id] ?? null;
+  if (tool.in_code_tool_id) {
+    if (tool.in_code_tool_id === IMAGE_GENERATION_TOOL_ID) {
+      return {
+        href: "/admin/configuration/image-generation",
+        tooltip: t("chat.actions.config_image_gen", "Configure Image Generation"),
+      };
+    } else if (tool.in_code_tool_id === WEB_SEARCH_TOOL_ID) {
+      return {
+        href: "/admin/configuration/web-search",
+        tooltip: t("chat.actions.config_web_search", "Configure Web Search"),
+      };
+    } else if (tool.in_code_tool_id === PYTHON_TOOL_ID) {
+      return {
+        href: "/admin/configuration/code-interpreter",
+        tooltip: t("chat.actions.config_code_interpreter", "Configure Code Interpreter"),
+      };
+    }
   }
 
   if (!tool.in_code_tool_id && !tool.mcp_server_id) {
-    return OPENAPI_ADMIN_CONFIG;
+    return {
+      href: "/admin/actions/open-api",
+      tooltip: t("chat.actions.manage_openapi", "Manage OpenAPI Actions"),
+    };
   }
 
   return null;
@@ -168,6 +169,7 @@ export default function ActionsPopover({
   availableSources = [],
   disabled = false,
 }: ActionsPopoverProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
     null
@@ -726,7 +728,7 @@ export default function ActionsPopover({
         <Button icon={SvgChevronRight} prominence="tertiary" size="sm" />
       }
     >
-      Re-Authenticate
+      {t("chat.actions.re_authenticate", "Re-Authenticate")}
     </LineItem>
   ) : undefined;
 
@@ -833,7 +835,7 @@ export default function ActionsPopover({
       {[
         <InputTypeIn
           key="search"
-          placeholder="Search actions..."
+          placeholder={t("chat.actions.search_placeholder", "Search actions...")}
           searchIcon
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
@@ -850,7 +852,7 @@ export default function ActionsPopover({
             const canAdminConfigure = isAdmin || isCurator;
             const adminConfigureInfo =
               isUnavailable && canAdminConfigure
-                ? getAdminConfigureInfo(tool)
+                ? getAdminConfigureInfo(tool, t)
                 : null;
             return (
               <ActionLineItem
@@ -862,7 +864,8 @@ export default function ActionsPopover({
                 tooltip={getToolTooltip(
                   tool,
                   isToolAvailable,
-                  canAdminConfigure
+                  canAdminConfigure,
+                  t
                 )}
                 showAdminConfigure={!!adminConfigureInfo}
                 adminConfigureHref={adminConfigureInfo?.href}
@@ -930,7 +933,7 @@ export default function ActionsPopover({
 
         (isAdmin || isCurator) && (
           <LineItem href="/admin/actions" icon={SvgActions} key="more-actions">
-            More Actions
+            {t("chat.actions.more_actions", "More Actions")}
           </LineItem>
         ),
       ]}
@@ -940,12 +943,12 @@ export default function ActionsPopover({
   const toolsView = (
     <SwitchList
       items={sourceToggleItems}
-      searchPlaceholder="Search Filters"
+      searchPlaceholder={t("chat.actions.search_filters", "Search Filters")}
       allDisabled={allSourcesDisabled}
       onDisableAll={handleDisableAllSources}
       onEnableAll={handleEnableAllSources}
-      disableAllLabel="Disable All Sources"
-      enableAllLabel="Enable All Sources"
+      disableAllLabel={t("chat.actions.disable_all", "Disable All Tools")}
+      enableAllLabel={t("chat.actions.enable_all", "Enable All Tools")}
       onBack={() => setSecondaryView(null)}
     />
   );
@@ -953,12 +956,12 @@ export default function ActionsPopover({
   const mcpView = (
     <SwitchList
       items={mcpToggleItems}
-      searchPlaceholder={`Search ${selectedMcpServer?.name ?? "server"} tools`}
+      searchPlaceholder={t("chat.actions.search_server_tools", { defaultValue: "Search {{name}} tools", name: selectedMcpServer?.name ?? "server" })}
       allDisabled={mcpAllDisabled}
       onDisableAll={disableAllToolsForSelectedServer}
       onEnableAll={enableAllToolsForSelectedServer}
-      disableAllLabel="Disable All Tools"
-      enableAllLabel="Enable All Tools"
+      disableAllLabel={t("chat.actions.disable_all", "Disable All Tools")}
+      enableAllLabel={t("chat.actions.enable_all", "Enable All Tools")}
       onBack={() => setSecondaryView(null)}
       footer={mcpFooter}
     />
@@ -977,7 +980,7 @@ export default function ActionsPopover({
               icon={SvgSliders}
               interaction={open ? "hover" : "rest"}
               prominence="tertiary"
-              tooltip="Manage Actions"
+              tooltip={t("chat.actions.manage_actions", "Manage Actions")}
             />
           </div>
         </Popover.Trigger>

@@ -7,6 +7,7 @@ import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { useTranslation } from "react-i18next";
 import {
   LLMProviderResponse,
   LLMProviderView,
@@ -34,6 +35,7 @@ import { getModelIcon } from "@/lib/languageModels";
 const NO_DEFAULT_VALUE = "__none__";
 
 export default function ImageGenerationContent() {
+  const { t } = useTranslation();
   const {
     data: llmProviderResponse,
     error: llmError,
@@ -204,8 +206,8 @@ export default function ImageGenerationContent() {
     <>
       <div className="flex flex-col gap-4">
         <Content
-          title="Image Generation Model"
-          description="Select a model to generate images in chat."
+          title={t("admin.image_gen.model_title", "Image Generation Model")}
+          description={t("admin.image_gen.model_desc", "Select a model to generate images in chat.")}
           sizePreset="main-content"
           variant="section"
         />
@@ -213,7 +215,7 @@ export default function ImageGenerationContent() {
         {connectedProviderIds.size === 0 && (
           <MessageCard
             variant="info"
-            title="Connect an image generation model to use in chat."
+            title={t("admin.image_gen.connect_prompt", "Connect an image generation model to use in chat.")}
           />
         )}
 
