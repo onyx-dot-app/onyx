@@ -43,7 +43,7 @@ async def current_cloud_superuser(
     request: Request,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> User:
-    if SUPER_CLOUD_API_KEY is None:
+    if not SUPER_CLOUD_API_KEY:
         raise HTTPException(
             status_code=401, detail="Cloud superuser API key not configured"
         )
