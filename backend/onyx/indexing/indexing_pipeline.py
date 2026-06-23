@@ -31,6 +31,7 @@ from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
 from onyx.connectors.models import SectionType
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import get_documents_by_ids
@@ -720,6 +721,17 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         # Only get the vision LLM if image processing is enabled
         llm = get_default_llm_with_vision()
 
+    def _clone_non_image_section(section: Section) -> Section:
+        if isinstance(section, TabularSection):
+            return section.model_copy()
+        return Section(
+            type=section.type,
+            text=section.text or "",
+            link=section.link,
+            image_file_id=None,
+            heading=section.heading,
+        )
+
     if not llm:
         if get_image_extraction_and_analysis_enabled():
             logger.warning(
@@ -732,15 +744,16 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             IndexingDocument(
                 **document.model_dump(),
                 processed_sections=[
-                    Section(
-                        type=section.type,
-                        text="" if isinstance(section, ImageSection) else section.text,
-                        link=section.link,
-                        image_file_id=(
-                            section.image_file_id
-                            if isinstance(section, ImageSection)
-                            else None
-                        ),
+                    (
+                        Section(
+                            type=section.type,
+                            text="",
+                            link=section.link,
+                            image_file_id=section.image_file_id,
+                            heading=section.heading,
+                        )
+                        if isinstance(section, ImageSection)
+                        else _clone_non_image_section(section)
                     )
                     for section in document.sections
                 ],
@@ -760,14 +773,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
 
         for section in document.sections:
             if not isinstance(section, ImageSection):
-                processed_sections.append(
-                    Section(
-                        type=section.type,
-                        text=section.text or "",
-                        link=section.link,
-                        image_file_id=None,
-                    )
-                )
+                processed_sections.append(_clone_non_image_section(section))
                 continue
 
             processed_section = Section(
@@ -775,6 +781,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 link=section.link,
                 image_file_id=section.image_file_id,
                 text="",
+                heading=section.heading,
             )
             processed_sections.append(processed_section)
 
