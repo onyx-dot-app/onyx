@@ -35,8 +35,8 @@ from onyx.server.features.build.external_apps.models import (
     CreateCustomExternalAppFromRepoRequest,
 )
 from onyx.skills.bundle import validate_custom_bundle
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 _UPSTREAM = ["https://api.example.com/*"]
 _AUTH_TEMPLATE: dict[str, str] = {"Authorization": "Bearer {api_key}"}
@@ -72,7 +72,7 @@ def db_session() -> Generator[Session, None, None]:
 
 @pytest.fixture(scope="function")
 def tenant_context() -> Generator[None, None, None]:
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         yield
     finally:
@@ -101,7 +101,7 @@ def test_user(
     yield user
     db_session.rollback()
     try:
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
         try:
             with get_session_with_current_tenant() as s:
                 row = s.get(User, user.id)
@@ -117,7 +117,7 @@ def test_user(
 @pytest.fixture(scope="module", autouse=True)
 def initialize_file_store() -> Generator[None, None, None]:
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         get_default_file_store().initialize()
         yield

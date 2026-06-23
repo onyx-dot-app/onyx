@@ -31,8 +31,8 @@ from onyx.server.features.skill.api import _install_admin_repo_skills
 from onyx.server.features.skill.api import _install_personal_repo_skills
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import validate_custom_bundle
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 _VALID_SKILL_MD = "---\nname: My Skill\ndescription: does things\n---\n# body\n"
 
@@ -108,7 +108,7 @@ def _make_group(db_session: Session) -> UserGroup:
 
 def _delete_group(group_id: int) -> None:
     try:
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
         try:
             with get_session_with_current_tenant() as session:
                 row = session.get(UserGroup, group_id)
@@ -123,7 +123,7 @@ def _delete_group(group_id: int) -> None:
 
 def _delete_user(user_id: object) -> None:
     try:
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
         try:
             with get_session_with_current_tenant() as session:
                 row = session.get(User, user_id)
@@ -140,7 +140,7 @@ def _delete_skills_by_slugs(slugs: list[str]) -> None:
     if not slugs:
         return
     try:
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
         try:
             with get_session_with_current_tenant() as session:
                 rows = (
@@ -174,7 +174,7 @@ def db_session() -> Generator[Session, None, None]:
 
 @pytest.fixture(scope="function")
 def tenant_context() -> Generator[None, None, None]:
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         yield
     finally:
@@ -195,7 +195,7 @@ def test_user(
 @pytest.fixture(scope="module", autouse=True)
 def initialize_file_store() -> Generator[None, None, None]:
     _init_engine()
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         get_default_file_store().initialize()
         yield
