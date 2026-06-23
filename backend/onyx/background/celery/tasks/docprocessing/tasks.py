@@ -1859,22 +1859,37 @@ def _docprocessing_task(
 
         # Update batch completion and document counts atomically using database coordination
 
-        with get_session_with_current_tenant() as db_session, cross_batch_db_lock:
-            with time_stage(IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id):
-                IndexingCoordination.update_batch_completion_and_docs(
-                    db_session=db_session,
-                    index_attempt_id=index_attempt_id,
-                    total_docs_indexed=index_pipeline_result.total_docs,
-                    new_docs_indexed=index_pipeline_result.new_docs,
-                    total_chunks=index_pipeline_result.total_chunks,
+        # Time the lock-acquire wait (the contention signal); record it after
+        # release (below) so the metric write doesn't extend this shared lock.
+        lock_acquire_start = time.monotonic()
+        cross_batch_db_lock.acquire()
+        lock_acquire_ms = max(0, int((time.monotonic() - lock_acquire_start) * 1000))
+        try:
+            with get_session_with_current_tenant() as db_session:
+                with time_stage(
+                    IndexAttemptStage.COORDINATION_UPDATE, index_attempt_id
+                ):
+                    IndexingCoordination.update_batch_completion_and_docs(
+                        db_session=db_session,
+                        index_attempt_id=index_attempt_id,
+                        total_docs_indexed=index_pipeline_result.total_docs,
+                        new_docs_indexed=index_pipeline_result.new_docs,
+                        total_chunks=index_pipeline_result.total_chunks,
+                    )
+
+                _resolve_indexing_document_errors(
+                    cc_pair_id,
+                    index_pipeline_result.failures,
+                    documents,
                 )
+        finally:
+            cross_batch_db_lock.release()
+        safe_record_single_event(
+            IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT, index_attempt_id, lock_acquire_ms
+        )
 
-            _resolve_indexing_document_errors(
-                cc_pair_id,
-                index_pipeline_result.failures,
-                documents,
-            )
-
+        # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.
+        _finalization_start = time.monotonic()
         coordination_status = None
         # Record failures in the database
         if index_pipeline_result.failures:
@@ -1921,6 +1936,11 @@ def _docprocessing_task(
         )
         # Clean up this batch after successful processing
         storage.delete_batch_by_num(batch_num)
+        safe_record_single_event(
+            IndexAttemptStage.FINALIZATION,
+            index_attempt_id,
+            max(0, int((time.monotonic() - _finalization_start) * 1000)),
+        )
 
         # FIX: Explicitly clear document batch from memory and force garbage collection
         # This helps prevent memory accumulation across multiple batches
@@ -1929,7 +1949,8 @@ def _docprocessing_task(
         # NOTE: We assign None rather than `del` so the variable stays bound;
         # the except block under PERSISTENT_INDEXING needs to safely inspect it.
         documents = None
-        gc.collect()
+        with time_stage(IndexAttemptStage.GC_COLLECT, index_attempt_id):
+            gc.collect()
 
         # FIX: Log final memory usage to track problematic tenants/CC pairs
         emit_process_memory(

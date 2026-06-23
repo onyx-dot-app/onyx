@@ -80,6 +80,7 @@ from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricsResponse
 from onyx.server.documents.models import PaginatedReturn
+from onyx.server.documents.models import synthesize_unaccounted
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
@@ -168,9 +169,14 @@ def get_index_attempt_stage_metrics(
         db_session=db_session,
         index_attempt_id=index_attempt_id,
     )
+    stages = [IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics]
+    # Append the BATCH_UNACCOUNTED residual (frontend re-sorts, so order is fine).
+    unaccounted = synthesize_unaccounted(stages)
+    if unaccounted is not None:
+        stages.append(unaccounted)
     return IndexAttemptStageMetricsResponse(
         index_attempt_id=index_attempt_id,
-        stages=[IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics],
+        stages=stages,
     )
 
 
