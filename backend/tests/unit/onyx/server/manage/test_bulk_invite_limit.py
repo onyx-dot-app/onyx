@@ -146,14 +146,8 @@ def _with_common_patches(fn: object) -> object:
     return fn
 
 
-@patch("onyx.server.manage.users.MULTI_TENANT", False)
+@_with_common_patches
 @patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
-@patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
-@patch("onyx.server.manage.users.get_invited_users", return_value=[])
-@patch("onyx.server.manage.users.get_all_users", return_value=[])
-@patch("onyx.server.manage.users.write_invited_users", return_value=1)
-@patch("onyx.server.manage.users.enforce_seat_limit_locked")
-@patch("onyx.server.manage.users.enforce_invite_rate_limit")
 def test_bulk_invite_emits_user_create(
     _rate_limit: MagicMock,
     _seat_limit: MagicMock,
@@ -180,6 +174,9 @@ def test_bulk_invite_emits_user_create(
     assert events[0]["extra"]["invited_emails"] == ["new@example.com"]
 
 
+# Explicit patches (not _with_common_patches): this case needs
+# get_invited_users to report the email as already-invited, which the helper
+# hardcodes to [] and re-patching from inside the stack doesn't override.
 @patch("onyx.server.manage.users.MULTI_TENANT", False)
 @patch("onyx.server.manage.users.ENABLE_EMAIL_INVITES", False)
 @patch("onyx.server.manage.users.get_current_tenant_id", return_value="test_tenant")
