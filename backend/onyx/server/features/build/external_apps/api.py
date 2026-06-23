@@ -46,6 +46,7 @@ from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
+from onyx.utils.encryption import mask_string
 from onyx.utils.pydantic_util import parse_json_form_field
 from shared_configs.configs import MULTI_TENANT
 
@@ -92,19 +93,23 @@ def _to_user_response(
     app: ExternalApp, user_cred: ExternalAppUserCredential | None
 ) -> ExternalAppUserResponse:
     """User-facing view of an app. ``credential_keys`` = auth_template keys the
-    org hasn't pre-filled; ``credential_values`` = the user's stored values for
-    those keys (stale keys filtered out).
+    org hasn't pre-filled; ``credential_values`` = the user's masked stored
+    values for those keys (stale keys filtered out).
     """
     required_keys = required_user_credential_keys(
         app.auth_template, app.organization_credentials.get_value(apply_mask=False)
     )
-    stored = (
+    stored_raw = (
         user_cred.user_credentials.get_value(apply_mask=False)
         if user_cred is not None
         else {}
     )
-    credential_values = {key: stored[key] for key in required_keys if key in stored}
-    authenticated = all(key in credential_values for key in required_keys)
+    credential_values = {
+        key: mask_string(str(stored_raw[key]))
+        for key in required_keys
+        if key in stored_raw
+    }
+    authenticated = all(key in stored_raw for key in required_keys)
 
     return ExternalAppUserResponse(
         id=app.id,
@@ -411,6 +416,7 @@ def upsert_user_credentials(
         external_app_id=external_app_id,
         user_id=user.id,
         user_credentials=request.user_credentials,
+        resolve_masked_values=True,
     )
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes now.
