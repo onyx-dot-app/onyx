@@ -1,0 +1,60 @@
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+# Egress lockdown for the Craft sandbox pods themselves (CNI-layer defense-in-depth).
+#
+# A sandbox is only supposed to reach the network through the egress proxy. At runtime that is
+# enforced by the in-pod iptables the sandbox-init container installs (firewall-init.sh, NET_ADMIN):
+# OUTPUT policy DROP, allowing only the resolved proxy IP on its port. This NetworkPolicy makes the
+# same "only talks to the proxy (+ DNS)" property a declarative, auditable network fact at the CNI
+# layer, so it still holds if the in-pod iptables is ever bypassed. It only takes effect on clusters
+# whose CNI enforces NetworkPolicy; where it isn't enforced it is inert (the in-pod iptables still
+# applies). Companion to the proxy-side egress policy (templates/sandbox-proxy/networkpolicy-egress.yaml).
+#
+# Egress is allowed ONLY to:
+#   1. the egress proxy (release ns / component=sandbox-proxy : 8080) — all sandbox HTTP(S) funnels
+#      here via HTTPS_PROXY + the in-pod iptables redirect; the proxy resolves & fetches real targets.
+#   2. kube-dns (UDP+TCP 53) — firewall-init.sh resolves the proxy FQDN (SANDBOX_PROXY_HOST) via
+#      getent before it closes DNS in its own iptables; that lookup runs in the pod netns this policy
+#      governs (NetworkPolicy egress applies to init containers too), so blocking DNS bricks every
+#      sandbox at init.
+# Everything else is denied by the default-deny this policy establishes. Enforced per pod IP, so it
+# does NOT cover a host-netns escape (egresses via the node IP) — that is handled by node-level
+# IMDSv2 + hop-limit=1.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-egress
+  namespace: {{ $sandboxNs }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sandbox
+  policyTypes: [Egress]
+  egress:
+    # 1. The egress proxy in the release namespace. Selects the proxy POD by label (the Service is
+    #    named *-sandbox-proxy; NetworkPolicy matches pod labels, not Service names). The CNI
+    #    evaluates egress on the post-DNAT pod IP, so sandbox -> proxy ClusterIP -> proxy pod matches.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: sandbox-proxy
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.sandboxProxyPort" . }}
+    # 2. kube-dns (CoreDNS in kube-system) — needed by firewall-init.sh to resolve the proxy FQDN.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}
