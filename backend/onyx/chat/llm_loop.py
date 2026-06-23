@@ -60,6 +60,7 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.models import MemoryToolResponse
+from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
@@ -603,6 +604,36 @@ def _create_context_files_message(
     )
 
 
+def select_reminder_text(
+    *,
+    ran_image_gen: bool,
+    just_ran_web_search: bool,
+    has_open_url_tool: bool,
+    out_of_cycles: bool,
+    persona_task_prompt: str | None,
+    include_citation_reminder: bool,
+    include_file_reminder: bool,
+) -> str | None:
+    """Choose the reminder appended after a tool cycle.
+
+    The open_url nudge is only emitted when the open_url tool is actually
+    available this session; otherwise the model gets told to call a tool it
+    doesn't have, which leaks confusing "open_url is not available" replies.
+    """
+    if ran_image_gen:
+        # Some models are trained to hand images back to the user via a similar
+        # tool; this prevents output like [Cute Cat](attachment://a_cute_cat.png).
+        return IMAGE_GEN_REMINDER
+    if just_ran_web_search and has_open_url_tool and not out_of_cycles:
+        return OPEN_URL_REMINDER
+    return build_reminder_message(
+        reminder_text=persona_task_prompt,
+        include_citation_reminder=include_citation_reminder,
+        include_file_reminder=include_file_reminder,
+        is_last_cycle=out_of_cycles,
+    )
+
+
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -690,6 +721,9 @@ def run_llm_loop(
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
+        # Only nudge the model toward open_url if that tool is actually available
+        # this session; otherwise it gets told to call a tool it doesn't have.
+        has_open_url_tool: bool = any(isinstance(tool, OpenURLTool) for tool in tools)
         has_called_search_tool: bool = False
         code_interpreter_file_generated: bool = False
         fallback_extraction_attempted: bool = False
@@ -785,26 +819,18 @@ def run_llm_loop(
                     )
                     custom_agent_prompt_msg = None
 
-            reminder_message_text: str | None
-            if ran_image_gen:
-                # Some models are trained to give back images to the user for some similar tool
-                # This is to prevent it generating things like:
-                # [Cute Cat](attachment://a_cute_cat_sitting_playfully.png)
-                reminder_message_text = IMAGE_GEN_REMINDER
-            elif just_ran_web_search and not out_of_cycles:
-                reminder_message_text = OPEN_URL_REMINDER
-            else:
-                # This is the default case, the LLM at this point may answer so it is important
-                # to include the reminder. Potentially this should also mention citation
-                reminder_message_text = build_reminder_message(
-                    reminder_text=(
-                        persona.task_prompt if persona and persona.task_prompt else None
-                    ),
-                    include_citation_reminder=should_cite_documents
-                    or always_cite_documents,
-                    include_file_reminder=code_interpreter_file_generated,
-                    is_last_cycle=out_of_cycles,
-                )
+            reminder_message_text = select_reminder_text(
+                ran_image_gen=ran_image_gen,
+                just_ran_web_search=just_ran_web_search,
+                has_open_url_tool=has_open_url_tool,
+                out_of_cycles=out_of_cycles,
+                persona_task_prompt=(
+                    persona.task_prompt if persona and persona.task_prompt else None
+                ),
+                include_citation_reminder=should_cite_documents
+                or always_cite_documents,
+                include_file_reminder=code_interpreter_file_generated,
+            )
 
             reminder_msg = (
                 ChatMessageSimple(
