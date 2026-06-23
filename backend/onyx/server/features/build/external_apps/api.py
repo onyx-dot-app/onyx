@@ -92,19 +92,26 @@ def _to_user_response(
     app: ExternalApp, user_cred: ExternalAppUserCredential | None
 ) -> ExternalAppUserResponse:
     """User-facing view of an app. ``credential_keys`` = auth_template keys the
-    org hasn't pre-filled; ``credential_values`` = the user's stored values for
-    those keys (stale keys filtered out).
+    org hasn't pre-filled; ``credential_values`` = the user's masked stored
+    values for those keys (stale keys filtered out).
     """
     required_keys = required_user_credential_keys(
         app.auth_template, app.organization_credentials.get_value(apply_mask=False)
     )
-    stored = (
+    stored_raw = (
         user_cred.user_credentials.get_value(apply_mask=False)
         if user_cred is not None
         else {}
     )
-    credential_values = {key: stored[key] for key in required_keys if key in stored}
-    authenticated = all(key in credential_values for key in required_keys)
+    stored_masked = (
+        user_cred.user_credentials.get_value(apply_mask=True)
+        if user_cred is not None
+        else {}
+    )
+    credential_values = {
+        key: stored_masked[key] for key in required_keys if key in stored_raw
+    }
+    authenticated = all(key in stored_raw for key in required_keys)
 
     return ExternalAppUserResponse(
         id=app.id,
