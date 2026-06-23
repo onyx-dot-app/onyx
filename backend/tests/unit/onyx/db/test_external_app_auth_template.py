@@ -7,11 +7,9 @@ from typing import Any
 
 import pytest
 
-from onyx.db.external_app import mask_external_app_user_credentials
 from onyx.db.external_app import resolve_masked_credentials
 from onyx.db.external_app import validate_auth_template
 from onyx.error_handling.exceptions import OnyxError
-from onyx.utils.encryption import mask_credential_dict
 from onyx.utils.encryption import mask_string
 from onyx.utils.sensitive import SensitiveValue
 
@@ -70,7 +68,7 @@ def test_resolve_masked_credentials_restores_existing_values() -> None:
     existing = _sensitive_dict(
         {
             "access_token": "USER_ACCESS_TOKEN",
-            "expires_at": 1_234,
+            "workspace_id": "OLD_WORKSPACE_ID",
         }
     )
 
@@ -78,7 +76,7 @@ def test_resolve_masked_credentials_restores_existing_values() -> None:
         {
             "access_token": mask_string("USER_ACCESS_TOKEN"),
             "refresh_token": "NEW_REFRESH_TOKEN",
-            "expires_at": 5_678,
+            "workspace_id": "NEW_WORKSPACE_ID",
         },
         existing,
     )
@@ -86,7 +84,7 @@ def test_resolve_masked_credentials_restores_existing_values() -> None:
     assert resolved == {
         "access_token": "USER_ACCESS_TOKEN",
         "refresh_token": "NEW_REFRESH_TOKEN",
-        "expires_at": 5_678,
+        "workspace_id": "NEW_WORKSPACE_ID",
     }
 
 
@@ -96,20 +94,3 @@ def test_resolve_masked_credentials_rejects_new_masked_values() -> None:
             {"access_token": mask_string("USER_ACCESS_TOKEN")},
             None,
         )
-
-
-def test_external_app_user_credential_masker_has_no_connector_allowlist() -> None:
-    cloud_id = "cloud-id-should-mask"
-    cloud_name = "nested-cloud-name-should-mask"
-    credentials = {
-        "cloud_id": cloud_id,
-        "nested": {"cloud_name": cloud_name},
-    }
-
-    assert mask_credential_dict(credentials)["cloud_id"] == credentials["cloud_id"]
-    assert mask_external_app_user_credentials(credentials) == {
-        "cloud_id": mask_string(cloud_id),
-        "nested": {
-            "cloud_name": mask_string(cloud_name),
-        },
-    }

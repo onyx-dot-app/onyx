@@ -16,7 +16,6 @@ from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_apps
 from onyx.db.external_app import get_policies
 from onyx.db.external_app import get_user_credentials_by_app_id
-from onyx.db.external_app import mask_external_app_user_credentials
 from onyx.db.external_app import required_user_credential_keys
 from onyx.db.external_app import update_external_app
 from onyx.db.external_app import upsert_external_app_user_credential
@@ -47,6 +46,7 @@ from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
+from onyx.utils.encryption import mask_string
 from onyx.utils.pydantic_util import parse_json_form_field
 from shared_configs.configs import MULTI_TENANT
 
@@ -104,16 +104,10 @@ def _to_user_response(
         if user_cred is not None
         else {}
     )
-    stored_masked = (
-        user_cred.user_credentials.get_value(
-            apply_mask=True,
-            mask_fn=mask_external_app_user_credentials,
-        )
-        if user_cred is not None
-        else {}
-    )
     credential_values = {
-        key: stored_masked[key] for key in required_keys if key in stored_raw
+        key: mask_string(str(stored_raw[key]))
+        for key in required_keys
+        if key in stored_raw
     }
     authenticated = all(key in stored_raw for key in required_keys)
 

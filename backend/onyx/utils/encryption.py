@@ -156,25 +156,20 @@ MASK_CREDENTIALS_WHITELIST = {
 }
 
 
-def mask_credential_dict(
-    credential_dict: dict[str, Any],
-    *,
-    whitelist: set[str] | None = None,
-) -> dict[str, Any]:
-    allowed_keys = MASK_CREDENTIALS_WHITELIST if whitelist is None else whitelist
+def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, Any]:
     masked_creds: dict[str, Any] = {}
     for key, val in credential_dict.items():
         if isinstance(val, str):
             # we want to pass the authentication_method field through so the frontend
             # can disambiguate credentials created by different methods
-            if key in allowed_keys:
+            if key in MASK_CREDENTIALS_WHITELIST:
                 masked_creds[key] = val
             else:
                 masked_creds[key] = mask_string(val)
         elif isinstance(val, dict):
-            masked_creds[key] = mask_credential_dict(val, whitelist=allowed_keys)
+            masked_creds[key] = mask_credential_dict(val)
         elif isinstance(val, list):
-            masked_creds[key] = _mask_list(val, whitelist=allowed_keys)
+            masked_creds[key] = _mask_list(val)
         elif isinstance(val, (bool, type(None))):
             masked_creds[key] = val
         elif isinstance(val, (int, float)):
@@ -185,15 +180,15 @@ def mask_credential_dict(
     return masked_creds
 
 
-def _mask_list(items: list[Any], *, whitelist: set[str]) -> list[Any]:
+def _mask_list(items: list[Any]) -> list[Any]:
     masked: list[Any] = []
     for item in items:
         if isinstance(item, dict):
-            masked.append(mask_credential_dict(item, whitelist=whitelist))
+            masked.append(mask_credential_dict(item))
         elif isinstance(item, str):
             masked.append(mask_string(item))
         elif isinstance(item, list):
-            masked.append(_mask_list(item, whitelist=whitelist))
+            masked.append(_mask_list(item))
         elif isinstance(item, (bool, type(None))):
             masked.append(item)
         else:

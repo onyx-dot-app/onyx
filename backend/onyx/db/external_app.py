@@ -1,5 +1,6 @@
 import re
 from typing import Any
+from typing import cast
 from uuid import UUID
 from uuid import uuid4
 
@@ -21,7 +22,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.encryption import is_masked_credential
-from onyx.utils.encryption import mask_credential_dict
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 
@@ -81,16 +81,16 @@ def validate_auth_template(
 
 
 def resolve_masked_credentials(
-    incoming: dict[str, Any],
+    incoming: dict[str, str],
     existing: SensitiveValue[dict[str, Any]] | None,
-) -> dict[str, Any]:
+) -> dict[str, str]:
     """Restore real secret values when the caller submits masked placeholders."""
     existing_values = (
         existing.get_value(apply_mask=False) if existing is not None else {}
     )
-    resolved: dict[str, Any] = {}
+    resolved: dict[str, str] = {}
     for key, value in incoming.items():
-        if isinstance(value, str) and is_masked_credential(value):
+        if is_masked_credential(value):
             if key not in existing_values:
                 raise OnyxError(
                     OnyxErrorCode.INVALID_INPUT,
@@ -101,12 +101,6 @@ def resolve_masked_credentials(
         else:
             resolved[key] = value
     return resolved
-
-
-def mask_external_app_user_credentials(
-    credentials: dict[str, Any],
-) -> dict[str, Any]:
-    return mask_credential_dict(credentials, whitelist=set())
 
 
 def is_user_authenticated_for_app(
@@ -472,7 +466,7 @@ def upsert_external_app_user_credential(
             user_id=user_id,
         )
         user_credentials = resolve_masked_credentials(
-            user_credentials,
+            cast(dict[str, str], user_credentials),
             existing_credential.user_credentials
             if existing_credential is not None
             else None,
