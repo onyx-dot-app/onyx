@@ -501,6 +501,7 @@ const AppSidebar = memo(function AppSidebarInner() {
       </div>
     );
   }, [
+    t,
     folded,
     activeSidebarTab,
     combinedSettingsData,
@@ -534,7 +535,7 @@ const AppSidebar = memo(function AppSidebarInner() {
         }
       />
     ),
-    [folded]
+    [t, folded]
   );
   const moreAgentsButton = useMemo(
     () => (
@@ -554,7 +555,7 @@ const AppSidebar = memo(function AppSidebarInner() {
         </SidebarTab>
       </div>
     ),
-    [folded, activeSidebarTab, visibleAgents]
+    [t, folded, activeSidebarTab, visibleAgents]
   );
   const newProjectButton = useMemo(
     () => (
@@ -568,7 +569,7 @@ const AppSidebar = memo(function AppSidebarInner() {
         {t("sidebar.new_project")}
       </SidebarTab>
     ),
-    [folded, createProjectModal.toggle, createProjectModal.isOpen]
+    [t, folded, createProjectModal.toggle, createProjectModal.isOpen]
   );
   const handleShowBuildIntro = useCallback(() => {
     setShowIntroAnimation(true);
@@ -598,7 +599,7 @@ const AppSidebar = memo(function AppSidebarInner() {
         />
       </div>
     ),
-    [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
+    [t, folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
   );
 
   return (

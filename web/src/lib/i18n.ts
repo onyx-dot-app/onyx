@@ -4,6 +4,9 @@ import LanguageDetector from "i18next-browser-languagedetector";
 
 import enCommon from "../../public/locales/en/common.json";
 import esCommon from "../../public/locales/es/common.json";
+import ptCommon from "../../public/locales/pt/common.json";
+import frCommon from "../../public/locales/fr/common.json";
+import deCommon from "../../public/locales/de/common.json";
 
 // Initialize i18n only if it hasn't been initialized yet
 if (!i18n.isInitialized) {
@@ -17,6 +20,15 @@ if (!i18n.isInitialized) {
         },
         es: {
           common: esCommon,
+        },
+        pt: {
+          common: ptCommon,
+        },
+        fr: {
+          common: frCommon,
+        },
+        de: {
+          common: deCommon,
         },
       },
       fallbackLng: "en",
