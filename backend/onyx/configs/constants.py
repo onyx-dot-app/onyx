@@ -648,6 +648,9 @@ class OnyxCeleryTask:
     SCHEDULED_TASKS_RUN = "scheduled_tasks_run"
     SCHEDULED_TASKS_CLEANUP_STUCK = "scheduled_tasks_cleanup_stuck"
 
+    # Glomi Forge
+    GLOMI_FORGE_RUN_SESSION = "glomi_forge.run_session"
+
     CHECK_FOR_DOCUMENTS_FOR_OPENSEARCH_MIGRATION_TASK = (
         "check_for_documents_for_opensearch_migration_task"
     )
