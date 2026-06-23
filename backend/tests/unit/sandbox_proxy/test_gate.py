@@ -1091,23 +1091,7 @@ def test_api_server_exception_is_port_scoped(monkeypatch: pytest.MonkeyPatch) ->
     assert gate.destination_is_blocked("api.internal", 5432) is True  # PG: blocked
 
 
-def test_classify_destination_pins_public_ip(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A public hostname returns a pin IP so the caller can connect by IP and
-    defeat DNS rebinding; internal/literal/api destinations return no pin."""
-    monkeypatch.setattr(
-        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("93.184.216.34")
-    )
-    assert gate.classify_destination("example.com", 443) == (False, "93.184.216.34")
-    # literal IP: nothing to pin (already an address)
-    assert gate.classify_destination("8.8.8.8", 443) == (False, None)
-    # internal resolution: blocked, no pin
-    monkeypatch.setattr(
-        gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("10.1.2.3")
-    )
-    assert gate.classify_destination("intra.example", 443) == (True, None)
-
-
-def test_classify_destination_blocks_if_any_resolved_ip_internal(
+def test_destination_is_blocked_blocks_if_any_resolved_ip_internal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """If a name resolves to a mix of public and internal IPs, deny — an attacker
@@ -1117,7 +1101,7 @@ def test_classify_destination_blocks_if_any_resolved_ip_internal(
         "getaddrinfo",
         lambda *_a, **_k: _addrinfo("93.184.216.34", "10.0.0.9"),
     )
-    assert gate.classify_destination("rebind.example", 443) == (True, None)
+    assert gate.destination_is_blocked("rebind.example", 443) is True
 
 
 def _server_hook_data(host: str, port: int) -> server_hooks.ServerConnectionHookData:
@@ -1129,9 +1113,11 @@ def _server_hook_data(host: str, port: int) -> server_hooks.ServerConnectionHook
 
 
 @pytest.mark.asyncio
-async def test_server_connect_pins_public_ip(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Public host: connection is pinned to the resolved IP (rebinding-proof) and
-    the hostname is preserved as SNI so TLS interception still works."""
+async def test_server_connect_allows_public_without_pinning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Public host: allowed through untouched. We must NOT pin the IP or alter
+    sni — pinning breaks eager-mode TLS interception and credential injection."""
     monkeypatch.setattr(
         gate.socket, "getaddrinfo", lambda *_a, **_k: _addrinfo("93.184.216.34")
     )
@@ -1141,7 +1127,7 @@ async def test_server_connect_pins_public_ip(monkeypatch: pytest.MonkeyPatch) ->
     await addon.server_connect(data)
 
     assert data.server.error is None
-    assert data.server.address == ("93.184.216.34", 443)
+    assert data.server.address == ("example.com", 443)  # hostname left intact
     assert data.server.sni == "example.com"
 
 
@@ -1159,7 +1145,7 @@ async def test_server_connect_blocks_rebind_to_internal(
     await addon.server_connect(data)
 
     assert data.server.error is not None
-    assert data.server.address == ("rebind.example", 443)  # not pinned
+    assert data.server.address == ("rebind.example", 443)
 
 
 # ---------------------------------------------------------------------------

@@ -166,9 +166,7 @@ def _allow_loopback_egress(monkeypatch: pytest.MonkeyPatch) -> None:
     """These tests route through 127.0.0.1 (loopback = internal), which the egress
     guard correctly blocks in production. They exercise response streaming, not the
     egress boundary, so bypass the guard here."""
-    monkeypatch.setattr(
-        gate, "classify_destination", lambda _host, _port: (False, None)
-    )
+    monkeypatch.setattr(gate, "destination_is_blocked", lambda _host, _port: False)
 
 
 def _start_proxy(
