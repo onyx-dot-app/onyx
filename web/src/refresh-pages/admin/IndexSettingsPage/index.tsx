@@ -823,16 +823,15 @@ export default function IndexSettingsPage() {
       <cancelReindexModal.Provider>
         <ConfirmationModalLayout
           icon={SvgRevert}
-          title="Cancel Re-index"
+          title={t("admin.index_settings.cancel_reindex_title")}
           submit={
             <Button variant="danger" onClick={handleCancelReindex}>
-              Cancel
+              {t("admin.index_settings.cancel_reindex_title")}
             </Button>
           }
         >
           <Text font="main-ui-body" color="text-03" as="p">
-            Cancelling will revert to the previous embedding model and all
-            re-indexing progress will be lost.
+            {t("admin.index_settings.cancel_reindex_desc")}
           </Text>
         </ConfirmationModalLayout>
       </cancelReindexModal.Provider>
@@ -952,7 +951,7 @@ export default function IndexSettingsPage() {
                             prominence="secondary"
                             onClick={() => cancelReindexModal.toggle(true)}
                           >
-                            Cancel Re-index
+                            {t("admin.index_settings.cancel_reindex_title")}
                           </Button>
                         </GeneralLayouts.Section>
                       }
@@ -1369,7 +1368,7 @@ export default function IndexSettingsPage() {
                                         setViewAllModelsOpen(true);
                                       }}
                                     >
-                                      View All Models
+                                      {t("admin.index_settings.view_all_models")}
                                     </Button>
                                     {isCurrentCloudBased && (
                                       <div className="p-1">
@@ -1461,13 +1460,13 @@ export default function IndexSettingsPage() {
                             <SwitchField name="enable_contextual_rag" />
                           </InputHorizontal>
 
-                          <Disabled
+                           <Disabled
                             disabled={!values.enable_contextual_rag}
-                            tooltip="Cannot modify while Contextual Retrieval is off."
+                            tooltip={t("admin.index_settings.contextual_retrieval_disabled_tooltip", "Cannot modify while Contextual Retrieval is off.")}
                           >
                             <InputHorizontal
-                              title="Contextual Retrieval LLM"
-                              description="This model will be used to generate context for chunks."
+                              title={t("admin.index_settings.contextual_retrieval_llm")}
+                              description={t("admin.index_settings.contextual_retrieval_llm_desc")}
                               disabled={!values.enable_contextual_rag}
                               withLabel
                             >
@@ -1511,7 +1510,7 @@ export default function IndexSettingsPage() {
                       tooltip={
                         !hasAnyVisionLlm
                           ? markdown(
-                              "Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable [Language Model](/admin/configuration/language-models) first."
+                              t("admin.index_settings.image_processing_disabled_tooltip", "Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable Language Model first.")
                             )
                           : undefined
                       }
@@ -1519,8 +1518,8 @@ export default function IndexSettingsPage() {
                       <Card border="solid" rounding="lg">
                         <GeneralLayouts.Section width="full">
                           <InputHorizontal
-                            title="Extract & Caption Images"
-                            description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
+                            title={t("admin.index_settings.extract_caption_images")}
+                            description={t("admin.index_settings.extract_caption_images_desc")}
                             withLabel
                           >
                             <Switch
@@ -1536,11 +1535,11 @@ export default function IndexSettingsPage() {
 
                           <Disabled
                             disabled={!imageProcessingEnabled}
-                            tooltip="Enable Extract & Caption Images to configure this."
+                            tooltip={t("admin.index_settings.enable_extract_caption_images_to_configure")}
                           >
                             <InputHorizontal
-                              title="Captioning LLM"
-                              description="This model will be used to analyze images during indexing. Only vision-capable models can be selected. Updates apply to documents indexed going forward — existing captions are baked into prior embeddings."
+                              title={t("admin.index_settings.captioning_llm")}
+                              description={t("admin.index_settings.captioning_llm_desc")}
                               disabled={!imageProcessingEnabled}
                               withLabel
                             >
@@ -1560,12 +1559,12 @@ export default function IndexSettingsPage() {
 
                           <Disabled
                             disabled={!imageProcessingEnabled}
-                            tooltip="Enable Extract & Caption Images to configure this."
+                            tooltip={t("admin.index_settings.enable_extract_caption_images_to_configure")}
                           >
                             <InputHorizontal
-                              title="Max Image Size for Analysis"
+                              title={t("admin.index_settings.max_image_size")}
                               suffix="(MB)"
-                              description="Images above this size will be skipped to limit resource usage."
+                              description={t("admin.index_settings.max_image_size_desc")}
                               disabled={!imageProcessingEnabled}
                               withLabel
                             >

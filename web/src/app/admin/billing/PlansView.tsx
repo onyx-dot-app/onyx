@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   SvgDashboard,
   SvgHistory,
@@ -95,6 +97,7 @@ function PlanCard({
   isCurrentPlan,
   hideFeatures,
 }: PlanConfig & { hideFeatures?: boolean }) {
+  const { t } = useTranslation();
   return (
     <Card
       padding={0}
@@ -152,7 +155,7 @@ function PlanCard({
             // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button tertiary transient className="pointer-events-none">
               <Text mainUiAction text03>
-                Your Current Plan
+                {t("admin.billing.your_current_plan")}
               </Text>
             </Button>
           ) : href ? (
@@ -172,7 +175,7 @@ function PlanCard({
             // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
             <Button tertiary transient className="pointer-events-none">
               <Text mainUiAction text03>
-                Included in your plan
+                {t("admin.billing.included_in_your_plan")}
               </Text>
             </Button>
           )}
@@ -242,30 +245,51 @@ export default function PlansView({
   onCheckout,
   hideFeatures,
 }: PlansViewProps) {
+  const { t } = useTranslation();
+
+  const businessFeatures = useMemo<PlanFeature[]>(() => [
+    { icon: SvgFiles, text: t("admin.billing.feature_inherit_document_permissions") },
+    { icon: SvgHistory, text: t("admin.billing.feature_query_history_usage") },
+    { icon: SvgShield, text: t("admin.billing.feature_rbac") },
+    { icon: SvgLock, text: t("admin.billing.feature_encryption_secrets") },
+    { icon: SvgKey, text: t("admin.billing.feature_service_account_keys") },
+    { icon: SvgHardDrive, text: t("admin.billing.feature_self_hosting") },
+    { icon: SvgPaintBrush, text: t("admin.billing.feature_custom_theming") },
+  ], [t]);
+
+  const enterpriseFeatures = useMemo<PlanFeature[]>(() => [
+    { icon: SvgUsers, text: t("admin.billing.feature_scim_sync") },
+    { icon: SvgDashboard, text: t("admin.billing.feature_white_labeling") },
+    { icon: SvgUserManage, text: t("admin.billing.feature_custom_roles_permissions") },
+    { icon: SvgSliders, text: t("admin.billing.feature_configurable_usage_limits") },
+    { icon: SvgShareWebhook, text: t("admin.billing.feature_hook_extensions") },
+    { icon: SvgServer, text: t("admin.billing.feature_custom_deployments") },
+    { icon: SvgGlobe, text: t("admin.billing.feature_region_data_processing") },
+    { icon: SvgHeadsetMic, text: t("admin.billing.feature_enterprise_support") },
+  ], [t]);
+
   const plans: PlanConfig[] = [
     {
       icon: SvgUsers,
-      title: "Business",
+      title: t("admin.billing.plan_business"),
       pricing: "$20",
-      description:
-        "per seat/month billed annually\nor $25 per seat if billed monthly",
-      buttonLabel: "Get Business Plan",
+      description: t("admin.billing.business_pricing_desc"),
+      buttonLabel: t("admin.billing.get_business_plan"),
       buttonVariant: "primary",
       onClick: hasLicense ? undefined : onCheckout,
-      features: BUSINESS_FEATURES,
-      featuresPrefix: "Get more work done with AI for your team.",
+      features: businessFeatures,
+      featuresPrefix: t("admin.billing.business_features_prefix"),
       isCurrentPlan: !!hasSubscription,
     },
     {
       icon: SvgOrganization,
-      title: "Enterprise",
-      description:
-        "Flexible pricing & deployment options\nfor large organizations",
-      buttonLabel: "Contact Sales",
+      title: t("admin.billing.plan_enterprise"),
+      description: t("admin.billing.enterprise_pricing_desc"),
+      buttonLabel: t("admin.billing.contact_sales"),
       buttonVariant: "secondary",
       href: SALES_URL,
-      features: ENTERPRISE_FEATURES,
-      featuresPrefix: "Everything in Business Plan, plus:",
+      features: enterpriseFeatures,
+      featuresPrefix: t("admin.billing.enterprise_features_prefix"),
       isCurrentPlan: !!hasLicense && !hasSubscription,
     },
   ];

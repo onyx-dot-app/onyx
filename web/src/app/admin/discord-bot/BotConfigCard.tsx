@@ -18,7 +18,10 @@ import { toast } from "@/hooks/useToast";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import { getFormattedDateTime } from "@/lib/dateUtils";
 
+import { useTranslation } from "react-i18next";
+
 export function BotConfigCard() {
+  const { t } = useTranslation();
   const {
     data: botConfig,
     isLoading,
@@ -46,7 +49,7 @@ export function BotConfigCard() {
           alignItems="center"
         >
           <Text mainContentEmphasis text05>
-            Bot Token
+            {t("admin.bots.bot_token")}
           </Text>
         </Section>
         <div className="flex justify-center">
@@ -112,12 +115,12 @@ export function BotConfigCard() {
         <Section flexDirection="row" justifyContent="between">
           <Section flexDirection="row" gap={0.5} width="fit">
             <Text mainContentEmphasis text05>
-              Bot Token
+              {t("admin.bots.bot_token")}
             </Text>
             {isConfigured ? (
-              <Badge variant="success">Configured</Badge>
+              <Badge variant="success">{t("admin.bots.configured")}</Badge>
             ) : (
-              <Badge variant="secondary">Not Configured</Badge>
+              <Badge variant="secondary">{t("admin.bots.not_configured")}</Badge>
             )}
           </Section>
           {isConfigured && (
@@ -131,7 +134,7 @@ export function BotConfigCard() {
                 variant="danger"
                 onClick={() => setShowDeleteConfirm(true)}
               >
-                Delete Discord Token
+                {t("admin.bots.delete_discord_token")}
               </Button>
             </Tooltip>
           )}
@@ -140,36 +143,37 @@ export function BotConfigCard() {
         {isConfigured ? (
           <Section flexDirection="column" alignItems="start" gap={0.5}>
             <Text text03 secondaryBody>
-              Your Discord bot token is configured.
+              {t("admin.bots.discord_token_configured_desc")}
               {botConfig?.created_at && (
                 <>
                   {" "}
-                  Added {getFormattedDateTime(new Date(botConfig.created_at))}.
+                  {t("admin.bots.discord_token_added", {
+                    time: getFormattedDateTime(new Date(botConfig.created_at)),
+                  })}
                 </>
               )}
             </Text>
             <Text text03 secondaryBody>
-              To change the token, delete the current one and add a new one.
+              {t("admin.bots.discord_token_change_desc")}
             </Text>
           </Section>
         ) : (
           <Section flexDirection="column" alignItems="start" gap={0.75}>
             <Text text03 secondaryBody>
-              Enter your Discord bot token to enable the bot. You can get this
-              from the Discord Developer Portal.
+              {t("admin.bots.discord_token_setup_desc")}
             </Text>
             <Section flexDirection="row" alignItems="end" gap={0.5}>
               <PasswordInputTypeIn
                 value={botToken}
                 onChange={(e) => setBotToken(e.target.value)}
-                placeholder="Enter bot token..."
+                placeholder={t("admin.bots.enter_bot_token_placeholder")}
                 disabled={isSubmitting}
               />
               <Button
                 disabled={isSubmitting || !botToken.trim()}
                 onClick={handleSaveToken}
               >
-                {isSubmitting ? "Saving..." : "Save Token"}
+                {isSubmitting ? t("admin.bots.saving") : t("admin.bots.save_token")}
               </Button>
             </Section>
           </Section>
