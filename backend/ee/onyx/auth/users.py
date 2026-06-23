@@ -44,9 +44,10 @@ async def current_cloud_superuser(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> User:
     if not SUPER_CLOUD_API_KEY:
-        raise HTTPException(
-            status_code=401, detail="Cloud superuser API key not configured"
-        )
+        # Fail closed, but return the same 401 as a bad key so callers can't
+        # distinguish "unconfigured" from "wrong key". Log the real reason for operators.
+        logger.error("SUPER_CLOUD_API_KEY is not configured; rejecting request")
+        raise HTTPException(status_code=401, detail="Invalid API key")
 
     api_key = request.headers.get("Authorization", "").replace("Bearer ", "")
     if not secrets.compare_digest(api_key, SUPER_CLOUD_API_KEY):
