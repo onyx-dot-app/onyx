@@ -1124,7 +1124,16 @@
       "error_invalid_key": "Ungültiger API-Schlüssel",
       "error_timeout": "Zeitüberschreitung bei der Anfrage",
       "error_connect": "Verbindung fehlgeschlagen",
-      "error_generic": "Ein unerwarteter Fehler ist aufgetreten"
+      "error_generic": "Ein unerwarteter Fehler ist aufgetreten",
+      "point_document_ingestion_name": "Dokumentenaufnahme",
+      "point_document_ingestion_desc": "Wird für jedes Dokument ausgeführt, bevor es in die Indexierungs-Pipeline gelangt. Ermöglicht das Filtern, Umschreiben oder Verwerfen von Dokumenten.",
+      "point_document_ingestion_fail": "Das Dokument wird nicht indexiert.",
+      "point_document_push_name": "Dokumenten-Push",
+      "point_document_push_desc": "Wird nach der erfolgreichen Indexierung jedes Dokuments ausgelöst. Sendet indexierte Dokumente an ein externes Ziel wie ein Wiki oder ein Data Warehouse. Wird nur für öffentliche Konnektoren in Single-Tenant-Bereitstellungen ausgelöst.",
+      "point_document_push_fail": "Der Indexierungsstapel schlägt fehl.",
+      "point_query_processing_name": "Abfrageverarbeitung",
+      "point_query_processing_desc": "Wird für jede Benutzerabfrage ausgeführt, bevor sie in die Pipeline gelangt. Ermöglicht das Umschreiben, Filtern oder Ablehnen von Abfragen.",
+      "point_query_processing_fail": "Die Abfrage wird blockiert und dem Benutzer wird eine Fehlermeldung angezeigt."
     },
     "token_rate_limits": {
       "title": "Token-Ratenlimits",

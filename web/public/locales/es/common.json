@@ -1124,7 +1124,16 @@
       "error_invalid_key": "Clave API no válida",
       "error_timeout": "La solicitud agotó el tiempo de espera",
       "error_connect": "Error de conexión",
-      "error_generic": "Se produjo un error inesperado"
+      "error_generic": "Se produjo un error inesperado",
+      "point_document_ingestion_name": "Ingesta de documentos",
+      "point_document_ingestion_desc": "Se ejecuta en cada documento antes de que entre en el pipeline de indexación. Permite filtrar, reescribir o descartar documentos.",
+      "point_document_ingestion_fail": "El documento no se indexará.",
+      "point_document_push_name": "Envío de documentos",
+      "point_document_push_desc": "Se activa después de que cada documento se indexa correctamente. Envía los documentos indexados a un destino externo, como una wiki o un almacén de datos. Solo se activa para conectores públicos en despliegues de un solo inquilino.",
+      "point_document_push_fail": "El lote de indexación fallará.",
+      "point_query_processing_name": "Procesamiento de consultas",
+      "point_query_processing_desc": "Se ejecuta en cada consulta del usuario antes de que entre en el pipeline. Permite reescribir, filtrar o rechazar consultas.",
+      "point_query_processing_fail": "La consulta se bloqueará y el usuario verá un mensaje de error."
     },
     "token_rate_limits": {
       "title": "Límites de tokens",

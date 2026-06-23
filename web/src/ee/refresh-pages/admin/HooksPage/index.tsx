@@ -38,6 +38,7 @@ import type { IconFunctionComponent } from "@opal/types";
 import { SvgNoResult, SvgEmpty } from "@opal/illustrations";
 import { InputTypeIn } from "@opal/components";
 import HookFormModal from "@/ee/refresh-pages/admin/HooksPage/HookFormModal";
+import { localizeHookField } from "@/ee/refresh-pages/admin/HooksPage/hookPoints";
 import HookStatusPopover from "@/ee/refresh-pages/admin/HooksPage/HookStatusPopover";
 import {
   activateHook,
@@ -187,8 +188,13 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
             sizePreset="main-ui"
             variant="section"
             icon={Icon}
-            title={spec.display_name}
-            description={spec.description}
+            title={localizeHookField(t, spec.hook_point, "name", spec.display_name)}
+            description={localizeHookField(
+              t,
+              spec.hook_point,
+              "desc",
+              spec.description
+            )}
           />
 
           {spec.docs_url && (
@@ -360,7 +366,14 @@ function ConnectedHookCard({
                     : hook.name
                 }
                 suffix={!hook.is_active ? t("admin.hooks.disconnected_suffix") : undefined}
-                description={t("admin.hooks.hook_point_label", { name: spec?.display_name ?? hook.hook_point })}
+                description={t("admin.hooks.hook_point_label", {
+                  name: localizeHookField(
+                    t,
+                    hook.hook_point,
+                    "name",
+                    spec?.display_name ?? hook.hook_point
+                  ),
+                })}
               />
 
               {spec?.docs_url && (
@@ -464,12 +477,18 @@ export default function HooksPage() {
   } = useHooks();
 
   const hookExtractor = useCallback(
-    (hook: HookResponse) =>
-      `${hook.name} ${
-        specs?.find((s: HookPointMeta) => s.hook_point === hook.hook_point)
-          ?.display_name ?? ""
-      }`,
-    [specs]
+    (hook: HookResponse) => {
+      const spec = specs?.find(
+        (s: HookPointMeta) => s.hook_point === hook.hook_point
+      );
+      return `${hook.name} ${localizeHookField(
+        t,
+        hook.hook_point,
+        "name",
+        spec?.display_name
+      )}`;
+    },
+    [specs, t]
   );
 
   const sortedHooks = useMemo(
@@ -493,18 +512,22 @@ export default function HooksPage() {
 
   const unconnectedSpecs = useMemo(() => {
     const searchLower = search.toLowerCase();
+    const name = (spec: HookPointMeta) =>
+      localizeHookField(t, spec.hook_point, "name", spec.display_name);
+    const desc = (spec: HookPointMeta) =>
+      localizeHookField(t, spec.hook_point, "desc", spec.description);
     return (specs ?? [])
       .filter(
         (spec: HookPointMeta) =>
           (hooksByPoint[spec.hook_point]?.length ?? 0) === 0 &&
           (!searchLower ||
-            spec.display_name.toLowerCase().includes(searchLower) ||
-            spec.description.toLowerCase().includes(searchLower))
+            name(spec).toLowerCase().includes(searchLower) ||
+            desc(spec).toLowerCase().includes(searchLower))
       )
       .sort((a: HookPointMeta, b: HookPointMeta) =>
-        a.display_name.localeCompare(b.display_name)
+        name(a).localeCompare(name(b))
       );
-  }, [specs, hooksByPoint, search]);
+  }, [specs, hooksByPoint, search, t]);
 
   useEffect(() => {
     if (settings.isLoading) return;

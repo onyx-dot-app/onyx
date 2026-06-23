@@ -32,6 +32,7 @@ import type {
   HookResponse,
   HookUpdateRequest,
 } from "@/ee/refresh-pages/admin/HooksPage/interfaces";
+import { localizeHookField } from "@/ee/refresh-pages/admin/HooksPage/hookPoints";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -167,9 +168,19 @@ export default function HookFormModal({
     onOpenChange(false);
   }
 
-  const hookPointDisplayName =
-    spec?.display_name ?? spec?.hook_point ?? hook?.hook_point ?? "";
-  const hookPointDescription = spec?.description;
+  const hookPoint = spec?.hook_point ?? hook?.hook_point ?? "";
+  const hookPointDisplayName = localizeHookField(
+    t,
+    hookPoint,
+    "name",
+    spec?.display_name ?? spec?.hook_point ?? hook?.hook_point ?? ""
+  );
+  const hookPointDescription = localizeHookField(
+    t,
+    hookPoint,
+    "desc",
+    spec?.description
+  );
   const docsUrl = spec?.docs_url;
 
   return (
@@ -250,7 +261,12 @@ export default function HookFormModal({
             const failStrategyDescription =
               values.fail_strategy === "soft"
                 ? t("admin.hooks.fail_strategy_soft_desc")
-                : spec?.fail_hard_description;
+                : localizeHookField(
+                    t,
+                    hookPoint,
+                    "fail",
+                    spec?.fail_hard_description
+                  );
 
             return (
               <Form className="w-full overflow-visible">

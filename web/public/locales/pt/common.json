@@ -1124,7 +1124,16 @@
       "error_invalid_key": "Chave de API inválida",
       "error_timeout": "O tempo limite de solicitação encerrou",
       "error_connect": "Conexão mal sucedida",
-      "error_generic": "Houve um erro imprevisto em sua requisição"
+      "error_generic": "Houve um erro imprevisto em sua requisição",
+      "point_document_ingestion_name": "Ingestão de documentos",
+      "point_document_ingestion_desc": "É executado em cada documento antes de entrar no pipeline de indexação. Permite filtrar, reescrever ou descartar documentos.",
+      "point_document_ingestion_fail": "O documento não será indexado.",
+      "point_document_push_name": "Envio de documentos",
+      "point_document_push_desc": "É acionado após cada documento ser indexado com sucesso. Envia os documentos indexados para um destino externo, como uma wiki ou um data warehouse. Só é acionado para conectores públicos em implantações de inquilino único.",
+      "point_document_push_fail": "O lote de indexação falhará.",
+      "point_query_processing_name": "Processamento de consultas",
+      "point_query_processing_desc": "É executado em cada consulta do usuário antes de entrar no pipeline. Permite reescrever, filtrar ou rejeitar consultas.",
+      "point_query_processing_fail": "A consulta será bloqueada e o usuário verá uma mensagem de erro."
     },
     "token_rate_limits": {
       "title": "Limites de Taxa de Tokens",

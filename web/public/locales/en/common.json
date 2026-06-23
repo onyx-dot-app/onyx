@@ -1124,7 +1124,16 @@
       "error_invalid_key": "Invalid API key",
       "error_timeout": "Request timed out",
       "error_connect": "Failed to connect",
-      "error_generic": "An unexpected error occurred"
+      "error_generic": "An unexpected error occurred",
+      "point_document_ingestion_name": "Document Ingestion",
+      "point_document_ingestion_desc": "Runs on every document before it enters the indexing pipeline. Allows filtering, rewriting, or dropping documents.",
+      "point_document_ingestion_fail": "The document will not be indexed.",
+      "point_document_push_name": "Document Push",
+      "point_document_push_desc": "Fires after each document is successfully indexed. Push indexed documents to an external destination such as a wiki or data warehouse. Only fires for public connectors in single-tenant deployments.",
+      "point_document_push_fail": "The indexing batch will fail.",
+      "point_query_processing_name": "Query Processing",
+      "point_query_processing_desc": "Runs on every user query before it enters the pipeline. Allows rewriting, filtering, or rejecting queries.",
+      "point_query_processing_fail": "The query will be blocked and the user will see an error message."
     },
     "token_rate_limits": {
       "title": "Token Rate Limits",
