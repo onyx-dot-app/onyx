@@ -740,6 +740,7 @@ def stage_or_inline_xlsx_sheets(
     file: IO[bytes],
     stage: Callable[[IO[bytes], str], str],
     max_inline_bytes: int,
+    file_name: str = "",
 ) -> list[StreamedSheet]:
     """Render each non-empty worksheet to a temp CSV, streaming rows so peak RAM
     is one row rather than the whole sheet. A sheet whose CSV is at most
@@ -747,7 +748,24 @@ def stage_or_inline_xlsx_sheets(
     referenced by id. The temp handle never escapes this function. No column
     trimming or empty-run collapsing — those need a full in-memory pass."""
     sheets: list[StreamedSheet] = []
-    workbook = openpyxl.load_workbook(file, read_only=True)
+    try:
+        workbook = openpyxl.load_workbook(file, read_only=True)
+    except BadZipFile as e:
+        error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
+        if file_name.startswith("~"):
+            logger.debug(error_str + " (this is expected for files with ~)")
+        else:
+            logger.warning(error_str)
+        return []
+    except Exception as e:
+        if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
+            logger.warning(
+                "Failed to extract text from %s. This happens due to a bug in openpyxl. %s",
+                file_name or "xlsx file",
+                e,
+            )
+            return []
+        raise
     try:
         for sheet in workbook.worksheets:
             ro_sheet = cast(ReadOnlyWorksheet, sheet)

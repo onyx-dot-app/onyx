@@ -55,7 +55,10 @@ def _xlsx_to_streamed_sections(
             heading=f"{file_name} :: {sheet.title}",
         )
         for sheet in stage_or_inline_xlsx_sheets(
-            file, raw_file_callback, XLSX_STREAM_SHEET_BYTES
+            file,
+            raw_file_callback,
+            XLSX_STREAM_SHEET_BYTES,
+            file_name=file_name,
         )
     ]
 
