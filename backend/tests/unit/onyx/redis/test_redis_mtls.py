@@ -1,7 +1,9 @@
 import importlib
 import os
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import quote
 
 import pytest
 
@@ -22,14 +24,18 @@ def _clear_redis_tls_env() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _restore_app_configs() -> object:
+def _restore_app_configs() -> Generator[None, None, None]:
     """Config-reload tests bind REDIS_SSL* at import time; restore the default
-    state afterwards so they don't leak into other test files."""
+    state afterwards so they don't leak into other test files. celery_base is
+    reloaded too since it derives broker_url / result_backend from those."""
     yield
     _clear_redis_tls_env()
     import onyx.configs.app_configs as app_configs
 
     importlib.reload(app_configs)
+    import onyx.background.celery.configs.base as celery_base
+
+    importlib.reload(celery_base)
 
 
 # --- connection wiring ----------------------------------------------------
@@ -81,11 +87,14 @@ def test_celery_broker_and_result_urls_include_client_cert(tmp_path: Path) -> No
 
         importlib.reload(app_configs)
         importlib.reload(celery_base)
+        # Paths are percent-encoded in the URL (safe='') so special characters
+        # can't corrupt the query string.
+        enc_cert = quote(str(cert), safe="")
+        enc_key = quote(str(key), safe="")
         for url in (celery_base.broker_url, celery_base.result_backend):
             assert url.startswith("rediss://")
-            assert f"ssl_certfile={cert}" in url
-            assert f"ssl_keyfile={key}" in url
-    importlib.reload(app_configs)
+            assert f"ssl_certfile={enc_cert}" in url
+            assert f"ssl_keyfile={enc_key}" in url
 
 
 # --- config validation ----------------------------------------------------

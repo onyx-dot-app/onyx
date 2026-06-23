@@ -34,10 +34,13 @@ if REDIS_SSL and not USE_REDIS_IAM_AUTH:
     if REDIS_SSL_CA_CERTS:
         SSL_QUERY_PARAMS += f"&ssl_ca_certs={REDIS_SSL_CA_CERTS}"
     # Client certificate for mutual TLS — the broker URL is how the Celery
-    # workers get their Redis SSL config, so they need this too.
-    if REDIS_SSL_CERTFILE:
+    # workers get their Redis SSL config, so they need this too. Percent-encode
+    # the paths (like REDIS_PASSWORD above) so URL-special characters in a path
+    # can't corrupt the query string.
+    if REDIS_SSL_CERTFILE and REDIS_SSL_KEYFILE:
         SSL_QUERY_PARAMS += (
-            f"&ssl_certfile={REDIS_SSL_CERTFILE}&ssl_keyfile={REDIS_SSL_KEYFILE}"
+            f"&ssl_certfile={urllib.parse.quote(REDIS_SSL_CERTFILE, safe='')}"
+            f"&ssl_keyfile={urllib.parse.quote(REDIS_SSL_KEYFILE, safe='')}"
         )
 
 # region Broker settings
