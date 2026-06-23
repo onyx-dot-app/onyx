@@ -79,7 +79,7 @@ class ExternalAppAdminResponse(BaseModel):
 class UpsertUserCredentialsRequest(BaseModel):
     """User-supplied credentials for a specific external app."""
 
-    user_credentials: dict[str, str]
+    user_credentials: dict[str, Any]
 
 
 class ExternalAppUserResponse(BaseModel):
@@ -105,7 +105,7 @@ class ExternalAppUserResponse(BaseModel):
     slug: str
     app_type: ExternalAppType
     credential_keys: list[str]
-    credential_values: dict[str, str]
+    credential_values: dict[str, Any]
     authenticated: bool
 
 

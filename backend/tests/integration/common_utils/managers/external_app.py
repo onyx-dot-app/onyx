@@ -264,7 +264,7 @@ class ExternalAppManager:
     def upsert_user_credentials(
         user_performing_action: DATestUser,
         app_id: int,
-        credentials: dict[str, str],
+        credentials: dict[str, Any],
     ) -> None:
         body = UpsertUserCredentialsRequest(user_credentials=credentials)
         response = client.post(
