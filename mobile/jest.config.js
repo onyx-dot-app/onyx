@@ -11,6 +11,13 @@
 //     auto-applied to every test (it's a node module).
 //   - jest.setup.ts (setupFilesAfterEnv) resets that keychain + clears mock call
 //     history before each test.
+//
+// Component tests render UI deps that ship untranspiled JSX/ESM (nativewind,
+// @rn-primitives). jest-expo's default transformIgnorePatterns already allow-lists
+// react-native* / expo*; we extend its curated first pattern with those two rather
+// than hand-roll (and lose) the rest.
+const expoPreset = require("jest-expo/jest-preset");
+
 module.exports = {
   preset: "jest-expo",
   moduleNameMapper: {
@@ -18,4 +25,11 @@ module.exports = {
   },
   testMatch: ["<rootDir>/src/**/__tests__/**/*.test.ts?(x)"],
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
+  transformIgnorePatterns: [
+    expoPreset.transformIgnorePatterns[0].replace(
+      "standard-navigation",
+      "standard-navigation|nativewind|react-native-css-interop|@rn-primitives",
+    ),
+    ...expoPreset.transformIgnorePatterns.slice(1),
+  ],
 };

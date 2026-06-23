@@ -30,6 +30,7 @@
     "nativewind": "^4.2.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-hook-form": "^7.54.2",
     "react-native": "0.85.3",
     "react-native-gesture-handler": "~2.31.1",
     "react-native-mmkv": "^4.3.1",
@@ -43,6 +44,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@testing-library/react-native": "^13.0.0",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.2.2",
     "eslint": "^9.39.4",
@@ -51,6 +53,7 @@
     "jest-expo": "~56.0.0",
     "prettier": "^3.8.4",
     "prettier-plugin-tailwindcss": "^0.8.0",
+    "react-test-renderer": "19.2.3",
     "tailwindcss": "3.4.17",
     "typescript": "~6.0.3"
   },
