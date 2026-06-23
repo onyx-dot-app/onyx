@@ -286,7 +286,7 @@ def run_research_agent_call(
                     if any(isinstance(tool, WebSearchTool) for tool in current_tools)
                     else ""
                 )
-                has_open_url_tool = any(
+                has_open_url_tool: bool = any(
                     isinstance(tool, OpenURLTool) for tool in current_tools
                 )
                 open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION if has_open_url_tool else ""
