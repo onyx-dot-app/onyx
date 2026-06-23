@@ -616,13 +616,11 @@ def select_reminder_text(
 ) -> str | None:
     """Choose the reminder appended after a tool cycle.
 
-    The open_url nudge is only emitted when the open_url tool is actually
-    available this session; otherwise the model gets told to call a tool it
-    doesn't have, which leaks confusing "open_url is not available" replies.
+    The open_url nudge is gated on the tool actually being available; otherwise
+    the model is told to call a tool it doesn't have and leaks confusing
+    "open_url is not available" replies.
     """
     if ran_image_gen:
-        # Some models are trained to hand images back to the user via a similar
-        # tool; this prevents output like [Cute Cat](attachment://a_cute_cat.png).
         return IMAGE_GEN_REMINDER
     if just_ran_web_search and has_open_url_tool and not out_of_cycles:
         return OPEN_URL_REMINDER
@@ -721,8 +719,6 @@ def run_llm_loop(
         should_cite_documents: bool = False
         ran_image_gen: bool = False
         just_ran_web_search: bool = False
-        # Only nudge the model toward open_url if that tool is actually available
-        # this session; otherwise it gets told to call a tool it doesn't have.
         has_open_url_tool: bool = any(isinstance(tool, OpenURLTool) for tool in tools)
         has_called_search_tool: bool = False
         code_interpreter_file_generated: bool = False
