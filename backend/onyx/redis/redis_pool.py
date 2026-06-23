@@ -31,6 +31,8 @@ from onyx.configs.app_configs import REDIS_REPLICA_HOST
 from onyx.configs.app_configs import REDIS_SSL
 from onyx.configs.app_configs import REDIS_SSL_CA_CERTS
 from onyx.configs.app_configs import REDIS_SSL_CERT_REQS
+from onyx.configs.app_configs import REDIS_SSL_CERTFILE
+from onyx.configs.app_configs import REDIS_SSL_KEYFILE
 from onyx.configs.app_configs import USE_REDIS_IAM_AUTH
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
@@ -119,6 +121,8 @@ class RedisPool:
         max_connections: int = REDIS_POOL_MAX_CONNECTIONS,
         ssl_ca_certs: str | None = REDIS_SSL_CA_CERTS,
         ssl_cert_reqs: str = REDIS_SSL_CERT_REQS,
+        ssl_certfile: str | None = REDIS_SSL_CERTFILE,
+        ssl_keyfile: str | None = REDIS_SSL_KEYFILE,
         ssl: bool = False,
     ) -> redis.BlockingConnectionPool:
         """
@@ -170,6 +174,8 @@ class RedisPool:
                 connection_class=redis.SSLConnection,
                 ssl_ca_certs=ssl_ca_certs,
                 ssl_cert_reqs=ssl_cert_reqs,
+                ssl_certfile=ssl_certfile,
+                ssl_keyfile=ssl_keyfile,
             )
 
         return redis.BlockingConnectionPool(
@@ -336,6 +342,10 @@ def _build_async_redis_connection() -> aioredis.Redis:
         ssl_context.verify_mode = SSL_CERT_REQS_MAP.get(
             REDIS_SSL_CERT_REQS, ssl.CERT_NONE
         )
+
+        # Present a client certificate for mutual TLS, if configured.
+        if REDIS_SSL_CERTFILE:
+            ssl_context.load_cert_chain(REDIS_SSL_CERTFILE, REDIS_SSL_KEYFILE)
 
         connection_kwargs["ssl"] = ssl_context
 

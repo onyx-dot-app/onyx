@@ -12,6 +12,8 @@ from onyx.configs.app_configs import REDIS_PORT
 from onyx.configs.app_configs import REDIS_SSL
 from onyx.configs.app_configs import REDIS_SSL_CA_CERTS
 from onyx.configs.app_configs import REDIS_SSL_CERT_REQS
+from onyx.configs.app_configs import REDIS_SSL_CERTFILE
+from onyx.configs.app_configs import REDIS_SSL_KEYFILE
 from onyx.configs.app_configs import USE_REDIS_IAM_AUTH
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
@@ -31,6 +33,15 @@ if REDIS_SSL and not USE_REDIS_IAM_AUTH:
     SSL_QUERY_PARAMS = f"?ssl_cert_reqs={REDIS_SSL_CERT_REQS}"
     if REDIS_SSL_CA_CERTS:
         SSL_QUERY_PARAMS += f"&ssl_ca_certs={REDIS_SSL_CA_CERTS}"
+    # Client certificate for mutual TLS — the broker URL is how the Celery
+    # workers get their Redis SSL config, so they need this too. Percent-encode
+    # the paths (like REDIS_PASSWORD above) so URL-special characters in a path
+    # can't corrupt the query string.
+    if REDIS_SSL_CERTFILE and REDIS_SSL_KEYFILE:
+        SSL_QUERY_PARAMS += (
+            f"&ssl_certfile={urllib.parse.quote(REDIS_SSL_CERTFILE, safe='')}"
+            f"&ssl_keyfile={urllib.parse.quote(REDIS_SSL_KEYFILE, safe='')}"
+        )
 
 # region Broker settings
 # example celery_broker_url: "redis://:password@localhost:6379/15"

@@ -73,6 +73,7 @@ import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
+import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
@@ -421,6 +422,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const isStreaming = currentChatState === "streaming";
 
   const multiModel = useMultiModelChat(llmManager);
+
+  const { fullWidthChat } = useFullWidthChat();
 
   // Auto-fold sidebar when a multi-model message is submitted.
   // Stays collapsed until the user exits multi-model mode (removes models).
@@ -826,6 +829,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       autoScroll={autoScrollEnabled}
                       isStreaming={isStreaming}
                       onScrollButtonVisibilityChange={setShowScrollButton}
+                      flushContent={fullWidthChat}
                     >
                       <ChatUI
                         liveAgent={liveAgent!}
@@ -841,6 +845,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         onResubmit={handleResubmitLastMessage}
                         anchorNodeId={anchorNodeId}
                         selectedModels={multiModel.selectedModels}
+                        fullWidthChat={fullWidthChat}
                       />
                     </ChatScrollContainer>
                   </Fade>
@@ -937,7 +942,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     sessionFetchError && "hidden"
                   )}
                 >
-                  <div className="relative w-full max-w-(--app-page-main-content-width) flex flex-col">
+                  <div
+                    className={cn(
+                      "relative w-full flex flex-col",
+                      !fullWidthChat && "max-w-(--app-page-main-content-width)"
+                    )}
+                  >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
                     {appFocus.isChat() && showScrollButton && (
                       <div className="absolute -top-14 self-center">

@@ -388,6 +388,39 @@ OPENSEARCH_ADMIN_PASSWORD = os.environ.get(
     "OPENSEARCH_ADMIN_PASSWORD", "StrongPassword123!"
 )
 OPENSEARCH_USE_SSL = os.environ.get("OPENSEARCH_USE_SSL", "true").lower() == "true"
+# Verify the OpenSearch server certificate. Defaults to False to preserve the
+# existing behavior (the bundled OpenSearch ships self-signed certs). Set True —
+# with OPENSEARCH_CA_CERTS for a private CA — to actually authenticate the
+# server instead of merely encrypting the connection.
+OPENSEARCH_VERIFY_CERTS = (
+    os.environ.get("OPENSEARCH_VERIFY_CERTS", "").lower() == "true"
+)
+# CA bundle to verify the server cert against when OPENSEARCH_VERIFY_CERTS=true.
+# Falls back to the system trust store if unset.
+OPENSEARCH_CA_CERTS: str | None = os.environ.get("OPENSEARCH_CA_CERTS") or None
+# Client certificate + key for mutual TLS (OpenSearch authenticating us). Both
+# must be set together.
+OPENSEARCH_CLIENT_CERT: str | None = os.environ.get("OPENSEARCH_CLIENT_CERT") or None
+OPENSEARCH_CLIENT_KEY: str | None = os.environ.get("OPENSEARCH_CLIENT_KEY") or None
+
+if OPENSEARCH_VERIFY_CERTS and not OPENSEARCH_USE_SSL:
+    logger.warning(
+        "OPENSEARCH_VERIFY_CERTS=true has no effect when OPENSEARCH_USE_SSL is "
+        "false (the connection is not encrypted)."
+    )
+if bool(OPENSEARCH_CLIENT_CERT) != bool(OPENSEARCH_CLIENT_KEY):
+    raise ValueError(
+        "OPENSEARCH_CLIENT_CERT and OPENSEARCH_CLIENT_KEY must both be set "
+        "(mutual TLS needs a client certificate and its private key)."
+    )
+for _os_name, _os_path in (
+    ("OPENSEARCH_CA_CERTS", OPENSEARCH_CA_CERTS),
+    ("OPENSEARCH_CLIENT_CERT", OPENSEARCH_CLIENT_CERT),
+    ("OPENSEARCH_CLIENT_KEY", OPENSEARCH_CLIENT_KEY),
+):
+    if _os_path and not os.path.exists(_os_path):
+        raise ValueError(f"{_os_name}={_os_path!r} does not exist.")
+
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
@@ -732,6 +765,29 @@ REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 12
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
 REDIS_SSL_CA_CERTS = os.getenv("REDIS_SSL_CA_CERTS", None)
+# Client certificate + key for Redis mutual TLS (the server authenticating us).
+# Both must be set together and require REDIS_SSL=true. A managed Redis may hand
+# these out base64-encoded — decode them to files (e.g. a mounted secret) and
+# point these at the paths.
+REDIS_SSL_CERTFILE: str | None = os.getenv("REDIS_SSL_CERTFILE") or None
+REDIS_SSL_KEYFILE: str | None = os.getenv("REDIS_SSL_KEYFILE") or None
+
+if bool(REDIS_SSL_CERTFILE) != bool(REDIS_SSL_KEYFILE):
+    raise ValueError(
+        "REDIS_SSL_CERTFILE and REDIS_SSL_KEYFILE must both be set (mutual TLS "
+        "needs a client certificate and its private key)."
+    )
+if (REDIS_SSL_CERTFILE or REDIS_SSL_KEYFILE) and not REDIS_SSL:
+    raise ValueError(
+        "REDIS_SSL_CERTFILE / REDIS_SSL_KEYFILE require REDIS_SSL=true so a TLS "
+        "connection is negotiated."
+    )
+for _redis_tls_name, _redis_tls_path in (
+    ("REDIS_SSL_CERTFILE", REDIS_SSL_CERTFILE),
+    ("REDIS_SSL_KEYFILE", REDIS_SSL_KEYFILE),
+):
+    if _redis_tls_path and not os.path.exists(_redis_tls_path):
+        raise ValueError(f"{_redis_tls_name}={_redis_tls_path!r} does not exist.")
 
 CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
 

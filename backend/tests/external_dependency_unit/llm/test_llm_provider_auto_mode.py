@@ -140,7 +140,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],  # No model configs provided
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -237,7 +237,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -315,7 +315,7 @@ class TestAutoModeSyncFeature:
                     model_configurations=initial_models,
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -347,7 +347,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],  # Auto mode will sync from config
                     ),
                     is_creation=False,  # This is an update
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -431,7 +431,7 @@ class TestAutoModeSyncFeature:
                         ],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -533,7 +533,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -560,7 +560,7 @@ class TestAutoModeSyncFeature:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -640,7 +640,7 @@ class TestAutoModeMissingFlows:
                     model_configurations=[],
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -735,7 +735,7 @@ class TestAutoModeTransitionsAndResync:
                     model_configurations=initial_models,
                 ),
                 is_creation=True,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -767,7 +767,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=False,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -827,7 +827,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -858,7 +858,7 @@ class TestAutoModeTransitionsAndResync:
                     ],
                 ),
                 is_creation=False,
-                _=_create_mock_admin(),
+                user=_create_mock_admin(),
                 db_session=db_session,
             )
 
@@ -925,7 +925,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -994,7 +994,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -1090,7 +1090,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -1191,7 +1191,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 
@@ -1276,7 +1276,7 @@ class TestAutoModeTransitionsAndResync:
                         model_configurations=[],
                     ),
                     is_creation=True,
-                    _=_create_mock_admin(),
+                    user=_create_mock_admin(),
                     db_session=db_session,
                 )
 

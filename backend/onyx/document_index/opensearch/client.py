@@ -15,9 +15,13 @@ from pydantic import BaseModel
 from onyx.configs.app_configs import DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
+from onyx.configs.app_configs import OPENSEARCH_CA_CERTS
+from onyx.configs.app_configs import OPENSEARCH_CLIENT_CERT
+from onyx.configs.app_configs import OPENSEARCH_CLIENT_KEY
 from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
 from onyx.configs.app_configs import OPENSEARCH_USE_SSL
+from onyx.configs.app_configs import OPENSEARCH_VERIFY_CERTS
 from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import DocumentChunk
@@ -148,8 +152,11 @@ class OpenSearchClient(AbstractContextManager):
             of (username, password).
         use_ssl: Whether to use SSL for the OpenSearch cluster. Defaults to
             True.
-        verify_certs: Whether to verify the SSL certificates for the OpenSearch
-            cluster. Defaults to False.
+        verify_certs: Whether to verify the server certificate. Defaults to
+            OPENSEARCH_VERIFY_CERTS.
+        ca_certs: CA bundle path used to verify the server certificate.
+        client_cert: Client certificate path for mutual TLS.
+        client_key: Client private key path for mutual TLS.
         ssl_show_warn: Whether to show warnings for SSL certificates. Defaults
             to False.
         timeout: The timeout for the OpenSearch cluster. Defaults to
@@ -162,7 +169,10 @@ class OpenSearchClient(AbstractContextManager):
         port: int = OPENSEARCH_REST_API_PORT,
         auth: tuple[str, str] = (OPENSEARCH_ADMIN_USERNAME, OPENSEARCH_ADMIN_PASSWORD),
         use_ssl: bool = OPENSEARCH_USE_SSL,
-        verify_certs: bool = False,
+        verify_certs: bool = OPENSEARCH_VERIFY_CERTS,
+        ca_certs: str | None = OPENSEARCH_CA_CERTS,
+        client_cert: str | None = OPENSEARCH_CLIENT_CERT,
+        client_key: str | None = OPENSEARCH_CLIENT_KEY,
         ssl_show_warn: bool = False,
         timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
     ):
@@ -177,6 +187,9 @@ class OpenSearchClient(AbstractContextManager):
             http_auth=auth,
             use_ssl=use_ssl,
             verify_certs=verify_certs,
+            ca_certs=ca_certs,
+            client_cert=client_cert,
+            client_key=client_key,
             ssl_show_warn=ssl_show_warn,
             # NOTE: This timeout applies to all requests the client makes,
             # including bulk indexing. When exceeded, the client will raise a
@@ -418,8 +431,11 @@ class OpenSearchIndexClient(OpenSearchClient):
             of (username, password).
         use_ssl: Whether to use SSL for the OpenSearch cluster. Defaults to
             True.
-        verify_certs: Whether to verify the SSL certificates for the OpenSearch
-            cluster. Defaults to False.
+        verify_certs: Whether to verify the server certificate. Defaults to
+            OPENSEARCH_VERIFY_CERTS.
+        ca_certs: CA bundle path used to verify the server certificate.
+        client_cert: Client certificate path for mutual TLS.
+        client_key: Client private key path for mutual TLS.
         ssl_show_warn: Whether to show warnings for SSL certificates. Defaults
             to False.
         timeout: The timeout for the OpenSearch cluster. Defaults to
@@ -433,7 +449,10 @@ class OpenSearchIndexClient(OpenSearchClient):
         port: int = OPENSEARCH_REST_API_PORT,
         auth: tuple[str, str] = (OPENSEARCH_ADMIN_USERNAME, OPENSEARCH_ADMIN_PASSWORD),
         use_ssl: bool = OPENSEARCH_USE_SSL,
-        verify_certs: bool = False,
+        verify_certs: bool = OPENSEARCH_VERIFY_CERTS,
+        ca_certs: str | None = OPENSEARCH_CA_CERTS,
+        client_cert: str | None = OPENSEARCH_CLIENT_CERT,
+        client_key: str | None = OPENSEARCH_CLIENT_KEY,
         ssl_show_warn: bool = False,
         timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
         emit_metrics: bool = True,
@@ -444,6 +463,9 @@ class OpenSearchIndexClient(OpenSearchClient):
             auth=auth,
             use_ssl=use_ssl,
             verify_certs=verify_certs,
+            ca_certs=ca_certs,
+            client_cert=client_cert,
+            client_key=client_key,
             ssl_show_warn=ssl_show_warn,
             timeout=timeout,
         )

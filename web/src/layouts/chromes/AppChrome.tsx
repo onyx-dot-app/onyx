@@ -43,7 +43,9 @@ import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
+  SvgFitWidth,
   SvgFolderIn,
+  SvgFullWidth,
   SvgMoreHorizontal,
   SvgSearchMenu,
   SvgShare,
@@ -57,6 +59,7 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useCustomFooterContent } from "@/lib/app/hooks";
+import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 
 // ---------------------------------------------------------------------------
 // Header
@@ -71,6 +74,7 @@ function Header() {
   const settings = useSettings();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
+  const { fullWidthChat, toggleFullWidthChat } = useFullWidthChat();
   const [showShareModal, setShowShareModal] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
@@ -396,6 +400,14 @@ function Header() {
                     >
                       {t("projects.share")}
                     </Button>
+                    <Button
+                      icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
+                      prominence="tertiary"
+                      onClick={toggleFullWidthChat}
+                      tooltip={fullWidthChat ? "Fit width" : "Full width"}
+                      aria-label="Toggle full width chat"
+                      aria-pressed={fullWidthChat}
+                    />
                     <SimplePopover
                       trigger={
                         <Button
