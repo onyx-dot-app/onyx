@@ -12,11 +12,13 @@ from onyx.access.models import ExternalAccess
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.slack.connector import filter_channels
 from onyx.connectors.slack.connector import get_channels
 from onyx.connectors.slack.connector import get_channels_across_teams
 from onyx.connectors.slack.connector import list_grid_team_ids
 from onyx.connectors.slack.connector import make_paginated_slack_api_call
 from onyx.connectors.slack.connector import SlackConnector
+from onyx.connectors.slack.models import ChannelType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_pool import get_redis_client
@@ -41,12 +43,53 @@ def _fetch_workspace_permissions(
     )
 
 
+def _filter_channels_for_permissions(
+    all_channels: list[ChannelType],
+    channels_to_include: list[str] | None,
+    include_regex_enabled: bool,
+    channels_to_exclude: list[str] | None = None,
+    exclude_regex_enabled: bool = False,
+) -> list[ChannelType]:
+    if channels_to_include and not include_regex_enabled:
+        available_channel_names = {channel["name"] for channel in all_channels}
+        available_channels_to_include = [
+            channel
+            for channel in channels_to_include
+            if channel in available_channel_names
+        ]
+        missing_channels = sorted(
+            set(channels_to_include) - set(available_channels_to_include)
+        )
+        if missing_channels:
+            logger.warning(
+                "Skipping Slack permission sync for configured channels missing "
+                "from Slack API response: %s",
+                missing_channels,
+            )
+        if not available_channels_to_include:
+            return []
+
+        channels_to_include = available_channels_to_include
+
+    return filter_channels(
+        all_channels,
+        channels_to_include,
+        include_regex_enabled,
+        channels_to_exclude,
+        exclude_regex_enabled,
+    )
+
+
 def _fetch_channel_permissions(
     slack_client: WebClient,
     workspace_permissions: ExternalAccess,  # noqa: ARG001
     user_id_to_email_map: dict[str, str],
     team_ids: list[str] | None = None,
     team_id_to_user_emails: dict[str, set[str]] | None = None,
+    channels_to_include: list[str] | None = None,
+    include_regex_enabled: bool = False,
+    channels_to_exclude: list[str] | None = None,
+    exclude_regex_enabled: bool = False,
 ) -> dict[str, ExternalAccess]:
     channel_permissions = {}
     if team_ids:
@@ -73,6 +116,20 @@ def _fetch_channel_permissions(
             get_public=False,
             get_private=True,
         )
+    filtered_channels = _filter_channels_for_permissions(
+        public_channels + private_channels,
+        channels_to_include,
+        include_regex_enabled,
+        channels_to_exclude,
+        exclude_regex_enabled,
+    )
+    public_channels = [
+        channel for channel in filtered_channels if not channel.get("is_private")
+    ]
+    private_channels = [
+        channel for channel in filtered_channels if channel.get("is_private")
+    ]
+
     for channel in public_channels:
         channel_id = channel.get("id")
         if not channel_id:
@@ -199,6 +256,8 @@ def slack_doc_sync(
         SlackConnector.MAX_RETRIES,
         r,
     )
+    slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
+    slack_connector.set_credentials_provider(provider)
 
     grid_team_ids: list[str] | None = None
     try:
@@ -236,10 +295,12 @@ def slack_doc_sync(
         user_id_to_email_map=user_id_to_email_map,
         team_ids=grid_team_ids,
         team_id_to_user_emails=team_id_to_user_emails,
+        channels_to_include=slack_connector.channels,
+        include_regex_enabled=slack_connector.channel_regex_enabled,
+        channels_to_exclude=slack_connector.exclude_channels,
+        exclude_regex_enabled=slack_connector.exclude_channel_regex_enabled,
     )
 
-    slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
-    slack_connector.set_credentials_provider(provider)
     indexing_start_ts: SecondsSinceUnixEpoch | None = (
         cc_pair.connector.indexing_start.timestamp()
         if cc_pair.connector.indexing_start is not None

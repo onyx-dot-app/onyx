@@ -141,6 +141,7 @@ export interface GuruCredentialJson {
 export interface GongCredentialJson {
   gong_access_key: string;
   gong_access_key_secret: string;
+  gong_base_url: string | null;
 }
 
 export interface LoopioCredentialJson {
@@ -321,6 +322,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   gong: {
     gong_access_key: "",
     gong_access_key_secret: "",
+    gong_base_url: null,
   } as GongCredentialJson,
   zulip: { zuliprc_content: "" } as ZulipCredentialJson,
   linear: { linear_access_token: "" } as LinearCredentialJson,
@@ -556,6 +558,8 @@ export const credentialDisplayNames: Record<string, string> = {
   // Gong
   gong_access_key: "Gong Access Key",
   gong_access_key_secret: "Gong Access Key Secret",
+  gong_base_url:
+    "Gong API Base URL (optional; set your region-specific host like https://<region>.api.gong.io for non-US data residency)",
 
   // Loopio
   loopio_subdomain: "Loopio Subdomain",

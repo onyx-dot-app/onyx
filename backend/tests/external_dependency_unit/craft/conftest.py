@@ -11,7 +11,6 @@ import io
 import json
 import os
 import shlex
-import threading
 import time
 import zipfile
 from collections.abc import Callable
@@ -34,10 +33,7 @@ from fastapi_users.password import PasswordHelper
 
 if TYPE_CHECKING:
     from kubernetes import client as k8s_client_module
-from redis import Redis
-from sqlalchemy import select
 from sqlalchemy import text
-from sqlalchemy.orm import class_mapper
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -52,8 +48,6 @@ from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import BuildSession
-from onyx.db.models import ExternalApp
-from onyx.db.models import ExternalAppUserCredential
 from onyx.db.models import Sandbox
 from onyx.db.models import Skill
 from onyx.db.models import Skill__UserGroup
@@ -63,7 +57,6 @@ from onyx.db.models import UserGroup
 from onyx.db.models import UserRole
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
@@ -74,10 +67,12 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
-from tests.external_dependency_unit.craft.stubs import StubSandboxManager
+from tests.common.craft.payloads import default_llm_config
+from tests.common.craft.skill_table_isolation import restore_skill_tables
+from tests.common.craft.skill_table_isolation import snapshot_skill_tables
+from tests.common.craft.stubs import StubSandboxManager
 
 _DEV_PUSH_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
@@ -107,73 +102,20 @@ def _sandbox_push_key() -> Generator[None, None, None]:
 # Skill-table isolation
 # ---------------------------------------------------------------------------
 #
-# These tests run against the shared ``public`` schema (``TEST_TENANT_ID ==
-# "public"``) — the very schema a self-hosted / local dev deployment uses. The
-# fixtures and helpers below commit ``Skill`` / ``ExternalApp`` rows directly
-# and nothing rolled them back, so every committed row leaked into the
-# developer's live craft skill list (and into the next test's view of the
-# table). Tests also delete/mutate the migration-seeded built-in rows
-# (``pptx``, ``image-generation``, ``company-search``), corrupting them for the
-# live app.
+# These tests run against the shared ``public`` schema
+# (``POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE == "public"``) — the very schema a
+# self-hosted / local dev deployment uses. The fixtures and helpers below
+# commit ``Skill`` / ``ExternalApp`` rows directly and nothing rolled them back,
+# so every committed row leaked into the developer's live craft skill list (and
+# into the next test's view of the table). Tests also delete/mutate the
+# migration-seeded built-in rows (``pptx``, ``image-generation``,
+# ``company-search``), corrupting them for the live app.
 #
-# The ``_test_helpers`` contract states "the surrounding test owns transaction
+# The ``db_helpers`` contract states "the surrounding test owns transaction
 # boundaries"; this autouse fixture is that boundary for the skill tables. It
 # snapshots their committed state before each test and restores it afterward,
 # so a run leaves these tables exactly as it found them (the canonical
 # built-ins on a freshly-migrated DB).
-
-# Parent -> child order (FKs all point child -> parent). Restore/insert in this
-# order; delete in reverse so FK constraints stay satisfied.
-_SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
-    Skill,
-    Skill__UserGroup,
-    ExternalApp,
-    ExternalAppUserCredential,
-)
-
-
-def _skill_table_column_keys(model: type[Any]) -> list[str]:
-    return [attr.key for attr in class_mapper(model).column_attrs]
-
-
-def _skill_table_pk_keys(model: type[Any]) -> list[str]:
-    return [col.key for col in class_mapper(model).primary_key]  # ty: ignore[invalid-return-type]
-
-
-def _snapshot_skill_tables(
-    session: Session,
-) -> dict[type[Any], list[dict[str, Any]]]:
-    snapshot: dict[type[Any], list[dict[str, Any]]] = {}
-    for model in _SKILL_ISOLATION_MODELS:
-        keys = _skill_table_column_keys(model)
-        snapshot[model] = [
-            {key: getattr(row, key) for key in keys}
-            for row in session.execute(select(model)).scalars().all()
-        ]
-    return snapshot
-
-
-def _restore_skill_tables(
-    session: Session, snapshot: dict[type[Any], list[dict[str, Any]]]
-) -> None:
-    # Delete rows created during the test (children first so FKs stay valid).
-    for model in reversed(_SKILL_ISOLATION_MODELS):
-        pk_keys = _skill_table_pk_keys(model)
-        baseline_pks = {tuple(row[key] for key in pk_keys) for row in snapshot[model]}
-        for row in session.execute(select(model)).scalars().all():
-            if tuple(getattr(row, key) for key in pk_keys) not in baseline_pks:
-                session.delete(row)
-        session.flush()
-
-    # Re-insert baseline rows the test deleted and restore any it mutated
-    # (parents first). ``merge`` keys on PK: insert when absent, update when
-    # present.
-    for model in _SKILL_ISOLATION_MODELS:
-        for row in snapshot[model]:
-            session.merge(model(**row))
-        session.flush()
-
-    session.commit()
 
 
 def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
@@ -186,7 +128,7 @@ def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
     if not ids:
         return
     try:
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
         try:
             with get_session_with_current_tenant() as session:
                 # Fail fast instead of hanging if another (uncommitted) test
@@ -209,7 +151,7 @@ def _best_effort_delete_memberships(group_ids: list[int]) -> None:
     if not group_ids:
         return
     try:
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
         try:
             with get_session_with_current_tenant() as session:
                 session.execute(text("SET lock_timeout = '10s'"))
@@ -233,12 +175,12 @@ def _isolate_skill_tables(
     Shares the test's ``db_session`` so there is a single transaction holder —
     no second connection that could block on row locks the test still holds.
     """
-    snapshot = _snapshot_skill_tables(db_session)
+    snapshot = snapshot_skill_tables(db_session)
     yield
     # Drop any uncommitted state a failing/early-exiting test left open before
     # reconciling against the committed baseline.
     db_session.rollback()
-    _restore_skill_tables(db_session, snapshot)
+    restore_skill_tables(db_session, snapshot)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -249,7 +191,7 @@ def _seed_default_llm_provider() -> Generator[None, None, None]:
     never invoked — tests forward the resolved config to ``provision()`` only.
     """
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     seeded_name: str | None = None
     try:
         with get_session_with_current_tenant() as session:
@@ -299,7 +241,7 @@ def db_session() -> Generator[Session, None, None]:
 @pytest.fixture(scope="function")
 def tenant_context() -> Generator[None, None, None]:
     """Set up tenant context for testing."""
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         yield
     finally:
@@ -916,7 +858,7 @@ def _pool_pod(
         )
 
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     manager = KubernetesSandboxManager()
 
     try:
@@ -1283,63 +1225,6 @@ def session_manager_with_stub(
     return sm
 
 
-def assert_lock_serializes_two_threads(
-    redis_client: Redis | TenantRedisClient,  # type: ignore[type-arg]
-    lock_key: str,
-    *,
-    acquire_fn: Callable[[], Any] | None = None,  # noqa: ARG001
-) -> None:
-    """Verify two concurrent acquirers contend on ``lock_key`` — one waits.
-
-    Spawns two threads that race for the same Redis lock; the first
-    thread acquires + holds, the second observes that a non-blocking
-    acquire fails (the serialization point). Cleans the key before and
-    after.
-
-    ``acquire_fn`` is accepted for API parity with future variants that
-    may wrap a production acquire helper; the current implementation
-    always uses ``redis_client.lock(lock_key)`` so the test pins the same
-    contract that ``create_session_with_lock`` / ``provision_with_lock``
-    rely on.
-    """
-    redis_client.delete(lock_key)
-
-    first_holds_lock = threading.Event()
-    release_event = threading.Event()
-    second_saw_lock_held: list[bool] = []
-
-    def first() -> None:
-        lock = redis_client.lock(lock_key, timeout=30)
-        assert lock.acquire(blocking=True, blocking_timeout=5) is True
-        first_holds_lock.set()
-        try:
-            release_event.wait(timeout=5)
-        finally:
-            lock.release()
-
-    def second() -> None:
-        assert first_holds_lock.wait(timeout=5)
-        lock = redis_client.lock(lock_key, timeout=30)
-        acquired_immediately = lock.acquire(blocking=False)
-        second_saw_lock_held.append(not acquired_immediately)
-        if acquired_immediately:
-            lock.release()
-            return
-        release_event.set()
-        assert lock.acquire(blocking=True, blocking_timeout=5) is True
-        lock.release()
-
-    t1 = threading.Thread(target=first)
-    t2 = threading.Thread(target=second)
-    t1.start()
-    t2.start()
-    t1.join(timeout=10)
-    t2.join(timeout=10)
-
-    assert second_saw_lock_held == [True]
-    redis_client.delete(lock_key)
-
-
 # ---------------------------------------------------------------------------
 # Kubernetes helpers (Part V.1)
 #
@@ -1374,7 +1259,7 @@ def pod_exec(
     client: "k8s_client_module.CoreV1Api",
     pod_name: str,
     namespace: str,
-    command: str | list[str],
+    command: str,
     container: str = "sandbox",
 ) -> str:
     """Run a one-shot command in a pod container; return combined output.
@@ -1383,12 +1268,11 @@ def pod_exec(
     operations that need to write to ``/workspace/managed/`` (read-only in
     the sandbox container) or inspect the sidecar's environment.
 
-    ``command`` may be a shell-string (auto-wrapped in ``/bin/sh -c``) or an
-    explicit argv list passed straight through to ``connect_get_namespaced_pod_exec``.
+    ``command`` is a shell-string run via ``/bin/sh -c``.
     """
     from kubernetes.stream import stream as k8s_stream
 
-    argv = ["/bin/sh", "-c", command] if isinstance(command, str) else list(command)
+    argv = ["/bin/sh", "-c", command]
     resp = k8s_stream(
         client.connect_get_namespaced_pod_exec,
         name=pod_name,
@@ -1572,9 +1456,8 @@ def wait_for_proxy_redeploy(
 # ``pytestmark = pytest.mark.skipif(SANDBOX_BACKEND != KUBERNETES, ...)`` —
 # the fixtures themselves do not gate.
 #
-# We don't use the test_kubernetes_sandbox.py ``_is_kubernetes_available``
-# call here — the cluster check happens implicitly when ``k8s_client`` or
-# the manager makes its first API call.
+# The cluster check happens implicitly when ``k8s_client`` or the manager makes
+# its first API call.
 # ---------------------------------------------------------------------------
 
 
@@ -1586,7 +1469,7 @@ def k8s_manager() -> Generator[KubernetesSandboxManager, None, None]:
     ``SANDBOX_BACKEND == KUBERNETES`` via ``pytestmark``.
     """
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         yield KubernetesSandboxManager()
     finally:

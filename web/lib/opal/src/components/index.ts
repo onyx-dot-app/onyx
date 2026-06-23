@@ -153,3 +153,9 @@ export {
   type TabsListProps,
   type TabsTriggerProps,
 } from "@opal/components/tabs/components";
+
+/* EndOfList */
+export {
+  EndOfList,
+  type EndOfListProps,
+} from "@opal/components/end-of-list/components";

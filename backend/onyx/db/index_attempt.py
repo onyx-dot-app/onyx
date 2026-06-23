@@ -747,6 +747,24 @@ def count_index_attempts_for_cc_pair(
     return total_count
 
 
+def get_error_counts_for_index_attempts(
+    db_session: Session,
+    index_attempt_ids: list[int],
+) -> dict[int, int]:
+    """Per-attempt error-row counts via one grouped query; attempt ids with no
+    errors are absent (callers treat missing as 0). Counts in SQL because
+    ``error_rows`` is unbounded per attempt and must not be materialized here."""
+    if not index_attempt_ids:
+        return {}
+
+    stmt = (
+        select(IndexAttemptError.index_attempt_id, func.count())
+        .where(IndexAttemptError.index_attempt_id.in_(index_attempt_ids))
+        .group_by(IndexAttemptError.index_attempt_id)
+    )
+    return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}
+
+
 def get_paginated_index_attempts_for_cc_pair_id(
     db_session: Session,
     cc_pair_id: int,

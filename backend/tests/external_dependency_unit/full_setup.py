@@ -14,8 +14,8 @@ from onyx.indexing.models import IndexingSetting
 from onyx.setup import setup_document_indices
 from onyx.setup import setup_postgres
 from shared_configs import configs as shared_configs_module
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 _SETUP_COMPLETE: bool = False
 
@@ -39,7 +39,7 @@ def ensure_full_deployment_setup(
     if os.environ.get("SKIP_EXTERNAL_DEPENDENCY_UNIT_SETUP", "").lower() == "true":
         return
 
-    tenant = tenant_id or TEST_TENANT_ID
+    tenant = tenant_id or POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
     # Initialize engine (noop if already initialized)
     SqlEngine.init_engine(pool_size=10, max_overflow=5)

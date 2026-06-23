@@ -326,3 +326,4 @@ class DATestSkill(BaseModel):
     is_public: bool = False
     enabled: bool = True
     granted_group_ids: list[int] = Field(default_factory=list)
+    is_personal: bool = False

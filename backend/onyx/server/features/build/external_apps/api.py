@@ -31,7 +31,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.models import BuiltInExternalAppDescriptor
 from onyx.external_apps.providers.registry import action_policy_views
 from onyx.external_apps.providers.registry import fetch_available_built_in_apps
-from onyx.external_apps.providers.registry import fetch_built_in_app
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.external_apps.providers.registry import resolve_action_overrides
 from onyx.external_apps.url_glob import UrlGlob
@@ -364,14 +363,6 @@ def list_built_in_external_apps(
 ) -> list[BuiltInExternalAppDescriptor]:
     """Backend-defined presets for the admin "Configure" UI."""
     return fetch_available_built_in_apps()
-
-
-@router.get("/admin/apps/built-in/options/{app_type}")
-def get_built_in_external_app(
-    app_type: ExternalAppType,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> BuiltInExternalAppDescriptor:
-    return fetch_built_in_app(app_type)
 
 
 @router.delete("/admin/apps/{external_app_id}")

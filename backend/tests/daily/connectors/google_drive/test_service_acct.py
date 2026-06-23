@@ -13,6 +13,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_MY_DRIVE_ID
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_expected_docs_in_retrieved_docs,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
@@ -168,6 +171,7 @@ def test_include_all(
             TEST_USER_1_EXTRA_FOLDER_ID,
             EXTERNAL_SHARED_FOLDER_ID,
             FOLDER_3_ID,
+            *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
         )
     )
     assert_hierarchy_nodes_match_expected(
@@ -230,8 +234,8 @@ def test_include_shared_drives_only_with_size_threshold(
     # If instead someone with FULL access to the shared drive retrieves it, the connector will retrieve
     # the folder and all its files. There is currently no consistency to the order of assignment of users
     # to shared drives, so this is a heisenbug. When we guarantee that restricted folders are retrieved,
-    # we can change this to 52
-    assert len(output.documents) == 50 or len(output.documents) == 51
+    # we can change this to 53
+    assert len(output.documents) in (52, 53)
 
 
 @patch(
@@ -276,7 +280,7 @@ def test_include_shared_drives_only(
     # 2 extra files from shared drive owned by non-admin and not shared with admin
     # another one flaky for unknown reasons
     # TODO: switch to 54 when restricted access issue is resolved
-    assert len(output.documents) == 51 or len(output.documents) == 52
+    assert len(output.documents) in (53, 54)
 
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
@@ -345,6 +349,7 @@ def test_include_my_drives_only(
         PILL_FOLDER_ID,
         TEST_USER_1_EXTRA_FOLDER_ID,
         EXTERNAL_SHARED_FOLDER_ID,
+        *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
     )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,

@@ -1,4 +1,7 @@
 import type { HTMLAttributes } from "react";
+// Canonical TextFont/TextColor unions, shared with mobile via the neutral
+// @onyx-ai/shared/contracts (not the RN-only /native).
+import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
 import type { RichStr, WithoutStyles } from "@opal/types";
 import { cn } from "@opal/utils";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";
@@ -6,50 +9,6 @@ import { resolveStr } from "@opal/components/text/InlineMarkdown";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type TextFont =
-  | "heading-h1"
-  | "heading-h2"
-  | "heading-h3"
-  | "heading-h3-muted"
-  | "main-content-body"
-  | "main-content-muted"
-  | "main-content-emphasis"
-  | "main-content-mono"
-  | "main-ui-body"
-  | "main-ui-muted"
-  | "main-ui-action"
-  | "main-ui-mono"
-  | "secondary-body"
-  | "secondary-action"
-  | "secondary-mono"
-  | "secondary-mono-label"
-  | "figure-small-label"
-  | "figure-small-value"
-  | "figure-keystroke";
-
-type TextColor =
-  | "inherit"
-  | "text-01"
-  | "text-02"
-  | "text-03"
-  | "text-04"
-  | "text-05"
-  | "text-inverted-01"
-  | "text-inverted-02"
-  | "text-inverted-03"
-  | "text-inverted-04"
-  | "text-inverted-05"
-  | "text-light-03"
-  | "text-light-05"
-  | "text-dark-03"
-  | "text-dark-05"
-  | "status-error-01"
-  | "status-error-02"
-  | "status-error-05"
-  | "status-success-01"
-  | "status-success-02"
-  | "status-success-05";
 
 interface TextProps extends WithoutStyles<
   Omit<HTMLAttributes<HTMLElement>, "color" | "children">
@@ -161,4 +120,6 @@ function Text({
   );
 }
 
-export { Text, type TextProps, type TextFont, type TextColor };
+export { Text, type TextProps };
+// Re-export the shared unions so existing `@opal/components` consumers are unchanged.
+export type { TextFont, TextColor };

@@ -42,6 +42,7 @@ from onyx.db.enums import Permission
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import count_index_attempts_for_cc_pair
+from onyx.db.index_attempt import get_error_counts_for_index_attempts
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
@@ -79,6 +80,7 @@ from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
 from onyx.server.documents.models import IndexAttemptStageMetricsResponse
 from onyx.server.documents.models import PaginatedReturn
+from onyx.server.documents.models import synthesize_unaccounted
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
@@ -116,9 +118,16 @@ def get_cc_pair_index_attempts(
         page=page_num,
         page_size=page_size,
     )
+    error_counts = get_error_counts_for_index_attempts(
+        db_session=db_session,
+        index_attempt_ids=[index_attempt.id for index_attempt in index_attempts],
+    )
     return PaginatedReturn(
         items=[
-            IndexAttemptSnapshot.from_index_attempt_db_model(index_attempt)
+            IndexAttemptSnapshot.from_index_attempt_db_model(
+                index_attempt,
+                error_count=error_counts.get(index_attempt.id, 0),
+            )
             for index_attempt in index_attempts
         ],
         total_items=total_count,
@@ -160,9 +169,14 @@ def get_index_attempt_stage_metrics(
         db_session=db_session,
         index_attempt_id=index_attempt_id,
     )
+    stages = [IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics]
+    # Append the BATCH_UNACCOUNTED residual (frontend re-sorts, so order is fine).
+    unaccounted = synthesize_unaccounted(stages)
+    if unaccounted is not None:
+        stages.append(unaccounted)
     return IndexAttemptStageMetricsResponse(
         index_attempt_id=index_attempt_id,
-        stages=[IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics],
+        stages=stages,
     )
 
 

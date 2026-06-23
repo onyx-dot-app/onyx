@@ -1,6 +1,7 @@
 """Celery tasks for sandbox operations (cleanup, etc.)."""
 
 import datetime
+import time
 
 from celery import shared_task
 from celery import Task
@@ -119,9 +120,22 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                 seconds=SANDBOX_IDLE_TIMEOUT_SECONDS // SNAPSHOT_INTERVAL_DIVISOR
             )
 
+            # Partition in a single pass so idle sandboxes are reaped first
+            # (reclaiming pods is time-sensitive) before the rest are
+            # background-snapshotted.
+            idle_sandboxes: list[Sandbox] = []
+            non_idle_sandboxes: list[Sandbox] = []
             for sandbox in running_sandboxes:
+                (
+                    idle_sandboxes
+                    if is_sandbox_idle(sandbox, now)
+                    else non_idle_sandboxes
+                ).append(sandbox)
+
+            for idle, sandbox in [(True, s) for s in idle_sandboxes] + [
+                (False, s) for s in non_idle_sandboxes
+            ]:
                 sandbox_id = sandbox.id
-                idle = is_sandbox_idle(sandbox, now)
 
                 try:
                     # DB-only prefilter: listing workspaces is a pod exec, so
@@ -175,9 +189,11 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                             prior_snapshots = get_snapshots_for_session(
                                 db_session, session_id
                             )
+                            snapshot_start = time.monotonic()
                             snapshot_result = sandbox_manager.create_snapshot(
                                 sandbox_id, session_id, tenant_id
                             )
+                            snapshot_elapsed = time.monotonic() - snapshot_start
                             if snapshot_result:
                                 create_snapshot__no_commit(
                                     db_session,
@@ -191,7 +207,9 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                                 db_session.commit()
                                 snapshots_created += 1
                                 task_logger.info(
-                                    f"Snapshot created for session {session_id}"
+                                    f"Snapshot created for session {session_id}: "
+                                    f"{snapshot_result.size_bytes / 1_048_576:.1f} MiB "
+                                    f"in {snapshot_elapsed:.1f}s"
                                 )
                         except Exception as e:
                             snapshot_failed = True

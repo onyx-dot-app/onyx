@@ -33,7 +33,7 @@ from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.server.features.build.session.manager import SessionManager
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
@@ -79,7 +79,7 @@ def _provision_real(
     mgr.provision(
         sandbox_id=sandbox.id,
         user_id=user_id,
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         llm_config=LLMProviderConfig(
             provider="test",
             model_name="test-model",

@@ -31,7 +31,7 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import FilesystemEntry
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
+from tests.common.craft.payloads import default_llm_config
 from tests.external_dependency_unit.craft.conftest import pod_exec
 from tests.external_dependency_unit.craft.conftest import wait_for_pod_deletion
 
@@ -98,12 +98,6 @@ class TestListDirectory:
         pool_session: tuple[UUID, UUID, str],
     ) -> None:
         sandbox_id, session_id, pod_name = pool_session
-        # ``list_directory`` walks ``sessions/{id}/{path}`` with ``ls -laL``.
-        # The session root contains ``user_library`` (a symlink into the RO
-        # managed/ mount) which fails ``-L`` dereference and trips the
-        # function's ``ERROR_NOT_FOUND`` branch, so the contract in
-        # production is "list a subpath under outputs/" (the docstring's
-        # documented path). Seed + assert inside outputs/.
         outputs_dir = f"/workspace/sessions/{session_id}/outputs"
         pod_exec(
             k8s_client,

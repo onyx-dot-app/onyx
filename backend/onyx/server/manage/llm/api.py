@@ -1,14 +1,17 @@
-import os
 from collections import defaultdict
 from datetime import datetime
 from datetime import timezone
 from typing import Any
 
 import boto3
+import botocore.session
 import httpx
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError
 from botocore.exceptions import ClientError
 from botocore.exceptions import NoCredentialsError
+from botocore.tokens import FrozenAuthToken
+from botocore.tokens import TokenProviderChain
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Query
@@ -51,6 +54,7 @@ from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import get_bedrock_token_limit
 from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import is_sensitive_custom_config_key
+from onyx.llm.utils import litellm_thinks_model_supports_image_input
 from onyx.llm.utils import test_llm
 from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
@@ -158,6 +162,35 @@ def _resolve_api_key(
         if api_key and api_key == _mask_string(stored_key):
             return stored_key
     return api_key
+
+
+def _resolve_bedrock_bearer_token(
+    bearer_token: str | None,
+    provider_name: str | None,
+    db_session: Session,
+) -> str | None:
+    """Return the real Bedrock bearer token for the model-fetch endpoint.
+
+    When editing an existing provider the form value is masked (e.g.
+    ``abcd****wxyz``). If *provider_name* is supplied we look up the unmasked
+    token from the provider's stored ``custom_config`` so the AWS request
+    succeeds instead of being rejected for using the masked placeholder.
+    """
+    if not bearer_token or not provider_name:
+        return bearer_token
+
+    existing_provider = fetch_existing_llm_provider(
+        name=provider_name, db_session=db_session
+    )
+    if not existing_provider or not existing_provider.custom_config:
+        return bearer_token
+
+    stored_token = existing_provider.custom_config.get("AWS_BEARER_TOKEN_BEDROCK")
+    if stored_token and _is_masked_value_for_existing(
+        bearer_token, stored_token, "AWS_BEARER_TOKEN_BEDROCK"
+    ):
+        return stored_token
+    return bearer_token
 
 
 def _sync_fetched_models(
@@ -1020,6 +1053,41 @@ def get_provider_contextual_cost(
     return costs
 
 
+class _StaticBedrockBearerTokenProvider:
+    """Supplies a fixed bearer token for the ``bedrock`` signing name only.
+
+    Scoped to a single botocore session so concurrent requests can't observe
+    each other's token — unlike ``AWS_BEARER_TOKEN_BEDROCK``, which is
+    process-global and races across the threaded API server.
+    """
+
+    METHOD = "static-bedrock-bearer"
+
+    def __init__(self, token: str) -> None:
+        self._token = token
+
+    def load_token(self, **kwargs: Any) -> FrozenAuthToken | None:
+        # botocore forwards `signing_name` into the token-provider chain at
+        # client-creation time. This is an internal botocore contract, not a
+        # published API — re-validate on botocore upgrades. The end-to-end
+        # `test_real_client_signs_with_bearer_token` guards against drift.
+        if kwargs.get("signing_name") != "bedrock":
+            return None
+        return FrozenAuthToken(self._token)
+
+
+def _build_bedrock_bearer_token_session(token: str, region_name: str) -> boto3.Session:
+    """Build a boto3 session that authenticates Bedrock calls with the given
+    bearer token, without touching process-wide environment state."""
+    botocore_session = botocore.session.Session()
+    botocore_session.set_config_variable("region", region_name)
+    botocore_session.register_component(
+        "token_provider",
+        TokenProviderChain(providers=[_StaticBedrockBearerTokenProvider(token)]),
+    )
+    return boto3.Session(botocore_session=botocore_session)
+
+
 @admin_router.post("/bedrock/available-models")
 def get_bedrock_available_models(
     request: BedrockModelsRequest,
@@ -1031,16 +1099,21 @@ def get_bedrock_available_models(
     Returns model IDs with display names from AWS. Prefers inference profiles
     (for cross-region support) over base models when available.
     """
+    # When editing an existing provider the form sends the masked bearer token;
+    # swap it back for the stored value so the AWS call uses real credentials.
+    bearer_token = _resolve_bedrock_bearer_token(
+        request.aws_bearer_token_bedrock, request.provider_name, db_session
+    )
+
     try:
         # Precedence: bearer → keys → IAM
-        if request.aws_bearer_token_bedrock:
-            try:
-                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = (
-                    request.aws_bearer_token_bedrock
-                )
-                session = boto3.Session(region_name=request.aws_region_name)
-            finally:
-                os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
+        client_config: Config | None = None
+        if bearer_token:
+            session = _build_bedrock_bearer_token_session(
+                token=bearer_token,
+                region_name=request.aws_region_name,
+            )
+            client_config = Config(signature_version="bearer")
         elif request.aws_access_key_id and request.aws_secret_access_key:
             session = boto3.Session(
                 aws_access_key_id=request.aws_access_key_id,
@@ -1051,7 +1124,7 @@ def get_bedrock_available_models(
             session = boto3.Session(region_name=request.aws_region_name)
 
         try:
-            bedrock = session.client("bedrock")
+            bedrock = session.client("bedrock", config=client_config)
         except Exception as e:
             raise OnyxError(
                 OnyxErrorCode.CREDENTIAL_INVALID,
@@ -1727,7 +1800,10 @@ def get_bifrost_available_models(
                     name=model_id,
                     display_name=model_name,
                     max_input_tokens=model.get("context_length"),
-                    supports_image_input=infer_vision_support(model_id),
+                    # Vision support from the LiteLLM cost map, not a hardcoded list
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.BIFROST
+                    ),
                     supports_reasoning=is_reasoning_model(model_id, model_name),
                 )
             )

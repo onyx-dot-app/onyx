@@ -9,10 +9,12 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/api/client";
 import { QUERY_KEYS } from "@/api/query-keys";
 import type { CurrentUser } from "@/api/types";
+import { useSession } from "@/state/session";
 
 export function useCurrentUser() {
+  const serverUrl = useSession((state) => state.serverUrl);
   return useQuery({
-    queryKey: QUERY_KEYS.me,
+    queryKey: QUERY_KEYS.me(serverUrl),
     // `signal` is forwarded so `cancelQueries` can abort the in-flight request.
     queryFn: ({ signal }) => apiFetch<CurrentUser>("/api/me", { signal }),
   });

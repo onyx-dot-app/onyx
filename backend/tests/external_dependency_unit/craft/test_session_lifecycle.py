@@ -36,15 +36,14 @@ from onyx.server.features.build.db.build_session import allocate_nextjs_port
 from onyx.server.features.build.db.build_session import get_user_build_sessions
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
+from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
 from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import make_sandbox
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft.conftest import (
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.stubs import StubSandboxManager
+from tests.external_dependency_unit.craft.redis_helpers import (
     assert_lock_serializes_two_threads,
 )
-from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
 # Built-in skill rows are seeded by ``setup_postgres`` (run once per
 # tenant in ``full_setup``) and persist across tests. The session
@@ -253,46 +252,6 @@ class TestEmptySessionReuse:
         }
         assert stub_sandbox_manager.create_opencode_history_snapshot_count == 0
         assert stub_sandbox_manager.cleanup_session_workspace_count == 1
-
-    def test_delete_empty_session_deletes_live_opencode_session_best_effort(
-        self,
-        db_session: Session,
-        test_user: User,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-    ) -> None:
-        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
-        empty_session = BuildSession(
-            id=uuid4(),
-            user_id=test_user.id,
-            name="empty-pre-provisioned",
-            status=BuildSessionStatus.ACTIVE,
-            opencode_session_id="empty-opencode-session",
-        )
-        db_session.add(empty_session)
-        db_session.commit()
-
-        stub_sandbox_manager.supports_opencode_history_persistence = True
-        stub_sandbox_manager.cleanup_session_workspace_silent = True
-
-        deleted = session_manager_with_stub.delete_empty_session(test_user.id)
-        db_session.commit()
-
-        assert deleted is True
-        assert (
-            db_session.query(BuildSession)
-            .filter(BuildSession.id == empty_session.id)
-            .one_or_none()
-            is None
-        )
-        assert stub_sandbox_manager.delete_opencode_session_count == 1
-        assert stub_sandbox_manager.last_delete_opencode_session_payload == {
-            "sandbox_id": sandbox_row.id,
-            "session_id": empty_session.id,
-            "opencode_session_id": "empty-opencode-session",
-        }
-        assert stub_sandbox_manager.create_opencode_history_snapshot_count == 0
 
 
 # =============================================================================
@@ -923,7 +882,9 @@ class TestConcurrentCreateLock:
         # Same lock contract as sessions_api.create_session: lock key is
         # ``session_create:{user_id}``. Two threads contend; the second
         # observes the first holding it.
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         lock_key = f"session_create:{test_user.id}"
 
         assert_lock_serializes_two_threads(redis_client, lock_key)
@@ -1012,7 +973,7 @@ class TestRestoreSession:
         snapshot = Snapshot(
             id=uuid4(),
             session_id=idle_session.id,
-            storage_path=f"{TEST_TENANT_ID}/snapshots/{idle_session.id}/latest.tar.gz",
+            storage_path=f"{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/snapshots/{idle_session.id}/latest.tar.gz",
             size_bytes=123,
         )
         db_session.add(snapshot)
@@ -1058,159 +1019,10 @@ class TestRestoreSession:
             stub_sandbox_manager.last_restore_snapshot_payload["snapshot_storage_path"]
             == snapshot.storage_path
         )
-
-
-class TestSandboxReset:
-    def test_sandbox_reset_terminates_pod_and_marks_terminated(
-        self,
-        db_session: Session,
-        test_user: User,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        # Happy path: terminate_user_sandbox terminates the pod, marks the
-        # DB row TERMINATED, flushes.
-        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
-        delete_calls: list[tuple[str, str]] = []
-
-        class RecordingSnapshotManager:
-            def __init__(self, _file_store: object) -> None:
-                pass
-
-            def delete_opencode_history_snapshot(
-                self, tenant_id: str, sandbox_id: str
-            ) -> None:
-                delete_calls.append((tenant_id, sandbox_id))
-
-        monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.SnapshotManager",
-            RecordingSnapshotManager,
-        )
-
-        stub_sandbox_manager.supports_opencode_history_persistence = True
-        stub_sandbox_manager.terminate_silent = True
-        sm = session_manager_with_stub
-        succeeded = sm.terminate_user_sandbox(user_id=test_user.id)
-        db_session.commit()
-        db_session.refresh(sandbox_row)
-        assert succeeded is True
-        assert sandbox_row.status == SandboxStatus.TERMINATED
-        assert delete_calls == [(TEST_TENANT_ID, str(sandbox_row.id))]
-        assert stub_sandbox_manager.create_opencode_history_snapshot_count == 0
-        assert stub_sandbox_manager.terminate_count == 1
-        assert stub_sandbox_manager.last_terminate_sandbox_id == sandbox_row.id
-
-        # Failure case: terminate raises => terminate_user_sandbox re-raises
-        # RuntimeError and the row stays at its pre-call status. We exercise
-        # this by setting up a second user/sandbox under a stub that raises.
-        other_user = make_user(db_session)
-        other_row = make_sandbox(db_session, other_user, status=SandboxStatus.RUNNING)
-        db_session.commit()
-
-        failing_stub = StubSandboxManager()
-        # terminate_silent left at False => stub raises NotImplementedError.
-        monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.get_sandbox_manager",
-            lambda: failing_stub,
-        )
-        monkeypatch.setattr(
-            "onyx.server.features.build.sandbox.factory._sandbox_manager_instance",
-            failing_stub,
-        )
-        sm_fail = SessionManager(db_session)
-        with pytest.raises(RuntimeError):
-            sm_fail.terminate_user_sandbox(user_id=other_user.id)
-        # Caller would rollback; mirror that here.
-        db_session.rollback()
-        db_session.refresh(other_row)
-        # Row stays at its original status — no partial state.
-        assert other_row.status == SandboxStatus.RUNNING
-
-    def test_sandbox_reset_rolls_back_status_when_history_delete_fails(
-        self,
-        db_session: Session,
-        test_user: User,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
-        delete_calls: list[tuple[str, str]] = []
-
-        class FailingSnapshotManager:
-            def __init__(self, _file_store: object) -> None:
-                pass
-
-            def delete_opencode_history_snapshot(
-                self, tenant_id: str, sandbox_id: str
-            ) -> None:
-                delete_calls.append((tenant_id, sandbox_id))
-                raise RuntimeError("delete opencode history failed")
-
-        monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.SnapshotManager",
-            FailingSnapshotManager,
-        )
-
-        stub_sandbox_manager.supports_opencode_history_persistence = True
-        stub_sandbox_manager.terminate_silent = True
-
-        with pytest.raises(RuntimeError, match="delete opencode history"):
-            session_manager_with_stub.terminate_user_sandbox(user_id=test_user.id)
-
-        db_session.rollback()
-        db_session.refresh(sandbox_row)
-        assert sandbox_row.status == SandboxStatus.RUNNING
-        assert stub_sandbox_manager.terminate_count == 0
-        assert delete_calls == [(TEST_TENANT_ID, str(sandbox_row.id))]
-
-    def test_sandbox_reset_ignores_history_delete_failure_when_already_terminated(
-        self,
-        db_session: Session,
-        test_user: User,
-        sandbox: Callable[..., Sandbox],
-        session_manager_with_stub: SessionManager,
-        stub_sandbox_manager: StubSandboxManager,
-        monkeypatch: pytest.MonkeyPatch,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        sandbox_row = sandbox(user=test_user, status=SandboxStatus.TERMINATED)
-        delete_calls: list[tuple[str, str]] = []
-
-        class FailingSnapshotManager:
-            def __init__(self, _file_store: object) -> None:
-                pass
-
-            def delete_opencode_history_snapshot(
-                self, tenant_id: str, sandbox_id: str
-            ) -> None:
-                delete_calls.append((tenant_id, sandbox_id))
-                raise RuntimeError("delete opencode history failed")
-
-        monkeypatch.setattr(
-            "onyx.server.features.build.session.manager.SnapshotManager",
-            FailingSnapshotManager,
-        )
-
-        stub_sandbox_manager.supports_opencode_history_persistence = True
-
-        with caplog.at_level(logging.WARNING):
-            succeeded = session_manager_with_stub.terminate_user_sandbox(
-                user_id=test_user.id
-            )
-
-        db_session.refresh(sandbox_row)
-        assert succeeded is True
-        assert sandbox_row.status == SandboxStatus.TERMINATED
-        assert stub_sandbox_manager.terminate_count == 0
-        assert delete_calls == [(TEST_TENANT_ID, str(sandbox_row.id))]
-        assert any(
-            "Failed to delete opencode history for already-terminated sandbox"
-            in record.getMessage()
-            for record in caplog.records
+        assert stub_sandbox_manager.last_write_files_to_sandbox_payload is not None
+        assert (
+            stub_sandbox_manager.last_write_files_to_sandbox_payload["mount_path"]
+            == USER_LIBRARY_MOUNT_PATH
         )
 
 

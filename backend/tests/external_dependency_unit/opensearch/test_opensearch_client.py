@@ -141,6 +141,8 @@ def _create_test_document_chunk(
     ),
     source_type: DocumentSource = DocumentSource.FILE,
     last_updated: datetime | None = None,
+    user_projects: list[int] | None = None,
+    document_sets: list[str] | None = None,
 ) -> DocumentChunk:
     if content_vector is None:
         # Generate dummy vector - 128 dimensions for fast testing.
@@ -172,8 +174,8 @@ def _create_test_document_chunk(
         blurb="Test blurb",
         doc_summary="Test doc summary",
         chunk_context="Test chunk context",
-        document_sets=None,
-        user_projects=None,
+        document_sets=document_sets,
+        user_projects=user_projects,
         primary_owners=None,
         secondary_owners=None,
         tenant_id=tenant_state,
@@ -1508,6 +1510,187 @@ class TestOpenSearchClient:
         )
         assert results[1].score
         assert results[1].match_highlights.get(CONTENT_FIELD_NAME, [])
+
+    def test_project_id_filter_restricts_search_to_project_files(
+        self,
+        test_client: OpenSearchIndexClient,
+        search_pipeline: None,  # noqa: ARG002
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """End-to-end proof that ``project_id_filter`` restricts search to the
+        project's files.
+
+        Three equally-relevant docs are indexed: a file in the target project, a
+        file in a DIFFERENT project, and a connector doc with no project tag.
+        Searching with ``project_id_filter`` for the target project must return
+        ONLY the target project's file — proving the filter matches by project
+        value (not merely "has any project tag"), and excludes both the other
+        project and untagged connector content.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        project_id = 99
+        other_project_id = 100
+        # Three equally-relevant docs distinguished only by their project tag.
+        project_file = _create_test_document_chunk(
+            document_id="project-file",
+            chunk_index=0,
+            content="Quarterly planning notes",
+            content_vector=_generate_test_vector(0.1),
+            tenant_state=tenant_state,
+            user_projects=[project_id],
+        )
+        other_project_file = _create_test_document_chunk(
+            document_id="other-project-file",
+            chunk_index=0,
+            content="Quarterly planning notes",
+            content_vector=_generate_test_vector(0.1),
+            tenant_state=tenant_state,
+            user_projects=[other_project_id],
+        )
+        connector_doc = _create_test_document_chunk(
+            document_id="connector-doc",
+            chunk_index=0,
+            content="Quarterly planning notes",
+            content_vector=_generate_test_vector(0.1),
+            tenant_state=tenant_state,
+            user_projects=None,
+        )
+        for doc in (project_file, other_project_file, connector_doc):
+            test_client.index_document(document=doc, tenant_state=tenant_state)
+        test_client.refresh_index()
+
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
+        query_text = "quarterly planning notes"
+        query_vector = _generate_test_vector(0.1)
+
+        def _search(index_filters: IndexFilters) -> set[str]:
+            search_body = DocumentQuery.get_hybrid_search_query(
+                query_text=query_text,
+                query_vector=query_vector,
+                num_hits=5,
+                tenant_state=tenant_state,
+                index_filters=index_filters,
+                include_hidden=False,
+            )
+            return {
+                chunk.document_chunk.document_id
+                for chunk in test_client.search(
+                    body=search_body, search_pipeline_id=pipeline_name
+                )
+            }
+
+        # Control: no project filter → all three docs are searchable.
+        unfiltered_ids = _search(IndexFilters(access_control_list=None, tenant_id=None))
+        assert unfiltered_ids == {
+            "project-file",
+            "other-project-file",
+            "connector-doc",
+        }, "All docs should match the query when no project filter is applied"
+
+        # Under test: project_id_filter alone restricts to the target project's
+        # files — excluding both the OTHER project and the untagged connector doc.
+        filtered_ids = _search(
+            IndexFilters(
+                access_control_list=None,
+                tenant_id=None,
+                project_id_filter=project_id,
+            )
+        )
+
+        # Postcondition.
+        assert filtered_ids == {"project-file"}, (
+            "project_id_filter must restrict search to the target project's files "
+            "only; the other project's file and the connector doc must be "
+            f"excluded. Got: {filtered_ids}"
+        )
+
+    def test_project_id_filter_combined_with_document_sets_widens_search(
+        self,
+        test_client: OpenSearchIndexClient,
+        search_pipeline: None,  # noqa: ARG002
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """End-to-end proof that ``project_id_filter`` is OR'd with another
+        knowledge scope rather than intersected.
+
+        With both ``project_id_filter`` and ``document_set`` set (the default
+        persona + document-sets-in-a-project path), the search must return the
+        project's files AND the document-set's docs, while still excluding
+        untagged content.
+        """
+        # Precondition.
+        _patch_global_tenant_state(monkeypatch, False)
+        tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
+        mappings = DocumentSchema.get_document_schema(
+            vector_dimension=128, multitenant=tenant_state.multitenant
+        )
+        settings = DocumentSchema.get_index_settings_based_on_environment()
+        test_client.create_index(mappings=mappings, settings=settings)
+
+        project_id = 99
+        document_set = "engineering"
+        project_file = _create_test_document_chunk(
+            document_id="project-file",
+            chunk_index=0,
+            content="Quarterly planning notes",
+            content_vector=_generate_test_vector(0.1),
+            tenant_state=tenant_state,
+            user_projects=[project_id],
+        )
+        doc_set_doc = _create_test_document_chunk(
+            document_id="doc-set-doc",
+            chunk_index=0,
+            content="Quarterly planning notes",
+            content_vector=_generate_test_vector(0.1),
+            tenant_state=tenant_state,
+            document_sets=[document_set],
+        )
+        untagged_doc = _create_test_document_chunk(
+            document_id="untagged-doc",
+            chunk_index=0,
+            content="Quarterly planning notes",
+            content_vector=_generate_test_vector(0.1),
+            tenant_state=tenant_state,
+        )
+        for doc in (project_file, doc_set_doc, untagged_doc):
+            test_client.index_document(document=doc, tenant_state=tenant_state)
+        test_client.refresh_index()
+
+        pipeline_name, _ = get_normalization_pipeline_name_and_config()
+        search_body = DocumentQuery.get_hybrid_search_query(
+            query_text="quarterly planning notes",
+            query_vector=_generate_test_vector(0.1),
+            num_hits=5,
+            tenant_state=tenant_state,
+            index_filters=IndexFilters(
+                access_control_list=None,
+                tenant_id=None,
+                project_id_filter=project_id,
+                document_set=[document_set],
+            ),
+            include_hidden=False,
+        )
+        result_ids = {
+            chunk.document_chunk.document_id
+            for chunk in test_client.search(
+                body=search_body, search_pipeline_id=pipeline_name
+            )
+        }
+
+        # Postcondition: project files OR document-set docs, but not untagged.
+        assert result_ids == {"project-file", "doc-set-doc"}, (
+            "project_id_filter combined with document_set must OR (widen) — "
+            "returning both the project file and the document-set doc, while "
+            f"excluding untagged content. Got: {result_ids}"
+        )
 
     def test_hybrid_search_with_pipeline_and_filters_returns_chunks_with_related_content_first(
         self,

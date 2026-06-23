@@ -16,6 +16,16 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
+def _non_negative_int_env(name: str, default: int) -> int:
+    """Parse an int env var, falling back to ``default`` when unset or negative."""
+    value = int(os.environ.get(name) or default)
+    if value < 0:
+        logger.warning("%s=%d is negative; falling back to %d", name, value, default)
+        return default
+    return value
+
+
 #####
 # App Configs
 #####
@@ -47,31 +57,21 @@ BLURB_SIZE = 128  # Number Encoder Tokens included in the chunk blurb
 
 # Hard ceiling for the admin-configurable file upload size (in MB).
 # Self-hosted customers can raise or lower this via the environment variable.
-_raw_max_upload_size_mb = int(os.environ.get("MAX_ALLOWED_UPLOAD_SIZE_MB", "250"))
-if _raw_max_upload_size_mb < 0:
-    logger.warning(
-        "MAX_ALLOWED_UPLOAD_SIZE_MB=%d is negative; falling back to 250",
-        _raw_max_upload_size_mb,
-    )
-    _raw_max_upload_size_mb = 250
-MAX_ALLOWED_UPLOAD_SIZE_MB = _raw_max_upload_size_mb
+MAX_ALLOWED_UPLOAD_SIZE_MB = _non_negative_int_env("MAX_ALLOWED_UPLOAD_SIZE_MB", 250)
 
 # Default fallback for the per-user file upload size limit (in MB) when no
 # admin-configured value exists.  Clamped to MAX_ALLOWED_UPLOAD_SIZE_MB at
 # runtime so this never silently exceeds the hard ceiling.
-_raw_default_upload_size_mb = int(
-    os.environ.get("DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", "100")
+DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = _non_negative_int_env(
+    "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB", 100
 )
-if _raw_default_upload_size_mb < 0:
-    logger.warning(
-        "DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB=%d is negative; falling back to 100",
-        _raw_default_upload_size_mb,
-    )
-    _raw_default_upload_size_mb = 100
-DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB = _raw_default_upload_size_mb
 GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
     os.environ.get("GENERATIVE_MODEL_ACCESS_CHECK_FREQ") or 86400
 )  # 1 day
+
+# Per-user cap on self-managed personal skills. Env-overridable so CI can lower
+# it without uploading the full quota of real bundles to exercise the limit.
+MAX_PERSONAL_SKILLS_PER_USER = _non_negative_int_env("MAX_PERSONAL_SKILLS_PER_USER", 50)
 
 # Controls whether users can use User Knowledge (personal documents) in assistants
 DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
@@ -122,6 +122,11 @@ HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL = (
 # on Windows, try  setting this to `http://127.0.0.1:3000` instead and see if that
 # fixes it)
 WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
+
+# Surfaced to the web app via /api/settings so analytics can be enabled by env
+# var instead of a NEXT_PUBLIC_POSTHOG_KEY build arg. Client-side project key.
+POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY")
+POSTHOG_HOST = os.environ.get("POSTHOG_HOST") or "https://us.i.posthog.com"
 
 
 #####
@@ -263,6 +268,38 @@ OIDC_PKCE_ENABLED = os.environ.get("OIDC_PKCE_ENABLED", "").lower() == "true"
 
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/onyx/configs/saml_config"
+
+# Native mobile (Expo / React Native) SSO bridge. The app completes OAuth in the
+# system browser (reusing the existing registered IdP callback), then the backend
+# returns a single-use, PKCE-bound one-time code over a custom-scheme deep link —
+# never a token. The app swaps the code for the session token at
+# /auth/mobile/sso/exchange.
+MOBILE_SSO_CODE_PREFIX = "mobile_sso_code:"
+# Lifetime of the one-time code; intentionally short — it only has to survive the
+# system-browser -> app handoff plus the immediate exchange call. A non-positive
+# TTL would make Redis reject the SET, breaking every exchange — fail fast at boot.
+MOBILE_SSO_CODE_TTL_SECONDS = int(os.environ.get("MOBILE_SSO_CODE_TTL_SECONDS") or 60)
+if MOBILE_SSO_CODE_TTL_SECONDS < 1:
+    raise ValueError("MOBILE_SSO_CODE_TTL_SECONDS must be >= 1")
+# Deep-link URIs the SSO completion is allowed to 302 to. Defaults to the app's
+# custom scheme; override (comma-separated) to add Universal/App Links later.
+_DEFAULT_MOBILE_REDIRECT_URIS = frozenset({"onyx://auth/callback"})
+_MOBILE_ALLOWED_REDIRECT_URIS_RAW = os.environ.get("MOBILE_ALLOWED_REDIRECT_URIS", "")
+MOBILE_ALLOWED_REDIRECT_URIS: frozenset[str] = frozenset(
+    uri.strip() for uri in _MOBILE_ALLOWED_REDIRECT_URIS_RAW.split(",") if uri.strip()
+)
+if not MOBILE_ALLOWED_REDIRECT_URIS:
+    # An override that was set but parsed empty (e.g. just commas/whitespace) is a
+    # misconfig — warn rather than silently rejecting every mobile redirect. An
+    # unset value is the normal default, so don't warn there.
+    if _MOBILE_ALLOWED_REDIRECT_URIS_RAW.strip():
+        logger.warning(
+            "MOBILE_ALLOWED_REDIRECT_URIS=%r parsed to an empty set; "
+            "falling back to default %s",
+            _MOBILE_ALLOWED_REDIRECT_URIS_RAW,
+            _DEFAULT_MOBILE_REDIRECT_URIS,
+        )
+    MOBILE_ALLOWED_REDIRECT_URIS = _DEFAULT_MOBILE_REDIRECT_URIS
 
 # JWT Public Key URL for JWT token verification
 JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
@@ -524,6 +561,108 @@ POSTGRES_TCP_KEEPALIVES_COUNT = int(
 
 # RDS IAM authentication - enables IAM-based authentication for PostgreSQL
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
+
+# TLS for non-IAM PostgreSQL connections.
+#
+# POSTGRES_SSLMODE follows libpq's vocabulary. Only `verify-ca` / `verify-full`
+# authenticate the server (and require POSTGRES_SSLROOTCERT to verify against);
+# `require` encrypts but does NOT protect against a man-in-the-middle. All of
+# this is ignored when USE_IAM_AUTH is true (IAM enforces its own TLS).
+POSTGRES_SSLMODE: str | None = os.environ.get("POSTGRES_SSLMODE") or None
+# Path to the CA bundle used to verify the server certificate for `verify-ca` /
+# `verify-full`. Required by managed providers (RDS, Cloud SQL, Azure) whose
+# server certs don't chain to a system-trusted CA; point it at the system bundle
+# if the server uses a publicly-trusted certificate.
+POSTGRES_SSLROOTCERT: str | None = os.environ.get("POSTGRES_SSLROOTCERT") or None
+# Client certificate + key for mutual TLS (the server authenticating us). Both
+# must be set together, and are only used when POSTGRES_SSLMODE negotiates SSL
+# (require / verify-ca / verify-full).
+POSTGRES_SSLCERT: str | None = os.environ.get("POSTGRES_SSLCERT") or None
+POSTGRES_SSLKEY: str | None = os.environ.get("POSTGRES_SSLKEY") or None
+POSTGRES_SSLKEY_PASSWORD: str | None = (
+    os.environ.get("POSTGRES_SSLKEY_PASSWORD") or None
+)
+
+_VALID_POSTGRES_SSLMODES = frozenset(
+    {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
+)
+_CA_VERIFYING_SSLMODES = frozenset({"verify-ca", "verify-full"})
+# Modes that always negotiate SSL — a client certificate is only reliably
+# presented under one of these.
+_SSL_NEGOTIATING_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
+_POSTGRES_SSL_FILE_SETTINGS = (
+    ("POSTGRES_SSLROOTCERT", POSTGRES_SSLROOTCERT),
+    ("POSTGRES_SSLCERT", POSTGRES_SSLCERT),
+    ("POSTGRES_SSLKEY", POSTGRES_SSLKEY),
+)
+# True when any non-mode TLS setting (including the key password) is present —
+# all of these are dead config without a POSTGRES_SSLMODE.
+_HAS_POSTGRES_SSL_SECONDARY = any(
+    [POSTGRES_SSLROOTCERT, POSTGRES_SSLCERT, POSTGRES_SSLKEY, POSTGRES_SSLKEY_PASSWORD]
+)
+
+if USE_IAM_AUTH:
+    # IAM auth manages the database TLS connection itself, so the explicit
+    # POSTGRES_SSL* settings are ignored — warn rather than silently drop them.
+    if POSTGRES_SSLMODE or _HAS_POSTGRES_SSL_SECONDARY:
+        logger.warning(
+            "USE_IAM_AUTH is enabled; ignoring POSTGRES_SSLMODE / POSTGRES_SSL* "
+            "(IAM auth manages the database TLS connection)."
+        )
+elif POSTGRES_SSLMODE:
+    if POSTGRES_SSLMODE not in _VALID_POSTGRES_SSLMODES:
+        raise ValueError(
+            f"Invalid POSTGRES_SSLMODE={POSTGRES_SSLMODE!r}. "
+            f"Must be one of: {sorted(_VALID_POSTGRES_SSLMODES)}"
+        )
+    if POSTGRES_SSLMODE in _CA_VERIFYING_SSLMODES and not POSTGRES_SSLROOTCERT:
+        # Without a CA bundle these modes can't verify the server cert: libpq
+        # errors out and asyncpg silently falls back to the system trust store.
+        # Fail loudly so the intended CA-pinned trust model is explicit.
+        raise ValueError(
+            f"POSTGRES_SSLMODE={POSTGRES_SSLMODE!r} verifies the server "
+            "certificate and requires POSTGRES_SSLROOTCERT (path to the CA "
+            "bundle). Set it to your provider's CA, or to the system CA bundle "
+            "if the server uses a publicly-trusted certificate."
+        )
+    if POSTGRES_SSLMODE == "require" and POSTGRES_SSLROOTCERT:
+        logger.warning(
+            "POSTGRES_SSLROOTCERT is set but POSTGRES_SSLMODE=require does not "
+            "verify the server certificate; use verify-ca or verify-full to "
+            "verify against the CA bundle."
+        )
+    # Mutual TLS: client cert + key must be provided together, under a mode that
+    # actually negotiates SSL.
+    if bool(POSTGRES_SSLCERT) != bool(POSTGRES_SSLKEY):
+        raise ValueError(
+            "POSTGRES_SSLCERT and POSTGRES_SSLKEY must both be set (mutual TLS "
+            "needs a client certificate and its private key)."
+        )
+    if POSTGRES_SSLKEY_PASSWORD and not POSTGRES_SSLCERT:
+        raise ValueError(
+            "POSTGRES_SSLKEY_PASSWORD is set without a client certificate; it "
+            "only decrypts POSTGRES_SSLKEY. Set POSTGRES_SSLCERT/POSTGRES_SSLKEY "
+            "or unset the password."
+        )
+    if POSTGRES_SSLCERT and POSTGRES_SSLMODE not in _SSL_NEGOTIATING_SSLMODES:
+        raise ValueError(
+            f"POSTGRES_SSLCERT / POSTGRES_SSLKEY require POSTGRES_SSLMODE to be "
+            f"one of {sorted(_SSL_NEGOTIATING_SSLMODES)} so TLS is negotiated; "
+            f"got {POSTGRES_SSLMODE!r}."
+        )
+    for _name, _path in _POSTGRES_SSL_FILE_SETTINGS:
+        if _path and not os.path.exists(_path):
+            raise ValueError(f"{_name}={_path!r} does not exist.")
+elif _HAS_POSTGRES_SSL_SECONDARY:
+    # CA bundle / client cert / key password without a mode is dead config: SSL
+    # stays off and the connection runs unverified despite the operator supplying
+    # certs. Fail loudly so this can't masquerade as a verified/mutually-
+    # authenticated link.
+    raise ValueError(
+        "POSTGRES_SSLROOTCERT / POSTGRES_SSLCERT / POSTGRES_SSLKEY / "
+        "POSTGRES_SSLKEY_PASSWORD are set but POSTGRES_SSLMODE is not. Set a "
+        "POSTGRES_SSLMODE (e.g. verify-full) so TLS is actually negotiated."
+    )
 
 # Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
 # Note: This is separate from RDS IAM auth as they use different authentication mechanisms
@@ -854,6 +993,13 @@ CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC = (
 
 GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
+# Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
+# fetch. Native Docs report no `size`, so the fetch can't be checked from
+# metadata; larger Docs are indexed via the basic text export.
+GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
+    os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
 )
 
 # Cap the total text retained per file across a connector's extracted sections,

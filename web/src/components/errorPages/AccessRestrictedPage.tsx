@@ -8,8 +8,8 @@ import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { logout } from "@/lib/user";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { useLicense } from "@/hooks/useLicense";
-import { useSettingsContext } from "@/providers/SettingsProvider";
-import { ApplicationStatus } from "@/interfaces/settings";
+import { useSettings } from "@/lib/settings/hooks";
+import { ApplicationStatus } from "@/lib/settings/types";
 import Text from "@/refresh-components/texts/Text";
 import { SvgLock } from "@opal/icons";
 
@@ -39,16 +39,15 @@ export default function AccessRestricted() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: license } = useLicense();
-  const settings = useSettingsContext();
+  const settings = useSettings();
 
   const isSeatLimitExceeded =
-    settings.settings.application_status ===
-    ApplicationStatus.SEAT_LIMIT_EXCEEDED;
+    settings.application_status === ApplicationStatus.SEAT_LIMIT_EXCEEDED;
   const hadPreviousLicense = license?.has_license === true;
   const showRenewalMessage = NEXT_PUBLIC_CLOUD_ENABLED || hadPreviousLicense;
 
   function getSeatLimitMessage() {
-    const { used_seats, seat_count } = settings.settings;
+    const { used_seats, seat_count } = settings;
     const counts =
       used_seats != null && seat_count != null
         ? ` (${used_seats} users / ${seat_count} seats)`

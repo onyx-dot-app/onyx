@@ -7,7 +7,7 @@ import Card from "@/refresh-components/cards/Card";
 import { Button } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
-import { ThreeDotsLoader } from "@/components/Loading";
+import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { Tooltip } from "@opal/components";
 import {
   useDiscordBotConfig,
@@ -49,7 +49,9 @@ export function BotConfigCard() {
             Bot Token
           </Text>
         </Section>
-        <ThreeDotsLoader />
+        <div className="flex justify-center">
+          <SvgSimpleLoader className="h-6 w-6" />
+        </div>
       </Card>
     );
   }

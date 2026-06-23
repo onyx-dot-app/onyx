@@ -1,11 +1,11 @@
 apiVersion: v2
 name: onyx
-description: A Helm chart for Kubernetes
+description: Onyx application and Craft sandbox deployment chart
 home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.6.1
+version: 0.6.6
 appVersion: latest
 annotations:
   category: Productivity
@@ -16,12 +16,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: Add isolated writable /tmp scratch space for sandboxed
-        OpenCode agents.
-    - kind: changed
-      description: Preserve Craft opencode history across Kubernetes sandbox
-        restarts by restoring it before opencode starts.
+    - kind: security
+      description: Add an egress NetworkPolicy on the Craft sandbox egress proxy that blocks the
+        link-local / cloud-metadata range (169.254.0.0/16), so a sandbox can't use the proxy as an
+        SSRF pivot to the node's IMDS credentials. Internet, DNS, and datastores remain reachable.
 dependencies:
   - name: cloudnative-pg
     version: 0.26.0

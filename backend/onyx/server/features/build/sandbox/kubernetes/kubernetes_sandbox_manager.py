@@ -41,7 +41,6 @@ import hashlib
 import io
 import ipaddress
 import json
-import mimetypes
 import os
 import re
 import secrets
@@ -73,7 +72,6 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
@@ -147,6 +145,9 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
 POD_READY_TIMEOUT_SECONDS = 60
 
+OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 300.0
+POD_IP_POLL_INTERVAL_SECONDS = 0.5
+
 # Resource deletion timeout and polling interval
 # Kubernetes deletes are async - we need to wait for resources to actually be
 # gone.
@@ -154,9 +155,6 @@ RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 
 
-# Proxy CA bundle path; still referenced by _proxy_main_container_env_vars().
-_PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
-_PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # Pinned to the proxy IP via pod hostAliases — the iptables lockdown blocks DNS,
 # so the sandbox can't resolve it on its own.
 _PROXY_ALIAS = "sandbox-proxy"
@@ -175,11 +173,6 @@ _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
 _PROXY_RESOLVE_RETRY_BACKOFF_S = 0.5
 
 
-# Loopback only: the firewall permits nothing else to bypass the proxy, and the
-# Onyx API host must transit the proxy so the PAT can be injected on the wire.
-_NO_PROXY = "127.0.0.1,localhost"
-
-
 def _placeholder_llm_configs(
     configs: list[LLMProviderConfig],
 ) -> list[LLMProviderConfig]:
@@ -192,26 +185,6 @@ def _placeholder_llm_configs(
         if c.api_key
         else c
         for c in configs
-    ]
-
-
-def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
-    proxy_url = f"http://{_PROXY_ALIAS}:{SANDBOX_PROXY_PORT}"
-    no_proxy = _NO_PROXY
-    return [
-        client.V1EnvVar(name="HTTPS_PROXY", value=proxy_url),
-        client.V1EnvVar(name="HTTP_PROXY", value=proxy_url),
-        client.V1EnvVar(name="https_proxy", value=proxy_url),
-        client.V1EnvVar(name="http_proxy", value=proxy_url),
-        client.V1EnvVar(name="NO_PROXY", value=no_proxy),
-        client.V1EnvVar(name="no_proxy", value=no_proxy),
-        # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
-        client.V1EnvVar(name="NODE_EXTRA_CA_CERTS", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="REQUESTS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="SSL_CERT_FILE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="AWS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
     ]
 
 
@@ -965,6 +938,30 @@ class KubernetesSandboxManager(SandboxManager):
         logger.warning("Timeout waiting for pod %s to become ready", pod_name)
         return False
 
+    def _wait_for_pod_ip(self, pod_name: str, deadline: float) -> bool:
+        """Poll until the pod is assigned an IP, or the monotonic deadline.
+
+        Waits for IP assignment only, never readiness: the init sidecar serves
+        the restore endpoint while its startup probe stays blocked, so waiting
+        for readiness here would deadlock the restore handshake.
+        """
+        while time.monotonic() < deadline:
+            try:
+                pod = self._core_api.read_namespaced_pod(
+                    name=pod_name, namespace=self._namespace
+                )
+            except ApiException as e:
+                if e.status == 404:
+                    raise RuntimeError(f"Pod {pod_name} was deleted")
+                raise
+            if pod.status.pod_ip:
+                logger.info("Pod %s assigned IP %s", pod_name, pod.status.pod_ip)
+                return True
+            time.sleep(POD_IP_POLL_INTERVAL_SECONDS)
+
+        logger.warning("Timeout waiting for pod %s to be assigned an IP", pod_name)
+        return False
+
     def _pod_exists_and_healthy(self, pod_name: str) -> bool:
         """Check if a pod exists and the sandbox app container is ready.
 
@@ -1156,12 +1153,24 @@ class KubernetesSandboxManager(SandboxManager):
             # 2. Create Service (handles terminating services)
             self._ensure_service_exists(sandbox_id, tenant_id)
 
-            # 3. Restore opencode history before the sandbox app container starts.
-            # The restartable init sidecar serves the restore endpoint but its
-            # startup probe stays blocked until restore is complete or explicitly
-            # marked unnecessary, so opencode-serve cannot open an empty DB first.
+            # 3. Restore opencode history before the sandbox app container starts;
+            # the init sidecar serves the restore endpoint while its startup probe
+            # stays blocked, so opencode-serve can't open an empty DB first. The IP
+            # wait and the restore draw from one deadline so slow scheduling leaves
+            # less budget for the restore rather than stacking two full timeouts.
             if startup_restore_required:
-                self.restore_opencode_history_snapshot(sandbox_id, tenant_id)
+                restore_deadline = (
+                    time.monotonic() + OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+                )
+                if not self._wait_for_pod_ip(pod_name, restore_deadline):
+                    raise RuntimeError(
+                        f"Timeout waiting for sandbox pod {pod_name} to be assigned an IP"
+                    )
+                self.restore_opencode_history_snapshot(
+                    sandbox_id,
+                    tenant_id,
+                    timeout_seconds=restore_deadline - time.monotonic(),
+                )
 
             # 4. Wait for pod to be ready
             logger.info("Waiting for pod %s to become ready...", pod_name)
@@ -1500,7 +1509,6 @@ echo "Session workspace setup complete"
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        nextjs_port: int | None = None,  # noqa: ARG002
     ) -> None:
         """Clean up a session workspace (on session delete). Executes
         kubectl exec to remove the session directory.
@@ -1508,8 +1516,6 @@ echo "Session workspace setup complete"
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID to clean up
-            nextjs_port: Optional port where Next.js server is running (unused in K8s,
-                        we use PID file instead)
         """
         self._close_session_buses(sandbox_id, session_id)
 
@@ -1651,7 +1657,7 @@ echo "Session cleanup complete"
         self,
         sandbox_id: UUID,
         tenant_id: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
     ) -> bool:
         if not self._snapshot_manager.has_opencode_history_snapshot(
             tenant_id, str(sandbox_id)
@@ -1697,7 +1703,7 @@ echo "Session cleanup complete"
         self,
         *,
         sandbox_id: UUID,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
     ) -> None:
         self._sidecar_client.post_empty(
             sandbox_id=sandbox_id,
@@ -1811,7 +1817,6 @@ echo "Session cleanup complete"
         sandbox_id: UUID,
         session_id: UUID,
         snapshot_storage_path: str,
-        tenant_id: str,  # noqa: ARG002
         nextjs_port: int | None,
         llm_config: LLMProviderConfig,
         skills_section: str,
@@ -1829,7 +1834,6 @@ echo "Session cleanup complete"
             sandbox_id: The sandbox ID
             session_id: The session ID to restore
             snapshot_storage_path: FileStore file id for the snapshot archive
-            tenant_id: Tenant identifier kept for the SandboxManager interface.
             nextjs_port: Port number for the NextJS dev server, or None to
                 skip starting it.
             llm_config: LLM provider configuration for opencode.json
@@ -1989,14 +1993,15 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
     def list_directory(
         self, sandbox_id: UUID, session_id: UUID, path: str
     ) -> list[FilesystemEntry]:
-        """List contents of a directory in the session's outputs directory.
+        """List contents of a directory in the session workspace.
 
-        For Kubernetes backend, we exec into the pod to list files.
+        For Kubernetes backend, the sandbox sidecar owns pod-local filesystem
+        access and returns structured entries.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
-            path: Relative path within sessions/$session_id/outputs/
+            path: Relative path within sessions/$session_id/
 
         Returns:
             List of FilesystemEntry objects sorted by directory first, then name
@@ -2004,121 +2009,25 @@ printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
         Raises:
             ValueError: If path traversal attempted or path is not a directory
         """
-        # _get_pod_name needs string
-        pod_name = self._get_pod_name(str(sandbox_id))
-
-        # Security: sanitize path by removing '..' components individually
-        path_obj = Path(path.lstrip("/"))
-        clean_parts = [p for p in path_obj.parts if p != ".."]
-        clean_path = str(Path(*clean_parts)) if clean_parts else "."
-        target_path = f"/workspace/sessions/{session_id}/{clean_path}"
-        # Use shlex.quote to prevent command injection
-        quoted_path = shlex.quote(target_path)
-
-        logger.info("Listing directory %s in pod %s", target_path, pod_name)
-
-        # Use exec to list directory
-        # -L follows symlinks
-        exec_command = [
-            "/bin/sh",
-            "-c",
-            f"ls -laL --time-style=+%s {quoted_path} 2>/dev/null || echo 'ERROR_NOT_FOUND'",
-        ]
-
         try:
-            resp = k8s_stream(
-                self._stream_core_api.connect_get_namespaced_pod_exec,
-                name=pod_name,
-                namespace=self._namespace,
-                container=_SANDBOX_CONTAINER_NAME,
-                command=exec_command,
-                stderr=True,
-                stdin=False,
-                stdout=True,
-                tty=False,
+            return self._sidecar_client.list_directory(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                path=path,
             )
-
-            if "ERROR_NOT_FOUND" in resp:
-                raise ValueError(f"Path not found or not a directory: {path}")
-
-            entries = self._parse_ls_output(resp, clean_path)
-            return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
-
-        except ApiException as e:
-            raise RuntimeError(f"Failed to list directory: {e}") from e
-
-    def _parse_ls_output(self, ls_output: str, base_path: str) -> list[FilesystemEntry]:
-        """Parse ls -la output into FilesystemEntry objects.
-
-        Handles regular files, directories, and symlinks. Symlinks to directories
-        are treated as directories for navigation purposes.
-        """
-        entries = []
-        lines = ls_output.strip().split("\n")
-
-        logger.debug("Parsing %s lines of ls output for %s", len(lines), base_path)
-
-        for line in lines:
-            logger.debug("Parsing line: %s", line)
-
-            # Skip header line and . / .. entries
-            if line.startswith("total") or not line:
-                continue
-
-            parts = line.split()
-            # ls -la --time-style=+%s format: perms links owner group size timestamp name
-            # Minimum 7 parts for a simple filename
-            if len(parts) < 7:
-                continue
-
-            # Handle symlinks: format is "name -> target"
-            # For symlinks, parts[-1] is the target, not the name
-            is_symlink = line.startswith("l")
-            if is_symlink and " -> " in line:
-                # Extract name from the "name -> target" portion
-                # Filename starts at index 6 (after perms, links, owner, group, size, timestamp)
-                try:
-                    # Rejoin from index 6 onwards to handle names with spaces
-                    name_and_target = " ".join(parts[6:])
-                    if " -> " in name_and_target:
-                        name = name_and_target.split(" -> ")[0]
-                    else:
-                        name = parts[-1]
-                except (IndexError, ValueError):
-                    name = parts[-1]
-            else:
-                # For regular files/directories, name is at index 6 or later (with spaces)
-                name = " ".join(parts[6:])
-
-            if name in (".", ".."):
-                continue
-
-            # Directories start with 'd', symlinks start with 'l'
-            # Treat symlinks as directories (they typically point to directories
-            # in our sandbox setup)
-            is_directory = line.startswith("d") or is_symlink
-            size_str = parts[4]
-
+        except SidecarStatusError as e:
             try:
-                size = int(size_str) if not is_directory else None
-            except ValueError:
-                size = None
+                detail = json.loads(e.body).get("detail", "")
+            except (TypeError, ValueError):
+                detail = ""
 
-            # Guess MIME type for files based on extension
-            mime_type = mimetypes.guess_type(name)[0] if not is_directory else None
-
-            entry_path = f"{base_path}/{name}".lstrip("/")
-            entries.append(
-                FilesystemEntry(
-                    name=name,
-                    path=entry_path,
-                    is_directory=is_directory,
-                    size=size,
-                    mime_type=mime_type,
-                )
-            )
-
-        return entries
+            if e.status_code == 400 and detail == "path traversal is not allowed":
+                raise ValueError(f"path traversal attempted: {path}") from e
+            if e.status_code == 404 and detail == "path not found or not a directory":
+                raise ValueError(f"Path not found or not a directory: {path}") from e
+            raise RuntimeError(f"Failed to list directory: {e}") from e
+        except SidecarRequestError as e:
+            raise RuntimeError(f"Failed to list directory: {e}") from e
 
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
         """Read a file from the session's workspace.

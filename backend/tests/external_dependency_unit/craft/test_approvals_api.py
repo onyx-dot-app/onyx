@@ -18,7 +18,6 @@ from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import ApprovalDecidedVia
 from onyx.db.enums import ApprovalDecision
 from onyx.db.enums import EndpointPolicy
-from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -26,19 +25,16 @@ from onyx.external_apps.matching.engine import MatchedAction
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.approvals.api import DecisionBody
 from onyx.server.features.build.approvals.api import list_live_approvals
-from onyx.server.features.build.approvals.api import list_session_approvals
 from onyx.server.features.build.approvals.api import submit_decision
 from onyx.server.features.build.approvals.api import submit_session_grant
 from onyx.server.features.build.db import action_approval
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import _set_created_at
-from tests.external_dependency_unit.craft._test_helpers import action_entry
-from tests.external_dependency_unit.craft._test_helpers import (
-    default_action_entries as _default_actions,
-)
-from tests.external_dependency_unit.craft._test_helpers import make_external_app
-from tests.external_dependency_unit.craft._test_helpers import make_skill
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.payloads import action_entry
+from tests.common.craft.payloads import default_action_entries as _default_actions
+from tests.external_dependency_unit.craft.db_helpers import force_approval_created_at
+from tests.external_dependency_unit.craft.db_helpers import make_external_app
+from tests.external_dependency_unit.craft.db_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import make_user
 
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,7 +94,7 @@ def test_list_live_approvals_filter_logic(
 
     # Push the stale row just past the 180s spec cutoff (hardcoded, not derived).
     stale_when = datetime.now(timezone.utc) - timedelta(seconds=190)
-    _set_created_at(db_session, ActionApproval, stale.approval_id, stale_when)
+    force_approval_created_at(db_session, stale.approval_id, stale_when)
 
     response = list_live_approvals(
         session_id=session.id, user=user, db_session=db_session
@@ -133,195 +129,6 @@ def test_list_live_approvals_non_owner_gets_not_found(
         list_live_approvals(session_id=session.id, user=intruder, db_session=db_session)
 
     assert exc_info.value.error_code == OnyxErrorCode.NOT_FOUND
-
-
-# --------------------------------------------------------------------------- #
-# list_session_approvals
-# --------------------------------------------------------------------------- #
-
-
-def test_list_session_approvals_no_filter_returns_all(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    build_session_with_user: Callable[..., BuildSession],
-) -> None:
-    """No filter returns every row for the session, pending included."""
-    user = make_user(db_session, email_prefix="audit_all")
-    session = build_session_with_user(user=user)
-
-    pending = action_approval.insert_action_approval(
-        db_session,
-        session_id=session.id,
-        actions=_default_actions(),
-        app_name="Shell",
-        payload={"cmd": "pending"},
-    )
-    approved_row = action_approval.insert_action_approval(
-        db_session,
-        session_id=session.id,
-        actions=_default_actions(),
-        app_name="Shell",
-        payload={"cmd": "approved"},
-    )
-    rejected_row = action_approval.insert_action_approval(
-        db_session,
-        session_id=session.id,
-        actions=_default_actions(),
-        app_name="Shell",
-        payload={"cmd": "rejected"},
-    )
-    db_session.commit()
-
-    assert (
-        action_approval.try_record_decision(
-            db_session,
-            approval_id=approved_row.approval_id,
-            decision=ApprovalDecision.APPROVED,
-        )
-        is not None
-    )
-    assert (
-        action_approval.try_record_decision(
-            db_session,
-            approval_id=rejected_row.approval_id,
-            decision=ApprovalDecision.REJECTED,
-        )
-        is not None
-    )
-    db_session.commit()
-
-    response = list_session_approvals(
-        session_id=session.id,
-        decision=None,
-        since=None,
-        until=None,
-        user=user,
-        db_session=db_session,
-    )
-
-    returned_ids = {item.approval_id for item in response.items}
-    assert returned_ids == {
-        pending.approval_id,
-        approved_row.approval_id,
-        rejected_row.approval_id,
-    }
-
-
-def test_list_session_approvals_decision_filter(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    build_session_with_user: Callable[..., BuildSession],
-) -> None:
-    """``decision=REJECTED`` returns only rejected rows."""
-    user = make_user(db_session, email_prefix="audit_decision")
-    session = build_session_with_user(user=user)
-
-    approved_row = action_approval.insert_action_approval(
-        db_session,
-        session_id=session.id,
-        actions=_default_actions(),
-        app_name="Shell",
-        payload={"cmd": "approved"},
-    )
-    rejected_row = action_approval.insert_action_approval(
-        db_session,
-        session_id=session.id,
-        actions=_default_actions(),
-        app_name="Shell",
-        payload={"cmd": "rejected"},
-    )
-    action_approval.insert_action_approval(
-        db_session,
-        session_id=session.id,
-        actions=_default_actions(),
-        app_name="Shell",
-        payload={"cmd": "still-pending"},
-    )
-    db_session.commit()
-
-    assert (
-        action_approval.try_record_decision(
-            db_session,
-            approval_id=approved_row.approval_id,
-            decision=ApprovalDecision.APPROVED,
-        )
-        is not None
-    )
-    assert (
-        action_approval.try_record_decision(
-            db_session,
-            approval_id=rejected_row.approval_id,
-            decision=ApprovalDecision.REJECTED,
-        )
-        is not None
-    )
-    db_session.commit()
-
-    response = list_session_approvals(
-        session_id=session.id,
-        decision=ApprovalDecision.REJECTED,
-        since=None,
-        until=None,
-        user=user,
-        db_session=db_session,
-    )
-
-    returned_ids = [item.approval_id for item in response.items]
-    assert returned_ids == [rejected_row.approval_id]
-    assert response.items[0].decision == ApprovalDecision.REJECTED
-
-
-@pytest.mark.parametrize("direction", ["since", "until"])
-def test_list_session_approvals_time_filter(
-    direction: str,
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    build_session_with_user: Callable[..., BuildSession],
-) -> None:
-    """``since`` cuts off rows before the boundary, ``until`` cuts off rows after it."""
-    user = make_user(db_session, email_prefix=f"audit_{direction}")
-    session = build_session_with_user(user=user)
-
-    old_row = action_approval.insert_action_approval(
-        db_session,
-        session_id=session.id,
-        actions=_default_actions(),
-        app_name="Shell",
-        payload={"cmd": "old"},
-    )
-    new_row = action_approval.insert_action_approval(
-        db_session,
-        session_id=session.id,
-        actions=_default_actions(),
-        app_name="Shell",
-        payload={"cmd": "new"},
-    )
-    db_session.commit()
-
-    now = datetime.now(timezone.utc)
-    _set_created_at(
-        db_session, ActionApproval, old_row.approval_id, now - timedelta(hours=2)
-    )
-    _set_created_at(
-        db_session, ActionApproval, new_row.approval_id, now - timedelta(minutes=5)
-    )
-
-    boundary = now - timedelta(hours=1)
-    since = boundary if direction == "since" else None
-    until = boundary if direction == "until" else None
-    expected_id = new_row.approval_id if direction == "since" else old_row.approval_id
-
-    response = list_session_approvals(
-        session_id=session.id,
-        decision=None,
-        since=since,
-        until=until,
-        user=user,
-        db_session=db_session,
-    )
-
-    returned_ids = [item.approval_id for item in response.items]
-    assert returned_ids == [expected_id]
 
 
 # --------------------------------------------------------------------------- #
@@ -513,7 +320,7 @@ def test_submit_decision_pushes_wake_on_redis(
     )
     db_session.commit()
 
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     # Pre-clean so a leftover from a prior failed run can't mask the bug.
     cache.delete(approval_cache._wake_key(approval.approval_id))
 
@@ -615,7 +422,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         (str(matching.approval_id), ApprovalDecision.APPROVED),
     ]
 
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert approval_cache.cached_session_grants_cover(
         session_id=session.id,
         external_app_id=app.id,
@@ -648,7 +455,7 @@ def test_submit_decision_swallows_transient_wake_failure(
     )
     db_session.commit()
 
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     # Pre-clean so the post-call assertion isn't poisoned by a leftover.
     cache.delete(approval_cache._wake_key(approval.approval_id))
 

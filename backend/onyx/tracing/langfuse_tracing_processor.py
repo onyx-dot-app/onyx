@@ -291,8 +291,13 @@ class LangfuseTracingProcessor(TracingProcessor):
                     update_kwargs["usage_details"] = usage
                 if cost is not None:
                     update_kwargs["cost_details"] = {"total": cost}
+                generation_metadata: dict[str, Any] = {}
                 if data.reasoning:
-                    update_kwargs["metadata"] = {"reasoning": data.reasoning}
+                    generation_metadata["reasoning"] = data.reasoning
+                if data.tools:
+                    generation_metadata["tools"] = data.tools
+                if generation_metadata:
+                    update_kwargs["metadata"] = generation_metadata
                 if data.time_to_first_action_seconds is not None:
                     update_kwargs["completion_start_time"] = _timestamp_from_maybe_iso(
                         span.started_at

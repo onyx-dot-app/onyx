@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback } from "react";
-import { Tag } from "@opal/components";
+import { Button, Switch, Tag } from "@opal/components";
 import { Content } from "@opal/layouts";
-import { SvgBlocks, SvgUser } from "@opal/icons";
+import { SvgBlocks, SvgTrash, SvgUploadCloud, SvgUser } from "@opal/icons";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
-import { useSettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 
 export type SkillCardSource = "builtin" | "custom";
 
@@ -26,6 +26,10 @@ export interface BuiltinSkillCardItem extends SkillCardItemBase {
 export interface CustomSkillCardItem extends SkillCardItemBase {
   source: "custom";
   author_email?: string | null;
+  /** True when the skill is a personal skill owned by the current user. */
+  is_personal?: boolean;
+  /** Disabled skills render greyed out; owners can re-enable via the toggle. */
+  enabled?: boolean;
 }
 
 export type SkillCardItem = BuiltinSkillCardItem | CustomSkillCardItem;
@@ -33,11 +37,23 @@ export type SkillCardItem = BuiltinSkillCardItem | CustomSkillCardItem;
 export interface SkillCardProps {
   item: SkillCardItem;
   onClick?: (item: SkillCardItem) => void;
+  /** Shown for owned personal skills only. */
+  onReplaceBundle?: (item: CustomSkillCardItem) => void;
+  onDelete?: (item: CustomSkillCardItem) => void;
+  onToggleEnabled?: (item: CustomSkillCardItem, enabled: boolean) => void;
+  /** Disables the action controls while a mutation for any card is in flight. */
+  busy?: boolean;
 }
 
-export default function SkillCard({ item, onClick }: SkillCardProps) {
-  const { enterpriseSettings } = useSettingsContext();
-  const appName = enterpriseSettings?.application_name || "Onyx";
+export default function SkillCard({
+  item,
+  onClick,
+  onReplaceBundle,
+  onDelete,
+  onToggleEnabled,
+  busy = false,
+}: SkillCardProps) {
+  const { appName } = useSettings();
 
   const handleClick = useCallback(() => {
     onClick?.(item);
@@ -45,6 +61,7 @@ export default function SkillCard({ item, onClick }: SkillCardProps) {
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
+  const isDisabled = item.source === "custom" && item.enabled === false;
 
   return (
     <Interactive.Simple onClick={handleClick} group="group/SkillCard">
@@ -52,7 +69,9 @@ export default function SkillCard({ item, onClick }: SkillCardProps) {
         padding={0}
         gap={0}
         height="full"
-        className="radial-00 hover:shadow-00"
+        className={
+          isDisabled ? "radial-00 opacity-50" : "radial-00 hover:shadow-00"
+        }
       >
         <div className="flex self-stretch h-24">
           <CardItemLayout
@@ -72,7 +91,44 @@ export default function SkillCard({ item, onClick }: SkillCardProps) {
               color="muted"
             />
           </div>
-          <div className="p-0.5 pr-1.5">
+          <div className="p-0.5 pr-1.5 flex items-center gap-1">
+            {item.source === "custom" && item.is_personal && (
+              <div
+                className="flex items-center gap-0.5"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {onToggleEnabled && (
+                  <Switch
+                    checked={item.enabled !== false}
+                    disabled={busy}
+                    onCheckedChange={(checked) =>
+                      onToggleEnabled(item, checked)
+                    }
+                  />
+                )}
+                {onReplaceBundle && (
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
+                    icon={SvgUploadCloud}
+                    tooltip="Replace bundle"
+                    disabled={busy}
+                    onClick={() => onReplaceBundle(item)}
+                  />
+                )}
+                {onDelete && (
+                  <Button
+                    prominence="tertiary"
+                    variant="danger"
+                    size="sm"
+                    icon={SvgTrash}
+                    tooltip="Delete skill"
+                    disabled={busy}
+                    onClick={() => onDelete(item)}
+                  />
+                )}
+              </div>
+            )}
             {item.source === "builtin" ? (
               item.is_available ? (
                 <Tag title="Built-in" color="blue" />
@@ -86,6 +142,8 @@ export default function SkillCard({ item, onClick }: SkillCardProps) {
                   color="amber"
                 />
               )
+            ) : item.is_personal ? (
+              <Tag title="Personal" color="purple" />
             ) : (
               <Tag title="Custom" color="gray" />
             )}

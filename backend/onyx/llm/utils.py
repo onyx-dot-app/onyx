@@ -136,7 +136,7 @@ def _unwrap_nested_exception(error: Exception) -> Exception:
 
 def litellm_exception_to_error_msg(
     e: Exception,
-    llm: LLM,
+    llm: LLM | None,
     fallback_to_error_msg: bool = False,
     custom_error_msg_mappings: (
         dict[str, str] | None
@@ -174,7 +174,30 @@ def litellm_exception_to_error_msg(
             if error_msg_pattern in error_msg:
                 return custom_error_msg, "CUSTOM_ERROR", True
 
-    if isinstance(core_exception, BadRequestError):
+    # Both subclass BadRequestError, so they must precede the BadRequestError
+    # branch or they'd be misclassified as BAD_REQUEST.
+    if isinstance(core_exception, ContextWindowExceededError):
+        error_msg = (
+            "Context window exceeded: Your input is too long for the model to process."
+        )
+        if llm is not None:
+            try:
+                max_context = get_max_input_tokens(
+                    model_name=llm.config.model_name,
+                    model_provider=llm.config.model_provider,
+                )
+                error_msg += f" Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}."
+            except Exception:
+                logger.warning(
+                    "Unable to get maximum input token for LiteLLM exception handling"
+                )
+        error_code = "CONTEXT_TOO_LONG"
+        is_retryable = False
+    elif isinstance(core_exception, ContentPolicyViolationError):
+        error_msg = "Content policy violation: Your request violates the content policy. Please revise your input."
+        error_code = "CONTENT_POLICY"
+        is_retryable = False
+    elif isinstance(core_exception, BadRequestError):
         error_msg = "Bad request: The server couldn't process your request. Please check your input."
         error_code = "BAD_REQUEST"
         is_retryable = True
@@ -261,27 +284,6 @@ def litellm_exception_to_error_msg(
             error_msg = f"{provider_name} service error: {str(core_exception)}"
         error_code = "SERVICE_UNAVAILABLE"
         is_retryable = True
-    elif isinstance(core_exception, ContextWindowExceededError):
-        error_msg = (
-            "Context window exceeded: Your input is too long for the model to process."
-        )
-        if llm is not None:
-            try:
-                max_context = get_max_input_tokens(
-                    model_name=llm.config.model_name,
-                    model_provider=llm.config.model_provider,
-                )
-                error_msg += f" Your invoked model ({llm.config.model_name}) has a maximum context size of {max_context}."
-            except Exception:
-                logger.warning(
-                    "Unable to get maximum input token for LiteLLM exception handling"
-                )
-        error_code = "CONTEXT_TOO_LONG"
-        is_retryable = False
-    elif isinstance(core_exception, ContentPolicyViolationError):
-        error_msg = "Content policy violation: Your request violates the content policy. Please revise your input."
-        error_code = "CONTENT_POLICY"
-        is_retryable = False
     elif isinstance(core_exception, APIConnectionError):
         error_msg = "API connection error: Failed to connect to the API. Please check your internet connection."
         error_code = "CONNECTION_ERROR"
@@ -296,6 +298,19 @@ def litellm_exception_to_error_msg(
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
         error_code = "CONNECTION_ERROR"
         is_retryable = True
+    elif str(getattr(core_exception, "status_code", "")) == "413" or (
+        "413" in error_msg and "request entity too large" in error_msg.lower()
+    ):
+        # Upstream proxy/gateway (e.g. nginx) rejected the request body as too large.
+        error_msg = (
+            "Request too large: The LLM endpoint rejected the request because it "
+            "exceeded the maximum allowed size (HTTP 413). This commonly happens "
+            "when sending images to a model behind a proxy/gateway. Increase the "
+            "maximum request body size on the gateway in front of your LLM "
+            "endpoint (e.g. nginx `client_max_body_size`)."
+        )
+        error_code = "REQUEST_TOO_LARGE"
+        is_retryable = False
     elif isinstance(core_exception, APIError):
         error_msg = f"API error: An error occurred while communicating with the API. Details: {str(core_exception)}"
         error_code = "API_ERROR"

@@ -32,8 +32,8 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.snapshot_manager import SNAPSHOT_FILE_TYPE
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.payloads import default_llm_config
 from tests.external_dependency_unit.craft.conftest import pod_exec
 from tests.external_dependency_unit.craft.conftest import wait_for_pod_deletion
 
@@ -107,13 +107,6 @@ def _download_snapshot(storage_path: str, dest: Path) -> None:
         file_io.close()
 
 
-def _delete_snapshot(storage_path: str) -> None:
-    try:
-        get_default_file_store().delete_file(storage_path, error_on_missing=False)
-    except Exception:
-        pass
-
-
 def _put_snapshot_bytes(storage_path: str, body: bytes) -> None:
     """Upload arbitrary bytes to FileStore (used to forge corrupt
     or traversal-laden tarballs that real callers can't produce)."""
@@ -156,7 +149,9 @@ def test_snapshot_includes_outputs_and_attachments_only(
 
     _populate_session_workspace(k8s_client, pod_name, session_id)
 
-    result = k8s_manager.create_snapshot(sandbox_id, session_id, TEST_TENANT_ID)
+    result = k8s_manager.create_snapshot(
+        sandbox_id, session_id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    )
     assert result is not None, "create_snapshot returned None for populated session"
 
     archive = tmp_path / "snapshot.tar.gz"
@@ -195,7 +190,9 @@ def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
         k8s_client, pod_name, session_id, include_managed_skills=True
     )
 
-    result = k8s_manager.create_snapshot(sandbox_id, session_id, TEST_TENANT_ID)
+    result = k8s_manager.create_snapshot(
+        sandbox_id, session_id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    )
     assert result is not None
 
     archive = tmp_path / "snapshot.tar.gz"
@@ -229,7 +226,9 @@ def test_restore_from_snapshot_recreates_workspace(
     sandbox_id, session_id, pod_name = pool_session
 
     payload = _populate_session_workspace(k8s_client, pod_name, session_id)
-    result = k8s_manager.create_snapshot(sandbox_id, session_id, TEST_TENANT_ID)
+    result = k8s_manager.create_snapshot(
+        sandbox_id, session_id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    )
     assert result is not None
 
     # Capture the file hashes before tearing down the workspace.
@@ -263,7 +262,6 @@ def test_restore_from_snapshot_recreates_workspace(
         sandbox_id=sandbox_id,
         session_id=session_id,
         snapshot_storage_path=result.storage_path,
-        tenant_id=TEST_TENANT_ID,
         nextjs_port=None,
         llm_config=default_llm_config(),
         skills_section="No skills available.",
@@ -299,7 +297,9 @@ def test_restore_re_pushes_skills(
     sandbox_id, session_id, pod_name = pool_session
 
     _populate_session_workspace(k8s_client, pod_name, session_id)
-    result = k8s_manager.create_snapshot(sandbox_id, session_id, TEST_TENANT_ID)
+    result = k8s_manager.create_snapshot(
+        sandbox_id, session_id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    )
     assert result is not None
 
     # Wipe the managed/skills tree to simulate a fresh post-restore state.
@@ -321,7 +321,6 @@ def test_restore_re_pushes_skills(
         sandbox_id=sandbox_id,
         session_id=session_id,
         snapshot_storage_path=result.storage_path,
-        tenant_id=TEST_TENANT_ID,
         nextjs_port=None,
         llm_config=default_llm_config(),
         skills_section="No skills available.",
@@ -411,7 +410,7 @@ def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
 
     assert k8s_manager.create_opencode_history_snapshot(
         sandbox_id,
-        TEST_TENANT_ID,
+        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     )
 
     k8s_manager.terminate(sandbox_id)
@@ -420,7 +419,7 @@ def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
     k8s_manager.provision(
         sandbox_id=sandbox_id,
         user_id=uuid4(),
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         llm_config=default_llm_config(),
         onyx_pat="test-onyx-pat",
     )
@@ -478,7 +477,7 @@ def test_restore_uses_data_filter_to_block_traversal(
         evil_info.size = len(evil_payload)
         tar.addfile(evil_info, fileobj=io.BytesIO(evil_payload))
 
-    storage_path = f"{TEST_TENANT_ID}/snapshots/{session_id}/traversal.tar.gz"
+    storage_path = f"{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/snapshots/{session_id}/traversal.tar.gz"
     _put_snapshot_bytes(storage_path, archive_local.read_bytes())
 
     # Attempt to restore. Traversal must be rejected before extraction.
@@ -487,7 +486,6 @@ def test_restore_uses_data_filter_to_block_traversal(
             sandbox_id=sandbox_id,
             session_id=session_id,
             snapshot_storage_path=storage_path,
-            tenant_id=TEST_TENANT_ID,
             nextjs_port=None,
             llm_config=default_llm_config(),
             skills_section="No skills available.",
@@ -544,7 +542,7 @@ def test_snapshot_corruption_detected_on_restore(
 
     # Forge a truncated gzip blob — valid gzip header, garbage body.
     corrupt_bytes = b"\x1f\x8b\x08\x00" + b"\x00" * 8 + b"truncated-mid-stream"
-    storage_path = f"{TEST_TENANT_ID}/snapshots/{session_id}/corrupt.tar.gz"
+    storage_path = f"{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/snapshots/{session_id}/corrupt.tar.gz"
     _put_snapshot_bytes(storage_path, corrupt_bytes)
 
     # Restore should raise a SnapshotCorruption-class error (or at minimum
@@ -556,7 +554,6 @@ def test_snapshot_corruption_detected_on_restore(
             sandbox_id=sandbox_id,
             session_id=session_id,
             snapshot_storage_path=storage_path,
-            tenant_id=TEST_TENANT_ID,
             nextjs_port=None,
             llm_config=default_llm_config(),
             skills_section="No skills available.",

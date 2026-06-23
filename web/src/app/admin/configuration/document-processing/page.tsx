@@ -6,7 +6,7 @@ import { Button } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { SettingsLayouts } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
@@ -56,7 +56,7 @@ function Main() {
   };
 
   if (isLoading) {
-    return <ThreeDotsLoader />;
+    return <PageLoader />;
   }
   return (
     <div className="pb-36">

@@ -38,6 +38,7 @@ from onyx.db.persona import get_persona_snapshots_for_user
 from onyx.db.persona import get_persona_snapshots_paginated
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
+from onyx.db.persona import remove_user_from_persona_shares
 from onyx.db.persona import update_persona_featured
 from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
@@ -46,6 +47,8 @@ from onyx.db.persona import update_persona_visibility
 from onyx.db.persona import update_personas_display_priority
 from onyx.db.persona_sharing import get_persona_access_level
 from onyx.db.persona_sharing import get_user_group_ids_for_user
+from onyx.db.persona_sharing import persona_ownership_is_vacant
+from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -64,6 +67,7 @@ from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
+from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -485,6 +489,54 @@ def share_persona(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+class TransferPersonaOwnershipRequest(BaseModel):
+    new_owner_user_id: UUID | None = None
+    new_owner_group_id: int | None = None
+
+
+@basic_router.post("/{persona_id}/transfer-ownership")
+def transfer_persona_ownership_endpoint(
+    persona_id: int,
+    transfer_request: TransferPersonaOwnershipRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    versioned_transfer = fetch_versioned_implementation(
+        "onyx.db.persona", "transfer_persona_ownership"
+    )
+    try:
+        versioned_transfer(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            new_owner_user_id=transfer_request.new_owner_user_id,
+            new_owner_group_id=transfer_request.new_owner_group_id,
+        )
+    except PermissionError as e:
+        logger.exception("Failed to transfer persona ownership")
+        raise HTTPException(status_code=403, detail=str(e))
+    except (ValueError, NotImplementedError) as e:
+        logger.exception("Failed to transfer persona ownership")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@basic_router.delete("/{persona_id}/share/me")
+def leave_persona_shares(
+    persona_id: int,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    try:
+        remove_user_from_persona_shares(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+        )
+    except ValueError as e:
+        logger.exception("Failed to remove user from persona shares")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
 def delete_persona(
     persona_id: int,
@@ -598,6 +650,8 @@ def get_persona(
         snapshot.user_permission = get_persona_access_level(
             persona, user, user_group_ids
         )
+    snapshot.admin_count = get_active_admin_count(db_session)
+    snapshot.ownership_vacant = persona_ownership_is_vacant(persona)
     return snapshot
 
 

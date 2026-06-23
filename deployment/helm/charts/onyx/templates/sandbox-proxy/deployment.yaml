@@ -73,6 +73,15 @@ spec:
               containerPort: {{ $healthzPort }}
               protocol: TCP
           env:
+            # Disable file logging for this pod: the root FS is read-only, so opening log
+            # files under /var/log/onyx would crash startup. Logs go to stdout (collected by
+            # the cluster); the per-pod files would be lost on restart anyway.
+            - name: LOG_TO_FILE
+              value: "false"
+            # Point Python's default temp dir at the confdir mount (the only writable mount)
+            # so any stray tempfile write doesn't crash on the read-only root.
+            - name: TMPDIR
+              value: /var/run/sandbox-proxy
             - name: SANDBOX_PROXY_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -111,7 +120,7 @@ spec:
             failureThreshold: 8
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: {{ .Values.sandboxProxy.runAsUser }}
             seccompProfile:
@@ -120,6 +129,8 @@ spec:
               drop:
                 - ALL
           volumeMounts:
+            # CA material (mitmproxy confdir) and the proxy's TMPDIR both live here — the
+            # one writable mount on an otherwise read-only root.
             - name: confdir
               mountPath: /var/run/sandbox-proxy
       volumes:

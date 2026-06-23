@@ -257,9 +257,14 @@ class ModelConfigurationView(BaseModel):
                 name=model_configuration_model.name,
                 is_visible=model_configuration_model.is_visible,
                 max_input_tokens=model_configuration_model.max_input_tokens,
+                # Dynamic/custom-config providers under-report vision; fall back
+                # to the LiteLLM cost map when no VISION flow is stored.
                 supports_image_input=(
                     LLMModelFlowType.VISION
                     in model_configuration_model.llm_model_flow_types
+                    or litellm_thinks_model_supports_image_input(
+                        model_configuration_model.name, provider_name
+                    )
                 ),
                 # Prefer the stored REASONING flow; fall back to a substring
                 # heuristic on model name/display name for legacy rows that

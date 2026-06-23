@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { Content, InputErrorText, InputVertical } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
@@ -37,8 +37,8 @@ import {
 import { formatDateShort } from "@/lib/dateUtils";
 import { humanReadableFormatShort } from "@opal/time";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-import { useSettingsContext } from "@/providers/SettingsProvider";
-import { Tier } from "@/interfaces/settings";
+import { useSettings } from "@/lib/settings/hooks";
+import { Tier } from "@/lib/settings/types";
 import useUsers from "@/hooks/useUsers";
 
 // ----------------------------------------------------------------------------
@@ -169,8 +169,8 @@ function SubscriptionCard({
   const [isEndingTrial, setIsEndingTrial] = useState(false);
   const [endTrialError, setEndTrialError] = useState<string | null>(null);
 
-  const settings = useSettingsContext();
-  const tier = settings?.settings.tier;
+  const settings = useSettings();
+  const tier = settings.tier;
   const isEnterprise = tier === Tier.ENTERPRISE || tier == null;
   const planName = isEnterprise ? "Enterprise Plan" : "Business Plan";
   const PlanIcon = isEnterprise ? SvgOrganization : SvgUsers;
@@ -484,16 +484,9 @@ function SeatsCard({
 
             {isBelowMinimum ? (
               <InputErrorText type="error">
-                You cannot set seats below current{" "}
-                <span className="font-semibold">{minRequiredSeats}</span> seats
-                in use/pending.{" "}
-                <Link
-                  href="/admin/users"
-                  className="underline hover:no-underline"
-                >
-                  Remove users
-                </Link>{" "}
-                first before adjusting seats.
+                {markdown(
+                  `You cannot set seats below current **${minRequiredSeats}** seats in use/pending. [Remove users](/admin/users) first before adjusting seats.`
+                )}
               </InputErrorText>
             ) : seatDifference !== 0 ? (
               <Text secondaryBody text03>

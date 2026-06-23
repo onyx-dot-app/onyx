@@ -44,8 +44,7 @@ env:
   IMAGE_TAG: "latest"
   # Pin to a CI-only tag so the locally-built sandbox image is what compose
   # passes to api_server, and what DockerSandboxManager.provision then loads
-  # into each sandbox container. Without this, compose falls back to
-  # docker-compose.craft.yml's default version tag (currently v0.1.52).
+  # into each sandbox container.
   SANDBOX_CONTAINER_IMAGE: "onyxdotapp/sandbox:ci"
   # Read by api_server on boot; Sandbox containers call back via this URL on the
   # compose bridge.
@@ -77,10 +76,11 @@ jobs:
         with:
           filters: |
             craft_compose:
+              - 'backend/Dockerfile'
               - 'backend/onyx/sandbox_proxy/**'
               - 'backend/onyx/server/features/build/sandbox/**'
               - 'backend/onyx/server/features/build/approvals/**'
-              - 'backend/Dockerfile'
+              - 'backend/onyx/skills/**'
               - 'deployment/docker_compose/docker-compose.yml'
               - 'deployment/docker_compose/docker-compose.dev.yml'
               - 'deployment/docker_compose/docker-compose.craft.yml'
@@ -100,10 +100,6 @@ jobs:
       - volume=100gb
       - run-id=${{ github.run_id }}-craft-compose-integration
       - extras=ecr-cache
-    # 30m covers the cold-cache case: the GHA buildx scopes are branch-keyed,
-    # so the first run on a new branch rebuilds sandbox (~3m) + backend (~4m)
-    # from scratch. Warm-cache runs land closer to 8m total. The inner
-    # `Run integration tests` step has its own 10m cap.
     timeout-minutes: 20
 
     env:
@@ -127,7 +123,7 @@ jobs:
             backend/requirements/ee.txt
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
 
       - name: Build sandbox image (proxy-aware firewall-init.sh + opencode)
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
@@ -166,9 +162,9 @@ jobs:
         working-directory: deployment/docker_compose
         run: echo 'USER_AUTH_SECRET=craft-compose-ci-only-dummy-secret' > .env
 
-      # TODO(ods): Replace with `ods compose --craft` once that flag is
-      # added to tools/ods/cmd/compose.go. Today `ods compose` doesn't support
-      # the craft overlay, so we drop to raw docker compose.
+      # TODO(ods): Replace with `ods compose --craft` once that flag is added to
+      # tools/ods/cmd/compose.go. Today `ods compose` doesn't support the craft
+      # overlay, so we drop to raw docker compose.
       #
       # Service list: Only what the gate + posture tests need. compose's
       # depends_on graph pulls in relational_db / cache / opensearch / model
@@ -283,9 +279,9 @@ jobs:
           path: compose-logs/
           retention-days: 7
 
-      # Tear down. -v removes named volumes inside the compose project
-      # but the externally-declared sandbox_proxy_ca + onyx_craft_sandbox
-      # survive (compose down doesn't touch external resources).
+      # Tear down. -v removes named volumes inside the compose project but the
+      # externally-declared sandbox_proxy_ca + onyx_craft_sandbox survive
+      # (compose down doesn't touch external resources).
       - name: Teardown
         if: always()
         working-directory: deployment/docker_compose

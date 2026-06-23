@@ -1,7 +1,7 @@
 "use client";
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect } from "react";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
-import { SettingsContext } from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import Link from "next/link";
 import type { Route } from "next";
 import Cookies from "js-cookie";
@@ -13,23 +13,21 @@ const DISMISSED_NOTIFICATION_COOKIE_PREFIX = "dismissed_notification_";
 const COOKIE_EXPIRY_DAYS = 1;
 
 export function AnnouncementBanner() {
-  const settings = useContext(SettingsContext);
+  const settings = useSettings();
   const { mutate } = useSWRConfig();
   const [localNotifications, setLocalNotifications] = useState(
-    settings?.settings.notifications || []
+    settings.notifications || []
   );
 
   useEffect(() => {
-    const filteredNotifications = (
-      settings?.settings.notifications || []
-    ).filter(
+    const filteredNotifications = (settings.notifications || []).filter(
       (notification) =>
         !Cookies.get(
           `${DISMISSED_NOTIFICATION_COOKIE_PREFIX}${notification.id}`
         )
     );
     setLocalNotifications(filteredNotifications);
-  }, [settings?.settings.notifications]);
+  }, [settings.notifications]);
 
   if (!localNotifications || localNotifications.length === 0) return null;
 

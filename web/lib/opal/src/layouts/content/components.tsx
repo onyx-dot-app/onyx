@@ -45,6 +45,9 @@ interface ContentBaseProps {
   /** Optional description below the title. */
   description?: string | RichStr;
 
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  titleMaxLines?: number;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 
@@ -124,6 +127,8 @@ type SmContentProps = Omit<
   variant: "body";
   /** Layout orientation. Default: `"inline"`. */
   orientation?: ContentSmOrientation;
+  /** ARIA role forwarded to the title text element. */
+  role?: string;
 };
 
 type ContentProps =

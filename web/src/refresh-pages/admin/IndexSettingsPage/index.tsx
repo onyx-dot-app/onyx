@@ -5,7 +5,7 @@ import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -74,15 +74,15 @@ import {
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { ContentAction } from "@opal/layouts";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
-import { useSettingsContext } from "@/providers/SettingsProvider";
-import { Settings } from "@/interfaces/settings";
+import { useSettings } from "@/lib/settings/hooks";
+import { Settings, toSettings } from "@/lib/settings/types";
 import { toast } from "@/hooks/useToast";
 import {
   useConfiguredEmbeddingProviders,
   useCurrentEmbeddingModel,
   useCurrentSearchSettings,
   useSecondarySearchSettings,
-} from "@/hooks/useSearchSettings";
+} from "@/lib/indexing/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import useFilter from "@/hooks/useFilter";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
@@ -572,7 +572,7 @@ interface IndexSettingsFormValues {
 
 export default function IndexSettingsPage() {
   const router = useRouter();
-  const settings = useSettingsContext();
+  const settings = useSettings();
   const editModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
   const [activeModelTab, setActiveModelTab] = useState(MODEL_TAB_CLOUD);
@@ -612,10 +612,10 @@ export default function IndexSettingsPage() {
 
   const saveSettings = useCallback(
     async (updates: Partial<Settings>) => {
-      if (!settings.settings) return;
+      if (!settings) return;
 
       try {
-        await saveAdminSettings({ ...settings.settings, ...updates });
+        await saveAdminSettings({ ...toSettings(settings), ...updates });
         router.refresh();
         await mutate(SWR_KEYS.settings);
         toast.success("Settings updated");
@@ -623,11 +623,11 @@ export default function IndexSettingsPage() {
         toast.error("Failed to update settings");
       }
     },
-    [settings.settings, router]
+    [settings, router]
   );
 
   const imageProcessingEnabled =
-    settings.settings.image_extraction_and_analysis_enabled ?? false;
+    settings.image_extraction_and_analysis_enabled ?? false;
 
   const { data: secondarySearchSettings } = useSecondarySearchSettings();
   const isReindexing = !!secondarySearchSettings;
@@ -791,7 +791,7 @@ export default function IndexSettingsPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
         <SettingsLayouts.Body>
-          <ThreeDotsLoader />
+          <PageLoader />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );
@@ -1562,8 +1562,7 @@ export default function IndexSettingsPage() {
                             >
                               <InputSelect
                                 value={String(
-                                  settings.settings
-                                    .image_analysis_max_size_mb ?? 20
+                                  settings.image_analysis_max_size_mb ?? 20
                                 )}
                                 onValueChange={(value) => {
                                   void saveSettings({

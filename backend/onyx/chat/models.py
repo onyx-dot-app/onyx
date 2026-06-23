@@ -101,7 +101,7 @@ class ChatLoadedFile(InMemoryChatFile):
 
     # Named distinctly from the base ``lazy_from_descriptor`` so the subclass
     # can require ``content_text`` / ``token_count`` without violating LSP on
-    # the override (ty/mypy correctly flag the broader subclass signature).
+    # the override (ty correctly flag the broader subclass signature).
     @classmethod
     def lazy_loaded(
         cls,

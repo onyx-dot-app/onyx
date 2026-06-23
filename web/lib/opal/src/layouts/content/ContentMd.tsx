@@ -70,6 +70,9 @@ interface ContentMdProps {
   /** Tag rendered beside the title. */
   tag?: TagProps;
 
+  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  titleMaxLines?: number;
+
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
 
@@ -138,6 +141,7 @@ function ContentMd({
   suffix,
   auxIcon,
   tag,
+  titleMaxLines,
   sizePreset = "main-ui",
   ref,
 }: ContentMdProps) {
@@ -214,7 +218,7 @@ function ContentMd({
             <Text
               font={config.titleFont}
               color="inherit"
-              maxLines={1}
+              maxLines={titleMaxLines}
               title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
             >

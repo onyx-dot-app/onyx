@@ -13,6 +13,7 @@ from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.server.features.build.configs import ENABLE_CRAFT
 from onyx.server.features.build.configs import MAX_UPLOAD_FILE_SIZE_BYTES
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -126,10 +127,10 @@ def is_onyx_craft_enabled(user: User) -> bool:
     if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
         return ENABLE_CRAFT
 
-    # Use the feature flag provider
-    is_enabled = feature_flag_provider.feature_enabled(
+    is_enabled = feature_flag_provider.feature_enabled_for_user_tenant(
         ONYX_CRAFT_ENABLED_FLAG,
-        user.id,
+        user,
+        get_current_tenant_id(),
     )
 
     if is_enabled:

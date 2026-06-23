@@ -43,8 +43,8 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 )
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.utils.logger import setup_logger
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.payloads import default_llm_config
 from tests.external_dependency_unit.craft.conftest import pod_exec
 from tests.external_dependency_unit.craft.conftest import wait_for_pod_deletion
 
@@ -63,11 +63,6 @@ TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 # Local helpers (file-scoped). Generic K8s helpers (``pod_exec``,
 # ``wait_for_pod_deletion``, ``k8s_client`` fixture) live in conftest.py.
 # ---------------------------------------------------------------------------
-
-
-def _is_kubernetes_available(k8s: client.CoreV1Api) -> None:
-    """Sanity-check that the cluster client is usable for this namespace."""
-    k8s.list_namespaced_pod(SANDBOX_NAMESPACE, limit=1)
 
 
 def _wait_until_healthy(
@@ -96,7 +91,7 @@ def _provisioned_sandbox(
     info = manager.provision(
         sandbox_id=sandbox_id,
         user_id=TEST_USER_ID,
-        tenant_id=TEST_TENANT_ID,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         llm_config=config,
         onyx_pat="ci-test-pat",
     )

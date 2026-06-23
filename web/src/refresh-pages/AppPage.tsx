@@ -10,10 +10,7 @@ import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import {
-  useSettingsContext,
-  useVectorDbEnabled,
-} from "@/providers/SettingsProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -23,6 +20,7 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/lib/agents/hooks";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import { useUser } from "@/providers/UserProvider";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import NoAgentModal from "@/sections/modals/NoAgentModal";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import Modal from "@/refresh-components/Modal";
@@ -69,6 +67,7 @@ import { Button, Spacer } from "@opal/components";
 import { IllustrationContent, RootLayout } from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
 import useAppFocus from "@/hooks/useAppFocus";
+import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
@@ -126,6 +125,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const router = useRouter();
   const appFocus = useAppFocus();
+  const { isMobile } = useScreenSize();
 
   useToastFromQuery({
     oauth_connected: {
@@ -147,23 +147,23 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
   // available in server-side components
-  const settings = useSettingsContext();
+  const settings = useSettings();
+  const { appName } = settings;
 
   const appNameRef = useRef<string>("Onyx");
   useEffect(() => {
-    const appName = settings.enterpriseSettings?.application_name || "Onyx";
     appNameRef.current = appName;
     document.title = currentChatSession?.name
       ? `${currentChatSession.name} — ${appName}`
       : appName;
-  }, [currentChatSession?.name, settings.enterpriseSettings?.application_name]);
+  }, [currentChatSession?.name, appName]);
   useEffect(() => {
     return () => {
       document.title = appNameRef.current;
     };
   }, []);
 
-  const vectorDbEnabled = useVectorDbEnabled();
+  const { vectorDbEnabled } = settings;
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -190,6 +190,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { data: federatedConnectorsData } = useFederatedConnectors();
 
   const { user } = useUser();
+  // `useUser()` reports null while loading, so gating on it would redirect during
+  // the /me load window. Read the raw result instead (undefined = loading, null =
+  // resolved signed-out). This matters for anonymous users specifically: they're
+  // kept on the login page, so unlike logged-in users they wouldn't bounce back.
+  const { user: resolvedUser } = useCurrentUser();
 
   function processSearchParamsAndSubmitMessage(searchParamsString: string) {
     const newSearchParams = new URLSearchParams(searchParamsString);
@@ -308,7 +313,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     liveAgent,
     currentChatSessionId,
     currentChatSession ?? undefined,
-    settings
+    settings.disable_default_assistant ?? false
   );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
@@ -556,7 +561,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
-  if (!user) {
+  if (resolvedUser === null) {
     redirect("/auth/login");
   }
 
@@ -708,7 +713,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (liveAgent?.starter_messages?.length ?? 0) > 0;
 
   const gridStyle = {
-    gridTemplateColumns: "1fr",
+    // minmax(0, 1fr) (instead of "1fr") lets the single column shrink to the
+    // grid's width. A bare "1fr" is minmax(auto, 1fr), whose auto minimum is
+    // the content's min-content — wide content (e.g. the onboarding cards) would
+    // otherwise blow the column past the viewport and clip the right edge.
+    gridTemplateColumns: "minmax(0, 1fr)",
     gridTemplateRows: isSearch
       ? "0fr auto 1fr"
       : appFocus.isChat()
@@ -724,7 +733,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     <>
       <AppPopup />
 
-      {retrievalEnabled && documentSidebarVisible && settings.isMobile && (
+      {retrievalEnabled && documentSidebarVisible && isMobile && (
         <div className="md:hidden">
           <Modal
             open
@@ -761,25 +770,23 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      {!(noAgents && !isLoadingAgents) &&
-        retrievalEnabled &&
-        !settings.isMobile && (
-          <RootLayout.RightPanel>
-            <div
-              className={cn(
-                "overflow-hidden transition-all duration-300 ease-in-out h-full",
-                documentSidebarVisible ? "w-100" : "w-0"
-              )}
-            >
-              <DocumentsSidebar
-                setPresentingDocument={setPresentingDocument}
-                modal={false}
-                closeSidebar={handleDesktopDocumentSidebarClose}
-                selectedDocuments={selectedDocuments}
-              />
-            </div>
-          </RootLayout.RightPanel>
-        )}
+      {!(noAgents && !isLoadingAgents) && retrievalEnabled && !isMobile && (
+        <RootLayout.RightPanel>
+          <div
+            className={cn(
+              "overflow-hidden transition-all duration-300 ease-in-out h-full",
+              documentSidebarVisible ? "w-100" : "w-0"
+            )}
+          >
+            <DocumentsSidebar
+              setPresentingDocument={setPresentingDocument}
+              modal={false}
+              closeSidebar={handleDesktopDocumentSidebarClose}
+              selectedDocuments={selectedDocuments}
+            />
+          </div>
+        </RootLayout.RightPanel>
+      )}
 
       <div className="w-full h-full overflow-hidden">
         <Dropzone
@@ -799,7 +806,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 style={gridStyle}
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center px-4">
+                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center px-2 sm:px-4">
                   {/* ChatUI */}
                   <Fade
                     show={
@@ -924,7 +931,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 {/* ── Middle-center: AppInputBar ── */}
                 <div
                   className={cn(
-                    "row-start-2 flex flex-col items-center px-4",
+                    "row-start-2 flex flex-col items-center px-2 sm:px-4",
                     sessionFetchError && "hidden"
                   )}
                 >
@@ -1039,7 +1046,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
-                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-4">
+                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
                   {/* Agent description below input */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&
                     !isDefaultAgent && (

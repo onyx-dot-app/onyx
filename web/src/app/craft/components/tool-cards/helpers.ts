@@ -84,15 +84,6 @@ export function getStatusDisplay(status: ToolCallStatus): StatusDisplay {
 
 export { SvgLoader, SvgGlobe };
 
-/**
- * Returns true when the tool call has completed (success or failure).
- */
-export function isTerminalStatus(status: ToolCallStatus): boolean {
-  return (
-    status === "completed" || status === "failed" || status === "cancelled"
-  );
-}
-
 /** The "Using <skill> skill" invocation card (drives the sparkle + border). */
 export function isSkillInvocation(toolCall: ToolCallState): boolean {
   return toolCall.toolName === "skill";

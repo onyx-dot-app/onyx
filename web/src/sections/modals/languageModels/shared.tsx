@@ -7,7 +7,7 @@ import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
 import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/interfaces/settings";
+import { Tier } from "@/lib/settings/types";
 import { useAgents } from "@/lib/agents/hooks";
 import { useUserGroups } from "@/lib/hooks";
 import type {

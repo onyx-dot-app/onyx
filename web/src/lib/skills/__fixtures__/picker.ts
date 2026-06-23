@@ -27,6 +27,7 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     name: "Report Writer",
     description: "Draft a structured report from notes.",
     is_public: true,
+    is_personal: false,
     enabled: true,
     author_user_id: null,
     author_email: null,
