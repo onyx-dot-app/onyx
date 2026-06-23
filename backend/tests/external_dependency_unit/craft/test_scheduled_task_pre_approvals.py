@@ -383,8 +383,8 @@ def test_validated_app_ids_rejects_unavailable_and_dedupes(
     )
     monkeypatch.setattr(
         scheduled_tasks_api,
-        "app_is_available",
-        lambda _db, app, _user_id: app.id in {7, 9},
+        "app_is_available_for_user_credential",
+        lambda app, _user_cred: app.id in {7, 9},
     )
 
     user_id = make_user(db_session).id

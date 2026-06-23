@@ -40,6 +40,8 @@ from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
 from onyx.db.external_app import get_external_apps
+from onyx.db.external_app import get_user_credentials_by_app_id
+from onyx.db.models import ExternalApp
 from onyx.db.models import ScheduledTask
 from onyx.db.models import ScheduledTaskRun
 from onyx.db.models import User
@@ -52,7 +54,7 @@ from onyx.db.scheduled_task import soft_delete_scheduled_task
 from onyx.db.scheduled_task import update_scheduled_task
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.credentials import app_is_available
+from onyx.external_apps.credentials import app_is_available_for_user_credential
 from onyx.server.features.build.scheduled_tasks.schedule import compile_to_cron
 from onyx.server.features.build.scheduled_tasks.schedule import EDITOR_PAYLOAD_MODELS
 from onyx.server.features.build.scheduled_tasks.schedule import EditorMode
@@ -299,6 +301,7 @@ def _detail(
     db_session: Session,
     task: ScheduledTask,
     user_id: UUID,
+    external_apps: list[ExternalApp] | None = None,
 ) -> ScheduledTaskDetail:
     last_run = _latest_run(db_session, task, user_id)
     next_runs: list[datetime] = []
@@ -308,6 +311,9 @@ def _detail(
             datetime.now(tz=timezone.utc),
             NEXT_RUNS_PREVIEW_COUNT,
         )
+    pre_approved_app_ids = task.pre_approved_app_ids
+    if external_apps is None and pre_approved_app_ids:
+        external_apps = get_external_apps(db_session)
     return ScheduledTaskDetail(
         id=str(task.id),
         name=task.name,
@@ -319,9 +325,9 @@ def _detail(
         next_run_at=task.next_run_at,
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
-        pre_approved_app_ids=task.pre_approved_app_ids,
+        pre_approved_app_ids=pre_approved_app_ids,
         pre_approved_apps=_pre_approved_app_display_metadata(
-            db_session, task.pre_approved_app_ids
+            pre_approved_app_ids, external_apps or []
         ),
         created_at=task.created_at,
         updated_at=task.updated_at,
@@ -329,8 +335,8 @@ def _detail(
 
 
 def _pre_approved_app_display_metadata(
-    db_session: Session,
     app_ids: list[int],
+    external_apps: list[ExternalApp],
 ) -> list[ScheduledTaskPreApprovedAppDisplay]:
     """Return grant display metadata in grant order.
 
@@ -340,7 +346,7 @@ def _pre_approved_app_display_metadata(
     if not app_ids:
         return []
     ids = set(app_ids)
-    apps_by_id = {app.id: app for app in get_external_apps(db_session) if app.id in ids}
+    apps_by_id = {app.id: app for app in external_apps if app.id in ids}
     return [
         ScheduledTaskPreApprovedAppDisplay(
             id=app.id,
@@ -356,7 +362,10 @@ def _pre_approved_app_display_metadata(
 
 
 def _validated_app_ids(
-    db_session: Session, app_ids: list[int], user_id: UUID
+    db_session: Session,
+    app_ids: list[int],
+    user_id: UUID,
+    external_apps: list[ExternalApp] | None = None,
 ) -> list[int]:
     """Dedupe (order-preserving) and verify each id is available to the user.
 
@@ -366,10 +375,17 @@ def _validated_app_ids(
     deduped = list(dict.fromkeys(app_ids))
     if not deduped:
         return []
+    external_apps = (
+        external_apps if external_apps is not None else get_external_apps(db_session)
+    )
+    user_creds_by_app = get_user_credentials_by_app_id(
+        db_session=db_session,
+        user_id=user_id,
+    )
     available_ids = {
         app.id
-        for app in get_external_apps(db_session)
-        if app_is_available(db_session, app, user_id)
+        for app in external_apps
+        if app_is_available_for_user_credential(app, user_creds_by_app.get(app.id))
     }
     unavailable = [app_id for app_id in deduped if app_id not in available_ids]
     if unavailable:
@@ -452,6 +468,9 @@ def create_task(
          and enqueue the executor. Does NOT touch ``next_run_at``.
     """
     cron_expression = compile_to_cron(request.editor_payload)
+    external_apps = (
+        get_external_apps(db_session) if request.pre_approved_app_ids else []
+    )
 
     task = create_scheduled_task(
         db_session=db_session,
@@ -462,7 +481,10 @@ def create_task(
         editor_mode=request.editor_mode,
         status=request.status,
         pre_approved_app_ids=_validated_app_ids(
-            db_session, request.pre_approved_app_ids, user.id
+            db_session,
+            request.pre_approved_app_ids,
+            user.id,
+            external_apps=external_apps,
         ),
     )
 
@@ -481,7 +503,7 @@ def create_task(
         db_session.commit()
 
     db_session.refresh(task)
-    return _detail(db_session, task, user.id)
+    return _detail(db_session, task, user.id, external_apps=external_apps)
 
 
 @router.get("/{task_id}")
@@ -515,6 +537,11 @@ def patch_task(
         # whenever editor_payload is — no runtime check needed here.
         cron_expression = compile_to_cron(request.editor_payload)
 
+    external_apps = (
+        get_external_apps(db_session)
+        if request.pre_approved_app_ids is not None
+        else None
+    )
     task = update_scheduled_task(
         db_session=db_session,
         task_id=task_id,
@@ -525,14 +552,19 @@ def patch_task(
         editor_mode=request.editor_mode,
         status=request.status,
         pre_approved_app_ids=(
-            _validated_app_ids(db_session, request.pre_approved_app_ids, user.id)
+            _validated_app_ids(
+                db_session,
+                request.pre_approved_app_ids,
+                user.id,
+                external_apps=external_apps,
+            )
             if request.pre_approved_app_ids is not None
             else None
         ),
     )
     db_session.commit()
     db_session.refresh(task)
-    return _detail(db_session, task, user.id)
+    return _detail(db_session, task, user.id, external_apps=external_apps)
 
 
 @router.delete("/{task_id}")

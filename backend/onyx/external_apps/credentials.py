@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_app_user_credential
 from onyx.db.models import ExternalApp
+from onyx.db.models import ExternalAppUserCredential
 
 
 def build_auth_headers(
@@ -33,6 +34,36 @@ def build_auth_headers(
     return headers
 
 
+def _combined_credentials(
+    app: ExternalApp,
+    user_cred: ExternalAppUserCredential | None,
+) -> dict[str, Any]:
+    credentials: dict[str, Any] = dict(
+        app.organization_credentials.get_value(apply_mask=False)
+    )
+    if user_cred is not None:
+        credentials.update(user_cred.user_credentials.get_value(apply_mask=False))
+    return credentials
+
+
+def app_is_available_for_user_credential(
+    app: ExternalApp,
+    user_cred: ExternalAppUserCredential | None,
+) -> bool:
+    """Whether ``app`` is enabled and has enough credentials to serve a user.
+
+    This is the non-querying form of :func:`app_is_available` for callers that
+    already loaded the ``ExternalApp`` and credential row.
+    """
+    if not app.skill.enabled:
+        return False
+    if not app.auth_template:
+        return True
+    return bool(
+        build_auth_headers(app.auth_template, _combined_credentials(app, user_cred))
+    )
+
+
 def resolve_injection_headers(
     db_session: Session,
     external_app_id: int,
@@ -51,16 +82,13 @@ def resolve_injection_headers(
     if app is None or not app.skill.enabled:
         return {}
 
-    credentials: dict[str, Any] = dict(
-        app.organization_credentials.get_value(apply_mask=False)
-    )
     user_cred = get_external_app_user_credential(
         db_session, external_app_id=external_app_id, user_id=user_id
     )
-    if user_cred is not None:
-        credentials.update(user_cred.user_credentials.get_value(apply_mask=False))
-
-    return build_auth_headers(app.auth_template, credentials)
+    return build_auth_headers(
+        app.auth_template,
+        _combined_credentials(app, user_cred),
+    )
 
 
 def app_is_available(db_session: Session, app: ExternalApp, user_id: UUID) -> bool:
@@ -74,8 +102,7 @@ def app_is_available(db_session: Session, app: ExternalApp, user_id: UUID) -> bo
     re-resolves later with an OAuth refresh, so this verdict-time render is the
     cheap presence check, not the final one.
     """
-    if not app.skill.enabled:
-        return False
-    if not app.auth_template:
-        return True
-    return bool(resolve_injection_headers(db_session, app.id, user_id))
+    user_cred = get_external_app_user_credential(
+        db_session, external_app_id=app.id, user_id=user_id
+    )
+    return app_is_available_for_user_credential(app, user_cred)
