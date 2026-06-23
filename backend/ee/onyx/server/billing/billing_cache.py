@@ -80,7 +80,9 @@ def cached_fetch_billing_information(
         raw = redis.get(key)
     except RedisError as e:
         logger.warning(
-            f"billing cache read failed for tenant {tenant_id}, falling through to CP: {e}"
+            "billing cache read failed for tenant %s, falling through to CP: %s",
+            tenant_id,
+            e,
         )
         return fetch_billing_information(tenant_id)
 
@@ -94,7 +96,9 @@ def cached_fetch_billing_information(
             # ``BillingInformation`` leaves every subsequent read failing for
             # the full TTL without ever reaching the refetch/overwrite below.
             logger.warning(
-                f"billing cache entry for tenant {tenant_id} unparseable, refetching: {e}"
+                "billing cache entry for tenant %s unparseable, refetching: %s",
+                tenant_id,
+                e,
             )
 
     info = fetch_billing_information(tenant_id)
@@ -102,7 +106,7 @@ def cached_fetch_billing_information(
     try:
         redis.setex(key, BILLING_CACHE_TTL_SECONDS, _serialize(info))
     except RedisError as e:
-        logger.warning(f"billing cache write failed for tenant {tenant_id}: {e}")
+        logger.warning("billing cache write failed for tenant %s: %s", tenant_id, e)
 
     return info
 
@@ -128,4 +132,6 @@ def invalidate_billing_cache(tenant_id: str) -> None:
     try:
         get_shared_redis_client().delete(_cache_key(tenant_id))
     except RedisError as e:
-        logger.warning(f"billing cache invalidate failed for tenant {tenant_id}: {e}")
+        logger.warning(
+            "billing cache invalidate failed for tenant %s: %s", tenant_id, e
+        )
