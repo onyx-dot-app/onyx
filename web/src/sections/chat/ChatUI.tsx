@@ -230,7 +230,6 @@ const ChatUI = React.memo(
                   key={messageReactComponentKey}
                   className="flex flex-col gap-12 w-full"
                 >
-                  {/* Human message stays at normal chat width */}
                   <div className={cn("w-full self-center", msgWidth)}>
                     <HumanMessage
                       disableSwitchingForStreaming={
