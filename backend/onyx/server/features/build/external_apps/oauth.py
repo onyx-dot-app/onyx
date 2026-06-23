@@ -27,6 +27,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.external_apps.models import OAuthCallbackRequest
 from onyx.server.features.build.external_apps.models import OAuthCallbackResponse
 from onyx.server.features.build.external_apps.models import OAuthStartResponse
+from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -238,6 +239,8 @@ def handle_external_app_oauth_callback(
         user_id=user.id,
         user_credentials=stored_credentials,
     )
+    # Authenticating opens this user's per-user gate; refresh their sandboxes now.
+    push_skills_for_users({user.id}, db_session)
 
     # One-shot — prevent replay.
     r.delete(redis_key)
