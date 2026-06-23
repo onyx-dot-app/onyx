@@ -90,6 +90,8 @@ HIDDEN_PATTERNS = {
     ".gitignore",
 }
 
+ZIP_EXCLUDED_DIR_NAMES = frozenset({"node_modules"})
+
 
 def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
     """Replace filesystem-unsafe characters in a zip filename stem. ``allow_dots``
@@ -909,6 +911,8 @@ class SessionManager:
                 return
             for entry in entries:
                 if entry.is_directory:
+                    if entry.name in ZIP_EXCLUDED_DIR_NAMES:
+                        continue
                     _walk(entry.path)
                 else:
                     collected.append((entry.path, arcname_for(entry.path)))
