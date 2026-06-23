@@ -1,6 +1,5 @@
 import asyncio
 import json
-import ssl
 import threading
 from typing import Any
 from typing import cast
@@ -296,13 +295,6 @@ def get_raw_redis_replica_client() -> Redis:
     return redis_pool.get_raw_replica_client()
 
 
-SSL_CERT_REQS_MAP = {
-    "none": ssl.CERT_NONE,
-    "optional": ssl.CERT_OPTIONAL,
-    "required": ssl.CERT_REQUIRED,
-}
-
-
 # Async Redis connections are cached PER EVENT LOOP, not globally. redis-py binds
 # a connection's socket and its asyncio Futures to the loop that first used it, so
 # a single client reused across loops raises "got Future attached to a different
@@ -332,22 +324,19 @@ def _build_async_redis_connection() -> aioredis.Redis:
     if USE_REDIS_IAM_AUTH:
         configure_redis_iam_auth(connection_kwargs)
     elif REDIS_SSL:
-        ssl_context = ssl.create_default_context()
-
+        # redis-py's async client builds its own SSLContext from these kwargs;
+        # unlike the sync SSLConnection it does NOT accept a prebuilt
+        # ssl_context, so passing one is silently ignored (TLS still negotiates
+        # but the CA / client cert are dropped). Hand it the native ssl_* params.
+        connection_kwargs["ssl"] = True
+        connection_kwargs["ssl_cert_reqs"] = REDIS_SSL_CERT_REQS
+        connection_kwargs["ssl_check_hostname"] = False
         if REDIS_SSL_CA_CERTS:
-            ssl_context.load_verify_locations(REDIS_SSL_CA_CERTS)
-        ssl_context.check_hostname = False
-
-        # Map your string to the proper ssl.CERT_* constant
-        ssl_context.verify_mode = SSL_CERT_REQS_MAP.get(
-            REDIS_SSL_CERT_REQS, ssl.CERT_NONE
-        )
-
-        # Present a client certificate for mutual TLS, if configured.
+            connection_kwargs["ssl_ca_certs"] = REDIS_SSL_CA_CERTS
+        # Client certificate for mutual TLS, if configured.
         if REDIS_SSL_CERTFILE:
-            ssl_context.load_cert_chain(REDIS_SSL_CERTFILE, REDIS_SSL_KEYFILE)
-
-        connection_kwargs["ssl"] = ssl_context
+            connection_kwargs["ssl_certfile"] = REDIS_SSL_CERTFILE
+            connection_kwargs["ssl_keyfile"] = REDIS_SSL_KEYFILE
 
     # Create a new Redis connection (or connection pool) with SSL configuration
     return aioredis.Redis(**connection_kwargs)
