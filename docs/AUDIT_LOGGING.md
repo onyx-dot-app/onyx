@@ -78,10 +78,13 @@ them). Current taxonomy (`AuditAction` in `backend/onyx/utils/audit.py`):
   `api_key.{create,regenerate,delete}`, `credential.{create,update,delete}`,
   `credential.access`
 
-> Most actions are wired to call sites. A few (`user.create`,
-> `user.group_change`, `auth.password_reset`) are defined ahead of their
-> instrumentation and land in follow-up PRs, so consumers can build dashboards
-> against the full taxonomy now.
+**Emitted today.** All of the above fire at real call sites **except** three
+that are defined ahead of their instrumentation and land in follow-up work:
+`auth.password_reset`, `user.create` (admin-invite flow), and
+`user.group_change` (Enterprise user groups). Everything else — every auth,
+admin-config, access-control, and credential event listed — is live. Building
+dashboards/alerts against the full taxonomy is safe; those three simply won't
+appear until wired.
 
 ### Example event
 
@@ -145,6 +148,68 @@ Example **Fluent Bit** grep filter:
     Match   onyx.*
     Regex   logger ^onyx\.audit
 ```
+
+### Splunk (HTTP Event Collector)
+
+Ship the filtered audit stream to a Splunk HEC endpoint, e.g. via Fluent Bit.
+Set `sourcetype` to `_json` so Splunk parses the event body, and route to a
+dedicated index (e.g. `onyx_audit`) for retention/RBAC:
+
+```ini
+[OUTPUT]
+    Name             splunk
+    Match            onyx.*
+    Host             splunk-hec.example.com
+    Port             8088
+    Splunk_Token     ${SPLUNK_HEC_TOKEN}
+    Splunk_Send_Raw  On
+    event_sourcetype _json
+    event_index      onyx_audit
+```
+
+Then in Splunk, e.g.: `index=onyx_audit action=auth.login_failure | stats count by actor.email, source_ip`.
+
+### Microsoft Sentinel (Azure Monitor)
+
+Use the Azure Monitor / Log Analytics agent (or a Vector `azure_monitor_logs`
+sink) to send the parsed JSON to a custom table (`OnyxAudit_CL`). With Vector:
+
+```toml
+[sinks.sentinel]
+type = "azure_monitor_logs"
+inputs = ["onyx_audit_parsed"]
+customer_id = "${LOG_ANALYTICS_WORKSPACE_ID}"
+shared_key = "${LOG_ANALYTICS_SHARED_KEY}"
+log_type = "OnyxAudit"
+```
+
+Query with KQL: `OnyxAudit_CL | where action_s == "user.role_change" | project TimeGenerated, actor_email_s, resource_id_s, extra_new_role_s`.
+
+### Elastic (Filebeat / Elastic Agent)
+
+Tail the `backend/log/*.log` files (or container stdout) and decode the JSON body:
+
+```yaml
+filebeat.inputs:
+  - type: filestream
+    paths: ["/app/backend/log/*.log"]
+    parsers:
+      - ndjson:
+          target: ""
+          message_key: message
+processors:
+  - drop_event:
+      when:
+        not:
+          regexp:
+            logger: "^onyx\\.audit"
+```
+
+### Generic syslog
+
+If your collector only speaks syslog, forward the JSON line as the syslog
+`MSG` and parse downstream — the event body is self-contained JSON, so any
+SIEM that can JSON-decode a syslog message works without a custom parser.
 
 > Roadmap: a syslog/CEF formatter, an OCSF-native emitter mode, and an in-product
 > `audit_event` table + read API are planned follow-ups. The JSON export path
