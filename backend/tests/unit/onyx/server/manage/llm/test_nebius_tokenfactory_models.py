@@ -76,7 +76,7 @@ def _fetch() -> dict:
             request=NebiusTokenfactoryModelsRequest(
                 api_base="https://api.tokenfactory.nebius.com/v1",
                 api_key="k",
-                provider_name=None,  # skip DB sync
+                provider_id=None,  # skip DB sync
             ),
             _=cast(User, None),
             db_session=cast(Session, None),

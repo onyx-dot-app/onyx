@@ -362,7 +362,7 @@ def upsert_llm_provider(
 
 def sync_model_configurations(
     db_session: Session,
-    provider_name: str,
+    provider_id: int,
     models: list[SyncModelEntry],
 ) -> int:
     """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama, etc.).
@@ -374,15 +374,15 @@ def sync_model_configurations(
 
     Args:
         db_session: Database session
-        provider_name: Name of the LLM provider
+        provider_id: Id of the LLM provider
         models: List of SyncModelEntry objects describing the fetched models
 
     Returns:
         Number of new models added
     """
-    provider = fetch_existing_llm_provider(name=provider_name, db_session=db_session)
+    provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
     if not provider:
-        raise ValueError(f"LLM Provider '{provider_name}' not found")
+        raise ValueError(f"LLM Provider '{provider_id}' not found")
 
     existing_by_name = {mc.name: mc for mc in provider.model_configurations}
 

@@ -357,7 +357,8 @@ class BedrockModelsRequest(BaseModel):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
     aws_bearer_token_bedrock: str | None = None
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class BedrockFinalModelResponse(BaseModel):
@@ -369,7 +370,8 @@ class BedrockFinalModelResponse(BaseModel):
 
 class OllamaModelsRequest(BaseModel):
     api_base: str
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class OllamaFinalModelResponse(BaseModel):
@@ -420,7 +422,8 @@ class OllamaModelDetails(BaseModel):
 class OpenRouterModelsRequest(BaseModel):
     api_base: str
     api_key: str
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class OpenRouterModelDetails(BaseModel):
@@ -461,7 +464,8 @@ class LMStudioModelsRequest(BaseModel):
     api_base: str
     api_key: str | None = None
     api_key_changed: bool = False
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class LMStudioFinalModelResponse(BaseModel):
@@ -520,7 +524,8 @@ class SyncModelEntry(BaseModel):
 class LitellmModelsRequest(BaseModel):
     api_key: str
     api_base: str
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class LitellmModelDetails(BaseModel):
@@ -603,7 +608,8 @@ class LitellmFinalModelResponse(BaseModel):
 class BifrostModelsRequest(BaseModel):
     api_base: str
     api_key: str | None = None
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class BifrostFinalModelResponse(BaseModel):
@@ -618,8 +624,8 @@ class BifrostFinalModelResponse(BaseModel):
 class NebiusTokenfactoryModelsRequest(BaseModel):
     api_base: str
     api_key: str | None = None
-    provider_name: str | None = None  # Optional: to save models to existing provider
-    provider_id: int | None = None  # Reliable id for resolving the stored key on edit
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class NebiusTokenfactoryFinalModelResponse(BaseModel):
@@ -639,7 +645,8 @@ class NebiusTokenfactoryFinalModelResponse(BaseModel):
 class OpenAICompatibleModelsRequest(BaseModel):
     api_base: str
     api_key: str | None = None
-    provider_name: str | None = None  # Optional: to save models to existing provider
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
 
 
 class OpenAICompatibleFinalModelResponse(BaseModel):

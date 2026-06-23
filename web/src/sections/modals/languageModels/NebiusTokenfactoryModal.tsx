@@ -55,7 +55,6 @@ function NebiusTokenfactoryModalInternals({
     const { models, error } = await fetchNebiusTokenfactoryModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key || undefined,
-      provider_name: existingLlmProvider?.name ?? undefined,
       provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
@@ -82,7 +81,6 @@ function NebiusTokenfactoryModalInternals({
     fetchNebiusTokenfactoryModels({
       api_base: formikProps.values.api_base,
       api_key: formikProps.values.api_key || undefined,
-      provider_name: existingLlmProvider.name ?? undefined,
       provider_id: existingLlmProvider.id,
     })
       .then(({ models }) => {

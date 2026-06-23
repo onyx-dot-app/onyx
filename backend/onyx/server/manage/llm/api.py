@@ -27,7 +27,6 @@ from onyx.db.enums import Permission
 from onyx.db.llm import can_user_access_llm_provider
 from onyx.db.llm import fetch_default_llm_model
 from onyx.db.llm import fetch_default_vision_model
-from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_models
@@ -135,10 +134,9 @@ def _mask_string(value: str) -> str:
 
 def _resolve_api_key(
     api_key: str | None,
-    provider_name: str | None,
+    provider_id: int | None,
     api_base: str | None,
     db_session: Session,
-    provider_id: int | None = None,
 ) -> str | None:
     """Return the real API key for model-fetch endpoints.
 
@@ -146,19 +144,15 @@ def _resolve_api_key(
     ``sk-a****b1c2``). We look up the unmasked key from the database so the
     external request succeeds; a freshly typed (non-masked) key is used as-is.
 
-    The provider is resolved by *provider_id* when given (reliable — the edit
-    form always has it, and well-known providers are frequently saved with a
-    NULL name), otherwise by *provider_name*. The stored key is only returned
-    when the request's *api_base* matches the value stored in the database.
+    The provider is resolved by *provider_id* — reliable, since the edit form
+    always has it (well-known providers are frequently saved with a NULL name).
+    The stored key is only returned when the request's *api_base* matches the
+    value stored in the database.
     """
-    existing_provider = None
-    if provider_id is not None:
-        existing_provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
-    elif provider_name:
-        existing_provider = fetch_existing_llm_provider(
-            name=provider_name, db_session=db_session
-        )
+    if provider_id is None:
+        return api_key
 
+    existing_provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
     if existing_provider and existing_provider.api_key:
         # Normalise both URLs before comparing so trailing-slash
         # differences don't cause a false mismatch.
@@ -177,22 +171,20 @@ def _resolve_api_key(
 
 def _resolve_bedrock_bearer_token(
     bearer_token: str | None,
-    provider_name: str | None,
+    provider_id: int | None,
     db_session: Session,
 ) -> str | None:
     """Return the real Bedrock bearer token for the model-fetch endpoint.
 
     When editing an existing provider the form value is masked (e.g.
-    ``abcd****wxyz``). If *provider_name* is supplied we look up the unmasked
+    ``abcd****wxyz``). If *provider_id* is supplied we look up the unmasked
     token from the provider's stored ``custom_config`` so the AWS request
     succeeds instead of being rejected for using the masked placeholder.
     """
-    if not bearer_token or not provider_name:
+    if not bearer_token or provider_id is None:
         return bearer_token
 
-    existing_provider = fetch_existing_llm_provider(
-        name=provider_name, db_session=db_session
-    )
+    existing_provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
     if not existing_provider or not existing_provider.custom_config:
         return bearer_token
 
@@ -206,7 +198,7 @@ def _resolve_bedrock_bearer_token(
 
 def _sync_fetched_models(
     db_session: Session,
-    provider_name: str,
+    provider_id: int,
     models: list[SyncModelEntry],
     source_label: str,
 ) -> None:
@@ -214,14 +206,14 @@ def _sync_fetched_models(
 
     Args:
         db_session: Database session
-        provider_name: Name of the LLM provider
+        provider_id: Id of the LLM provider
         models: List of SyncModelEntry objects describing the fetched models
         source_label: Human-readable label for log messages (e.g. "Bedrock", "LiteLLM")
     """
     try:
         new_count = sync_model_configurations(
             db_session=db_session,
-            provider_name=provider_name,
+            provider_id=provider_id,
             models=models,
         )
         if new_count > 0:
@@ -229,7 +221,7 @@ def _sync_fetched_models(
                 "Added %s new %s models to provider '%s'",
                 new_count,
                 source_label,
-                provider_name,
+                provider_id,
             )
         invalidate_provider_listing_cache()
     except ValueError as e:
@@ -1130,7 +1122,7 @@ def get_bedrock_available_models(
     # When editing an existing provider the form sends the masked bearer token;
     # swap it back for the stored value so the AWS call uses real credentials.
     bearer_token = _resolve_bedrock_bearer_token(
-        request.aws_bearer_token_bedrock, request.provider_name, db_session
+        request.aws_bearer_token_bedrock, request.provider_id, db_session
     )
 
     try:
@@ -1248,11 +1240,11 @@ def get_bedrock_available_models(
                 )
             )
 
-        # Sync new models to DB if provider_name is specified
-        if request.provider_name:
+        # Sync new models to DB if provider_id is specified
+        if request.provider_id is not None:
             _sync_fetched_models(
                 db_session=db_session,
-                provider_name=request.provider_name,
+                provider_id=request.provider_id,
                 models=[
                     SyncModelEntry(
                         name=r.name,
@@ -1396,11 +1388,11 @@ def get_ollama_available_models(
         key=lambda m: m.name.lower(),
     )
 
-    # Sync new models to DB if provider_name is specified
-    if request.provider_name:
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
         _sync_fetched_models(
             db_session=db_session,
-            provider_name=request.provider_name,
+            provider_id=request.provider_id,
             models=[
                 SyncModelEntry(
                     name=r.name,
@@ -1450,7 +1442,7 @@ def get_openrouter_available_models(
     """
 
     api_key = _resolve_api_key(
-        request.api_key, request.provider_name, request.api_base, db_session
+        request.api_key, request.provider_id, request.api_base, db_session
     )
 
     response_json = _get_openrouter_models_response(
@@ -1503,11 +1495,11 @@ def get_openrouter_available_models(
 
     sorted_results = sorted(results, key=lambda m: m.name.lower())
 
-    # Sync new models to DB if provider_name is specified
-    if request.provider_name:
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
         _sync_fetched_models(
             db_session=db_session,
-            provider_name=request.provider_name,
+            provider_id=request.provider_id,
             models=[
                 SyncModelEntry(
                     name=r.name,
@@ -1545,13 +1537,13 @@ def get_lm_studio_available_models(
             "API base URL is required to fetch LM Studio models.",
         )
 
-    # If provider_name is given and the api_key hasn't been changed by the user,
+    # If provider_id is given and the api_key hasn't been changed by the user,
     # fall back to the stored API key from the database (the form value is masked).
     # Only do so when the api_base matches what is stored.
     api_key = request.api_key
-    if request.provider_name and not request.api_key_changed:
-        existing_provider = fetch_existing_llm_provider(
-            name=request.provider_name, db_session=db_session
+    if request.provider_id is not None and not request.api_key_changed:
+        existing_provider = fetch_existing_llm_provider_by_id(
+            request.provider_id, db_session
         )
         if existing_provider and existing_provider.custom_config:
             stored_base = (existing_provider.api_base or "").strip().rstrip("/")
@@ -1615,11 +1607,11 @@ def get_lm_studio_available_models(
 
     sorted_results = sorted(results, key=lambda m: m.name.lower())
 
-    # Sync new models to DB if provider_name is specified
-    if request.provider_name:
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
         _sync_fetched_models(
             db_session=db_session,
-            provider_name=request.provider_name,
+            provider_id=request.provider_id,
             models=[
                 SyncModelEntry(
                     name=r.name,
@@ -1644,7 +1636,7 @@ def get_litellm_available_models(
 ) -> list[LitellmFinalModelResponse]:
     """Fetch available models from LiteLLM proxy /v1/model/info endpoint."""
     api_key = _resolve_api_key(
-        request.api_key, request.provider_name, request.api_base, db_session
+        request.api_key, request.provider_id, request.api_base, db_session
     )
 
     response_json = _get_litellm_models_response(
@@ -1695,11 +1687,11 @@ def get_litellm_available_models(
 
     sorted_results = sorted(results, key=lambda m: m.model_name.lower())
 
-    # Sync new models to DB if provider_name is specified
-    if request.provider_name:
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
         _sync_fetched_models(
             db_session=db_session,
-            provider_name=request.provider_name,
+            provider_id=request.provider_id,
             models=[
                 SyncModelEntry(
                     name=r.model_name,
@@ -1793,7 +1785,7 @@ def get_bifrost_available_models(
 ) -> list[BifrostFinalModelResponse]:
     """Fetch available models from Bifrost gateway /v1/models endpoint."""
     api_key = _resolve_api_key(
-        request.api_key, request.provider_name, request.api_base, db_session
+        request.api_key, request.provider_id, request.api_base, db_session
     )
 
     response_json = _get_bifrost_models_response(
@@ -1849,11 +1841,11 @@ def get_bifrost_available_models(
 
     sorted_results = sorted(results, key=lambda m: m.name.lower())
 
-    # Sync new models to DB if provider_name is specified
-    if request.provider_name:
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
         _sync_fetched_models(
             db_session=db_session,
-            provider_name=request.provider_name,
+            provider_id=request.provider_id,
             models=[
                 SyncModelEntry(
                     name=r.name,
@@ -1928,11 +1920,7 @@ def get_nebius_tokenfactory_available_models(
     """Fetch chat models from Nebius TokenFactory, with per-model context
     length and tool/vision capabilities read straight from the source API."""
     api_key = _resolve_api_key(
-        request.api_key,
-        request.provider_name,
-        request.api_base,
-        db_session,
-        provider_id=request.provider_id,
+        request.api_key, request.provider_id, request.api_base, db_session
     )
 
     response_json = _get_nebius_tokenfactory_models_response(
@@ -2013,10 +2001,10 @@ def get_nebius_tokenfactory_available_models(
 
     sorted_results = sorted(results, key=lambda m: m.name.lower())
 
-    if request.provider_name:
+    if request.provider_id is not None:
         _sync_fetched_models(
             db_session=db_session,
-            provider_name=request.provider_name,
+            provider_id=request.provider_id,
             models=[
                 SyncModelEntry(
                     name=r.name,
@@ -2041,7 +2029,7 @@ def get_openai_compatible_server_available_models(
 ) -> list[OpenAICompatibleFinalModelResponse]:
     """Fetch available models from a generic OpenAI-compatible /v1/models endpoint."""
     api_key = _resolve_api_key(
-        request.api_key, request.provider_name, request.api_base, db_session
+        request.api_key, request.provider_id, request.api_base, db_session
     )
 
     response_json = _get_openai_compatible_server_response(
@@ -2091,11 +2079,11 @@ def get_openai_compatible_server_available_models(
 
     sorted_results = sorted(results, key=lambda m: m.name.lower())
 
-    # Sync new models to DB if provider_name is specified
-    if request.provider_name:
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
         _sync_fetched_models(
             db_session=db_session,
-            provider_name=request.provider_name,
+            provider_id=request.provider_id,
             models=[
                 SyncModelEntry(
                     name=r.name,
