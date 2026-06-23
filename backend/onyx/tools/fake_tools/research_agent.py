@@ -286,11 +286,10 @@ def run_research_agent_call(
                     if any(isinstance(tool, WebSearchTool) for tool in current_tools)
                     else ""
                 )
-                open_urls_tip = (
-                    OPEN_URLS_TOOL_DESCRIPTION
-                    if any(isinstance(tool, OpenURLTool) for tool in current_tools)
-                    else ""
+                has_open_url_tool = any(
+                    isinstance(tool, OpenURLTool) for tool in current_tools
                 )
+                open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION if has_open_url_tool else ""
                 if is_reasoning_model and open_urls_tip:
                     open_urls_tip = OPEN_URLS_TOOL_DESCRIPTION_REASONING
 
@@ -314,7 +313,9 @@ def run_research_agent_call(
                     message_type=MessageType.SYSTEM,
                 )
 
-                if just_ran_web_search:
+                # Only remind the model to open_url when that tool is actually
+                # available; otherwise it gets nudged toward a tool it doesn't have.
+                if just_ran_web_search and has_open_url_tool:
                     reminder_message = ChatMessageSimple(
                         message=OPEN_URL_REMINDER_RESEARCH_AGENT,
                         token_count=100,
