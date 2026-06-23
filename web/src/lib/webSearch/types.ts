@@ -7,7 +7,8 @@ export type WebSearchProviderType =
   | "serper"
   | "exa"
   | "searxng"
-  | "brave";
+  | "brave"
+  | "baidu";
 
 export type WebContentProviderType =
   | "firecrawl"

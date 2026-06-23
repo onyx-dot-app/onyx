@@ -47,6 +47,12 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     apiKeyUrl:
       "https://api-dashboard.search.brave.com/app/documentation/web-search/get-started",
   },
+  baidu: {
+    label: "Baidu",
+    subtitle: "Baidu AI Search",
+    helper: "Connect to Baidu AI Search to set up web search.",
+    apiKeyUrl: "https://cloud.baidu.com/doc/qianfan-api/s/Wmbq4z7e5",
+  },
   google_pse: {
     label: "Google PSE",
     subtitle: "Google",
@@ -102,6 +108,7 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
   exa: { requiresApiKey: true, requiredConfigKeys: [] },
   serper: { requiresApiKey: true, requiredConfigKeys: [] },
   brave: { requiresApiKey: true, requiredConfigKeys: [] },
+  baidu: { requiresApiKey: true, requiredConfigKeys: [] },
   google_pse: {
     requiresApiKey: true,
     requiredConfigKeys: ["search_engine_id"],
