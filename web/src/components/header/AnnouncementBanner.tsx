@@ -7,6 +7,7 @@ import type { Route } from "next";
 import Cookies from "js-cookie";
 import { SvgX } from "@opal/icons";
 import { dismissNotification } from "@/lib/notifications/api";
+import { NotificationType } from "@/lib/notifications/interfaces";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useSWRConfig } from "swr";
 const DISMISSED_NOTIFICATION_COOKIE_PREFIX = "dismissed_notification_";
@@ -56,7 +57,7 @@ export function AnnouncementBanner() {
         .filter(
           (notification) =>
             !notification.dismissed &&
-            notification.notif_type !== "admin_banner"
+            notification.notif_type !== NotificationType.ADMIN_BANNER
         )
         .map((notification) => {
           return (

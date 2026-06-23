@@ -72,8 +72,10 @@ def upsert_admin_banner(
 
     banner = set_admin_banner(db_session, title=title, content=content)
     if banner is None:
-        # No eligible users in tenant — banner can't be persisted.
-        return AdminBannerResponse(title=title, content=content, created_at=None)
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "No eligible users to receive the banner",
+        )
     return _to_response(banner)
 
 

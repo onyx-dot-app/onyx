@@ -24,6 +24,9 @@ def _eligible_user_ids_query() -> Select[tuple[UUID]]:
 
 
 def get_active_admin_banner(db_session: Session) -> Notification | None:
+    # No `dismissed` filter on purpose: a banner stays published until an admin
+    # clears it, regardless of per-user dismissals — and late-joiner minting in
+    # `ensure_admin_banner_for_user` relies on reading it while published.
     stmt = (
         select(Notification)
         .where(Notification.notif_type == NotificationType.ADMIN_BANNER)
@@ -45,6 +48,14 @@ def set_admin_banner(
     title: str,
     content: str | None,
 ) -> Notification | None:
+    # Resolve recipients first: with zero eligible users there is nobody to
+    # publish to, so return None and leave any existing banner untouched — the
+    # delete+insert swap below only runs once we know there are recipients.
+    user_ids = list(db_session.scalars(_eligible_user_ids_query()).all())
+    if not user_ids:
+        logger.warning("Admin banner not set: tenant has no eligible users")
+        return None
+
     # DELETE here is uncommitted; batch_create_notifications commits once,
     # making the swap atomic. Constant additional_data lets the unique index
     # on (user_id, notif_type, COALESCE(additional_data, '{}'))
@@ -52,16 +63,6 @@ def set_admin_banner(
     db_session.query(Notification).filter(
         Notification.notif_type == NotificationType.ADMIN_BANNER
     ).delete(synchronize_session=False)
-
-    user_ids = list(db_session.scalars(_eligible_user_ids_query()).all())
-    if not user_ids:
-        db_session.commit()
-        logger.info(
-            "Admin banner cleared for tenant with no eligible users (title=%s chars, content=%s chars)",
-            len(title),
-            len(content) if content else 0,
-        )
-        return None
 
     batch_create_notifications(
         user_ids,

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR, { mutate } from "swr";
 
 import { Button, Card, Text } from "@opal/components";
-import { InputVertical, Section } from "@opal/layouts";
+import { InputVertical, Section, SettingsLayouts } from "@opal/layouts";
 
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -12,7 +12,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { toast } from "@/hooks/useToast";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import InputTextArea from "@/refresh-components/inputs/InputTextArea";
-import * as SettingsLayouts from "@/layouts/settings-layouts";
 
 const MAX_TITLE_LEN = 200;
 const MAX_CONTENT_LEN = 2000;
