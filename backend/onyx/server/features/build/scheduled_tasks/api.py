@@ -366,15 +366,19 @@ def _validated_app_ids(
     app_ids: list[int],
     user_id: UUID,
     external_apps: list[ExternalApp] | None = None,
+    already_approved_app_ids: set[int] | None = None,
 ) -> list[int]:
     """Dedupe (order-preserving) and verify each id is available to the user.
 
     This mirrors the sandbox gateway's availability predicate: enabled apps
-    with everything needed to inject credentials, or credentialless apps.
+    with everything needed to inject credentials, or credentialless apps. PATCH
+    callers may pass existing grants so stale task state can be preserved while
+    newly added unavailable apps are still rejected.
     """
     deduped = list(dict.fromkeys(app_ids))
     if not deduped:
         return []
+    already_approved_app_ids = already_approved_app_ids or set()
     external_apps = (
         external_apps if external_apps is not None else get_external_apps(db_session)
     )
@@ -387,7 +391,11 @@ def _validated_app_ids(
         for app in external_apps
         if app_is_available_for_user_credential(app, user_creds_by_app.get(app.id))
     }
-    unavailable = [app_id for app_id in deduped if app_id not in available_ids]
+    unavailable = [
+        app_id
+        for app_id in deduped
+        if app_id not in available_ids and app_id not in already_approved_app_ids
+    ]
     if unavailable:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -542,6 +550,15 @@ def patch_task(
         if request.pre_approved_app_ids is not None
         else None
     )
+    existing_pre_approved_app_ids: set[int] = set()
+    if request.pre_approved_app_ids is not None:
+        existing_task = get_scheduled_task(
+            db_session=db_session,
+            task_id=task_id,
+            user_id=user.id,
+        )
+        existing_pre_approved_app_ids = set(existing_task.pre_approved_app_ids)
+
     task = update_scheduled_task(
         db_session=db_session,
         task_id=task_id,
@@ -557,6 +574,7 @@ def patch_task(
                 request.pre_approved_app_ids,
                 user.id,
                 external_apps=external_apps,
+                already_approved_app_ids=existing_pre_approved_app_ids,
             )
             if request.pre_approved_app_ids is not None
             else None

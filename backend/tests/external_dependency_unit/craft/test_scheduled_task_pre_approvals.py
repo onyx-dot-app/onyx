@@ -481,6 +481,39 @@ def test_detail_includes_metadata_for_disabled_granted_apps(
     assert display_app.enabled is False
 
 
+def test_patch_allows_preserving_existing_unavailable_grant(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    user = make_user(db_session)
+    app = make_external_app(
+        db_session,
+        skill=make_skill(db_session),
+        auth_template={},
+        app_type=ExternalAppType.CUSTOM,
+    )
+    task = _seed_task(db_session, user, pre_approved_app_ids=[app.id], prompt="orig")
+
+    app.skill.enabled = False
+    db_session.commit()
+
+    response = scheduled_tasks_api.patch_task(
+        task_id=task.id,
+        request=scheduled_tasks_api.ScheduledTaskPatch.model_validate(
+            {
+                "prompt": "updated",
+                "pre_approved_app_ids": [app.id],
+            }
+        ),
+        user=user,
+        db_session=db_session,
+    )
+
+    assert response.prompt == "updated"
+    assert response.pre_approved_app_ids == [app.id]
+    assert response.pre_approved_apps[0].enabled is False
+
+
 def test_create_task_route_returns_detail_shape(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
