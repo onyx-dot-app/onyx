@@ -1,5 +1,6 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
 {{- $sandboxNs := (index (.Values.configMap | default (dict)) "SANDBOX_NAMESPACE") | default "onyx-sandboxes" }}
+{{- $proxyNs := (index (.Values.configMap | default (dict)) "SANDBOX_PROXY_NAMESPACE") | default $.Release.Namespace }}
 # Egress lockdown for the Craft sandbox pods themselves (CNI-layer defense-in-depth).
 #
 # A sandbox is only supposed to reach the network through the egress proxy. At runtime that is
@@ -31,13 +32,15 @@ spec:
       app.kubernetes.io/component: sandbox
   policyTypes: [Egress]
   egress:
-    # 1. The egress proxy in the release namespace. Selects the proxy POD by label (the Service is
-    #    named *-sandbox-proxy; NetworkPolicy matches pod labels, not Service names). The CNI
-    #    evaluates egress on the post-DNAT pod IP, so sandbox -> proxy ClusterIP -> proxy pod matches.
+    # 1. The egress proxy. Defaults to the release namespace but honors a SANDBOX_PROXY_NAMESPACE
+    #    override (shared proxy outside the release ns), matching the derivation in sandbox-rbac.yaml.
+    #    Selects the proxy POD by label (the Service is named *-sandbox-proxy; NetworkPolicy matches
+    #    pod labels, not Service names). The CNI evaluates egress on the post-DNAT pod IP, so
+    #    sandbox -> proxy ClusterIP -> proxy pod matches.
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+              kubernetes.io/metadata.name: {{ $proxyNs }}
           podSelector:
             matchLabels:
               app.kubernetes.io/component: sandbox-proxy
