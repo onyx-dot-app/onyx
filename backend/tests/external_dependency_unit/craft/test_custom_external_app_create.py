@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import onyx.server.features.build.external_apps.api as api
+import onyx.skills.bundle as skill_bundle
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.db.models import Skill
@@ -339,6 +340,57 @@ def test_create_requires_bundle(
             _=test_user,
             db_session=db_session,
         )
+
+
+def test_create_rejects_bundle_over_skill_upload_size_limit(
+    db_session: Session,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
+    monkeypatch.setattr(skill_bundle, "DEFAULT_TOTAL_MAX_BYTES", 1)
+    slug = f"custom-test-{uuid4().hex[:8]}"
+
+    with pytest.raises(OnyxError) as exc:
+        api.create_custom_external_app(
+            name="Too Large",
+            description="",
+            upstream_url_patterns=json.dumps(_UPSTREAM),
+            auth_template=json.dumps(_AUTH_TEMPLATE),
+            organization_credentials=json.dumps({}),
+            enabled=True,
+            bundle=_upload(f"{slug}.zip"),
+            _=test_user,
+            db_session=db_session,
+        )
+
+    assert exc.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+    assert db_session.scalar(select(Skill).where(Skill.slug == slug)) is None
+
+
+def test_replace_rejects_bundle_over_skill_upload_size_limit(
+    db_session: Session,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", _noop)
+    slug = f"custom-test-{uuid4().hex[:8]}"
+    created = _create(db_session, test_user, slug)
+
+    monkeypatch.setattr(skill_bundle, "DEFAULT_TOTAL_MAX_BYTES", 1)
+
+    with pytest.raises(OnyxError) as exc:
+        api.replace_custom_app_bundle(
+            external_app_id=created.id,
+            bundle=_upload(f"{slug}.zip", marker="v2"),
+            _=test_user,
+            db_session=db_session,
+        )
+
+    assert exc.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+
+    db_session.execute(delete(Skill).where(Skill.slug == slug))
+    db_session.commit()
 
 
 def test_create_cleans_up_blob_on_failure(
