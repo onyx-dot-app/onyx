@@ -1,4 +1,3 @@
-import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 
 // Nebius Token Factory mark — the lime rounded-square-with-plus glyph on the
