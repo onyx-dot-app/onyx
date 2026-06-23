@@ -71,6 +71,7 @@ def test_async_connection_passes_native_ssl_kwargs() -> None:
         kwargs = mock_aioredis.Redis.call_args.kwargs
         assert kwargs["ssl"] is True
         assert kwargs["ssl_cert_reqs"] == "required"
+        assert kwargs["ssl_check_hostname"] is False
         assert kwargs["ssl_ca_certs"] == "/ca.crt"
         assert kwargs["ssl_certfile"] == "/c.crt"
         assert kwargs["ssl_keyfile"] == "/c.key"
