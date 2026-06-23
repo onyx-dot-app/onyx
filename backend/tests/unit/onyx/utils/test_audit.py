@@ -8,11 +8,13 @@ and Redis-backed dedup that degrades safely when Redis is unavailable.
 import json
 import logging
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
 from onyx.utils import audit
 from onyx.utils.audit import _OCSF_CLASS_BY_ACTION
+from onyx.utils.audit import actor_from_user
 from onyx.utils.audit import AuditAction
 from onyx.utils.audit import AuditActor
 from onyx.utils.audit import AuditOutcome
@@ -170,3 +172,23 @@ def test_no_dedup_key_always_emits(caplog: pytest.LogCaptureFixture) -> None:
         emit_audit_event(AuditAction.USER_ROLE_CHANGE, AuditOutcome.SUCCESS)
 
     assert len(_capture(caplog)) == 2
+
+
+def test_actor_from_user_none_returns_none() -> None:
+    assert actor_from_user(None) is None
+
+
+def test_actor_from_user_builds_actor() -> None:
+    user = MagicMock(id="u-1", email="user@example.com")
+    actor = actor_from_user(user, auth_type="password")
+    assert actor is not None
+    assert actor.user_id == "u-1"
+    assert actor.email == "user@example.com"
+    assert actor.auth_type == "password"
+
+
+def test_actor_from_user_never_raises() -> None:
+    # A user object whose ``id`` access blows up must degrade to None, not raise.
+    broken = MagicMock()
+    type(broken).id = property(lambda _self: (_ for _ in ()).throw(RuntimeError()))
+    assert actor_from_user(broken) is None
