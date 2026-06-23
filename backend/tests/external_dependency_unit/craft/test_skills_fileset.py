@@ -16,11 +16,11 @@ from onyx.db.models import UserGroup
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import build_skills_fileset_for_user
-from tests.external_dependency_unit.craft._test_helpers import add_user_to_group
-from tests.external_dependency_unit.craft._test_helpers import make_built_in_skill_row
-from tests.external_dependency_unit.craft._test_helpers import make_cc_pair
-from tests.external_dependency_unit.craft._test_helpers import make_group
-from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
+from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import make_group
+from tests.external_dependency_unit.craft.db_helpers import reset_built_in_skill_row
+from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
 _FRONTMATTER = "---\nname: {slug}\ndescription: {slug}\n---\n"
 
@@ -153,7 +153,7 @@ class TestBuiltInTemplate:
         _write_skill_dir(tmp_path, "company-search", template_body=template_body)
         reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
-        make_cc_pair(db_session, DocumentSource.SLACK)
+        make_cc_pair(db_session, DocumentSource.SLACK, commit=False)
 
         files = build_skills_fileset_for_user(test_user, db_session)
 
@@ -181,7 +181,7 @@ class TestBuiltInTemplate:
         )
         reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
-        make_cc_pair(db_session, DocumentSource.GOOGLE_DRIVE)
+        make_cc_pair(db_session, DocumentSource.GOOGLE_DRIVE, commit=False)
 
         files = build_skills_fileset_for_user(test_user, db_session)
 

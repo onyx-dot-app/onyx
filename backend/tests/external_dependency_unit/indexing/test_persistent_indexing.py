@@ -44,7 +44,7 @@ from onyx.db.index_attempt import get_index_attempt_errors
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
 from onyx.db.models import SearchSettings
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
@@ -247,7 +247,7 @@ def test_unhandled_exception_default_marks_attempt_failed(
             run_docfetching_entrypoint(
                 app=mock_app,
                 index_attempt_id=attempt_id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 connector_credential_pair_id=cc_pair_id,
             )
 
@@ -291,7 +291,7 @@ def test_unhandled_exception_persistent_mode_still_marks_failed(
             run_docfetching_entrypoint(
                 app=mock_app,
                 index_attempt_id=attempt_id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 connector_credential_pair_id=cc_pair_id,
             )
 
@@ -335,7 +335,7 @@ def test_threshold_disabled_in_persistent_mode(
         run_docfetching_entrypoint(
             app=mock_app,
             index_attempt_id=attempt_id,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             connector_credential_pair_id=cc_pair_id,
         )
 
@@ -375,7 +375,7 @@ def test_threshold_default_aborts_attempt(
             run_docfetching_entrypoint(
                 app=mock_app,
                 index_attempt_id=attempt_id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 connector_credential_pair_id=cc_pair_id,
             )
 

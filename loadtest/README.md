@@ -9,22 +9,27 @@ controllable dependency: the bundled mock LLM server provides unlimited,
 zero-cost, deterministic call volume so every regression is attributable to
 Onyx code.
 
-This is a **standalone uv project** — intentionally not a member of the root
-uv workspace, so Locust's gevent pins never constrain the backend lockfile.
-Code here must never import `onyx.*` (gevent monkey-patching breaks backend
-deps); the stream parser is vendored.
+Locust's dependencies live in the root project's optional **`loadtest`
+dependency group** (not synced by default), so its gevent/flask tree only
+enters the environment when you opt in. Code here must never import `onyx.*`
+(gevent monkey-patching breaks backend deps); the stream parser is vendored.
 
 ## Setup
 
+From the repo root, sync with the `loadtest` group, then work from this
+directory. The `uv run` commands below all pass `--group loadtest` so the
+group stays installed (a bare `uv run` re-syncs to the default groups and
+would drop Locust).
+
 ```bash
+uv sync --group loadtest
 cd loadtest
-uv sync
 ```
 
 ### Mock LLM server
 
 ```bash
-uv run uvicorn mock_llm.app:app --port 8001
+uv run --group loadtest uvicorn mock_llm.app:app --port 8001
 ```
 
 Register it in Onyx (Admin Panel → LLM, or `PUT /api/admin/llm/provider`) as
@@ -49,7 +54,7 @@ Behavior knobs ride in the model name (litellm passes it through verbatim):
 The mock understands Onyx's LLM-loop contract: `tool_choice` none/auto/
 required/forced, the deep-research phase sequence (clarification →
 plan → orchestrator → research agents → reports), and `max_tokens` caps.
-Contract tests: `uv run pytest tests/ -q`.
+Contract tests: `uv run --group loadtest pytest tests/ -q`.
 
 ### Provider profiles
 
@@ -68,7 +73,7 @@ their resources open longer, which is exactly what stresses the api-server):
 ## Running
 
 ```bash
-ONYX_API_KEY=<key> uv run locust --headless -u 5 -r 1 -t 5m -H https://<your-onyx-url>
+ONYX_API_KEY=<key> uv run --group loadtest locust --headless -u 5 -r 1 -t 5m -H https://<your-onyx-url>
 ```
 
 ### Scenario mix
@@ -85,9 +90,9 @@ approximating production traffic shape:
 
 ```bash
 # default weighted mix:
-... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url>
+... uv run --group loadtest locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url>
 # or pin to specific classes:
-... uv run locust --headless -u 10 -r 2 -t 10m -H https://<your-onyx-url> BasicChatUser ChatWithSearchUser
+... uv run --group loadtest locust --headless -u 10 -r 2 -t 10m -H https://<your-onyx-url> BasicChatUser ChatWithSearchUser
 ```
 
 ### Targeted reproducers
@@ -114,7 +119,7 @@ mode. Each maps to a real production incident class:
 
 ```bash
 ONYX_LONGCONV_MODEL=mock-smallctx \
-... uv run locust --headless -u 25 -r 5 -t 20m -H https://<your-onyx-url> CompressionUser
+... uv run --group loadtest locust --headless -u 25 -r 5 -t 20m -H https://<your-onyx-url> CompressionUser
 ```
 - **FileAttachmentUser** (`fileattach:*`) — uploads one file (`ONYX_FILE_KB`,
   default 512) up front, then attaches it to every message. Exercises the
@@ -124,8 +129,8 @@ ONYX_LONGCONV_MODEL=mock-smallctx \
   across a growing history (a file-heavy long chat).
 
 ```bash
-... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> LongConversationUser
-... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> DisconnectUser
+... uv run --group loadtest locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> LongConversationUser
+... uv run --group loadtest locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> DisconnectUser
 ```
 
 ### Collapse-point ramp (`ONYX_SHAPE=stepramp`)
@@ -139,7 +144,7 @@ overrides `-u/-r` and is only active when `ONYX_SHAPE=stepramp` is set.
 ```bash
 ONYX_SHAPE=stepramp ONYX_RAMP_STAGES=25,50,100,200 ONYX_RAMP_DWELL=300 \
 ONYX_LLM_MODEL=mock-ttft8000-itl40-len600 \
-ONYX_API_KEY=<key> uv run locust --headless -t 25m -H https://<your-onyx-url>
+ONYX_API_KEY=<key> uv run --group loadtest locust --headless -t 25m -H https://<your-onyx-url>
 ```
 
 The API key is created by an admin via `POST /api/admin/api-key`

@@ -82,6 +82,8 @@ export { default as SvgFiles } from "@opal/icons/files";
 export { default as SvgFileChartPie } from "@opal/icons/file-chart-pie";
 export { default as SvgFileSmall } from "@opal/icons/file-small";
 export { default as SvgFileText } from "@opal/icons/file-text";
+export { default as SvgFitWidth } from "@opal/icons/fit-width";
+export { default as SvgFullWidth } from "@opal/icons/full-width";
 export { default as SvgFilter } from "@opal/icons/filter";
 export { default as SvgFilterPlus } from "@opal/icons/filter-plus";
 export { default as SvgFold } from "@opal/icons/fold";

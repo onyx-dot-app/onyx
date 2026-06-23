@@ -50,15 +50,15 @@ from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.push import hydrate_sandbox_skills
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from onyx.skills.push import push_skills_for_users
-from tests.external_dependency_unit.craft._test_helpers import add_user_to_group
-from tests.external_dependency_unit.craft._test_helpers import make_built_in_skill_row
-from tests.external_dependency_unit.craft._test_helpers import make_cc_pair
-from tests.external_dependency_unit.craft._test_helpers import make_group
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft._test_helpers import reset_built_in_skill_row
+from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.conftest import SandboxHandle
 from tests.external_dependency_unit.craft.conftest import WorkspaceProxy
-from tests.external_dependency_unit.craft.stubs import StubSandboxManager
+from tests.external_dependency_unit.craft.db_helpers import add_user_to_group
+from tests.external_dependency_unit.craft.db_helpers import make_built_in_skill_row
+from tests.external_dependency_unit.craft.db_helpers import make_cc_pair
+from tests.external_dependency_unit.craft.db_helpers import make_group
+from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import reset_built_in_skill_row
 
 
 def _skill_file_path(

@@ -35,10 +35,10 @@ from onyx.db.models import Snapshot
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.sandbox.models import SnapshotResult
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import make_sandbox
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft.stubs import StubSandboxManager
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.stubs import StubSandboxManager
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox
+from tests.external_dependency_unit.craft.db_helpers import make_user
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -93,7 +93,7 @@ def _quiesce_leaked_sandboxes(db_session: Session) -> None:
 @pytest.fixture(autouse=True)
 def _isolated_redis_lock() -> Generator[None, None, None]:
     """Make sure the sweep beat lock is free before + after."""
-    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     redis_client.delete(OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK)
     try:
         yield
@@ -162,7 +162,7 @@ def test_running_sandbox_snapshotted_without_termination(
         size_bytes=4321,
     )
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     db_session.expire_all()
     snapshots = (
@@ -193,7 +193,7 @@ def test_fresh_snapshot_skipped_by_age_gate(
     session_row = _make_session(db_session, user)
     _add_snapshot(db_session, session_row.id, age_seconds=10)
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     assert stubbed_sweep.list_session_workspaces_count == 0
     assert stubbed_sweep.create_snapshot_count == 0
@@ -222,7 +222,7 @@ def test_stale_session_defeats_prefilter(
         size_bytes=55,
     )
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     assert stubbed_sweep.list_session_workspaces_count == 1
     # The per-session age gate still protects the fresh session.
@@ -256,7 +256,7 @@ def test_stale_snapshot_resnapshotted_and_priors_pruned(
         size_bytes=999,
     )
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     assert stubbed_sweep.create_snapshot_count == 1
     db_session.expire_all()
@@ -297,7 +297,9 @@ def test_snapshot_failure_continues_other_sessions(
     monkeypatch.setattr(stubbed_sweep, "create_snapshot", _snapshot)
 
     with caplog.at_level(logging.WARNING):
-        cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+        cleanup_idle_sandboxes_task.run(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
 
     db_session.expire_all()
     snapshots_a = (
@@ -321,7 +323,7 @@ def test_no_running_sandboxes_is_a_noop(
     make_sandbox(db_session, user, status=SandboxStatus.SLEEPING)
     db_session.commit()
 
-    cleanup_idle_sandboxes_task.run(tenant_id=TEST_TENANT_ID)
+    cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
     assert stubbed_sweep.list_session_workspaces_count == 0
     assert stubbed_sweep.create_snapshot_count == 0

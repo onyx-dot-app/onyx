@@ -47,7 +47,7 @@ def check_documents_deleted(tenant_id: str) -> dict:
             # Count Documents
             doc_count = db_session.scalar(select(func.count()).select_from(Document))
 
-        # Handle None values from scalar (should not happen but mypy needs it)
+        # Handle None values from scalar (should not happen but the type-checker needs it)
         cc_count = cc_count or 0
         doc_count = doc_count or 0
 

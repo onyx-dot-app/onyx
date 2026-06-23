@@ -19,7 +19,7 @@ from onyx.sandbox_proxy.approval_cache import cached_session_grants_cover
 from onyx.sandbox_proxy.approval_cache import pop_announcement
 from onyx.sandbox_proxy.approval_cache import send_wake
 from onyx.sandbox_proxy.approval_cache import wait_for_wake
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 # ---------------------------------------------------------------------------
 # announce_approval / pop_announcement
@@ -27,7 +27,7 @@ from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
 def test_announce_then_pop_round_trip() -> None:
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     approval_id = uuid4()
     session_id = uuid4()
 
@@ -39,7 +39,7 @@ def test_announce_then_pop_round_trip() -> None:
 
 
 def test_announce_applies_ttl() -> None:
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     session_id = uuid4()
 
     announce_approval(uuid4(), session_id, cache)
@@ -50,13 +50,13 @@ def test_announce_applies_ttl() -> None:
 
 
 def test_pop_announcement_timeout_returns_none() -> None:
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert pop_announcement(uuid4(), timeout_s=1, cache=cache) is None
 
 
 def test_pop_announcement_unparseable_returns_none() -> None:
     """A malformed payload must not crash the merger thread."""
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     session_id = uuid4()
 
     cache.rpush(announce_key(session_id), b"not-a-uuid")
@@ -70,7 +70,7 @@ def test_pop_announcement_unparseable_returns_none() -> None:
 
 @pytest.mark.asyncio
 async def test_wait_for_wake_receives_send_wake() -> None:
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     approval_id = uuid4()
 
     def _produce() -> None:
@@ -90,7 +90,7 @@ async def test_wait_for_wake_receives_send_wake() -> None:
 
 @pytest.mark.asyncio
 async def test_wait_for_wake_timeout_returns_none() -> None:
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     decision = await wait_for_wake(uuid4(), timeout_s=1, cache=cache)
     assert decision is None
 
@@ -98,7 +98,7 @@ async def test_wait_for_wake_timeout_returns_none() -> None:
 @pytest.mark.asyncio
 async def test_wait_for_wake_unparseable_returns_none() -> None:
     """Pins the `except ValueError` branch in `wait_for_wake`."""
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     approval_id = uuid4()
 
     cache.rpush(_wake_key(approval_id), b"BANANA")
@@ -107,7 +107,7 @@ async def test_wait_for_wake_unparseable_returns_none() -> None:
 
 
 def test_send_wake_applies_ttl() -> None:
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     approval_id = uuid4()
 
     send_wake(approval_id, ApprovalDecision.APPROVED, cache)
@@ -123,7 +123,7 @@ def test_send_wake_applies_ttl() -> None:
 
 
 def test_cached_session_grants_cover_requires_every_action() -> None:
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     session_id = uuid4()
     approval_id = uuid4()
     external_app_id = 42
@@ -172,7 +172,7 @@ def test_cached_session_grants_cover_requires_every_action() -> None:
 async def test_decision_value_round_trips() -> None:
     """Pins the enum → bytes → enum encoding; the completeness check below
     independently pins the full enum value set."""
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     approval_id = uuid4()
 
     send_wake(approval_id, ApprovalDecision.APPROVED, cache)

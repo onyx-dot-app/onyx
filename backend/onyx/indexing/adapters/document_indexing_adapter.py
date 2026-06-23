@@ -1,4 +1,5 @@
 import contextlib
+import time
 from collections.abc import Generator
 
 from sqlalchemy.orm import Session
@@ -17,6 +18,8 @@ from onyx.db.document import update_docs_last_modified__no_commit
 from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document_set import fetch_document_sets_for_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.index_attempt_metrics import safe_record_single_event_if_set
+from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.indexing.models import ChunkEnrichmentContext
@@ -94,6 +97,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             with prepare_to_modify_documents(
                 db_session=db_session,
                 document_ids=[doc.id for doc in documents],
+                index_attempt_id=self.index_attempt_metadata.attempt_id,
             ):
                 yield db_session
                 db_session.commit()
@@ -106,6 +110,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         db_session: Session,
     ) -> "DocumentChunkEnricher":
         """Do all DB lookups once and return a per-chunk enricher."""
+        _enrich_start = time.monotonic()
         updatable_ids = [doc.id for doc in context.updatable_docs]
 
         doc_id_to_new_chunk_cnt: dict[str, int] = {
@@ -123,7 +128,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             is_public=False,
         )
 
-        return DocumentChunkEnricher(
+        enricher = DocumentChunkEnricher(
             doc_id_to_access_info=get_access_for_documents(
                 document_ids=updatable_ids, db_session=db_session
             ),
@@ -148,6 +153,12 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             no_access=no_access,
             tenant_id=tenant_id,
         )
+        safe_record_single_event_if_set(
+            IndexAttemptStage.ENRICHMENT_PREP,
+            self.index_attempt_metadata.attempt_id,
+            max(0, int((time.monotonic() - _enrich_start) * 1000)),
+        )
+        return enricher
 
     def _get_ancestor_ids_for_documents(
         self,

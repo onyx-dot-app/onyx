@@ -436,11 +436,12 @@ def _proxy_env_vars(
 ) -> dict[str, str]:
     """Proxy-enabled env additions for the sandbox container.
 
-    Mirrors ``kubernetes_sandbox_manager._proxy_main_container_env_vars`` but
-    layered on the docker env dict instead of a list of V1EnvVars. Includes the
-    firewall-init.sh contract vars since the script runs as the container's
-    entrypoint wrapper and reads them from its own environment. Proxy ports come
-    from build config and are injected as internal env, not caller arguments.
+    The Kubernetes lane injects the equivalent vars via the Helm pod template
+    (``onyx.sandboxProxyEnv``); here they're layered on the docker env dict.
+    Includes the firewall-init.sh contract vars since the script runs as the
+    container's entrypoint wrapper and reads them from its own environment.
+    Proxy ports come from build config and are injected as internal env, not
+    caller arguments.
     """
     proxy_url = f"http://{sandbox_proxy_host}:{SANDBOX_PROXY_PORT}"
     return {

@@ -135,7 +135,12 @@ export type BackgroundVariants = "none" | "light" | "heavy";
  * - `"danger"` — destructive / error state
  * - `"interactive"` — follows the interactive coloring system (`currentColor` / `--interactive-foreground`)
  */
-export type ColorTypes = "default" | "muted" | "danger" | "interactive";
+export type ColorTypes =
+  | "default"
+  | "muted"
+  | "danger"
+  | "warning"
+  | "interactive";
 
 // ---------------------------------------------------------------------------
 // Status Variants

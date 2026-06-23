@@ -30,8 +30,8 @@ from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.server.security.store import _build_env_defaults
 from onyx.server.security.store import _install_cache_for_test
 from onyx.server.security.store import invalidate_security_cache
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
 class _FakeRequest:
@@ -76,13 +76,13 @@ def _clean_db_and_cache(
     tenant_context: None,  # noqa: ARG001 — requested for side-effect (tenant contextvar)
 ) -> Generator[None, None, None]:
     _delete_security_settings_row()
-    invalidate_security_cache(TEST_TENANT_ID)
+    invalidate_security_cache(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     import time as _time
 
     _install_cache_for_test(ttl=10.0, timer=_time.monotonic)
     yield
     _delete_security_settings_row()
-    invalidate_security_cache(TEST_TENANT_ID)
+    invalidate_security_cache(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
 
 # -----------------------------------------------------------------------------
@@ -205,7 +205,7 @@ def test_put_multi_tenant_accepts_tenant_editable_field(
 
 def _put_in_thread(body: dict[str, Any], errors: list[BaseException]) -> None:
     # Threads don't inherit contextvars; re-establish before the PUT.
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         _put(body)
     except BaseException as e:  # noqa: BLE001

@@ -30,9 +30,9 @@ from onyx.server.features.build.sandbox.user_library import hydrate_user_library
 from onyx.server.features.build.sandbox.user_library import (
     sync_user_library_to_active_sandboxes,
 )
-from tests.external_dependency_unit.craft._test_helpers import make_user
 from tests.external_dependency_unit.craft.conftest import SandboxHandle
 from tests.external_dependency_unit.craft.conftest import WorkspaceProxy
+from tests.external_dependency_unit.craft.db_helpers import make_user
 
 
 def _library_path(workspace: WorkspaceProxy, file_path: str) -> WorkspaceProxy:

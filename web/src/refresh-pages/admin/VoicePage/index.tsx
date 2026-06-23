@@ -8,7 +8,7 @@ import {
   activateVoiceProvider,
   deactivateVoiceProvider,
 } from "@/lib/voice/svc";
-import { ThreeDotsLoader } from "@/components/Loading";
+import { PageLoader } from "@/refresh-components/PageLoader";
 import { Content } from "@opal/layouts";
 import { MessageCard, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -203,7 +203,7 @@ export default function VoicePage() {
           divider
         />
         <SettingsLayouts.Body>
-          <ThreeDotsLoader />
+          <PageLoader />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );

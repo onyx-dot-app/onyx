@@ -30,7 +30,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 def _create_test_connector(db_session: Session, name: str) -> Connector:
@@ -288,7 +288,7 @@ class TestDocprocessingPriorityInDocumentExtraction:
                 index_attempt_id=index_attempt.id,
                 cc_pair_id=cc_pair.id,
                 search_settings_id=search_settings.id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 callback=None,
             )
 

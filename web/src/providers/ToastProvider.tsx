@@ -123,7 +123,6 @@ function ToastContainer() {
             <MessageCard
               variant={LEVEL_TO_VARIANT[t.level ?? "info"]}
               title={truncatedTitle}
-              titleWrap
               description={buildDescription(t)}
               padding="xs"
               onClose={t.dismissible ? () => handleClose(t.id) : undefined}

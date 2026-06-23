@@ -135,6 +135,10 @@ from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
 from onyx.server.utils_vector_db import require_vector_db
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.threadpool_concurrency import CallableProtocol
@@ -1568,6 +1572,14 @@ def create_connector_from_model(
             event=MilestoneRecordType.CREATED_CONNECTOR,
         )
 
+        emit_audit_event(
+            AuditAction.CONNECTOR_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="connector",
+            resource_id=connector_response.id,
+            extra={"source": connector_data.source.value},
+        )
         return connector_response
     except ValueError as e:
         logger.error("Error creating connector: %s", e)
@@ -1690,6 +1702,14 @@ def update_connector_from_model(
             status_code=404, detail=f"Connector {connector_id} does not exist"
         )
 
+    emit_audit_event(
+        AuditAction.CONNECTOR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="connector",
+        resource_id=updated_connector.id,
+    )
+
     return ConnectorSnapshot(
         id=updated_connector.id,
         name=updated_connector.name,
@@ -1714,17 +1734,26 @@ def update_connector_from_model(
 )
 def delete_connector_by_id(
     connector_id: int,
-    _: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
     try:
         with db_session.begin():
-            return delete_connector(
+            result = delete_connector(
                 db_session=db_session,
                 connector_id=connector_id,
             )
     except AssertionError:
         raise HTTPException(status_code=400, detail="Connector is not deletable")
+
+    emit_audit_event(
+        AuditAction.CONNECTOR_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="connector",
+        resource_id=connector_id,
+    )
+    return result
 
 
 @router.post("/admin/connector/run-once", tags=PUBLIC_API_TAGS)
