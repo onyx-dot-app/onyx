@@ -1543,6 +1543,15 @@ craft:
   # listener IP(s), e.g. ["169.254.20.10/32"]. Empty (default) = standard CoreDNS, resolved via
   # the podSelector alone (no NodeLocal DNS).
   dnsExtraCIDRs: []
+  # CIDR(s) of the egress proxy when it is NOT a chart-labeled pod. The sandbox-egress NetworkPolicy
+  # selects the proxy by pod label (app.kubernetes.io/component: sandbox-proxy), but
+  # configMap.SANDBOX_PROXY_HOST may be overridden to an external proxy (FQDN/IP) or a Service whose
+  # pods don't carry that label. firewall-init.sh allows whatever the host resolves to, but a
+  # NetworkPolicy can't follow a hostname, so on NP-enforcing clusters such a proxy is dropped and
+  # all sandbox egress breaks. Set this to the proxy CIDR(s), e.g. ["10.0.5.6/32"], on those setups.
+  # Empty (default) = the chart-deployed proxy, covered by the podSelector (incl. the
+  # SANDBOX_PROXY_NAMESPACE shared-proxy path); leave empty unless you point at a non-pod proxy.
+  proxyExtraCIDRs: []
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.

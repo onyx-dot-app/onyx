@@ -47,6 +47,22 @@ spec:
       ports:
         - protocol: TCP
           port: {{ include "onyx.sandboxProxyPort" . }}
+    # 1b. Proxy reached as a non-pod peer, when configured. The rule above selects the proxy by pod
+    #     label, but SANDBOX_PROXY_HOST may be overridden to a target that isn't a chart-labeled pod —
+    #     an external proxy (FQDN/IP) or a Service whose backing pods lack app.kubernetes.io/component:
+    #     sandbox-proxy. firewall-init.sh resolves and allows whatever the env var points at, but a
+    #     NetworkPolicy can't follow a hostname, so on those topologies the podSelector misses and all
+    #     sandbox egress is dropped. Operators using such a proxy set craft.proxyExtraCIDRs to its
+    #     CIDR(s); empty by default (the chart-deployed proxy is covered by the podSelector). Each CIDR
+    #     is its OWN egress rule per the IPv4/IPv6 ipBlock fail-closed caveat on AWS VPC CNI.
+    {{- range (index (.Values.craft | default (dict)) "proxyExtraCIDRs" | default list) }}
+    - to:
+        - ipBlock:
+            cidr: {{ . | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ include "onyx.sandboxProxyPort" $ }}
+    {{- end }}
     # 2. kube-dns (CoreDNS in kube-system) — needed by firewall-init.sh to resolve the proxy FQDN.
     - to:
         - namespaceSelector:
