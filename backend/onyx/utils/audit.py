@@ -25,6 +25,10 @@ AUDIT_SCHEMA_VERSION = "1.0"
 # object with no human-readable prefix.
 AUDIT_LOGGER_ROOT = "onyx.audit"
 
+# Diagnostics logger for the subsystem's own failures. Deliberately NOT under
+# ``onyx.audit`` so internal warnings never land in the parsed audit stream.
+_internal_logger = logging.getLogger(__name__)
+
 _DEFAULT_DEDUP_TTL_SECONDS = 600
 
 
@@ -160,6 +164,9 @@ def actor_from_user(
             auth_type=auth_type,
         )
     except Exception:
+        # Don't raise into the caller, but surface the failure for diagnosis
+        # (distinguishes an internal error from a genuinely absent user).
+        _internal_logger.warning("actor_from_user failed to build actor", exc_info=True)
         return None
 
 

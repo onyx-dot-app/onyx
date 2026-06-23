@@ -26,6 +26,7 @@ from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
 from onyx.db.connector import delete_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
+from onyx.db.connector_credential_pair import get_connector_credential_pair_for_user
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
 )
@@ -792,14 +793,17 @@ def associate_credential_to_connector(
             response.data,
         )
 
-        emit_audit_event(
-            AuditAction.CC_PAIR_CREATE,
-            AuditOutcome.SUCCESS,
-            actor=actor_from_user(user),
-            resource_type="cc_pair",
-            resource_id=response.data,
-            extra={"connector_id": connector_id, "credential_id": credential_id},
-        )
+        # response.data is the cc_pair id only when the association was actually
+        # created; a no-op (credential already linked) returns success=False.
+        if response.success:
+            emit_audit_event(
+                AuditAction.CC_PAIR_CREATE,
+                AuditOutcome.SUCCESS,
+                actor=actor_from_user(user),
+                resource_type="cc_pair",
+                resource_id=response.data,
+                extra={"connector_id": connector_id, "credential_id": credential_id},
+            )
         return response
     except ValidationError as e:
         # If validation fails, delete the connector and commit the changes
@@ -834,14 +838,30 @@ def dissociate_credential_from_connector(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse[int]:
+    # Capture the cc_pair id before removal — remove_credential_from_connector
+    # returns the connector_id (not the cc_pair id) in its StatusResponse.
+    cc_pair = get_connector_credential_pair_for_user(
+        db_session=db_session,
+        connector_id=connector_id,
+        credential_id=credential_id,
+        user=user,
+        get_editable=True,
+    )
+    cc_pair_id = cc_pair.id if cc_pair else None
+
     result = remove_credential_from_connector(
         connector_id, credential_id, user, db_session
     )
-    emit_audit_event(
-        AuditAction.CC_PAIR_DELETE,
-        AuditOutcome.SUCCESS,
-        actor=actor_from_user(user),
-        resource_type="cc_pair",
-        extra={"connector_id": connector_id, "credential_id": credential_id},
-    )
+
+    # Only emit when something was actually dissociated (a no-op returns
+    # success=False without raising).
+    if result.success:
+        emit_audit_event(
+            AuditAction.CC_PAIR_DELETE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="cc_pair",
+            resource_id=cc_pair_id,
+            extra={"connector_id": connector_id, "credential_id": credential_id},
+        )
     return result
