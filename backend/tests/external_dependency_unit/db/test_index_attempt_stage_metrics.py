@@ -20,23 +20,30 @@ Validates the upsert + Chan-combination logic against real Postgres:
 
 import math
 import statistics
+import time
 from collections.abc import Generator
 from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.db.document import prepare_to_modify_documents
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
+from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
 from onyx.db.index_attempt_metrics import record_single_event
 from onyx.db.index_attempt_metrics import record_stage_aggregate
 from onyx.db.index_attempt_metrics import StageEventBuffer
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Document as DbDocument
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptStageMetric
+from onyx.server.documents.models import IndexAttemptStageMetricSnapshot
+from onyx.server.documents.models import synthesize_unaccounted
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
@@ -353,3 +360,103 @@ class TestConcurrentUpserts:
         assert row.max_duration_ms == per_event_ms
         # All samples are equal, so variance and therefore M2 must be 0.
         assert math.isclose(row.m2_duration_ms, 0.0, abs_tol=1e-9)
+
+
+class TestNewStagesAndResidual:
+    """The 5 new wait-timer stages round-trip through the VARCHAR enum column,
+    and the read-time BATCH_UNACCOUNTED residual reconciles to BATCH_TOTAL
+    minus the in-span component stages (pre-span stages like QUEUE_WAIT are
+    excluded)."""
+
+    def test_new_stages_persist_and_residual_reconciles(
+        self,
+        db_session: Session,
+        index_attempt: IndexAttempt,
+    ) -> None:
+        durations = {
+            IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT: 8_000,
+            IndexAttemptStage.ENRICHMENT_PREP: 4_000,
+            IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT: 700_000,
+            IndexAttemptStage.FINALIZATION: 30_000,
+            IndexAttemptStage.GC_COLLECT: 5_000,
+            IndexAttemptStage.VECTOR_DB_WRITE: 21_000,
+            IndexAttemptStage.EMBEDDING: 1_670,
+            # NOT inside the BATCH_TOTAL span -> must be excluded from residual.
+            IndexAttemptStage.QUEUE_WAIT: 999_999,
+            IndexAttemptStage.BATCH_TOTAL: 852_000,
+        }
+        for stage, ms in durations.items():
+            record_single_event(
+                db_session,
+                index_attempt_id=index_attempt.id,
+                stage=stage,
+                duration_ms=ms,
+            )
+
+        db_session.expire_all()
+        rows = get_stage_metrics_for_attempt(db_session, index_attempt.id)
+        stages_present = {r.stage for r in rows}
+        # The new stages survived the round-trip through the VARCHAR enum column.
+        for stage in (
+            IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT,
+            IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT,
+            IndexAttemptStage.ENRICHMENT_PREP,
+            IndexAttemptStage.FINALIZATION,
+            IndexAttemptStage.GC_COLLECT,
+        ):
+            assert stage in stages_present
+
+        snapshots = [IndexAttemptStageMetricSnapshot.from_db_model(r) for r in rows]
+        residual = synthesize_unaccounted(snapshots)
+        assert residual is not None
+        assert residual.stage == IndexAttemptStage.BATCH_UNACCOUNTED
+
+        in_span_total = (
+            8_000 + 700_000 + 4_000 + 30_000 + 5_000 + 21_000 + 1_670
+        )  # QUEUE_WAIT (999_999) deliberately excluded
+        assert residual.total_duration_ms == 852_000 - in_span_total
+
+
+class TestLockAcquireOnlyTiming:
+    """DOC_LOCK_ACQUIRE_WAIT must time only the lock acquisition, never the held
+    critical section the caller runs after the lock is granted."""
+
+    def test_held_section_excluded_from_lock_acquire_wait(
+        self,
+        db_session: Session,
+        index_attempt: IndexAttempt,
+        tenant_context: None,  # noqa: ARG002 — recording opens its own session
+    ) -> None:
+        doc_id = f"lock-timing-{uuid4()}"
+        db_session.add(
+            DbDocument(
+                id=doc_id,
+                semantic_id=f"semantic_{doc_id}",
+                boost=0,
+                hidden=False,
+                from_ingestion_api=False,
+            )
+        )
+        db_session.commit()
+
+        held_seconds = 0.5
+        try:
+            with prepare_to_modify_documents(
+                db_session=db_session,
+                document_ids=[doc_id],
+                index_attempt_id=index_attempt.id,
+            ):
+                # Held critical section — must NOT be counted in DOC_LOCK_ACQUIRE_WAIT.
+                time.sleep(held_seconds)
+                db_session.commit()
+        finally:
+            db_session.query(DbDocument).filter(DbDocument.id == doc_id).delete()
+            db_session.commit()
+
+        row = _get_metric(
+            db_session, index_attempt.id, IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT
+        )
+        assert row is not None
+        # The 500ms held sleep happens after the lock is granted; the recorded
+        # acquire wait (uncontended single row) must be far below it.
+        assert row.total_duration_ms < (held_seconds * 1000) / 2

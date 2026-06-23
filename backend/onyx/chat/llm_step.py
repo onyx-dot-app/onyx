@@ -1015,7 +1015,7 @@ def translate_history_to_llm_format(
             suffix=messages[last_cacheable_msg_idx + 1 :],
             continuation=False,
         )
-        assert isinstance(processed_messages, list)  # for mypy
+        assert isinstance(processed_messages, list)  # for type-checking
         messages = processed_messages
 
     return messages
@@ -1155,6 +1155,9 @@ def run_llm_step_pkt_generator(
     ) as span_generation:
         span_generation.span_data.input = cast(
             Sequence[Mapping[str, Any]], llm_msg_history
+        )
+        span_generation.span_data.tools = cast(
+            Sequence[Mapping[str, Any]], tool_definitions
         )
         stream_start_time = time.monotonic()
         first_action_recorded = False

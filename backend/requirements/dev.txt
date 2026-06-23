@@ -1185,13 +1185,13 @@ numpy==2.4.1 \
     #   matplotlib
     #   pandas-stubs
     #   voyageai
-onyx-devtools==0.8.2 \
-    --hash=sha256:3494ba5d8a0d5bd57a08bd8b86d9190f3d4b6bc0ee22bc548a67cb3e67db02c2 \
-    --hash=sha256:4f7c1623b177485e9afaa79c7d210e83eeee0de92e52fcc8c0b6df1f6084cb1a \
-    --hash=sha256:a392f19e0ec5fd8dd6792ed81aa4482651e1e89a371420af534616f5aa3e32c6 \
-    --hash=sha256:ad0ee2c26276cbcd98d65537201bfd05c27a93fa94adc6171c6b343d9955de9f \
-    --hash=sha256:b70e127dcd4178481819eeb43bde53b241a0852fb4e3579c824c74d99f462672 \
-    --hash=sha256:bbedc9df9ee6044d66ae3807362bba8b4c302157dadc743b81b91c8d23384bf8
+onyx-devtools==0.8.3 \
+    --hash=sha256:00fda9e25dc797045f1af50c06afe3004fbdb17cddf550ee7e114dff19cd42a4 \
+    --hash=sha256:02a63344bf582ae6b5057d1df7ec693ae11e32c5d4be671214d0d4a555f15859 \
+    --hash=sha256:0e1bf2f0d04a3c15be8c2e82b8183ec8447cd6af262b92c1b6652974e13708ae \
+    --hash=sha256:5f93a61ca0b64298bee3e4c460dff053f890aa2748847410b712eaa8a7a6f6d0 \
+    --hash=sha256:6a60fbb0494c72baa6483cbb5a77a385cfc7a891ebbe71ce253c410455b3ccb0 \
+    --hash=sha256:75ae47162dc322a2be58da2d58a2a3a28176ce5dd6b838ad29cfd8b568187947
 openai==2.38.0 \
     --hash=sha256:798694c6cf74145541fda94325b6f8f72d8e1fd0262cc137c8d728177a6a4ce3 \
     --hash=sha256:ec6661c57b2dcc47414a767e6e3335c7ed3d19c9696999283a3c82e95c756a3c
@@ -1855,9 +1855,9 @@ stack-data==0.6.3 \
     --hash=sha256:836a778de4fec4dcd1dcd89ed8abff8a221f58308462e1c4aa2a3cf30148f0b9 \
     --hash=sha256:d5558e0c25a4cb0853cddad3d77da9891a08cb85dd9f9f91b9f8cd66e511e695
     # via ipython
-starlette==1.0.1 \
-    --hash=sha256:512399c5f1de7fac99c88572212ded9ddeddef2fb32afa82d724000e88b38f4f \
-    --hash=sha256:7c0e69b2ee1c848bd54669d908500117a3ee13de603a21427e5c6fc1adf98dcd
+starlette==1.3.1 \
+    --hash=sha256:05d0213193f2fbaae60e2ecb593b4add4262ad4e46536b54abe36f11a71724e0 \
+    --hash=sha256:c7372aae11c3c3f26a42df7bd626cec2f47d03483d261d369516a615a53714c6
     # via
     #   fastapi
     #   prometheus-fastapi-instrumentator

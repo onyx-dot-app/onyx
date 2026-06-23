@@ -18,8 +18,8 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -42,7 +42,7 @@ def db_session() -> Generator[Session, None, None]:
 
 @pytest.fixture(scope="function")
 def tenant_context() -> Generator[None, None, None]:
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         yield
     finally:

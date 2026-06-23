@@ -58,9 +58,9 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import action_entry
+from tests.common.craft.payloads import action_entry
 from tests.external_dependency_unit.craft.conftest import pod_exec
 from tests.external_dependency_unit.craft.conftest import pod_exec_async
 from tests.external_dependency_unit.craft.conftest import wait_for_pod_exec_output
@@ -99,7 +99,7 @@ def _seed_slack_external_app() -> Generator[None, None, None]:
     Slack row already exists.
     """
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     try:
         with get_session_with_current_tenant() as session:
             if get_built_in_external_app(session, ExternalAppType.SLACK) is None:
@@ -622,7 +622,7 @@ def test_sse_merger_emits_approval_requested_packet(
 
     pending = _wait_for_pending_approval(db_session, session_id)
 
-    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     popped = approval_cache.pop_announcement(session_id, timeout_s=5, cache=cache)
     assert popped == pending.approval_id, (
         f"announce list should contain the parked approval id "

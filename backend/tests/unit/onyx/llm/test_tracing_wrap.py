@@ -9,7 +9,7 @@ Cover:
 - Stale-span guard: a finished ``GenerationSpanData`` in the contextvar does
   not suppress fallback tracing (regression guard for the ``GeneratorExit``
   corner case)
-- `_extract_prompt` helper reads positional and keyword arguments
+- `_extract_prompt_and_tools` helper reads positional and keyword arguments
 
 The `_FakeLLM` test double's `invoke` / `stream` signatures intentionally
 mirror the `LLM` abstract interface, which means many parameters are
@@ -44,7 +44,7 @@ from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import ToolChoiceOptions
 from onyx.llm.models import UserMessage
 from onyx.llm.tracing_wrap import _ALREADY_WRAPPED_ATTR
-from onyx.llm.tracing_wrap import _extract_prompt
+from onyx.llm.tracing_wrap import _extract_prompt_and_tools
 from onyx.llm.tracing_wrap import _finalize_tool_calls
 from onyx.llm.tracing_wrap import _merge_tool_call_delta
 from onyx.llm.tracing_wrap import _outer_generation_span_active
@@ -204,28 +204,46 @@ def test_outer_guard_false_for_finished_span_leaked_into_contextvar() -> None:
 
 # `functools.wraps` sets __wrapped__ on the auto-wrapped methods so the
 # underlying (undecorated) function is reachable for signature introspection.
-# mypy doesn't know about this attribute on the Callable type, so we access
+# The type-checker doesn't know about this attribute on the Callable type, so we access
 # it via getattr below.
 
 
 def test_extract_prompt_reads_positional_arg() -> None:
     llm = _FakeLLM()
     sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
-    assert _extract_prompt(sig, llm, ("hi",), {}) == "hi"
+    prompt, tools = _extract_prompt_and_tools(sig, llm, ("hi",), {})
+    assert prompt == "hi"
+    assert tools is None
 
 
 def test_extract_prompt_reads_keyword_arg() -> None:
     llm = _FakeLLM()
     sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
-    assert _extract_prompt(sig, llm, (), {"prompt": "hi"}) == "hi"
+    prompt, tools = _extract_prompt_and_tools(sig, llm, (), {"prompt": "hi"})
+    assert prompt == "hi"
+    assert tools is None
+
+
+def test_extract_tools_reads_keyword_arg() -> None:
+    llm = _FakeLLM()
+    sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
+    tool_defs = [{"type": "function", "function": {"name": "search"}}]
+    prompt, tools = _extract_prompt_and_tools(
+        sig, llm, (), {"prompt": "hi", "tools": tool_defs}
+    )
+    assert prompt == "hi"
+    assert tools == tool_defs
 
 
 def test_extract_prompt_returns_none_on_signature_mismatch() -> None:
     """Unknown keyword arguments don't match the signature → bind fails →
-    extraction returns None rather than raising."""
+    extraction returns (None, None) rather than raising."""
     llm = _FakeLLM()
     sig = _validate_prompt_param(getattr(_FakeLLM.invoke, "__wrapped__"))
-    assert _extract_prompt(sig, llm, (), {"not_a_real_param": "hi"}) is None
+    assert _extract_prompt_and_tools(sig, llm, (), {"not_a_real_param": "hi"}) == (
+        None,
+        None,
+    )
 
 
 def test_validate_prompt_param_rejects_signature_without_prompt() -> None:

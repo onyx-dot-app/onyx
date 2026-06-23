@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
 from onyx.external_apps.credentials import resolve_injection_headers
-from tests.external_dependency_unit.craft._test_helpers import make_external_app
-from tests.external_dependency_unit.craft._test_helpers import make_skill
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft._test_helpers import make_user_credential
+from tests.external_dependency_unit.craft.db_helpers import make_external_app
+from tests.external_dependency_unit.craft.db_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_user_credential
 
 _BEARER = {"Authorization": "Bearer {access_token}"}
 

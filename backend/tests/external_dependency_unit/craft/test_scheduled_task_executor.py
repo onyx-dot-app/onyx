@@ -44,10 +44,10 @@ from onyx.db.models import User
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import make_sandbox
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox
+from tests.external_dependency_unit.craft.db_helpers import make_user
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -193,10 +193,12 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
     fake_app = _FakeApp()
 
     def _dispatch_in_thread(idx: int) -> None:
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
         try:
             barrier.wait(timeout=5)
-            results[idx] = dispatch_due_scheduled_tasks.run(tenant_id=TEST_TENANT_ID)
+            results[idx] = dispatch_due_scheduled_tasks.run(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            )
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
@@ -272,7 +274,9 @@ def test_cleanup_stuck_runs_marks_queued_over_threshold_failed(
     db_session.add(run)
     db_session.commit()
 
-    marked = cleanup_stuck_scheduled_runs.run(tenant_id=TEST_TENANT_ID)
+    marked = cleanup_stuck_scheduled_runs.run(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    )
     assert marked >= 1
 
     db_session.expire_all()
@@ -317,7 +321,9 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
     db_session.add(run)
     db_session.commit()
 
-    marked = cleanup_stuck_scheduled_runs.run(tenant_id=TEST_TENANT_ID)
+    marked = cleanup_stuck_scheduled_runs.run(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    )
     assert marked >= 1
 
     db_session.expire_all()

@@ -698,7 +698,7 @@ class GithubConnector(
         Returns:
             list[Repository.Repository]: The configured repositories.
         """
-        assert self.github_client is not None  # mypy
+        assert self.github_client is not None  # for type-checking
         if self.repositories:
             if "," in self.repositories:
                 return self.get_github_repos(self.github_client)
@@ -735,7 +735,7 @@ class GithubConnector(
                 "Re-tried listing repo files too many times. "
                 "Something is going wrong with fetching objects from Github"
             )
-        assert self.github_client is not None  # mypy
+        assert self.github_client is not None  # for type-checking
         try:
             git_tree = repo.get_git_tree(repo.default_branch, recursive=True)
             truncated = bool(git_tree.raw_data.get("truncated"))
@@ -765,7 +765,7 @@ class GithubConnector(
                 "Re-tried fetching file content too many times. "
                 "Something is going wrong with fetching objects from Github"
             )
-        assert self.github_client is not None  # mypy
+        assert self.github_client is not None  # for type-checking
         try:
             content = repo.get_contents(path, ref=repo.default_branch)
             if isinstance(content, list):

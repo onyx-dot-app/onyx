@@ -31,11 +31,13 @@ def llm_generation_span(
     llm: LLM,
     flow: LLMFlow | None,
     input_messages: Sequence[Any] | Any | None = None,
+    tools: Sequence[Mapping[str, Any]] | None = None,
     parent: Any | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
     with generation_span(
         model=llm.config.model_name,
         model_config=build_llm_model_config(llm, flow),
+        tools=tools,
         parent=parent,
     ) as span:
         if input_messages is not None:
@@ -58,6 +60,7 @@ def traced_llm_call(
     provider: str,
     extra_config: Mapping[str, str] | None = None,
     input_messages: Sequence[Any] | Any | None = None,
+    tools: Sequence[Mapping[str, Any]] | None = None,
     parent: Any | None = None,
 ) -> Iterator[Span[GenerationSpanData]]:
     """Open a generation span for call sites that don't go through ``LLM``.
@@ -76,6 +79,7 @@ def traced_llm_call(
     with generation_span(
         model=model,
         model_config=model_config,
+        tools=tools,
         parent=parent,
     ) as span:
         if input_messages is not None:

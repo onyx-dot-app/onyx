@@ -1,2 +1,6 @@
-export type { A11yProps, Handler, SizeToken, Slot } from "./primitives";
-export type { ButtonContract, ButtonVariant } from "./button";
+export type {
+  InteractiveVariant,
+  InteractiveProminence,
+  InteractiveContract,
+} from "./interactive";
+export type { TextColor, TextFont } from "./typography";

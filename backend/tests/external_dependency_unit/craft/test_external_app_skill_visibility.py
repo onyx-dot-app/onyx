@@ -28,10 +28,10 @@ from onyx.db.skill import fetch_skill_for_user
 from onyx.db.skill import fetch_skill_for_user_by_slug
 from onyx.db.skill import list_skills_for_sandbox_injection
 from onyx.db.skill import list_skills_for_user
-from tests.external_dependency_unit.craft._test_helpers import make_external_app
-from tests.external_dependency_unit.craft._test_helpers import make_skill
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft._test_helpers import make_user_credential
+from tests.external_dependency_unit.craft.db_helpers import make_external_app
+from tests.external_dependency_unit.craft.db_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_user_credential
 
 # Required keys are top-level auth_template keys not covered by
 # organization_credentials (mirrors `is_user_authenticated_for_app`).

@@ -62,7 +62,7 @@ from onyx.server.features.build.sandbox.event_schema import ToolCallStart
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
+from tests.common.craft.payloads import default_llm_config
 
 # ----------------------------------------------------------------------
 # Module-wide skip gate

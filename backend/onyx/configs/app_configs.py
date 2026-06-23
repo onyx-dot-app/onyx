@@ -562,6 +562,108 @@ POSTGRES_TCP_KEEPALIVES_COUNT = int(
 # RDS IAM authentication - enables IAM-based authentication for PostgreSQL
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
+# TLS for non-IAM PostgreSQL connections.
+#
+# POSTGRES_SSLMODE follows libpq's vocabulary. Only `verify-ca` / `verify-full`
+# authenticate the server (and require POSTGRES_SSLROOTCERT to verify against);
+# `require` encrypts but does NOT protect against a man-in-the-middle. All of
+# this is ignored when USE_IAM_AUTH is true (IAM enforces its own TLS).
+POSTGRES_SSLMODE: str | None = os.environ.get("POSTGRES_SSLMODE") or None
+# Path to the CA bundle used to verify the server certificate for `verify-ca` /
+# `verify-full`. Required by managed providers (RDS, Cloud SQL, Azure) whose
+# server certs don't chain to a system-trusted CA; point it at the system bundle
+# if the server uses a publicly-trusted certificate.
+POSTGRES_SSLROOTCERT: str | None = os.environ.get("POSTGRES_SSLROOTCERT") or None
+# Client certificate + key for mutual TLS (the server authenticating us). Both
+# must be set together, and are only used when POSTGRES_SSLMODE negotiates SSL
+# (require / verify-ca / verify-full).
+POSTGRES_SSLCERT: str | None = os.environ.get("POSTGRES_SSLCERT") or None
+POSTGRES_SSLKEY: str | None = os.environ.get("POSTGRES_SSLKEY") or None
+POSTGRES_SSLKEY_PASSWORD: str | None = (
+    os.environ.get("POSTGRES_SSLKEY_PASSWORD") or None
+)
+
+_VALID_POSTGRES_SSLMODES = frozenset(
+    {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
+)
+_CA_VERIFYING_SSLMODES = frozenset({"verify-ca", "verify-full"})
+# Modes that always negotiate SSL — a client certificate is only reliably
+# presented under one of these.
+_SSL_NEGOTIATING_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
+_POSTGRES_SSL_FILE_SETTINGS = (
+    ("POSTGRES_SSLROOTCERT", POSTGRES_SSLROOTCERT),
+    ("POSTGRES_SSLCERT", POSTGRES_SSLCERT),
+    ("POSTGRES_SSLKEY", POSTGRES_SSLKEY),
+)
+# True when any non-mode TLS setting (including the key password) is present —
+# all of these are dead config without a POSTGRES_SSLMODE.
+_HAS_POSTGRES_SSL_SECONDARY = any(
+    [POSTGRES_SSLROOTCERT, POSTGRES_SSLCERT, POSTGRES_SSLKEY, POSTGRES_SSLKEY_PASSWORD]
+)
+
+if USE_IAM_AUTH:
+    # IAM auth manages the database TLS connection itself, so the explicit
+    # POSTGRES_SSL* settings are ignored — warn rather than silently drop them.
+    if POSTGRES_SSLMODE or _HAS_POSTGRES_SSL_SECONDARY:
+        logger.warning(
+            "USE_IAM_AUTH is enabled; ignoring POSTGRES_SSLMODE / POSTGRES_SSL* "
+            "(IAM auth manages the database TLS connection)."
+        )
+elif POSTGRES_SSLMODE:
+    if POSTGRES_SSLMODE not in _VALID_POSTGRES_SSLMODES:
+        raise ValueError(
+            f"Invalid POSTGRES_SSLMODE={POSTGRES_SSLMODE!r}. "
+            f"Must be one of: {sorted(_VALID_POSTGRES_SSLMODES)}"
+        )
+    if POSTGRES_SSLMODE in _CA_VERIFYING_SSLMODES and not POSTGRES_SSLROOTCERT:
+        # Without a CA bundle these modes can't verify the server cert: libpq
+        # errors out and asyncpg silently falls back to the system trust store.
+        # Fail loudly so the intended CA-pinned trust model is explicit.
+        raise ValueError(
+            f"POSTGRES_SSLMODE={POSTGRES_SSLMODE!r} verifies the server "
+            "certificate and requires POSTGRES_SSLROOTCERT (path to the CA "
+            "bundle). Set it to your provider's CA, or to the system CA bundle "
+            "if the server uses a publicly-trusted certificate."
+        )
+    if POSTGRES_SSLMODE == "require" and POSTGRES_SSLROOTCERT:
+        logger.warning(
+            "POSTGRES_SSLROOTCERT is set but POSTGRES_SSLMODE=require does not "
+            "verify the server certificate; use verify-ca or verify-full to "
+            "verify against the CA bundle."
+        )
+    # Mutual TLS: client cert + key must be provided together, under a mode that
+    # actually negotiates SSL.
+    if bool(POSTGRES_SSLCERT) != bool(POSTGRES_SSLKEY):
+        raise ValueError(
+            "POSTGRES_SSLCERT and POSTGRES_SSLKEY must both be set (mutual TLS "
+            "needs a client certificate and its private key)."
+        )
+    if POSTGRES_SSLKEY_PASSWORD and not POSTGRES_SSLCERT:
+        raise ValueError(
+            "POSTGRES_SSLKEY_PASSWORD is set without a client certificate; it "
+            "only decrypts POSTGRES_SSLKEY. Set POSTGRES_SSLCERT/POSTGRES_SSLKEY "
+            "or unset the password."
+        )
+    if POSTGRES_SSLCERT and POSTGRES_SSLMODE not in _SSL_NEGOTIATING_SSLMODES:
+        raise ValueError(
+            f"POSTGRES_SSLCERT / POSTGRES_SSLKEY require POSTGRES_SSLMODE to be "
+            f"one of {sorted(_SSL_NEGOTIATING_SSLMODES)} so TLS is negotiated; "
+            f"got {POSTGRES_SSLMODE!r}."
+        )
+    for _name, _path in _POSTGRES_SSL_FILE_SETTINGS:
+        if _path and not os.path.exists(_path):
+            raise ValueError(f"{_name}={_path!r} does not exist.")
+elif _HAS_POSTGRES_SSL_SECONDARY:
+    # CA bundle / client cert / key password without a mode is dead config: SSL
+    # stays off and the connection runs unverified despite the operator supplying
+    # certs. Fail loudly so this can't masquerade as a verified/mutually-
+    # authenticated link.
+    raise ValueError(
+        "POSTGRES_SSLROOTCERT / POSTGRES_SSLCERT / POSTGRES_SSLKEY / "
+        "POSTGRES_SSLKEY_PASSWORD are set but POSTGRES_SSLMODE is not. Set a "
+        "POSTGRES_SSLMODE (e.g. verify-full) so TLS is actually negotiated."
+    )
+
 # Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
 # Note: This is separate from RDS IAM auth as they use different authentication mechanisms
 USE_REDIS_IAM_AUTH = os.getenv("USE_REDIS_IAM_AUTH", "False").lower() == "true"
@@ -891,6 +993,13 @@ CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC = (
 
 GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
+# Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
+# fetch. Native Docs report no `size`, so the fetch can't be checked from
+# metadata; larger Docs are indexed via the basic text export.
+GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
+    os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
 )
 
 # Cap the total text retained per file across a connector's extracted sections,

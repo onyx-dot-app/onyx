@@ -44,9 +44,17 @@ class IndexAttemptStage(str, PyEnum):
     CHUNKING = "CHUNKING"
     CONTEXTUAL_RAG = "CONTEXTUAL_RAG"
     EMBEDDING = "EMBEDDING"
+    DOC_LOCK_ACQUIRE_WAIT = "DOC_LOCK_ACQUIRE_WAIT"
+    ENRICHMENT_PREP = "ENRICHMENT_PREP"
     VECTOR_DB_WRITE = "VECTOR_DB_WRITE"
     POST_INDEX_DB_UPDATE = "POST_INDEX_DB_UPDATE"
+    COORD_LOCK_ACQUIRE_WAIT = "COORD_LOCK_ACQUIRE_WAIT"
     COORDINATION_UPDATE = "COORDINATION_UPDATE"
+    FINALIZATION = "FINALIZATION"
+    GC_COLLECT = "GC_COLLECT"
+
+    # Residual (BATCH_TOTAL minus in-span stages); read-time, never written.
+    BATCH_UNACCOUNTED = "BATCH_UNACCOUNTED"
 
     # --- Aggregate ---
     BATCH_TOTAL = "BATCH_TOTAL"
@@ -85,9 +93,15 @@ STAGE_SCOPE: dict[IndexAttemptStage, StageScope] = {
     IndexAttemptStage.CHUNKING: StageScope.BATCH_LEVEL,
     IndexAttemptStage.CONTEXTUAL_RAG: StageScope.BATCH_LEVEL,
     IndexAttemptStage.EMBEDDING: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.DOC_LOCK_ACQUIRE_WAIT: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.ENRICHMENT_PREP: StageScope.BATCH_LEVEL,
     IndexAttemptStage.VECTOR_DB_WRITE: StageScope.BATCH_LEVEL,
     IndexAttemptStage.POST_INDEX_DB_UPDATE: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.COORD_LOCK_ACQUIRE_WAIT: StageScope.BATCH_LEVEL,
     IndexAttemptStage.COORDINATION_UPDATE: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.FINALIZATION: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.GC_COLLECT: StageScope.BATCH_LEVEL,
+    IndexAttemptStage.BATCH_UNACCOUNTED: StageScope.BATCH_LEVEL,
     IndexAttemptStage.BATCH_TOTAL: StageScope.BATCH_LEVEL,
 }
 

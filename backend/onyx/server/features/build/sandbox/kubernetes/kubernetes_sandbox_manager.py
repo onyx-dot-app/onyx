@@ -72,7 +72,6 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.features.build.configs import SANDBOX_PROXY_HOST
 from onyx.server.features.build.configs import SANDBOX_PROXY_INJECTED_PLACEHOLDER
 from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.configs import SANDBOX_SERVICE_ACCOUNT_NAME
 from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR
 from onyx.server.features.build.sandbox.base import BUN_IMAGE_CACHE_DIR
@@ -146,6 +145,9 @@ _API_SERVER_HOSTNAME = os.environ.get("HOSTNAME", "unknown")
 
 POD_READY_TIMEOUT_SECONDS = 60
 
+OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS = 300.0
+POD_IP_POLL_INTERVAL_SECONDS = 0.5
+
 # Resource deletion timeout and polling interval
 # Kubernetes deletes are async - we need to wait for resources to actually be
 # gone.
@@ -153,9 +155,6 @@ RESOURCE_DELETION_TIMEOUT_SECONDS = 30
 RESOURCE_DELETION_POLL_INTERVAL_SECONDS = 0.5
 
 
-# Proxy CA bundle path; still referenced by _proxy_main_container_env_vars().
-_PROXY_CA_BUNDLE_DIR = "/etc/ssl/sandbox"
-_PROXY_CA_BUNDLE_FILE = f"{_PROXY_CA_BUNDLE_DIR}/ca-bundle.crt"
 # Pinned to the proxy IP via pod hostAliases — the iptables lockdown blocks DNS,
 # so the sandbox can't resolve it on its own.
 _PROXY_ALIAS = "sandbox-proxy"
@@ -174,11 +173,6 @@ _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
 _PROXY_RESOLVE_RETRY_BACKOFF_S = 0.5
 
 
-# Loopback only: the firewall permits nothing else to bypass the proxy, and the
-# Onyx API host must transit the proxy so the PAT can be injected on the wire.
-_NO_PROXY = "127.0.0.1,localhost"
-
-
 def _placeholder_llm_configs(
     configs: list[LLMProviderConfig],
 ) -> list[LLMProviderConfig]:
@@ -191,26 +185,6 @@ def _placeholder_llm_configs(
         if c.api_key
         else c
         for c in configs
-    ]
-
-
-def _proxy_main_container_env_vars() -> list[client.V1EnvVar]:
-    proxy_url = f"http://{_PROXY_ALIAS}:{SANDBOX_PROXY_PORT}"
-    no_proxy = _NO_PROXY
-    return [
-        client.V1EnvVar(name="HTTPS_PROXY", value=proxy_url),
-        client.V1EnvVar(name="HTTP_PROXY", value=proxy_url),
-        client.V1EnvVar(name="https_proxy", value=proxy_url),
-        client.V1EnvVar(name="http_proxy", value=proxy_url),
-        client.V1EnvVar(name="NO_PROXY", value=no_proxy),
-        client.V1EnvVar(name="no_proxy", value=no_proxy),
-        # SDK-specific CA env vars for libs that bypass /etc/ssl/certs.
-        client.V1EnvVar(name="NODE_EXTRA_CA_CERTS", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="REQUESTS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="SSL_CERT_FILE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="AWS_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="CURL_CA_BUNDLE", value=_PROXY_CA_BUNDLE_FILE),
-        client.V1EnvVar(name="GIT_SSL_CAINFO", value=_PROXY_CA_BUNDLE_FILE),
     ]
 
 
@@ -964,6 +938,30 @@ class KubernetesSandboxManager(SandboxManager):
         logger.warning("Timeout waiting for pod %s to become ready", pod_name)
         return False
 
+    def _wait_for_pod_ip(self, pod_name: str, deadline: float) -> bool:
+        """Poll until the pod is assigned an IP, or the monotonic deadline.
+
+        Waits for IP assignment only, never readiness: the init sidecar serves
+        the restore endpoint while its startup probe stays blocked, so waiting
+        for readiness here would deadlock the restore handshake.
+        """
+        while time.monotonic() < deadline:
+            try:
+                pod = self._core_api.read_namespaced_pod(
+                    name=pod_name, namespace=self._namespace
+                )
+            except ApiException as e:
+                if e.status == 404:
+                    raise RuntimeError(f"Pod {pod_name} was deleted")
+                raise
+            if pod.status.pod_ip:
+                logger.info("Pod %s assigned IP %s", pod_name, pod.status.pod_ip)
+                return True
+            time.sleep(POD_IP_POLL_INTERVAL_SECONDS)
+
+        logger.warning("Timeout waiting for pod %s to be assigned an IP", pod_name)
+        return False
+
     def _pod_exists_and_healthy(self, pod_name: str) -> bool:
         """Check if a pod exists and the sandbox app container is ready.
 
@@ -1155,12 +1153,24 @@ class KubernetesSandboxManager(SandboxManager):
             # 2. Create Service (handles terminating services)
             self._ensure_service_exists(sandbox_id, tenant_id)
 
-            # 3. Restore opencode history before the sandbox app container starts.
-            # The restartable init sidecar serves the restore endpoint but its
-            # startup probe stays blocked until restore is complete or explicitly
-            # marked unnecessary, so opencode-serve cannot open an empty DB first.
+            # 3. Restore opencode history before the sandbox app container starts;
+            # the init sidecar serves the restore endpoint while its startup probe
+            # stays blocked, so opencode-serve can't open an empty DB first. The IP
+            # wait and the restore draw from one deadline so slow scheduling leaves
+            # less budget for the restore rather than stacking two full timeouts.
             if startup_restore_required:
-                self.restore_opencode_history_snapshot(sandbox_id, tenant_id)
+                restore_deadline = (
+                    time.monotonic() + OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS
+                )
+                if not self._wait_for_pod_ip(pod_name, restore_deadline):
+                    raise RuntimeError(
+                        f"Timeout waiting for sandbox pod {pod_name} to be assigned an IP"
+                    )
+                self.restore_opencode_history_snapshot(
+                    sandbox_id,
+                    tenant_id,
+                    timeout_seconds=restore_deadline - time.monotonic(),
+                )
 
             # 4. Wait for pod to be ready
             logger.info("Waiting for pod %s to become ready...", pod_name)
@@ -1647,7 +1657,7 @@ echo "Session cleanup complete"
         self,
         sandbox_id: UUID,
         tenant_id: str,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
     ) -> bool:
         if not self._snapshot_manager.has_opencode_history_snapshot(
             tenant_id, str(sandbox_id)
@@ -1693,7 +1703,7 @@ echo "Session cleanup complete"
         self,
         *,
         sandbox_id: UUID,
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = OPENCODE_HISTORY_RESTORE_TIMEOUT_SECONDS,
     ) -> None:
         self._sidecar_client.post_empty(
             sandbox_id=sandbox_id,

@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "next dev",
     "dev:profile": "NEXT_PUBLIC_ENABLE_STATS=true next dev",
+    "dev:clean": "bun run clean && next dev",
+    "clean": "rm -rf .next node_modules/.cache *.tsbuildinfo",
     "build": "next build",
     "start": "next start",
     "lint": "oxlint",
@@ -90,7 +92,6 @@
     "react-dom": "19.2.4",
     "react-dropzone": "^14.2.3",
     "react-icons": "^4.8.0",
-    "react-loader-spinner": "^8.0.0",
     "react-markdown": "^9.0.1",
     "react-select": "^5.8.0",
     "recharts": "^2.13.1",
