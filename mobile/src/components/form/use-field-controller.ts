@@ -4,10 +4,8 @@ import {
   type FieldValues,
 } from "react-hook-form";
 
-// Resolves the react-hook-form `control` a bound field should bind to: an explicit
-// `control` prop wins, otherwise it falls back to the nearest <FormProvider>. This
-// keeps `FormProvider` optional — small forms can pass `control` directly — while
-// larger forms avoid prop-drilling. Throws a clear error when neither is present.
+// Resolves `control`: explicit prop wins, else the nearest <FormProvider> — keeping
+// FormProvider optional. Throws a clear error when neither is present.
 export function useFieldController<TFieldValues extends FieldValues>(
   explicit?: Control<TFieldValues>,
 ): Control<TFieldValues> {

@@ -1,11 +1,7 @@
-// React Native counterpart of web Opal's `InputTypeIn`
-// (web/lib/opal/src/components/inputs/input-type-in/components.tsx): a controlled
-// field shell with a `variant` for idle/error/disabled/readOnly. RHF-agnostic — it
-// only sees value/onChangeText/onBlur, so it's reusable anywhere. `PasswordTextInput`
-// adds the show/hide reveal toggle.
+// RN port of web Opal's `InputTypeIn` / `PasswordInputTypeIn`.
 import { cva, type VariantProps } from "class-variance-authority";
 import { cssInterop } from "nativewind";
-import { useState, type ReactNode, type Ref } from "react";
+import { useCallback, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   Pressable,
   TextInput as RNTextInput,
@@ -16,14 +12,14 @@ import {
 import { textPresets } from "@onyx-ai/shared/native";
 
 import { Icon } from "@/components/ui/icon";
+import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import type { IconFunctionComponent } from "@/icons/types";
 import SvgEye from "@/icons/eye";
-import SvgEyeOff from "@/icons/eye-off";
+import SvgEyeClosed from "@/icons/eye-closed";
+import SvgX from "@/icons/x";
 
-// `placeholderTextColor` is a prop, not a style, so a NativeWind class can't reach
-// it. Bridge a `placeholderClassName` → resolved color → the prop, keeping the
-// placeholder on the token system (dark-mode aware). Mirrors the `Icon` wrapper.
+// `placeholderTextColor` is a prop, not a style — bridge a class to it via cssInterop.
 const FieldTextInput = cssInterop(RNTextInput, {
   className: { target: "style" },
   placeholderClassName: {
@@ -43,10 +39,11 @@ const fieldShell = cva(
   {
     variants: {
       variant: {
-        idle: "border-border-01 bg-background-tint-00",
-        error: "border-status-error-05 bg-background-tint-00",
-        disabled: "border-border-01 bg-background-tint-01",
-        readOnly: "border-border-01 bg-background-tint-01",
+        idle: "border-border-01 bg-background-neutral-00",
+        internal: "border-transparent bg-transparent",
+        error: "border-status-error-05 bg-background-neutral-00",
+        disabled: "border-transparent bg-background-neutral-03",
+        readOnly: "border-border-01 bg-transparent",
       },
     },
     defaultVariants: { variant: "idle" },
@@ -59,78 +56,173 @@ export type TextInputVariant = NonNullable<
 
 export interface TextInputProps extends Omit<RNTextInputProps, "editable"> {
   ref?: Ref<RNTextInput>;
-  /** Drives border + background tokens (and editability). @default "idle" */
+  /** Border/background tokens + editability. @default "idle" */
   variant?: TextInputVariant;
-  /** Leading icon rendered inside the field (e.g. search). */
   leftIcon?: IconFunctionComponent;
-  /** Trailing content inside the field (e.g. the password reveal button). */
+  prefixText?: string;
   rightSlot?: ReactNode;
+  /** Clear (×) button while non-empty; suppressed by `rightSlot`. */
+  clearButton?: boolean;
   className?: string;
 }
 
 function TextInput({
+  ref,
   variant = "idle",
   leftIcon,
+  prefixText,
   rightSlot,
+  clearButton = false,
   className,
   style,
+  value,
+  onChangeText,
+  onFocus,
+  onBlur,
   ...rest
 }: TextInputProps) {
   const editable = variant !== "disabled" && variant !== "readOnly";
-  const muted = variant === "disabled" || variant === "readOnly";
+  const [focused, setFocused] = useState(false);
+
+  const innerRef = useRef<RNTextInput | null>(null);
+  const setRef = useCallback(
+    (node: RNTextInput | null) => {
+      innerRef.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref],
+  );
+  const focusInput = useCallback(() => {
+    if (editable) innerRef.current?.focus();
+  }, [editable]);
+
+  const focusBorder = focused && variant === "idle" ? "border-border-05" : "";
+  // Always mounted (stable input width), inert when empty — web's `invisible` reserve-space.
+  const hasValue = !!value;
+  const showClear = clearButton && !rightSlot && editable;
+
   return (
-    <View className={cn(fieldShell({ variant }), className)}>
+    <Pressable
+      accessible={false}
+      onPress={focusInput}
+      className={cn(fieldShell({ variant }), focusBorder, className)}
+    >
       {leftIcon ? (
-        <Icon as={leftIcon} size={16} className="mr-8 text-text-03" />
+        <Icon as={leftIcon} size={16} className="mr-8 text-text-02" />
+      ) : null}
+      {prefixText ? (
+        <Text font="main-ui-body" color="text-02">
+          {prefixText}
+        </Text>
       ) : null}
       <FieldTextInput
+        ref={setRef}
         editable={editable}
         accessibilityState={
           variant === "disabled" ? { disabled: true } : undefined
         }
-        placeholderClassName="text-text-03"
-        className={cn("flex-1", muted ? "text-text-03" : "text-text-04")}
+        placeholderClassName="text-text-02"
+        className={cn(
+          "flex-1",
+          variant === "disabled" ? "text-text-02" : "text-text-04",
+        )}
         style={[textPresets["main-ui-body"] as TextStyle, style]}
+        value={value}
+        onChangeText={onChangeText}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
         {...rest}
       />
+      {showClear ? (
+        <Pressable
+          disabled={!hasValue}
+          onPress={() => onChangeText?.("")}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Clear"
+          pointerEvents={hasValue ? "auto" : "none"}
+          className={cn("ml-8", !hasValue && "opacity-0")}
+        >
+          <Icon as={SvgX} size={16} className="text-text-03" />
+        </Pressable>
+      ) : null}
       {rightSlot ? <View className="ml-8">{rightSlot}</View> : null}
-    </View>
+    </Pressable>
   );
 }
 
+// Backend secrets arrive as all-bullet placeholders; they can't be revealed.
+const BACKEND_PLACEHOLDER = /^•+$/;
+
 export interface PasswordTextInputProps extends Omit<
   TextInputProps,
-  "rightSlot" | "secureTextEntry" | "leftIcon"
+  "rightSlot" | "secureTextEntry" | "leftIcon" | "clearButton"
 > {
-  /** When false the value stays masked with no reveal toggle. @default true */
+  /** When false (or for a stored backend value) the reveal toggle is disabled. @default true */
   revealable?: boolean;
 }
 
 function PasswordTextInput({
   revealable = true,
+  value,
   autoCapitalize,
   autoComplete,
   textContentType,
+  onFocus,
+  onBlur,
   ...rest
 }: PasswordTextInputProps) {
+  // `revealed` deliberately persists across blur (matches web).
   const [revealed, setRevealed] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  const realValue = String(value ?? "");
+  const nonRevealable =
+    !revealable ||
+    (realValue.length > 0 && BACKEND_PLACEHOLDER.test(realValue));
+  const hidden = !revealed || nonRevealable;
+  const showToggle = realValue.length > 0 || focused;
+  const label = nonRevealable
+    ? "Value cannot be revealed"
+    : revealed
+      ? "Hide password"
+      : "Show password";
+
   return (
     <TextInput
       {...rest}
-      secureTextEntry={!revealed}
+      value={value}
+      secureTextEntry={hidden}
       autoCapitalize={autoCapitalize ?? "none"}
-      autoComplete={autoComplete ?? "password"}
+      // "new-password" so managers don't autofill a saved login into a secret field.
+      autoComplete={autoComplete ?? "new-password"}
       textContentType={textContentType ?? "password"}
+      onFocus={(e) => {
+        setFocused(true);
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        onBlur?.(e);
+      }}
       rightSlot={
-        revealable ? (
+        showToggle ? (
           <Pressable
-            onPress={() => setRevealed((value) => !value)}
+            disabled={nonRevealable}
+            onPress={() => setRevealed((v) => !v)}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={revealed ? "Hide password" : "Show password"}
+            accessibilityLabel={label}
           >
             <Icon
-              as={revealed ? SvgEyeOff : SvgEye}
+              as={revealed && !nonRevealable ? SvgEye : SvgEyeClosed}
               size={16}
               className="text-text-03"
             />

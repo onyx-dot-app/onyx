@@ -6,9 +6,10 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react-native";
-import { Pressable, Text as RNText } from "react-native";
+import { Pressable } from "react-native";
 import { FormProvider, useForm } from "react-hook-form";
 
+import { Text } from "@/components/ui/text";
 import { PasswordInputField, TextInputField } from "@/components/form";
 import { useFieldController } from "@/components/form/use-field-controller";
 
@@ -21,7 +22,7 @@ function SubmitButton({ onPress }: { onPress: () => void }) {
       accessibilityLabel="submit"
       onPress={onPress}
     >
-      <RNText>submit</RNText>
+      <Text>submit</Text>
     </Pressable>
   );
 }

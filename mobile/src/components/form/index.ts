@@ -1,9 +1,5 @@
-// Public surface of the form library.
-//
-// Layer 1 (presentational, RHF-free): the `InputLayouts` primitives + the
-// `TextInput` / `PasswordTextInput` atoms — usable on their own with a plain
-// `error` string, or via react-hook-form's `<Controller>` for custom inputs.
-// Layer 2 (RHF-bound): `TextInputField` / `PasswordInputField` — one line per field.
+// Public surface. Layer 1 (RHF-free): `InputLayouts` primitives + `TextInput` /
+// `PasswordTextInput` atoms. Layer 2 (RHF-bound): `TextInputField` / `PasswordInputField`.
 import {
   InputDivider,
   InputErrorText,

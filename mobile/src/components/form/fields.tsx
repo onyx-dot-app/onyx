@@ -1,9 +1,6 @@
-// Bound field atoms — Layer 2, the only form components that know react-hook-form.
-// React Native counterpart of web's `InputTypeInField` / `PasswordInputTypeInField`
-// (web/src/refresh-components/form/). Each calls `useController`, sources the scoped
-// `fieldState.error`, and renders a presentational `Vertical` around the matching
-// input atom, so screens write one line per field. RHF binds via `useController`,
-// never `register` — RN `TextInput` emits `onChangeText` (a string), not a DOM event.
+// Bound field atoms (Layer 2) — the only form files that import react-hook-form. RN
+// counterpart of web's `InputTypeInField` / `PasswordInputTypeInField`. Binds via
+// `useController`, never `register` — RN `TextInput` emits `onChangeText`, not a DOM event.
 import {
   useController,
   type Control,
@@ -23,9 +20,8 @@ import {
   type TextInputVariant,
 } from "@/components/ui/text-input";
 
-// Names whose value is string-typed. RN TextInput only handles strings, so binding a
-// number/boolean field would coerce its value to a string and corrupt form state —
-// reject those bindings at compile time.
+// RN TextInput only handles strings, so binding a number/boolean field would coerce +
+// corrupt form state — constrain names to string-valued paths.
 type StringFieldPath<TFieldValues extends FieldValues> = {
   [K in FieldPath<TFieldValues>]: FieldPathValue<TFieldValues, K> extends
     | string
@@ -68,9 +64,8 @@ function resolveVariant(
   return "idle";
 }
 
-// An error with no message (e.g. boolean `required: true`, or a schema rule without a
-// message) would otherwise flip the field red with no explanation and no a11y alert.
-// Returning a fallback keeps the message row and the red variant in lockstep.
+// A truthy error with no message (e.g. boolean `required: true`) would flip the field red
+// with no message row or a11y alert — a fallback keeps message + variant in lockstep.
 function errorMessageOf(
   message: string | undefined,
   hasError: boolean,
@@ -95,6 +90,8 @@ export type TextInputFieldProps<
     | "returnKeyType"
     | "onSubmitEditing"
     | "leftIcon"
+    | "prefixText"
+    | "clearButton"
   >;
 
 function TextInputField<

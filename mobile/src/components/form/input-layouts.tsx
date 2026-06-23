@@ -1,9 +1,6 @@
-// React Native port of web Opal's input-layout primitives
-// (web/lib/opal/src/layouts/inputs/components.tsx), Formik-free. Pure presentational
-// scaffolds arranging a label, description, the input (`children`), and an inline
-// error — they import NO react-hook-form; the bound `*Field` atoms pass a plain
-// `error` string in. Spacing uses explicit margins, not `gap` (unreliable in
-// NativeWind on RN — see components/sidebar/SidebarTab.tsx).
+// RN port of web Opal's input-layout primitives (web/lib/opal/src/layouts/inputs/),
+// RHF-free. Spacing uses explicit margins, not `gap` (unreliable in NativeWind on RN
+// — see components/sidebar/SidebarTab.tsx).
 import type { ReactNode } from "react";
 import { View } from "react-native";
 
@@ -19,11 +16,10 @@ export type InputErrorType = "error" | "warning";
 
 interface InputLayoutBaseProps {
   title: string;
-  /** Helper text rendered above the input (under the title). */
   description?: string;
-  /** "optional" renders "(Optional)"; any other string renders verbatim. */
+  /** "optional" renders "(Optional)"; any other string verbatim. */
   suffix?: "optional" | (string & {});
-  /** Pre-resolved message. Presence renders the error row below the input. */
+  /** Pre-resolved message (Layer 1 never reads RHF); presence renders the error row. */
   error?: string;
   errorType?: InputErrorType;
   disabled?: boolean;
@@ -42,17 +38,17 @@ function Label({ title, description, suffix, disabled }: LabelProps) {
   return (
     <View className={cn(disabled && "opacity-50")}>
       <View className="flex-row items-center">
-        <Text font="main-ui-action" className="text-text-04">
+        <Text font="main-ui-action" color="text-04">
           {title}
         </Text>
         {suffix ? (
-          <Text font="secondary-body" className="ml-4 text-text-03">
+          <Text font="secondary-body" color="text-03" className="ml-4">
             {suffix === "optional" ? "(Optional)" : suffix}
           </Text>
         ) : null}
       </View>
       {description ? (
-        <Text font="secondary-body" className="mt-4 text-text-03">
+        <Text font="secondary-body" color="text-03" className="mt-4">
           {description}
         </Text>
       ) : null}
@@ -78,7 +74,11 @@ function InputErrorText({ children, type = "error" }: InputErrorTextProps) {
       accessibilityLiveRegion="polite"
     >
       <Icon as={icon} size={12} className={cn("mr-4", color)} />
-      <Text font="secondary-body" className={cn("flex-1", color)}>
+      <Text
+        font="secondary-body"
+        color="inherit"
+        className={cn("flex-1", color)}
+      >
         {children}
       </Text>
     </View>
@@ -86,7 +86,6 @@ function InputErrorText({ children, type = "error" }: InputErrorTextProps) {
 }
 
 export interface VerticalProps extends InputLayoutBaseProps {
-  /** Secondary helper text rendered below the error row. */
   subDescription?: string;
 }
 
@@ -111,7 +110,7 @@ function Vertical({
         </View>
       ) : null}
       {subDescription ? (
-        <Text font="secondary-body" className="mt-4 text-text-03">
+        <Text font="secondary-body" color="text-03" className="mt-4">
           {subDescription}
         </Text>
       ) : null}
@@ -122,7 +121,6 @@ function Vertical({
 export interface HorizontalProps extends InputLayoutBaseProps {
   /** Vertically center the input against the label block. */
   center?: boolean;
-  /** Optional leading icon beside the title. */
   icon?: IconFunctionComponent;
 }
 
