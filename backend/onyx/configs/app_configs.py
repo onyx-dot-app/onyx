@@ -714,6 +714,26 @@ REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 # this assumes that other redis settings remain the same as the primary
 REDIS_REPLICA_HOST = os.environ.get("REDIS_REPLICA_HOST") or REDIS_HOST
 
+# Redis Sentinel for high availability. When REDIS_SENTINEL_HOSTS is set, the app
+# (and Celery) connect via Sentinel — which discovers the current master and
+# follows failover — instead of REDIS_HOST/REDIS_PORT directly. Format is a
+# comma-separated list of host:port sentinel nodes. REDIS_PASSWORD still
+# authenticates the master/replica; REDIS_SENTINEL_PASSWORD (optional) is for the
+# sentinel nodes themselves if they require separate auth. TLS (REDIS_SSL +
+# certs) applies to both the sentinel and the data connections.
+_REDIS_SENTINEL_HOSTS_STR = os.environ.get("REDIS_SENTINEL_HOSTS", "").strip()
+REDIS_SENTINEL_HOSTS: list[tuple[str, int]] = [
+    (host.rsplit(":", 1)[0], int(host.rsplit(":", 1)[1]))
+    for host in (h.strip() for h in _REDIS_SENTINEL_HOSTS_STR.split(",") if h.strip())
+]
+REDIS_SENTINEL_MASTER_NAME = os.environ.get("REDIS_SENTINEL_MASTER_NAME", "mymaster")
+REDIS_SENTINEL_PASSWORD = os.environ.get("REDIS_SENTINEL_PASSWORD") or None
+
+if REDIS_SENTINEL_HOSTS and not REDIS_SENTINEL_MASTER_NAME:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS is set but REDIS_SENTINEL_MASTER_NAME is empty."
+    )
+
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
 
 # Rate limiting for auth endpoints
