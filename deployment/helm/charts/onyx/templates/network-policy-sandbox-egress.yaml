@@ -1,26 +1,11 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
 {{- $sandboxNs := (index (.Values.configMap | default (dict)) "SANDBOX_NAMESPACE") | default "onyx-sandboxes" }}
 {{- $proxyNs := (index (.Values.configMap | default (dict)) "SANDBOX_PROXY_NAMESPACE") | default $.Release.Namespace }}
-# Egress lockdown for the Craft sandbox pods themselves (CNI-layer defense-in-depth).
-#
-# A sandbox is only supposed to reach the network through the egress proxy. At runtime that is
-# enforced by the in-pod iptables the sandbox-init container installs (firewall-init.sh, NET_ADMIN):
-# OUTPUT policy DROP, allowing only the resolved proxy IP on its port. This NetworkPolicy makes the
-# same "only talks to the proxy (+ DNS)" property a declarative, auditable network fact at the CNI
-# layer, so it still holds if the in-pod iptables is ever bypassed. It only takes effect on clusters
-# whose CNI enforces NetworkPolicy; where it isn't enforced it is inert (the in-pod iptables still
-# applies). Companion to the proxy-side egress policy (templates/sandbox-proxy/networkpolicy-egress.yaml).
-#
-# Egress is allowed ONLY to:
-#   1. the egress proxy (release ns / component=sandbox-proxy : 8080) — all sandbox HTTP(S) funnels
-#      here via HTTPS_PROXY + the in-pod iptables redirect; the proxy resolves & fetches real targets.
-#   2. kube-dns (UDP+TCP 53) — firewall-init.sh resolves the proxy FQDN (SANDBOX_PROXY_HOST) via
-#      getent before it closes DNS in its own iptables; that lookup runs in the pod netns this policy
-#      governs (NetworkPolicy egress applies to init containers too), so blocking DNS bricks every
-#      sandbox at init.
-# Everything else is denied by the default-deny this policy establishes. Enforced per pod IP, so it
-# does NOT cover a host-netns escape (egresses via the node IP) — that is handled by node-level
-# IMDSv2 + hop-limit=1.
+# CNI-layer egress allow-list for Craft sandbox pods: proxy + DNS only, default-deny. Declarative
+# backstop to the in-pod iptables, which is the authoritative runtime control (see firewall-init.sh);
+# only enforced where the CNI honors NetworkPolicy, inert otherwise. DNS must stay allowed or
+# sandbox-init's proxy-FQDN resolution breaks. Each ipBlock is its own egress rule per the IPv4/IPv6
+# fail-closed caveat documented in the proxy-side policy (templates/sandbox-proxy/networkpolicy-egress.yaml).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -32,11 +17,7 @@ spec:
       app.kubernetes.io/component: sandbox
   policyTypes: [Egress]
   egress:
-    # 1. The egress proxy. Defaults to the release namespace but honors a SANDBOX_PROXY_NAMESPACE
-    #    override (shared proxy outside the release ns), matching the derivation in sandbox-rbac.yaml.
-    #    Selects the proxy POD by label (the Service is named *-sandbox-proxy; NetworkPolicy matches
-    #    pod labels, not Service names). The CNI evaluates egress on the post-DNAT pod IP, so
-    #    sandbox -> proxy ClusterIP -> proxy pod matches.
+    # Egress proxy pod ($proxyNs = SANDBOX_PROXY_NAMESPACE or release ns; matched by pod label, not Service).
     - to:
         - namespaceSelector:
             matchLabels:
@@ -47,14 +28,7 @@ spec:
       ports:
         - protocol: TCP
           port: {{ include "onyx.sandboxProxyPort" . }}
-    # 1b. Proxy reached as a non-pod peer, when configured. The rule above selects the proxy by pod
-    #     label, but SANDBOX_PROXY_HOST may be overridden to a target that isn't a chart-labeled pod —
-    #     an external proxy (FQDN/IP) or a Service whose backing pods lack app.kubernetes.io/component:
-    #     sandbox-proxy. firewall-init.sh resolves and allows whatever the env var points at, but a
-    #     NetworkPolicy can't follow a hostname, so on those topologies the podSelector misses and all
-    #     sandbox egress is dropped. Operators using such a proxy set craft.proxyExtraCIDRs to its
-    #     CIDR(s); empty by default (the chart-deployed proxy is covered by the podSelector). Each CIDR
-    #     is its OWN egress rule per the IPv4/IPv6 ipBlock fail-closed caveat on AWS VPC CNI.
+    # Proxy by CIDR (craft.proxyExtraCIDRs) when SANDBOX_PROXY_HOST points at a non-chart-labeled target.
     {{- range (index (.Values.craft | default (dict)) "proxyExtraCIDRs" | default list) }}
     - to:
         - ipBlock:
@@ -63,7 +37,7 @@ spec:
         - protocol: TCP
           port: {{ include "onyx.sandboxProxyPort" $ }}
     {{- end }}
-    # 2. kube-dns (CoreDNS in kube-system) — needed by firewall-init.sh to resolve the proxy FQDN.
+    # kube-dns.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -76,14 +50,7 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # 2b. NodeLocal DNS (or any non-pod cluster DNS listener), when configured. A NodeLocal DNS
-    #     cache is a hostNetwork endpoint, NOT a CoreDNS pod, so the kube-dns podSelector above
-    #     can't match it; its listen IP is cluster-specific (commonly 169.254.20.10 but not fixed).
-    #     Without an allow here its query hits the default-deny, failing firewall-init.sh's getent
-    #     and bricking sandbox init. Operators on such clusters set craft.dnsExtraCIDRs to the
-    #     actual listener IP(s); empty by default (plain CoreDNS resolves via the podSelector alone).
-    #     Each CIDR is its OWN egress rule per the IPv4/IPv6 ipBlock fail-closed caveat on AWS VPC
-    #     CNI (one IPv4+IPv6 `to:` list drops all egress) — see the proxy-side policy.
+    # NodeLocal DNS / non-pod DNS listeners (craft.dnsExtraCIDRs), e.g. 169.254.20.10/32.
     {{- range (index (.Values.craft | default (dict)) "dnsExtraCIDRs" | default list) }}
     - to:
         - ipBlock:
