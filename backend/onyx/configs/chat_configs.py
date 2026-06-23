@@ -30,6 +30,13 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Timeout for non-streaming secondary LLM flows (e.g. search section-relevance
+# classification and section-expansion selection). These are short, low-effort
+# calls; the bound exists so a stalled provider connection fails fast into the
+# existing graceful fallback instead of hanging a worker until liveness kills it.
+SECONDARY_LLM_FLOW_TIMEOUT_S = int(
+    os.environ.get("SECONDARY_LLM_FLOW_TIMEOUT_S") or "60"
+)
 # Weighting factor between vector and keyword Search; 1 for completely vector
 # search, 0 for keyword. Enforces a valid range of [0, 1]. A supplied value from
 # the env outside of this range will be clipped to the respective end of the
