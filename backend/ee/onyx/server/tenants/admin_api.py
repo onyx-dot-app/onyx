@@ -5,6 +5,7 @@ from fastapi import Response
 from fastapi_users import exceptions
 
 from ee.onyx.auth.users import current_cloud_superuser
+from ee.onyx.configs.app_configs import IMPERSONATION_ENABLED
 from ee.onyx.server.tenants.models import ImpersonateRequest
 from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from onyx.auth.users import auth_backend
@@ -13,6 +14,8 @@ from onyx.auth.users import User
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -20,10 +23,24 @@ logger = setup_logger()
 router = APIRouter(prefix="/tenants")
 
 
+def require_impersonation_enabled() -> None:
+    """FastAPI dependency that gates the impersonation endpoint.
+
+    Impersonation is disabled by default and must be explicitly enabled via the
+    IMPERSONATION_ENABLED env var.
+    """
+    if not IMPERSONATION_ENABLED:
+        raise OnyxError(
+            OnyxErrorCode.ENV_VAR_GATED,
+            "Impersonation is disabled (IMPERSONATION_ENABLED is not set)",
+        )
+
+
 @router.post("/impersonate")
 async def impersonate_user(
     impersonate_request: ImpersonateRequest,
     _: User = Depends(current_cloud_superuser),
+    __: None = Depends(require_impersonation_enabled),
 ) -> Response:
     """Allows a cloud superuser to impersonate another user by generating an impersonation JWT token"""
     try:
