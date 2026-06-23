@@ -14,6 +14,7 @@ from onyx.auth.schemas import UserRole
 from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.enums import DefaultAppMode
+from onyx.db.enums import SupportedLanguage
 from onyx.db.enums import ThemePreference
 from onyx.db.memory import MAX_MEMORIES_PER_USER
 from onyx.db.models import AllowedAnswerFilters
@@ -245,7 +246,7 @@ class ThemePreferenceRequest(BaseModel):
 
 
 class LanguageRequest(BaseModel):
-    language: str
+    language: SupportedLanguage
 
 
 class DefaultAppModeRequest(BaseModel):

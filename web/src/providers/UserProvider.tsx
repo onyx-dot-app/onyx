@@ -430,6 +430,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateUserLanguagePreference = async (language: string) => {
+    // Snapshot the current language so we can roll back the optimistic
+    // i18n change if the request fails.
+    const previousLanguage = i18n.language;
     try {
       setUpToDateUser((prevUser) => {
         if (prevUser) {
@@ -459,10 +462,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!response.ok) {
-        await refreshUser();
         throw new Error("Failed to update language preference");
       }
     } catch (error) {
+      // Roll back the optimistic UI language change so the live UI stays in
+      // sync with the persisted preference.
+      i18n.changeLanguage(previousLanguage);
+      if (typeof document !== "undefined") {
+        document.documentElement.lang = previousLanguage;
+      }
+      await refreshUser();
       console.error("Error updating language preference:", error);
       throw error;
     }

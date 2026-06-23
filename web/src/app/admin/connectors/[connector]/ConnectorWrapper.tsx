@@ -48,7 +48,7 @@ export default function ConnectorWrapper({
           <div className="mt-12 w-full max-w-3xl mx-auto">
             <div className="mx-auto flex flex-col gap-y-2">
               <HeaderTitle>
-                <p>'{connector}' {t("admin.connector_form.invalid_type")}</p>
+                <p>{t("admin.connector_form.invalid_type", { connector })}</p>
               </HeaderTitle>
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button

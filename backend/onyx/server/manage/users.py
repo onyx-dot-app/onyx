@@ -1068,7 +1068,7 @@ def update_user_language_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_language(user.id, request.language, db_session)
+    update_user_language(user.id, request.language.value, db_session)
 
 
 @router.patch("/user/chat-background")

@@ -1028,7 +1028,7 @@
     "connector_form": {
       "connector_name_label": "Konnektorname",
       "connector_name_desc": "Ein beschreibender Name für den Konnektor.",
-      "invalid_type": "ist kein gültiger Konnektortyp!",
+      "invalid_type": "'{{connector}}' ist kein gültiger Konnektortyp!",
       "go_home": "Startseite",
       "oauth_failed": "OAuth-Authentifizierung fehlgeschlagen. Bitte versuchen Sie es erneut."
     },

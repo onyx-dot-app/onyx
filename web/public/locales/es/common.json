@@ -1028,7 +1028,7 @@
     "connector_form": {
       "connector_name_label": "Nombre del conector",
       "connector_name_desc": "Un nombre descriptivo para el conector.",
-      "invalid_type": "no es un tipo de conector válido",
+      "invalid_type": "'{{connector}}' no es un tipo de conector válido",
       "go_home": "Ir al inicio",
       "oauth_failed": "Error de autenticación OAuth. Por favor, inténtalo de nuevo."
     },
