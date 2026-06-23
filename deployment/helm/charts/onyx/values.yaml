@@ -164,7 +164,10 @@ inferenceCapability:
   livenessProbe: {}
   podSecurityContext: {}
   securityContext:
-    privileged: true
+    # `privileged` is not needed by this workload and is intentionally omitted.
+    # root is kept only so the optional customCACerts feature can run
+    # update-ca-certificates; to run non-root, override this and
+    # podSecurityContext (see codeInterpreter below for the pattern).
     runAsUser: 0
   nodeSelector: {}
   tolerations: []
@@ -222,7 +225,10 @@ indexCapability:
   livenessProbe: {}
   podSecurityContext: {}
   securityContext:
-    privileged: true
+    # `privileged` is not needed by this workload and is intentionally omitted.
+    # root is kept only so the optional customCACerts feature can run
+    # update-ca-certificates; to run non-root, override this and
+    # podSecurityContext (see codeInterpreter below for the pattern).
     runAsUser: 0
   nodeSelector: {}
   tolerations: []
@@ -550,7 +556,10 @@ celery_shared:
     timeoutSeconds: 3
   podSecurityContext: {}
   securityContext:
-    privileged: true
+    # `privileged` is not needed by this workload and is intentionally omitted.
+    # root is kept only so the optional customCACerts feature can run
+    # update-ca-certificates; to run non-root, override this and
+    # podSecurityContext (see codeInterpreter below for the pattern).
     runAsUser: 0
 
 celery_beat:
