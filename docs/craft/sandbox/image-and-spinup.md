@@ -104,8 +104,9 @@ from `onyx/skills/builtin/pptx/scripts/`).
 - Prod / default: `ENABLE_SKILLS=true` — full image, all skills work.
 - Dev kind clusters / CI: `ENABLE_SKILLS=false` — ~700 MB smaller, but
   any skill that shells out to `soffice` / `pdftoppm` / `pptxgenjs` will
-  fail. The current K8s test suite doesn't exercise those, so
-  `pr-craft-k8s-tests.yml` builds with `ENABLE_SKILLS=false`.
+  fail. The full-cluster Craft K8s integration lane doesn't exercise
+  those runtime tools, so `pr-craft-k8s-tests.yml` builds with
+  `ENABLE_SKILLS=false`.
 
 To toggle in dev:
 

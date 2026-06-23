@@ -1,28 +1,4 @@
-"""Docker-backend end-to-end approval-gate + posture tests.
-
-Mirrors the K8s ``test_approval_gate.py`` (which lives at
-``external_dependency_unit/craft/``) but runs as an **integration test**: the
-full compose stack with the craft overlay must be up before pytest starts, and
-assertions are made against the real api_server + sandbox-proxy + sandbox
-containers via HTTP and ``docker exec``. The tier-up from external-dep-unit is
-deliberate -- the docker-specific bug classes we catch here (image ENTRYPOINT
-concat, HOME after setpriv, curl httpoxy interactions on the bridge) only
-surface in the integrated provisioning flow.
-
-Bring-up (handled by ``.github/workflows/pr-craft-compose-integration.yml``)::
-
-    docker network create onyx_craft_sandbox
-    docker volume create sandbox_proxy_ca
-    docker compose \\
-        -f docker-compose.yml \\
-        -f docker-compose.dev.yml \\
-        -f docker-compose.craft.yml \\
-        --env-file env.template \\
-        up -d --wait --wait-timeout 600
-
-Skipped automatically when ``SANDBOX_BACKEND != docker`` so the file is a no-op
-on the K8s lane.
-"""
+"""Docker-backend end-to-end approval-gate + posture tests."""
 
 from __future__ import annotations
 
@@ -66,12 +42,6 @@ _SANDBOX_BRIDGE_NETWORK = "onyx_craft_sandbox"
 
 
 def _opencode_pid(container: str, docker_exec: DockerExec) -> int:
-    """Finds the opencode-serve PID inside the sandbox.
-
-    Returns the integer PID; raises with a diagnostic if not found. We rely on
-    this to assert capability + uid invariants on the actual agent process, not
-    the entrypoint shell.
-    """
     proc = docker_exec(container, ["pgrep", "-f", "opencode serve"])
     pids = [int(p) for p in proc.stdout.split() if p.strip()]
     assert pids, (
@@ -84,13 +54,6 @@ def _opencode_pid(container: str, docker_exec: DockerExec) -> int:
 def _start_slack_post_via_proxy(
     container: str, session_id: UUID
 ) -> subprocess.Popen[str]:
-    """
-    Starts a sandbox-side curl POST to ``chat.postMessage`` through the proxy
-    and return the Popen. The bearer is intentionally fake; if the request
-    reaches Slack it 401s. Caller drives the gate decision via the API while
-    curl is parked, then ``communicate()``s to collect the result. Output body
-    lands at ``/tmp/slack_out`` inside the sandbox.
-    """
     cmd = (
         f"curl -sS -X POST "
         f"-H 'Authorization: Bearer xoxb-fake' "
@@ -111,7 +74,6 @@ def _start_slack_post_via_proxy(
 def _wait_for_pending_approval(
     user: DATestUser, session_id: UUID, timeout_s: float = 30.0
 ) -> dict[str, Any]:
-    """Polls the live-approvals HTTP endpoint until a pending row appears."""
     deadline = time.monotonic() + timeout_s
     url = f"{API_SERVER_URL}/build/approvals/sessions/{session_id}/live"
     while time.monotonic() < deadline:
@@ -129,7 +91,6 @@ def _wait_for_pending_approval(
 def _post_decision(
     user: DATestUser, approval_id: str, decision: ApprovalDecision
 ) -> Response:
-    """POST APPROVE or REJECT via the decision API."""
     url = f"{API_SERVER_URL}/build/approvals/{approval_id}/decision"
     return client.post(
         url,
@@ -139,20 +100,8 @@ def _post_decision(
     )
 
 
-# ------------------------------------------------------------------------------
-# Fixtures
-# ------------------------------------------------------------------------------
-
-
 @pytest.fixture(scope="module")
 def module_user() -> DATestUser:
-    """A user shared across the docker-posture tests (1-5).
-
-    The K8s analogue gives each test its own user + sandbox. We share for the
-    posture tests because they don't mutate any per-sandbox state -- they only
-    read container properties. Tests that drive the gate flow (6-7) take their
-    own fresh user via the ``gated_user`` fixture.
-    """
     return UserManager.create(name="craft_docker_module")
 
 
@@ -161,14 +110,11 @@ def module_sandbox(
     module_user: DATestUser,
     provision_sandbox: ProvisionSandbox,
 ) -> tuple[UUID, str]:
-    """One sandbox provisioned via the real API; reused across posture tests."""
     return provision_sandbox(module_user)
 
 
 @pytest.fixture
 def gated_user() -> DATestUser:
-    """Function-scoped user for the gate-flow tests -- each test gets its own
-    session + sandbox so approval rows don't leak across tests."""
     return UserManager.create(name=f"craft_docker_gated_{uuid4().hex[:8]}")
 
 
@@ -177,26 +123,14 @@ def gated_session(
     gated_user: DATestUser,
     provision_sandbox: ProvisionSandbox,
 ) -> Generator[tuple[DATestUser, UUID, str], None, None]:
-    """Provisions a fresh sandbox via the real API for one gate-flow test."""
     session_id, container = provision_sandbox(gated_user)
     yield gated_user, session_id, container
-
-
-# ------------------------------------------------------------------------------
-# Tests 1-5: Docker-specific posture invariants
-# ------------------------------------------------------------------------------
 
 
 def test_sandbox_runs_with_zero_caps_at_uid_1000(
     module_sandbox: tuple[UUID, str],
     docker_exec: DockerExec,
 ) -> None:
-    """
-    The opencode-serve process must run as uid 1000 with an empty bounding set.
-    This is the assertion that catches both the ENTRYPOINT-not-overridden bug
-    (firewall-init.sh skipped -> process stays root) and the HOME-after- setpriv
-    bug (opencode-serve never starts -> no pid to check).
-    """
     _session_id, container = module_sandbox
     pid = _opencode_pid(container, docker_exec)
 
@@ -220,11 +154,6 @@ def test_sandbox_https_is_mitmd_by_proxy_ca(
     module_sandbox: tuple[UUID, str],
     docker_exec: DockerExec,
 ) -> None:
-    """
-    Public HTTPS gets MITM'd: leaf cert issued by the Onyx Sandbox Proxy CA.
-    Proves the firewall-init.sh CA-install step + the iptables proxy-allow rule
-    + the proxy's MITM both work end-to-end.
-    """
     _session_id, container = module_sandbox
     proc = docker_exec(
         container,
@@ -248,11 +177,6 @@ def test_credentials_injected_on_wire_returns_real_user(
     module_sandbox: tuple[UUID, str],
     docker_exec: DockerExec,
 ) -> None:
-    """
-    Sandbox env carries the placeholder PAT; calling api_server/me via the proxy
-    returns the REAL user record (proves the proxy substituted the bearer header
-    from ``Sandbox.encrypted_pat``).
-    """
     _session_id, container = module_sandbox
 
     env_check = docker_exec(container, ["sh", "-c", "echo $ONYX_PAT"])
@@ -285,10 +209,6 @@ def test_iptables_rejects_bypass_attempts(
     module_sandbox: tuple[UUID, str],
     docker_exec: DockerExec,
 ) -> None:
-    """
-    All four bypass classes are kernel-level rejected; the loopback embedded
-    resolver stays reachable by design (compose-internal name resolution).
-    """
     _session_id, container = module_sandbox
 
     direct_api = docker_exec(
@@ -370,10 +290,8 @@ def test_iptables_rejects_bypass_attempts(
     )
     assert ipv6_egress.returncode == 7, "IPv6 egress not blocked"
 
-    # By-design exception: Docker's embedded resolver at 127.0.0.11 is reachable
-    # via the loopback ACCEPT rule. Required so the sandbox can resolve
-    # ``sandbox-proxy``. Asserting positively so a future "close all DNS"
-    # over-correction would fail this test.
+    # Docker's embedded resolver (127.0.0.11) must stay reachable so the sandbox
+    # can resolve ``sandbox-proxy``.
     embedded_dns = docker_exec(
         container,
         ["getent", "ahosts", "example.com"],
@@ -385,12 +303,6 @@ def test_iptables_rejects_bypass_attempts(
 
 
 def test_unlabeled_container_gets_unidentified_sandbox_403() -> None:
-    """
-    A non-sandbox container on the bridge that hits the proxy must get a 403 + a
-    ``identity_unknown_sandbox`` warning in the proxy logs. Proves
-    DockerEventsLookup rejects unknown source IPs and the observability hook we
-    added in branch 6 still fires.
-    """
     proc = subprocess.run(
         [
             "docker",
@@ -434,20 +346,8 @@ def test_sessions_directory_writable_by_sandbox_user(
     module_sandbox: tuple[UUID, str],
     docker_exec: DockerExec,
 ) -> None:
-    """
-    The /workspace/sessions volume mount must be writable by UID 1000.
-
-    Regression test: Docker volumes are created with root:root ownership.
-    firewall-init.sh must chown the directory before dropping to UID 1000,
-    otherwise session workspace creation fails with EACCES.
-
-    This test verifies that UID 1000 can create a test directory inside
-    /workspace/sessions, proving the permissions fix in firewall-init.sh
-    works correctly.
-    """
     _session_id, container = module_sandbox
 
-    # Verify /workspace/sessions exists and is owned by 1000:1000
     stat_result = docker_exec(container, ["stat", "-c", "%u:%g", "/workspace/sessions"])
     assert stat_result.returncode == 0, (
         f"/workspace/sessions stat failed: {stat_result.stderr}"
@@ -456,9 +356,7 @@ def test_sessions_directory_writable_by_sandbox_user(
         f"/workspace/sessions not owned by 1000:1000: {stat_result.stdout.strip()}"
     )
 
-    # Attempt to create a test directory as UID 1000. Must set the exec user
-    # explicitly because in proxy mode docker exec defaults to the container's
-    # configured root user, not the setpriv-dropped agent user.
+    # docker exec defaults to root, not the setpriv-dropped agent user.
     test_dir = f"/workspace/sessions/test-{uuid4().hex[:8]}"
     mkdir_result = docker_exec(
         container,
@@ -474,17 +372,8 @@ def test_sessions_directory_writable_by_sandbox_user(
     docker_exec(container, ["rm", "-rf", test_dir], user=SANDBOX_EXEC_USER)
 
 
-# ------------------------------------------------------------------------------
-# Tests 6-7: Gate APPROVE / REJECT flow (analogues of K8s test_approval_gate)
-#
-# Depend on the ``slack_external_app`` fixture so the proxy's
-# ``ExternalAppActionMatcher`` actually claims ``chat.postMessage``. Without
-# that seeding the matcher returns ``None``, the request leaves the proxy with
-# ``policy=off_catalog``, and no approval ever parks. The default deployment has
-# no external apps configured and the K8s lane's ``test_approval_gate.py`` isn't
-# actually run by its CI (verified -- not in the lane's ``paths:`` filter or
-# pytest args), so this fixture is the first place to wire the seeding in.
-# ------------------------------------------------------------------------------
+# Gate-flow tests depend on the ``slack_external_app`` fixture; without it the
+# matcher claims nothing and no approval parks.
 
 
 def test_approve_decision_forwards_to_slack(
@@ -492,15 +381,6 @@ def test_approve_decision_forwards_to_slack(
     gated_session: tuple[DATestUser, UUID, str],
     docker_exec: DockerExec,
 ) -> None:
-    """
-    A gated Slack request parks at the proxy, becomes a pending ActionApproval,
-    and on APPROVE the proxy forwards upstream. Mirrors K8s
-    ``test_approved_decision_forwards_to_slack``.
-
-    The fake bearer means Slack returns ``invalid_auth`` once the request
-    actually reaches it -- evidence the forward fired (vs. the gate having
-    short-circuited).
-    """
     user, session_id, container = gated_session
 
     curl_proc = _start_slack_post_via_proxy(container, session_id)
@@ -533,11 +413,6 @@ def test_reject_decision_returns_403_user_rejected(
     gated_session: tuple[DATestUser, UUID, str],
     docker_exec: DockerExec,
 ) -> None:
-    """
-    REJECT causes the parked sandbox-side curl to return a 403 carrying the
-    ``USER_REJECTED_ACTION`` error code. Mirrors K8s
-    ``test_rejected_decision_returns_403_user_rejected``.
-    """
     user, session_id, container = gated_session
 
     curl_proc = _start_slack_post_via_proxy(container, session_id)
@@ -568,12 +443,6 @@ def test_ask_with_uninvokable_app_forwards_bare(
     gated_session: tuple[DATestUser, UUID, str],
     docker_exec: DockerExec,
 ) -> None:
-    """ASKs on an app whose auth template can't be filled forwards bare.
-
-    Documents the credential gate's short-circuit: With no credentials to inject
-    after approval, the gate skips the ASK prompt and forwards the request
-    as-is. Mirrors K8s ``test_ask_with_uninvokable_app_forwards_bare``.
-    """
     user, session_id, container = gated_session
 
     # Strip Slack's org credential so app_is_available -> False.
@@ -587,9 +456,6 @@ def test_ask_with_uninvokable_app_forwards_bare(
         curl_proc = _start_slack_post_via_proxy(container, session_id)
         try:
             stdout, _stderr = curl_proc.communicate(timeout=60)
-            # Slack returns HTTP 200 with `invalid_auth` in the body for the
-            # fake bearer -- the 200 + body is the proof the request actually
-            # reached slack.com bare (no injection from the gate).
             assert stdout.strip() == "200", (
                 "Uninvokable ASK should forward bare to Slack and Slack should "
                 f"200 with invalid_auth in the body, got {stdout!r}"

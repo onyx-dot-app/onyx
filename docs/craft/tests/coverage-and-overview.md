@@ -34,9 +34,9 @@ Craft is Onyx's sandboxed build environment — per-user pods running an AI agen
 - **Sessions** — create, list, delete, restore (with lock contention), pre-provisioned check, sandbox reset, generate-suggestions fallback, rename fallback chain, limited-role check.
 - **Uploads** — success, auth, foreign session rejection, blocked extensions, unicode filenames.
 - **File ops** — path traversal rejection on every verb, hidden-entry filtering, cross-user isolation, opencode.json hidden from download.
-- **Skills admin** — full CRUD HTTP contract, invalid/oversized/corrupt bundle rejection, duplicate slug, FK violation on unknown group, orphan-blob cleanup. Push-pipeline side effects (visibility change, description-only no-op, replace/delete propagation, grant union) live in the ext-dep tier — see `external_dependency_unit/craft/test_skill_push.py`.
+- **Skills admin** — full CRUD HTTP contract, invalid/oversized/corrupt bundle rejection, duplicate slug, FK violation on unknown group, orphan-blob cleanup. API-triggered push side effects (public/private fan-out, disable removal, bundle replacement, grant replacement, delete propagation) live in the Craft Kubernetes integration tier — see `backend/tests/integration/tests/craft/k8s/test_skill_push.py`.
 - **Webapp proxy** — sharing scope enforcement, set-cookie stripping, route-order, cross-session isolation.
-- **User library** — upload/delete/toggle, cross-user isolation.
+- **User library** — upload/delete/toggle, cross-user isolation. The Craft Kubernetes tier verifies upload/zip/delete API calls through the real deployed API and into sandbox pods; direct fileset filtering and active-sandbox targeting live in external-dependency unit coverage.
 - **Scheduled tasks** — cron compilation, paired-field validation, run-now on paused, idempotent soft-delete, pagination.
 
 ### Other
@@ -66,10 +66,12 @@ Craft is Onyx's sandboxed build environment — per-user pods running an AI agen
 | What | Where |
 |---|---|
 | Unit tests (pure logic) | `backend/tests/unit/onyx/skills/` and `backend/tests/unit/onyx/server/features/build/` |
-| Ext-dep tests (real DB) | `backend/tests/external_dependency_unit/craft/` |
+| Ext-dep tests (real DB, no k8s cluster) | `backend/tests/external_dependency_unit/craft/` |
 | Integration tests (real HTTP) | `backend/tests/integration/tests/craft/` and `backend/tests/integration/tests/skills/` |
-| K8s-gated tests | `test_kubernetes_sandbox.py` and `test_snapshot_restore.py` (file-level `skipif`) |
-| Shared fixtures | `backend/tests/external_dependency_unit/craft/conftest.py` |
-| Stub sandbox manager | `backend/tests/common/craft/stubs.py` |
-| Shared helpers | `backend/tests/external_dependency_unit/craft/_test_helpers.py` |
+| Craft k8s integration tests (Helm-installed kind cluster with real API/web/Celery/backing services/sandbox pods) | `backend/tests/integration/tests/craft/k8s/` |
+| EDU DB/stub fixtures | `backend/tests/external_dependency_unit/craft/conftest.py` |
+| k8s fixtures/helpers | `backend/tests/integration/tests/craft/k8s/k8s_fixtures.py` |
+| Shared stub sandbox manager | `backend/tests/common/craft/stubs.py` |
+| EDU DB row helpers | `backend/tests/external_dependency_unit/craft/db_helpers.py` |
+| Shared pure payload builders | `backend/tests/common/craft/payloads.py` |
 | Integration HTTP wrappers | `backend/tests/integration/common_utils/managers/skill.py` and `build_session.py` |

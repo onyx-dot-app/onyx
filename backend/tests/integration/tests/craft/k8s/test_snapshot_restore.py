@@ -1,55 +1,43 @@
-"""Snapshot + restore (K8s only).
-
-These tests exercise the real Kubernetes snapshot/restore flow:
-- Pods are provisioned via ``KubernetesSandboxManager``.
-- Snapshots are streamed from the pod sidecar to the API server, then persisted
-  through the normal Onyx FileStore.
-- Verification downloads the resulting tarball via FileStore and inspects its
-  members locally with ``tmp_path``.
-
-The file-level ``pytestmark`` gates the entire module to the K8s CI lane.
-Per project memory: never run these locally — they touch the real cluster.
-"""
+"""Kubernetes sidecar snapshot/restore contract + API restore orchestration."""
 
 from __future__ import annotations
 
 import io
 import shutil
 import tarfile
+from collections.abc import Callable
 from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
 import pytest
 from kubernetes import client
+from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.snapshot_manager import SNAPSHOT_FILE_TYPE
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
-from tests.external_dependency_unit.craft.conftest import pod_exec
-from tests.external_dependency_unit.craft.conftest import wait_for_pod_deletion
+from tests.integration.common_utils.managers.build_session import BuildSessionManager
+from tests.integration.common_utils.managers.skill import SkillManager
+from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.craft.k8s.k8s_fixtures import cleanup_api_user_sandbox_rows
+from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
+from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
+from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
     reason="K8s tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
 )
-
-
-# ---------------------------------------------------------------------------
-# Snapshot-specific helpers
-#
-# Generic K8s helpers (``pod_exec``, ``wait_for_pod_deletion``, ``k8s_client``
-# fixture) live in conftest.py per Part V.1. What remains here is
-# snapshot/FileStore plumbing plus the live-pod fixture that wires them up.
-# ---------------------------------------------------------------------------
 
 
 def _populate_session_workspace(
@@ -59,11 +47,7 @@ def _populate_session_workspace(
     *,
     include_managed_skills: bool = False,
 ) -> dict[str, str]:
-    """Seed the session workspace with deterministic content for inspection.
-
-    Returns a map of ``relative path → content`` so tests can assert on it
-    after a round trip through snapshot/restore.
-    """
+    """Seed the session workspace; returns ``{relative path: content}``."""
     session_path = f"/workspace/sessions/{session_id}"
     payload = {
         "outputs/web/page.tsx": "// hello from outputs\n",
@@ -74,16 +58,12 @@ def _populate_session_workspace(
     script_lines = ["set -e", f"cd {session_path}"]
     for rel_path, content in payload.items():
         script_lines.append(f"mkdir -p $(dirname {rel_path})")
-        # Use printf with single quotes; payload above is shell-safe.
         script_lines.append(f"printf '%s' '{content}' > {rel_path}")
 
     pod_exec(k8s, pod_name, SANDBOX_NAMESPACE, "\n".join(script_lines))
 
     if include_managed_skills:
-        # ``managed/skills`` lives at /workspace/managed, which is read-only
-        # in the sandbox container. The sidecar mounts it rw, so we route
-        # this seed through the sidecar. The point: prove the snapshot does
-        # not pick managed/ up via traversal of ``.opencode/skills``.
+        # managed/ is RO in the sandbox container; seed via the sidecar.
         pod_exec(
             k8s,
             pod_name,
@@ -98,7 +78,6 @@ def _populate_session_workspace(
 
 
 def _download_snapshot(storage_path: str, dest: Path) -> None:
-    """Download a snapshot blob from FileStore to ``dest``."""
     file_io = get_default_file_store().read_file(storage_path, use_tempfile=True)
     try:
         with dest.open("wb") as out_file:
@@ -108,8 +87,7 @@ def _download_snapshot(storage_path: str, dest: Path) -> None:
 
 
 def _put_snapshot_bytes(storage_path: str, body: bytes) -> None:
-    """Upload arbitrary bytes to FileStore (used to forge corrupt
-    or traversal-laden tarballs that real callers can't produce)."""
+    """Upload arbitrary bytes to FileStore (forges corrupt/traversal tarballs)."""
     get_default_file_store().save_file(
         content=io.BytesIO(body),
         display_name=Path(storage_path).name,
@@ -122,21 +100,6 @@ def _put_snapshot_bytes(storage_path: str, body: bytes) -> None:
 def _list_archive_members(tar_path: Path) -> list[str]:
     with tarfile.open(tar_path, "r:gz") as tar:
         return tar.getnames()
-
-
-# ---------------------------------------------------------------------------
-# Fixtures: k8s_manager, pool_session, and live_pod are provided by conftest.py.
-# Tests use ``pool_session`` to share the module pod; ``live_pod`` is
-# reserved for the termination test and the traversal-defence test (where
-# isolation matters if the defence ever regresses). Snapshot FileStore cleanup
-# is not handled by either fixture — snapshot keys include the per-test
-# session_id so they don't collide.
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
 
 def test_snapshot_includes_outputs_and_attachments_only(
@@ -158,8 +121,7 @@ def test_snapshot_includes_outputs_and_attachments_only(
     _download_snapshot(result.storage_path, archive)
 
     members = _list_archive_members(archive)
-    # tarfile may emit either "outputs" or "./outputs" depending on tar version;
-    # normalise on a contains-check.
+    # tarfile may emit "outputs" or "./outputs" depending on version.
     assert any(m == "outputs" or m.startswith("outputs/") for m in members), (
         f"Expected outputs/ tree in archive. Members: {members}"
     )
@@ -170,7 +132,6 @@ def test_snapshot_includes_outputs_and_attachments_only(
         m == ".opencode-data" or m.startswith(".opencode-data/") for m in members
     ), f".opencode-data/ must not appear in session snapshot. Members: {members}"
 
-    # The specific seed files should round-trip.
     assert any(m.endswith("outputs/web/page.tsx") for m in members)
     assert any(m.endswith("attachments/notes.txt") for m in members)
 
@@ -183,9 +144,6 @@ def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
 ) -> None:
     sandbox_id, session_id, pod_name = pool_session
 
-    # ``setup_session_workspace`` already wrote AGENTS.md + opencode.json
-    # at the session root. We additionally seed managed/skills/ at the
-    # pod-global location.
     _populate_session_workspace(
         k8s_client, pod_name, session_id, include_managed_skills=True
     )
@@ -199,13 +157,7 @@ def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
     _download_snapshot(result.storage_path, archive)
 
     members = _list_archive_members(archive)
-    # AGENTS.md, opencode.json live at the session root — they must not be
-    # captured. Match the session-root path only (the snapshot tars from the
-    # session dir, so the root would show up as ``AGENTS.md`` or
-    # ``./AGENTS.md``). The scaffolded Next.js project under outputs/web/
-    # ships its own AGENTS.md which is legitimate user code and must remain.
-    # Likewise the .opencode/skills symlink (which targets
-    # /workspace/managed/skills) must not leak the managed tree.
+    # Match the session-root path only: outputs/web/ ships its own legitimate AGENTS.md.
     for forbidden in ("AGENTS.md", "opencode.json"):
         assert not any(m in (forbidden, f"./{forbidden}") for m in members), (
             f"{forbidden} must not appear at snapshot root. Members: {members}"
@@ -231,7 +183,6 @@ def test_restore_from_snapshot_recreates_workspace(
     )
     assert result is not None
 
-    # Capture the file hashes before tearing down the workspace.
     pre_hashes = pod_exec(
         k8s_client,
         pod_name,
@@ -241,14 +192,9 @@ def test_restore_from_snapshot_recreates_workspace(
         f"xargs sha256sum",
     )
 
-    # Tear down the session workspace (simulates terminate + re-provision
-    # without recycling the entire pod). For a true "new pod" round-trip
-    # we would terminate the sandbox here, but provisioning is slow and
-    # the restore path is identical — what matters is that the workspace
-    # is empty at the time of restore.
+    # Empty workspace at restore time; equivalent to terminate + re-provision.
     k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
 
-    # Verify it's gone.
     missing = pod_exec(
         k8s_client,
         pod_name,
@@ -257,7 +203,6 @@ def test_restore_from_snapshot_recreates_workspace(
     )
     assert "MISSING" in missing
 
-    # Restore.
     k8s_manager.restore_snapshot(
         sandbox_id=sandbox_id,
         session_id=session_id,
@@ -279,7 +224,6 @@ def test_restore_from_snapshot_recreates_workspace(
         f"Restored files differ.\nBEFORE:\n{pre_hashes}\nAFTER:\n{post_hashes}"
     )
 
-    # Spot-check one file's content end-to-end.
     notes = pod_exec(
         k8s_client,
         pod_name,
@@ -292,72 +236,68 @@ def test_restore_from_snapshot_recreates_workspace(
 def test_restore_re_pushes_skills(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    k8s_admin_user: DATestUser,
+    running_sandbox: Callable[..., SandboxHandle],
+    tenant_context: None,  # noqa: ARG001
+    db_session: Session,
 ) -> None:
-    sandbox_id, session_id, pod_name = pool_session
+    handle = running_sandbox(with_session=True)
+    assert handle.session_id is not None
+    sandbox_id = handle.sandbox_id
+    session_id = handle.session_id
+    pod_name = handle.manager._get_pod_name(sandbox_id)
 
     _populate_session_workspace(k8s_client, pod_name, session_id)
     result = k8s_manager.create_snapshot(
         sandbox_id, session_id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
     )
     assert result is not None
-
-    # Wipe the managed/skills tree to simulate a fresh post-restore state.
-    # In production the caller (sessions_api) follows up restore_snapshot
-    # with hydrate_sandbox_skills; this test verifies that push works
-    # against a snapshot-restored workspace. The wipe must run in the
-    # sidecar — ``/workspace/managed`` is read-only in the sandbox container.
-    pod_exec(
-        k8s_client,
-        pod_name,
-        SANDBOX_NAMESPACE,
-        "rm -rf /workspace/managed/skills && mkdir -p /workspace/managed",
-        container="sidecar",
-    )
-
-    # Restore the session.
-    k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
-    k8s_manager.restore_snapshot(
-        sandbox_id=sandbox_id,
+    create_snapshot__no_commit(
+        db_session,
         session_id=session_id,
-        snapshot_storage_path=result.storage_path,
-        nextjs_port=None,
-        llm_config=default_llm_config(),
-        skills_section="No skills available.",
+        storage_path=result.storage_path,
+        size_bytes=result.size_bytes,
     )
+    db_session.commit()
 
-    # Push a synthetic skill via the manager (this is the same code path
-    # that ``hydrate_sandbox_skills`` exercises after a successful restore).
-    fileset = {
-        "marker-skill/SKILL.md": (b"---\nname: marker-skill\ndescription: test\n---\n"),
-        "marker-skill/run.sh": b"#!/bin/sh\necho ok\n",
-    }
-    k8s_manager.push_to_sandbox(
-        sandbox_id=sandbox_id,
-        mount_path="/workspace/managed/skills",
-        files=fileset,
+    skill = SkillManager.create_custom(
+        k8s_admin_user,
+        slug=f"restore-repush-{uuid4().hex[:6]}",
+        is_public=True,
     )
+    try:
+        # managed/ is RO in the sandbox container; wipe via the sidecar.
+        pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            "rm -rf /workspace/managed/skills && mkdir -p /workspace/managed",
+            container="sidecar",
+        )
 
-    listing = pod_exec(
-        k8s_client,
-        pod_name,
-        SANDBOX_NAMESPACE,
-        "ls -1 /workspace/managed/skills/marker-skill/",
-    )
-    assert "SKILL.md" in listing, (
-        f"Restored workspace should accept skill push. Got: {listing}"
-    )
-    assert "run.sh" in listing
+        k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
+        response = BuildSessionManager.restore(handle.api_user, session_id)
+        assert response["session_loaded_in_sandbox"] is True
 
-    # The session's .opencode/skills symlink should resolve to the
-    # repopulated managed/skills tree.
-    resolved = pod_exec(
-        k8s_client,
-        pod_name,
-        SANDBOX_NAMESPACE,
-        f"ls -1 /workspace/sessions/{session_id}/.opencode/skills/marker-skill/",
-    )
-    assert "SKILL.md" in resolved
+        listing = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            f"ls -1 /workspace/managed/skills/{skill.slug}/",
+        )
+        assert "SKILL.md" in listing, (
+            f"API restore should rehydrate skills after snapshot restore. Got: {listing}"
+        )
+
+        resolved = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            f"ls -1 /workspace/sessions/{session_id}/.opencode/skills/{skill.slug}/",
+        )
+        assert "SKILL.md" in resolved
+    finally:
+        SkillManager.delete_custom(skill, k8s_admin_user)
 
 
 def test_restore_with_missing_snapshot_creates_fresh_workspace(
@@ -367,13 +307,9 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
 ) -> None:
     sandbox_id, session_id, pod_name = pool_session
 
-    # Wipe the workspace so we can verify the fresh-setup path.
     k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
 
-    # No snapshot exists — the caller (sessions_api) handles the
-    # "no snapshot" path by calling ``setup_session_workspace`` rather than
-    # ``restore_snapshot``. This test pins that contract: setup_session_workspace
-    # must not raise and must produce a fresh outputs/ tree.
+    # No snapshot: callers use setup_session_workspace, which must produce a fresh tree.
     k8s_manager.setup_session_workspace(
         sandbox_id=sandbox_id,
         session_id=session_id,
@@ -416,21 +352,25 @@ def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
     k8s_manager.terminate(sandbox_id)
     wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
 
+    # Throwaway user; reap its row explicitly (live_pod only reaps the original).
+    reprovision_user_id = uuid4()
     k8s_manager.provision(
         sandbox_id=sandbox_id,
-        user_id=uuid4(),
+        user_id=reprovision_user_id,
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         llm_config=default_llm_config(),
         onyx_pat="test-onyx-pat",
     )
-
-    restored = pod_exec(
-        k8s_client,
-        pod_name,
-        SANDBOX_NAMESPACE,
-        f"cat {marker_path}",
-    )
-    assert restored == "restored-opencode-history"
+    try:
+        restored = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            f"cat {marker_path}",
+        )
+        assert restored == "restored-opencode-history"
+    finally:
+        cleanup_api_user_sandbox_rows(reprovision_user_id)
 
 
 def test_restore_uses_data_filter_to_block_traversal(
@@ -439,39 +379,18 @@ def test_restore_uses_data_filter_to_block_traversal(
     live_pod: tuple[UUID, UUID, str],
     tmp_path: Path,
 ) -> None:
-    """Forge a tarball with a ``../escape.txt`` entry and verify the restore
-    cannot write outside the session workspace.
-
-    Defence-in-depth here is provided by the in-pod sidecar before extracting:
-    it validates snapshot members, rejects links/special files/traversal, and
-    only materializes entries under the snapshot-owned session roots. (The test
-    name retains its historical "data_filter" wording for stability.)
-
-    The new sidecar contract is stricter than the old GNU tar path:
-    traversal must be rejected before extraction, not silently normalized
-    or skipped.
-    """
+    """A forged ``../escape.txt`` tar entry must be rejected before extraction."""
     sandbox_id, session_id, pod_name = live_pod
 
-    # Wipe the workspace so we can detect any traversal artefacts cleanly.
-    # Stays on ``live_pod`` (not ``pool_session``) so that any regression
-    # which lets ``/workspace/escape.txt`` actually get written is
-    # contained to a fresh pod, not poisoning every later test in the
-    # module.
+    # On live_pod so any regression that writes /workspace/escape.txt stays on a fresh pod.
     k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
 
-    # Build a tarball locally with one well-behaved entry plus one traversal
-    # entry. We use the local tmp_path to assemble it, then upload via FileStore.
     archive_local = tmp_path / "traversal.tar.gz"
     with tarfile.open(archive_local, "w:gz") as tar:
-        # Well-behaved entry — should land inside the session dir.
         good = tmp_path / "good.txt"
         good.write_text("safe content\n")
         tar.add(good, arcname="outputs/good.txt")
 
-        # Malicious entry — relative traversal trying to land outside the
-        # extraction root. Build a TarInfo with a hand-crafted name so the
-        # archive really does contain ``../escape.txt``.
         evil_info = tarfile.TarInfo(name="../escape.txt")
         evil_payload = b"PWNED\n"
         evil_info.size = len(evil_payload)
@@ -480,7 +399,6 @@ def test_restore_uses_data_filter_to_block_traversal(
     storage_path = f"{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/snapshots/{session_id}/traversal.tar.gz"
     _put_snapshot_bytes(storage_path, archive_local.read_bytes())
 
-    # Attempt to restore. Traversal must be rejected before extraction.
     with pytest.raises(Exception) as excinfo:
         k8s_manager.restore_snapshot(
             sandbox_id=sandbox_id,
@@ -496,7 +414,6 @@ def test_restore_uses_data_filter_to_block_traversal(
         token in err_text for token in ("traversal", "escape", "invalid snapshot")
     ), f"Restore should clearly reject traversal. Got: {excinfo.value}"
 
-    # The session's parent dir must not have gained an ``escape.txt``.
     sessions_root_listing = pod_exec(
         k8s_client,
         pod_name,
@@ -508,7 +425,6 @@ def test_restore_uses_data_filter_to_block_traversal(
         f"Listing: {sessions_root_listing}"
     )
 
-    # And a direct stat of the would-be escape target must fail.
     escape_probe = pod_exec(
         k8s_client,
         pod_name,
@@ -519,8 +435,7 @@ def test_restore_uses_data_filter_to_block_traversal(
         f"/workspace/escape.txt should not exist post-restore. Probe: {escape_probe}."
     )
 
-    # The good member in the same archive should not have been extracted
-    # before rejecting the traversal member.
+    # The good member must not be extracted before the traversal member is rejected.
     good_probe = pod_exec(
         k8s_client,
         pod_name,
@@ -540,15 +455,11 @@ def test_snapshot_corruption_detected_on_restore(
 ) -> None:
     sandbox_id, session_id, _pod_name = pool_session
 
-    # Forge a truncated gzip blob — valid gzip header, garbage body.
+    # Valid gzip header, garbage body.
     corrupt_bytes = b"\x1f\x8b\x08\x00" + b"\x00" * 8 + b"truncated-mid-stream"
     storage_path = f"{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/snapshots/{session_id}/corrupt.tar.gz"
     _put_snapshot_bytes(storage_path, corrupt_bytes)
 
-    # Restore should raise a SnapshotCorruption-class error (or at minimum
-    # an error whose message identifies the blob as corrupt). The API-side
-    # upload checksum covers transit to the sidecar; tar validation covers
-    # corrupt archive contents.
     with pytest.raises(Exception) as excinfo:
         k8s_manager.restore_snapshot(
             sandbox_id=sandbox_id,

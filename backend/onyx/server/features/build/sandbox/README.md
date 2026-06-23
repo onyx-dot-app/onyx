@@ -208,7 +208,7 @@ SANDBOX_MAX_CONCURRENT_PER_ORG=10         # Default: 10
 
 ```bash
 # Test Kubernetes sandbox provisioning (requires kind cluster — see make craft-up)
-uv run pytest backend/tests/external_dependency_unit/craft/test_kubernetes_sandbox.py
+uv run pytest backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox.py
 ```
 
 ## Troubleshooting

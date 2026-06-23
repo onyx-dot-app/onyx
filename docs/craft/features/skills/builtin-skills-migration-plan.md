@@ -116,14 +116,7 @@ The API server container already has built-in skill files on disk at
    `ln -sf /workspace/managed/skills {session_path}/.opencode/skills`. Drop the
    `if [ -d /workspace/skills ]` guard — the directory is gone after Phase 5.
 
-3. **Local sandbox manager** (`local_sandbox_manager.py:368-369`): change
-   `skills_target=sandbox_path / "skills"` to
-   `skills_target=sandbox_path / "managed" / "skills"`. (Local push lands files at
-   `$sandbox_path/managed/skills/` after the `/workspace/` strip in
-   `write_files_to_sandbox`.) Also ensure that directory exists before the symlink is
-   created.
-
-4. **K8s manager hardcoded pptx path** (`kubernetes_sandbox_manager.py:2012`): change
+3. **K8s manager hardcoded pptx path** (`kubernetes_sandbox_manager.py:2012`): change
    `/workspace/skills/pptx/scripts/preview.py` to
    `/workspace/managed/skills/pptx/scripts/preview.py`.
 

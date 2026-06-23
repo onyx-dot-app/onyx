@@ -86,5 +86,6 @@ Restore:
   resistance.
 - Pod spec tests proving storage env vars are absent from the sandbox app
   container and sidecar init container.
-- K8s external dependency tests proving snapshot create/restore round trips via
-  FileStore.
+- Craft k8s integration tests proving snapshot create/restore round trips via
+  FileStore against the Helm-installed kind lane with real API, web_server,
+  Celery workers, sandbox proxy, backing services, and sandbox pods.

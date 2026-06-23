@@ -602,8 +602,8 @@ poison CI.
   containers via `docker run`, assert `lookup` finds them, evicts on
   removal. Skip if `/var/run/docker.sock` is absent.
 
-**Integration** (CI lane mirroring `pr-craft-k8s-tests.yml`): a new
-`pr-craft-compose-tests.yml` lane stands up the docker-compose stack
+**Integration** (CI lane mirroring `pr-craft-k8s-tests.yml`): the
+`pr-craft-compose-integration.yml` lane stands up the docker-compose stack
 with the `--include-craft` overlay, provisions a sandbox, triggers a
 gated Slack request via a stand-in matcher, POSTs APPROVE via the
 decision API, and asserts the upstream forward happened. The whole
