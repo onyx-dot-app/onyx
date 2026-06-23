@@ -66,19 +66,10 @@ async def impersonate_user(
             )
             raise HTTPException(status_code=422, detail=detail)
 
+        # Capture the id while the session is open; the success event is emitted
+        # only once the response is built (below).
+        impersonated_user_id = str(user_to_impersonate.id)
         token = await get_redis_strategy().write_token(user_to_impersonate)
-
-        emit_audit_event(
-            AuditAction.IMPERSONATE,
-            AuditOutcome.SUCCESS,
-            actor=actor,
-            resource_type="user",
-            resource_id=str(user_to_impersonate.id),
-            extra={
-                "target_email": impersonate_request.email,
-                "target_tenant_id": tenant_id,
-            },
-        )
 
     response = await auth_backend.transport.get_login_response(token)
     response.set_cookie(
@@ -87,5 +78,19 @@ async def impersonate_user(
         httponly=True,
         secure=True,
         samesite="lax",
+    )
+
+    # Emit only after the response is successfully built, so the audit trail
+    # reflects what the caller actually received.
+    emit_audit_event(
+        AuditAction.IMPERSONATE,
+        AuditOutcome.SUCCESS,
+        actor=actor,
+        resource_type="user",
+        resource_id=impersonated_user_id,
+        extra={
+            "target_email": impersonate_request.email,
+            "target_tenant_id": tenant_id,
+        },
     )
     return response
