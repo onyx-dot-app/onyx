@@ -25,6 +25,7 @@ import { AgentTimeline } from "@/app/app/message/messageComponents/timeline/Agen
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
+import { cn } from "@opal/utils";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -53,6 +54,8 @@ export interface AgentMessageProps {
   hideFooter?: boolean;
   /** Skip TTS streaming (used in multi-model where voice doesn't apply) */
   disableTTS?: boolean;
+  /** When on, drop the message's reading-width padding so it sits flush with the chat edge. */
+  fullWidthChat?: boolean;
 }
 
 // TODO: Consider more robust comparisons:
@@ -81,7 +84,8 @@ function arePropsEqual(
     prev.llmManager?.isLoadingProviders ===
       next.llmManager?.isLoadingProviders &&
     prev.processingDurationSeconds === next.processingDurationSeconds &&
-    prev.hideFooter === next.hideFooter
+    prev.hideFooter === next.hideFooter &&
+    prev.fullWidthChat === next.fullWidthChat
     // Skip: chatState.regenerate, chatState.setPresentingDocument,
     //       most of llmManager, onMessageSelection (function/object props)
   );
@@ -102,6 +106,7 @@ const AgentMessage = React.memo(function AgentMessage({
   processingDurationSeconds,
   hideFooter,
   disableTTS,
+  fullWidthChat,
 }: AgentMessageProps) {
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
@@ -296,7 +301,10 @@ const AgentMessage = React.memo(function AgentMessage({
       {/* Row 2: Display content + MessageToolbar */}
       <div
         ref={markdownRef}
-        className="overflow-x-visible focus:outline-hidden select-text cursor-text px-3"
+        className={cn(
+          "overflow-x-visible focus:outline-hidden select-text cursor-text",
+          !fullWidthChat && "px-3"
+        )}
         onCopy={(e) => {
           if (markdownRef.current) {
             handleCopy(e, markdownRef as RefObject<HTMLDivElement>);

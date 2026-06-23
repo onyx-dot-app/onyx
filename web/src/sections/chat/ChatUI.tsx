@@ -213,7 +213,12 @@ const ChatUI = React.memo(
       <>
         {/* No max-width on container — individual messages control their own width.
             Multi-model responses use full width while normal messages stay centered. */}
-        <div className="flex flex-col w-full h-full pt-4 pb-8 pr-1 gap-12">
+        <div
+          className={cn(
+            "flex flex-col w-full h-full pt-4 pb-8 gap-12",
+            !fullWidthChat && "pr-1"
+          )}
+        >
           {messages.map((message, i) => {
             const messageReactComponentKey = `message-${message.nodeId}`;
             const parentMessage = message.parentNodeId
@@ -315,6 +320,7 @@ const ChatUI = React.memo(
                   className={cn("w-full self-center", msgWidth)}
                 >
                   <AgentMessage
+                    fullWidthChat={fullWidthChat}
                     rawPackets={message.packets}
                     packetCount={message.packetCount}
                     chatState={chatStateData}
