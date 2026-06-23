@@ -269,6 +269,33 @@ def test_client_cert_with_non_negotiating_mode_raises(
     importlib.reload(app_configs)
 
 
+def test_key_password_without_cert_raises() -> None:
+    """A key password alone is dead config — it only decrypts a client key that
+    isn't provided."""
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLMODE"] = "verify-full"
+        os.environ["POSTGRES_SSLROOTCERT"] = _CA_BUNDLE
+        os.environ["POSTGRES_SSLKEY_PASSWORD"] = "hunter2"
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="POSTGRES_SSLKEY_PASSWORD"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
+def test_key_password_without_mode_raises() -> None:
+    """A key password with no mode falls into the dead-config branch."""
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLKEY_PASSWORD"] = "hunter2"
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="POSTGRES_SSLMODE is not"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
 def test_client_cert_without_mode_raises(
     client_cert_key: tuple[str, str],
 ) -> None:

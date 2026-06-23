@@ -80,8 +80,9 @@ def create_pg_ssl_context() -> ssl.SSLContext | str | None:
         return POSTGRES_SSLMODE
 
     if POSTGRES_SSLMODE == "require":
-        # Encrypt without verifying the server identity. No CA bundle is loaded
-        # because `require` never verifies it.
+        # Encrypt without verifying the server identity. The system CA bundle is
+        # still loaded by create_default_context but is never consulted because
+        # verify_mode is CERT_NONE; we pass no custom CA.
         verify_mode, check_hostname, ca_certs = ssl.CERT_NONE, False, None
     else:
         # verify-ca / verify-full — verify the server cert against the CA bundle.

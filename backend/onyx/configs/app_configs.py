@@ -595,11 +595,16 @@ _POSTGRES_SSL_FILE_SETTINGS = (
     ("POSTGRES_SSLCERT", POSTGRES_SSLCERT),
     ("POSTGRES_SSLKEY", POSTGRES_SSLKEY),
 )
+# True when any non-mode TLS setting (including the key password) is present —
+# all of these are dead config without a POSTGRES_SSLMODE.
+_HAS_POSTGRES_SSL_SECONDARY = any(
+    [POSTGRES_SSLROOTCERT, POSTGRES_SSLCERT, POSTGRES_SSLKEY, POSTGRES_SSLKEY_PASSWORD]
+)
 
 if USE_IAM_AUTH:
     # IAM auth manages the database TLS connection itself, so the explicit
     # POSTGRES_SSL* settings are ignored — warn rather than silently drop them.
-    if POSTGRES_SSLMODE or any(value for _, value in _POSTGRES_SSL_FILE_SETTINGS):
+    if POSTGRES_SSLMODE or _HAS_POSTGRES_SSL_SECONDARY:
         logger.warning(
             "USE_IAM_AUTH is enabled; ignoring POSTGRES_SSLMODE / POSTGRES_SSL* "
             "(IAM auth manages the database TLS connection)."
@@ -633,6 +638,12 @@ elif POSTGRES_SSLMODE:
             "POSTGRES_SSLCERT and POSTGRES_SSLKEY must both be set (mutual TLS "
             "needs a client certificate and its private key)."
         )
+    if POSTGRES_SSLKEY_PASSWORD and not POSTGRES_SSLCERT:
+        raise ValueError(
+            "POSTGRES_SSLKEY_PASSWORD is set without a client certificate; it "
+            "only decrypts POSTGRES_SSLKEY. Set POSTGRES_SSLCERT/POSTGRES_SSLKEY "
+            "or unset the password."
+        )
     if POSTGRES_SSLCERT and POSTGRES_SSLMODE not in _SSL_NEGOTIATING_SSLMODES:
         raise ValueError(
             f"POSTGRES_SSLCERT / POSTGRES_SSLKEY require POSTGRES_SSLMODE to be "
@@ -642,14 +653,15 @@ elif POSTGRES_SSLMODE:
     for _name, _path in _POSTGRES_SSL_FILE_SETTINGS:
         if _path and not os.path.exists(_path):
             raise ValueError(f"{_name}={_path!r} does not exist.")
-elif any(value for _, value in _POSTGRES_SSL_FILE_SETTINGS):
-    # CA bundle / client cert without a mode is dead config: SSL stays off and
-    # the connection runs unverified despite the operator supplying certs. Fail
-    # loudly so this can't masquerade as a verified/mutually-authenticated link.
+elif _HAS_POSTGRES_SSL_SECONDARY:
+    # CA bundle / client cert / key password without a mode is dead config: SSL
+    # stays off and the connection runs unverified despite the operator supplying
+    # certs. Fail loudly so this can't masquerade as a verified/mutually-
+    # authenticated link.
     raise ValueError(
-        "POSTGRES_SSLROOTCERT / POSTGRES_SSLCERT / POSTGRES_SSLKEY are set but "
-        "POSTGRES_SSLMODE is not. Set a POSTGRES_SSLMODE (e.g. verify-full) so "
-        "TLS is actually negotiated."
+        "POSTGRES_SSLROOTCERT / POSTGRES_SSLCERT / POSTGRES_SSLKEY / "
+        "POSTGRES_SSLKEY_PASSWORD are set but POSTGRES_SSLMODE is not. Set a "
+        "POSTGRES_SSLMODE (e.g. verify-full) so TLS is actually negotiated."
     )
 
 # Redis IAM authentication - enables IAM-based authentication for Redis ElastiCache
