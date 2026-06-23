@@ -732,6 +732,29 @@ REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 12
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
 REDIS_SSL_CA_CERTS = os.getenv("REDIS_SSL_CA_CERTS", None)
+# Client certificate + key for Redis mutual TLS (the server authenticating us).
+# Both must be set together and require REDIS_SSL=true. A managed Redis may hand
+# these out base64-encoded — decode them to files (e.g. a mounted secret) and
+# point these at the paths.
+REDIS_SSL_CERTFILE: str | None = os.getenv("REDIS_SSL_CERTFILE") or None
+REDIS_SSL_KEYFILE: str | None = os.getenv("REDIS_SSL_KEYFILE") or None
+
+if bool(REDIS_SSL_CERTFILE) != bool(REDIS_SSL_KEYFILE):
+    raise ValueError(
+        "REDIS_SSL_CERTFILE and REDIS_SSL_KEYFILE must both be set (mutual TLS "
+        "needs a client certificate and its private key)."
+    )
+if (REDIS_SSL_CERTFILE or REDIS_SSL_KEYFILE) and not REDIS_SSL:
+    raise ValueError(
+        "REDIS_SSL_CERTFILE / REDIS_SSL_KEYFILE require REDIS_SSL=true so a TLS "
+        "connection is negotiated."
+    )
+for _redis_tls_name, _redis_tls_path in (
+    ("REDIS_SSL_CERTFILE", REDIS_SSL_CERTFILE),
+    ("REDIS_SSL_KEYFILE", REDIS_SSL_KEYFILE),
+):
+    if _redis_tls_path and not os.path.exists(_redis_tls_path):
+        raise ValueError(f"{_redis_tls_name}={_redis_tls_path!r} does not exist.")
 
 CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
 
