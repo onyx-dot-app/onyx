@@ -1,11 +1,13 @@
 """Unit tests for the Redis-backed billing cache."""
 
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
+import pytest
 from redis.exceptions import RedisError
 
 from ee.onyx.server.billing import billing_cache as bc
@@ -50,6 +52,15 @@ def _fake_redis(
         redis.setex = MagicMock(return_value=True)
     redis.delete = MagicMock(return_value=1)
     return redis
+
+
+@pytest.fixture(autouse=True)
+def _enable_multi_tenant() -> Generator[None, None, None]:
+    """The cache is cloud-only; exercise the MULTI_TENANT path by default.
+    Single-tenant guard tests opt out with their own ``patch.object``.
+    """
+    with patch.object(bc, "MULTI_TENANT", True):
+        yield
 
 
 def test_cache_hit_returns_value_without_calling_cp() -> None:
@@ -282,3 +293,46 @@ def test_invalidate_swallows_redis_errors() -> None:
     with patch.object(bc, "get_shared_redis_client", return_value=redis):
         # No exception bubbles up.
         invalidate_billing_cache("tenant_abc")
+
+
+def test_single_tenant_fetch_raises_without_touching_redis() -> None:
+    """The cache is cloud-only; a single-tenant caller must fail loudly
+    rather than open a Redis/control-plane connection a Lite deploy lacks.
+    """
+    redis = _fake_redis()
+    with (
+        patch.object(bc, "MULTI_TENANT", False),
+        patch.object(bc, "get_shared_redis_client", return_value=redis) as client,
+        patch.object(bc, "fetch_billing_information") as cp_fetch,
+    ):
+        with pytest.raises(RuntimeError):
+            cached_fetch_billing_information("tenant_abc")
+
+    client.assert_not_called()
+    cp_fetch.assert_not_called()
+
+
+def test_single_tenant_trial_check_is_false_without_fetch() -> None:
+    """Trial limits don't apply in single-tenant; never reach the control plane."""
+    redis = _fake_redis()
+    with (
+        patch.object(bc, "MULTI_TENANT", False),
+        patch.object(bc, "get_shared_redis_client", return_value=redis) as client,
+        patch.object(bc, "fetch_billing_information") as cp_fetch,
+    ):
+        assert cached_is_tenant_on_trial("tenant_abc") is False
+
+    client.assert_not_called()
+    cp_fetch.assert_not_called()
+
+
+def test_single_tenant_invalidate_is_noop() -> None:
+    """Invalidation must not touch Redis in single-tenant deployments."""
+    redis = _fake_redis()
+    with (
+        patch.object(bc, "MULTI_TENANT", False),
+        patch.object(bc, "get_shared_redis_client", return_value=redis) as client,
+    ):
+        invalidate_billing_cache("tenant_abc")
+
+    client.assert_not_called()

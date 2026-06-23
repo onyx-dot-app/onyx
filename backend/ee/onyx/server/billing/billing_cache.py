@@ -29,6 +29,7 @@ from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from onyx.configs.app_configs import BILLING_CACHE_TTL_SECONDS
 from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -83,7 +84,17 @@ def cached_fetch_billing_information(
     """Return billing info for a tenant, preferring the per-tenant Redis
     entry over a control-plane round-trip. Writes the entry on miss with
     ``BILLING_CACHE_TTL_SECONDS`` TTL.
+
+    Cloud-only: there is no control-plane billing in single-tenant
+    deployments, so callers must already be on the multi-tenant path. Fail
+    loudly rather than silently open a Redis/control-plane connection that a
+    Lite deployment may not have.
     """
+    if not MULTI_TENANT:
+        raise RuntimeError(
+            "cached_fetch_billing_information is cloud-only; gate callers on MULTI_TENANT"
+        )
+
     redis = get_shared_redis_client()
     key = _cache_key(tenant_id)
 
@@ -127,6 +138,10 @@ def cached_is_tenant_on_trial(tenant_id: str) -> bool:
     entry as ``cached_fetch_billing_information`` so the boolean and the
     full billing object cannot drift.
     """
+    if not MULTI_TENANT:
+        # No control-plane billing in single-tenant; trial limits don't apply.
+        return False
+
     info = cached_fetch_billing_information(tenant_id)
     if isinstance(info, SubscriptionStatusResponse):
         # No subscription on record — treat as trial (matches legacy behaviour
@@ -140,6 +155,9 @@ def invalidate_billing_cache(tenant_id: str) -> None:
     exists. Used by call sites that just mutated the tenant's subscription
     (e.g. admin panel → control plane) and want the next read to refresh.
     """
+    if not MULTI_TENANT:
+        return
+
     try:
         get_shared_redis_client().delete(_cache_key(tenant_id))
     except RedisError as e:
