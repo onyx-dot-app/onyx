@@ -34,9 +34,10 @@
 ## 各节点详述
 
 ### 节点 A —— glomi_forge 地基 + 落地页端到端
-已出独立 spec,见配套文档。要点:新并行模块 + 新表 + feature flag;`SandboxProvider`/`BuilderAdapter` Protocol + `DaytonaSandboxProvider` + `PiBuilderAdapter` + `ForgeOrchestrator`;1 个 `glomi-landing-page` 模板;复用平台模型目录映射 Pi;最小前端 + 复用预览。
-- **交付物**:可跑通的端到端落地页生成 + 编排单测 + 一条 e2e。
-- **风险**:依赖一个能连的 Daytona(用本地 docker-compose 解锁);Pi RPC 事件归一化工作量;模型 OpenAI-compatible 在 Pi 内的 tool calling 兼容性。
+已完成子项目 A 代码落地。要点:新并行模块 + 新表 + feature flag;`SandboxProvider`/`BuilderAdapter` Protocol + `DaytonaSandboxProvider` + `PiBuilderAdapter` + `ForgeOrchestrator`;1 个 `glomi-landing-page` 模板;复用平台模型目录映射 Pi;最小前端 + 复用预览。
+- **交付物**:领域模型、DB/session/event、编排状态机、sandbox launcher、Celery task、API/SSE、最小内测页、编排/adapter 单测和 gated Daytona/Pi E2E 均已落地。
+- **当前边界**:真实 Daytona/Pi 端到端由 `DAYTONA_API_URL` / `DAYTONA_API_KEY` gate 控制；本地缺 Daytona control plane 和 snapshot 时测试安全 skip。生产可用仍依赖 INFRA 提供国内 Daytona、自有 snapshot、资源治理和模型兼容白名单。
+- **关键经验**:后端通过自有 `ForgeEvent` JSONL 契约和 `SandboxProvider` / `BuilderAdapter` 协议隔离 Pi/Daytona 细节，后续替换 builder 或 sandbox 底座时不需要重写 session/event/API 层。
 
 ### 节点 INFRA —— Daytona 国内自托管
 - **内容**:Daytona 全栈(api/runner/proxy/ssh-gateway/Postgres/Redis/Dex/Registry)Helm 部署到阿里云/腾讯云 k8s;镜像 registry 国内化;`glomi-*` snapshot 构建与推送流水线;网络白名单/出站最小化;GlomiAI → Daytona 的认证与 endpoint 配置。
@@ -74,6 +75,6 @@
 
 - [x] 设计稿研读 + 代码库现状盘点 + 底座调研(Daytona 自托管可行/AGPL、Pi 自托管/RPC)
 - [x] 节点 A spec 完成
-- [ ] 节点 A 实现计划(writing-plans)
-- [ ] 节点 A 实现
+- [x] 节点 A 实现计划(writing-plans)
+- [x] 节点 A 实现
 - [ ] INFRA / B / C / D / E 各自 spec

@@ -47,7 +47,7 @@
 |---|---|---|---|
 | **超级对话** 自动编排工具/研究/生成 | `chat/llm_loop.py`（自研循环 + XML tool-call,兼容国产模型） | 已完成 Phase A 验证；Phase B 作为主控入口派发 Glomi Forge / Deep Research | 已验证，继续增强 |
 | **深度研究** 带引用研究报告 | `deep_research/dr_loop.py` | 已完成中文搜索策略、证据上下文、中文报告成稿的一期验证 | 已验证，继续增强 |
-| **Glomi Forge 创作交付**（差异化王牌） | 规划中 `backend/onyx/glomi_forge/*`；现有 `server/features/build/*` 作为 Onyx Craft 参考实现 | 自研 Daytona + Pi 生成交付运行时：消费级入口、模板、资源治理、分享页、主控派发 | Phase B 当前重心 |
+| **Glomi Forge 创作交付**（差异化王牌） | 已新增 `backend/onyx/glomi_forge/*`、`backend/onyx/server/features/glomi_forge/*`；现有 `server/features/build/*` 作为 Onyx Craft 参考实现 | 自研 Daytona + Pi 生成交付运行时：消费级入口、模板、资源治理、分享页、主控派发 | Phase B 当前重心；A 节点代码落地 |
 | **智能体 & 记忆** | `db/persona.py` + `db/memory.py` | 预置中文智能体、个人记忆、分享 | Phase B/后续增强 |
 
 ---
@@ -66,7 +66,7 @@
 | **E2** | 平台模型目录与模型选择 | ✅ Phase A 已验证，Phase B 继续服务 Glomi Forge | 从“每账户一个默认模型”升级为后端控制的供应商分组 Glomi Model Catalog：供应商下挂 provider 配置与模型 ID 数组，当前测试支持 GPT（既有平台 OpenAI-compatible gateway）和 MiniMax（官方 `https://api.minimax.io/v1` OpenAI-compatible endpoint，按多模态模型暴露图片输入）；后端返回供应商分组、模型能力（视觉、推理、角色标签）给前端选择器，并在读取 `/api/chat/available-models` 时按 catalog / `GLOMI_ENABLED_LLM_MODELS` 强制过滤；当 Glomi catalog 开启时，C 端只返回 catalog provider，避免旧通用 `OpenAI-Compatible` provider 或上游 `/models` 全量结果泄漏到模型下拉；OpenAI-compatible transport 只作为调用通道，供应商差异由后端 response normalization 兜底，stream 和 invoke 路径都会把供应商 tagged reasoning 归一化到 reasoning 字段；Glomi Forge 需要复用同一模型目录并做 Pi/沙箱侧 provider 映射 |
 | **E3** | 超级对话调优 | ✅ Phase A 已验证，Phase B 转为主控入口 | 默认 Persona 的中文 system prompt、工具使用策略、回答体验打磨；搜索由 Agent 在 `web_search` 调用中选择 `lite` / `medium` / `deep`；普通 chat 研究型回答采用自适应但克制的表达策略；Phase B 要把“生成交付意图”路由到 Glomi Forge |
 | **E4** | 深度研究中文化 | ✅ Phase A 已验证，继续增强 | 与 E3 共享“中文 Agent 搜索与研究能力层”：问题拆解、query portfolio、来源路由、证据评估、中文报告成稿；默认搜索 provider 第一期接入 Glomi Search Gateway |
-| **E5** | Glomi Forge 地基与 C 端化 | 🚀 Phase B 当前重心 | 自研 `glomi_forge` 运行时：Daytona sandbox substrate + Pi builder harness + ForgeSession/ForgeSpec/ForgeEvent；支持平台模型目录里的 OpenAI-compatible 模型、资源限额与回收、消费级生成入口 + 模板 |
+| **E5** | Glomi Forge 地基与 C 端化 | 🚀 Phase B 当前重心；A 节点代码落地 | 自研 `glomi_forge` 运行时：Daytona sandbox substrate + Pi builder harness + ForgeSession/ForgeSpec/ForgeEvent；已完成 landing_page 模板、DB/session/event 地基、API、Celery enqueue、最小内测页和 gated Daytona/Pi E2E；真实生产端到端依赖 INFRA 提供 Daytona control plane 与 snapshot |
 | **E6** | 生成物分享（Sparkpage 式） | 🚀 Phase B 当前重心 | 生成结果公开分享页,获客/传播；分享页要成为 Glomi Forge 成品的默认出口，而不是隐藏在工作台里 |
 | **E7** | 鉴权重建 | 🔵 商业化期·延后 | 剥离 `ee` 鉴权,微信扫码（网站应用 OAuth）+ 手机号验证码 |
 | **E8** | 计费 & 商业化 | 🔵 商业化期·延后 | 微信支付/支付宝,套餐或积分,用量计量（替代 `ee billing`） |
@@ -105,8 +105,8 @@
 
 | 阶段 | 目标 | 要改造的重点 |
 |---|---|---|
-| **B0 命名与地基收敛** | Glomi Forge 与 Onyx Craft 概念切开 | 产品名 `Glomi Forge`；包名 `glomi_forge`；API `/api/glomi-forge`；feature flag `ENABLE_GLOMI_FORGE`；DB 表 `glomi_forge_session/event` |
-| **B1 A 节点端到端** | 用户可以直接用 Glomi Forge 生成成品 | Daytona sandbox + Pi builder + landing page template；`ForgeSpec` / `ForgeSession` / `ForgeEvent`；最小内测页与预览 |
+| **B0 命名与地基收敛** | Glomi Forge 与 Onyx Craft 概念切开 | ✅ 已落地：产品名 `Glomi Forge`；包名 `glomi_forge`；API `/api/glomi-forge`；feature flag `ENABLE_GLOMI_FORGE`；DB 表 `glomi_forge_session/event` |
+| **B1 A 节点端到端** | 用户可以直接用 Glomi Forge 生成成品 | ✅ 代码已落地：Daytona sandbox + Pi builder + landing page template；`ForgeSpec` / `ForgeSession` / `ForgeEvent`；最小内测页与预览；真实 E2E 由 `DAYTONA_API_URL`/`DAYTONA_API_KEY` gate 控制，待 INFRA 提供稳定 Daytona/snapshot 后跑通 |
 | **B2 运行稳定与资源治理** | 让 Glomi Forge 在当前 Linux/国内 k8s 环境可控运行 | Daytona 自托管、snapshot、资源限额、空闲回收、任务超时、失败恢复、可观测日志 |
 | **B3 生成物分享闭环** | 让 Glomi Forge 产物天然能传播 | 把 web artifact、报告、PPT 等输出统一成可公开/私密分享链接；分享页不暴露工作台复杂 UI；支持继续编辑/复制任务 |
 | **B4 主对话派发 Glomi Forge** | 一个输入框自动进入生成模式 | 在主 chat 中识别“要交付成品”的意图，创建/复用 ForgeSession，流式展示进度，把预览和最终产物回填到对话；Deep Research 继续负责研究，Glomi Forge 负责可运行/可展示交付物 |
@@ -118,6 +118,12 @@
 - **控制资源**：单机 Linux 不适合无限预创建 sandbox。Phase B 起步必须把并发、闲置回收、容器内存/CPU、任务超时和失败清理作为产品能力的一部分。
 - **主控解耦**：短问答和研究仍走 chat / Deep Research；需要产物交付才进入 Glomi Forge。这样既最大化 Forge 价值，也避免所有请求都进重型 sandbox。
 - **分享优先**：Glomi Forge 的商业与传播价值不在“生成过程很酷”，而在“成品能被打开、检查、转发、二次编辑”。
+
+#### 2026-06-23 当前进展
+
+- Glomi Forge 子项目 A 已完成代码落地：领域 Pydantic 模型、DB 表/操作、Provider/Adapter 协议与 fakes、TemplateService、`ForgeSpecBuilder`、`ForgeOrchestrator`、Daytona/Pi adapter、sandbox launcher、Celery task、API/SSE、最小内测页和 gated E2E 均已具备。
+- 关键解耦点是沙箱内 launcher 把 Pi 原始输出归一化为自有 `ForgeEvent` JSONL 契约，后端只依赖 `SandboxProvider` / `BuilderAdapter` 协议和事件表，不绑定 Pi 内部 schema。
+- 真实端到端仍是基础设施 gate：当前测试可在无 Daytona 环境下安全 skip；下一步优先 INFRA/B2，提供国内 Daytona control plane、`glomi-landing-page` snapshot、资源治理、失败恢复和可观测性。
 
 ### Phase C —— 商业化与上线（验证可行后再启动）
 - **内容**：E7 鉴权（微信/手机）→ E8 计费 → **E9 合规（内容安全先行）** → E10 前台重塑 → E11 国内云部署 → E12 连接器。

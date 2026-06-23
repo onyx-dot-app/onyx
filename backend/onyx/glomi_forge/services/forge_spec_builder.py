@@ -5,6 +5,7 @@ from typing import Any
 from onyx.db.enums import ForgeArtifactType
 from onyx.glomi_forge.schemas.forge_spec import ForgeSpec
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
@@ -52,7 +53,7 @@ class ForgeSpecBuilder:
         nl_request: str,
         artifact_type: ForgeArtifactType,
     ) -> ForgeSpec:
-        messages = [
+        messages: list[ChatCompletionMessage] = [
             SystemMessage(content=_SYSTEM_PROMPT),
             UserMessage(
                 content=(

@@ -1,5 +1,6 @@
 """SandboxProvider backed by the Daytona SDK."""
 
+from importlib import import_module
 from types import SimpleNamespace
 from typing import Any
 
@@ -14,7 +15,7 @@ from onyx.glomi_forge.schemas.sandbox import SandboxFile
 
 def _snapshot_params(input: CreateSandboxInput) -> Any:
     try:
-        from daytona import CreateSandboxFromSnapshotParams
+        daytona = import_module("daytona")
     except ModuleNotFoundError:
         return SimpleNamespace(
             snapshot=input.snapshot,
@@ -22,7 +23,7 @@ def _snapshot_params(input: CreateSandboxInput) -> Any:
             labels=input.labels or None,
         )
 
-    return CreateSandboxFromSnapshotParams(
+    return daytona.CreateSandboxFromSnapshotParams(
         snapshot=input.snapshot,
         env_vars=input.env_vars or None,
         labels=input.labels or None,
@@ -32,11 +33,13 @@ def _snapshot_params(input: CreateSandboxInput) -> Any:
 class DaytonaSandboxProvider:
     def __init__(self, client: Any | None = None) -> None:
         if client is None:
-            from daytona import Daytona
-            from daytona import DaytonaConfig
+            daytona = import_module("daytona")
 
-            client = Daytona(
-                DaytonaConfig(api_key=DAYTONA_API_KEY, api_url=DAYTONA_API_URL)
+            client = daytona.Daytona(
+                daytona.DaytonaConfig(
+                    api_key=DAYTONA_API_KEY,
+                    api_url=DAYTONA_API_URL,
+                )
             )
         self.client = client
         self._handles: dict[str, Any] = {}
