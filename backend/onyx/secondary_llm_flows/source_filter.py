@@ -1,24 +1,34 @@
+import json
+
+from pydantic import BaseModel
+
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ChatCompletionMessage
 from onyx.llm.models import ReasoningEffort
-from onyx.llm.models import SystemMessage
 from onyx.llm.models import UserMessage
 from onyx.prompts.filter_extration import SOURCE_SCOPE_DECISION_PROMPT
-from onyx.prompts.filter_extration import SOURCES_KEY
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import llm_generation_span
 from onyx.tracing.llm_utils import record_llm_response
 from onyx.utils.logger import setup_logger
-from onyx.utils.text_processing import parse_llm_json_response
+from onyx.utils.text_processing import parse_bracketed_list
 
 logger = setup_logger()
 
 # Only the most recent user turns feed the scope decision — older turns add
 # tokens and stale directives without helping the current request.
 MAX_SOURCE_FILTER_USER_TURNS = 5
+
+
+class SearchCycle(BaseModel):
+    """One internal_search cycle this turn, as context for the next decision."""
+
+    cycle_number: int
+    queries: list[str]
+    searched_sources: list[str]
 
 
 def strings_to_document_sources(source_strs: list[str]) -> list[DocumentSource]:
@@ -34,44 +44,41 @@ def strings_to_document_sources(source_strs: list[str]) -> list[DocumentSource]:
 def _parse_scope_decision(
     content: str | None, connected_sources: list[DocumentSource]
 ) -> list[DocumentSource] | None:
-    """Parse the LLM JSON into the scope to apply, restricted to connected
-    sources. Returns None on anything unparseable or an empty scope."""
-    data = parse_llm_json_response(content) if content else None
-    if not isinstance(data, dict):
+    """Parse the model's bracketed list (e.g. `[zendesk, asana]` or `[]`) into the
+    scope to apply, restricted to connected sources. Returns None on anything
+    unparseable or an empty scope."""
+    raw_sources = parse_bracketed_list(content)
+    if not raw_sources:
         return None
-
     allowed = set(connected_sources)
-    raw = data.get(SOURCES_KEY)
-    parsed = (
-        strings_to_document_sources([str(s) for s in raw])
-        if isinstance(raw, list)
-        else []
-    )
-    # Filter to connected sources, dedupe, preserve order.
-    sources = list(dict.fromkeys(s for s in parsed if s in allowed))
-    return sources or None
+    parsed = strings_to_document_sources(raw_sources)
+    # Restrict to connected sources, dedupe, preserve order.
+    return list(dict.fromkeys(s for s in parsed if s in allowed)) or None
 
 
 def decide_search_scope(
     history: list[ChatMinimalTextMessage],
     llm: LLM,
     connected_sources: list[DocumentSource],
-    already_searched: list[DocumentSource],
+    previous_cycles: list[SearchCycle],
+    current_queries: list[str],
 ) -> list[DocumentSource] | None:
-    """Decide, in one LLM call, which connected source(s) an internal search
-    should cover, from the routing instructions and the user's request.
+    """Decide, in one LLM call, which connected source(s) this internal search
+    cycle should cover, from the conversation and the prior cycles this turn.
 
     Returns the explicitly-named source(s) to scope to, or None to search
     everything. Fails open to None on any error.
 
-    The flow is stateless: the caller passes `already_searched` (sources covered
-    earlier this turn) so a sequential directive advances to the next source.
+    `previous_cycles` is the queries + applied filters of earlier cycles this
+    turn; `current_queries` is this cycle's queries. The flow stays stateless and
+    the caller supplies both so a backoff sequence can advance to the next source
+    when the queries stay on topic, or re-search when they shift.
     """
-    if not connected_sources:
+    # With fewer than two sources there is nothing to scope between.
+    if len(connected_sources) < 2:
         return None
 
-    # Use only user-side turns: they carry the routing intent, and it keeps the
-    # request ending on a user message (providers reject assistant-terminated input).
+    # Only user-side turns carry the routing intent.
     user_turns = [
         msg.message.strip()
         for msg in history
@@ -79,37 +86,31 @@ def decide_search_scope(
     ]
     if not user_turns:
         return None
-    # Keep only the most recent turns (the current request plus a little context).
     user_turns = user_turns[-MAX_SOURCE_FILTER_USER_TURNS:]
 
-    # Separate the current request from earlier turns so the model can judge
-    # directive lifecycle (persist on a same-topic follow-up, drop a stale
-    # directive on an unrelated ask, honor the latest directive).
-    current_request = user_turns[-1]
+    last_user_query = user_turns[-1]
     prior_turns = user_turns[:-1]
-    if prior_turns:
-        user_content = (
-            "[Earlier turns in this conversation]\n"
-            + "\n".join(prior_turns)
-            + "\n\n[Current request — decide the scope for THIS]\n"
-            + current_request
-        )
-    else:
-        user_content = current_request
+    conversation_history = (
+        "\n".join(prior_turns)
+        if prior_turns
+        else "N/A, this is the first message in the conversation."
+    )
+    previous_cycles_str = (
+        json.dumps([cycle.model_dump() for cycle in previous_cycles], indent=2)
+        if previous_cycles
+        else "N/A This is the first search"
+    )
+    current_cycle_queries = "\n".join(current_queries) or "N/A"
+    valid_sources = "\n".join(source.value for source in connected_sources)
 
-    valid_sources = "\n".join(f"- {source.value}" for source in connected_sources)
-    searched_str = (
-        ", ".join(source.value for source in already_searched) or "(none yet)"
+    prompt = SOURCE_SCOPE_DECISION_PROMPT.format(
+        conversation_history=conversation_history,
+        current_cycle_queries=current_cycle_queries,
+        previous_cycles=previous_cycles_str,
+        valid_sources=valid_sources,
+        last_user_query=last_user_query,
     )
-    system_msg = SystemMessage(
-        content=SOURCE_SCOPE_DECISION_PROMPT.format(
-            valid_sources=valid_sources, already_searched=searched_str
-        )
-    )
-    messages: list[ChatCompletionMessage] = [
-        system_msg,
-        UserMessage(content=user_content),
-    ]
+    messages: list[ChatCompletionMessage] = [UserMessage(content=prompt)]
 
     try:
         with llm_generation_span(

@@ -90,6 +90,7 @@ from onyx.secondary_llm_flows.document_filter import select_sections_for_expansi
 from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
 from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
 from onyx.secondary_llm_flows.source_filter import decide_search_scope
+from onyx.secondary_llm_flows.source_filter import SearchCycle
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
@@ -284,9 +285,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
 
-        # Source(s) scoped so far this turn (the tool is reused across the turn's
-        # calls), so decide_search_scope can advance a sequential directive.
-        self._searched_scopes: list[DocumentSource] = []
+        self._search_cycles: list[SearchCycle] = []
+        self._cached_expansion: tuple[str | None, list[str]] | None = None
 
         self._id = tool_id
 
@@ -543,7 +543,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         QUERIES_FIELD: {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of search queries to execute, typically a single query.",
+                            "description": (
+                                "List of search queries to execute, typically a single query. "
+                                "Query expansion and filter extraction steps will be run "
+                                "automatically downstream, do not include time or source type "
+                                "scoping details in your query."
+                            ),
                         },
                     },
                     "required": [QUERIES_FIELD],
@@ -685,11 +690,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         user_info = override_kwargs.user_info
 
-        # A user/persona source restriction (from internal_search_filters) is the
-        # OUTER bound, not a hard final filter: the plan flow refines WITHIN it.
-        # Regular chat -> the plan may pick any connected source; persona with a
-        # restriction -> the plan may only pick among the persona's allowed
-        # sources. Either way the restriction is never exceeded.
+        # A persona/user source restriction is the outer bound the decision works within.
         user_source_restriction: list[DocumentSource] | None = (
             list(self.user_selected_filters.source_type)
             if self.user_selected_filters and self.user_selected_filters.source_type
@@ -701,16 +702,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         else:
             candidate_sources = connected_sources
 
-        # Decide this call's source scope. Skip the LLM call unless there are 2+
-        # candidate sources — with 0 or 1, scoping cannot change what gets searched.
-        should_decide = len(candidate_sources) >= 2
-        # Snapshot the already-searched sources so a sequential directive
-        # advances to the next un-searched source on this call.
         decide_args = (
             message_history,
             self.llm,
             candidate_sources,
-            list(self._searched_scopes),
+            list(self._search_cycles),
+            list(llm_queries),
         )
         plan_scope: list[DocumentSource] | None = None
 
@@ -719,8 +716,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             logger.debug("Search tool - Skipping query expansion (repeat search call)")
             semantic_query = None
             keyword_queries: list[str] = []
-            if should_decide:
-                plan_scope = decide_search_scope(*decide_args)
+            plan_scope = decide_search_scope(*decide_args)
         else:
             # Start timing for query expansion/rephrase
             query_expansion_start_time = time.time()
@@ -734,11 +730,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     keyword_query_expansion,
                     (message_history, self.llm, user_info, memories),
                 ),
+                (decide_search_scope, decide_args),
             ]
-            # Decide the source scope alongside query expansion — it's an
-            # independent LLM call, so this hides its latency.
-            if should_decide:
-                functions_with_args.append((decide_search_scope, decide_args))
 
             expansion_results = run_functions_tuples_in_parallel(functions_with_args)
 
@@ -752,11 +745,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             keyword_queries = (
                 expansion_results[1] if expansion_results[1] is not None else []
             )  # list[str]
-            if should_decide:
-                plan_scope = expansion_results[2]
+            plan_scope = expansion_results[2]
+            self._cached_expansion = (semantic_query, keyword_queries)
 
-        # This call's scope: the filter flow's pick, else the persona/user
-        # restriction (the outer bound), else everything.
         resolved_scope = (
             plan_scope if plan_scope is not None else user_source_restriction
         )
@@ -766,15 +757,33 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             [s.value for s in resolved_scope] if resolved_scope else "all sources",
         )
 
-        # Record this call's scope so a later call in the turn can advance a
-        # sequential directive past the source(s) already covered.
-        if resolved_scope:
-            for source in resolved_scope:
-                if source not in self._searched_scopes:
-                    self._searched_scopes.append(source)
+        # On a repeat call that advanced to a not-yet-searched source, reuse the
+        # cached expansion (it is source-agnostic) rather than searching raw queries.
+        searched_sources = {
+            value for cycle in self._search_cycles for value in cycle.searched_sources
+        }
+        is_new_filter = bool(resolved_scope) and any(
+            source.value not in searched_sources for source in resolved_scope
+        )
+        if (
+            override_kwargs.skip_query_expansion
+            and is_new_filter
+            and self._cached_expansion is not None
+        ):
+            semantic_query, keyword_queries = self._cached_expansion
 
-        # A note appended to the response so the agent knows this search was
-        # scoped, and which queries actually ran (so a repeat can vary terms).
+        self._search_cycles.append(
+            SearchCycle(
+                cycle_number=len(self._search_cycles) + 1,
+                queries=list(llm_queries),
+                searched_sources=(
+                    [source.value for source in resolved_scope]
+                    if resolved_scope
+                    else []
+                ),
+            )
+        )
+
         queries_run = list(
             dict.fromkeys(
                 llm_queries
@@ -784,8 +793,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         scope_note = _build_scope_note(resolved_scope, queries_run)
 
-        # Apply the resolved scope to this call's filters and federated backends.
-        # Built locally so each call resolves its own scope.
         effective_filters = self.user_selected_filters
         if resolved_scope is not None:
             effective_filters = (
@@ -943,8 +950,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         if not top_sections:
             logger.info("Search tool - no results found, returning empty response")
-            # Carry the scope note so the agent knows this source came back empty
-            # and whether searching again would try a different source.
             empty_response = f"No results found. {scope_note}" if scope_note else ""
             return ToolResponse(
                 rich_response=SearchDocsResponse(
@@ -1106,8 +1111,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             format(document_expansion_elapsed, ".3f"),
         )
 
-        # Prepend the scope note so the agent knows which source(s) produced these
-        # results and whether a follow-up search can fall back to another source.
         llm_facing_response = f"{scope_note}\n\n{docs_str}" if scope_note else docs_str
 
         return ToolResponse(

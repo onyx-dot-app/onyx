@@ -182,8 +182,6 @@ def parse_llm_json_response(content: str) -> dict | None:
     1. JSON inside markdown code block (```json ... ``` or ``` ... ```)
     2. Entire content as raw JSON
     3. First '{' to last '}' in content (greedy match)
-    4. First complete JSON object, ignoring trailing data (some models emit the
-       object twice, e.g. `{...}{...}`, or append prose after it)
 
     Args:
         content: The LLM response text to parse.
@@ -220,19 +218,24 @@ def parse_llm_json_response(content: str) -> dict | None:
         except json.JSONDecodeError:
             pass
 
-    # Decode the first complete JSON object and ignore any trailing data. Handles
-    # models that emit the object twice (`{...}{...}`) or append prose after it,
-    # which the greedy match above can't parse.
-    brace_idx = content.find("{")
-    if brace_idx != -1:
-        try:
-            result, _ = json.JSONDecoder().raw_decode(content[brace_idx:])
-            if isinstance(result, dict):
-                return result
-        except json.JSONDecodeError:
-            pass
-
     return None
+
+
+def parse_bracketed_list(content: str | None) -> list[str] | None:
+    """Parse a bracketed comma-separated list from LLM output, e.g.
+    `[zendesk, asana]` or `["a", "b"]` -> `["zendesk", "asana"]`.
+
+    Tolerates stray text around the list and quoted or unquoted items, and uses
+    the last `[...]` when several are present. Returns the items (empty list for
+    `[]`), or None when no bracketed list is found.
+    """
+    if not content:
+        return None
+    matches = re.findall(r"\[([^\[\]]*)\]", content)
+    if not matches:
+        return None
+    items = (item.strip().strip("\"'") for item in matches[-1].split(","))
+    return [item for item in items if item]
 
 
 def clean_model_quote(quote: str, trim_length: int) -> str:

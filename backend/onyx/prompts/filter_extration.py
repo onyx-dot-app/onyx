@@ -22,55 +22,82 @@ The valid values for "date" is a date in format MM/DD/YYYY, ALWAYS follow this f
 
 
 # Used in source_filter.py: decide which connected source(s) an internal search
-# should cover, based on the routing instructions, the user's request, and the
-# source(s) already searched this turn.
-SOURCE_SCOPE_DECISION_PROMPT = f"""
-You route an internal search. Based on the conversation — the assistant/persona \
-instructions on where to look and what the user asks — decide which connected source(s) \
-THIS search should cover.
+# cycle should cover, given the conversation, the prior cycles this turn, and the
+# queries being run this cycle. Filled with: {conversation_history},
+# {current_cycle_queries}, {previous_cycles}, {valid_sources}, {last_user_query}.
+# Output is a bracketed comma-separated list of sources.
+SOURCE_SCOPE_DECISION_PROMPT = """
+You scope an internal search to its relevant sources. When the conversation EXPLICITLY \
+names source(s) to search, scope to them; when it names none, return [] (search every \
+source). You scope only by source — other scoping is handled by other systems. The system \
+runs multiple cycles, and the queries and sources of previous cycles are provided as \
+context.
 
-The default is NO filter (search everything). Only scope when the conversation EXPLICITLY \
-names or routes to specific source(s). Scoping is the exception, not the norm.
+## Guidance
 
-Routing comes in two shapes — read the instruction to tell them apart:
-- SEQUENTIAL / FALLBACK ("check A first, then B"; "try A; if nothing, then B"; "A, \
-otherwise B"): search ONE source at a time, in the stated order. Return the FIRST routed \
-source NOT already searched this turn. If every routed source has already been searched, \
-return the full routed set.
-- COMBINED ("search A and B"; "check both A and B"; "look in A, B and C"): search the \
-whole named set TOGETHER. Return all named sources on every call, including repeats (a \
-repeat re-runs the same set with new query terms).
+Scope to a source when it is EXPLICITLY named — in this cycle's queries, or in an earlier \
+turn that this cycle continues. NEVER infer a source from the query's topic (e.g. an HR or \
+billing query is not a source). If no source is named, return [].
 
-The conversation may span multiple turns — decide the scope for the CURRENT request:
-- A source directive applies to the current request AND to same-topic follow-ups. If the \
-current request continues the same task and names no new source, KEEP the earlier \
-directive's source(s).
-- A new, UNRELATED current request that names no source RESETS to unscoped — do not carry \
-a stale directive forward.
-- A later request naming a DIFFERENT source OVERRIDES the earlier one — scope to the \
-newly named source only.
-- If the current request explicitly says to search everywhere / not to filter / across \
-all sources, return an empty list, regardless of any earlier directive.
+A source named in an earlier turn still applies to a same-topic follow-up that names no new \
+source — keep scoping to it.
 
-Already searched this turn: {{already_searched}}
+When source(s) ARE named, the phrasing decides the mode:
 
-Output JSON with one key, "{SOURCES_KEY}" — the connected source(s) to search now:
-- Source(s) named/routed (per the shapes above): the source(s) to search now.
-- No source named or routed: an empty list (search everything).
+- COMBINED — one or more named sources with NO fallback order ("in Google Drive"; "search \
+A and B"; "check both A and B"): scope to all of them every cycle, regardless of previous \
+cycles. A single named source is COMBINED — scope to it.
 
-Rules:
-- A source must be EXPLICITLY mentioned (by name) or routed to. Default to an empty list; \
-when in doubt, return an empty list.
-- NEVER infer or guess a source from the topic or subject of the request. The subject \
-matter of a question (e.g. an HR or billing question) is NOT a source — do not hallucinate \
-a filter from it.
-- Ignore anything not in the valid sources below.
+- BACKOFF ("check A first, then B", "try A; if nothing, then B" — an order): scope to ONE \
+source per cycle. By DEFAULT ADVANCE — scope to the first named source NOT in any previous \
+cycle's searched_sources; a reworded retry of the same search keeps advancing. BUT if this \
+cycle's queries are about a clearly DIFFERENT topic than the previous cycle's, re-search the \
+source the previous cycle used — it has not been searched for this new topic. Once all named \
+sources have been tried, scope to all of them.
 
-The valid sources are:
-{{valid_sources}}
+Only scope to sources listed in the Valid sources section below. If a named source is not \
+listed there, ignore it and scope to the named sources that ARE listed; return [] only when \
+none of the named sources are listed.
 
-Answer with ONLY a json, e.g. {{{{"{SOURCES_KEY}": ["confluence"]}}}}, \
-{{{{"{SOURCES_KEY}": ["confluence", "github"]}}}}, or {{{{"{SOURCES_KEY}": []}}}}.
+## Conversation history
+
+{conversation_history}
+
+## Current cycle queries
+
+{current_cycle_queries}
+
+## Previous cycles of this user query
+
+{previous_cycles}
+
+## Valid sources
+
+{valid_sources}
+
+## Guidance reminder
+
+COMBINED ("A and B"): scope to all named sources, every cycle.
+BACKOFF ("A first, then B"): by DEFAULT ADVANCE to the first named source not in previous \
+cycles' searched_sources (a reworded retry keeps advancing). If this cycle's queries are \
+about a clearly DIFFERENT topic than the previous cycle's, re-search the source the previous \
+cycle used.
+If no source is named anywhere in the conversation, return [].
+
+## Output format
+
+Output a comma separated list of sources within brackets:
+[source_1, source_2]
+
+Do not include any formatting, explanations, or other text aside from the list. Provide an \
+empty list [] if no source should be scoped this cycle.
+
+## Query reminder
+
+The user's query is:
+{last_user_query}
+
+CRITICAL: output only the comma separated list of sources.
 """.strip()
 
 # Use the following for easy viewing of prompts

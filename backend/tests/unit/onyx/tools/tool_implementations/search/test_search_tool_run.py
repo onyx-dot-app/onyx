@@ -36,16 +36,21 @@ def _make_tool(user_selected_filters: BaseFilters | None = None) -> SearchTool:
 def _run(
     tool: SearchTool,
     *,
-    decision: ScopeDecision,
     connected_sources: list[DocumentSource],
+    decision: ScopeDecision = None,
+    decide_mock: MagicMock | None = None,
+    skip_query_expansion: bool = False,
 ) -> MagicMock:
-    """Run tool.run() with all DB/LLM deps mocked. Returns the search_pipeline mock.
+    """Run tool.run() with all DB/LLM deps mocked; returns the search_pipeline mock.
 
-    `decision` is what the filter flow returns; the tool resolves it to a scope.
-    search_pipeline returns no chunks, so run() takes the empty-results early
-    return.
+    decide_search_scope is replaced by `decide_mock` when given (so its call args
+    can be inspected), otherwise by a stub returning `decision`. search_pipeline
+    returns no chunks, so run() takes the empty-results early return.
     """
     mock_search_pipeline = MagicMock(return_value=[])
+    decide = (
+        decide_mock if decide_mock is not None else MagicMock(return_value=decision)
+    )
     with (
         patch(f"{MODULE}.get_session_with_current_tenant") as mock_session_ctx,
         patch(f"{MODULE}.build_access_filters_for_user", return_value=[]),
@@ -57,29 +62,27 @@ def _run(
         ),
         patch(f"{MODULE}.semantic_query_rephrase", return_value="rephrased query"),
         patch(f"{MODULE}.keyword_query_expansion", return_value=[]),
-        patch(f"{MODULE}.decide_search_scope", return_value=decision),
+        patch(f"{MODULE}.decide_search_scope", decide),
         patch(f"{MODULE}.weighted_reciprocal_rank_fusion", return_value=[]),
         patch(f"{MODULE}.merge_individual_chunks", return_value=[]),
         patch(f"{MODULE}.search_pipeline", mock_search_pipeline),
     ):
         mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
         mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
-
-        override_kwargs = SearchToolOverrideKwargs(
-            starting_citation_num=1,
-            original_query="find the runbook in confluence",
-            message_history=[
-                ChatMinimalTextMessage(
-                    message="find the runbook in confluence",
-                    message_type=MessageType.USER,
-                )
-            ],
-            skip_query_expansion=False,
-        )
         tool.run(
             placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=override_kwargs,
-            queries=["runbook"],
+            override_kwargs=SearchToolOverrideKwargs(
+                starting_citation_num=1,
+                original_query="resolve the ticket",
+                message_history=[
+                    ChatMinimalTextMessage(
+                        message="resolve the ticket",
+                        message_type=MessageType.USER,
+                    )
+                ],
+                skip_query_expansion=skip_query_expansion,
+            ),
+            queries=["ticket"],
         )
     return mock_search_pipeline
 
@@ -87,6 +90,13 @@ def _run(
 def _filters_passed_to_search(mock_search_pipeline: MagicMock) -> list[Any]:
     return [
         call.kwargs["chunk_search_request"].user_selected_filters
+        for call in mock_search_pipeline.call_args_list
+    ]
+
+
+def _queries_sent(mock_search_pipeline: MagicMock) -> list[str]:
+    return [
+        call.kwargs["chunk_search_request"].query
         for call in mock_search_pipeline.call_args_list
     ]
 
@@ -155,73 +165,6 @@ def test_persona_restriction_is_refined_by_the_decision() -> None:
         assert applied.source_type == [DocumentSource.CONFLUENCE]
 
 
-def _run_with_decision_mock(
-    tool: SearchTool,
-    *,
-    decide_mock: MagicMock,
-    connected_sources: list[DocumentSource],
-) -> None:
-    """Run tool.run() once with decide_search_scope replaced by `decide_mock`
-    (so its call args, including already_searched, can be inspected)."""
-    with (
-        patch(f"{MODULE}.get_session_with_current_tenant") as mock_session_ctx,
-        patch(f"{MODULE}.build_access_filters_for_user", return_value=[]),
-        patch(f"{MODULE}.get_current_search_settings", return_value=MagicMock()),
-        patch(f"{MODULE}.EmbeddingModel"),
-        patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[]),
-        patch(
-            f"{MODULE}.fetch_unique_document_sources", return_value=connected_sources
-        ),
-        patch(f"{MODULE}.semantic_query_rephrase", return_value="rephrased query"),
-        patch(f"{MODULE}.keyword_query_expansion", return_value=[]),
-        patch(f"{MODULE}.decide_search_scope", decide_mock),
-        patch(f"{MODULE}.weighted_reciprocal_rank_fusion", return_value=[]),
-        patch(f"{MODULE}.merge_individual_chunks", return_value=[]),
-        patch(f"{MODULE}.search_pipeline", MagicMock(return_value=[])),
-    ):
-        mock_session_ctx.return_value.__enter__ = MagicMock(return_value=MagicMock())
-        mock_session_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        override_kwargs = SearchToolOverrideKwargs(
-            starting_citation_num=1,
-            original_query="resolve the ticket",
-            message_history=[
-                ChatMinimalTextMessage(
-                    message="Check Zendesk first, then Confluence.",
-                    message_type=MessageType.USER,
-                )
-            ],
-            skip_query_expansion=False,
-        )
-        tool.run(
-            placement=Placement(turn_index=0, tab_index=0),
-            override_kwargs=override_kwargs,
-            queries=["ticket"],
-        )
-
-
-def test_searched_scopes_accumulate_across_calls_for_the_walk() -> None:
-    """A sequential directive advances: the scope resolved on the first call is
-    passed back to decide_search_scope as already_searched on the second."""
-    tool = _make_tool()
-    connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
-
-    # Mimic the walk: first call routes to Zendesk, second to Confluence.
-    decide_mock = MagicMock(
-        side_effect=[[DocumentSource.ZENDESK], [DocumentSource.CONFLUENCE]]
-    )
-
-    _run_with_decision_mock(tool, decide_mock=decide_mock, connected_sources=connected)
-    _run_with_decision_mock(tool, decide_mock=decide_mock, connected_sources=connected)
-
-    # already_searched is the 4th positional arg.
-    first_already_searched = decide_mock.call_args_list[0].args[3]
-    second_already_searched = decide_mock.call_args_list[1].args[3]
-    assert first_already_searched == []
-    assert second_already_searched == [DocumentSource.ZENDESK], (
-        "the second call must know Zendesk was already searched this turn"
-    )
-
-
 def test_persona_restriction_applies_when_decision_does_not_route() -> None:
     """With a persona restriction and a no-scope decision, the search stays scoped
     to the restriction (never broadens to everything)."""
@@ -242,3 +185,59 @@ def test_persona_restriction_applies_when_decision_does_not_route() -> None:
     for applied in filters:
         assert applied is not None
         assert applied.source_type == restriction
+
+
+def test_cached_expansion_is_reused_on_a_new_filter_not_a_repeat() -> None:
+    """The first call expands (and caches). A repeat call on a NOT-yet-searched
+    source reuses the cached expansion; a repeat on an already-searched source
+    does not (the agent is expected to vary terms there)."""
+    tool = _make_tool()
+    connected = [DocumentSource.ZENDESK, DocumentSource.ASANA]
+
+    # Call 1: first search (expansion runs) scoped to Zendesk -> caches expansion.
+    _run(tool, decision=[DocumentSource.ZENDESK], connected_sources=connected)
+
+    # Call 2: repeat call, walk advanced to Asana (new) -> reuse cached expansion.
+    new_filter = _run(
+        tool,
+        decision=[DocumentSource.ASANA],
+        connected_sources=connected,
+        skip_query_expansion=True,
+    )
+    assert "rephrased query" in _queries_sent(new_filter), (
+        "cached expansion should be reused when searching a new source"
+    )
+
+    # Call 3: repeat call on Asana again (already searched) -> no reuse.
+    repeat = _run(
+        tool,
+        decision=[DocumentSource.ASANA],
+        connected_sources=connected,
+        skip_query_expansion=True,
+    )
+    assert "rephrased query" not in _queries_sent(repeat), (
+        "a same-source repeat should not re-apply the cached expansion"
+    )
+
+
+def test_prior_cycles_accumulate_across_calls_for_the_walk() -> None:
+    """A backoff sequence advances: the first call's queries + resolved scope are
+    passed back to decide_search_scope as previous_cycles on the second."""
+    tool = _make_tool()
+    connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
+
+    # Mimic the walk: first call routes to Zendesk, second to Confluence.
+    decide_mock = MagicMock(
+        side_effect=[[DocumentSource.ZENDESK], [DocumentSource.CONFLUENCE]]
+    )
+    _run(tool, decide_mock=decide_mock, connected_sources=connected)
+    _run(tool, decide_mock=decide_mock, connected_sources=connected)
+
+    # previous_cycles is the 4th positional arg.
+    first_cycles = decide_mock.call_args_list[0].args[3]
+    second_cycles = decide_mock.call_args_list[1].args[3]
+    assert first_cycles == []
+    assert len(second_cycles) == 1
+    assert second_cycles[0].searched_sources == ["zendesk"]
+    assert second_cycles[0].queries == ["ticket"]
+    assert second_cycles[0].cycle_number == 1
