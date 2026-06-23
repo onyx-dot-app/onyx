@@ -123,6 +123,7 @@ function SidebarTab({
               width="full"
               padding="fit"
               rightChildren={truncationSpacer}
+              titleMaxLines={1}
             />
           ) : (
             <div className="flex flex-row items-center gap-2 w-full">
