@@ -135,7 +135,7 @@ def _create_mcp_client_function_runner(
     # with SSE (infinite stream). Avoid passing auth for SSE; rely on headers.
     auth_for_request = auth if transport == MCPTransport.STREAMABLE_HTTP else None
 
-    # doing this here for mypy
+    # doing this here for type-checking
     client_func = (
         streamablehttp_client
         if transport == MCPTransport.STREAMABLE_HTTP
@@ -152,7 +152,7 @@ def _create_mcp_client_function_runner(
             if len(client_tuple) == 3:
                 read, write, _ = client_tuple
             elif len(client_tuple) == 2:
-                assert isinstance(client_tuple, tuple)  # mypy
+                assert isinstance(client_tuple, tuple)  # for type-checking
                 read, write = client_tuple  # ty: ignore[invalid-assignment]
             else:
                 raise ValueError(

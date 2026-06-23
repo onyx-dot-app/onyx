@@ -29,8 +29,8 @@ from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAd
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import IndexChunk
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -147,7 +147,7 @@ class TestAdapterWritesBothMetadataFields:
         db_session.commit()
 
         adapter = UserFileIndexingAdapter(
-            tenant_id=TEST_TENANT_ID, db_session=db_session
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, db_session=db_session
         )
         chunk = _make_index_chunk(uf)
         doc = chunk.source_document
@@ -155,7 +155,7 @@ class TestAdapterWritesBothMetadataFields:
 
         enricher = adapter.prepare_enrichment(
             context=context,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chunks=[chunk],
             db_session=db_session,
         )
@@ -182,7 +182,7 @@ class TestAdapterWritesBothMetadataFields:
         db_session.commit()
 
         adapter = UserFileIndexingAdapter(
-            tenant_id=TEST_TENANT_ID, db_session=db_session
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, db_session=db_session
         )
         chunk = _make_index_chunk(uf)
         context = DocumentBatchPrepareContext(
@@ -191,7 +191,7 @@ class TestAdapterWritesBothMetadataFields:
 
         enricher = adapter.prepare_enrichment(
             context=context,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chunks=[chunk],
             db_session=db_session,
         )
@@ -220,7 +220,7 @@ class TestAdapterWritesBothMetadataFields:
         db_session.commit()
 
         adapter = UserFileIndexingAdapter(
-            tenant_id=TEST_TENANT_ID, db_session=db_session
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, db_session=db_session
         )
         chunk = _make_index_chunk(uf)
         context = DocumentBatchPrepareContext(
@@ -229,7 +229,7 @@ class TestAdapterWritesBothMetadataFields:
 
         enricher = adapter.prepare_enrichment(
             context=context,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chunks=[chunk],
             db_session=db_session,
         )
@@ -252,7 +252,7 @@ class TestAdapterWritesBothMetadataFields:
         uf = _create_user_file(db_session, user)
 
         adapter = UserFileIndexingAdapter(
-            tenant_id=TEST_TENANT_ID, db_session=db_session
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, db_session=db_session
         )
         chunk = _make_index_chunk(uf)
         context = DocumentBatchPrepareContext(
@@ -261,7 +261,7 @@ class TestAdapterWritesBothMetadataFields:
 
         enricher = adapter.prepare_enrichment(
             context=context,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chunks=[chunk],
             db_session=db_session,
         )
@@ -291,7 +291,7 @@ class TestAdapterWritesBothMetadataFields:
         db_session.commit()
 
         adapter = UserFileIndexingAdapter(
-            tenant_id=TEST_TENANT_ID, db_session=db_session
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, db_session=db_session
         )
         chunk = _make_index_chunk(uf)
         context = DocumentBatchPrepareContext(
@@ -300,7 +300,7 @@ class TestAdapterWritesBothMetadataFields:
 
         enricher = adapter.prepare_enrichment(
             context=context,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chunks=[chunk],
             db_session=db_session,
         )

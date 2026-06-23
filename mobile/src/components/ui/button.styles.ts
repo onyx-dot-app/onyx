@@ -4,10 +4,10 @@
 // token strings (so NativeWind's compiler sees them) resolving to the same Onyx
 // tokens as web. Web `:hover` has no touch equivalent, so the matrix carries only
 // rest / active / disabled.
-import type { TextFont } from "@onyx-ai/shared/native";
 import type {
   InteractiveProminence,
   InteractiveVariant,
+  TextFont,
 } from "@onyx-ai/shared/contracts";
 
 /** Size preset — mirrors web's `ContainerSizeVariants`. */

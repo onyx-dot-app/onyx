@@ -36,14 +36,14 @@ from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.api import restore_session
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.sandbox_lifecycle import provision_sandbox
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
-from tests.external_dependency_unit.craft._test_helpers import make_sandbox
-from tests.external_dependency_unit.craft._test_helpers import make_user
-from tests.external_dependency_unit.craft.conftest import (
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.payloads import default_llm_config
+from tests.common.craft.stubs import StubSandboxManager
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox
+from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.redis_helpers import (
     assert_lock_serializes_two_threads,
 )
-from tests.external_dependency_unit.craft.stubs import StubSandboxManager
 
 
 class TestProvisionTransitions:
@@ -73,7 +73,7 @@ class TestProvisionTransitions:
             sandbox=sandbox,
             user=test_user,
             user_id=test_user.id,
-            tenant_id=TEST_TENANT_ID,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             all_llm_configs=[default_llm_config()],
         )
         db_session.commit()
@@ -107,7 +107,7 @@ class TestProvisionFailureRollback:
                 sandbox=sandbox,
                 user=test_user,
                 user_id=test_user.id,
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 all_llm_configs=[default_llm_config()],
             )
 
@@ -266,7 +266,7 @@ class TestHealthCheckFailureRecovery:
         assert refreshed.status == SandboxStatus.RUNNING
         assert {
             "sandbox_id": row.id,
-            "tenant_id": TEST_TENANT_ID,
+            "tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             "timeout_seconds": 30.0,
         } in stub_sandbox_manager.create_opencode_history_snapshot_payloads
 
@@ -303,7 +303,7 @@ class TestRestoreFailureRecovery:
         create_snapshot__no_commit(
             db_session,
             session_id,
-            f"{TEST_TENANT_ID}/snapshots/{session_id}/snap.tar.gz",
+            f"{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/snapshots/{session_id}/snap.tar.gz",
             size_bytes=123,
         )
         db_session.commit()
@@ -470,7 +470,9 @@ class TestConcurrentProvisionLock:
         # Real Redis lock under the same key shape used by sessions_api.py
         # (``session_create:{user_id}``). Two threads race for the lock; the
         # second observes that the first held it and therefore had to wait.
-        redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+        redis_client = get_redis_client(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        )
         lock_key = f"session_create:{test_user.id}"
 
         assert_lock_serializes_two_threads(redis_client, lock_key)

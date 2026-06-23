@@ -3,3 +3,4 @@ export type {
   InteractiveProminence,
   InteractiveContract,
 } from "./interactive";
+export type { TextColor, TextFont } from "./typography";

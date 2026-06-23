@@ -2020,7 +2020,7 @@ class SharepointConnector(
 
         initial_url = f"{self.graph_api_base}/drives/{drive_id}/root/delta"
         if use_timestamp_token:
-            assert start is not None  # mypy
+            assert start is not None  # for type-checking
             token = quote(start.isoformat(timespec="seconds"))
             initial_url += f"?token={token}"
 

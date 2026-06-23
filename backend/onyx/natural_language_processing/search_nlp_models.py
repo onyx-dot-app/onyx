@@ -880,7 +880,7 @@ class EmbeddingModel:
         if self.embed_server_endpoint is None:
             raise ValueError("Model server endpoint is not configured for local models")
 
-        # Store the endpoint in a local variable to help mypy understand it's not None
+        # Store the endpoint in a local variable to help the type-checker understand it's not None
         endpoint = self.embed_server_endpoint
 
         def _make_request() -> Response:

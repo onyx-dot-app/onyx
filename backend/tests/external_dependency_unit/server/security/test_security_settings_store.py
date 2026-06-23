@@ -21,7 +21,6 @@ from onyx.server.security.store import get_security_settings
 from onyx.server.security.store import invalidate_security_cache
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
 def _delete_security_settings_row() -> None:
@@ -36,14 +35,14 @@ def _clean_db_and_cache(
     tenant_context: None,  # noqa: ARG001 — requested for side-effect (tenant contextvar)
 ) -> Generator[None, None, None]:
     _delete_security_settings_row()
-    invalidate_security_cache(TEST_TENANT_ID)
+    invalidate_security_cache(POSTGRES_DEFAULT_SCHEMA)
     # Reset to a real-clock cache so fake-clock tests don't leak state across.
     import time as _time
 
     _install_cache_for_test(ttl=10.0, timer=_time.monotonic)
     yield
     _delete_security_settings_row()
-    invalidate_security_cache(TEST_TENANT_ID)
+    invalidate_security_cache(POSTGRES_DEFAULT_SCHEMA)
 
 
 def test_empty_db_returns_env_defaults() -> None:
@@ -203,6 +202,6 @@ def test_db_error_falls_back_to_env_defaults() -> None:
         "_load_raw_overrides_unlocked",
         side_effect=RuntimeError("simulated DB outage"),
     ):
-        invalidate_security_cache(TEST_TENANT_ID)
+        invalidate_security_cache(POSTGRES_DEFAULT_SCHEMA)
         effective = get_security_settings()
         assert effective == _build_env_defaults()

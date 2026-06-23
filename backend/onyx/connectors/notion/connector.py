@@ -986,7 +986,7 @@ class NotionConnector(LoadConnector, PollConnector):
         res.raise_for_status()
         return NotionSearchResponse(**res.json())
 
-    # The | Document is needed for mypy type checking
+    # The | Document is needed for type-checking
     def _yield_database_hierarchy_nodes(
         self,
     ) -> Generator[HierarchyNode | Document, None, None]:

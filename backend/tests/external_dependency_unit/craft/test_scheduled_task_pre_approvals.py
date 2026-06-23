@@ -34,10 +34,10 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.db.action_approval import insert_action_approval
 from onyx.server.features.build.scheduled_tasks import api as scheduled_tasks_api
-from tests.external_dependency_unit.craft._test_helpers import default_action_entries
-from tests.external_dependency_unit.craft._test_helpers import make_external_app
-from tests.external_dependency_unit.craft._test_helpers import make_skill
-from tests.external_dependency_unit.craft._test_helpers import make_user
+from tests.common.craft.payloads import default_action_entries
+from tests.external_dependency_unit.craft.db_helpers import make_external_app
+from tests.external_dependency_unit.craft.db_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import make_user
 
 
 def _make_app(db_session: Session) -> int:

@@ -298,6 +298,19 @@ def litellm_exception_to_error_msg(
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
         error_code = "CONNECTION_ERROR"
         is_retryable = True
+    elif str(getattr(core_exception, "status_code", "")) == "413" or (
+        "413" in error_msg and "request entity too large" in error_msg.lower()
+    ):
+        # Upstream proxy/gateway (e.g. nginx) rejected the request body as too large.
+        error_msg = (
+            "Request too large: The LLM endpoint rejected the request because it "
+            "exceeded the maximum allowed size (HTTP 413). This commonly happens "
+            "when sending images to a model behind a proxy/gateway. Increase the "
+            "maximum request body size on the gateway in front of your LLM "
+            "endpoint (e.g. nginx `client_max_body_size`)."
+        )
+        error_code = "REQUEST_TOO_LARGE"
+        is_retryable = False
     elif isinstance(core_exception, APIError):
         error_msg = f"API error: An error occurred while communicating with the API. Details: {str(core_exception)}"
         error_code = "API_ERROR"

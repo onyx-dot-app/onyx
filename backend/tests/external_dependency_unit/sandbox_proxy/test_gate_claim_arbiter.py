@@ -24,8 +24,8 @@ from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatche
 from onyx.sandbox_proxy.identity import ResolvedSandbox
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
+from tests.common.craft.payloads import action_entry
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.external_dependency_unit.craft._test_helpers import action_entry
 
 
 def _seed_build_session(db_session: Session) -> UUID:

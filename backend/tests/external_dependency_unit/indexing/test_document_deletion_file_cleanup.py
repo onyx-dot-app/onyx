@@ -25,7 +25,7 @@ from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from onyx.server.onyx_api.ingestion import delete_ingestion_doc
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import cleanup_cc_pair
 from tests.external_dependency_unit.indexing_helpers import get_doc_row
 from tests.external_dependency_unit.indexing_helpers import get_filerecord
@@ -223,7 +223,7 @@ class TestDocumentByCcPairCleanupTask:
                     doc.id,
                     cc_pair.connector_id,
                     cc_pair.credential_id,
-                    TEST_TENANT_ID,
+                    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 ),
             )
 
@@ -264,7 +264,7 @@ class TestDocumentByCcPairCleanupTask:
                     doc.id,
                     cc_pair.connector_id,
                     cc_pair.credential_id,
-                    TEST_TENANT_ID,
+                    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 ),
             )
 

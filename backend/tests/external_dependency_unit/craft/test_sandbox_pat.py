@@ -24,8 +24,8 @@ from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-from tests.external_dependency_unit.constants import TEST_TENANT_ID
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.payloads import default_llm_config
 
 
 @pytest.fixture()
@@ -307,7 +307,7 @@ class TestEnsureSandboxPat:
             manager.provision(
                 sandbox_id=uuid4(),
                 user_id=uuid4(),
-                tenant_id=TEST_TENANT_ID,
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 llm_config=llm_config,
                 onyx_pat="",
             )

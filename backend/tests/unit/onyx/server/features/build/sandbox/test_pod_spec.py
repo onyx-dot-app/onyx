@@ -516,10 +516,10 @@ def test_onyx_pat_env_is_placeholder_not_real(pod: client.V1Pod) -> None:
     assert env["ONYX_PAT"] == SANDBOX_PROXY_INJECTED_PLACEHOLDER
 
 
-def test_no_proxy_is_loopback_only() -> None:
+def test_no_proxy_is_loopback_only(pod: client.V1Pod) -> None:
     """Only loopback may bypass the proxy; the Onyx API host must route through
     it so the PAT can be injected on the wire."""
-    env = {e.name: e.value for e in ksm._proxy_main_container_env_vars()}
+    env = {e.name: e.value for e in _container(pod, "sandbox").env}
     assert set(env["NO_PROXY"].split(",")) == {"127.0.0.1", "localhost"}
     assert env["no_proxy"] == env["NO_PROXY"]
 

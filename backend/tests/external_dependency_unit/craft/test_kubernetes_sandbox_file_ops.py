@@ -31,7 +31,7 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
     KubernetesSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import FilesystemEntry
-from tests.external_dependency_unit.craft._test_helpers import default_llm_config
+from tests.common.craft.payloads import default_llm_config
 from tests.external_dependency_unit.craft.conftest import pod_exec
 from tests.external_dependency_unit.craft.conftest import wait_for_pod_deletion
 
