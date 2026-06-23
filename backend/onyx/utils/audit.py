@@ -49,9 +49,7 @@ class AuditOutcome(str, Enum):
 
 class AuditAction(str, Enum):
     """Audited-action taxonomy. Values are an append-only schema contract
-    (consumers filter on them). A few members (``USER_CREATE``,
-    ``USER_GROUP_CHANGE``, ``PASSWORD_RESET``) are defined ahead of their call
-    sites and land in follow-up PRs."""
+    (consumers filter on them)."""
 
     # Authentication
     LOGIN = "auth.login"
