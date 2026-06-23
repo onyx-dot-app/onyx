@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { SvgEmpty } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -17,6 +18,7 @@ function ResourcePopover({
   onSearchChange,
   sections,
 }: ResourcePopoverProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   const totalItems = sections.reduce((sum, s) => sum + s.items.length, 0);
@@ -45,7 +47,7 @@ function ResourcePopover({
             <div className="px-3 py-3">
               <Content
                 icon={SvgEmpty}
-                title="No results found"
+                title={t("admin.groups.no_results")}
                 sizePreset="secondary"
                 variant="section"
               />

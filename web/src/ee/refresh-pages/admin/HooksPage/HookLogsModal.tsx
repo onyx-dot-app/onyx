@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "react-i18next";
 import { Button, Text } from "@opal/components";
 import { SvgDownload, SvgTextLines, SvgSimpleLoader } from "@opal/icons";
 import Modal from "@/refresh-components/Modal";
@@ -41,6 +42,7 @@ function SectionHeader({ label }: { label: string }) {
 }
 
 function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
+  const { t } = useTranslation();
   return (
     <Hoverable.Root group={group}>
       <Section
@@ -60,7 +62,7 @@ function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
         {/* 2. Error message */}
         <span className="flex-1 min-w-0 break-all whitespace-pre-wrap text-code-code">
           <Text font="secondary-mono" color="inherit">
-            {log.error_message ?? "Unknown error"}
+            {log.error_message ?? t("admin.hooks.logs_unknown_error")}
           </Text>
         </span>
         {/* 3. Copy button */}
@@ -76,6 +78,7 @@ function LogRow({ log, group }: { log: HookExecutionRecord; group: string }) {
 
 export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
   const onClose = useModalClose();
+  const { t } = useTranslation();
 
   const { recentErrors, olderErrors, isLoading, error } = useHookExecutionLogs(
     hook.id,
@@ -105,10 +108,8 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
       <Modal.Content width="md" height="fit">
         <Modal.Header
           icon={(props) => <SvgTextLines {...props} />}
-          title="Recent Errors"
-          description={`Hook: ${hook.name} • Hook Point: ${
-            spec?.display_name ?? hook.hook_point
-          }`}
+          title={t("admin.hooks.logs_title")}
+          description={t("admin.hooks.logs_desc", { hookName: hook.name, hookPoint: spec?.display_name ?? hook.hook_point })}
           onClose={onClose}
         />
         <Modal.Body>
@@ -118,17 +119,17 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
             </Section>
           ) : error ? (
             <Text font="main-ui-body" color="text-03">
-              Failed to load logs.
+              {t("admin.hooks.logs_failed")}
             </Text>
           ) : totalLines === 0 ? (
             <Text font="main-ui-body" color="text-03">
-              No errors in the past 30 days.
+              {t("admin.hooks.logs_no_errors")}
             </Text>
           ) : (
             <>
               {recentErrors.length > 0 && (
                 <>
-                  <SectionHeader label="Past Hour" />
+                  <SectionHeader label={t("admin.hooks.logs_past_hour")} />
                   {recentErrors.map((log, idx) => (
                     <LogRow
                       key={log.created_at + String(idx)}
@@ -140,7 +141,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
               )}
               {olderErrors.length > 0 && (
                 <>
-                  <SectionHeader label="Older" />
+                  <SectionHeader label={t("admin.hooks.logs_older")} />
                   {olderErrors.map((log, idx) => (
                     <LogRow
                       key={log.created_at + String(idx)}
@@ -161,7 +162,7 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
           className="bg-background-tint-01"
         >
           <Text font="main-ui-body" color="text-03">
-            {`${totalLines} ${totalLines === 1 ? "line" : "lines"}`}
+            {t("admin.hooks.logs_line_count", { count: totalLines })}
           </Text>
           <Section
             flexDirection="row"
@@ -171,12 +172,12 @@ export default function HookLogsModal({ hook, spec }: HookLogsModalProps) {
             padding={0.25}
             className="rounded-xl bg-background-tint-00"
           >
-            <CopyButton size="sm" tooltip="Copy" getCopyText={getLogsText} />
+            <CopyButton size="sm" tooltip={t("admin.hooks.logs_copy_tooltip")} getCopyText={getLogsText} />
             <Button
               prominence="tertiary"
               size="sm"
               icon={SvgDownload}
-              tooltip="Download"
+              tooltip={t("admin.hooks.logs_download_tooltip")}
               onClick={handleDownload}
             />
           </Section>

@@ -2,6 +2,7 @@
 
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
@@ -24,6 +25,7 @@ interface GroupCardProps {
 }
 
 function GroupCard({ group }: GroupCardProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const builtIn = isBuiltInGroup(group);
@@ -35,10 +37,12 @@ function GroupCard({ group }: GroupCardProps) {
     try {
       await renameGroup(group.id, newName);
       mutate(SWR_KEYS.adminUserGroups);
-      toast.success(`Group renamed to "${newName}"`);
+      toast.success(t("admin.groups.rename_success", { name: newName }));
     } catch (e) {
       console.error("Failed to rename group:", e);
-      toast.error(e instanceof Error ? e.message : "Failed to rename group");
+      toast.error(
+        e instanceof Error ? e.message : t("admin.groups.rename_failed")
+      );
     }
   }
 
@@ -50,7 +54,7 @@ function GroupCard({ group }: GroupCardProps) {
         description={buildGroupDescription(group)}
         sizePreset="main-content"
         variant="section"
-        tag={isBasic ? { title: "Default" } : undefined}
+        tag={isBasic ? { title: t("admin.groups.default_tag") } : undefined}
         editable={!builtIn && !isSyncing}
         onTitleChange={!builtIn && !isSyncing ? handleRename : undefined}
         rightChildren={
@@ -65,8 +69,8 @@ function GroupCard({ group }: GroupCardProps) {
             <Button
               icon={SvgChevronRight}
               prominence="tertiary"
-              tooltip="View group"
-              aria-label="View group"
+              tooltip={t("admin.groups.view_group")}
+              aria-label={t("admin.groups.view_group")}
               onClick={() => router.push(`/admin/groups/${group.id}` as Route)}
             />
           </Section>

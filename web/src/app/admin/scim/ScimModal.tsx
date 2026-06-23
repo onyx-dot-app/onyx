@@ -28,12 +28,12 @@ interface ScimModalProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function copyToClipboard(text: string) {
+async function copyToClipboard(text: string, t: (key: string) => string) {
   try {
     await navigator.clipboard.writeText(text);
-    toast.success("Token copied to clipboard");
+    toast.success(t("admin.scim.token_copied"));
   } catch {
-    toast.error("Failed to copy token");
+    toast.error(t("admin.scim.copy_failed"));
   }
 }
 
@@ -93,7 +93,7 @@ export default function ScimModal({
             <Modal.Body>
               <Hoverable.Root group="token">
                 <Interactive.Stateless
-                  onClick={() => copyToClipboard(view.rawToken)}
+                  onClick={() => copyToClipboard(view.rawToken, t)}
                 >
                   <InputTextArea
                     value={view.rawToken}
@@ -131,7 +131,7 @@ export default function ScimModal({
                 submit={
                   <Button
                     autoFocus
-                    onClick={() => copyToClipboard(view.rawToken)}
+                    onClick={() => copyToClipboard(view.rawToken, t)}
                   >
                     {t("admin.scim.copy_token", "Copy Token")}
                   </Button>

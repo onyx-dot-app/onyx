@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { SvgEmpty, SvgFiles, SvgXOctagon } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -33,9 +34,10 @@ interface SharedGroupResourcesProps {
 // ---------------------------------------------------------------------------
 
 function SharedBadge() {
+  const { t } = useTranslation();
   return (
     <Text as="span" secondaryBody text03>
-      Shared
+      {t("admin.groups.shared_badge")}
     </Text>
   );
 }
@@ -88,6 +90,7 @@ function SharedGroupResources({
   selectedAgentIds,
   onAgentIdsChange,
 }: SharedGroupResourcesProps) {
+  const { t } = useTranslation();
   const [connectorSearch, setConnectorSearch] = useState("");
   const [agentSearch, setAgentSearch] = useState("");
 
@@ -151,7 +154,8 @@ function SharedGroupResources({
                 p.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
               }
             >
-              {p.name ?? `Connector #${p.cc_pair_id}`}
+              {p.name ??
+                t("admin.groups.connector_fallback", { id: p.cc_pair_id })}
             </LineItem>
           ),
         };
@@ -187,13 +191,19 @@ function SharedGroupResources({
 
     return [
       ...(connectorItems.length > 0
-        ? [{ label: "Connectors", items: connectorItems }]
+        ? [{ label: t("admin.groups.section_connectors"), items: connectorItems }]
         : []),
       ...(docSetItems.length > 0
-        ? [{ label: "Document Sets", items: docSetItems }]
+        ? [
+            {
+              label: t("admin.groups.section_document_sets"),
+              items: docSetItems,
+            },
+          ]
         : []),
     ];
   }, [
+    t,
     connectors,
     documentSets,
     connectorSearch,
@@ -224,7 +234,7 @@ function SharedGroupResources({
               interactive={!dimmed}
               muted={dimmed}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
-              description="agent"
+              description={t("admin.groups.agent_label")}
               rightChildren={
                 !a.is_public || dimmed ? <SharedBadge /> : undefined
               }
@@ -237,6 +247,7 @@ function SharedGroupResources({
 
     return items.length > 0 ? [{ items }] : [];
   }, [
+    t,
     agents,
     agentSearch,
     selectedAgentSet,
@@ -264,8 +275,8 @@ function SharedGroupResources({
   return (
     <SimpleCollapsible>
       <SimpleCollapsible.Header
-        title="Shared with This Group"
-        description="Share connectors, document sets, agents with members of this group."
+        title={t("admin.groups.shared_title")}
+        description={t("admin.groups.shared_desc")}
       />
       <SimpleCollapsible.Content>
         <Card>
@@ -290,10 +301,10 @@ function SharedGroupResources({
                 justifyContent="start"
               >
                 <Text mainUiAction text04>
-                  Connectors & Document Sets
+                  {t("admin.groups.connectors_and_doc_sets")}
                 </Text>
                 <ResourcePopover
-                  placeholder="Add connectors, document sets"
+                  placeholder={t("admin.groups.add_resources_placeholder")}
                   searchValue={connectorSearch}
                   onSearchChange={setConnectorSearch}
                   sections={connectorDocSetSections}
@@ -312,8 +323,13 @@ function SharedGroupResources({
                     <ResourceContent
                       key={`c-${pair.cc_pair_id}`}
                       icon={getSourceMetadata(pair.connector.source).icon}
-                      title={pair.name ?? `Connector #${pair.cc_pair_id}`}
-                      description="Connector"
+                      title={
+                        pair.name ??
+                        t("admin.groups.connector_fallback", {
+                          id: pair.cc_pair_id,
+                        })
+                      }
+                      description={t("admin.groups.connector_label")}
                       onRemove={() => removeConnector(pair.cc_pair_id)}
                     />
                   ))}
@@ -322,7 +338,7 @@ function SharedGroupResources({
                       key={`d-${ds.id}`}
                       icon={SvgFiles}
                       title={ds.name}
-                      description="Document Set"
+                      description={t("admin.groups.document_set_label")}
                       infoContent={
                         <SourceIconStack sources={ds.cc_pair_summaries} />
                       }
@@ -333,8 +349,8 @@ function SharedGroupResources({
               ) : (
                 <Content
                   icon={SvgEmpty}
-                  title="No connectors or document sets added"
-                  description="Add connectors or document set to share with this group."
+                  title={t("admin.groups.no_resources_title")}
+                  description={t("admin.groups.no_resources_desc")}
                   sizePreset="secondary"
                   variant="section"
                 />
@@ -357,10 +373,10 @@ function SharedGroupResources({
                 justifyContent="start"
               >
                 <Text mainUiAction text04>
-                  Agents
+                  {t("admin.groups.agents_heading")}
                 </Text>
                 <ResourcePopover
-                  placeholder="Add agents"
+                  placeholder={t("admin.groups.add_agents_placeholder")}
                   searchValue={agentSearch}
                   onSearchChange={setAgentSearch}
                   sections={agentSections}
@@ -384,7 +400,7 @@ function SharedGroupResources({
                         </div>
                       }
                       title={agent.name}
-                      description="agent"
+                      description={t("admin.groups.agent_label")}
                       onRemove={() => removeAgent(agent.id)}
                     />
                   ))}
@@ -392,8 +408,8 @@ function SharedGroupResources({
               ) : (
                 <Content
                   icon={SvgXOctagon}
-                  title="No agents added"
-                  description="Add agents to share with this group."
+                  title={t("admin.groups.no_agents_title")}
+                  description={t("admin.groups.no_agents_desc")}
                   sizePreset="secondary"
                   variant="section"
                 />

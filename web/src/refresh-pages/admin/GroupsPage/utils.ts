@@ -1,14 +1,15 @@
 import type { UserGroup } from "@/lib/types";
+import i18n from "@/lib/i18n";
 
 /** Whether this group is a system default group (Admin, Basic). */
 export function isBuiltInGroup(group: UserGroup): boolean {
   return group.is_default;
 }
 
-/** Human-readable description for built-in groups. */
-const BUILT_IN_DESCRIPTIONS: Record<string, string> = {
-  Basic: "Default group for all users with basic permissions.",
-  Admin: "Built-in admin group with full access to manage all permissions.",
+/** Translation keys for built-in group descriptions. */
+const BUILT_IN_DESCRIPTION_KEYS: Record<string, string> = {
+  Basic: "admin.groups.desc_basic",
+  Admin: "admin.groups.desc_admin",
 };
 
 /**
@@ -20,36 +21,35 @@ const BUILT_IN_DESCRIPTIONS: Record<string, string> = {
  */
 export function buildGroupDescription(group: UserGroup): string {
   if (isBuiltInGroup(group)) {
-    return BUILT_IN_DESCRIPTIONS[group.name] ?? "";
+    const key = BUILT_IN_DESCRIPTION_KEYS[group.name];
+    return key ? i18n.t(key) : "";
   }
 
   const parts: string[] = [];
   if (group.cc_pairs.length > 0) {
     parts.push(
-      `${group.cc_pairs.length} connector${
-        group.cc_pairs.length !== 1 ? "s" : ""
-      }`
+      i18n.t("admin.groups.count_connectors", { count: group.cc_pairs.length })
     );
   }
   if (group.document_sets.length > 0) {
     parts.push(
-      `${group.document_sets.length} document set${
-        group.document_sets.length !== 1 ? "s" : ""
-      }`
+      i18n.t("admin.groups.count_document_sets", {
+        count: group.document_sets.length,
+      })
     );
   }
   if (group.personas.length > 0) {
     parts.push(
-      `${group.personas.length} agent${group.personas.length !== 1 ? "s" : ""}`
+      i18n.t("admin.groups.count_agents", { count: group.personas.length })
     );
   }
 
   return parts.length > 0
     ? parts.join(" · ")
-    : "No private connectors / document sets / agents";
+    : i18n.t("admin.groups.no_private_resources");
 }
 
 /** Format the member count badge, e.g. "306 Members" or "1 Member". */
 export function formatMemberCount(count: number): string {
-  return `${count} ${count === 1 ? "Member" : "Members"}`;
+  return i18n.t("admin.groups.member_count", { count });
 }
