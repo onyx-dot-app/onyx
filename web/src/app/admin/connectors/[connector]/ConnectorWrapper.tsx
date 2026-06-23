@@ -21,18 +21,20 @@ import { Credential } from "@/lib/connectors/credentials";
 import { useFederatedConnectors } from "@/lib/hooks";
 import Text from "@/refresh-components/texts/Text";
 import { useToastFromQuery } from "@/hooks/useToast";
+import { useTranslation } from "react-i18next";
 
 export default function ConnectorWrapper({
   connector,
 }: {
   connector: ConfigurableSources;
 }) {
+  const { t } = useTranslation();
   const searchParams = useSearchParams();
   const mode = searchParams?.get("mode"); // 'federated' or 'regular'
 
   useToastFromQuery({
     oauth_failed: {
-      message: "OAuth authentication failed. Please try again.",
+      message: t("admin.connector_form.oauth_failed"),
       type: "error",
     },
   });
@@ -46,15 +48,14 @@ export default function ConnectorWrapper({
           <div className="mt-12 w-full max-w-3xl mx-auto">
             <div className="mx-auto flex flex-col gap-y-2">
               <HeaderTitle>
-                <p>&lsquo;{connector}&rsquo; is not a valid Connector Type!</p>
+                <p>'{connector}' {t("admin.connector_form.invalid_type")}</p>
               </HeaderTitle>
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Button
                 onClick={() => window.open("/admin/indexing/status", "_self")}
                 className="mr-auto"
               >
-                {" "}
-                Go home{" "}
+                {t("admin.connector_form.go_home")}
               </Button>
             </div>
           </div>

@@ -100,6 +100,25 @@
         "fill_required": "Please fill in all required fields.",
         "no_changes": "No changes to save.",
         "model_name_required": "Model name is required"
+      },
+      "vertex_ai": {
+        "auth_method_title": "Authentication Method",
+        "auth_method_desc": "Choose how Onyx should authenticate with Google Vertex AI.",
+        "service_account_label": "Service Account JSON",
+        "service_account_desc": "Upload a GCP service account key JSON file",
+        "workload_identity_label": "Workload Identity (GKE)",
+        "workload_identity_desc": "Use the pod's ambient GCP credentials (GKE Workload Identity)",
+        "region_title": "Google Cloud Region Name",
+        "region_desc": "Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud.",
+        "api_key_title": "API Key",
+        "api_key_desc": "Attach your API key JSON from Google Cloud to access your models.",
+        "workload_identity_info": "Onyx will use the pod's ambient Google Cloud credentials (via google.auth.default). Ensure the Kubernetes ServiceAccount is bound to a GCP Service Account with access to Vertex AI.",
+        "gcp_project_title": "GCP Project ID",
+        "gcp_project_desc": "The GCP project where Vertex AI is enabled. Required because ADC cannot reliably infer the target project under service-account impersonation.",
+        "gcp_project_placeholder": "my-vertex-project",
+        "auth_method_required": "Authentication method is required",
+        "credentials_required": "Credentials file is required",
+        "gcp_project_required": "GCP Project ID is required"
       }
     },
     "chat_preferences": {
@@ -865,6 +884,46 @@
       "badge_registered": "Registered",
       "badge_pending": "Pending",
       "desc": "Setup Slack bots that connect to Onyx. Once setup, you will be able to ask questions to Onyx directly from Slack."
+    },
+    "file_upload": {
+      "drag_drop_files": "Drag and drop some files here, or click to select files",
+      "drag_drop_file": "Drag and drop a file here, or click to select a file",
+      "selected_files": "Selected Files",
+      "selected_file": "Selected File"
+    },
+    "connector_advanced": {
+      "title": "Advanced Configuration",
+      "prune_freq_label": "Prune Frequency (hours)",
+      "prune_freq_desc": "Checks all documents against the source to delete those that no longer exist. Note: This process checks every document, so be cautious when increasing frequency. Default is {{hours}} hours ({{days}} days). Decimal hours are supported (e.g., 0.1 hours = 6 minutes). Enter 0 to disable pruning for this connector.",
+      "refresh_freq_label": "Refresh Frequency (minutes)",
+      "refresh_freq_desc": "This is how frequently we pull new documents from the source (in minutes). If you input 0, we will never pull new documents for this connector.",
+      "start_date_label": "Indexing Start Date",
+      "start_date_desc": "Documents prior to this date will not be pulled in",
+      "reset_btn": "Reset"
+    },
+    "connector_access": {
+      "title": "Document Access",
+      "desc": "Control who has access to the documents indexed by this connector.",
+      "private_label": "Private",
+      "private_desc": "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
+      "public_label": "Public",
+      "public_desc": "Everyone with an account on Onyx can access the documents pulled in by this connector",
+      "auto_sync_label": "Auto Sync Permissions",
+      "auto_sync_desc": "We will automatically sync permissions from the source. A document will be searchable in Onyx if and only if the user performing the search has permission to access the document in the source.",
+      "auto_sync_disabled": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one."
+    },
+    "connector_nav": {
+      "previous": "Previous",
+      "create_connector": "Create Connector",
+      "continue": "Continue",
+      "advanced": "Advanced"
+    },
+    "connector_form": {
+      "connector_name_label": "Connector Name",
+      "connector_name_desc": "A descriptive name for the connector.",
+      "invalid_type": "is not a valid Connector Type!",
+      "go_home": "Go home",
+      "oauth_failed": "OAuth authentication failed. Please try again."
     }
   },
   "chat": {
@@ -1488,7 +1547,7 @@
   "error_page": {
     "title": "We encountered an issue",
     "onyx_settings_error": "It seems there was a problem loading your Onyx settings. This could be due to a configuration issue or incomplete setup.",
-    "admin_documentation": "If you're an admin, please review our <0>documentation</0> for proper configuration steps. If you're a user, please contact your admin for assistance.",
-    "discord_support": "Need help? Join our <0>Discord community</0> for support."
+    "admin_documentation": "If you're an admin, please review our <docLink>documentation</docLink> for proper configuration steps. If you're a user, please contact your admin for assistance.",
+    "discord_support": "Need help? Join our <discordLink>Discord community</discordLink> for support."
   }
 }

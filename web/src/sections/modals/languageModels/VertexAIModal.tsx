@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
+import { useTranslation } from "react-i18next";
 import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputSelectField from "@/refresh-components/form/InputSelectField";
@@ -61,6 +62,7 @@ function VertexAIModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: VertexAIModalInternalsProps) {
+  const { t } = useTranslation();
   const formikProps = useFormikContext<VertexAIModalValues>();
   const authMethod = formikProps.values.custom_config?.vertex_auth_method;
   const settings = useSettings();
@@ -84,23 +86,23 @@ function VertexAIModalInternals({
           {showAuthMethodSelector && (
             <InputVertical
               withLabel={FIELD_VERTEX_AUTH_METHOD}
-              title="Authentication Method"
-              subDescription="Choose how Onyx should authenticate with Google Vertex AI."
+              title={t("admin.llm.vertex_ai.auth_method_title")}
+              subDescription={t("admin.llm.vertex_ai.auth_method_desc")}
             >
               <InputSelectField name={FIELD_VERTEX_AUTH_METHOD}>
                 <InputSelect.Trigger />
                 <InputSelect.Content>
                   <InputSelect.Item
                     value={AUTH_METHOD_SERVICE_ACCOUNT}
-                    description="Upload a GCP service account key JSON file"
+                    description={t("admin.llm.vertex_ai.service_account_desc")}
                   >
-                    Service Account JSON
+                    {t("admin.llm.vertex_ai.service_account_label")}
                   </InputSelect.Item>
                   <InputSelect.Item
                     value={AUTH_METHOD_WORKLOAD_IDENTITY}
-                    description="Use the pod's ambient GCP credentials (GKE Workload Identity)"
+                    description={t("admin.llm.vertex_ai.workload_identity_desc")}
                   >
-                    Workload Identity (GKE)
+                    {t("admin.llm.vertex_ai.workload_identity_label")}
                   </InputSelect.Item>
                 </InputSelect.Content>
               </InputSelectField>
@@ -109,8 +111,8 @@ function VertexAIModalInternals({
 
           <InputVertical
             withLabel={FIELD_VERTEX_LOCATION}
-            title="Google Cloud Region Name"
-            subDescription="Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud."
+            title={t("admin.llm.vertex_ai.region_title")}
+            subDescription={t("admin.llm.vertex_ai.region_desc")}
           >
             <InputTypeInField
               name={FIELD_VERTEX_LOCATION}
@@ -124,8 +126,8 @@ function VertexAIModalInternals({
         <InputPadder>
           <InputVertical
             withLabel={FIELD_VERTEX_CREDENTIALS}
-            title="API Key"
-            subDescription="Attach your API key JSON from Google Cloud to access your models."
+            title={t("admin.llm.vertex_ai.api_key_title")}
+            subDescription={t("admin.llm.vertex_ai.api_key_desc")}
           >
             <FileUploadFormField name={FIELD_VERTEX_CREDENTIALS} label="" />
           </InputVertical>
@@ -137,14 +139,14 @@ function VertexAIModalInternals({
           <InputPadder>
             <MessageCard
               variant="info"
-              title="Onyx will use the pod's ambient Google Cloud credentials (via google.auth.default). Ensure the Kubernetes ServiceAccount is bound to a GCP Service Account with access to Vertex AI."
+              title={t("admin.llm.vertex_ai.workload_identity_info")}
             />
           </InputPadder>
           <Card background="light" border="none" padding="sm">
             <InputVertical
               withLabel={FIELD_VERTEX_PROJECT}
-              title="GCP Project ID"
-              subDescription="The GCP project where Vertex AI is enabled. Required because ADC cannot reliably infer the target project under service-account impersonation."
+              title={t("admin.llm.vertex_ai.gcp_project_title")}
+              subDescription={t("admin.llm.vertex_ai.gcp_project_desc")}
             >
               <InputTypeInField
                 name={FIELD_VERTEX_PROJECT}

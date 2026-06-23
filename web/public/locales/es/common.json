@@ -100,6 +100,25 @@
         "fill_required": "Completa todos los campos obligatorios.",
         "no_changes": "No hay cambios que guardar.",
         "model_name_required": "El nombre del modelo es obligatorio"
+      },
+      "vertex_ai": {
+        "auth_method_title": "Método de autenticación",
+        "auth_method_desc": "Elige cómo debe autenticarse Onyx con Google Vertex AI.",
+        "service_account_label": "JSON de cuenta de servicio",
+        "service_account_desc": "Sube un archivo JSON de clave de cuenta de servicio de GCP",
+        "workload_identity_label": "Workload Identity (GKE)",
+        "workload_identity_desc": "Usa las credenciales ambientales de GCP del pod (GKE Workload Identity)",
+        "region_title": "Nombre de la región de Google Cloud",
+        "region_desc": "Región donde están alojados tus modelos de Google Vertex AI. Consulta la lista completa de regiones compatibles en Google Cloud.",
+        "api_key_title": "Clave API",
+        "api_key_desc": "Adjunta tu archivo JSON de clave API de Google Cloud para acceder a tus modelos.",
+        "workload_identity_info": "Onyx usará las credenciales ambientales de Google Cloud del pod (vía google.auth.default). Asegúrate de que la ServiceAccount de Kubernetes esté vinculada a una cuenta de servicio de GCP con acceso a Vertex AI.",
+        "gcp_project_title": "ID del proyecto de GCP",
+        "gcp_project_desc": "El proyecto de GCP donde está habilitado Vertex AI. Requerido porque ADC no puede inferir de forma confiable el proyecto de destino bajo la suplantación de cuenta de servicio.",
+        "gcp_project_placeholder": "mi-proyecto-vertex",
+        "auth_method_required": "El método de autenticación es obligatorio",
+        "credentials_required": "El archivo de credenciales es obligatorio",
+        "gcp_project_required": "El ID del proyecto de GCP es obligatorio"
       }
     },
     "chat_preferences": {
@@ -865,6 +884,46 @@
       "badge_registered": "Registrado",
       "badge_pending": "Pendiente",
       "desc": "Configura bots de Slack que se conecten a Onyx. Una vez configurados, podrás hacer preguntas a Onyx directamente desde Slack."
+    },
+    "file_upload": {
+      "drag_drop_files": "Arrastra y suelta archivos aquí, o haz clic para seleccionar archivos",
+      "drag_drop_file": "Arrastra y suelta un archivo aquí, o haz clic para seleccionar un archivo",
+      "selected_files": "Archivos seleccionados",
+      "selected_file": "Archivo seleccionado"
+    },
+    "connector_advanced": {
+      "title": "Configuración avanzada",
+      "prune_freq_label": "Frecuencia de limpieza (horas)",
+      "prune_freq_desc": "Verifica todos los documentos contra la fuente para eliminar los que ya no existen. Nota: Este proceso verifica cada documento, así que ten cuidado al aumentar la frecuencia. El valor predeterminado es {{hours}} horas ({{days}} días). Se permiten horas decimales (por ejemplo, 0.1 horas = 6 minutos). Ingresa 0 para desactivar la limpieza en este conector.",
+      "refresh_freq_label": "Frecuencia de actualización (minutos)",
+      "refresh_freq_desc": "Con qué frecuencia obtenemos nuevos documentos de la fuente (en minutos). Si ingresas 0, nunca obtendremos nuevos documentos para este conector.",
+      "start_date_label": "Fecha de inicio de indexación",
+      "start_date_desc": "Los documentos anteriores a esta fecha no se importarán",
+      "reset_btn": "Restablecer"
+    },
+    "connector_access": {
+      "title": "Acceso a documentos",
+      "desc": "Controla quién tiene acceso a los documentos indexados por este conector.",
+      "private_label": "Privado",
+      "private_desc": "Solo los usuarios que han recibido acceso explícito a este conector (a través de la página de grupos de usuarios) pueden acceder a los documentos importados por este conector",
+      "public_label": "Público",
+      "public_desc": "Cualquier persona con una cuenta en Onyx puede acceder a los documentos importados por este conector",
+      "auto_sync_label": "Sincronización automática de permisos",
+      "auto_sync_desc": "Sincronizaremos automáticamente los permisos desde la fuente. Un documento será buscable en Onyx si y solo si el usuario que realiza la búsqueda tiene permiso para acceder al documento en la fuente.",
+      "auto_sync_disabled": "El método de autenticación de credencial actual no admite la sincronización automática de permisos. Cambia el método de autenticación de credencial a uno compatible."
+    },
+    "connector_nav": {
+      "previous": "Anterior",
+      "create_connector": "Crear conector",
+      "continue": "Continuar",
+      "advanced": "Avanzado"
+    },
+    "connector_form": {
+      "connector_name_label": "Nombre del conector",
+      "connector_name_desc": "Un nombre descriptivo para el conector.",
+      "invalid_type": "no es un tipo de conector válido",
+      "go_home": "Ir al inicio",
+      "oauth_failed": "Error de autenticación OAuth. Por favor, inténtalo de nuevo."
     }
   },
   "chat": {
@@ -1488,7 +1547,7 @@
   "error_page": {
     "title": "Hemos detectado un problema",
     "onyx_settings_error": "Parece que hubo un problema al cargar tu configuración de Onyx. Esto podría deberse a un problema de configuración o a una instalación incompleta.",
-    "admin_documentation": "Si eres administrador, revisa nuestra <0>documentación</0> para conocer los pasos de configuración adecuados. Si eres usuario, ponte en contacto con tu administrador para obtener ayuda.",
-    "discord_support": "¿Necesitas ayuda? Únete a nuestra <0>comunidad de Discord</0> para recibir asistencia."
+    "admin_documentation": "Si eres administrador, revisa nuestra <docLink>documentación</docLink> para conocer los pasos de configuración adecuados. Si eres usuario, ponte en contacto con tu administrador para obtener ayuda.",
+    "discord_support": "¿Necesitas ayuda? Únete a nuestra <discordLink>comunidad de Discord</discordLink> para recibir asistencia."
   }
 }
