@@ -722,6 +722,8 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         llm = get_default_llm_with_vision()
 
     def _clone_non_image_section(section: Section) -> Section:
+        """Copy a non-image section, preserving a TabularSection (and its
+        csv_file_id) rather than flattening it to a base Section."""
         if isinstance(section, TabularSection):
             return section.model_copy()
         return Section(

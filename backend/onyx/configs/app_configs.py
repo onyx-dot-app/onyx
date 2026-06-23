@@ -1128,10 +1128,8 @@ MAX_XLSX_CELLS_PER_SHEET = max(
 )
 
 # A worksheet whose uncompressed XML exceeds this is streamed to a file-backed
-# TabularSection (CSV staged in the file store, streamed at chunk time) instead
-# of being rendered to an in-memory string. Keeps a huge sheet off the worker
-# heap end to end rather than truncating it. Checked cheaply from the xlsx zip
-# directory before any parse.
+# TabularSection (CSV staged in the file store) instead of an in-memory string,
+# so a huge sheet stays off the worker heap rather than being truncated.
 XLSX_STREAM_SHEET_BYTES = max(
     0, int(os.environ.get("XLSX_STREAM_SHEET_BYTES") or 50 * 1024 * 1024)
 )

@@ -227,8 +227,7 @@ def parse_to_chunks(
 
 def _iter_parsed_rows_streamed(lines: Iterable[str]) -> Iterator[ParsedRow]:
     """Stream ParsedRows from a CSV line source (e.g. a file handle), header
-    first, without materializing the file — the file-backed counterpart to
-    ``parse_csv_string`` (which buffers the whole string into a list)."""
+    first, without buffering the whole file into memory."""
     reader = csv.reader(lines)
     header: list[str] | None = None
     for row in reader:
@@ -325,12 +324,10 @@ class TabularChunker(SectionChunker):
         payloads: list[ChunkPayload],
         content_token_limit: int,
     ) -> SectionChunkerOutput:
-        """Stream the CSV staged at ``csv_file_id`` straight into row chunks so a
-        huge sheet is never materialized. A section is only file-backed when its
-        CSV exceeds the inline threshold, so descriptor/analysis chunks are
-        skipped: ``analyze_sheet`` transposes the whole sheet into memory, which
-        would defeat the streaming bound. Smaller sheets keep the inline path and
-        its descriptor chunks."""
+        """Stream the staged CSV straight into row chunks so a huge sheet is never
+        materialized. Descriptor/analysis chunks are skipped: ``analyze_sheet``
+        transposes the whole sheet into memory, which would defeat the streaming
+        bound. Small sheets keep the inline path and its descriptors."""
         heading = section.heading or ""
         file_store = get_default_file_store()
         with file_store.read_file(csv_file_id, use_tempfile=True) as raw:
