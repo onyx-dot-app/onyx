@@ -91,29 +91,35 @@ def get_cgroup_cpu_limit(
     and gets CFS-throttled. We read the quota directly so callers can cap thread counts
     to the budget the container actually has.
 
-    Returns None when no quota is set (unlimited) or the cgroup files are unavailable.
+    Returns None when no quota is set (unlimited) or the cgroup files are unavailable
+    or unreadable. Quotas are floored to whole cores so the cap never exceeds the
+    container's actual CPU budget.
     """
     # cgroup v2: single file formatted as "<quota> <period>"; "max" means unlimited.
-    # When the v2 file is present it is authoritative, so we never fall back to v1
-    # (a hybrid host can have stale non-zero v1 quota files that don't reflect reality).
+    # When the v2 file is present it is authoritative: we never fall back to v1, since a
+    # hybrid host can carry stale v1 quota files that don't reflect the real limit.
     try:
         quota_str, period_str = v2_cpu_max.read_text().split()
         if quota_str == "max":
             return None
         period = int(period_str)
         if period > 0:
-            return max(1, round(int(quota_str) / period))
+            return max(1, int(quota_str) // period)
+        return None
     except FileNotFoundError:
-        pass  # not a cgroup v2 host; try v1
+        pass  # not a cgroup v2 host; fall back to v1
     except (OSError, ValueError) as e:
+        # v2 is present but unreadable/malformed; it remains authoritative, so do not
+        # trust v1 — report undetectable rather than apply a possibly-stale quota.
         logger.debug("Could not parse cgroup v2 cpu.max (%s): %s", v2_cpu_max, e)
+        return None
 
     # cgroup v1: separate quota/period files; quota <= 0 means unlimited.
     try:
         quota = int(v1_cpu_quota.read_text())
         period = int(v1_cpu_period.read_text())
         if quota > 0 and period > 0:
-            return max(1, round(quota / period))
+            return max(1, quota // period)
     except FileNotFoundError:
         pass  # no cgroup cpu controller available; treat as unlimited
     except (OSError, ValueError) as e:

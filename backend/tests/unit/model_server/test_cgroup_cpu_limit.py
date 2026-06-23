@@ -33,17 +33,17 @@ def test_cgroup_v2_unlimited(tmp_path: Path) -> None:
     )
 
 
-def test_cgroup_v2_rounds_to_nearest_core(tmp_path: Path) -> None:
+def test_cgroup_v2_floors_fractional_quota(tmp_path: Path) -> None:
     v2 = tmp_path / "cpu.max"
-    # 6.5 cores -> rounds to 6 (banker's rounding); the point is it never returns 0.
-    v2.write_text("650000 100000")
+    # 7.5 cores -> floors to 7 so the cap never exceeds the quota (round would give 8).
+    v2.write_text("750000 100000")
     assert (
         get_cgroup_cpu_limit(
             v2_cpu_max=v2,
             v1_cpu_quota=_missing(tmp_path),
             v1_cpu_period=_missing(tmp_path),
         )
-        == 6
+        == 7
     )
 
 
@@ -66,6 +66,20 @@ def test_cgroup_v2_max_does_not_fall_through_to_v1(tmp_path: Path) -> None:
     # the v2 hierarchy is authoritative.
     v2 = tmp_path / "cpu.max"
     v2.write_text("max 100000")
+    quota = tmp_path / "cpu.cfs_quota_us"
+    period = tmp_path / "cpu.cfs_period_us"
+    quota.write_text("400000")
+    period.write_text("100000")
+    assert (
+        get_cgroup_cpu_limit(v2_cpu_max=v2, v1_cpu_quota=quota, v1_cpu_period=period)
+        is None
+    )
+
+
+def test_cgroup_v2_malformed_does_not_fall_through_to_v1(tmp_path: Path) -> None:
+    # A present-but-unparseable v2 file is still authoritative: we must not consult v1.
+    v2 = tmp_path / "cpu.max"
+    v2.write_text("garbage")
     quota = tmp_path / "cpu.cfs_quota_us"
     period = tmp_path / "cpu.cfs_period_us"
     quota.write_text("400000")
