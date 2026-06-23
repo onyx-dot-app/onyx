@@ -142,6 +142,10 @@ from onyx.redis.redis_pool import retrieve_ws_token_data
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditActor
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_identify_user
 from onyx.utils.telemetry import mt_cloud_telemetry
@@ -1061,6 +1065,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             request=request,
         )
 
+        emit_audit_event(
+            AuditAction.LOGIN,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+        )
+
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
     ) -> None:
@@ -1175,6 +1185,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user_id=str(user.id),
         )
 
+        emit_audit_event(
+            AuditAction.REGISTER,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+        )
+
     async def on_after_forgot_password(
         self,
         user: User,
@@ -1197,6 +1213,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
 
+        emit_audit_event(
+            AuditAction.PASSWORD_FORGOT,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+        )
+
     async def on_after_request_verify(
         self,
         user: User,
@@ -1216,11 +1238,26 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user.email, token, new_organization=user_count == 1
         )
 
+        emit_audit_event(
+            AuditAction.EMAIL_VERIFY,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+        )
+
     @log_function_time(print_only=True)
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
         email = credentials.username
+
+        def _audit_login_failure(
+            outcome: AuditOutcome = AuditOutcome.FAILURE,
+        ) -> None:
+            emit_audit_event(
+                AuditAction.LOGIN_FAILURE,
+                outcome,
+                actor=AuditActor(email=email),
+            )
 
         tenant_id: str | None = None
         try:
@@ -1239,6 +1276,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if not tenant_id:
             # User not found in mapping
             self.password_helper.hash(credentials.password)
+            _audit_login_failure()
             return None
 
         # Create a tenant-specific session
@@ -1254,9 +1292,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             except exceptions.UserNotExists:
                 self.password_helper.hash(credentials.password)
+                _audit_login_failure()
                 return None
 
             if not user.account_type.is_web_login():
+                _audit_login_failure(AuditOutcome.DENIED)
                 raise BasicAuthenticationError(
                     detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
                 )
@@ -1265,6 +1305,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 credentials.password, user.hashed_password
             )
             if not verified:
+                _audit_login_failure()
                 return None
 
             if updated_password_hash is not None:
@@ -1607,7 +1648,13 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
             strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
         ) -> Response:
             user, token = user_token
-            return await backend.logout(strategy, user, token)
+            result = await backend.logout(strategy, user, token)
+            emit_audit_event(
+                AuditAction.LOGOUT,
+                AuditOutcome.SUCCESS,
+                actor=AuditActor(user_id=str(user.id), email=user.email),
+            )
+            return result
 
         return router
 
