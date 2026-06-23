@@ -2,6 +2,7 @@
 
 ## 2026-06-23
 
+- Glomi Forge Task 11 继续推进：新增 `PiBuilderAdapter`，通过 `SandboxProvider.run_command` detached 启动 `/opt/glomi/run_forge.py`，再轮询读取 `/workspace/logs/events.jsonl`，按已读行增量解析为 `ForgeEvent`，遇 `builder_finished` / `builder_failed` 终止订阅；`stop()` 通过 `pkill -f run_forge.py` 停 launcher。新增 provider-stub 单测，红测先确认 builder provider package 缺失；实现后通过 `1 passed`，Ruff 与 `git diff --check` 通过。
 - Glomi Forge Task 10 继续推进：新增 `DaytonaSandboxProvider`，实现 create/write/read/command/preview/stop/delete 的 `SandboxProvider` 协议，并维护 sandbox handle cache。由于本机 `.venv` 未安装 Daytona SDK（前序 `uv add --no-sync`，完整 sync 被 macOS x86_64 Torch wheel 阻塞），provider 将 SDK import 延迟到真实 client 构造/参数创建；mock-client 单测可在当前环境运行。验证记录：`test_daytona_provider.py` 通过 `1 passed`，Ruff 与 `git diff --check` 通过。
 - Glomi Forge Task 9 继续推进：新增 sandbox image 资产，包括 `run_forge.py` in-sandbox launcher、`write_models_json.py` 和 Dockerfile。launcher 读 `/workspace/input/task.json` 与 context 文件，运行 Pi JSON 模式，把 Pi raw event 归一化为自有 `ForgeEvent` JSONL，成功后启动 Next preview、写 output manifest 并发出 preview/artifact/finished 事件；失败发 `builder_failed`。新增 normalization 单测，红测先确认 launcher 文件缺失；实现后通过 `3 passed`，Ruff 与 `git diff --check` 通过。`0.0.0.0` preview bind 是 Daytona 预览暴露要求，已用 `noqa` 标注。
 - Glomi Forge Task 8 继续推进：新增 `ForgeSpecBuilder`，把自然语言交付请求转换为 `ForgeSpec`，真实 LLM 调用通过 `llm_generation_span(..., flow=LLMFlow.FORGE_SPEC_GENERATION)` 打标签并用 structured response format 请求 JSON。新增 fake LLM 单测和 gated 真实 LLM 测试；验证记录：fake 单测 `1 passed`，真实 LLM 测试因本轮环境无 `OPENAI_API_KEY` 为 `1 skipped`，touched Ruff 与 `git diff --check` 通过。
