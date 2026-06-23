@@ -46,7 +46,7 @@ async def current_cloud_superuser(
     if not SUPER_CLOUD_API_KEY:
         # Fail closed, but return the same 401 as a bad key so callers can't
         # distinguish "unconfigured" from "wrong key". Log the real reason for operators.
-        logger.error("SUPER_CLOUD_API_KEY is not configured; rejecting request")
+        logger.warning("SUPER_CLOUD_API_KEY is not configured; rejecting request")
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     api_key = request.headers.get("Authorization", "").replace("Bearer ", "")
