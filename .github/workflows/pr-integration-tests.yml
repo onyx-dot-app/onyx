@@ -373,7 +373,7 @@ jobs:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
           timeout_minutes: 20
           max_attempts: 3
@@ -519,7 +519,7 @@ jobs:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
       - name: Run Onyx Lite Integration Tests
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # ratchet:nick-fields/retry@v3
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
           timeout_minutes: 20
           max_attempts: 3
