@@ -7,6 +7,8 @@ import { APP_NAME } from "@/lib/brand";
 import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 
+const WORDMARK_ASPECT_RATIO = 1589 / 396;
+
 export function GlomiLogoMark({
   size = 24,
   width,
@@ -52,7 +54,7 @@ export function GlomiLogotype({
   size?: number;
   className?: string;
 }) {
-  const width = Math.round(size * (glomiWordmark.width / glomiWordmark.height));
+  const width = Math.round(size * WORDMARK_ASPECT_RATIO);
 
   return (
     <span
