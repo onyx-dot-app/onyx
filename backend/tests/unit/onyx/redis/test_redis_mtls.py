@@ -77,6 +77,26 @@ def test_async_connection_passes_native_ssl_kwargs() -> None:
         assert "ssl_context" not in kwargs
 
 
+def test_iam_auth_uses_native_async_ssl_kwargs() -> None:
+    """The async IAM path must use native ssl_* kwargs, not ssl_context — the
+    async Redis client rejects ssl_context with a TypeError, so passing one
+    crashes every async IAM connection."""
+    import redis.asyncio as aioredis
+
+    from onyx.redis.iam_auth import configure_redis_iam_auth
+
+    kwargs: dict = {"host": "h", "port": 6379, "password": "pw"}
+    configure_redis_iam_auth(kwargs)
+    assert "ssl_context" not in kwargs
+    assert "password" not in kwargs  # IAM drops the password
+    assert kwargs["ssl"] is True
+    assert kwargs["ssl_cert_reqs"] == "required"
+    assert kwargs["ssl_check_hostname"] is True
+    # Regression guard: constructing the async client must not raise the
+    # "unexpected keyword argument 'ssl_context'" TypeError.
+    aioredis.Redis(**kwargs)
+
+
 def test_celery_broker_and_result_urls_include_client_cert(tmp_path: Path) -> None:
     cert = tmp_path / "client.crt"
     key = tmp_path / "client.key"
