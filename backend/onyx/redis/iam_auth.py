@@ -14,19 +14,26 @@ from typing import Any
 
 def configure_redis_iam_auth(connection_kwargs: dict[str, Any]) -> None:
     """
-    Configure Redis connection parameters for IAM authentication.
+    Configure async Redis connection kwargs for IAM authentication.
     Modifies the connection_kwargs dict in-place to:
     1. Remove password (not needed with IAM)
-    2. Enable SSL with system CA certificates
-    3. Set proper SSL context for secure connections
+    2. Enable TLS with server-cert verification against the system trust store
+       (ElastiCache uses a publicly-trusted CA)
+
+    Uses redis-py's native async ssl_* kwargs. The async client has no
+    ``ssl_context`` parameter, so passing one raises
+    ``TypeError: ... unexpected keyword argument 'ssl_context'`` — i.e. every
+    async IAM connection would crash.
     """
     # Remove password as it's not needed with IAM authentication
     if "password" in connection_kwargs:
         del connection_kwargs["password"]
 
-    # Ensure SSL is enabled for IAM authentication
+    # Enable TLS with verification (mirrors create_redis_ssl_context_if_iam:
+    # CERT_REQUIRED + hostname check, system CA store).
     connection_kwargs["ssl"] = True
-    connection_kwargs["ssl_context"] = create_redis_ssl_context_if_iam()
+    connection_kwargs["ssl_cert_reqs"] = "required"
+    connection_kwargs["ssl_check_hostname"] = True
 
 
 def create_redis_ssl_context_if_iam() -> ssl.SSLContext:
