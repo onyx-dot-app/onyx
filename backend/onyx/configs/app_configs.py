@@ -388,6 +388,39 @@ OPENSEARCH_ADMIN_PASSWORD = os.environ.get(
     "OPENSEARCH_ADMIN_PASSWORD", "StrongPassword123!"
 )
 OPENSEARCH_USE_SSL = os.environ.get("OPENSEARCH_USE_SSL", "true").lower() == "true"
+# Verify the OpenSearch server certificate. Defaults to False to preserve the
+# existing behavior (the bundled OpenSearch ships self-signed certs). Set True —
+# with OPENSEARCH_CA_CERTS for a private CA — to actually authenticate the
+# server instead of merely encrypting the connection.
+OPENSEARCH_VERIFY_CERTS = (
+    os.environ.get("OPENSEARCH_VERIFY_CERTS", "").lower() == "true"
+)
+# CA bundle to verify the server cert against when OPENSEARCH_VERIFY_CERTS=true.
+# Falls back to the system trust store if unset.
+OPENSEARCH_CA_CERTS: str | None = os.environ.get("OPENSEARCH_CA_CERTS") or None
+# Client certificate + key for mutual TLS (OpenSearch authenticating us). Both
+# must be set together.
+OPENSEARCH_CLIENT_CERT: str | None = os.environ.get("OPENSEARCH_CLIENT_CERT") or None
+OPENSEARCH_CLIENT_KEY: str | None = os.environ.get("OPENSEARCH_CLIENT_KEY") or None
+
+if OPENSEARCH_VERIFY_CERTS and not OPENSEARCH_USE_SSL:
+    logger.warning(
+        "OPENSEARCH_VERIFY_CERTS=true has no effect when OPENSEARCH_USE_SSL is "
+        "false (the connection is not encrypted)."
+    )
+if bool(OPENSEARCH_CLIENT_CERT) != bool(OPENSEARCH_CLIENT_KEY):
+    raise ValueError(
+        "OPENSEARCH_CLIENT_CERT and OPENSEARCH_CLIENT_KEY must both be set "
+        "(mutual TLS needs a client certificate and its private key)."
+    )
+for _os_name, _os_path in (
+    ("OPENSEARCH_CA_CERTS", OPENSEARCH_CA_CERTS),
+    ("OPENSEARCH_CLIENT_CERT", OPENSEARCH_CLIENT_CERT),
+    ("OPENSEARCH_CLIENT_KEY", OPENSEARCH_CLIENT_KEY),
+):
+    if _os_path and not os.path.exists(_os_path):
+        raise ValueError(f"{_os_name}={_os_path!r} does not exist.")
+
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
