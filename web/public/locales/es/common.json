@@ -424,14 +424,8 @@
     "scim": {
       "desc": "Configura SCIM (System for Cross-domain Identity Management) para sincronizar usuarios desde tu proveedor de identidad."
     },
-    "billing": {
-      "desc": "Gestiona tu suscripción, uso y ajustes de facturación."
-    },
     "discord_bot": {
       "desc": "Configura un bot de Discord para responder preguntas dentro de tu servidor de Discord."
-    },
-    "bots": {
-      "desc": "Configura bots de Slack que se conecten a Onyx. Una vez configurados, podrás hacer preguntas a Onyx directamente desde Slack."
     },
     "agents": {
       "description": "Personaliza el comportamiento y el conocimiento de la IA con agentes. Administra los agentes de tu organización.",
@@ -798,7 +792,8 @@
       "feature_hook_extensions": "Extensiones de hook",
       "feature_custom_deployments": "Despliegues personalizados",
       "feature_region_data_processing": "Procesamiento de datos específico de la región",
-      "feature_enterprise_support": "SLAs empresariales y soporte prioritario"
+      "feature_enterprise_support": "SLAs empresariales y soporte prioritario",
+      "desc": "Gestiona tu suscripción, uso y ajustes de facturación."
     },
     "bots": {
       "slack_title": "Integración de Slack",
@@ -842,7 +837,8 @@
       "table_registered": "Registrado",
       "table_actions": "Acciones",
       "badge_registered": "Registrado",
-      "badge_pending": "Pendiente"
+      "badge_pending": "Pendiente",
+      "desc": "Configura bots de Slack que se conecten a Onyx. Una vez configurados, podrás hacer preguntas a Onyx directamente desde Slack."
     }
   },
   "chat": {
@@ -1306,5 +1302,31 @@
       "connected": "conectado",
       "connect": "Conectar"
     }
+  },
+  "auth": {
+    "welcome_to": "Bienvenido a",
+    "tagline": "Tu plataforma de IA de código abierto para el trabajo",
+    "email_address": "Dirección de correo electrónico",
+    "email_placeholder": "correo@tuempresa.com",
+    "password": "Contraseña",
+    "new_to_onyx": "¿Eres nuevo en {{appName}}?",
+    "create_account": "Crear una cuenta",
+    "sign_in": "Iniciar sesión",
+    "already_have_account": "¿Ya tienes una cuenta?",
+    "or_continue_as_guest": "o continuar como invitado",
+    "joining": "Uniendo...",
+    "creating_account": "Creando cuenta...",
+    "signing_in": "Iniciando sesión...",
+    "account_created_signing_in": "Cuenta creada. Iniciando sesión...",
+    "signed_in_successfully": "Sesión iniciada con éxito.",
+    "create_an_account_to_set_password": "Crea una cuenta para establecer una contraseña",
+    "invalid_email_or_password": "Correo electrónico o contraseña inválidos",
+    "join": "Unirse",
+    "complete_signup": "Completa tu registro",
+    "get_started": "Comienza con Onyx",
+    "password_min_length": "La contraseña debe tener al menos {{count}} caracteres",
+    "hide_password": "Ocultar contraseña",
+    "show_password": "Mostrar contraseña",
+    "value_cannot_be_revealed": "El valor no se puede mostrar"
   }
 }

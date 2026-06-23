@@ -40,6 +40,7 @@ import {
   FILE_TYPE_DEFINITIONS,
 } from "@/lib/connectors/fileTypes";
 import Text from "@/refresh-components/texts/Text";
+import { useTranslation } from "react-i18next";
 
 import { Tooltip } from "@opal/components";
 import InputTextArea, {
@@ -263,6 +264,7 @@ export function TextFormField({
   className?: string;
   showPasswordToggle?: boolean;
 }) {
+  const { t } = useTranslation();
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
     heightString = "h-28";
@@ -371,7 +373,7 @@ export function TextFormField({
         {!isTextArea && isPasswordField && showPasswordToggle && (
           <button
             type="button"
-            aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+            aria-label={isPasswordVisible ? t("auth.hide_password", { defaultValue: "Hide password" }) : t("auth.show_password", { defaultValue: "Show password" })}
             className="absolute right-3 top-1/2 -translate-y-1/2 stroke-text-02 hover:stroke-text-03 mt-0.5"
             onClick={() => setIsPasswordVisible((v) => !v)}
             tabIndex={0}
