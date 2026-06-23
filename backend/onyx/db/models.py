@@ -70,6 +70,8 @@ from onyx.db.enums import DefaultAppMode
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.enums import EndpointPolicy
 from onyx.db.enums import ExternalAppType
+from onyx.db.enums import ForgeArtifactType
+from onyx.db.enums import GlomiForgeStatus
 from onyx.db.enums import GrantSource
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.enums import HookFailStrategy
@@ -2989,6 +2991,108 @@ class ChatRunEvent(Base):
     __table_args__ = (
         UniqueConstraint("run_id", "seq", name="uq_chat_run_event_run_seq"),
         Index("ix_chat_run_event_run_seq", "run_id", "seq"),
+    )
+
+
+class GlomiForgeSession(Base):
+    """Daytona + Pi delivery session, parallel to opencode BuildSession."""
+
+    __tablename__ = "glomi_forge_session"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    parent_chat_session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    artifact_type: Mapped[ForgeArtifactType] = mapped_column(
+        Enum(
+            ForgeArtifactType,
+            native_enum=False,
+            name="forgeartifacttype",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+    )
+    template_id: Mapped[str] = mapped_column(String, nullable=False)
+    template_version: Mapped[str] = mapped_column(
+        String, nullable=False, default="1", server_default="1"
+    )
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[GlomiForgeStatus] = mapped_column(
+        Enum(
+            GlomiForgeStatus,
+            native_enum=False,
+            name="glomiforgestatus",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
+        default=GlomiForgeStatus.QUEUED,
+        server_default=GlomiForgeStatus.QUEUED.value,
+    )
+    status_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    spec: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
+    sandbox_provider: Mapped[str] = mapped_column(
+        String, nullable=False, default="daytona", server_default="daytona"
+    )
+    sandbox_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    builder_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    preview_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    latest_output: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB, nullable=True
+    )
+    retry_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    last_error: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB, nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_glomi_forge_session_user", "user_id"),
+        Index("ix_glomi_forge_session_status", "status"),
+    )
+
+
+class GlomiForgeEvent(Base):
+    """Durable, ordered builder events for a Glomi Forge session."""
+
+    __tablename__ = "glomi_forge_event"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("glomi_forge_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    packet_json: Mapped[dict[str, Any]] = mapped_column(PGJSONB, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id", "seq", name="uq_glomi_forge_event_session_seq"
+        ),
+        Index("ix_glomi_forge_event_session_seq", "session_id", "seq"),
     )
 
 

@@ -552,3 +552,29 @@ Permission.IMPLIED = frozenset(
         Permission.READ_ADMIN,
     }
 )
+
+
+class GlomiForgeStatus(str, PyEnum):
+    QUEUED = "queued"
+    PROVISIONING = "provisioning"
+    BUILDING = "building"
+    PREVIEW_READY = "preview_ready"
+    AWAITING_FEEDBACK = "awaiting_feedback"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    TERMINATED = "terminated"
+
+    def is_terminal(self) -> bool:
+        return self in (
+            GlomiForgeStatus.COMPLETED,
+            GlomiForgeStatus.FAILED,
+            GlomiForgeStatus.TERMINATED,
+        )
+
+
+class ForgeArtifactType(str, PyEnum):
+    LANDING_PAGE = "landing_page"
+    SLIDES = "slides"
+    REPORT = "report"
+    DASHBOARD = "dashboard"
+    TOOL = "tool"
