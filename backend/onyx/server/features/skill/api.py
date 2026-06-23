@@ -696,10 +696,17 @@ def _install_personal_repo_skills(
         before_install=_enforce_cap,
     )
 
-    created_responses: list[CustomSkillResponse] = []
-    for row in created_rows:
-        push_skill_to_affected_sandboxes(row, db_session)
-        created_responses.append(CustomSkillResponse.from_model(row, group_ids=[]))
+    created_responses = [
+        CustomSkillResponse.from_model(row, group_ids=[]) for row in created_rows
+    ]
+    # Rows are already committed; the sandbox push is best-effort and must never
+    # turn a successful install into a 500 (which would hide the committed rows
+    # and trigger slug-collision failures on retry).
+    try:
+        for row in created_rows:
+            push_skill_to_affected_sandboxes(row, db_session)
+    except Exception:
+        logger.exception("Post-commit skill push failed after personal repo install")
     return RepoSkillsInstallResult(created=created_responses, failures=failures)
 
 
@@ -720,15 +727,18 @@ def _install_admin_repo_skills(
         db_session=db_session,
     )
 
-    affected: set[UUID] = set()
-    for row in created_rows:
-        affected |= affected_user_ids_for_skill(row, db_session)
-    if affected:
-        push_skills_for_users(affected, db_session)
-
     created_responses = [
         CustomSkillResponse.from_model(row, group_ids=group_ids) for row in created_rows
     ]
+    # Rows are already committed; best-effort push must not break the response.
+    try:
+        affected: set[UUID] = set()
+        for row in created_rows:
+            affected |= affected_user_ids_for_skill(row, db_session)
+        if affected:
+            push_skills_for_users(affected, db_session)
+    except Exception:
+        logger.exception("Post-commit skill push failed after admin repo install")
     return RepoSkillsInstallResult(created=created_responses, failures=failures)
 
 
