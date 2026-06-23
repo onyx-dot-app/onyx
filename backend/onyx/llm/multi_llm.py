@@ -808,6 +808,7 @@ class LitellmLLM(LLM):
         from litellm import ModelResponse as LiteLLMModelResponse
 
         from onyx.llm.model_response import from_litellm_model_response
+        from onyx.llm.model_response import TaggedReasoningContentNormalizer
 
         # HTTPHandler Threading & Connection Pool Notes:
         # =============================================
@@ -879,6 +880,12 @@ class LitellmLLM(LLM):
             )
 
             model_response = from_litellm_model_response(response)
+            if self._model_provider == LlmProviderNames.OPENAI_COMPATIBLE:
+                model_response.choice.message = (
+                    TaggedReasoningContentNormalizer().process_message(
+                        model_response.choice.message
+                    )
+                )
 
             # Track LLM cost for Onyx-managed API keys
             if model_response.usage:
@@ -910,6 +917,7 @@ class LitellmLLM(LLM):
         from litellm.exceptions import Timeout as LiteLLMTimeout
 
         from onyx.llm.model_response import from_litellm_model_response_stream
+        from onyx.llm.model_response import TaggedReasoningContentNormalizer
 
         retryable_exceptions = (
             LiteLLMTimeout,
@@ -972,8 +980,25 @@ class LitellmLLM(LLM):
                     ),
                 )
 
+                tagged_reasoning_normalizer = (
+                    TaggedReasoningContentNormalizer()
+                    if self._model_provider == LlmProviderNames.OPENAI_COMPATIBLE
+                    else None
+                )
                 for chunk in response:
                     model_response = from_litellm_model_response_stream(chunk)
+                    if tagged_reasoning_normalizer is not None:
+                        model_response.choice.delta = (
+                            tagged_reasoning_normalizer.process_delta(
+                                model_response.choice.delta
+                            )
+                        )
+                        if model_response.choice.finish_reason is not None:
+                            model_response.choice.delta = (
+                                tagged_reasoning_normalizer.flush_delta(
+                                    model_response.choice.delta
+                                )
+                            )
 
                     # Track LLM cost when usage info is available (typically in the last chunk)
                     if model_response.usage:

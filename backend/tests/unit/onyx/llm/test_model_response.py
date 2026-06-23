@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING
 import pytest
 
 from onyx.llm.model_response import ChatCompletionDeltaToolCall
+from onyx.llm.model_response import Delta
 from onyx.llm.model_response import from_litellm_model_response
 from onyx.llm.model_response import from_litellm_model_response_stream
 from onyx.llm.model_response import FunctionCall
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.model_response import ModelResponseStream
+from onyx.llm.model_response import TaggedReasoningContentNormalizer
 
 if TYPE_CHECKING:
     from litellm.types.utils import ModelResponse as LiteLLMModelResponse
@@ -262,6 +264,56 @@ def test_from_litellm_model_response_stream_preserves_reasoning_content() -> Non
     assert response.choice.delta.content is None
     assert response.choice.delta.reasoning_content == " variations"
     assert response.choice.finish_reason is None
+
+
+def test_tagged_reasoning_normalizer_splits_same_chunk_think_tags() -> None:
+    normalizer = TaggedReasoningContentNormalizer()
+
+    delta = normalizer.process_delta(
+        Delta(content="<think>reasoning</think>Final answer")
+    )
+
+    assert delta.reasoning_content == "reasoning"
+    assert delta.content == "Final answer"
+
+
+def test_tagged_reasoning_normalizer_keeps_split_think_block_out_of_content() -> None:
+    normalizer = TaggedReasoningContentNormalizer()
+
+    first = normalizer.process_delta(Delta(content="<think>step 1"))
+    second = normalizer.process_delta(Delta(content=" step 2"))
+    third = normalizer.process_delta(Delta(content="</think>Final"))
+
+    assert first.reasoning_content == "step 1"
+    assert first.content is None
+    assert second.reasoning_content == " step 2"
+    assert second.content is None
+    assert third.reasoning_content is None
+    assert third.content == "Final"
+
+
+def test_tagged_reasoning_normalizer_handles_tag_split_across_chunks() -> None:
+    normalizer = TaggedReasoningContentNormalizer()
+
+    first = normalizer.process_delta(Delta(content="<thi"))
+    second = normalizer.process_delta(Delta(content="nk>hidden</think>shown"))
+
+    assert first.reasoning_content is None
+    assert first.content is None
+    assert second.reasoning_content == "hidden"
+    assert second.content == "shown"
+
+
+def test_tagged_reasoning_normalizer_flushes_unclosed_partial_tag_text() -> None:
+    normalizer = TaggedReasoningContentNormalizer()
+
+    first = normalizer.process_delta(Delta(content="Visible <thi"))
+    final = normalizer.flush_delta(Delta())
+
+    assert first.reasoning_content is None
+    assert first.content == "Visible "
+    assert final.reasoning_content is None
+    assert final.content == "<thi"
 
 
 @pytest.mark.parametrize("payload", _build_finish_reason_payload())

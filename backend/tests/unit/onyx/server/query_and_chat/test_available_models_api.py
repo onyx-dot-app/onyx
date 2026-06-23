@@ -37,7 +37,11 @@ def test_available_chat_model_response_serializes_capabilities() -> None:
     assert dumped["models"][0]["roles"] == ["balanced", "vision"]
 
 
-def test_available_chat_models_response_marks_default_and_selected() -> None:
+def test_available_chat_models_response_marks_default_and_selected(mocker) -> None:
+    mocker.patch(
+        "onyx.db.glomi_model_catalog.GLOMI_ENABLED_LLM_MODELS",
+        "gpt-5.5,MiniMax-M3",
+    )
     provider = SimpleNamespace(
         id=1,
         name="Glomi Default",
@@ -114,3 +118,126 @@ def test_available_chat_models_response_marks_default_and_selected() -> None:
     assert minimax_model.supplier_display_name == "MiniMax"
     assert minimax_model.supports_image_input is True
     assert "vision" in minimax_model.roles
+
+
+def test_available_chat_models_filters_glomi_provider_to_enabled_catalog_models(
+    mocker,
+) -> None:
+    mocker.patch(
+        "onyx.db.glomi_model_catalog.GLOMI_ENABLED_LLM_MODELS",
+        "gpt-5.5",
+    )
+    provider = SimpleNamespace(
+        id=1,
+        name="Glomi Default",
+        provider="openai_compatible",
+        model_configurations=[
+            SimpleNamespace(
+                id=10,
+                name="gpt-5.5",
+                is_visible=True,
+                supports_image_input=True,
+                llm_model_flow_types=[
+                    LLMModelFlowType.CHAT,
+                    LLMModelFlowType.VISION,
+                    LLMModelFlowType.REASONING,
+                ],
+                display_name="GPT-5.5",
+                custom_display_name=None,
+            ),
+            SimpleNamespace(
+                id=11,
+                name="codex-auto-review",
+                is_visible=True,
+                supports_image_input=False,
+                llm_model_flow_types=[LLMModelFlowType.CHAT],
+                display_name="codex-auto-review",
+                custom_display_name=None,
+            ),
+            SimpleNamespace(
+                id=12,
+                name="gpt-4o-audio-preview",
+                is_visible=True,
+                supports_image_input=False,
+                llm_model_flow_types=[LLMModelFlowType.CHAT],
+                display_name="gpt-4o-audio-preview",
+                custom_display_name=None,
+            ),
+        ],
+    )
+    default_model = SimpleNamespace(llm_provider_id=1, name="gpt-5.5")
+    user = SimpleNamespace(default_model=None)
+
+    response = build_available_chat_models_response(
+        providers=[provider],
+        default_model=default_model,
+        user=user,
+    )
+
+    assert [model.model_id for model in response.models] == ["gpt-5.5"]
+
+
+def test_available_chat_models_hides_non_catalog_providers_when_glomi_catalog_enabled(
+    mocker,
+) -> None:
+    mocker.patch(
+        "onyx.db.glomi_model_catalog.GLOMI_ENABLED_LLM_MODELS",
+        "MiniMax-M3",
+    )
+    mocker.patch("onyx.db.glomi_model_catalog.GLOMI_MINIMAX_LLM_ENABLED", True)
+    minimax_provider = SimpleNamespace(
+        id=1,
+        name="Glomi MiniMax",
+        provider="openai_compatible",
+        model_configurations=[
+            SimpleNamespace(
+                id=10,
+                name="MiniMax-M3",
+                is_visible=True,
+                supports_image_input=True,
+                llm_model_flow_types=[
+                    LLMModelFlowType.CHAT,
+                    LLMModelFlowType.VISION,
+                    LLMModelFlowType.REASONING,
+                ],
+                display_name="MiniMax-M3",
+                custom_display_name=None,
+            ),
+        ],
+    )
+    legacy_openai_compatible_provider = SimpleNamespace(
+        id=2,
+        name="OpenAI-Compatible",
+        provider="openai_compatible",
+        model_configurations=[
+            SimpleNamespace(
+                id=20,
+                name="codex-auto-review",
+                is_visible=True,
+                supports_image_input=False,
+                llm_model_flow_types=[LLMModelFlowType.CHAT],
+                display_name="codex-auto-review",
+                custom_display_name=None,
+            ),
+            SimpleNamespace(
+                id=21,
+                name="gpt-4o-audio-preview",
+                is_visible=True,
+                supports_image_input=False,
+                llm_model_flow_types=[LLMModelFlowType.CHAT],
+                display_name="gpt-4o-audio-preview",
+                custom_display_name=None,
+            ),
+        ],
+    )
+    default_model = SimpleNamespace(llm_provider_id=1, name="MiniMax-M3")
+    user = SimpleNamespace(default_model=None)
+
+    response = build_available_chat_models_response(
+        providers=[minimax_provider, legacy_openai_compatible_provider],
+        default_model=default_model,
+        user=user,
+    )
+
+    assert [model.model_id for model in response.models] == ["MiniMax-M3"]
+    assert response.models[0].supplier_display_name == "MiniMax"

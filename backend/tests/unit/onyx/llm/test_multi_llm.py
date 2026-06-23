@@ -426,6 +426,132 @@ def test_multiple_tool_calls_streaming(default_multi_llm: LitellmLLM) -> None:
         )
 
 
+def test_openai_compatible_stream_routes_tagged_thinking_to_reasoning() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        model_name="MiniMax-M3",
+        api_base="https://api.minimax.io/v1",
+        max_input_tokens=8192,
+    )
+    messages: LanguageModelInput = [UserMessage(content="Answer briefly.")]
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chunk-1",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(content="<think>Need answer"),
+                    finish_reason=None,
+                    index=0,
+                )
+            ],
+            model="MiniMax-M3",
+        ),
+        litellm.ModelResponse(
+            id="chunk-2",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(content="</think>Final"),
+                    finish_reason=None,
+                    index=0,
+                )
+            ],
+            model="MiniMax-M3",
+        ),
+    ]
+    mock_stream_chunks[0].choices[0].finish_reason = None
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = mock_stream_chunks
+
+        chunks = list(llm.stream(messages))
+
+    assert chunks[0].choice.delta.reasoning_content == "Need answer"
+    assert chunks[0].choice.delta.content is None
+    assert chunks[1].choice.delta.reasoning_content is None
+    assert chunks[1].choice.delta.content == "Final"
+
+
+def test_openai_compatible_stream_flushes_trailing_partial_tag_text() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        model_name="MiniMax-M3",
+        api_base="https://api.minimax.io/v1",
+        max_input_tokens=8192,
+    )
+    messages: LanguageModelInput = [UserMessage(content="Answer briefly.")]
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chunk-1",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(content="Visible <thi"),
+                    finish_reason=None,
+                    index=0,
+                )
+            ],
+            model="MiniMax-M3",
+        ),
+        litellm.ModelResponse(
+            id="chunk-2",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model="MiniMax-M3",
+        ),
+    ]
+    mock_stream_chunks[0].choices[0].finish_reason = None
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = mock_stream_chunks
+
+        chunks = list(llm.stream(messages))
+
+    assert chunks[0].choice.delta.content == "Visible "
+    assert chunks[1].choice.delta.content == "<thi"
+    assert chunks[1].choice.delta.reasoning_content is None
+
+
+def test_openai_compatible_invoke_routes_tagged_thinking_to_reasoning() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        model_name="MiniMax-M3",
+        api_base="https://api.minimax.io/v1",
+        max_input_tokens=8192,
+    )
+    messages: LanguageModelInput = [UserMessage(content="Answer briefly.")]
+    mock_stream_chunks = [
+        litellm.ModelResponse(
+            id="chunk-1",
+            choices=[
+                litellm.Choices(
+                    delta=_create_delta(content="<think>Need answer</think>Final"),
+                    finish_reason="stop",
+                    index=0,
+                )
+            ],
+            model="MiniMax-M3",
+        ),
+    ]
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = mock_stream_chunks
+
+        response = llm.invoke(messages)
+
+    assert response.choice.message.reasoning_content == "Need answer"
+    assert response.choice.message.content == "Final"
+
+
 ANTHROPIC_MODELS_OMITTING_SAMPLING_PARAMS = [
     "claude-opus-4-7",
     "claude-opus-4-7@20260101",

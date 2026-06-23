@@ -136,6 +136,27 @@ def get_glomi_supplier_metadata_for_provider(
     return _SUPPLIER_METADATA_BY_PROVIDER.get((provider_name, provider_type))
 
 
+def get_enabled_glomi_platform_model_for_provider(
+    provider_name: str | None,
+    provider_type: str,
+    model_name: str,
+) -> GlomiPlatformModel | None:
+    if provider_name is None:
+        return None
+
+    for provider_catalog in get_glomi_platform_model_catalog().providers:
+        if (
+            provider_catalog.provider_name == provider_name
+            and provider_catalog.provider_type == provider_type
+        ):
+            for model in provider_catalog.models:
+                if model.model_name == model_name:
+                    return model
+            return None
+
+    return None
+
+
 def _minimax_models_from_env() -> tuple[GlomiPlatformModel, ...]:
     known_models = {
         model.model_name: model for model in GLOMI_MINIMAX_PLATFORM_MODELS
@@ -198,31 +219,6 @@ def _filter_provider_models(
         for model in candidate_models
         if model.model_name.lower() in enabled_model_names
     )
-
-
-def _parse_enabled_model_names(raw_model_names: str) -> set[str]:
-    return {
-        model_name.strip().lower()
-        for model_name in raw_model_names.split(",")
-        if model_name.strip()
-    }
-
-
-def get_enabled_glomi_platform_models(
-    raw_model_names: str | None = None,
-) -> tuple[GlomiPlatformModel, ...]:
-    enabled_model_names = _parse_enabled_model_names(
-        raw_model_names if raw_model_names is not None else GLOMI_ENABLED_LLM_MODELS
-    )
-    if not enabled_model_names:
-        return ()
-
-    return tuple(
-        model
-        for model in GLOMI_PLATFORM_MODELS
-        if model.model_name.lower() in enabled_model_names
-    )
-
 
 def get_glomi_platform_model_catalog() -> GlomiPlatformModelCatalog:
     return GlomiPlatformModelCatalog(

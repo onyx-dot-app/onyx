@@ -6,8 +6,8 @@ from onyx.db.glomi_model_catalog import get_glomi_platform_model_catalog
 from onyx.db.glomi_model_catalog import get_glomi_supplier_metadata_for_provider
 from onyx.db.glomi_model_catalog import GLOMI_GPT_PLATFORM_MODELS
 from onyx.db.glomi_model_catalog import GLOMI_MINIMAX_PLATFORM_MODELS
-from onyx.db.glomi_model_catalog import GlomiPlatformProviderCatalog
 from onyx.db.glomi_model_catalog import GlomiPlatformModelCatalog
+from onyx.db.glomi_model_catalog import GlomiPlatformProviderCatalog
 from onyx.db.glomi_model_catalog import sync_glomi_platform_model_catalog
 
 
@@ -63,9 +63,9 @@ def test_catalog_can_include_minimax_provider_when_configured(mocker) -> None:
 
 
 def test_enabled_catalog_models_are_env_driven() -> None:
-    models = get_enabled_glomi_platform_models("gpt-5.5, GLM-5.2")
+    models = get_enabled_glomi_platform_models("gpt-5.5, MiniMax-M3")
 
-    assert [model.model_name for model in models] == ["gpt-5.5", "glm-5.2"]
+    assert [model.model_name for model in models] == ["gpt-5.5", "MiniMax-M3"]
 
 
 def test_catalog_filters_minimax_provider_by_default_env(mocker) -> None:
@@ -246,7 +246,9 @@ def test_supplier_metadata_lookup_for_catalog_provider() -> None:
     assert metadata.supplier_display_name == "MiniMax"
 
 
-def test_sync_preserves_existing_extra_models_and_provider_settings(mocker) -> None:
+def test_sync_removes_existing_extra_models_and_preserves_provider_settings(
+    mocker,
+) -> None:
     db_session = Mock()
     existing_provider = SimpleNamespace(
         id=7,
@@ -302,10 +304,7 @@ def test_sync_preserves_existing_extra_models_and_provider_settings(mocker) -> N
     assert request.api_version == "2026-06-16"
     assert request.custom_config == {"tenant": "existing"}
     assert request.deployment_name == "existing-deployment"
-    assert {model.name for model in request.model_configurations} == {
-        "gpt-5.5",
-        "legacy-model",
-    }
+    assert {model.name for model in request.model_configurations} == {"gpt-5.5"}
 
 
 def test_sync_does_not_override_existing_default_model(mocker) -> None:

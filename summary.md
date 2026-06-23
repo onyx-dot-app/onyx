@@ -1,5 +1,14 @@
 # 所有相关的变动都需要记录在summary.md中，包括坑，经验，变动等等；关于产品相关的文档在docs/GlomiAI.md，有产品相关变动了需要同步更新这个文件
 
+## 2026-06-23
+
+- 平台 provider 合同收敛：`Glomi Default` / `Glomi MiniMax` 这类 Glomi catalog provider 的 C 端模型展示不再信任 DB 里所有 `is_visible` 的 `model_configurations`，`/api/chat/available-models` 会按 `GLOMI_ENABLED_LLM_MODELS` 和供应商 catalog 重新过滤。即使 GPT gateway 的 `/models` 或 admin fetch 曾把 `codex-auto-review`、`gpt-4o-audio-preview` 等额外模型写进 DB，也不会出现在普通聊天模型下拉。
+- C 端模型下拉进一步收敛：当 Glomi platform catalog 开启时，`/api/chat/available-models` 只返回 catalog provider（如 `Glomi Default` / `Glomi MiniMax`）。旧的通用 `OpenAI-Compatible` provider 即使仍留在 DB/admin 配置中，也不会再出现在普通聊天模型选择器，避免额外 `/models` 结果以独立 provider 分组泄漏。
+- MiniMax/OpenAI-compatible `<think>` 泄漏修复：新增 OpenAI-compatible tagged reasoning normalizer，把 `<think>` / `<thinking>` 标签内的内容归一化到内部 reasoning 字段，标签外内容仍走可见 content。stream 路径会继续发 `reasoning_start/reasoning_delta/reasoning_done` packet，`invoke()` 汇总响应也会做同样归一化，前端主消息和后续非流式消费者都不会直接拿到原始 `<think>` 正文。
+- Tagged reasoning 边界补强：normalizer 覆盖标签跨 chunk 拆分（如 `<thi` + `nk>`）和最终 chunk 的 pending partial-tag flush，避免为了防泄漏而吞掉普通可见文本。
+- 架构经验：OpenAI-compatible 只能说明 transport 形状相近，不能说明 reasoning/tool/vision/error 语义一致。GPT-5.5 没暴露问题，是因为平台 gateway 已经贴合现有协议；MiniMax 官方 endpoint 需要供应商级 response normalization。
+- 新增 spec/plan：`docs/superpowers/specs/2026-06-23-platform-provider-contracts-design.md` 和 `docs/superpowers/plans/2026-06-23-platform-provider-contracts.md` 记录平台 provider 合同、catalog 白名单和 tagged reasoning 归一化实施路径。
+
 ## 2026-06-17
 
 - 模型下拉收敛：Glomi 平台 provider 仍固定维护四个候选模型（`gpt-5.5`、`qwen3.7-plus`、`deepseek-v4-pro`、`glm-5.2`），但新增 `GLOMI_ENABLED_LLM_MODELS` 启动环境变量控制实际开放模型，默认仅开放 `gpt-5.5`。如要开放 DeepSeek/GLM，可设 `GLOMI_ENABLED_LLM_MODELS=gpt-5.5,deepseek-v4-pro,glm-5.2` 并重启后端/相关 worker 触发同步。

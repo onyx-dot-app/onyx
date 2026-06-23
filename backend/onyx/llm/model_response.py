@@ -82,6 +82,126 @@ if TYPE_CHECKING:
     from litellm.types.utils import ModelResponseStream as LiteLLMModelResponseStream
 
 
+_REASONING_OPEN_TAGS = ("<think>", "<thinking>")
+_REASONING_CLOSE_TAGS = ("</think>", "</thinking>")
+_REASONING_TAGS = _REASONING_OPEN_TAGS + _REASONING_CLOSE_TAGS
+
+
+class TaggedReasoningContentNormalizer:
+    """Route tagged reasoning from streamed content into reasoning_content."""
+
+    def __init__(self) -> None:
+        self._in_reasoning = False
+        self._pending = ""
+
+    def process_delta(self, delta: Delta) -> Delta:
+        if delta.content is None:
+            return delta
+
+        content_to_parse = self._pending + delta.content
+        content_to_parse, self._pending = self._split_trailing_partial_tag(
+            content_to_parse
+        )
+        visible_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        index = 0
+
+        while index < len(content_to_parse):
+            opening_tag = self._matching_tag_at(
+                content_to_parse, index, _REASONING_OPEN_TAGS
+            )
+            if opening_tag is not None:
+                self._in_reasoning = True
+                index += len(opening_tag)
+                continue
+
+            closing_tag = self._matching_tag_at(
+                content_to_parse, index, _REASONING_CLOSE_TAGS
+            )
+            if closing_tag is not None:
+                self._in_reasoning = False
+                index += len(closing_tag)
+                continue
+
+            if self._in_reasoning:
+                reasoning_parts.append(content_to_parse[index])
+            else:
+                visible_parts.append(content_to_parse[index])
+            index += 1
+
+        parsed_reasoning = "".join(reasoning_parts)
+        parsed_content = "".join(visible_parts)
+        reasoning_content = "".join(
+            part
+            for part in (delta.reasoning_content, parsed_reasoning)
+            if part
+        )
+
+        return Delta(
+            content=parsed_content or None,
+            reasoning_content=reasoning_content or None,
+            tool_calls=delta.tool_calls,
+        )
+
+    def flush_delta(self, delta: Delta) -> Delta:
+        if not self._pending:
+            return delta
+
+        pending = self._pending
+        self._pending = ""
+
+        content = delta.content
+        reasoning_content = delta.reasoning_content
+        if self._in_reasoning:
+            reasoning_content = "".join(
+                part for part in (reasoning_content, pending) if part
+            )
+        else:
+            content = "".join(part for part in (content, pending) if part)
+
+        return Delta(
+            content=content or None,
+            reasoning_content=reasoning_content or None,
+            tool_calls=delta.tool_calls,
+        )
+
+    def process_message(self, message: Message) -> Message:
+        delta = self.process_delta(
+            Delta(
+                content=message.content,
+                reasoning_content=message.reasoning_content,
+            )
+        )
+        delta = self.flush_delta(delta)
+        return Message(
+            content=delta.content,
+            role=message.role,
+            tool_calls=message.tool_calls,
+            reasoning_content=delta.reasoning_content,
+        )
+
+    @staticmethod
+    def _matching_tag_at(
+        content: str,
+        index: int,
+        tags: tuple[str, ...],
+    ) -> str | None:
+        for tag in tags:
+            if content.startswith(tag, index):
+                return tag
+        return None
+
+    @staticmethod
+    def _split_trailing_partial_tag(content: str) -> tuple[str, str]:
+        for length in range(min(len(content), max(len(tag) for tag in _REASONING_TAGS))):
+            suffix = content[len(content) - length - 1 :]
+            if suffix in _REASONING_TAGS:
+                return content, ""
+            if any(tag.startswith(suffix) for tag in _REASONING_TAGS):
+                return content[: len(content) - len(suffix)], suffix
+        return content, ""
+
+
 def _parse_function_call(
     function_payload: dict[str, Any] | None,
 ) -> FunctionCall | None:

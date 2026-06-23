@@ -174,10 +174,15 @@ def build_available_chat_models_response(
     default_model: ModelConfiguration | None,
     user: User,
 ) -> AvailableChatModelsResponse:
+    from onyx.db.glomi_model_catalog import (
+        get_enabled_glomi_platform_model_for_provider,
+    )
+    from onyx.db.glomi_model_catalog import get_glomi_platform_model_catalog
     from onyx.db.glomi_model_catalog import get_glomi_supplier_metadata_for_provider
 
     selected_descriptor = getattr(user, "default_model", None)
     models: list[AvailableChatModel] = []
+    glomi_catalog_enabled = get_glomi_platform_model_catalog().enabled
 
     for provider in providers:
         provider_display_name = get_provider_display_name(provider.provider)
@@ -185,9 +190,21 @@ def build_available_chat_models_response(
             provider_name=provider.name,
             provider_type=provider.provider,
         )
+        if glomi_catalog_enabled and supplier_metadata is None:
+            continue
+
         for model_config in provider.model_configurations:
             if not model_config.is_visible:
                 continue
+            platform_model = None
+            if supplier_metadata is not None:
+                platform_model = get_enabled_glomi_platform_model_for_provider(
+                    provider_name=provider.name,
+                    provider_type=provider.provider,
+                    model_name=model_config.name,
+                )
+                if platform_model is None:
+                    continue
 
             is_default = (
                 default_model is not None
@@ -218,9 +235,21 @@ def build_available_chat_models_response(
                     model_configuration_id=model_config.id,
                     model_id=model_config.name,
                     display_name=_model_display_name(model_config),
-                    supports_image_input=_model_supports_image_input(model_config),
-                    supports_reasoning=_model_supports_reasoning(model_config),
-                    roles=_model_roles(model_config.name),
+                    supports_image_input=(
+                        platform_model.supports_image_input
+                        if platform_model is not None
+                        else _model_supports_image_input(model_config)
+                    ),
+                    supports_reasoning=(
+                        platform_model.supports_reasoning
+                        if platform_model is not None
+                        else _model_supports_reasoning(model_config)
+                    ),
+                    roles=(
+                        list(platform_model.roles)
+                        if platform_model is not None
+                        else _model_roles(model_config.name)
+                    ),
                     is_default=is_default,
                     is_selected=(
                         selected_descriptor == descriptor
