@@ -26,6 +26,7 @@ dependencies = [
     "voyageai==0.2.3",
     "brotli>=1.2.0",
     "agent-client-protocol>=0.7.1",
+    "daytona>=0.189.0",
 ]
 
 [dependency-groups]

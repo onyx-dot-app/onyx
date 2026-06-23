@@ -2,6 +2,7 @@
 
 ## 2026-06-23
 
+- Glomi Forge Task 1 继续推进：新增 `backend/onyx/glomi_forge` 模块骨架与 `configs.py` feature flag/Daytona 配置；通过 `uv add daytona --no-sync` 固定 Daytona SDK 到 `daytona>=0.189.0` 并更新 root `pyproject.toml`/`uv.lock`。本机无 Daytona control plane，`docs/superpowers/plans/A-spike-notes.md` 先记录待补 spike 项；普通 `uv add daytona` sync 在 macOS x86_64 上因 `torch==2.9.1` 无对应 wheel 失败，属于本地平台依赖限制。
 - Glomi Forge 命名收敛：用户确认自研的 Daytona + Pi 生成交付运行时以后统一叫 **Glomi Forge**，避免与 Onyx 原生 Craft / `server/features/build` 混淆。设计文档迁到 `docs/glomi/forge/`；路线/spec/plan 文件名改为 `glomi-forge`；实施计划里的包名/API/env/DB 命名统一为 `backend/onyx/glomi_forge`、`/api/glomi-forge`、`ENABLE_GLOMI_FORGE`、`glomi_forge_session` / `glomi_forge_event`，领域对象统一为 `ForgeSession`、`ForgeSpec`、`ForgeEvent`、`ForgeOrchestrator`。
 - 产品文档同步：`docs/GlomiAI.md` 和 `README.md` 已把 Phase B 当前重心从泛称 Craft 改为 Glomi Forge；Onyx Craft/opencode 路径仅作为参考实现和过渡兜底，不再承载新能力命名。
 - 平台 provider 合同收敛：`Glomi Default` / `Glomi MiniMax` 这类 Glomi catalog provider 的 C 端模型展示不再信任 DB 里所有 `is_visible` 的 `model_configurations`，`/api/chat/available-models` 会按 `GLOMI_ENABLED_LLM_MODELS` 和供应商 catalog 重新过滤。即使 GPT gateway 的 `/models` 或 admin fetch 曾把 `codex-auto-review`、`gpt-4o-audio-preview` 等额外模型写进 DB，也不会出现在普通聊天模型下拉。
