@@ -645,7 +645,7 @@ def test_body_too_large_returns_403(
     gated_session: tuple[User, UUID, str],
     db_session: Session,
 ) -> None:
-    """Body exceeding ``PARSER_MAX_BODY_BYTES`` (1 MiB) is rejected pre-match.
+    """Body exceeding ``PARSER_MAX_BODY_BYTES`` (32 MiB) is rejected pre-match.
 
     The gate rejects before the matcher runs, so no approval row is minted.
     """
@@ -653,16 +653,16 @@ def test_body_too_large_returns_403(
 
     output_path = f"/tmp/curl_oversize_{uuid4().hex[:8]}"
     body_path = f"/tmp/body_oversize_{uuid4().hex[:8]}.json"
-    # Generate the 1.5 MiB body in-pod -- inlining it through pod_exec_async
-    # would push the full payload into the apiserver's exec URL query params and
-    # trip a 431 Request Header Fields Too Large at the websocket handshake.
+    # Generate a 33 MiB body in-pod -- inlining it through pod_exec_async would
+    # push the full payload into the apiserver's exec URL query params and trip a
+    # 431 Request Header Fields Too Large at the websocket handshake.
     pod_exec(
         k8s_client,
         pod_name,
         SANDBOX_NAMESPACE,
         (
             f'printf \'{{"channel":"#general","text":"\' > {body_path} && '
-            f'head -c 1572864 /dev/zero | tr "\\0" x >> {body_path} && '
+            f'head -c 34603008 /dev/zero | tr "\\0" x >> {body_path} && '
             f"printf '\"}}' >> {body_path}"
         ),
     )
