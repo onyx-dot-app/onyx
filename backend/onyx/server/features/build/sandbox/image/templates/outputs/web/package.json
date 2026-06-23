@@ -38,7 +38,7 @@
     "@types/react-dom": "19.2.3",
     "oxlint": "^1.66.0",
     "tailwindcss": "^4.3.0",
-    "typescript": "^5"
+    "typescript": "^6"
   },
   "overrides": {
     "hono": "^4.12.25",
