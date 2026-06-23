@@ -1,3 +1,4 @@
+import datetime as dt
 import importlib
 import os
 import ssl
@@ -6,10 +7,54 @@ from unittest.mock import patch
 
 import certifi
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 # A real, parseable CA bundle so `verify-ca` / `verify-full` can actually load
 # certs (the resolution logic refuses to fabricate a context without one).
 _CA_BUNDLE = certifi.where()
+
+_SSL_ENV_VARS = (
+    "POSTGRES_SSLMODE",
+    "POSTGRES_SSLROOTCERT",
+    "POSTGRES_SSLCERT",
+    "POSTGRES_SSLKEY",
+    "POSTGRES_SSLKEY_PASSWORD",
+    "USE_IAM_AUTH",
+)
+
+
+@pytest.fixture(scope="session")
+def client_cert_key(tmp_path_factory: pytest.TempPathFactory) -> tuple[str, str]:
+    """A self-signed client certificate + matching private key on disk, for
+    exercising the mutual-TLS path (load_cert_chain / libpq sslcert+sslkey)."""
+    out = tmp_path_factory.mktemp("pg_mtls")
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "onyx-test-client")])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(dt.datetime(2020, 1, 1, tzinfo=dt.timezone.utc))
+        .not_valid_after(dt.datetime(2040, 1, 1, tzinfo=dt.timezone.utc))
+        .sign(key, hashes.SHA256())
+    )
+    cert_path = out / "client.crt"
+    key_path = out / "client.key"
+    cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.NoEncryption(),
+        )
+    )
+    return str(cert_path), str(key_path)
 
 
 def _reload_pg_ssl() -> ModuleType:
@@ -24,7 +69,7 @@ def _reload_pg_ssl() -> ModuleType:
 
 
 def _clear_ssl_env() -> None:
-    for var in ("POSTGRES_SSLMODE", "POSTGRES_SSLROOTCERT", "USE_IAM_AUTH"):
+    for var in _SSL_ENV_VARS:
         os.environ.pop(var, None)
 
 
@@ -149,6 +194,121 @@ def test_asyncpg_not_none_with_explicit_ssl_regression_guard() -> None:
         os.environ["POSTGRES_SSLROOTCERT"] = _CA_BUNDLE
         module = _reload_pg_ssl()
         assert module.create_pg_ssl_context() is not None
+
+
+# --- mutual TLS (client certificate) --------------------------------------
+
+
+def test_psycopg2_args_include_client_cert(
+    client_cert_key: tuple[str, str],
+) -> None:
+    cert, key = client_cert_key
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLMODE"] = "verify-full"
+        os.environ["POSTGRES_SSLROOTCERT"] = _CA_BUNDLE
+        os.environ["POSTGRES_SSLCERT"] = cert
+        os.environ["POSTGRES_SSLKEY"] = key
+        os.environ["POSTGRES_SSLKEY_PASSWORD"] = "hunter2"
+        module = _reload_pg_ssl()
+        assert module.pg_ssl_psycopg2_connect_args() == {
+            "sslmode": "verify-full",
+            "sslrootcert": _CA_BUNDLE,
+            "sslcert": cert,
+            "sslkey": key,
+            "sslpassword": "hunter2",
+        }
+
+
+def test_asyncpg_context_loads_client_cert(
+    client_cert_key: tuple[str, str],
+) -> None:
+    """The asyncpg path builds a real SSLContext with the client cert loaded —
+    a mismatched key would make load_cert_chain raise, so success proves the
+    pair flowed through."""
+    cert, key = client_cert_key
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLMODE"] = "require"
+        os.environ["POSTGRES_SSLCERT"] = cert
+        os.environ["POSTGRES_SSLKEY"] = key
+        module = _reload_pg_ssl()
+        ctx = module.create_pg_ssl_context()
+        assert isinstance(ctx, ssl.SSLContext)
+
+
+def test_client_cert_without_key_raises(
+    client_cert_key: tuple[str, str],
+) -> None:
+    cert, _ = client_cert_key
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLMODE"] = "verify-full"
+        os.environ["POSTGRES_SSLROOTCERT"] = _CA_BUNDLE
+        os.environ["POSTGRES_SSLCERT"] = cert
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="must both be set"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
+def test_client_cert_with_non_negotiating_mode_raises(
+    client_cert_key: tuple[str, str],
+) -> None:
+    cert, key = client_cert_key
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLMODE"] = "prefer"
+        os.environ["POSTGRES_SSLCERT"] = cert
+        os.environ["POSTGRES_SSLKEY"] = key
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="require POSTGRES_SSLMODE"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
+def test_key_password_without_cert_raises() -> None:
+    """A key password alone is dead config — it only decrypts a client key that
+    isn't provided."""
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLMODE"] = "verify-full"
+        os.environ["POSTGRES_SSLROOTCERT"] = _CA_BUNDLE
+        os.environ["POSTGRES_SSLKEY_PASSWORD"] = "hunter2"
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="POSTGRES_SSLKEY_PASSWORD"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
+def test_key_password_without_mode_raises() -> None:
+    """A key password with no mode falls into the dead-config branch."""
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLKEY_PASSWORD"] = "hunter2"
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="POSTGRES_SSLMODE is not"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
+
+
+def test_client_cert_without_mode_raises(
+    client_cert_key: tuple[str, str],
+) -> None:
+    cert, key = client_cert_key
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_ssl_env()
+        os.environ["POSTGRES_SSLCERT"] = cert
+        os.environ["POSTGRES_SSLKEY"] = key
+        import onyx.configs.app_configs as app_configs
+
+        with pytest.raises(ValueError, match="POSTGRES_SSLMODE is not"):
+            importlib.reload(app_configs)
+    importlib.reload(app_configs)
 
 
 # --- config validation ----------------------------------------------------
