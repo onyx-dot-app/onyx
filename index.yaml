@@ -16,7 +16,7 @@ entries:
       licenses: MIT
     apiVersion: v2
     appVersion: latest
-    created: "2026-06-23T21:09:31.417795653Z"
+    created: "2026-06-23T21:27:31.063831627Z"
     dependencies:
     - alias: postgresql
       condition: postgresql.enabled
@@ -49,7 +49,7 @@ entries:
       repository: https://onyx-dot-app.github.io/python-sandbox/
       version: 0.4.3
     description: Onyx application and Craft sandbox deployment chart
-    digest: 0e78cc8de01426554b31c81b5f0018d502c63cd31325a3df6b450ac9152a0bca
+    digest: 4d9369b2a7d105f69007fc20f1cd3849b134dc98becb06375210862028469a70
     home: https://www.onyx.app/
     name: onyx
     sources:
@@ -5363,4 +5363,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-06-23T21:09:31.389538468Z"
+generated: "2026-06-23T21:27:31.034381855Z"
