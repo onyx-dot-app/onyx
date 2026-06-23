@@ -78,8 +78,6 @@ async def impersonate_user(
         samesite="lax",
     )
 
-    # Emit only after the response is successfully built, so the audit trail
-    # reflects what the caller actually received.
     emit_audit_event(
         AuditAction.IMPERSONATE,
         AuditOutcome.SUCCESS,
