@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, memo } from "react";
+import { useTranslation } from "react-i18next";
 import { Project, useProjectsContext } from "@/providers/ProjectsContext";
 import { useDroppable } from "@dnd-kit/core";
 import { Button, LineItemButton, SidebarTab } from "@opal/components";
@@ -30,6 +31,7 @@ export interface ProjectFolderButtonProps {
 }
 
 const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
+  const { t } = useTranslation();
   const route = useAppRouter();
   const [open, setOpen] = useState(false);
   const [deleteConfirmationModalOpen, setDeleteConfirmationModalOpen] =
@@ -88,7 +90,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
       sizePreset="main-ui"
       rounding="sm"
       icon={SvgEdit}
-      title="Rename Project"
+      title={t("projects.rename_project")}
       onClick={noProp(() => setIsEditing(true))}
     />,
     null,
@@ -98,7 +100,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
       rounding="sm"
       color="danger"
       icon={SvgTrash}
-      title="Delete Project"
+      title={t("projects.delete_project")}
       onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
     />,
   ];
@@ -114,7 +116,7 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
       {/* Confirmation Modal (only for deletion) */}
       {deleteConfirmationModalOpen && (
         <ConfirmationModalLayout
-          title="Delete Project"
+          title={t("projects.delete_project")}
           icon={SvgTrash}
           onClose={() => setDeleteConfirmationModalOpen(false)}
           submit={
@@ -125,12 +127,11 @@ const ProjectFolderButton = memo(({ project }: ProjectFolderButtonProps) => {
                 deleteProject(project.id);
               }}
             >
-              Delete
+              {t("projects.delete")}
             </Button>
           }
         >
-          Are you sure you want to delete this project? This action cannot be
-          undone.
+          {t("projects.delete_project_confirm")}
         </ConfirmationModalLayout>
       )}
 

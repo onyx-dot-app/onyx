@@ -7,6 +7,7 @@ import Text from "@/refresh-components/texts/Text";
 import { InputVertical } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CopyButton } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -34,6 +35,7 @@ import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Section } from "@/layouts/general-layouts";
 import { EmptyMessageCard } from "@opal/components";
+import i18n from "@/lib/i18n";
 
 interface AddOpenAPIActionModalProps {
   skipOverlay?: boolean;
@@ -49,9 +51,13 @@ interface OpenAPIActionFormValues {
   definition: string;
 }
 
-const validationSchema = Yup.object().shape({
-  definition: Yup.string().required("OpenAPI schema definition is required"),
-});
+function getValidationSchema() {
+  return Yup.object().shape({
+    definition: Yup.string().required(
+      i18n.t("admin.actions_open_api.schema_required")
+    ),
+  });
+}
 
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
@@ -82,6 +88,7 @@ function FormContent({
   onEditAuthentication,
   onDisconnectTool,
 }: FormContentProps) {
+  const { t } = useTranslation();
   const { values, setFieldValue, setFieldError, dirty, isSubmitting } =
     useFormikContext<OpenAPIActionFormValues>();
 
@@ -104,9 +111,9 @@ function FormContent({
       setFieldValue("definition", formatted);
       setFieldError("definition", "");
     } catch {
-      setFieldError("definition", "Invalid JSON format");
+      setFieldError("definition", t("admin.actions_open_api.invalid_json"));
     }
-  }, [values.definition, setFieldValue, setFieldError]);
+  }, [values.definition, setFieldValue, setFieldError, t]);
 
   const validateDefinition = useCallback(
     async (
@@ -142,10 +149,10 @@ function FormContent({
         }
       } catch {
         setMethodSpecs(null);
-        setFieldError("definition", "Invalid JSON format");
+        setFieldError("definition", t("admin.actions_open_api.invalid_json"));
       }
     },
-    []
+    [t]
   );
 
   const debouncedValidateDefinition = useMemo(
@@ -153,17 +160,19 @@ function FormContent({
     [validateDefinition]
   );
 
-  const modalTitle = isEditMode ? "Edit OpenAPI action" : "Add OpenAPI action";
+  const modalTitle = isEditMode
+    ? t("admin.actions_open_api.modal_edit_title")
+    : t("admin.actions_open_api.modal_add_title");
   const modalDescription = isEditMode
-    ? "Update the OpenAPI schema for this action."
-    : "Add OpenAPI schema to add custom actions.";
+    ? t("admin.actions_open_api.modal_edit_desc")
+    : t("admin.actions_open_api.modal_add_desc");
   const primaryButtonLabel = isSubmitting
     ? isEditMode
-      ? "Saving..."
-      : "Adding..."
+      ? t("admin.actions_open_api.saving")
+      : t("admin.actions_open_api.adding")
     : isEditMode
-      ? "Save Changes"
-      : "Add Action";
+      ? t("admin.actions_open_api.save_changes")
+      : t("admin.actions_open_api.add_action_btn");
 
   const hasOAuthConfig = Boolean(existingTool?.oauth_config_id);
   const hasCustomHeaders =
@@ -178,17 +187,25 @@ function FormContent({
     }
     if (hasOAuthConfig) {
       return existingTool.oauth_config_name
-        ? `OAuth connected via ${existingTool.oauth_config_name}`
-        : "OAuth authentication configured";
+        ? t("admin.actions_open_api.oauth_via", {
+            name: existingTool.oauth_config_name,
+          })
+        : t("admin.actions_open_api.oauth_configured");
     }
     if (hasCustomHeaders) {
-      return "Custom authentication headers configured";
+      return t("admin.actions_open_api.custom_headers");
     }
     if (hasPassthroughAuth) {
-      return "Passthrough authentication enabled";
+      return t("admin.actions_open_api.passthrough_auth");
     }
     return "";
-  }, [existingTool, hasOAuthConfig, hasCustomHeaders, hasPassthroughAuth]);
+  }, [
+    existingTool,
+    hasOAuthConfig,
+    hasCustomHeaders,
+    hasPassthroughAuth,
+    t,
+  ]);
 
   const showAuthenticationStatus = Boolean(
     isEditMode && existingTool?.enabled && hasAuthenticationConfigured
@@ -236,13 +253,11 @@ function FormContent({
       <Modal.Body>
         <InputVertical
           withLabel="definition"
-          title="OpenAPI Schema Definition"
+          title={t("admin.actions_open_api.schema_title")}
           subDescription={markdown(
-            `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. ` +
-              `You can use the placeholders \`CHAT_SESSION_ID\`, \`MESSAGE_ID\`, \`USER_ID\`, and \`USER_EMAIL\` ` +
-              `anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the ` +
-              `current request's values at call time. ` +
-              `Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
+            t("admin.actions_open_api.schema_desc", {
+              docsUrl: `${DOCS_ADMINS_PATH}/actions/openapi`,
+            })
           )}
         >
           <Hoverable.Root group="definitionField" width="full">
@@ -258,13 +273,13 @@ function FormContent({
                         prominence="tertiary"
                         size="sm"
                         getCopyText={() => values.definition}
-                        tooltip="Copy definition"
+                        tooltip={t("admin.actions_open_api.copy_definition")}
                       />
                       <Button
                         prominence="tertiary"
                         size="sm"
                         icon={SvgBracketCurly}
-                        tooltip="Format definition"
+                        tooltip={t("admin.actions_open_api.format_definition")}
                         onClick={handleFormat}
                       />
                     </div>
@@ -274,7 +289,7 @@ function FormContent({
               <InputTextAreaField
                 name="definition"
                 rows={14}
-                placeholder="Enter your OpenAPI schema here"
+                placeholder={t("admin.actions_open_api.schema_placeholder")}
                 className="font-main-ui-mono"
               />
             </div>
@@ -296,7 +311,7 @@ function FormContent({
               <InfoBlock
                 icon={SvgAlertCircle}
                 title={url || ""}
-                description="URL found in the schema. Only connect to servers you trust."
+                description={t("admin.actions_open_api.url_warning")}
               />
             )}
             <Divider paddingParallel="fit" paddingPerpendicular="fit" />
@@ -305,7 +320,7 @@ function FormContent({
                 <ToolItem
                   key={`${method.method}-${method.path}-${method.name}`}
                   name={method.name}
-                  description={method.summary || "No summary provided"}
+                  description={method.summary || t("admin.actions_open_api.no_summary")}
                   variant="openapi"
                   openApiMetadata={{
                     method: method.method,
@@ -318,9 +333,9 @@ function FormContent({
         ) : (
           <EmptyMessageCard
             sizePreset="main-ui"
-            title="No Actions Found"
+            title={t("admin.actions_open_api.no_actions")}
             icon={SvgActions}
-            description="Provide OpenAPI schema to preview actions here."
+            description={t("admin.actions_open_api.no_actions_desc")}
           />
         )}
 
@@ -341,8 +356,8 @@ function FormContent({
                 <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
                 <Text>
                   {existingTool?.enabled
-                    ? "Authenticated & Enabled"
-                    : "Authentication configured"}
+                    ? t("admin.actions_open_api.authenticated_enabled")
+                    : t("admin.actions_open_api.auth_configured")}
                 </Text>
               </Section>
               {authenticationDescription && (
@@ -361,7 +376,7 @@ function FormContent({
                 icon={SvgUnplug}
                 prominence="tertiary"
                 type="button"
-                tooltip="Disable action"
+                tooltip={t("admin.actions_open_api.disable_action")}
                 onClick={() => {
                   if (!existingTool || !onDisconnectTool) {
                     return;
@@ -375,7 +390,7 @@ function FormContent({
                 type="button"
                 onClick={handleEditAuthenticationClick}
               >
-                Edit Configs
+                {t("admin.actions_mcp.edit_configs")}
               </Button>
             </Section>
           </Section>
@@ -389,7 +404,7 @@ function FormContent({
           type="button"
           onClick={handleClose}
         >
-          Cancel
+          {t("general.cancel")}
         </Button>
         <Button disabled={isSubmitting || !dirty} type="submit">
           {primaryButtonLabel}
@@ -408,7 +423,10 @@ export default function AddOpenAPIActionModal({
   onEditAuthentication,
   onDisconnectTool,
 }: AddOpenAPIActionModalProps) {
+  const { t } = useTranslation();
   const { isOpen, toggle } = useModal();
+
+  const validationSchema = useMemo(() => getValidationSchema(), []);
 
   const handleModalClose = useCallback(
     (open: boolean) => {
@@ -439,7 +457,7 @@ export default function AddOpenAPIActionModal({
       parsedDefinition = parseJsonWithTrailingCommas(values.definition);
     } catch (error) {
       console.error("Error parsing OpenAPI definition:", error);
-      toast.error("Invalid JSON format in OpenAPI schema definition");
+      toast.error(t("admin.actions_open_api.invalid_json"));
       return;
     }
 

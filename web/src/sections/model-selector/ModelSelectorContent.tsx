@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Button,
   LineItemButton,
@@ -47,6 +48,7 @@ export default function ModelSelectorContent({
   includeGlobalDefault = false,
   footer,
 }: ModelSelectorContentProps) {
+  const { t } = useTranslation();
   const { llmProviders, isLoading, defaultText } =
     useCurrentAgentLLMProviders();
 
@@ -163,7 +165,7 @@ export default function ModelSelectorContent({
         variant="internal"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder="Search models..."
+        placeholder={t("admin.agents.editor_search_models")}
       />
 
       <PopoverMenu scrollContainerRef={scrollContainerRef}>

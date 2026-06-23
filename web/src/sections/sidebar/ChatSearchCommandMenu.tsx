@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import CommandMenu, {
@@ -60,6 +61,7 @@ interface FilterableProject {
 export default function ChatSearchCommandMenu({
   trigger,
 }: ChatSearchCommandMenuProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [activeFilter, setActiveFilter] = useState<
@@ -302,7 +304,7 @@ export default function ChatSearchCommandMenu({
                     filteredProjects.length <= PREVIEW_PROJECTS_LIMIT
                   }
                 >
-                  Projects
+                  {t("sidebar.projects")}
                 </CommandMenu.Filter>
                 {/* New Project action - shown after Projects filter when no search term */}
                 {!hasSearchValue && activeFilter === "all" && (
@@ -311,7 +313,7 @@ export default function ChatSearchCommandMenu({
                     icon={SvgFolderPlus}
                     onSelect={() => handleNewProject()}
                   >
-                    New Project
+                    {t("sidebar.new_project")}
                   </CommandMenu.Action>
                 )}
                 {displayedProjects.map((project) => (
@@ -350,10 +352,9 @@ export default function ChatSearchCommandMenu({
                   icon={SvgFolderPlus}
                   onSelect={() => handleNewProject(searchValue.trim())}
                 >
-                  <>
-                    Create New Project "
-                    <span className="text-text-05">{searchValue.trim()}</span>"
-                  </>
+                  {t("projects.create_new_project_named", {
+                    name: searchValue.trim(),
+                  })}
                 </CommandMenu.Action>
               )}
 

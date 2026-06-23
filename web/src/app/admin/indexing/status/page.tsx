@@ -13,6 +13,7 @@ import { useToastFromQuery } from "@/hooks/useToast";
 import { Button } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
 import { useState, useRef, useMemo, RefObject } from "react";
+import { useTranslation } from "react-i18next";
 import { FilterOptions } from "./FilterComponent";
 import { ValidSources } from "@/lib/types";
 import Cookies from "js-cookie";
@@ -23,6 +24,7 @@ import { IndexingStatusRequest } from "@/lib/types";
 const route = ADMIN_ROUTES.INDEXING_STATUS;
 
 function Main() {
+  const { t } = useTranslation();
   const { vectorDbEnabled } = useSettings();
 
   // State for filter management
@@ -190,9 +192,7 @@ function Main() {
         <div>
           <Spacer rem={3} />
           <Text as="p">
-            {markdown(
-              "It looks like you don't have any connectors setup yet. Visit the [Add Connector](/admin/add-connector) page to get started!"
-            )}
+            {markdown(t("admin.connector_setup.empty_indexing"))}
           </Text>
         </div>
       ) : (

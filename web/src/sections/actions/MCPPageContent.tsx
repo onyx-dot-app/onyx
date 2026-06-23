@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { KeyedMutator } from "swr";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
@@ -30,6 +31,7 @@ import { useRouter } from "next/navigation";
 import useMcpServers from "@/hooks/useMcpServers";
 
 export default function MCPPageContent() {
+  const { t } = useTranslation();
   // Data fetching
   const {
     mcpData,
@@ -492,8 +494,8 @@ export default function MCPPageContent() {
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           onAction={handleAddServer}
-          actionLabel="Add MCP Server"
-          emptyStateText="Connect MCP server to add custom actions."
+          actionLabel={t("admin.actions_mcp.add_server")}
+          emptyStateText={t("admin.actions_mcp.empty_list")}
         />
       </div>
 

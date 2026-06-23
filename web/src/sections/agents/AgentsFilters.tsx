@@ -27,6 +27,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { FilterButton, LineItemButton } from "@opal/components";
 import { SvgActions, SvgUser } from "@opal/icons";
 import { Popover, PopoverMenu } from "@opal/components";
@@ -93,6 +94,7 @@ interface UseAgentsFiltersReturn<T extends MinimalAgent> {
 export function useAgentsFilters<T extends MinimalAgent>(
   agents: T[]
 ): UseAgentsFiltersReturn<T> {
+  const { t } = useTranslation();
   const { user } = useUser();
   const { mcpData } = useMcpServers();
   const { tools: allTools } = useAvailableTools();
@@ -226,24 +228,31 @@ export function useAgentsFilters<T extends MinimalAgent>(
   // -- Filter button labels --------------------------------------------------
 
   const creatorFilterButtonText = useMemo(() => {
-    if (selectedCreatorIds.size === 0) return "Everyone";
+    if (selectedCreatorIds.size === 0) return t("admin.agents.filter_everyone");
     if (selectedCreatorIds.size === 1) {
       const selectedId = Array.from(selectedCreatorIds)[0];
       const creator = uniqueCreators.find((c) => c.id === selectedId);
-      return creator ? `By ${creator.email}` : "Everyone";
+      return creator
+        ? t("admin.agents.filter_by_email", { email: creator.email })
+        : t("admin.agents.filter_everyone");
     }
-    return `${selectedCreatorIds.size} people`;
-  }, [selectedCreatorIds, uniqueCreators]);
+    return t("admin.agents.filter_people_count", {
+      count: selectedCreatorIds.size,
+    });
+  }, [selectedCreatorIds, uniqueCreators, t]);
 
   const actionsFilterButtonText = useMemo(() => {
-    if (selectedActionKeys.size === 0) return "All Actions";
+    if (selectedActionKeys.size === 0)
+      return t("admin.agents.filter_all_actions");
     if (selectedActionKeys.size === 1) {
       const key = Array.from(selectedActionKeys)[0];
       const item = uniqueActions.find((a) => actionFilterKey(a) === key);
-      return item?.name ?? "All Actions";
+      return item?.name ?? t("admin.agents.filter_all_actions");
     }
-    return `${selectedActionKeys.size} selected`;
-  }, [selectedActionKeys, uniqueActions]);
+    return t("admin.agents.filter_selected_count", {
+      count: selectedActionKeys.size,
+    });
+  }, [selectedActionKeys, uniqueActions, t]);
 
   // -- Filtered agents -------------------------------------------------------
 
@@ -297,7 +306,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
             {[
               <InputTypeIn
                 key="created-by"
-                placeholder="Created by..."
+                placeholder={t("admin.agents.filter_created_by_placeholder")}
                 variant="internal"
                 searchIcon
                 value={creatorFilter.query}
@@ -315,7 +324,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
                     selectVariant="select-heavy"
                     icon={SvgUser}
                     title={creator.email}
-                    description={isCurrentUser ? "Me" : undefined}
+                    description={isCurrentUser ? t("admin.agents.filter_me") : undefined}
                     state={isSelected ? "selected" : "empty"}
                     onClick={() => {
                       setSelectedCreatorIds((prev) => {
@@ -352,7 +361,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
             {[
               <InputTypeIn
                 key="actions"
-                placeholder="Filter actions..."
+                placeholder={t("admin.agents.filter_actions_placeholder")}
                 variant="internal"
                 searchIcon
                 value={actionsFilter.query}

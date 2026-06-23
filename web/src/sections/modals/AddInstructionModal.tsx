@@ -2,6 +2,7 @@
 
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
+import { useTranslation } from "react-i18next";
 import { Button } from "@opal/components";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useModal } from "@/refresh-components/contexts/ModalContext";
@@ -14,6 +15,7 @@ const validationSchema = Yup.object({
 });
 
 export default function AddInstructionModal() {
+  const { t } = useTranslation();
   const modal = useModal();
   const { currentProjectDetails, upsertInstructions } = useProjectsContext();
 
@@ -22,8 +24,8 @@ export default function AddInstructionModal() {
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgAddLines}
-          title="Set Project Instructions"
-          description="Specify the behaviors or tone for the chat sessions in this project."
+          title={t("projects.set_instructions_title")}
+          description={t("projects.set_instructions_desc")}
           onClose={() => modal.toggle(false)}
         />
         <Formik
@@ -47,7 +49,7 @@ export default function AddInstructionModal() {
               <Modal.Body>
                 <InputTextAreaField
                   name="instructions"
-                  placeholder="My goal with is to... be sure to... in your responses."
+                  placeholder={t("projects.instructions_placeholder")}
                 />
               </Modal.Body>
               <Modal.Footer>
@@ -56,13 +58,13 @@ export default function AddInstructionModal() {
                   type="button"
                   onClick={() => modal.toggle(false)}
                 >
-                  Cancel
+                  {t("general.cancel")}
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting || !dirty || !isValid}
                 >
-                  Save Instructions
+                  {t("projects.save_instructions")}
                 </Button>
               </Modal.Footer>
             </Form>
