@@ -17,9 +17,15 @@ export function useHighlightLanguages(
   useEffect(() => {
     if (!enabled || languages) return;
     let cancelled = false;
-    void loadHighlightLanguages().then((langs) => {
-      if (!cancelled) setLanguages(langs);
-    });
+    loadHighlightLanguages()
+      .then((langs) => {
+        if (!cancelled) setLanguages(langs);
+      })
+      .catch((error) => {
+        // Grammar chunk failed to load; leave `languages` null so rendering
+        // falls back to no syntax highlighting rather than rejecting unhandled.
+        console.error("Failed to load syntax-highlighting grammars", error);
+      });
     return () => {
       cancelled = true;
     };

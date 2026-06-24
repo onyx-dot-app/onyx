@@ -41,13 +41,13 @@ export default function MinimalMarkdown({
   const highlightLanguages = useHighlightLanguages(!streaming);
   const rehypePlugins = useMemo<PluggableList>(
     () =>
-      highlightLanguages
+      !streaming && highlightLanguages
         ? [
             [rehypeHighlight, { detect: true, languages: highlightLanguages }],
             rehypeKatex,
           ]
         : [rehypeKatex],
-    [highlightLanguages]
+    [streaming, highlightLanguages]
   );
   const markdownComponents = useMemo(() => {
     const defaults: Components = {
