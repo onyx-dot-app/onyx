@@ -31,6 +31,7 @@ from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_json_like
 
 logger = setup_logger()
 
@@ -327,11 +328,12 @@ def create_message(
         message_metadata: Required structured data (the raw sandbox event packet JSON)
         db_session: Database session
     """
+    sanitized_metadata = sanitize_json_like(message_metadata)
     message = BuildMessage(
         session_id=session_id,
         turn_index=turn_index,
         type=message_type,
-        message_metadata=message_metadata,
+        message_metadata=sanitized_metadata,
     )
     db_session.add(message)
     db_session.commit()
@@ -343,7 +345,7 @@ def create_message(
         message.id,
         session_id,
         turn_index,
-        message_metadata.get("type"),
+        sanitized_metadata.get("type"),
     )
     return message
 
@@ -383,12 +385,15 @@ def update_message(
     if message is None:
         return None
 
-    message.message_metadata = message_metadata
+    sanitized_metadata = sanitize_json_like(message_metadata)
+    message.message_metadata = sanitized_metadata
     db_session.commit()
     db_session.refresh(message)
 
     logger.info(
-        "Updated message %s metadata type=%s", message_id, message_metadata.get("type")
+        "Updated message %s metadata type=%s",
+        message_id,
+        sanitized_metadata.get("type"),
     )
     return message
 
@@ -433,7 +438,8 @@ def upsert_agent_plan(
     )
 
     if existing_plan:
-        existing_plan.message_metadata = plan_metadata
+        sanitized_metadata = sanitize_json_like(plan_metadata)
+        existing_plan.message_metadata = sanitized_metadata
         db_session.commit()
         db_session.refresh(existing_plan)
         logger.info(

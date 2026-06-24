@@ -96,6 +96,8 @@ class StubSandboxManager(SandboxManager):
       by ``subscribe_to_opencode_session``.
     - ``create_snapshot_returns``: ``SnapshotResult | None`` returned by
       ``create_snapshot``.
+    - ``create_snapshot_results_by_session``: per-session ``SnapshotResult``,
+      ``None``, or exception for ``create_snapshot``.
     - ``list_directory_returns`` or ``list_directory_returns_by_path``,
       ``read_file_returns``, ``upload_file_returns``, ``delete_file_returns``,
       ``get_upload_stats_returns``, ``get_webapp_url_returns``,
@@ -133,6 +135,9 @@ class StubSandboxManager(SandboxManager):
         self.health_check_returns: bool | None = None
         self.session_workspace_exists_returns: bool | None = None
         self.create_snapshot_returns: SnapshotResult | None | object = _UNSET
+        self.create_snapshot_results_by_session: dict[
+            UUID, SnapshotResult | None | Exception
+        ] = {}
         self.create_opencode_history_snapshot_returns: bool | object = _UNSET
         self.list_directory_returns: list[FilesystemEntry] | None = None
         self.list_directory_returns_by_path: dict[str, list[FilesystemEntry]] | None = (
@@ -325,6 +330,12 @@ class StubSandboxManager(SandboxManager):
             "session_id": session_id,
             "tenant_id": tenant_id,
         }
+        if session_id in self.create_snapshot_results_by_session:
+            outcome = self.create_snapshot_results_by_session[session_id]
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
         if self.create_snapshot_returns is _UNSET:
             raise _not_configured("create_snapshot")
         return cast("SnapshotResult | None", self.create_snapshot_returns)
