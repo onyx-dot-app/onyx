@@ -15,6 +15,7 @@ import pytest
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentSource
 from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TabularSection
 from onyx.connectors.models import TextSection
 from onyx.hooks.executor import HookSkipped
 from onyx.hooks.executor import HookSoftFailed
@@ -600,6 +601,17 @@ def _make_image_doc(
     )
 
 
+def _make_tabular_doc(doc_id: str, section: TabularSection) -> Document:
+    return Document(
+        id=doc_id,
+        title=f"Doc {doc_id}",
+        semantic_identifier=doc_id,
+        sections=[section],
+        source=DocumentSource.FILE,
+        metadata={},
+    )
+
+
 class TestProcessImageSections:
     """Validate that parallel image summarization places results in the
     correct section positions — especially under concurrent execution."""
@@ -637,6 +649,31 @@ class TestProcessImageSections:
             ),
         ):
             return process_image_sections(documents)
+
+    def test_file_backed_tabular_preserved_with_llm(self) -> None:
+        """A file-backed TabularSection keeps its csv_file_id through the
+        image-processing rebuild (vision-LLM path)."""
+        doc = _make_tabular_doc(
+            "doc-fb", TabularSection(link="l", csv_file_id="fid-1", heading="Sheet1")
+        )
+        section = self._run([doc], image_map={})[0].processed_sections[0]
+        assert isinstance(section, TabularSection)
+        assert section.csv_file_id == "fid-1"
+        assert section.text is None
+
+    def test_file_backed_tabular_preserved_without_llm(self) -> None:
+        """Same guarantee on the no-LLM path (image analysis disabled)."""
+        doc = _make_tabular_doc(
+            "doc-fb", TabularSection(link="l", csv_file_id="fid-2", heading="Sheet1")
+        )
+        with patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=False,
+        ):
+            section = process_image_sections([doc])[0].processed_sections[0]
+        assert isinstance(section, TabularSection)
+        assert section.csv_file_id == "fid-2"
+        assert section.text is None
 
     def test_interleaved_sections_preserve_order(self) -> None:
         """Text and image sections must stay in their original positions."""

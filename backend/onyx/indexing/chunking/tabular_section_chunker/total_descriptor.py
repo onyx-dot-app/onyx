@@ -1,5 +1,6 @@
 from collections import Counter
 
+from onyx.indexing.chunking.tabular_section_chunker.analysis import NumericAggregate
 from onyx.indexing.chunking.tabular_section_chunker.analysis import SheetAnalysis
 from onyx.indexing.chunking.tabular_section_chunker.util import label
 from onyx.indexing.chunking.tabular_section_chunker.util import pack_lines
@@ -24,7 +25,7 @@ def build_total_descriptor_chunks(
 
     lines: list[str] = []
     for idx in analysis.numeric_cols:
-        lines.append(_numeric_totals_line(headers[idx], analysis.numeric_values[idx]))
+        lines.append(_numeric_totals_line(headers[idx], analysis.numeric_stats[idx]))
     for idx in analysis.categorical_cols:
         line = _categorical_top_line(headers[idx], analysis.categorical_counts[idx])
         if line:
@@ -45,13 +46,11 @@ def build_total_descriptor_chunks(
     )
 
 
-def _numeric_totals_line(name: str, values: list[float]) -> str:
-    total = sum(values)
-    avg = total / len(values)
+def _numeric_totals_line(name: str, agg: NumericAggregate) -> str:
     return (
-        f"Column {label(name)}: total (sum across all rows) = {_fmt(total)}, "
-        f"average = {_fmt(avg)}, minimum = {_fmt(min(values))}, "
-        f"maximum = {_fmt(max(values))}, count = {len(values)}."
+        f"Column {label(name)}: total (sum across all rows) = {_fmt(agg.total)}, "
+        f"average = {_fmt(agg.average)}, minimum = {_fmt(agg.minimum)}, "
+        f"maximum = {_fmt(agg.maximum)}, count = {agg.count}."
     )
 
 
