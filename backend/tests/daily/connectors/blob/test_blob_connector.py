@@ -135,7 +135,7 @@ def test_blob_s3_connector(
 
         if is_tabular_file(doc.semantic_identifier):
             assert isinstance(section, TabularSection)
-            assert len(section.text) > 0
+            assert len(section.text or "") > 0
             continue
 
         assert isinstance(section, TextSection)

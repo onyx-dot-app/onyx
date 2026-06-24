@@ -1,6 +1,8 @@
 import csv
 import io
 from collections.abc import Generator
+from collections.abc import Iterable
+from collections.abc import Iterator
 from collections.abc import Mapping
 
 from pydantic import BaseModel
@@ -86,35 +88,39 @@ def read_csv_header(csv_text: str) -> list[str]:
         raise csv.Error(f"read_csv_header failed: {e}") from e
 
 
+def parse_csv_stream(lines: Iterable[str]) -> Iterator[ParsedRow]:
+    """Stream each data row paired with its header from a CSV line source (a file
+    handle or any iterable of lines), header first, without buffering the input.
+
+    Assumes clean line endings; `parse_csv_string` wraps this for in-memory
+    strings that may use bare-``\\r`` (old Mac) row separators.
+    """
+    reader = csv.reader(lines)
+    header: list[str] | None = None
+    for row in reader:
+        if not any(cell.strip() for cell in row):
+            continue
+        if header is None:
+            header = row
+            continue
+        yield ParsedRow(header=header, row=row)
+
+
 def parse_csv_string(csv_text: str) -> Generator[ParsedRow, None, None]:
     """Yield each data row paired with its header from a CSV string.
 
     Falls back to normalized line endings when csv.reader raises the
     specific "new-line character" error (e.g. old Mac-format CSVs).
     """
-
-    def _parse(text: str) -> list[ParsedRow]:
-        reader = csv.reader(io.StringIO(text))
-        header: list[str] | None = None
-        rows: list[ParsedRow] = []
-        for row in reader:
-            if not any(cell.strip() for cell in row):
-                continue
-            if header is None:
-                header = row
-                continue
-            rows.append(ParsedRow(header=header, row=row))
-        return rows
-
     if not csv_text.strip():
         return
     try:
-        rows = _parse(csv_text)
+        rows = list(parse_csv_stream(io.StringIO(csv_text)))
     except csv.Error as e:
         if _NEWLINE_CSV_ERROR not in str(e):
             raise csv.Error(f"parse_csv_string failed: {e}") from e
         try:
-            rows = _parse(normalize_csv_newlines(csv_text))
+            rows = list(parse_csv_stream(io.StringIO(normalize_csv_newlines(csv_text))))
         except csv.Error as e2:
             raise csv.Error(f"parse_csv_string failed: {e2}") from e2
     yield from rows
