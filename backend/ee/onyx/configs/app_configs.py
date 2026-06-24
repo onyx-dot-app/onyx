@@ -115,7 +115,7 @@ JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
 
 # Super Users
 SUPER_USERS = json.loads(os.environ.get("SUPER_USERS", "[]"))
-SUPER_CLOUD_API_KEY = os.environ.get("SUPER_CLOUD_API_KEY", "api_key")
+SUPER_CLOUD_API_KEY: str | None = os.environ.get("SUPER_CLOUD_API_KEY")
 
 # Gates the cloud-superuser impersonation endpoint. Disabled by default; must be
 # explicitly opted into via env var.
