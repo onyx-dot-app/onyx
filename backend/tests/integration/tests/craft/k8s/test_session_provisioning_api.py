@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from contextlib import suppress
 from uuid import UUID
 from uuid import uuid4
 
@@ -17,6 +16,7 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.tests.craft.k8s.k8s_fixtures import cleanup_api_user_sandbox_rows
+from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
@@ -45,7 +45,13 @@ def test_create_session_provisions_running_sandbox_pod_via_api(
         assert pod.status is not None
         assert pod.status.phase == "Running"
     finally:
+        cleanup_rows = True
         if sandbox_id is not None:
-            with suppress(Exception):
+            try:
                 k8s_manager.terminate(sandbox_id)
-        cleanup_api_user_sandbox_rows(UUID(api_user.id))
+                wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
+            except Exception:
+                cleanup_rows = False
+                raise
+        if cleanup_rows:
+            cleanup_api_user_sandbox_rows(UUID(api_user.id))

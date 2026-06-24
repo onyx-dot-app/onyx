@@ -36,15 +36,15 @@ Full Onyx deployment running. No mocking. Prefer this over other test types when
 possible. Most integration tests exercise the product through HTTP API manager
 helpers under `tests/integration/common_utils`.
 
-Craft Kubernetes integration tests live in `tests/integration/tests/craft/k8s/`
-and run in the dedicated Helm-installed kind job
+Craft Kubernetes smoke tests live in `tests/integration/tests/craft/k8s/` and
+run in the dedicated Helm-installed kind job
 ([pr-craft-k8s-tests.yml](../../.github/workflows/pr-craft-k8s-tests.yml)).
-That suite is a full deployed Craft integration lane: the chart provides
-Postgres, Redis, MinIO, OpenSearch, api_server, web_server, Celery workers,
-sandbox-proxy, and real sandbox pods in kind. API-facing setup goes through the
-deployed api_server; direct manager calls are reserved for low-level Kubernetes
-contracts that do not have an HTTP API. Direct task/stub checks belong in
-`tests/external_dependency_unit/craft/`.
+That lane runs against a deployed chart: Postgres, Redis, MinIO, OpenSearch,
+api_server, web_server, Celery workers, sandbox-proxy, and real sandbox pods in
+kind. API-facing setup goes through the deployed api_server; direct manager
+calls are reserved for low-level Kubernetes contracts that do not have an HTTP
+API. Some broader Craft K8s feature coverage still lives under
+`tests/external_dependency_unit/craft/` while it is being moved.
 
 ```bash
 python -m dotenv -f .vscode/.env run -- pytest backend/tests/integration

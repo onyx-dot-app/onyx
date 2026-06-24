@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import os
 from collections.abc import Generator
 from uuid import uuid4
@@ -9,12 +8,6 @@ import httpx
 import pytest
 
 from onyx.auth.schemas import UserRole as AuthUserRole
-from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.server.features.build.configs import SANDBOX_BACKEND
-from onyx.server.features.build.configs import SandboxBackend
-from onyx.server.features.build.db.sandbox import get_running_sandboxes
-from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.integration.common_utils import http_client
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -23,26 +16,9 @@ from tests.integration.common_utils.managers.user import build_email
 from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.craft.conftest import _RetryingTransport
 
-pytest_plugins = (
-    "tests.integration.tests.craft.k8s.k8s_db_fixtures",
-    "tests.integration.tests.craft.k8s.k8s_fixtures",
-)
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _reap_module_pods() -> Generator[None, None, None]:
-    yield
-    if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
-        return
-    with get_session_with_tenant(
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-    ) as db:
-        running = get_running_sandboxes(db)
-    manager = get_sandbox_manager()
-    for sandbox in running:
-        with contextlib.suppress(Exception):
-            manager.terminate(sandbox.id)
+pytest_plugins = ("tests.integration.tests.craft.k8s.k8s_fixtures",)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -72,7 +48,10 @@ def _start_celery_workers() -> None:
 @pytest.fixture(scope="session", autouse=True)
 def _test_client() -> Generator[httpx.Client, None, None]:
     """Bind integration HTTP helpers to the deployed api_server."""
-    real_client = httpx.Client(timeout=httpx.Timeout(120.0, connect=10.0))
+    real_client = httpx.Client(
+        transport=_RetryingTransport(),
+        timeout=httpx.Timeout(120.0, connect=10.0),
+    )
     http_client.set_test_client(real_client)
     try:
         yield real_client

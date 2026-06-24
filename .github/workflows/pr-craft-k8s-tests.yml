@@ -84,6 +84,7 @@ jobs:
               - 'backend/onyx/skills/**'
               - 'backend/shared_configs/**'
               - 'backend/tests/common/craft/**'
+              - 'backend/tests/integration/conftest.py'
               - 'backend/tests/integration/common_utils/**'
               - 'deployment/helm/**'
               - 'backend/tests/integration/tests/craft/*.py'

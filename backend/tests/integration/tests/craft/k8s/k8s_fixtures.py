@@ -1,25 +1,16 @@
 from __future__ import annotations
 
-import base64
-import json
 import os
-import shlex
 import time
 from collections.abc import Callable
 from collections.abc import Generator
-from collections.abc import Sequence
 from contextlib import contextmanager
-from contextlib import suppress
 from dataclasses import dataclass
-from dataclasses import field
-from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 if TYPE_CHECKING:
     from kubernetes import client as k8s_client_module
@@ -35,7 +26,6 @@ from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.configs import SANDBOX_PROXY_PORT
 from onyx.server.features.build.db.user_library import delete_user_file
 from onyx.server.features.build.db.user_library import list_user_files
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
@@ -63,13 +53,10 @@ def _sandbox_push_private_key() -> str:
     if configured:
         return configured
 
-    private_key = Ed25519PrivateKey.generate()
-    private_bytes = private_key.private_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PrivateFormat.Raw,
-        encryption_algorithm=serialization.NoEncryption(),
+    raise RuntimeError(
+        "ONYX_SANDBOX_PUSH_PRIVATE_KEY must be set and match the deployed "
+        "api_server key for Craft K8s integration tests"
     )
-    return base64.b64encode(private_bytes).decode("ascii")
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -98,153 +85,10 @@ def _sandbox_push_key(
 
 
 @dataclass(frozen=True)
-class WorkspaceProxy:
-    """``pathlib.Path``-shaped proxy for a sandbox pod's ``/workspace`` root."""
-
-    _k8s_client: "k8s_client_module.CoreV1Api"
-    _pod_name: str
-    _rel_parts: tuple[str, ...] = field(default_factory=tuple)
-
-    @property
-    def _abs_posix(self) -> str:
-        return (
-            "/workspace/" + "/".join(self._rel_parts)
-            if self._rel_parts
-            else "/workspace"
-        )
-
-    @property
-    def name(self) -> str:
-        return self._rel_parts[-1] if self._rel_parts else "workspace"
-
-    def __truediv__(self, segment: str | "WorkspaceProxy") -> "WorkspaceProxy":
-        if isinstance(segment, WorkspaceProxy):
-            raise TypeError("Cannot join two WorkspaceProxy instances")
-        new_parts = self._rel_parts + tuple(
-            p for p in PurePosixPath(segment).parts if p
-        )
-        return WorkspaceProxy(
-            _k8s_client=self._k8s_client,
-            _pod_name=self._pod_name,
-            _rel_parts=new_parts,
-        )
-
-    def _exec(self, command: str) -> str:
-        from kubernetes.stream import stream as k8s_stream
-
-        resp = k8s_stream(
-            self._k8s_client.connect_get_namespaced_pod_exec,
-            name=self._pod_name,
-            namespace=SANDBOX_NAMESPACE,
-            container="sandbox",
-            command=["/bin/sh", "-c", command],
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        return str(resp) if resp is not None else ""
-
-    def exists(self) -> bool:
-        quoted = shlex.quote(self._abs_posix)
-        # -L too: dangling symlinks count as present.
-        out = self._exec(
-            f"if [ -e {quoted} ] || [ -L {quoted} ]; then echo Y; else echo N; fi"
-        )
-        return "Y" in out
-
-    def is_file(self) -> bool:
-        out = self._exec(
-            f"if [ -f {shlex.quote(self._abs_posix)} ]; then echo Y; else echo N; fi"
-        )
-        return "Y" in out
-
-    def is_symlink(self) -> bool:
-        out = self._exec(
-            f"if [ -L {shlex.quote(self._abs_posix)} ]; then echo Y; else echo N; fi"
-        )
-        return "Y" in out
-
-    def resolve(self) -> "WorkspaceProxy":
-        out = self._exec(
-            f"readlink -f {shlex.quote(self._abs_posix)} || echo {shlex.quote(self._abs_posix)}"
-        )
-        resolved = out.strip()
-        if resolved.startswith("/workspace/"):
-            rel = resolved[len("/workspace/") :]
-        else:
-            rel = resolved.lstrip("/")
-        parts = tuple(p for p in rel.split("/") if p)
-        return WorkspaceProxy(
-            _k8s_client=self._k8s_client,
-            _pod_name=self._pod_name,
-            _rel_parts=parts,
-        )
-
-    def read_bytes(self) -> bytes:
-        import base64
-
-        out = self._exec(
-            f"base64 {shlex.quote(self._abs_posix)} 2>/dev/null || echo __MISSING__"
-        )
-        if "__MISSING__" in out:
-            raise FileNotFoundError(self._abs_posix)
-        return base64.b64decode(out.strip())
-
-    def read_text(self) -> str:
-        return self.read_bytes().decode("utf-8")
-
-    def rglob(self, pattern: str) -> list["WorkspaceProxy"]:
-        if pattern != "*":
-            raise NotImplementedError(
-                "WorkspaceProxy.rglob only supports '*' (used by craft tests)"
-            )
-        out = self._exec(
-            f"find {shlex.quote(self._abs_posix)} -mindepth 1 2>/dev/null || true"
-        )
-        results: list[WorkspaceProxy] = []
-        for line in out.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            if line.startswith("/workspace/"):
-                rel = line[len("/workspace/") :]
-            elif line == "/workspace":
-                continue
-            else:
-                rel = line.lstrip("/")
-            parts = tuple(p for p in rel.split("/") if p)
-            results.append(
-                WorkspaceProxy(
-                    _k8s_client=self._k8s_client,
-                    _pod_name=self._pod_name,
-                    _rel_parts=parts,
-                )
-            )
-        return results
-
-    def __fspath__(self) -> str:
-        return self._abs_posix
-
-    def __str__(self) -> str:
-        return self._abs_posix
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, WorkspaceProxy):
-            return self._abs_posix == other._abs_posix
-        return NotImplemented
-
-    def __hash__(self) -> int:
-        return hash(self._abs_posix)
-
-
-@dataclass(frozen=True)
 class SandboxHandle:
     manager: KubernetesSandboxManager
     sandbox_id: UUID
     session_id: UUID | None
-    _k8s_client: "k8s_client_module.CoreV1Api"
-    _register_extra: Callable[[UUID, "DATestUser"], None]
     _api_user: "DATestUser | None" = None
 
     @property
@@ -252,38 +96,6 @@ class SandboxHandle:
         if self._api_user is None:
             raise RuntimeError("SandboxHandle has no API user bound")
         return self._api_user
-
-    @property
-    def workspace_path(self) -> WorkspaceProxy:
-        return WorkspaceProxy(
-            _k8s_client=self._k8s_client,
-            _pod_name=self.manager._get_pod_name(self.sandbox_id),
-        )
-
-    def provision_api_user(
-        self,
-        api_user: "DATestUser",
-    ) -> WorkspaceProxy:
-        sandbox_id, _session_id = _create_api_session_for_user(api_user)
-        if sandbox_id == self.sandbox_id:
-            if self._api_user is not None and api_user.id != self._api_user.id:
-                raise AssertionError(
-                    "API returned the pool sandbox for a different user; "
-                    f"pool_user={self._api_user.id} api_user={api_user.id}"
-                )
-        else:
-            self._register_extra(sandbox_id, api_user)
-
-        return WorkspaceProxy(
-            _k8s_client=self._k8s_client,
-            _pod_name=self.manager._get_pod_name(sandbox_id),
-        )
-
-    def provision_api_users(
-        self,
-        users: Sequence["DATestUser"],
-    ) -> list[WorkspaceProxy]:
-        return [self.provision_api_user(user) for user in users]
 
 
 def _create_api_user_and_session() -> tuple["DATestUser", UUID, UUID]:
@@ -345,6 +157,16 @@ def cleanup_api_user_sandbox_rows(user_id: UUID) -> None:
         )
 
 
+def _terminate_and_wait(
+    manager: KubernetesSandboxManager,
+    k8s_client: "k8s_client_module.CoreV1Api",
+    sandbox_id: UUID,
+) -> None:
+    pod_name = manager._get_pod_name(sandbox_id)
+    manager.terminate(sandbox_id)
+    wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
+
+
 @contextmanager
 def _provisioned_sandbox(
     manager: KubernetesSandboxManager,
@@ -353,21 +175,17 @@ def _provisioned_sandbox(
     """Provision through the API so proxy identity lookup can resolve the pod."""
     api_user, sandbox_id, session_id = _create_api_user_and_session()
     user_id = UUID(api_user.id)
+    cleanup_rows = False
     try:
         pod_name = manager._get_pod_name(str(sandbox_id))
         try:
             yield api_user, sandbox_id, session_id, pod_name
         finally:
-            try:
-                manager.terminate(sandbox_id)
-            except Exception:
-                pass
-            try:
-                wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
-            except Exception:
-                pass
+            _terminate_and_wait(manager, k8s_client, sandbox_id)
+            cleanup_rows = True
     finally:
-        cleanup_api_user_sandbox_rows(user_id)
+        if cleanup_rows:
+            cleanup_api_user_sandbox_rows(user_id)
 
 
 @dataclass(frozen=True)
@@ -470,20 +288,18 @@ def running_sandbox(
                 _register_extra(sandbox_id, pool.api_user)
 
         def _cleanup() -> None:
+            errors: list[BaseException] = []
             for extra_id, user_id in extra_sandbox_user_ids.items():
                 try:
-                    pool.manager.terminate(extra_id)
-                except Exception:
-                    pass
-                try:
-                    wait_for_pod_deletion(
-                        pool.k8s_client,
-                        pool.manager._get_pod_name(extra_id),
-                        SANDBOX_NAMESPACE,
-                    )
-                except Exception:
-                    pass
+                    _terminate_and_wait(pool.manager, pool.k8s_client, extra_id)
+                except Exception as exc:
+                    errors.append(exc)
+                    continue
                 cleanup_api_user_sandbox_rows(user_id)
+            if errors:
+                raise RuntimeError(
+                    f"Failed to clean up {len(errors)} extra sandbox pod(s)"
+                ) from errors[0]
 
         request.addfinalizer(_cleanup)
 
@@ -491,8 +307,6 @@ def running_sandbox(
             manager=pool.manager,
             sandbox_id=sandbox_id,
             session_id=session_id,
-            _k8s_client=pool.k8s_client,
-            _register_extra=_register_extra,
             _api_user=api_user,
         )
 
@@ -540,60 +354,6 @@ def pod_exec(
     return str(resp) if resp is not None else ""
 
 
-def pod_exec_async(
-    client: "k8s_client_module.CoreV1Api",
-    pod_name: str,
-    namespace: str,
-    url: str,
-    output_path: str,
-    *,
-    method: str = "POST",
-    headers: dict[str, str] | None = None,
-    body: str | None = None,
-    body_file: str | None = None,
-    max_time_s: int = 240,
-    container: str = "sandbox",
-    proxy_session_id: str | None = None,
-) -> None:
-    """Kick off a background sandbox-side ``curl``; poll via ``wait_for_pod_exec_output``.
-
-    Writes ``{status}\\n{body}`` to a tempfile only after curl exits.
-    ``proxy_session_id`` tags the request as ``Proxy-Authorization`` userinfo;
-    omit it for the untagged fail-closed path. ``body_file`` (exclusive with
-    ``body``) sends the body from an in-pod path, for payloads that would trip
-    the apiserver's exec URL size limit.
-    """
-    if body is not None and body_file is not None:
-        raise ValueError("pass either body or body_file, not both")
-    header_args = ""
-    for key, value in (headers or {}).items():
-        header_args += f" -H {json.dumps(f'{key}: {value}')}"
-    if body is not None:
-        body_arg = f" --data {json.dumps(body)}"
-    elif body_file is not None:
-        # Suppress Expect:100-continue so the body is read before the proxy responds;
-        # otherwise the 403 carries no JSON body and the len-check path is skipped.
-        body_arg = f" --data-binary @{body_file} -H {json.dumps('Expect:')}"
-    else:
-        body_arg = ""
-    proxy_arg = (
-        f" -x {json.dumps(f'http://{proxy_session_id}@sandbox-proxy:{SANDBOX_PROXY_PORT}')}"
-        if proxy_session_id is not None
-        else ""
-    )
-    script = (
-        f"nohup sh -c '"
-        f"curl -s -X {method}{header_args}{body_arg}{proxy_arg} "
-        f"--max-time {max_time_s} "
-        f'-o {output_path}.body -w "%{{http_code}}" {json.dumps(url)} '
-        f"> {output_path}.code 2>&1; "
-        f'{{ cat {output_path}.code; printf "\\n"; cat {output_path}.body; }} '
-        f"> {output_path}"
-        f"' > /dev/null 2>&1 &"
-    )
-    pod_exec(client, pod_name, namespace, script, container=container)
-
-
 def wait_for_pod_deletion(
     client: "k8s_client_module.CoreV1Api",
     pod_name: str,
@@ -635,77 +395,6 @@ def wait_until_healthy(
     raise RuntimeError(f"Sandbox {sandbox_id} never became healthy")
 
 
-def wait_for_pod_exec_output(
-    client: "k8s_client_module.CoreV1Api",
-    pod_name: str,
-    output_path: str,
-    timeout_s: float,
-    namespace: str = SANDBOX_NAMESPACE,
-    container: str = "sandbox",
-) -> tuple[int, str]:
-    """Poll the ``pod_exec_async`` tempfile until it appears, returning
-    ``(status_code, body)``. Raises on timeout."""
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        raw = pod_exec(
-            client,
-            pod_name,
-            namespace,
-            f"cat {output_path} 2>/dev/null || true",
-            container=container,
-        )
-        if raw:
-            head, _, rest = raw.partition("\n")
-            head = head.strip()
-            if head.isdigit():
-                return int(head), rest
-        time.sleep(2)
-    raise RuntimeError(
-        f"pod_exec output {output_path} on pod {pod_name} did not arrive within "
-        f"{timeout_s:.1f}s"
-    )
-
-
-def wait_for_proxy_redeploy(
-    client: "k8s_client_module.CoreV1Api",
-    timeout_s: float = 120,
-) -> None:
-    """Wait until the sandbox-proxy Deployment reports a ready replica."""
-    from kubernetes import client as k8s_client_module
-
-    from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
-
-    proxy_component_label = "app.kubernetes.io/component=sandbox-proxy"
-    apps_v1 = k8s_client_module.AppsV1Api()
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        deployments = apps_v1.list_namespaced_deployment(
-            namespace=SANDBOX_PROXY_NAMESPACE,
-            label_selector=proxy_component_label,
-        )
-        for deploy in deployments.items or []:
-            ready = deploy.status.ready_replicas or 0
-            desired = (
-                deploy.spec.replicas if deploy.spec and deploy.spec.replicas else 1
-            )
-            if ready >= desired:
-                pods = client.list_namespaced_pod(
-                    namespace=SANDBOX_PROXY_NAMESPACE,
-                    label_selector=proxy_component_label,
-                )
-                ready_pods = [
-                    p
-                    for p in (pods.items or [])
-                    if any(cs.ready for cs in (p.status.container_statuses or []))
-                ]
-                if ready_pods:
-                    return
-        time.sleep(2)
-    raise RuntimeError(
-        f"sandbox-proxy Deployment did not return to ready within {timeout_s:.1f}s"
-    )
-
-
 @pytest.fixture(scope="function")
 def k8s_manager() -> Generator[KubernetesSandboxManager, None, None]:
     """Initialise DB engine + tenant context and return the K8s manager."""
@@ -724,8 +413,7 @@ def pool_session(
     _cleanup_pool_workspace(_pool_pod.k8s_client, _pool_pod.pod_name)
     sandbox_id, session_id = _create_api_session_for_user(_pool_pod.api_user)
     if sandbox_id != _pool_pod.sandbox_id:
-        with suppress(Exception):
-            _pool_pod.manager.terminate(sandbox_id)
+        _terminate_and_wait(_pool_pod.manager, _pool_pod.k8s_client, sandbox_id)
         pytest.fail(
             f"pool_session: API returned a new sandbox {sandbox_id!r} instead "
             f"of the pool pod {_pool_pod.sandbox_id!r}; the pool pod may have "
@@ -746,20 +434,6 @@ def live_pod(
         pod_name,
     ):
         yield sandbox_id, session_id, pod_name
-
-
-@pytest.fixture(scope="function")
-def owned_live_pod(
-    k8s_manager: KubernetesSandboxManager,
-    k8s_client: "k8s_client_module.CoreV1Api",
-) -> Generator[tuple["DATestUser", UUID, UUID, str], None, None]:
-    with _provisioned_sandbox(k8s_manager, k8s_client) as (
-        api_user,
-        sandbox_id,
-        session_id,
-        pod_name,
-    ):
-        yield api_user, sandbox_id, session_id, pod_name
 
 
 @pytest.fixture(scope="function")
