@@ -134,7 +134,7 @@ export interface SearchToolQueriesDelta extends BaseObj {
 
 export interface SearchToolFilterDelta extends BaseObj {
   type: "search_tool_filter_delta";
-  // Connector/source values this search is scoped to (empty/absent == all).
+  // Connector/source values this search is scoped to (empty == all)
   sources: string[];
 }
 

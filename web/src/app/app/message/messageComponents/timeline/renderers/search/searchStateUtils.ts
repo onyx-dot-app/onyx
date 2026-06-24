@@ -8,7 +8,7 @@ import {
   SectionEnd,
 } from "@/app/app/services/streamingModels";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { getSourceDisplayName } from "@/lib/sources";
+import { getSourceDisplayName, isValidSource } from "@/lib/sources";
 import { ValidSources } from "@/lib/types";
 
 export const MAX_TITLE_LENGTH = 25;
@@ -32,7 +32,6 @@ export const RESULTS_PER_EXPANSION = 10;
 export interface SearchState {
   queries: string[];
   results: OnyxDocument[];
-  // Connectors a source filter was applied to (deduped). Empty == no filter.
   sourceFilters: string[];
   isSearching: boolean;
   hasResults: boolean;
@@ -44,12 +43,20 @@ export interface SearchState {
  * Header text for an internal search step. When a source filter was applied,
  * overrides the default "Searching internal documents" with the connector(s).
  */
+const MAX_HEADER_SOURCES = 3;
+
 export const formatSearchHeader = (sourceFilters: string[]): string => {
   if (sourceFilters.length === 0) return "Searching internal documents";
-  const names = sourceFilters.map(
-    (source) => getSourceDisplayName(source as ValidSources) ?? source
+  const names = sourceFilters.map((source) =>
+    isValidSource(source)
+      ? getSourceDisplayName(source as ValidSources)
+      : source
   );
-  return `Searching ${names.join(", ")}`;
+  const shown = names.slice(0, MAX_HEADER_SOURCES);
+  const overflow = names.length - shown.length;
+  const label =
+    overflow > 0 ? `${shown.join(", ")} +${overflow} more` : shown.join(", ");
+  return `Searching ${label}`;
 };
 
 /** Constructs the current search state from search tool packets. */
