@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from typing import cast
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -8,6 +9,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters
 from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -101,6 +103,13 @@ def _queries_sent(mock_search_pipeline: MagicMock) -> list[str]:
     ]
 
 
+def _emitted_filter_sources(tool: SearchTool) -> list[list[str]]:
+    """Sources of each SearchToolFilterDelta the tool emitted to the UI."""
+    emit_mock = cast(MagicMock, tool.emitter.emit)
+    emitted = [call.args[0].obj for call in emit_mock.call_args_list]
+    return [obj.sources for obj in emitted if isinstance(obj, SearchToolFilterDelta)]
+
+
 def test_decided_scope_is_passed_to_search() -> None:
     """When the filter flow decides a source, every search runs scoped to it."""
     tool = _make_tool()
@@ -119,6 +128,26 @@ def test_decided_scope_is_passed_to_search() -> None:
     for applied in filters:
         assert applied is not None
         assert applied.source_type == [DocumentSource.CONFLUENCE]
+
+
+def test_filter_delta_emitted_for_a_subset_scope() -> None:
+    """A scope narrower than the connected sources surfaces a filter to the UI."""
+    tool = _make_tool()
+    _run(
+        tool,
+        decision=[DocumentSource.CONFLUENCE],
+        connected_sources=[DocumentSource.CONFLUENCE, DocumentSource.GITHUB],
+    )
+    assert _emitted_filter_sources(tool) == [["confluence"]]
+
+
+def test_no_filter_delta_when_scope_covers_all_sources() -> None:
+    """Scoping to every connected source is equivalent to an unscoped search, so
+    no filter is surfaced (the UI keeps its default 'internal documents' label)."""
+    tool = _make_tool()
+    connected = [DocumentSource.CONFLUENCE, DocumentSource.GITHUB]
+    _run(tool, decision=connected, connected_sources=connected)
+    assert _emitted_filter_sources(tool) == []
 
 
 def test_no_decided_scope_leaves_search_unscoped() -> None:
