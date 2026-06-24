@@ -17,7 +17,10 @@ from urllib3.exceptions import ReadTimeoutError
 from onyx.sandbox_proxy.identity import SandboxIdentity
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
-from onyx.server.features.build.sandbox.kubernetes.k8s_client import load_kube_config
+from onyx.server.features.build.sandbox.kubernetes.k8s_client import build_core_v1_api
+from onyx.server.features.build.sandbox.kubernetes.k8s_client import (
+    K8S_BOOT_REQUEST_TIMEOUT_S,
+)
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT_SANDBOX
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
@@ -84,8 +87,7 @@ class K8sInformerLookup(SandboxIPLookup):
         namespace: str = SANDBOX_NAMESPACE,
     ) -> None:
         if core_api is None:
-            load_kube_config()
-            core_api = client.CoreV1Api()
+            core_api = build_core_v1_api()
         self._core = core_api
         self._namespace = namespace
         self._cache: dict[str, SandboxIdentity] = {}
@@ -165,6 +167,7 @@ class K8sInformerLookup(SandboxIPLookup):
         listing = self._core.list_namespaced_pod(
             namespace=self._namespace,
             label_selector=_SANDBOX_POD_SELECTOR,
+            _request_timeout=K8S_BOOT_REQUEST_TIMEOUT_S,
         )
         new_cache: dict[str, SandboxIdentity] = {}
         for pod in listing.items:
