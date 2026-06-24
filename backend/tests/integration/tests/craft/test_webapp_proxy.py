@@ -84,8 +84,7 @@ def test_proxy_rejects_forged_auth_cookie(
 def test_proxy_no_webapp_port_renders_branded_offline_page(
     shared_session: tuple[DATestUser, UUID],
 ) -> None:
-    # Headless session -> no allocated nextjs_port -> the proxy's
-    # "port not allocated" branch renders the branded offline page.
+    # shared_session is headless, so no Next.js port is allocated.
     owner, session_id = shared_session
 
     response = _auth_get(owner, session_id, follow_redirects=False)

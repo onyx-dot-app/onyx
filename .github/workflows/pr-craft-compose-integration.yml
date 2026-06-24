@@ -84,6 +84,8 @@ jobs:
               - 'deployment/docker_compose/docker-compose.yml'
               - 'deployment/docker_compose/docker-compose.dev.yml'
               - 'deployment/docker_compose/docker-compose.craft.yml'
+              - 'backend/tests/integration/conftest.py'
+              - 'backend/tests/integration/common_utils/**'
               - 'backend/tests/integration/tests/craft/*.py'
               - 'backend/tests/integration/tests/craft/docker_e2e/**'
               - '.github/workflows/pr-craft-compose-integration.yml'

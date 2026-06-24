@@ -6,10 +6,12 @@ import contextlib
 import time
 from collections.abc import Generator
 from uuid import UUID
+from uuid import uuid4
 
 import httpx
 import pytest
 
+from onyx.auth.schemas import UserRole
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.features.build.configs import SANDBOX_BACKEND
@@ -19,8 +21,11 @@ from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.integration.common_utils import http_client
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
+from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
+from tests.integration.common_utils.managers.user import build_email
+from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestLLMProvider
 from tests.integration.common_utils.test_models import DATestUser
@@ -42,14 +47,17 @@ def _reap_module_sandboxes() -> Generator[None, None, None]:
             manager.terminate(sandbox.id)
 
 
-_RETRY_EXCEPTIONS = (
+_CONNECT_RETRY_EXCEPTIONS = (
     httpx.ConnectError,
     httpx.ConnectTimeout,
-    httpx.ReadTimeout,
     httpx.PoolTimeout,
+)
+_SAFE_RETRY_EXCEPTIONS = (
+    httpx.ReadTimeout,
     httpx.RemoteProtocolError,
 )
-_RETRY_STATUSES = {500, 502, 504}
+_RETRY_STATUSES = {502, 504}
+_SAFE_RETRY_METHODS = {"GET", "HEAD", "OPTIONS"}
 _MAX_ATTEMPTS = 3
 
 
@@ -60,19 +68,52 @@ class _RetryingTransport(httpx.HTTPTransport):
             last = attempt == _MAX_ATTEMPTS - 1
             try:
                 response = super().handle_request(request)
-            except _RETRY_EXCEPTIONS:
+            except _CONNECT_RETRY_EXCEPTIONS:
                 if last:
                     raise
                 time.sleep(backoff)
                 backoff *= 2
                 continue
-            if response.status_code in _RETRY_STATUSES and not last:
+            except _SAFE_RETRY_EXCEPTIONS:
+                if last or request.method.upper() not in _SAFE_RETRY_METHODS:
+                    raise
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            if (
+                response.status_code in _RETRY_STATUSES
+                and request.method.upper() in _SAFE_RETRY_METHODS
+                and not last
+            ):
                 response.close()
                 time.sleep(backoff)
                 backoff *= 2
                 continue
             return response
         raise AssertionError("unreachable")
+
+
+def _create_or_login_user(name: str, expected_role: UserRole) -> DATestUser:
+    try:
+        user = UserManager.create(name=name)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code != 400:
+            raise
+        user = UserManager.login_as_user(
+            DATestUser(
+                id="",
+                email=build_email(name),
+                password=DEFAULT_PASSWORD,
+                headers=GENERAL_HEADERS.copy(),
+                role=expected_role,
+                is_active=True,
+            )
+        )
+    if user.role != expected_role:
+        raise AssertionError(
+            f"Expected {name} to have role {expected_role.value}, got {user.role.value}"
+        )
+    return user
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -106,7 +147,7 @@ def _start_celery_workers() -> Generator[None, None, None]:
 def _module_reset_and_seed() -> None:
     """Skip the parent's reset_all() (out-of-process downgrade deadlocks against
     the api_server's pooled connections); seed an admin + LLM provider."""
-    admin = UserManager.create(name=ADMIN_USER_NAME)
+    admin = _create_or_login_user(ADMIN_USER_NAME, UserRole.ADMIN)
     LLMProviderManager.create(user_performing_action=admin, api_key="test-api-key")
 
 
@@ -131,7 +172,7 @@ def shared_session(
     mutate-and-assert session state must create their own session.
     """
     slug = request.module.__name__.rsplit(".", 1)[-1].replace("_", "-")
-    owner = UserManager.create(name=f"craft-shared-{slug}")
+    owner = UserManager.create(name=f"craft-shared-{slug}-{uuid4().hex[:8]}")
     body = BuildSessionManager.create(owner)
     sandbox = body.get("sandbox")
     try:
