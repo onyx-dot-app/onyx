@@ -62,7 +62,7 @@ from onyx.server.features.build.session.models import SetSessionSharingResponse
 from onyx.server.features.build.session.models import SnapshotResponse
 from onyx.server.features.build.session.models import WebappInfo
 from onyx.server.features.build.session.sandbox_lifecycle import (
-    persist_session_snapshot_keep_latest,
+    create_session_snapshot_keep_latest,
 )
 from onyx.server.features.build.session.sandbox_lifecycle import (
     snapshot_opencode_history_before_recovery,
@@ -578,7 +578,9 @@ def create_session_snapshot(
     sandbox_manager = get_sandbox_manager()
 
     try:
-        result = sandbox_manager.create_snapshot(
+        result = create_session_snapshot_keep_latest(
+            sandbox_manager=sandbox_manager,
+            db_session=db_session,
             sandbox_id=sandbox.id,
             session_id=session_id,
             tenant_id=get_current_tenant_id(),
@@ -589,13 +591,6 @@ def create_session_snapshot(
         raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, str(e)) from e
     if result is None:
         return Response(status_code=204)
-
-    persist_session_snapshot_keep_latest(
-        db_session=db_session,
-        session_id=session_id,
-        storage_path=result.storage_path,
-        size_bytes=result.size_bytes,
-    )
 
     return JSONResponse(
         content=SnapshotResponse(

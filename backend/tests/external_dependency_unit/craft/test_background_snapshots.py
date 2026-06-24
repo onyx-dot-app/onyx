@@ -35,6 +35,9 @@ from onyx.db.models import Snapshot
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.session import (
+    sandbox_lifecycle as sandbox_lifecycle_module,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox
@@ -58,8 +61,12 @@ class _FakeSnapshotManager:
 @pytest.fixture
 def fake_snapshot_manager(monkeypatch: pytest.MonkeyPatch) -> _FakeSnapshotManager:
     fake = _FakeSnapshotManager()
-    monkeypatch.setattr(tasks_module, "SnapshotManager", lambda _file_store: fake)
-    monkeypatch.setattr(tasks_module, "get_default_file_store", lambda: None)
+    monkeypatch.setattr(
+        sandbox_lifecycle_module, "SnapshotManager", lambda _file_store: fake
+    )
+    monkeypatch.setattr(
+        sandbox_lifecycle_module, "get_default_file_store", lambda: None
+    )
     return fake
 
 

@@ -26,7 +26,7 @@ from onyx.server.features.build.db.sandbox import update_sandbox_status__no_comm
 from onyx.server.features.build.db.sandbox import user_has_stale_active_session
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.session.sandbox_lifecycle import (
-    persist_session_snapshot_keep_latest,
+    create_session_snapshot_keep_latest,
 )
 
 # 100 minutes - snapshotting can take time
@@ -158,17 +158,15 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
                                 continue
 
                             snapshot_start = time.monotonic()
-                            snapshot_result = sandbox_manager.create_snapshot(
-                                sandbox_id, session_id, tenant_id
+                            snapshot_result = create_session_snapshot_keep_latest(
+                                sandbox_manager=sandbox_manager,
+                                db_session=db_session,
+                                sandbox_id=sandbox_id,
+                                session_id=session_id,
+                                tenant_id=tenant_id,
                             )
                             snapshot_elapsed = time.monotonic() - snapshot_start
                             if snapshot_result:
-                                persist_session_snapshot_keep_latest(
-                                    db_session=db_session,
-                                    session_id=session_id,
-                                    storage_path=snapshot_result.storage_path,
-                                    size_bytes=snapshot_result.size_bytes,
-                                )
                                 snapshots_created += 1
                                 task_logger.info(
                                     f"Snapshot created for session {session_id}: "

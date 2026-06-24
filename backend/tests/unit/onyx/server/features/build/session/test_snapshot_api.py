@@ -35,19 +35,20 @@ def test_create_session_snapshot_persists_and_returns_json(
     user = cast(User, SimpleNamespace(id=uuid4()))
     db_session = cast(Session, MagicMock())
     sandbox_manager = MagicMock()
-    sandbox_manager.create_snapshot.return_value = SnapshotResult(
-        storage_path="snapshots/session.tar.gz",
-        size_bytes=123,
+    create_snapshot = MagicMock(
+        return_value=SnapshotResult(
+            storage_path="snapshots/session.tar.gz",
+            size_bytes=123,
+        )
     )
-    persist_snapshot = MagicMock()
 
     _mock_owned_sandbox(monkeypatch, sandbox_id)
     monkeypatch.setattr(session_api, "get_sandbox_manager", lambda: sandbox_manager)
     monkeypatch.setattr(session_api, "get_current_tenant_id", lambda: "tenant-a")
     monkeypatch.setattr(
         session_api,
-        "persist_session_snapshot_keep_latest",
-        persist_snapshot,
+        "create_session_snapshot_keep_latest",
+        create_snapshot,
     )
 
     response = session_api.create_session_snapshot(
@@ -61,16 +62,12 @@ def test_create_session_snapshot_persists_and_returns_json(
         "storage_path": "snapshots/session.tar.gz",
         "size_bytes": 123,
     }
-    sandbox_manager.create_snapshot.assert_called_once_with(
+    create_snapshot.assert_called_once_with(
+        sandbox_manager=sandbox_manager,
+        db_session=db_session,
         sandbox_id=sandbox_id,
         session_id=session_id,
         tenant_id="tenant-a",
-    )
-    persist_snapshot.assert_called_once_with(
-        db_session=db_session,
-        session_id=session_id,
-        storage_path="snapshots/session.tar.gz",
-        size_bytes=123,
     )
 
 
@@ -78,11 +75,16 @@ def test_create_session_snapshot_maps_runtime_failure_to_5xx(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sandbox_manager = MagicMock()
-    sandbox_manager.create_snapshot.side_effect = RuntimeError("sidecar unavailable")
+    create_snapshot = MagicMock(side_effect=RuntimeError("sidecar unavailable"))
 
     _mock_owned_sandbox(monkeypatch, uuid4())
     monkeypatch.setattr(session_api, "get_sandbox_manager", lambda: sandbox_manager)
     monkeypatch.setattr(session_api, "get_current_tenant_id", lambda: "tenant-a")
+    monkeypatch.setattr(
+        session_api,
+        "create_session_snapshot_keep_latest",
+        create_snapshot,
+    )
 
     with pytest.raises(OnyxError) as exc_info:
         session_api.create_session_snapshot(
