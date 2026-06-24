@@ -231,6 +231,12 @@ def get_snapshots_for_session(db_session: Session, session_id: UUID) -> list[Sna
     return list(db_session.execute(stmt).scalars().all())
 
 
+def delete_snapshot__no_commit(db_session: Session, snapshot: Snapshot) -> None:
+    """Delete a snapshot row. Caller owns the transaction boundary."""
+    db_session.delete(snapshot)
+    db_session.flush()
+
+
 def delete_snapshot(db_session: Session, snapshot_id: UUID) -> bool:
     """Delete a specific snapshot by ID. Returns True if deleted, False if not found."""
     stmt = select(Snapshot).where(Snapshot.id == snapshot_id)

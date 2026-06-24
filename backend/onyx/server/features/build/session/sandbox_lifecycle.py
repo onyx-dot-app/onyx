@@ -10,16 +10,22 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
+from onyx.db.models import Snapshot
 from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_MAX_CONCURRENT_PER_ORG
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
+from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
+from onyx.server.features.build.db.sandbox import delete_snapshot__no_commit
 from onyx.server.features.build.db.sandbox import ensure_sandbox_pat
 from onyx.server.features.build.db.sandbox import get_running_sandbox_count
 from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.server.features.build.db.sandbox import get_snapshots_for_session
 from onyx.server.features.build.db.sandbox import update_sandbox_status__no_commit
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -52,6 +58,36 @@ def snapshot_opencode_history_before_recovery(
             sandbox_id,
             exc_info=True,
         )
+
+
+def persist_session_snapshot_keep_latest(
+    db_session: DBSession,
+    session_id: UUID,
+    storage_path: str,
+    size_bytes: int,
+) -> Snapshot:
+    """Record a new snapshot and prune the session's prior blobs/rows."""
+    prior_snapshots = get_snapshots_for_session(db_session, session_id)
+    snapshot = create_snapshot__no_commit(
+        db_session=db_session,
+        session_id=session_id,
+        storage_path=storage_path,
+        size_bytes=size_bytes,
+    )
+
+    snapshot_manager = SnapshotManager(get_default_file_store())
+    for old in prior_snapshots:
+        try:
+            snapshot_manager.delete_snapshot(old.storage_path)
+        except Exception as e:
+            logger.warning(
+                "Skipping prune of snapshot %s; blob delete failed: %s", old.id, e
+            )
+            continue
+        delete_snapshot__no_commit(db_session, old)
+
+    db_session.commit()
+    return snapshot
 
 
 class ProvisioningPolicy(str, Enum):
