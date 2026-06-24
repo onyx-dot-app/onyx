@@ -612,3 +612,29 @@ jobs:
           kind delete cluster --name onyx-craft-ci || true
           docker network disconnect kind "${KIND_REGISTRY_NAME}" 2>/dev/null || true
           docker rm -f "${KIND_REGISTRY_NAME}" 2>/dev/null || true
+
+  craft-k8s-tests-required:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes, craft-k8s-tests]
+    if: ${{ always() }}
+    steps:
+      - name: Check job status
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_TESTS: ${{ needs.changes.outputs.craft_k8s }}
+          TEST_RESULT: ${{ needs.craft-k8s-tests.result }}
+        run: |
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
+          if [ "${RUN_TESTS}" != "true" ]; then
+            echo "No relevant paths changed -- required check passes."
+            exit 0
+          fi
+          if [ "${TEST_RESULT}" != "success" ]; then
+            echo "Test result: ${TEST_RESULT}"
+            exit 1
+          fi
+          echo "All tests passed."

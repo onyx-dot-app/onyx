@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shlex
@@ -68,8 +69,6 @@ def _sandbox_push_private_key() -> str:
         format=serialization.PrivateFormat.Raw,
         encryption_algorithm=serialization.NoEncryption(),
     )
-    import base64
-
     return base64.b64encode(private_bytes).decode("ascii")
 
 

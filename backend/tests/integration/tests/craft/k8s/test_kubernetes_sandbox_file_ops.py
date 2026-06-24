@@ -17,6 +17,7 @@ from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client as http_client
@@ -61,7 +62,7 @@ class TestHealthCheck:
             info = k8s_manager.provision(
                 sandbox_id=sandbox_id,
                 user_id=UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c"),
-                tenant_id="tenant_test",
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 llm_config=default_llm_config(),
                 onyx_pat="ci-test-pat",
             )
@@ -192,7 +193,7 @@ class TestTerminate:
             k8s_manager.provision(
                 sandbox_id=sandbox_id,
                 user_id=UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c"),
-                tenant_id="tenant_test",
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 llm_config=default_llm_config(),
                 onyx_pat="ci-test-pat",
             )
