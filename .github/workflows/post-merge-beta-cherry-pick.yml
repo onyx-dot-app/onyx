@@ -155,7 +155,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
           enable-cache: false
           version: "0.9.9"
