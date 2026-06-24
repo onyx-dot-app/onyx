@@ -155,24 +155,48 @@ def resolve_parent_hierarchy_node_id(
     if parent_node:
         return parent_node.id
 
-    # Parent not found - fall back to SOURCE node
-    logger.warning(
-        "Parent hierarchy node not found: raw_id=%s, source=%s. Falling back to SOURCE node.",
-        raw_parent_id,
-        source,
-    )
+    # Parent not found - fall back to SOURCE node.
+    # Callers that want stub creation (upsert_hierarchy_node) detect this via the
+    # returned value equalling source_node_id and create a STUB in that case.
     source_node = get_source_hierarchy_node(db_session, source)
     return source_node.id if source_node else None
+
+
+def _create_stub_hierarchy_node(
+    db_session: Session,
+    raw_node_id: str,
+    source: DocumentSource,
+    source_node_id: int,
+) -> HierarchyNode:
+    """Create a STUB placeholder for a parent that hasn't been indexed yet.
+
+    Flushed immediately so subsequent lookups in the same session find it,
+    preventing duplicate stubs when multiple children share the same missing parent.
+    The stub is promoted to the real node type when the parent page is processed.
+    """
+    stub = HierarchyNode(
+        raw_node_id=raw_node_id,
+        display_name="__stub__",
+        link=None,
+        source=source,
+        node_type=HierarchyNodeType.STUB,
+        parent_id=source_node_id,
+        is_public=False,
+    )
+    db_session.add(stub)
+    db_session.flush()
+    return stub
 
 
 def upsert_parents(
     db_session: Session,
     node: PydanticHierarchyNode,
+    source_node_id: int,
     source: DocumentSource,
     node_by_id: dict[str, PydanticHierarchyNode],
     done_ids: set[str],
     is_connector_public: bool = False,
-) -> None:
+) -> list[HierarchyNode]:
     """
     Upsert the in-batch ancestors of ``node`` in oldest-to-newest order.
 
@@ -213,29 +237,39 @@ def upsert_parents(
         current = parent_node
 
     # Drain oldest-first so each parent is persisted before its children.
+    created: list[HierarchyNode] = []
     for parent_node in reversed(pending):
-        upsert_hierarchy_node(
-            db_session,
-            parent_node,
-            source,
-            commit=False,
-            is_connector_public=is_connector_public,
+        created.extend(
+            upsert_hierarchy_node(
+                db_session,
+                parent_node,
+                source_node_id,
+                source,
+                commit=False,
+                is_connector_public=is_connector_public,
+            )
         )
         done_ids.add(parent_node.raw_node_id)
+    return created
 
 
 def upsert_hierarchy_node(
     db_session: Session,
     node: PydanticHierarchyNode,
+    source_node_id: int,
     source: DocumentSource,
     commit: bool = True,
     is_connector_public: bool = False,
-) -> HierarchyNode:
+) -> list[HierarchyNode]:
     """
     Upsert a hierarchy node from a Pydantic model.
 
     If a node with the same raw_node_id and source exists, updates it.
     Otherwise, creates a new node.
+
+    Returns a list containing the upserted node, plus a STUB node if one was
+    created for a missing parent. The STUB is promoted when the real parent is
+    later processed.
 
     Args:
         db_session: SQLAlchemy session
@@ -246,6 +280,8 @@ def upsert_hierarchy_node(
             and all hierarchy nodes should be marked as public regardless of their
             external_access settings. This ensures nodes from public connectors are
             accessible to all users.
+        source_node_id: DB id of the SOURCE root node for this source, used to
+            detect and replace the fallback with a STUB for missing cross-batch parents.
     """
     # Resolve parent_id from raw_parent_id
     parent_id = (
@@ -253,6 +289,16 @@ def upsert_hierarchy_node(
         if node.node_type == HierarchyNodeType.SOURCE
         else resolve_parent_hierarchy_node_id(db_session, node.raw_parent_id, source)
     )
+
+    ret: list[HierarchyNode] = []
+    # If a specific parent was requested but resolve fell back to SOURCE, create a stub
+    # so the child points to a real placeholder rather than the wrong root node.
+    if node.raw_parent_id is not None and parent_id == source_node_id:
+        created_stub = _create_stub_hierarchy_node(
+            db_session, node.raw_parent_id, source, source_node_id
+        )
+        parent_id = created_stub.id
+        ret.append(created_stub)
 
     # For public connectors, all nodes are public
     # Otherwise, extract permission fields from external_access if present
@@ -305,13 +351,14 @@ def upsert_hierarchy_node(
             external_user_group_ids=external_user_group_ids,
         )
         db_session.add(hierarchy_node)
+    ret.append(hierarchy_node)
 
     if commit:
         db_session.commit()
     else:
         db_session.flush()
 
-    return hierarchy_node
+    return ret
 
 
 def upsert_hierarchy_nodes_batch(
@@ -324,10 +371,12 @@ def upsert_hierarchy_nodes_batch(
     """
     Batch upsert hierarchy nodes.
 
-    Note: This function requires that for each node passed in, all
-    its ancestors exist in either the database or elsewhere in the nodes list.
-    This function handles parent dependencies for you as long as that condition is met
-    (so you don't need to worry about parent nodes appearing before their children in the list).
+    Handles parent dependencies automatically: in-batch ancestors are upserted
+    before their children, and cross-batch missing parents get a STUB placeholder
+    that is promoted when the real parent is later processed.
+
+    Returns all upserted nodes including any STUB nodes created for missing parents,
+    so callers can cache and register them all uniformly.
 
     Args:
         db_session: SQLAlchemy session
@@ -338,38 +387,46 @@ def upsert_hierarchy_nodes_batch(
             and all hierarchy nodes should be marked as public regardless of their
             external_access settings.
     """
+    source_node = ensure_source_node_exists(db_session, source)
+    source_node_id = source_node.id
+
     node_by_id = {}
     for node in nodes:
         if node.node_type != HierarchyNodeType.SOURCE:
             node_by_id[node.raw_node_id] = node
-    done_ids = set[str]()
+    done_ids: set[str] = set()
 
-    results = []
+    all_nodes: list[HierarchyNode] = []
     for node in nodes:
         if node.raw_node_id in done_ids:
             continue
-        upsert_parents(
-            db_session,
-            node,
-            source,
-            node_by_id,
-            done_ids,
-            is_connector_public=is_connector_public,
+        all_nodes.extend(
+            upsert_parents(
+                db_session,
+                node,
+                source_node_id,
+                source,
+                node_by_id,
+                done_ids,
+                is_connector_public=is_connector_public,
+            )
         )
-        hierarchy_node = upsert_hierarchy_node(
-            db_session,
-            node,
-            source,
-            commit=False,
-            is_connector_public=is_connector_public,
+        all_nodes.extend(
+            upsert_hierarchy_node(
+                db_session,
+                node,
+                source_node_id,
+                source,
+                commit=False,
+                is_connector_public=is_connector_public,
+            )
         )
         done_ids.add(node.raw_node_id)
-        results.append(hierarchy_node)
 
     if commit:
         db_session.commit()
 
-    return results
+    return all_nodes
 
 
 def link_hierarchy_nodes_to_documents(
@@ -508,7 +565,10 @@ def _get_accessible_hierarchy_nodes_for_source(
     Returns:
         List of all HierarchyNode objects for the source
     """
-    stmt = select(HierarchyNode).where(HierarchyNode.source == source)
+    stmt = select(HierarchyNode).where(
+        HierarchyNode.source == source,
+        HierarchyNode.node_type != HierarchyNodeType.STUB,
+    )
     stmt = stmt.order_by(HierarchyNode.display_name)
     return list(db_session.execute(stmt).scalars().all())
 
