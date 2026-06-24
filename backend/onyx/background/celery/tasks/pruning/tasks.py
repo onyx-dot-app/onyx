@@ -246,6 +246,14 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
                         logger.info("CC pair not due for pruning: %s", cc_pair_id)
                         continue
 
+                    # Skip auto-scheduling during a prune failure backoff; a manual
+                    # prune (API) bypasses this path and can still force a run.
+                    if RedisConnector(tenant_id, cc_pair_id).prune.in_failure_backoff:
+                        logger.info(
+                            "CC pair in pruning failure backoff: %s", cc_pair_id
+                        )
+                        continue
+
                     payload_id = try_creating_prune_generator_task(
                         self.app, cc_pair, db_session, r, tenant_id
                     )
@@ -744,7 +752,16 @@ def connector_pruning_generator_task(
             f"Pruning exceptioned: cc_pair={cc_pair_id} connector={connector_id} payload_id={payload_id}"
         )
 
-        redis_connector.prune.reset()
+        # Back off so a failing prune isn't re-dispatched on the next beat.
+        redis_connector.prune.set_failure_backoff()
+
+        # Only reset (clears the fence + taskset) if cleanup tasks were never
+        # fanned out. If they were, reset would orphan them (it doesn't revoke
+        # them) and the next beat would re-enumerate and re-queue the whole set;
+        # keeping the fence lets the monitor finalize the in-flight taskset.
+        if redis_connector.prune.generator_complete is None:
+            redis_connector.prune.reset()
+
         raise e
     finally:
         if lock.owned():

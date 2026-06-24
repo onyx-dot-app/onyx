@@ -54,6 +54,11 @@ class RedisConnectorPrune:
     ACTIVE_PREFIX = PREFIX + "_active"
     ACTIVE_TTL = CELERY_PRUNING_LOCK_TIMEOUT * 2
 
+    # Set on prune failure; survives reset(). While present, the scheduled beat
+    # skips re-dispatching this cc_pair, so a failing prune can't re-fire and flood.
+    FAILURE_BACKOFF_PREFIX = PREFIX + "_failure_backoff"
+    FAILURE_BACKOFF_TTL = 30 * 60  # 30 minutes
+
     def __init__(self, tenant_id: str, id: int, redis: TenantRedisClient) -> None:
         self.tenant_id: str = tenant_id
         self.id = id
@@ -68,6 +73,7 @@ class RedisConnectorPrune:
 
         self.subtask_prefix: str = f"{self.SUBTASK_PREFIX}_{id}"
         self.active_key = f"{self.ACTIVE_PREFIX}_{id}"
+        self.failure_backoff_key = f"{self.FAILURE_BACKOFF_PREFIX}_{id}"
 
     def taskset_clear(self) -> None:
         self.redis.delete(self.taskset_key)
@@ -129,6 +135,15 @@ class RedisConnectorPrune:
 
     def active(self) -> bool:
         return bool(self.redis.exists(self.active_key))
+
+    def set_failure_backoff(self) -> None:
+        """Record a prune failure so the scheduled beat skips re-dispatching this
+        cc_pair until the backoff expires. Deliberately survives reset()."""
+        self.redis.set(self.failure_backoff_key, 1, ex=self.FAILURE_BACKOFF_TTL)
+
+    @property
+    def in_failure_backoff(self) -> bool:
+        return bool(self.redis.exists(self.failure_backoff_key))
 
     @property
     def generator_complete(self) -> int | None:
