@@ -950,7 +950,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         if not top_sections:
             logger.info("Search tool - no results found, returning empty response")
-            empty_response = f"No results found. {scope_note}" if scope_note else ""
+            empty_response, _ = convert_inference_sections_to_llm_string(
+                top_sections=[],
+                note=scope_note or None,
+            )
             return ToolResponse(
                 rich_response=SearchDocsResponse(
                     search_docs=[],
@@ -1099,6 +1102,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             limit=override_kwargs.max_llm_chunks,
             include_document_id=False,
             include_link=override_kwargs.include_link,
+            note=scope_note or None,
         )
 
         # End overall timing
@@ -1111,7 +1115,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             format(document_expansion_elapsed, ".3f"),
         )
 
-        llm_facing_response = f"{scope_note}\n\n{docs_str}" if scope_note else docs_str
+        llm_facing_response = docs_str
 
         return ToolResponse(
             # Typically the rich response will give more docs in case it needs to be displayed in the UI
