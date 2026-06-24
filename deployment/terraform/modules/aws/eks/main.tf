@@ -19,8 +19,8 @@ locals {
 
   # Optional dedicated node group for sandbox pods (nodeSelector/toleration below).
   # IMDSv2 hop-limit 1 blocks sandboxed containers from the node metadata service.
-  craft_sandbox_node_groups = var.enable_craft_sandbox_node_group ? {
-    sandbox = {
+  craft_sandbox_node_groups = var.enable_craft ? {
+    craft_sandbox = {
       name           = "sandbox-node-group"
       instance_types = var.craft_sandbox_node_instance_types
       min_size       = var.craft_sandbox_node_min_size
@@ -47,12 +47,20 @@ locals {
         xvda = {
           device_name = "/dev/xvda"
           ebs = {
-            volume_size           = 50
+            volume_size           = var.craft_sandbox_node_disk_size_gb
             volume_type           = "gp3"
             encrypted             = true
             delete_on_termination = true
           }
         }
+      }
+      # cluster-autoscaler auto-discovery tags (inert unless cluster-autoscaler
+      # runs in the cluster). min_size stays >= 1 so the group never scales to
+      # zero: scaling back up from zero would also require node-template
+      # label/taint tags, which are not set here.
+      tags = {
+        "k8s.io/cluster-autoscaler/enabled"             = "true"
+        "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
       }
     }
   } : {}

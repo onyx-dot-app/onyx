@@ -7,7 +7,10 @@ import {
   StopReason,
   CustomToolStart,
 } from "@/app/app/services/streamingModels";
-import { constructCurrentSearchState } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
+import {
+  formatSearchHeader,
+  constructCurrentSearchState,
+} from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
 
 export interface TimelineHeaderResult {
   headerText: string;
@@ -65,10 +68,11 @@ export function useTimelineHeader(
       let headerText: string;
       if (searchState.hasResults && !searchState.isInternetSearch) {
         headerText = t("chat.timeline.reading");
+      } else if (searchState.isInternetSearch) {
+        headerText = t("chat.timeline.searching_web");
       } else {
-        headerText = searchState.isInternetSearch
-          ? t("chat.timeline.searching_web")
-          : t("chat.timeline.searching_internal");
+        // A source filter overrides the header with the connector(s).
+        headerText = formatSearchHeader(searchState.sourceFilters, t);
       }
       return { headerText, hasPackets, userStopped };
     }

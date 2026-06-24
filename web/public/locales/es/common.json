@@ -1336,6 +1336,8 @@
       "reading": "Leyendo",
       "searching_web": "Buscando en la web",
       "searching_internal": "Buscando documentos internos",
+      "searching_sources": "Buscando en {{sources}}",
+      "sources_overflow": "{{list}} y {{count}} más",
       "executing_code": "Ejecutando código",
       "generating_images": "Generando imágenes",
       "reading_file": "Leyendo archivo",

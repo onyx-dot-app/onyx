@@ -78,12 +78,14 @@ jobs:
             craft_compose:
               - 'backend/Dockerfile'
               - 'backend/onyx/sandbox_proxy/**'
-              - 'backend/onyx/server/features/build/sandbox/**'
-              - 'backend/onyx/server/features/build/approvals/**'
+              - 'backend/onyx/server/features/build/**'
               - 'backend/onyx/skills/**'
               - 'deployment/docker_compose/docker-compose.yml'
               - 'deployment/docker_compose/docker-compose.dev.yml'
               - 'deployment/docker_compose/docker-compose.craft.yml'
+              - 'backend/tests/integration/conftest.py'
+              - 'backend/tests/integration/common_utils/**'
+              - 'backend/tests/integration/tests/craft/*.py'
               - 'backend/tests/integration/tests/craft/docker_e2e/**'
               - '.github/workflows/pr-craft-compose-integration.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
@@ -91,16 +93,14 @@ jobs:
   craft-compose-integration-test:
     needs: changes
     if: needs.changes.outputs.craft_compose == 'true'
-    # Self-hosted runs-on pool (matches pr-craft-k8s-tests /
-    # pr-integration-tests / pr-playwright-tests). Github's runners do not have
-    # sufficient disk space by default.
     runs-on:
       - runs-on
       - runner=4cpu-linux-x64
+      - spot=false
       - volume=100gb
       - run-id=${{ github.run_id }}-craft-compose-integration
       - extras=ecr-cache
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     env:
       PYTHONPATH: ./backend
@@ -154,22 +154,21 @@ jobs:
           docker network create onyx_craft_sandbox
           docker volume create sandbox_proxy_ca
 
-      # install.sh normally generates .env (including USER_AUTH_SECRET) from
-      # env.template; CI skips install.sh, and since #12038 the api server
-      # fail-closes on an empty USER_AUTH_SECRET. Services read .env via
-      # env_file, so a CI-only value here unblocks the stack.
-      - name: Provide USER_AUTH_SECRET (.env)
+      # CI skips install.sh, so these have to be added explicitly.
+      - name: Provide USER_AUTH_SECRET + upload caps (.env)
         working-directory: deployment/docker_compose
-        run: echo 'USER_AUTH_SECRET=craft-compose-ci-only-dummy-secret' > .env
+        run: |
+          {
+            echo 'USER_AUTH_SECRET=craft-compose-ci-only-dummy-secret'
+            echo 'BUILD_MAX_UPLOAD_FILE_SIZE_MB=2'
+            echo 'BUILD_MAX_UPLOAD_FILES_PER_SESSION=5'
+            echo 'BUILD_MAX_TOTAL_UPLOAD_SIZE_MB=4'
+            echo 'USER_LIBRARY_MAX_FILES_PER_UPLOAD=5'
+          } > .env
 
-      # TODO(ods): Replace with `ods compose --craft` once that flag is added to
-      # tools/ods/cmd/compose.go. Today `ods compose` doesn't support the craft
-      # overlay, so we drop to raw docker compose.
-      #
-      # Service list: Only what the gate + posture tests need. compose's
-      # depends_on graph pulls in relational_db / cache / opensearch / model
-      # servers / minio transitively. Deliberately excludes web_server and nginx
-      # -- the tests hit api_server on localhost:8080 directly.
+      # Raw docker compose (ods compose has no craft overlay yet). Only
+      # api_server/background/sandbox-proxy are named; depends_on pulls in db /
+      # cache / opensearch / model servers / minio. web_server + nginx omitted.
       - name: Bring up the stack (yml + dev + craft)
         working-directory: deployment/docker_compose
         run: |
@@ -190,14 +189,10 @@ jobs:
             http://localhost:8080/health
 
       - name: Run integration tests
-        timeout-minutes: 10
+        timeout-minutes: 25
         shell: bash
-        # Working dir = backend/ so alembic.ini is a relative path for the
-        # reset_all() fixture.
         working-directory: backend
         env:
-          # API_SERVER_URL and POSTGRES_* must point at the compose-published
-          # host ports (set by docker-compose.dev.yml).
           API_SERVER_HOST: "127.0.0.1"
           API_SERVER_PORT: "8080"
           POSTGRES_DB: "postgres"
@@ -205,35 +200,33 @@ jobs:
           POSTGRES_PORT: "5432"
           REDIS_HOST: "127.0.0.1"
           REDIS_PORT: "6379"
-          # The integration framework imports onyx.* at module load and needs
-          # craft + proxy env in place so DockerSandboxManager initializes.
+          S3_ENDPOINT_URL: "http://127.0.0.1:9004"
+          S3_AWS_ACCESS_KEY_ID: "minioadmin"
+          S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
+          # onyx.* reads these at import; DockerSandboxManager needs the
+          # proxy/docker env. USER_AUTH_SECRET must match the stack's .env.
           ENABLE_CRAFT: "true"
           ENABLE_PAID_ENTERPRISE_EDITION_FEATURES: "true"
+          USER_AUTH_SECRET: "craft-compose-ci-only-dummy-secret"
           SANDBOX_BACKEND: "docker"
           SANDBOX_PROXY_HOST: "sandbox-proxy"
           SANDBOX_PROXY_PORT: "8080"
           SANDBOX_DOCKER_NETWORK: "onyx_craft_sandbox"
           SANDBOX_DOCKER_SOCKET: "/var/run/docker.sock"
         run: |
-          # pipefail + tee so pytest output survives a step-timeout kill;
-          # line-buffered flush so the file is up to date when that happens.
           set -o pipefail
           mkdir -p ../compose-logs
           PYTHONUNBUFFERED=1 stdbuf -oL -eL py.test \
             -v \
-            -s \
-            --setup-show \
-            -o faulthandler_timeout=90 \
             --tb=short \
+            -rs \
             --durations=10 \
-            tests/integration/tests/craft/docker_e2e \
+            tests/integration/tests/craft \
+            --ignore=tests/integration/tests/craft/k8s \
             2>&1 | tee ../compose-logs/pytest.log
 
-      # Inline tail for fast triage in the GH Actions UI without downloading
-      # artifacts. Truncated; the full per-container logs land in compose-logs/
-      # via the next step and ship as an uploaded artifact.
       - name: Stack state + log tails on failure
-        if: ${{ failure() || cancelled() }}
+        if: ${{ !success() }}
         run: |
           echo "=== docker ps -a ==="; docker ps -a || true
           echo "=== api_server tail ==="; docker logs --tail 200 onyx-api_server-1 || true
@@ -244,11 +237,8 @@ jobs:
               echo "--- $c ---"; docker logs --tail 200 "$c" || true; \
             done
 
-      # Full per-container logs to disk so failures are debuggable after the
-      # runner shuts down. Captures both compose-managed services AND the
-      # dynamically-created sandbox-<id> containers the tests provision.
       - name: Collect Docker logs on failure
-        if: ${{ failure() || cancelled() }}
+        if: ${{ !success() }}
         run: |
           mkdir -p compose-logs
           # Compose-managed services (api_server, background, sandbox-proxy
@@ -272,16 +262,15 @@ jobs:
           done
 
       - name: Upload logs
-        if: ${{ failure() || cancelled() }}
+        if: ${{ !success() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: craft-compose-integration-logs
           path: compose-logs/
           retention-days: 7
 
-      # Tear down. -v removes named volumes inside the compose project but the
-      # externally-declared sandbox_proxy_ca + onyx_craft_sandbox survive
-      # (compose down doesn't touch external resources).
+      # -v drops the project's named volumes; the external sandbox_proxy_ca /
+      # onyx_craft_sandbox are removed explicitly below.
       - name: Teardown
         if: always()
         working-directory: deployment/docker_compose
