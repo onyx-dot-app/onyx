@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
+import { all } from "lowlight";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import "@/app/app/message/custom-code-styles.css";
@@ -244,7 +245,7 @@ export const renderMarkdown = (
           remarkGfm,
           [remarkMath, { singleDollarTextMath: true }],
         ]}
-        rehypePlugins={[rehypeHighlight, rehypeKatex]}
+        rehypePlugins={[[rehypeHighlight, { languages: all }], rehypeKatex]}
         urlTransform={transformLinkUri}
       >
         {content}
