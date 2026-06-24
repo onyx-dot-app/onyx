@@ -137,8 +137,8 @@ class RedisConnectorPrune:
         return bool(self.redis.exists(self.active_key))
 
     def set_failure_backoff(self) -> None:
-        """Record a prune failure so the scheduled beat skips re-dispatching this
-        cc_pair until the backoff expires. Deliberately survives reset()."""
+        """Record a prune failure so the beat skips re-dispatching this cc_pair
+        until it expires. Survives reset(); cleared by reset_all() on startup."""
         self.redis.set(self.failure_backoff_key, 1, ex=self.FAILURE_BACKOFF_TTL)
 
     @property
@@ -249,4 +249,7 @@ class RedisConnectorPrune:
             r.delete(key)
 
         for key in r.scan_iter(RedisConnectorPrune.FENCE_PREFIX + "*"):
+            r.delete(key)
+
+        for key in r.scan_iter(RedisConnectorPrune.FAILURE_BACKOFF_PREFIX + "*"):
             r.delete(key)
