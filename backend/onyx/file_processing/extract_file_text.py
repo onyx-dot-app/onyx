@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import tempfile
 import zipfile
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -26,6 +27,7 @@ from PIL import Image
 
 from onyx.configs.app_configs import MAX_EMBEDDED_IMAGES_PER_FILE
 from onyx.configs.app_configs import MAX_XLSX_CELLS_PER_SHEET
+from onyx.configs.app_configs import XLSX_STREAM_SHEET_BYTES
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.file_types import OnyxFileExtensions
@@ -651,22 +653,19 @@ def _sheet_to_csv(rows: Iterator[tuple[Any, ...]]) -> str:
     return buf.getvalue().rstrip("\n")
 
 
-def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
-    """
-    Converts each sheet in the excel file to a csv condensed string.
-    Returns a string and the worksheet title for each worksheet
-
-    Returns a list of (csv_text, sheet)
-    """
+def _load_readonly_workbook(file: IO[Any], file_name: str) -> openpyxl.Workbook | None:
+    """Load a read-only workbook, returning None (and logging) for the BadZipFile
+    / known-openpyxl-bug cases the xlsx indexers treat as skip-and-continue rather
+    than a hard failure."""
     try:
-        workbook = openpyxl.load_workbook(file, read_only=True)
+        return openpyxl.load_workbook(file, read_only=True)
     except BadZipFile as e:
         error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
         if file_name.startswith("~"):
             logger.debug(error_str + " (this is expected for files with ~)")
         else:
             logger.warning(error_str)
-        return []
+        return None
     except Exception as e:
         if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
             logger.warning(
@@ -674,8 +673,20 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
                 file_name or "xlsx file",
                 e,
             )
-            return []
+            return None
         raise
+
+
+def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str, str]]:
+    """
+    Converts each sheet in the excel file to a csv condensed string.
+    Returns a string and the worksheet title for each worksheet
+
+    Returns a list of (csv_text, sheet)
+    """
+    workbook = _load_readonly_workbook(file, file_name)
+    if workbook is None:
+        return []
 
     sheets: list[tuple[str, str]] = []
     try:
@@ -688,6 +699,90 @@ def xlsx_sheet_extraction(file: IO[Any], file_name: str = "") -> list[tuple[str,
     finally:
         workbook.close()
 
+    return sheets
+
+
+def xlsx_has_large_sheet(
+    file: IO[bytes], threshold: int = XLSX_STREAM_SHEET_BYTES
+) -> bool:
+    """True if any worksheet's *uncompressed* XML exceeds `threshold` — a cheap
+    pre-parse check read straight from the xlsx zip directory (no decompression).
+    Routes a huge workbook to streamed, file-backed extraction."""
+    try:
+        file.seek(0)
+        with zipfile.ZipFile(file) as zf:
+            return any(
+                info.file_size > threshold
+                for info in zf.infolist()
+                if info.filename.startswith("xl/worksheets/")
+                and info.filename.endswith(".xml")
+            )
+    except BadZipFile:
+        return False
+    finally:
+        file.seek(0)
+
+
+class StreamedSheet(NamedTuple):
+    """One worksheet rendered to CSV. Small sheets are returned inline (`text`);
+    larger ones are staged in the file store (`csv_file_id`) so they never land
+    on the heap. Exactly one of the two is populated."""
+
+    title: str
+    text: str | None
+    csv_file_id: str | None
+
+
+def _row_has_content(row: tuple[Any, ...]) -> bool:
+    return any(v is not None and v != "" for v in row)
+
+
+def _cell(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
+def stage_or_inline_xlsx_sheets(
+    file: IO[bytes],
+    stage: Callable[[IO[bytes], str], str],
+    max_inline_bytes: int,
+    file_name: str = "",
+) -> list[StreamedSheet]:
+    """Render each non-empty worksheet to a temp CSV, writing rows one at a time
+    so no worksheet is fully held in memory during conversion. A worksheet whose
+    CSV is at most `max_inline_bytes` is read back inline; a larger one is staged
+    via `stage` and referenced by `csv_file_id` so it stays off the heap
+    downstream. The returned list thus holds full CSV text for inline sheets
+    (each bounded by `max_inline_bytes`) and only an id for file-backed ones.
+    Empty rows are dropped; columns are not trimmed (that needs a second pass)."""
+    sheets: list[StreamedSheet] = []
+    workbook = _load_readonly_workbook(file, file_name)
+    if workbook is None:
+        return sheets
+    try:
+        for sheet in workbook.worksheets:
+            ro_sheet = cast(ReadOnlyWorksheet, sheet)
+            ro_sheet.reset_dimensions()
+            with tempfile.TemporaryFile(mode="w+", encoding="utf-8", newline="") as tmp:
+                writer = csv.writer(tmp, lineterminator="\n")
+                for row in ro_sheet.iter_rows(values_only=True):
+                    if _row_has_content(row):
+                        writer.writerow([_cell(v) for v in row])
+                tmp.flush()
+                binary = cast(IO[bytes], tmp.buffer)
+                size = binary.seek(0, io.SEEK_END)
+                if size > max_inline_bytes:
+                    binary.seek(0)
+                    sheets.append(
+                        StreamedSheet(ro_sheet.title, None, stage(binary, "text/csv"))
+                    )
+                    continue
+                binary.seek(0)
+                text = binary.read().decode("utf-8").strip()
+                if not text:
+                    continue
+                sheets.append(StreamedSheet(ro_sheet.title, text, None))
+    finally:
+        workbook.close()
     return sheets
 
 
