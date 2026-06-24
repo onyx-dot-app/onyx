@@ -55,6 +55,22 @@ logger = setup_logger()
 
 admin_router = APIRouter(prefix="/admin/web-search")
 
+# Providers whose API key is shared between the search and content sides: a key
+# entered on one side seeds the other (see the upsert endpoints below). Each
+# entry is (provider_type_on_this_side, display_name, provider_type_other_side).
+_SEARCH_TO_CONTENT_SYNC: list[
+    tuple[WebSearchProviderType, str, WebContentProviderType]
+] = [
+    (WebSearchProviderType.EXA, "Exa", WebContentProviderType.EXA),
+    (WebSearchProviderType.TAVILY, "Tavily", WebContentProviderType.TAVILY),
+]
+_CONTENT_TO_SEARCH_SYNC: list[
+    tuple[WebContentProviderType, str, WebSearchProviderType]
+] = [
+    (WebContentProviderType.EXA, "Exa", WebSearchProviderType.EXA),
+    (WebContentProviderType.TAVILY, "Tavily", WebSearchProviderType.TAVILY),
+]
+
 
 @admin_router.get("/search-providers", response_model=list[WebSearchProviderView])
 def list_search_providers(
@@ -107,27 +123,26 @@ def upsert_search_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync Exa key of search engine to content provider
-    if (
-        request.provider_type == WebSearchProviderType.EXA
-        and request.api_key_changed
-        and request.api_key
-    ):
-        stmt = (
-            insert(InternetContentProvider)
-            .values(
-                name="Exa",
-                provider_type=WebContentProviderType.EXA.value,
-                api_key=request.api_key,
-                is_active=False,
-            )
-            .on_conflict_do_update(
-                index_elements=["name"],
-                set_={"api_key": request.api_key},
-            )
-        )
-        db_session.execute(stmt)
-        db_session.flush()
+    # Sync API key from search provider to content provider (Exa / Tavily)
+    if request.api_key_changed and request.api_key:
+        for search_type, name, content_type in _SEARCH_TO_CONTENT_SYNC:
+            if request.provider_type == search_type:
+                stmt = (
+                    insert(InternetContentProvider)
+                    .values(
+                        name=name,
+                        provider_type=content_type.value,
+                        api_key=request.api_key,
+                        is_active=False,
+                    )
+                    .on_conflict_do_update(
+                        index_elements=["name"],
+                        set_={"api_key": request.api_key},
+                    )
+                )
+                db_session.execute(stmt)
+                db_session.flush()
+                break
 
     db_session.commit()
     return WebSearchProviderView(
@@ -288,27 +303,26 @@ def upsert_content_provider_endpoint(
         db_session=db_session,
     )
 
-    # Sync Exa key of content provider to search provider
-    if (
-        request.provider_type == WebContentProviderType.EXA
-        and request.api_key_changed
-        and request.api_key
-    ):
-        stmt = (
-            insert(InternetSearchProvider)
-            .values(
-                name="Exa",
-                provider_type=WebSearchProviderType.EXA.value,
-                api_key=request.api_key,
-                is_active=False,
-            )
-            .on_conflict_do_update(
-                index_elements=["name"],
-                set_={"api_key": request.api_key},
-            )
-        )
-        db_session.execute(stmt)
-        db_session.flush()
+    # Sync API key from content provider to search provider (Exa / Tavily)
+    if request.api_key_changed and request.api_key:
+        for content_type, name, search_type in _CONTENT_TO_SEARCH_SYNC:
+            if request.provider_type == content_type:
+                stmt = (
+                    insert(InternetSearchProvider)
+                    .values(
+                        name=name,
+                        provider_type=search_type.value,
+                        api_key=request.api_key,
+                        is_active=False,
+                    )
+                    .on_conflict_do_update(
+                        index_elements=["name"],
+                        set_={"api_key": request.api_key},
+                    )
+                )
+                db_session.execute(stmt)
+                db_session.flush()
+                break
 
     db_session.commit()
     return WebContentProviderView(

@@ -11,6 +11,7 @@ from onyx.tools.tool_implementations.open_url.onyx_web_crawler import (
     DEFAULT_MAX_PDF_SIZE_BYTES,
 )
 from onyx.tools.tool_implementations.open_url.onyx_web_crawler import OnyxWebCrawler
+from onyx.tools.tool_implementations.open_url.tavily import TavilyExtractClient
 from onyx.tools.tool_implementations.web_search.clients.brave_client import BraveClient
 from onyx.tools.tool_implementations.web_search.clients.exa_client import ExaClient
 from onyx.tools.tool_implementations.web_search.clients.google_pse_client import (
@@ -21,6 +22,9 @@ from onyx.tools.tool_implementations.web_search.clients.searxng_client import (
 )
 from onyx.tools.tool_implementations.web_search.clients.serper_client import (
     SerperClient,
+)
+from onyx.tools.tool_implementations.web_search.clients.tavily_client import (
+    TavilyClient,
 )
 from onyx.tools.tool_implementations.web_search.models import DEFAULT_MAX_RESULTS
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
@@ -104,6 +108,14 @@ def build_search_provider_from_config(
         )
     if provider_type == WebSearchProviderType.SERPER:
         return SerperClient(api_key=api_key, num_results=num_results)
+    if provider_type == WebSearchProviderType.TAVILY:
+        return TavilyClient(
+            api_key=api_key,
+            num_results=num_results,
+            search_depth=config.get("search_depth"),
+            topic=config.get("topic"),
+            country=config.get("country"),
+        )
     if provider_type == WebSearchProviderType.GOOGLE_PSE:
         search_engine_id = (
             config.get("search_engine_id")
@@ -167,6 +179,9 @@ def build_content_provider_from_config(
 
     if provider_type == WebContentProviderType.EXA:
         return ExaClient(api_key=api_key)
+
+    if provider_type == WebContentProviderType.TAVILY:
+        return TavilyExtractClient(api_key=api_key)
 
 
 def get_default_provider() -> WebSearchProvider | None:
