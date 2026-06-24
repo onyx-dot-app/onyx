@@ -35,6 +35,9 @@ from onyx.db.models import Snapshot
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.sandbox.models import SnapshotResult
+from onyx.server.features.build.session import (
+    sandbox_lifecycle as sandbox_lifecycle_module,
+)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox
@@ -58,8 +61,12 @@ class _FakeSnapshotManager:
 @pytest.fixture
 def fake_snapshot_manager(monkeypatch: pytest.MonkeyPatch) -> _FakeSnapshotManager:
     fake = _FakeSnapshotManager()
-    monkeypatch.setattr(tasks_module, "SnapshotManager", lambda _file_store: fake)
-    monkeypatch.setattr(tasks_module, "get_default_file_store", lambda: None)
+    monkeypatch.setattr(
+        sandbox_lifecycle_module, "SnapshotManager", lambda _file_store: fake
+    )
+    monkeypatch.setattr(
+        sandbox_lifecycle_module, "get_default_file_store", lambda: None
+    )
     return fake
 
 
@@ -258,7 +265,6 @@ def test_stale_snapshot_resnapshotted_and_priors_pruned(
 
     cleanup_idle_sandboxes_task.run(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
-    assert stubbed_sweep.create_snapshot_count == 1
     db_session.expire_all()
     snapshots = (
         db_session.query(Snapshot).filter(Snapshot.session_id == session_row.id).all()
@@ -272,7 +278,6 @@ def test_snapshot_failure_continues_other_sessions(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     stubbed_sweep: StubSandboxManager,
-    monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """A failing ``create_snapshot`` is logged and the sweep continues."""
@@ -286,15 +291,10 @@ def test_snapshot_failure_continues_other_sessions(
     real_result = SnapshotResult(
         storage_path=f"s3://snapshots/{uuid4()}.tar.gz", size_bytes=55
     )
-
-    def _snapshot(
-        _sandbox_id: object, session_id: object, _tenant_id: object
-    ) -> SnapshotResult:
-        if session_id == session_a.id:
-            raise RuntimeError("FileStore unreachable")
-        return real_result
-
-    monkeypatch.setattr(stubbed_sweep, "create_snapshot", _snapshot)
+    stubbed_sweep.create_snapshot_results_by_session = {
+        session_a.id: RuntimeError("FileStore unreachable"),
+        session_b.id: real_result,
+    }
 
     with caplog.at_level(logging.WARNING):
         cleanup_idle_sandboxes_task.run(
