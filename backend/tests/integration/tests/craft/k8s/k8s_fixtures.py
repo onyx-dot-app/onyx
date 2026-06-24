@@ -762,6 +762,30 @@ def live_pod(
 
 
 @pytest.fixture(scope="function")
+def owned_live_pod(
+    k8s_manager: KubernetesSandboxManager,
+    k8s_client: "k8s_client_module.CoreV1Api",
+) -> Generator[tuple["DATestUser", UUID, UUID, str], None, None]:
+    """Like ``live_pod`` but also yields the owning API user for API-driven calls.
+
+    Yields ``(api_user, sandbox_id, session_id, pod_name)``.
+    """
+    with _provisioned_sandbox(k8s_manager, k8s_client) as (
+        api_user,
+        sandbox_id,
+        session_id,
+        pod_name,
+    ):
+        yield api_user, sandbox_id, session_id, pod_name
+
+
+@pytest.fixture(scope="function")
+def pool_api_user(_pool_pod: _PoolPod) -> "DATestUser":
+    """The API user owning ``pool_session`` sessions; for API-driven snapshot/restore."""
+    return _pool_pod.api_user
+
+
+@pytest.fixture(scope="function")
 def provisioned_sandbox(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",

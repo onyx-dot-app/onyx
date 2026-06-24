@@ -152,6 +152,31 @@ class BuildSessionManager:
         return OpencodeHistorySnapshotResponse.model_validate(response.json())
 
     @staticmethod
+    def create_snapshot(user: DATestUser, session_id: UUID) -> dict[str, Any] | None:
+        """POST /snapshot; ``None`` on 204 (session has no outputs to snapshot)."""
+        response = client.post(
+            _sessions_url(str(session_id), "snapshot"),
+            headers=user.headers,
+            cookies=user.cookies,
+        )
+        if response.status_code == 204:
+            return None
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
+    def create_opencode_history_snapshot(
+        user: DATestUser, session_id: UUID
+    ) -> dict[str, Any]:
+        response = client.post(
+            _sessions_url(str(session_id), "opencode-history-snapshot"),
+            headers=user.headers,
+            cookies=user.cookies,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
     def start_turn(
         user: DATestUser,
         session_id: UUID,

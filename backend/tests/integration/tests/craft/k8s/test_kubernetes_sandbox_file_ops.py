@@ -161,11 +161,11 @@ class TestDeleteFile:
 class TestCreateSnapshot:
     def test_create_snapshot_returns_none_when_session_has_no_outputs(
         self,
-        k8s_manager: KubernetesSandboxManager,
         k8s_client: client.CoreV1Api,
         pool_session: tuple[UUID, UUID, str],
+        pool_api_user: DATestUser,
     ) -> None:
-        sandbox_id, session_id, pod_name = pool_session
+        _sandbox_id, session_id, pod_name = pool_session
 
         # Wipe snapshot-eligible trees so the session is truly empty (setup
         # scaffolds outputs/web/).
@@ -178,11 +178,7 @@ class TestCreateSnapshot:
             "2>/dev/null; true",
         )
 
-        result = k8s_manager.create_snapshot(
-            sandbox_id, session_id, tenant_id="tenant_test"
-        )
-
-        assert result is None
+        assert BuildSessionManager.create_snapshot(pool_api_user, session_id) is None
 
 
 class TestTerminate:

@@ -26,6 +26,8 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 from onyx.server.features.build.sandbox.snapshot_manager import SNAPSHOT_FILE_TYPE
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
+from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -103,22 +105,20 @@ def _list_archive_members(tar_path: Path) -> list[str]:
 
 
 def test_snapshot_includes_outputs_and_attachments_only(
-    k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
+    pool_api_user: DATestUser,
     tmp_path: Path,
 ) -> None:
-    sandbox_id, session_id, pod_name = pool_session
+    _sandbox_id, session_id, pod_name = pool_session
 
     _populate_session_workspace(k8s_client, pod_name, session_id)
 
-    result = k8s_manager.create_snapshot(
-        sandbox_id, session_id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-    )
-    assert result is not None, "create_snapshot returned None for populated session"
+    snapshot = BuildSessionManager.create_snapshot(pool_api_user, session_id)
+    assert snapshot is not None, "create_snapshot returned None for populated session"
 
     archive = tmp_path / "snapshot.tar.gz"
-    _download_snapshot(result.storage_path, archive)
+    _download_snapshot(snapshot["storage_path"], archive)
 
     members = _list_archive_members(archive)
     # tarfile may emit "outputs" or "./outputs" depending on version.
@@ -137,24 +137,22 @@ def test_snapshot_includes_outputs_and_attachments_only(
 
 
 def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
-    k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
+    pool_api_user: DATestUser,
     tmp_path: Path,
 ) -> None:
-    sandbox_id, session_id, pod_name = pool_session
+    _sandbox_id, session_id, pod_name = pool_session
 
     _populate_session_workspace(
         k8s_client, pod_name, session_id, include_managed_skills=True
     )
 
-    result = k8s_manager.create_snapshot(
-        sandbox_id, session_id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-    )
-    assert result is not None
+    snapshot = BuildSessionManager.create_snapshot(pool_api_user, session_id)
+    assert snapshot is not None
 
     archive = tmp_path / "snapshot.tar.gz"
-    _download_snapshot(result.storage_path, archive)
+    _download_snapshot(snapshot["storage_path"], archive)
 
     members = _list_archive_members(archive)
     # Match the session-root path only: outputs/web/ ships its own legitimate AGENTS.md.
@@ -174,14 +172,13 @@ def test_restore_from_snapshot_recreates_workspace(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
+    pool_api_user: DATestUser,
 ) -> None:
     sandbox_id, session_id, pod_name = pool_session
 
     payload = _populate_session_workspace(k8s_client, pod_name, session_id)
-    result = k8s_manager.create_snapshot(
-        sandbox_id, session_id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-    )
-    assert result is not None
+    snapshot = BuildSessionManager.create_snapshot(pool_api_user, session_id)
+    assert snapshot is not None
 
     pre_hashes = pod_exec(
         k8s_client,
@@ -192,7 +189,7 @@ def test_restore_from_snapshot_recreates_workspace(
         f"xargs sha256sum",
     )
 
-    # Empty workspace at restore time; equivalent to terminate + re-provision.
+    # /restore only restores when the workspace is absent; clear it first.
     k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
 
     missing = pod_exec(
@@ -203,14 +200,7 @@ def test_restore_from_snapshot_recreates_workspace(
     )
     assert "MISSING" in missing
 
-    k8s_manager.restore_snapshot(
-        sandbox_id=sandbox_id,
-        session_id=session_id,
-        snapshot_storage_path=result.storage_path,
-        nextjs_port=None,
-        llm_config=default_llm_config(),
-        skills_section="No skills available.",
-    )
+    BuildSessionManager.restore(pool_api_user, session_id)
 
     post_hashes = pod_exec(
         k8s_client,
@@ -238,8 +228,6 @@ def test_restore_re_pushes_skills(
     k8s_client: client.CoreV1Api,
     k8s_admin_user: DATestUser,
     running_sandbox: Callable[..., SandboxHandle],
-    tenant_context: None,  # noqa: ARG001
-    db_session: Session,
 ) -> None:
     handle = running_sandbox(with_session=True)
     assert handle.session_id is not None
@@ -248,17 +236,8 @@ def test_restore_re_pushes_skills(
     pod_name = handle.manager._get_pod_name(sandbox_id)
 
     _populate_session_workspace(k8s_client, pod_name, session_id)
-    result = k8s_manager.create_snapshot(
-        sandbox_id, session_id, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-    )
-    assert result is not None
-    create_snapshot__no_commit(
-        db_session,
-        session_id=session_id,
-        storage_path=result.storage_path,
-        size_bytes=result.size_bytes,
-    )
-    db_session.commit()
+    snapshot = BuildSessionManager.create_snapshot(handle.api_user, session_id)
+    assert snapshot is not None
 
     skill = SkillManager.create_custom(
         k8s_admin_user,
@@ -331,9 +310,9 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
 def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    owned_live_pod: tuple[DATestUser, UUID, UUID, str],
 ) -> None:
-    sandbox_id, _session_id, pod_name = live_pod
+    api_user, sandbox_id, session_id, pod_name = owned_live_pod
     marker_path = "/workspace/opencode-data/cache/history-roundtrip.txt"
 
     pod_exec(
@@ -344,10 +323,8 @@ def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
         f"printf '%s' 'restored-opencode-history' > {marker_path}",
     )
 
-    assert k8s_manager.create_opencode_history_snapshot(
-        sandbox_id,
-        POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-    )
+    result = BuildSessionManager.create_opencode_history_snapshot(api_user, session_id)
+    assert result["created"] is True
 
     k8s_manager.terminate(sandbox_id)
     wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
@@ -376,13 +353,15 @@ def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
 def test_restore_uses_data_filter_to_block_traversal(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    owned_live_pod: tuple[DATestUser, UUID, UUID, str],
+    tenant_context: None,  # noqa: ARG001
+    db_session: Session,
     tmp_path: Path,
 ) -> None:
     """A forged ``../escape.txt`` tar entry must be rejected before extraction."""
-    sandbox_id, session_id, pod_name = live_pod
+    api_user, sandbox_id, session_id, pod_name = owned_live_pod
 
-    # On live_pod so any regression that writes /workspace/escape.txt stays on a fresh pod.
+    # On a fresh pod so any regression that writes /workspace/escape.txt is isolated.
     k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
 
     archive_local = tmp_path / "traversal.tar.gz"
@@ -398,21 +377,27 @@ def test_restore_uses_data_filter_to_block_traversal(
 
     storage_path = f"{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/snapshots/{session_id}/traversal.tar.gz"
     _put_snapshot_bytes(storage_path, archive_local.read_bytes())
+    create_snapshot__no_commit(
+        db_session,
+        session_id=session_id,
+        storage_path=storage_path,
+        size_bytes=archive_local.stat().st_size,
+    )
+    db_session.commit()
 
-    with pytest.raises(Exception) as excinfo:
-        k8s_manager.restore_snapshot(
-            sandbox_id=sandbox_id,
-            session_id=session_id,
-            snapshot_storage_path=storage_path,
-            nextjs_port=None,
-            llm_config=default_llm_config(),
-            skills_section="No skills available.",
-        )
-
-    err_text = str(excinfo.value).lower()
+    response = http_client.post(
+        f"{API_SERVER_URL}/build/sessions/{session_id}/restore",
+        headers=api_user.headers,
+        cookies=api_user.cookies,
+    )
+    assert response.status_code == 500, (
+        f"Restore of a traversal archive should fail; "
+        f"got {response.status_code}: {response.text!r}"
+    )
+    detail = str(response.json().get("detail", "")).lower()
     assert any(
-        token in err_text for token in ("traversal", "escape", "invalid snapshot")
-    ), f"Restore should clearly reject traversal. Got: {excinfo.value}"
+        token in detail for token in ("traversal", "escape", "invalid snapshot")
+    ), f"Restore should clearly reject traversal. Got: {detail!r}"
 
     sessions_root_listing = pod_exec(
         k8s_client,
@@ -452,6 +437,9 @@ def test_restore_uses_data_filter_to_block_traversal(
 def test_snapshot_corruption_detected_on_restore(
     k8s_manager: KubernetesSandboxManager,
     pool_session: tuple[UUID, UUID, str],
+    pool_api_user: DATestUser,
+    tenant_context: None,  # noqa: ARG001
+    db_session: Session,
 ) -> None:
     sandbox_id, session_id, _pod_name = pool_session
 
@@ -459,22 +447,28 @@ def test_snapshot_corruption_detected_on_restore(
     corrupt_bytes = b"\x1f\x8b\x08\x00" + b"\x00" * 8 + b"truncated-mid-stream"
     storage_path = f"{POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}/snapshots/{session_id}/corrupt.tar.gz"
     _put_snapshot_bytes(storage_path, corrupt_bytes)
-
-    with pytest.raises(Exception) as excinfo:
-        k8s_manager.restore_snapshot(
-            sandbox_id=sandbox_id,
-            session_id=session_id,
-            snapshot_storage_path=storage_path,
-            nextjs_port=None,
-            llm_config=default_llm_config(),
-            skills_section="No skills available.",
-        )
-
-    err_text = str(excinfo.value).lower()
-    assert any(
-        token in err_text
-        for token in ("corrupt", "checksum", "invalid snapshot", "integrity")
-    ), (
-        "Error message should clearly identify snapshot corruption. "
-        f"Got: {excinfo.value}"
+    create_snapshot__no_commit(
+        db_session,
+        session_id=session_id,
+        storage_path=storage_path,
+        size_bytes=len(corrupt_bytes),
     )
+    db_session.commit()
+
+    # /restore only restores when the workspace is absent; clear it first.
+    k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
+
+    response = http_client.post(
+        f"{API_SERVER_URL}/build/sessions/{session_id}/restore",
+        headers=pool_api_user.headers,
+        cookies=pool_api_user.cookies,
+    )
+    assert response.status_code == 500, (
+        f"Restore of a corrupt archive should fail; "
+        f"got {response.status_code}: {response.text!r}"
+    )
+    detail = str(response.json().get("detail", "")).lower()
+    assert any(
+        token in detail
+        for token in ("corrupt", "checksum", "invalid snapshot", "integrity")
+    ), f"Error should identify snapshot corruption. Got: {detail!r}"
