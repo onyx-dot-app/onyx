@@ -68,6 +68,24 @@ def build_raw_file_callback(
     return _callback
 
 
+def build_tracking_raw_file_callback(
+    *, metadata: dict[str, Any]
+) -> tuple[RawFileCallback, list[str]]:
+    """Staging callback for connector runs with no attempt-end reaper — user-file
+    processing and the pruning id-enumeration. Returns the callback plus the list
+    it records staged ids in, so the caller reaps them once it has finished
+    reading them (these contexts have no index attempt for the standard reapers
+    to key on)."""
+    staged_ids: list[str] = []
+
+    def _callback(content: IO[bytes], content_type: str) -> str:
+        file_id = stage_raw_file(content, content_type, metadata=metadata)
+        staged_ids.append(file_id)
+        return file_id
+
+    return _callback, staged_ids
+
+
 def delete_files_best_effort(
     file_ids: list[str],
     context: str = "document cleanup",

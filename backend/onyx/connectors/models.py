@@ -76,33 +76,20 @@ class ImageSection(Section):
 
 
 class TabularSection(Section):
-    """Section containing tabular data (csv/tsv content, or one sheet of
-    an xlsx workbook rendered as CSV).
+    """Section containing tabular data (csv/tsv content, or one sheet of an
+    xlsx workbook rendered as CSV).
 
-    Exactly one of `text` (inline CSV) or `csv_file_id` (CSV staged in the file
-    store, streamed at chunk time) carries the content. The file-backed form
-    keeps a large sheet off the worker heap end to end.
+    The CSV is always staged in the file store and referenced by `csv_file_id`,
+    streamed back a row at a time at chunk time, so a large sheet never sits on
+    the worker heap.
     """
 
     type: Literal[SectionType.TABULAR] = SectionType.TABULAR
-    text: str | None = None  # inline CSV; None when file-backed
-    csv_file_id: str | None = None  # file store id of staged CSV; None when inline
+    csv_file_id: str  # file store id of the staged CSV
     link: str
 
-    @model_validator(mode="after")
-    def _exactly_one_source(self) -> "TabularSection":
-        if (self.text is None) == (self.csv_file_id is None):
-            raise ValueError(
-                "TabularSection requires exactly one of `text` or `csv_file_id`"
-            )
-        return self
-
     def __sizeof__(self) -> int:
-        return (
-            sys.getsizeof(self.text)
-            + sys.getsizeof(self.csv_file_id)
-            + sys.getsizeof(self.link)
-        )
+        return sys.getsizeof(self.csv_file_id) + sys.getsizeof(self.link)
 
 
 class BasicExpertInfo(BaseModel):

@@ -1386,13 +1386,6 @@ MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
 )
 
-# A worksheet whose uncompressed XML exceeds this is streamed to a file-backed
-# TabularSection (CSV staged in the file store) instead of an in-memory string,
-# so a huge sheet stays off the worker heap rather than being truncated.
-XLSX_STREAM_SHEET_BYTES = max(
-    0, int(os.environ.get("XLSX_STREAM_SHEET_BYTES") or 50 * 1024 * 1024)
-)
-
 # PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
 # or hang); this is the timeout before the subprocess is killed and pypdf runs.
 PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS = float(

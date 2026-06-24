@@ -48,9 +48,6 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     extract_and_stage_tabular_file,
 )
 from onyx.connectors.cross_connector_utils.tabular_section_utils import is_tabular_file
-from onyx.connectors.cross_connector_utils.tabular_section_utils import (
-    tabular_file_to_sections,
-)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
@@ -894,12 +891,9 @@ def _convert_driveitem_to_document_with_permissions(
                 sections.extend(result.sections)
                 staged_file_id = result.staged_file_id
             else:
-                sections.extend(
-                    tabular_file_to_sections(
-                        file=io.BytesIO(content_bytes),
-                        file_name=driveitem.name,
-                        link=driveitem.web_url or "",
-                    )
+                logger.warning(
+                    "Skipping tabular file %s because raw_file_callback is not set",
+                    driveitem.name,
                 )
         except Exception as e:
             logger.warning(

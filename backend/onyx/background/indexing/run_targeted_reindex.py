@@ -39,6 +39,7 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import TargetedReindexJobTarget
 from onyx.db.targeted_reindex import targets_to_connector_failures
 from onyx.document_index.factory import get_all_document_indices
+from onyx.file_store.staging import build_raw_file_callback
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
@@ -263,6 +264,16 @@ def process_targets_for_cc_pair(
 
     include_permissions = cc_pair.access_type == AccessType.SYNC
     failures = targets_to_connector_failures(targets, db_session)
+
+    # Tabular sections stage their CSV via this callback. Tag it with one of the
+    # cc_pair's attempts so the standard staging reaper reclaims the files.
+    connector.set_raw_file_callback(
+        build_raw_file_callback(
+            index_attempt_id=cc_pair_attempts[0].id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+        )
+    )
 
     # Materialize the connector output once. MAX_TARGETS_PER_REQUEST caps
     # the universe at 100 docs total per job, so this is bounded.
