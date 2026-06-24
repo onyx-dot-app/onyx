@@ -34,18 +34,18 @@ def _send_one_message(user: DATestUser, session_id: uuid.UUID) -> None:
 
 
 def test_create_session_returns_200_with_session_and_sandbox_shape(
-    admin_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001 — ensures a default LLM exists
 ) -> None:
+    owner = UserManager.create(name=f"craft-session-shape-{uuid.uuid4().hex[:8]}")
     response = client.post(
         f"{API_SERVER_URL}/build/sessions",
         json={"headless": False},
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
+        headers=owner.headers,
+        cookies=owner.cookies,
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["user_id"] == admin_user.id
+    assert body["user_id"] == owner.id
     assert body["sandbox"] is not None
 
 
