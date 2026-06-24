@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkRehype from "remark-rehype";
 import rehypeHighlight from "rehype-highlight";
-import { highlightLanguages } from "@/lib/highlightLanguages";
+import { loadHighlightLanguages } from "@/lib/highlightLanguages";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
@@ -70,26 +70,29 @@ export function convertMarkdownTablesToTsv(content: string): string {
 
 // For copying the entire content
 export function copyAll(content: string) {
-  // Convert markdown to HTML using unified ecosystem
-  unified()
-    .use(remarkParse)
-    .use(remarkGfm)
-    .use(remarkMath)
-    .use(remarkRehype)
-    .use(rehypeHighlight, { languages: highlightLanguages })
-    .use(rehypeKatex)
-    .use(rehypeSanitize)
-    .use(rehypeStringify)
-    .process(content)
-    .then((file: any) => {
-      const htmlContent = String(file);
+  // Convert markdown to HTML using unified ecosystem. Grammars load dynamically
+  // so the highlight.js corpus stays out of the chat bundle.
+  loadHighlightLanguages().then((languages) => {
+    unified()
+      .use(remarkParse)
+      .use(remarkGfm)
+      .use(remarkMath)
+      .use(remarkRehype)
+      .use(rehypeHighlight, { languages })
+      .use(rehypeKatex)
+      .use(rehypeSanitize)
+      .use(rehypeStringify)
+      .process(content)
+      .then((file: any) => {
+        const htmlContent = String(file);
 
-      // Create clipboard data
-      const clipboardItem = new ClipboardItem({
-        "text/html": new Blob([htmlContent], { type: "text/html" }),
-        "text/plain": new Blob([content], { type: "text/plain" }),
+        // Create clipboard data
+        const clipboardItem = new ClipboardItem({
+          "text/html": new Blob([htmlContent], { type: "text/html" }),
+          "text/plain": new Blob([content], { type: "text/plain" }),
+        });
+
+        navigator.clipboard.write([clipboardItem]);
       });
-
-      navigator.clipboard.write([clipboardItem]);
-    });
+  });
 }

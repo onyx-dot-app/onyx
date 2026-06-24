@@ -3,7 +3,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
-import { highlightLanguages } from "@/lib/highlightLanguages";
+import type { LanguageFn } from "highlight.js";
+import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import "@/app/app/message/custom-code-styles.css";
@@ -234,7 +235,8 @@ export const useMarkdownComponents = (
 export const renderMarkdown = (
   content: string,
   markdownComponents: any,
-  textSize: string = "text-base"
+  textSize: string = "text-base",
+  languages: Record<string, LanguageFn> | null = null
 ): JSX.Element => {
   return (
     <div dir="auto">
@@ -245,10 +247,11 @@ export const renderMarkdown = (
           remarkGfm,
           [remarkMath, { singleDollarTextMath: true }],
         ]}
-        rehypePlugins={[
-          [rehypeHighlight, { languages: highlightLanguages }],
-          rehypeKatex,
-        ]}
+        rehypePlugins={
+          languages
+            ? [[rehypeHighlight, { languages }], rehypeKatex]
+            : [rehypeKatex]
+        }
         urlTransform={transformLinkUri}
       >
         {content}
@@ -271,10 +274,17 @@ export const useMarkdownRenderer = (
     processedContent,
     textSize
   );
+  const highlightLanguages = useHighlightLanguages();
 
   const renderedContent = useMemo(
-    () => renderMarkdown(processedContent, markdownComponents, textSize),
-    [processedContent, markdownComponents, textSize]
+    () =>
+      renderMarkdown(
+        processedContent,
+        markdownComponents,
+        textSize,
+        highlightLanguages
+      ),
+    [processedContent, markdownComponents, textSize, highlightLanguages]
   );
 
   return {
