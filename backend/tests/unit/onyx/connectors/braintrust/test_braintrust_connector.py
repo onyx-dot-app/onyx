@@ -188,7 +188,7 @@ def test_dataset_doc_has_text_and_tabular_sections(
     assert "merge-cases" in (text.text or "")
     assert "1 rows" in (text.text or "")
     assert isinstance(tabular, TabularSection)
-    header, row = tabular.text.split("\n")
+    header, row = (tabular.text or "").split("\n")
     assert header == "id,created,input,expected,metadata,tags"
     assert row.startswith("row-1,")
     assert '""doc"": ""a.md""' in row
@@ -210,7 +210,7 @@ def test_experiment_doc_combines_summary_and_score_table(
     assert "+0.05" in body
     assert "3 improvements / 1 regressions" in body
     assert isinstance(tabular, TabularSection)
-    header, row = tabular.text.split("\n")
+    header, row = (tabular.text or "").split("\n")
     assert header == "id,created,input,output,expected,correctness"
     assert row.startswith("row-2,") and row.endswith(",0.9")
     assert tabular.link == _SUMMARY["experiment_url"]
@@ -297,7 +297,7 @@ def test_btql_keyset_pagination_accumulates_table() -> None:
 
     tabular = doc.sections[1]
     assert isinstance(tabular, TabularSection)
-    assert len(tabular.text.split("\n")) == 1 + 501
+    assert len((tabular.text or "").split("\n")) == 1 + 501
     assert len(seen_filters) == 2
     assert "_pagination_key < 'p401'" in seen_filters[1]
 
