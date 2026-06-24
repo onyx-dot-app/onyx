@@ -22,6 +22,8 @@ export type LoginMethod = {
 const LOGIN_PATH = "/auth/mobile/login";
 const REFRESH_PATH = "/auth/mobile/refresh";
 const LOGOUT_PATH = "/auth/mobile/logout";
+// Shared (non-mobile) fastapi-users route; only creates the user.
+const REGISTER_PATH = "/auth/register";
 
 // Bumped on every identity change; an in-flight refresh applies its result only
 // if this is unchanged, so a refresh resolving after logout/re-login can't
@@ -56,6 +58,38 @@ export async function login(method: LoginMethod): Promise<void> {
   await setToken(res.access_token);
   await purgeCache();
   useSession.getState().setStatus("authed");
+}
+
+// register() succeeded but the follow-up auto-login failed (e.g. the instance requires email
+// verification): the account exists, so the UI must say "sign in", not "signup failed".
+export class PostRegisterLoginError extends Error {
+  readonly loginError: unknown;
+  constructor(loginError: unknown) {
+    super("Account created but automatic sign-in failed");
+    this.name = "PostRegisterLoginError";
+    this.loginError = loginError;
+  }
+}
+
+// Create the account, then log in to mint the bearer (register issues no token).
+export async function register(params: {
+  email: string;
+  password: string;
+}): Promise<void> {
+  await apiFetch<unknown>(REGISTER_PATH, {
+    method: "POST",
+    auth: false,
+    body: { email: params.email, password: params.password },
+  });
+  try {
+    await login({
+      kind: "password",
+      email: params.email,
+      password: params.password,
+    });
+  } catch (loginError) {
+    throw new PostRegisterLoginError(loginError);
+  }
 }
 
 // Wipe the session locally; used by logout and on an irrecoverable refresh failure.

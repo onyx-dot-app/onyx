@@ -3,8 +3,9 @@
 // and sizing live in button.styles. Web "hover" maps to RN "pressed". Spacing
 // uses margins, not `gap-*` (unreliable in RN/NativeWind — see SidebarTab).
 // `children` is plain string; web's RichStr/markdown is intentionally unsupported.
-import { Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { router, type Href } from "expo-router";
+import { cssInterop } from "nativewind";
 import type { InteractiveContract } from "@onyx-ai/shared/contracts";
 
 import { cn } from "@/lib/utils";
@@ -20,6 +21,12 @@ import {
   type ButtonWidth,
 } from "@/components/ui/button.styles";
 
+// ActivityIndicator ignores `style.color`; bridge the text-color class onto its `color` prop so
+// the spinner matches the label (like text-input's placeholder).
+const Spinner = cssInterop(ActivityIndicator, {
+  className: { target: false, nativeStyleToProp: { color: "color" } },
+}) as React.ComponentType<{ className?: string; size?: "small" | "large" }>;
+
 type ButtonBaseProps = InteractiveContract & {
   /** Size preset. @default "lg" */
   size?: ButtonSize;
@@ -30,6 +37,8 @@ type ButtonBaseProps = InteractiveContract & {
    * @default "rest"
    */
   interaction?: ButtonInteraction;
+  /** Shows a spinner, dims to the disabled look, and blocks presses. @default false */
+  loading?: boolean;
   rightIcon?: IconFunctionComponent;
   onPress?: () => void;
   /** Navigates here on press (expo-router). */
@@ -62,6 +71,7 @@ function Button({
   width = "fit",
   interaction = "rest",
   disabled = false,
+  loading = false,
   accessibilityLabel,
   icon,
   rightIcon,
@@ -74,24 +84,28 @@ function Button({
   const hasLabel = children != null;
 
   function handlePress() {
-    // disabled Pressable already blocks onPress — no guard needed
+    // disabled/loading Pressable already blocks onPress — no guard needed
     onPress?.();
     if (href != null) router.navigate(href);
   }
 
   return (
     <Pressable
-      disabled={disabled}
+      disabled={disabled || loading}
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
       // RN stretches flex children on the cross axis, so `fit` needs `self-start`
       // to shrink-wrap like web's `w-fit` (RN has no `fit-content`).
       className={cn(width === "full" ? "w-full" : "self-start", className)}
     >
       {({ pressed }) => {
-        const state = resolveButtonState(disabled, interaction, pressed);
+        const state = resolveButtonState(
+          disabled || loading,
+          interaction,
+          pressed,
+        );
         const colors = BUTTON_COLORS[variant][prominence][state];
         return (
           <View
@@ -106,7 +120,12 @@ function Button({
               colors.border,
             )}
           >
-            {icon ? (
+            {loading ? (
+              // Replaces the leading icon while working; rightIcon is suppressed below.
+              <View className={cn("items-center justify-center", spec.iconPad)}>
+                <Spinner size="small" className={colors.fg} />
+              </View>
+            ) : icon ? (
               <View className={cn("items-center justify-center", spec.iconPad)}>
                 <Icon as={icon} size={spec.iconSize} className={colors.fg} />
               </View>
@@ -126,7 +145,7 @@ function Button({
               </Text>
             ) : null}
 
-            {rightIcon ? (
+            {!loading && rightIcon ? (
               <View
                 className={cn(
                   "items-center justify-center",

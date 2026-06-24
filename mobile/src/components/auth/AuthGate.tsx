@@ -9,6 +9,7 @@ import * as React from "react";
 import { ActivityIndicator, View } from "react-native";
 
 import { isAuthError } from "@/api/errors";
+import { AuthUnreachable } from "@/components/auth/AuthUnreachable";
 import { resolveAuthGate } from "@/components/auth/authRoute";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useSession } from "@/state/session";
@@ -26,13 +27,18 @@ function AuthSplash() {
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const serverUrl = useSession((state) => state.serverUrl);
+  const status = useSession((state) => state.status);
   const segments = useSegments();
-  const { data, error } = useCurrentUser();
+  const { data, error, isError, isFetching, refetch } = useCurrentUser();
+  const authError = isAuthError(error);
 
   const resolution = resolveAuthGate({
     serverUrl,
+    status,
     isAuthed: data !== undefined,
-    isAuthError: isAuthError(error),
+    isAuthError: authError,
+    // `isAuthed` wins, so a background refetch failing over cached identity keeps the app up.
+    isUnreachable: isError && !authError,
     segments,
   });
 
@@ -41,13 +47,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     if (redirectTo) router.replace(redirectTo);
   }, [redirectTo]);
 
-  // Mask the navigator while identity resolves and during the frame before a redirect.
-  const showSplash = resolution.kind !== "render";
+  // Overlay: actionable error on a settled failure, else the splash while identity resolves.
+  const overlay =
+    resolution.kind === "error" ? (
+      <AuthUnreachable onRetry={() => refetch()} retrying={isFetching} />
+    ) : resolution.kind !== "render" ? (
+      <AuthSplash />
+    ) : null;
 
   return (
     <>
       {children}
-      {showSplash ? <AuthSplash /> : null}
+      {overlay}
     </>
   );
 }

@@ -65,7 +65,7 @@ export default function Home() {
         <Button
           width="full"
           prominence="secondary"
-          disabled={logout.isPending}
+          loading={logout.isPending}
           onPress={() => logout.mutate()}
           className="mt-16"
         >

@@ -2,8 +2,9 @@
 //
 // `serverUrl` persists straight to MMKV (not via zustand's persist) because the HTTP
 // layer (`config.ts#getBaseUrl`) reads it *synchronously*, once per request, through
-// `getStoredServerUrl`. `status` is in-memory only (optimistic UI); `useCurrentUser`
-// (/api/me) is the authoritative identity check.
+// `getStoredServerUrl`. `status` is in-memory only: `useCurrentUser` (/api/me) is the
+// authoritative identity check, except `"anon"` (explicit logout / rejected token), which
+// the auth gate treats as a decisive logged-out signal.
 import { create } from "zustand";
 
 import { appStorage } from "@/state/storage";

@@ -17,7 +17,9 @@ import {
   getValidToken,
   login,
   logout,
+  PostRegisterLoginError,
   refreshToken,
+  register,
 } from "@/api/auth/sessionManager";
 import { apiFetch, type ApiFetchInit } from "@/api/client";
 import { ApiError } from "@/api/errors";
@@ -91,6 +93,54 @@ describe("login", () => {
     );
     expect(mockClear).toHaveBeenCalledTimes(1);
     expect(mockRemoveClient).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("register", () => {
+  it("creates the account as JSON, then logs in to mint the token", async () => {
+    // register returns no token; the subsequent login does.
+    mockApiFetch.mockImplementation((path) =>
+      Promise.resolve(path === "/auth/register" ? undefined : token("tok-new")),
+    );
+
+    await register({ email: "a@example.com", password: "pw" });
+
+    const [registerPath, registerInit] = mockApiFetch.mock.calls[0];
+    expect(registerPath).toBe("/auth/register");
+    expect(registerInit?.method).toBe("POST");
+    expect(registerInit?.auth).toBe(false);
+    expect(registerInit?.body).toEqual({
+      email: "a@example.com",
+      password: "pw",
+    });
+
+    expect(mockApiFetch.mock.calls[1][0]).toBe("/auth/mobile/login");
+    expect(mockSetToken).toHaveBeenCalledWith("tok-new");
+  });
+
+  it("does not log in when account creation fails", async () => {
+    mockApiFetch.mockRejectedValueOnce(new ApiError({ status: 400 }));
+
+    await expect(
+      register({ email: "taken@example.com", password: "pw" }),
+    ).rejects.toBeInstanceOf(ApiError);
+
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+    expect(mockSetToken).not.toHaveBeenCalled();
+  });
+
+  it("flags a post-register login failure distinctly (the account exists)", async () => {
+    // register OK, auto-login fails (e.g. verification required): account created, not signed in.
+    mockApiFetch.mockImplementation((path) =>
+      path === "/auth/register"
+        ? Promise.resolve(undefined)
+        : Promise.reject(new ApiError({ status: 400 })),
+    );
+
+    await expect(
+      register({ email: "a@example.com", password: "pw" }),
+    ).rejects.toBeInstanceOf(PostRegisterLoginError);
+    expect(mockSetToken).not.toHaveBeenCalled();
   });
 });
 

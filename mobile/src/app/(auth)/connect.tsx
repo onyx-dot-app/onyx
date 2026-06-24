@@ -75,7 +75,8 @@ export default function ConnectScreen() {
       <View className="mt-16">
         <Button
           width="full"
-          disabled={busy || url.trim().length === 0}
+          disabled={url.trim().length === 0}
+          loading={busy}
           onPress={() => connect(url)}
         >
           {busy ? "Connecting…" : "Save & Connect"}
