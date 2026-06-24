@@ -6,19 +6,19 @@ import { loginAs } from "@tests/e2e/utils/auth";
 // visitor should reach the chat surface (/app) instead of being redirected to
 // the login page.
 
-// Toggle the global anonymous-chat setting via the admin API, mirroring the
-// admin UI's read-modify-write (web/src/refresh-pages/admin/ChatPreferencesPage.tsx).
+// Patch global settings via the admin API, mirroring the admin UI's
+// read-modify-write (web/src/refresh-pages/admin/ChatPreferencesPage.tsx).
 // `page` must be authenticated as an admin.
-async function setAnonymousChatEnabled(
+async function patchAdminSettings(
   page: Page,
-  enabled: boolean
+  patch: Record<string, unknown>
 ): Promise<void> {
   const getRes = await page.request.get("/api/settings");
   expect(getRes.ok()).toBe(true);
   const current = await getRes.json();
 
   const putRes = await page.request.put("/api/admin/settings", {
-    data: { ...current, anonymous_user_enabled: enabled },
+    data: { ...current, ...patch },
   });
   expect(putRes.ok()).toBe(true);
 }
@@ -32,15 +32,18 @@ test.describe("Anonymous chat access @exclusive", () => {
   });
 
   test.afterEach(async ({ page }) => {
-    // Restore the default (disabled) so other suites start from a clean state.
+    // Restore the defaults so other suites start from a clean state.
     await loginAs(page, "admin");
-    await setAnonymousChatEnabled(page, false);
+    await patchAdminSettings(page, {
+      anonymous_user_enabled: false,
+      disable_default_assistant: false,
+    });
   });
 
   test("logged-out visitor is redirected to login when anonymous chat is disabled", async ({
     page,
   }) => {
-    await setAnonymousChatEnabled(page, false);
+    await patchAdminSettings(page, { anonymous_user_enabled: false });
     await page.context().clearCookies();
 
     await page.goto("/app");
@@ -56,7 +59,7 @@ test.describe("Anonymous chat access @exclusive", () => {
   test("logged-out visitor reaches chat as anonymous user when enabled", async ({
     page,
   }) => {
-    await setAnonymousChatEnabled(page, true);
+    await patchAdminSettings(page, { anonymous_user_enabled: true });
     await page.context().clearCookies();
 
     await page.goto("/app");
@@ -77,7 +80,7 @@ test.describe("Anonymous chat access @exclusive", () => {
   test("'continue as guest' on the login page leads to chat when enabled", async ({
     page,
   }) => {
-    await setAnonymousChatEnabled(page, true);
+    await patchAdminSettings(page, { anonymous_user_enabled: true });
     await page.context().clearCookies();
 
     await page.goto("/auth/login");
@@ -88,5 +91,28 @@ test.describe("Anonymous chat access @exclusive", () => {
     await guestLink.click();
 
     await expect(page).toHaveURL(/\/app(\/|\?|$)/);
+  });
+
+  test("anonymous visitor receives the disable_default_assistant setting when enabled", async ({
+    page,
+  }) => {
+    await patchAdminSettings(page, {
+      anonymous_user_enabled: true,
+      disable_default_assistant: true,
+    });
+    await page.context().clearCookies();
+
+    await page.goto("/app");
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/app(\/|\?|$)/);
+
+    // Regression: /api/settings used to 403 for the anonymous user, so the FE
+    // silently fell back to defaults (disable_default_assistant=false) and the
+    // "Always Start with an Agent" admin setting never took effect. It must now
+    // be readable as the anonymous user and reflect the admin's value.
+    const settings = await page.request.get("/api/settings");
+    expect(settings.ok()).toBe(true);
+    const body = await settings.json();
+    expect(body.disable_default_assistant).toBe(true);
   });
 });
