@@ -703,7 +703,7 @@ export default function ChatPreferencesPage() {
         <SettingsLayouts.Body>
           {/* Features */}
           <Card border="solid" rounding="lg">
-            <Section>
+            <Section alignItems="stretch">
               <Disabled
                 disabled={!businessTier || uniqueSources.length === 0}
                 allowClick={businessTier}
@@ -921,7 +921,7 @@ export default function ChatPreferencesPage() {
                     description="Tools and capabilities available for chat to use. This does not apply to agents."
                   />
                   <SimpleCollapsible.Content>
-                    <Section gap={0.5}>
+                    <Section gap={0.5} alignItems="stretch">
                       {vectorDbEnabled && searchTool && (
                         <Card border="solid" rounding="lg">
                           <InputHorizontal
@@ -1116,7 +1116,7 @@ export default function ChatPreferencesPage() {
             <SimpleCollapsible.Content>
               <Section gap={1}>
                 <Card border="solid" rounding="lg">
-                  <Section>
+                  <Section alignItems="stretch">
                     <Disabled
                       disabled={!enterpriseTier}
                       tooltip="Chat history retention is an Enterprise Plan feature."
