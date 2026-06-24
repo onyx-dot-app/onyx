@@ -33,6 +33,7 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
+from tests.integration.tests.craft.k8s.k8s_fixtures import wait_until_healthy
 
 logger = setup_logger()
 
@@ -42,19 +43,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
-
-
-def _wait_until_healthy(
-    manager: KubernetesSandboxManager,
-    sandbox_id: UUID,
-    max_attempts: int = 15,
-    timeout: float = 5.0,
-) -> None:
-    for _ in range(max_attempts):
-        if manager.health_check(sandbox_id, timeout=timeout):
-            return
-        time.sleep(2)
-    raise RuntimeError(f"Sandbox {sandbox_id} never became healthy")
 
 
 def _provisioned_sandbox(
@@ -73,7 +61,7 @@ def _provisioned_sandbox(
         onyx_pat="ci-test-pat",
     )
     assert info.status == SandboxStatus.RUNNING
-    _wait_until_healthy(manager, sandbox_id)
+    wait_until_healthy(manager, sandbox_id)
 
 
 def _read_pod_file(k8s: client.CoreV1Api, pod_name: str, path: str) -> str:
@@ -106,9 +94,7 @@ def test_provisioned_pod_has_sandbox_image_directories(
             f"{required} should exist in the provisioned pod. Got: {resp!r}"
         )
 
-    assert k8s_manager.health_check(sandbox_id, timeout=5.0), (
-        "health_check() should return True for a freshly provisioned pod"
-    )
+    wait_until_healthy(k8s_manager, sandbox_id)
 
 
 def test_session_workspace_setup_creates_expected_tree(

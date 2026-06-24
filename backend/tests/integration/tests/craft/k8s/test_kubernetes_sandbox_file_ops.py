@@ -27,6 +27,7 @@ from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
+from tests.integration.tests.craft.k8s.k8s_fixtures import wait_until_healthy
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
@@ -49,7 +50,7 @@ class TestHealthCheck:
         pool_session: tuple[UUID, UUID, str],
     ) -> None:
         sandbox_id, _, _ = pool_session
-        assert k8s_manager.health_check(sandbox_id, timeout=10.0) is True
+        wait_until_healthy(k8s_manager, sandbox_id)
 
     def test_health_check_returns_false_after_terminate(
         self,

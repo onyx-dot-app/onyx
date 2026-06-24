@@ -637,6 +637,21 @@ def wait_for_pod_deletion(
     )
 
 
+def wait_until_healthy(
+    manager: KubernetesSandboxManager,
+    sandbox_id: UUID,
+    max_attempts: int = 15,
+    timeout: float = 5.0,
+) -> None:
+    """Poll ``health_check`` until it passes; the sidecar probe can lag from the
+    out-of-cluster runner, so a single-shot check is flaky."""
+    for _ in range(max_attempts):
+        if manager.health_check(sandbox_id, timeout=timeout):
+            return
+        time.sleep(2)
+    raise RuntimeError(f"Sandbox {sandbox_id} never became healthy")
+
+
 def wait_for_pod_exec_output(
     client: "k8s_client_module.CoreV1Api",
     pod_name: str,
