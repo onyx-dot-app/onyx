@@ -706,8 +706,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             message_history,
             self.llm,
             candidate_sources,
-            list(self._search_cycles),
-            list(llm_queries),
+            self._search_cycles,
+            llm_queries,
         )
         plan_scope: list[DocumentSource] | None = None
 
