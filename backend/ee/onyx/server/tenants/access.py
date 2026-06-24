@@ -15,7 +15,10 @@ logger = setup_logger()
 
 
 def generate_data_plane_token() -> str:
-    if DATA_PLANE_SECRET is None:
+    # Treat an empty string the same as unset: PyJWT (>=2.13) rejects an empty
+    # HMAC key with InvalidKeyError, which callers don't anticipate. Raising a
+    # ValueError keeps the "misconfigured secret" signal that callers handle.
+    if not DATA_PLANE_SECRET:
         raise ValueError("DATA_PLANE_SECRET is not set")
 
     payload = {
