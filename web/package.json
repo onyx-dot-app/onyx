@@ -72,6 +72,7 @@
     "favicon-fetch": "^1.0.0",
     "formik": "^2.2.9",
     "highlight.js": "^11.11.1",
+    "highlightjs-sap-abap": "^0.3.0",
     "js-cookie": "^3.0.5",
     "katex": "^0.16.38",
     "linguist-languages": "^9.3.1",

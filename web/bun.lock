@@ -46,6 +46,7 @@
         "favicon-fetch": "^1.0.0",
         "formik": "^2.2.9",
         "highlight.js": "^11.11.1",
+        "highlightjs-sap-abap": "^0.3.0",
         "js-cookie": "^3.0.5",
         "katex": "^0.16.38",
         "linguist-languages": "^9.3.1",
@@ -1554,6 +1555,8 @@
     "hastscript": ["hastscript@9.0.1", "", { "dependencies": { "@types/hast": "^3.0.0", "comma-separated-tokens": "^2.0.0", "hast-util-parse-selector": "^4.0.0", "property-information": "^7.0.0", "space-separated-tokens": "^2.0.0" } }, ""],
 
     "highlight.js": ["highlight.js@11.11.1", "", {}, ""],
+
+    "highlightjs-sap-abap": ["highlightjs-sap-abap@0.3.0", "", {}, "sha512-nSiUvEOCycjtFA3pHaTowrbAAk5+lciBHyoVkDsd6FTRBtW9sT2dt42o2jAKbXjZVUidtacdk+j0Y2xnd233Mw=="],
 
     "hoist-non-react-statics": ["hoist-non-react-statics@3.3.2", "", { "dependencies": { "react-is": "^16.7.0" } }, ""],
 
