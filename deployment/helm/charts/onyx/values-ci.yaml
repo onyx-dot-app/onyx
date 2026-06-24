@@ -50,10 +50,12 @@ configMap:
   SANDBOX_POD_CPU_REQUEST: "100m"
   SANDBOX_POD_MEMORY_REQUEST: "256Mi"
   SANDBOX_POD_CPU_LIMIT: "2000m"
-  SANDBOX_POD_MEMORY_LIMIT: "4Gi"
-  # kind runner disks are small; production default is 5Gi/20Gi.
-  SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST: "512Mi"
-  SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT: "4Gi"
+  SANDBOX_POD_MEMORY_LIMIT: "6Gi"
+  # Sandboxes accumulate node_modules across sessions; an under-requested pod is
+  # the kubelet's first eviction target under node disk pressure. Production
+  # default is 5Gi/20Gi.
+  SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST: "2Gi"
+  SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT: "8Gi"
 
 postgresql:
   cluster:
