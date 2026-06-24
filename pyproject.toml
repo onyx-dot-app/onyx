@@ -10,7 +10,7 @@ requires-python = ">=3.13"
 dependencies = [
     "aioboto3==15.1.0",
     "cohere==5.6.1",
-    "fastapi==0.133.1",
+    "fastapi==0.137.1",
     "google-genai==1.52.0",
     "litellm[google]==1.85.1",
     "openai==2.38.0",
@@ -182,7 +182,7 @@ ee = ["posthog==3.7.4"]
 # Opt in with `uv sync --group loadtest`. See loadtest/README.md.
 loadtest = [
     "locust>=2.32",
-    "fastapi>=0.115",
+    "fastapi>=0.137.1",
     "uvicorn>=0.30",
     "prometheus-client>=0.21",
 ]
