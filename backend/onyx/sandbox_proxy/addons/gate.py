@@ -65,7 +65,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # Bodies over this cap are fail-closed (rejected), not parsed by the matcher.
-PARSER_MAX_BODY_BYTES = 1_048_576
+# 32 MiB = Anthropic's Messages API request-body limit, so the proxy is never
+# the false blocker: anything the upstream would accept passes through, and a
+# genuinely oversized request gets the upstream's own 413, not an opaque 403.
+PARSER_MAX_BODY_BYTES = 32 * 1024 * 1024
 
 
 # --- internal-destination egress lockdown: closes the proxy-relay path ---

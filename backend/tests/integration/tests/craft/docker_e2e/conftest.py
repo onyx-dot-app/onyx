@@ -167,10 +167,10 @@ def slack_external_app() -> None:
     Seeds Slack directly with ``enabled=True`` and an ``ASK`` policy on
     ``slack.messages.write`` so the gate matcher claims ``chat.postMessage``.
 
-    Unlike ``provision_built_in_external_apps`` (which the cloud tenant-creation
-    path runs when ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS=true``), this skips
-    real credentials and the full action catalog -- the test only needs the one
-    gated action. Re-seed is a no-op when the row already exists.
+    Unlike the cloud migration that seeds built-in apps per tenant (when
+    ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS=true``), this skips real credentials
+    and the full action catalog -- the test only needs the one gated action.
+    Re-seed is a no-op when the row already exists.
     """
     with get_session_with_tenant(tenant_id="public") as db:
         existing = get_built_in_external_app(db, ExternalAppType.SLACK)

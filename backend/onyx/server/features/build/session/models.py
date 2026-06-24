@@ -259,3 +259,17 @@ class PptxPreviewResponse(BaseModel):
     slide_count: int
     slide_paths: list[str]  # Relative paths to slide JPEGs within session workspace
     cached: bool  # Whether result was served from cache
+
+
+# ===== Snapshot Models =====
+class SnapshotResponse(BaseModel):
+    """Response describing a created session snapshot."""
+
+    storage_path: str
+    size_bytes: int
+
+
+class OpencodeHistorySnapshotResponse(BaseModel):
+    """Response for an opencode history snapshot attempt."""
+
+    created: bool
