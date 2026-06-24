@@ -455,6 +455,29 @@ def test_validate_connector_settings_errors(
     assert expected_message in str(excinfo.value)
 
 
+def test_validate_connector_settings_surfaces_typed_error(
+    build_github_connector: Callable[..., GithubConnector],
+) -> None:
+    """A typed ConnectorValidationError raised mid-validation propagates
+    unchanged, so the connector-setup API surfaces the real reason
+    ("Found no repos...") rather than a generic 500."""
+    github_connector = build_github_connector(repositories="")
+    github_client = cast(Github, github_connector.github_client)
+
+    # No specific repos -> org lookup fails -> fall back to a user that has
+    # zero accessible repos.
+    cast(MagicMock, github_client.get_organization).side_effect = GithubException(
+        status=404, data={}, headers={}
+    )
+    mock_user = MagicMock()
+    mock_user.get_repos.return_value.totalCount = 0
+    cast(MagicMock, github_client.get_user).return_value = mock_user
+
+    with pytest.raises(ConnectorValidationError) as excinfo:
+        github_connector.validate_connector_settings()
+    assert "Found no repos for user" in str(excinfo.value)
+
+
 def test_validate_connector_settings_success(
     build_github_connector: Callable[..., GithubConnector],
     mock_github_client: MagicMock,

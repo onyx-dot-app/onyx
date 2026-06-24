@@ -31,6 +31,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
 from onyx.connectors.github.utils import deserialize_repository
@@ -1349,8 +1350,13 @@ class GithubConnector(
                     f"Unexpected GitHub error (status={e.status}): {e.data}"
                 )
 
+        except ValidationError:
+            # Let typed validation errors propagate so the API can surface the
+            # real reason instead of collapsing them into a generic 500.
+            raise
+
         except Exception as exc:
-            raise Exception(
+            raise UnexpectedValidationError(
                 f"Unexpected error during GitHub settings validation: {exc}"
             )
 
