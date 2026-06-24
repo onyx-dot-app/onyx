@@ -71,11 +71,9 @@ def build_raw_file_callback(
 def build_tracking_raw_file_callback(
     *, metadata: dict[str, Any]
 ) -> tuple[RawFileCallback, list[str]]:
-    """Staging callback for connector runs with no attempt-end reaper — user-file
-    processing and the pruning id-enumeration. Returns the callback plus the list
-    it records staged ids in, so the caller reaps them once it has finished
-    reading them (these contexts have no index attempt for the standard reapers
-    to key on)."""
+    """Staging callback for connector runs that have no index attempt for the
+    standard staging reapers to key on. Returns the callback plus the list of ids
+    it stages, so the caller can reap them once it has read them."""
     staged_ids: list[str] = []
 
     def _callback(content: IO[bytes], content_type: str) -> str:

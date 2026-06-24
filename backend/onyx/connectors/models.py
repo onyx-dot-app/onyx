@@ -76,13 +76,9 @@ class ImageSection(Section):
 
 
 class TabularSection(Section):
-    """Section containing tabular data (csv/tsv content, or one sheet of an
-    xlsx workbook rendered as CSV).
-
-    The CSV is always staged in the file store and referenced by `csv_file_id`,
-    streamed back a row at a time at chunk time, so a large sheet never sits on
-    the worker heap.
-    """
+    """Tabular data — a csv/tsv file or one xlsx sheet rendered as CSV. The CSV is
+    always staged in the file store (`csv_file_id`) and streamed a row at a time
+    at chunk time, so a large sheet never sits on the worker heap."""
 
     type: Literal[SectionType.TABULAR] = SectionType.TABULAR
     csv_file_id: str  # file store id of the staged CSV

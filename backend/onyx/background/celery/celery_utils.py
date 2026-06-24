@@ -146,10 +146,9 @@ def extract_ids_from_runnable_connector(
     all_raw_id_to_parent: dict[str, str | None] = {}
     all_hierarchy_nodes: list[HierarchyNode] = []
 
-    # Non-slim connectors run full extraction here, and tabular sections need a
-    # staging callback to be produced at all. This path only uses the doc ids, so
-    # stage to a tracked list and reap it in the finally — there's no index
-    # attempt for the standard staging reapers to key on.
+    # Pruning only needs doc ids, but non-slim tabular connectors won't yield a
+    # doc without staging its CSV. Stage to a tracked list and reap in the finally
+    # — no index attempt for the standard staging reapers to key on.
     staging_callback, staged_csv_ids = build_tracking_raw_file_callback(
         metadata={
             "context": "pruning-id-enumeration",

@@ -741,10 +741,9 @@ def stage_xlsx_sheets(
     stage: Callable[[IO[bytes], str], str],
     file_name: str = "",
 ) -> list[StreamedSheet]:
-    """Render each non-empty worksheet to a temp CSV, writing rows one at a
-    time so no worksheet is fully held in memory during conversion. Each sheet
-    is then staged via `stage` and referenced by `csv_file_id` downstream.
-    Empty rows are dropped; columns are not trimmed (that needs a second pass)."""
+    """Stream each non-empty worksheet to a temp CSV row by row (never holding a
+    full sheet in memory), then stage it via `stage` and reference it by
+    `csv_file_id`. Empty rows are dropped; columns are not trimmed."""
     sheets: list[StreamedSheet] = []
     workbook = _load_readonly_workbook(file, file_name)
     if workbook is None:
