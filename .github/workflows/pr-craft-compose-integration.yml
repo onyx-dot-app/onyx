@@ -78,8 +78,7 @@ jobs:
             craft_compose:
               - 'backend/Dockerfile'
               - 'backend/onyx/sandbox_proxy/**'
-              - 'backend/onyx/server/features/build/sandbox/**'
-              - 'backend/onyx/server/features/build/approvals/**'
+              - 'backend/onyx/server/features/build/**'
               - 'backend/onyx/skills/**'
               - 'deployment/docker_compose/docker-compose.yml'
               - 'deployment/docker_compose/docker-compose.dev.yml'
