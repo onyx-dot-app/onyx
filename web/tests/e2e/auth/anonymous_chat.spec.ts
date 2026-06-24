@@ -11,7 +11,7 @@ import { loginAs } from "@tests/e2e/utils/auth";
 // `page` must be authenticated as an admin.
 async function patchAdminSettings(
   page: Page,
-  patch: Record<string, unknown>,
+  patch: Record<string, unknown>
 ): Promise<void> {
   const getRes = await page.request.get("/api/settings");
   expect(getRes.ok()).toBe(true);
