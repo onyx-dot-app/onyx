@@ -141,7 +141,7 @@ export interface EnterpriseSettings {
 
 /**
  * Combined settings shape returned by the server-side `fetchSettingsSS`
- * helper in `components/settings/lib.ts`. Used only for SSR — client
+ * helper in `lib/settings/svcSS.ts`. Used only for SSR — client
  * components access settings via the SWR hooks in `lib/settings/hooks.ts`.
  */
 export interface CombinedSettings {

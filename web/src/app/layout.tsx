@@ -6,8 +6,7 @@ import {
   MODAL_ROOT_ID,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
 } from "@/lib/constants";
-import type { EnterpriseSettings } from "@/lib/settings/types";
-import { fetchEnterpriseSettingsSS } from "@/components/settings/lib";
+import { fetchEnterpriseSettingsSS } from "@/lib/settings/svcSS";
 import AppProvider from "@/providers/AppProvider";
 import { PHProvider } from "./providers";
 import {
@@ -65,9 +64,8 @@ export async function generateMetadata(): Promise<Metadata> {
   let iconSrc = "/onyx.ico";
 
   if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
-    const response = await fetchEnterpriseSettingsSS();
-    if (response?.ok) {
-      const enterprise: EnterpriseSettings = await response.json();
+    const enterprise = await fetchEnterpriseSettingsSS();
+    if (enterprise) {
       title = enterprise.application_name?.trim() || "Onyx";
       if (enterprise.use_custom_logo) {
         iconSrc = "/api/enterprise-settings/logo";
