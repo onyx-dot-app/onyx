@@ -1052,6 +1052,13 @@ MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
 )
 
+# A worksheet whose uncompressed XML exceeds this is streamed to a file-backed
+# TabularSection (CSV staged in the file store) instead of an in-memory string,
+# so a huge sheet stays off the worker heap rather than being truncated.
+XLSX_STREAM_SHEET_BYTES = max(
+    0, int(os.environ.get("XLSX_STREAM_SHEET_BYTES") or 50 * 1024 * 1024)
+)
+
 # Use document summary for contextual rag
 USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
 # Use chunk summary for contextual rag
