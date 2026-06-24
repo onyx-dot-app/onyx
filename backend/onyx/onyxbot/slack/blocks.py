@@ -280,17 +280,11 @@ def _build_sources_blocks(
 
         section_blocks.append(
             ContextBlock(
-                elements=(
-                    [
-                        ImageElement(
-                            image_url=img_link,
-                            alt_text=f"{d.source_type.value} logo",
-                        )
-                    ]
-                    if img_link
-                    else []
-                )
-                + [
+                elements=[
+                    ImageElement(
+                        image_url=img_link,
+                        alt_text=f"{d.source_type.value} logo",
+                    ),
                     (
                         MarkdownTextObject(text=f"{document_title}")
                         if d.link == ""
