@@ -6,6 +6,7 @@ from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -135,33 +136,6 @@ def ensure_source_node_exists(
     return source_node
 
 
-def resolve_parent_hierarchy_node_id(
-    db_session: Session,
-    raw_parent_id: str | None,
-    source: DocumentSource,
-) -> int | None:
-    """
-    Resolve a raw_parent_id to a database HierarchyNode ID.
-
-    If raw_parent_id is None, returns the SOURCE node ID for backward compatibility.
-    If the parent node doesn't exist, returns the SOURCE node ID as fallback.
-    """
-    if raw_parent_id is None:
-        # No parent specified - use the SOURCE node
-        source_node = get_source_hierarchy_node(db_session, source)
-        return source_node.id if source_node else None
-
-    parent_node = get_hierarchy_node_by_raw_id(db_session, raw_parent_id, source)
-    if parent_node:
-        return parent_node.id
-
-    # Parent not found - fall back to SOURCE node.
-    # Callers that want stub creation (upsert_hierarchy_node) detect this via the
-    # returned value equalling source_node_id and create a STUB in that case.
-    source_node = get_source_hierarchy_node(db_session, source)
-    return source_node.id if source_node else None
-
-
 def _create_stub_hierarchy_node(
     db_session: Session,
     raw_node_id: str,
@@ -184,8 +158,16 @@ def _create_stub_hierarchy_node(
         is_public=False,
     )
     db_session.add(stub)
-    db_session.flush()
-    return stub
+    try:
+        with db_session.begin_nested():
+            db_session.flush()
+        return stub
+    except IntegrityError:
+        # A concurrent worker inserted this stub first; return theirs.
+        existing = get_hierarchy_node_by_raw_id(db_session, raw_node_id, source)
+        if existing is not None:
+            return existing
+        raise
 
 
 def upsert_parents(
@@ -283,22 +265,23 @@ def upsert_hierarchy_node(
         source_node_id: DB id of the SOURCE root node for this source, used to
             detect and replace the fallback with a STUB for missing cross-batch parents.
     """
-    # Resolve parent_id from raw_parent_id
-    parent_id = (
-        None
-        if node.node_type == HierarchyNodeType.SOURCE
-        else resolve_parent_hierarchy_node_id(db_session, node.raw_parent_id, source)
-    )
-
     ret: list[HierarchyNode] = []
-    # If a specific parent was requested but resolve fell back to SOURCE, create a stub
-    # so the child points to a real placeholder rather than the wrong root node.
-    if node.raw_parent_id is not None and parent_id == source_node_id:
-        created_stub = _create_stub_hierarchy_node(
-            db_session, node.raw_parent_id, source, source_node_id
+    if node.node_type == HierarchyNodeType.SOURCE:
+        parent_id: int | None = None
+    elif node.raw_parent_id is None:
+        parent_id = source_node_id
+    else:
+        parent_node = get_hierarchy_node_by_raw_id(
+            db_session, node.raw_parent_id, source
         )
-        parent_id = created_stub.id
-        ret.append(created_stub)
+        if parent_node is not None:
+            parent_id = parent_node.id
+        else:
+            stub = _create_stub_hierarchy_node(
+                db_session, node.raw_parent_id, source, source_node_id
+            )
+            parent_id = stub.id
+            ret.append(stub)
 
     # For public connectors, all nodes are public
     # Otherwise, extract permission fields from external_access if present
