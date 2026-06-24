@@ -6,7 +6,10 @@ import useSWR from "swr";
 import { MessageCard } from "@opal/components";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { Notification, NotificationType } from "@/lib/notifications/interfaces";
+import {
+  NotificationsResponse,
+  NotificationType,
+} from "@/lib/notifications/interfaces";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 const DISMISS_STORAGE_KEY = "admin-banner-dismissed";
@@ -65,7 +68,7 @@ function useMainContainerOffset(): { left: number; width: number } {
 }
 
 export default function AdminBannerNotice() {
-  const { data } = useSWR<Notification[]>(
+  const { data } = useSWR<NotificationsResponse>(
     SWR_KEYS.notifications,
     errorHandlingFetcher
   );
@@ -73,7 +76,7 @@ export default function AdminBannerNotice() {
   const [dismissedId, setDismissedId] = useState<number | null>(null);
 
   const banner = useMemo(() => {
-    return (data ?? []).find(
+    return (data?.notifications ?? []).find(
       (n) => n.notif_type === NotificationType.ADMIN_BANNER && !n.dismissed
     );
   }, [data]);
