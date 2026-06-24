@@ -2,6 +2,9 @@ import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useLogout } from "@/api/auth/useLogout";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { SidebarLayouts, SidebarTab, useSidebar } from "@/components/sidebar";
@@ -33,6 +36,8 @@ function SidebarTrigger() {
 export default function Home() {
   const { setFolded } = useSidebar();
   const [selected, setSelected] = useState("general");
+  const logout = useLogout();
+  const { data: user } = useCurrentUser();
 
   function choose(key: string) {
     setSelected(key);
@@ -46,11 +51,26 @@ export default function Home() {
         <Text font="main-ui-action">Onyx Mobile</Text>
       </View>
 
-      <View className="flex-1 items-center justify-center px-6">
+      <View className="flex-1 items-center justify-center px-24">
         <Text font="main-content-body" className="text-center text-text-03">
           Tap the menu icon to open the sidebar. Tap the backdrop or swipe left
           to close.
         </Text>
+        {user ? (
+          <Text font="secondary-body" color="text-03" className="mt-24">
+            Signed in as {user.email}
+          </Text>
+        ) : null}
+        {/* temporary: log out to test the auth loop */}
+        <Button
+          width="full"
+          prominence="secondary"
+          disabled={logout.isPending}
+          onPress={() => logout.mutate()}
+          className="mt-16"
+        >
+          {logout.isPending ? "Logging out…" : "Log out"}
+        </Button>
       </View>
 
       <SidebarLayouts.Root foldable>

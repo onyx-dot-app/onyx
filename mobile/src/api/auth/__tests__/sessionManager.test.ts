@@ -75,7 +75,7 @@ describe("login", () => {
 
     expect(mockApiFetch).toHaveBeenCalledTimes(1);
     const [path, init] = mockApiFetch.mock.calls[0];
-    expect(path).toBe("/api/auth/mobile/login");
+    expect(path).toBe("/auth/mobile/login");
     expect(init?.method).toBe("POST");
     expect(init?.auth).toBe(false);
     const body = init?.body as URLSearchParams;
@@ -100,7 +100,7 @@ describe("logout", () => {
 
     await logout();
 
-    expect(mockApiFetch).toHaveBeenCalledWith("/api/auth/mobile/logout", {
+    expect(mockApiFetch).toHaveBeenCalledWith("/auth/mobile/logout", {
       method: "POST",
     });
     expect(mockSetToken).toHaveBeenCalledWith(null);
@@ -185,7 +185,7 @@ describe("refreshToken (single-flight)", () => {
   it("does not resurrect the session when a logout completes mid-refresh", async () => {
     let resolveRefresh!: (value: BearerTokenResponse) => void;
     mockApiFetch.mockImplementation((path) => {
-      if (path === "/api/auth/mobile/refresh") {
+      if (path === "/auth/mobile/refresh") {
         return new Promise<BearerTokenResponse>((resolve) => {
           resolveRefresh = resolve;
         });
