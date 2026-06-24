@@ -16,6 +16,7 @@ import {
   SvgDeepseek,
   SvgQwen,
   SvgGoogle,
+  SvgNebius,
 } from "@opal/logos";
 import { ZAIIcon } from "@/components/icons/icons";
 import {
@@ -35,6 +36,7 @@ import LMStudioModal from "@/sections/modals/languageModels/LMStudioModal";
 import LiteLLMProxyModal from "@/sections/modals/languageModels/LiteLLMProxyModal";
 import BifrostModal from "@/sections/modals/languageModels/BifrostModal";
 import OpenAICompatibleModal from "@/sections/modals/languageModels/OpenAICompatibleModal";
+import NebiusTokenfactoryModal from "@/sections/modals/languageModels/NebiusTokenfactoryModal";
 
 // ─── Text (LLM) providers ────────────────────────────────────────────────────
 
@@ -118,6 +120,12 @@ const PROVIDERS: Record<string, ProviderEntry> = {
     companyName: "OpenAI-Compatible",
     Modal: OpenAICompatibleModal,
   },
+  [LLMProviderName.NEBIUS_TOKENFACTORY]: {
+    icon: SvgNebius,
+    productName: "Nebius TokenFactory",
+    companyName: "Nebius",
+    Modal: NebiusTokenfactoryModal,
+  },
   [LLMProviderName.CUSTOM]: {
     icon: SvgServer,
     productName: "Custom Models",
@@ -175,6 +183,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   LLMProviderName.LITELLM_PROXY,
   LLMProviderName.BIFROST,
   LLMProviderName.OPENAI_COMPATIBLE,
+  LLMProviderName.NEBIUS_TOKENFACTORY,
   LLMProviderName.VERTEX_AI,
 ]);
 
@@ -191,6 +200,7 @@ const MODEL_ICON_MAP: Record<string, IconFunctionComponent> = {
   [LLMProviderName.LITELLM_PROXY]: SvgLitellm,
   [LLMProviderName.BIFROST]: SvgBifrost,
   [LLMProviderName.OPENAI_COMPATIBLE]: SvgPlug,
+  [LLMProviderName.NEBIUS_TOKENFACTORY]: SvgNebius,
 
   amazon: SvgAws,
   phi: SvgMicrosoft,

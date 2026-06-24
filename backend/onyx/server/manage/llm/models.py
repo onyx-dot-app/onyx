@@ -614,6 +614,27 @@ class BifrostFinalModelResponse(BaseModel):
     supports_reasoning: bool
 
 
+# Nebius Token Factory dynamic models fetch
+class NebiusTokenfactoryModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    provider_name: str | None = None  # Optional: to save models to existing provider
+    provider_id: int | None = None  # Reliable id for resolving the stored key on edit
+
+
+class NebiusTokenfactoryFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "meta-llama/Llama-3.3-70B-Instruct")
+    display_name: str
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool
+    # Display-only metadata shown in the model picker (not persisted).
+    quantization: str | None = None
+    country_code: str | None = None
+    requests_per_minute: float | None = None
+    supported_features: list[str] = []
+
+
 # OpenAI Compatible dynamic models fetch
 class OpenAICompatibleModelsRequest(BaseModel):
     api_base: str

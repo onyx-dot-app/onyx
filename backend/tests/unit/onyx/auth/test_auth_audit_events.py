@@ -114,3 +114,20 @@ async def test_on_after_request_verify_emits_event(
     assert len(events) == 1
     assert events[0]["action"] == "auth.email_verify"
     assert events[0]["outcome"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_on_after_reset_password_emits_event(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    user = MagicMock(id="u-1", email="user@example.com")
+    manager = UserManager(MagicMock())
+
+    with caplog.at_level(logging.INFO, logger="onyx.audit"):
+        await manager.on_after_reset_password(user, request=None)
+
+    events = _audit_events(caplog)
+    assert len(events) == 1
+    assert events[0]["action"] == "auth.password_reset"
+    assert events[0]["outcome"] == "success"
+    assert events[0]["actor"]["email"] == "user@example.com"

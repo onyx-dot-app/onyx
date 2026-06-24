@@ -1,5 +1,6 @@
 import re
 from typing import Any
+from typing import cast
 from uuid import UUID
 from uuid import uuid4
 
@@ -443,16 +444,32 @@ def upsert_external_app_user_credential(
     external_app_id: int,
     user_id: UUID,
     user_credentials: dict[str, Any],
+    resolve_masked_values: bool = False,
 ) -> ExternalAppUserCredential:
     """Create or replace the calling user's credentials for the app, and commit.
     Atomic via ON CONFLICT on (external_app_id, user_id). Raises
-    ``OnyxError(NOT_FOUND)`` if the app doesn't exist.
+    ``OnyxError(NOT_FOUND)`` if the app doesn't exist. ``resolve_masked_values``
+    is for user form submissions that may echo masked display values; internal
+    OAuth writers should store provider-returned values as-is.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
             f"External app with id {external_app_id} not found.",
+        )
+
+    if resolve_masked_values:
+        existing_credential = get_external_app_user_credential(
+            db_session,
+            external_app_id=external_app_id,
+            user_id=user_id,
+        )
+        user_credentials = resolve_masked_credentials(
+            cast(dict[str, str], user_credentials),
+            existing_credential.user_credentials
+            if existing_credential is not None
+            else None,
         )
 
     stmt = pg_insert(ExternalAppUserCredential).values(

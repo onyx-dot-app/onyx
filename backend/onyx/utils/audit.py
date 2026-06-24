@@ -13,6 +13,7 @@ hot event classes via Redis (degrade to always-emit if Redis is down).
 
 import json
 import logging
+import sys
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -20,10 +21,10 @@ from typing import Any
 
 AUDIT_SCHEMA_VERSION = "1.0"
 
-# Root of the audit logger tree; per-class children propagate up to it. Plain
-# ``getLogger`` (not ``setup_logger``) keeps the record message a bare JSON
-# object with no human-readable prefix.
+# Root of the audit logger tree; children propagate up to the dedicated stdout
+# handler configured in ``_configure_audit_logging``.
 AUDIT_LOGGER_ROOT = "onyx.audit"
+AUDIT_HANDLER_NAME = "onyx_audit_stdout"
 
 # Diagnostics logger for the subsystem's own failures. Deliberately NOT under
 # ``onyx.audit`` so internal warnings never land in the parsed audit stream.
@@ -48,9 +49,7 @@ class AuditOutcome(str, Enum):
 
 class AuditAction(str, Enum):
     """Audited-action taxonomy. Values are an append-only schema contract
-    (consumers filter on them). A few members (``USER_CREATE``,
-    ``USER_GROUP_CHANGE``, ``PASSWORD_RESET``) are defined ahead of their call
-    sites and land in follow-up PRs."""
+    (consumers filter on them)."""
 
     # Authentication
     LOGIN = "auth.login"
@@ -60,6 +59,7 @@ class AuditAction(str, Enum):
     PASSWORD_FORGOT = "auth.password_forgot"
     PASSWORD_RESET = "auth.password_reset"
     EMAIL_VERIFY = "auth.email_verify"
+    IMPERSONATE = "auth.impersonate"  # cloud superuser assuming another user's session
 
     # Account change
     USER_CREATE = "user.create"
@@ -96,6 +96,7 @@ _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
     AuditAction.PASSWORD_FORGOT: OCSFEventClass.AUTHENTICATION,
     AuditAction.PASSWORD_RESET: OCSFEventClass.AUTHENTICATION,
     AuditAction.EMAIL_VERIFY: OCSFEventClass.AUTHENTICATION,
+    AuditAction.IMPERSONATE: OCSFEventClass.AUTHENTICATION,
     AuditAction.USER_CREATE: OCSFEventClass.ACCOUNT_CHANGE,
     AuditAction.USER_DELETE: OCSFEventClass.ACCOUNT_CHANGE,
     AuditAction.USER_DEACTIVATE: OCSFEventClass.ACCOUNT_CHANGE,
@@ -274,6 +275,33 @@ def emit_audit_event(
     except Exception:
         # Audit must never break the caller.
         return
+
+
+def _configure_audit_logging() -> None:
+    """Own an INFO stdout handler on ``onyx.audit`` so events reach stdout
+    regardless of host-process logging. Relying on root propagation dropped
+    every event under uvicorn (root unconfigured -> WARNING ``lastResort``).
+    ``propagate=False`` keeps output identical across processes and avoids
+    double-logging where root is configured (celery). Idempotent.
+    """
+    audit_root = logging.getLogger(AUDIT_LOGGER_ROOT)
+    if any(h.name == AUDIT_HANDLER_NAME for h in audit_root.handlers):
+        return
+    handler = logging.StreamHandler(sys.stdout)
+    handler.name = AUDIT_HANDLER_NAME
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    audit_root.addHandler(handler)
+    audit_root.setLevel(logging.INFO)
+    audit_root.propagate = False
+
+
+# IMPORT-TIME SIDE EFFECT (deliberate): configure the audit handler on import
+# so the subsystem is self-contained in every process that imports it. A
+# startup-hook entrypoint would reintroduce the bug this fixes -- a process
+# emitting events without having called it drops them silently. Idempotent and
+# inert until an event is actually emitted.
+_configure_audit_logging()
 
 
 def _logger_for(ocsf_class: OCSFEventClass | None) -> logging.Logger:

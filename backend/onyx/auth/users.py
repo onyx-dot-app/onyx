@@ -1219,6 +1219,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             actor=AuditActor(user_id=str(user.id), email=user.email),
         )
 
+    async def on_after_reset_password(
+        self,
+        user: User,
+        request: Optional[Request] = None,  # noqa: ARG002
+    ) -> None:
+        emit_audit_event(
+            AuditAction.PASSWORD_RESET,
+            AuditOutcome.SUCCESS,
+            actor=AuditActor(user_id=str(user.id), email=user.email),
+        )
+
     async def on_after_request_verify(
         self,
         user: User,

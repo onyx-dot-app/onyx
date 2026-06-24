@@ -616,6 +616,17 @@ def bulk_invite_users(
                         )
             raise e
 
+    # Genuinely-new invites (not existing or already-invited) are the accounts
+    # an admin is provisioning access for; re-invites of known emails are no-ops.
+    if emails_needing_seats:
+        emit_audit_event(
+            AuditAction.USER_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(current_user),
+            resource_type="user",
+            extra={"invited_emails": emails_needing_seats},
+        )
+
     return BulkInviteResponse(
         invited_count=number_of_invited_users,
         email_invite_status=email_invite_status,

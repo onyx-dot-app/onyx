@@ -209,6 +209,12 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 # lifetime, so a paired-up cookie + token never outlive each other.
 CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
 
+# Redis TTL for cached control-plane billing/trial lookups. 24h default —
+# trial→paid conversions propagate within this window in the worst case,
+# and the admin panel call sites invalidate on write so immediate UI
+# refreshes are not stale. Env-tunable for emergency tightening.
+BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "86400"))
+
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
 OAUTH_CLIENT_ID = (
@@ -388,6 +394,39 @@ OPENSEARCH_ADMIN_PASSWORD = os.environ.get(
     "OPENSEARCH_ADMIN_PASSWORD", "StrongPassword123!"
 )
 OPENSEARCH_USE_SSL = os.environ.get("OPENSEARCH_USE_SSL", "true").lower() == "true"
+# Verify the OpenSearch server certificate. Defaults to False to preserve the
+# existing behavior (the bundled OpenSearch ships self-signed certs). Set True —
+# with OPENSEARCH_CA_CERTS for a private CA — to actually authenticate the
+# server instead of merely encrypting the connection.
+OPENSEARCH_VERIFY_CERTS = (
+    os.environ.get("OPENSEARCH_VERIFY_CERTS", "").lower() == "true"
+)
+# CA bundle to verify the server cert against when OPENSEARCH_VERIFY_CERTS=true.
+# Falls back to the system trust store if unset.
+OPENSEARCH_CA_CERTS: str | None = os.environ.get("OPENSEARCH_CA_CERTS") or None
+# Client certificate + key for mutual TLS (OpenSearch authenticating us). Both
+# must be set together.
+OPENSEARCH_CLIENT_CERT: str | None = os.environ.get("OPENSEARCH_CLIENT_CERT") or None
+OPENSEARCH_CLIENT_KEY: str | None = os.environ.get("OPENSEARCH_CLIENT_KEY") or None
+
+if OPENSEARCH_VERIFY_CERTS and not OPENSEARCH_USE_SSL:
+    logger.warning(
+        "OPENSEARCH_VERIFY_CERTS=true has no effect when OPENSEARCH_USE_SSL is "
+        "false (the connection is not encrypted)."
+    )
+if bool(OPENSEARCH_CLIENT_CERT) != bool(OPENSEARCH_CLIENT_KEY):
+    raise ValueError(
+        "OPENSEARCH_CLIENT_CERT and OPENSEARCH_CLIENT_KEY must both be set "
+        "(mutual TLS needs a client certificate and its private key)."
+    )
+for _os_name, _os_path in (
+    ("OPENSEARCH_CA_CERTS", OPENSEARCH_CA_CERTS),
+    ("OPENSEARCH_CLIENT_CERT", OPENSEARCH_CLIENT_CERT),
+    ("OPENSEARCH_CLIENT_KEY", OPENSEARCH_CLIENT_KEY),
+):
+    if _os_path and not os.path.exists(_os_path):
+        raise ValueError(f"{_os_name}={_os_path!r} does not exist.")
+
 USING_AWS_MANAGED_OPENSEARCH = (
     os.environ.get("USING_AWS_MANAGED_OPENSEARCH", "").lower() == "true"
 )
@@ -675,6 +714,58 @@ REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD") or ""
 # this assumes that other redis settings remain the same as the primary
 REDIS_REPLICA_HOST = os.environ.get("REDIS_REPLICA_HOST") or REDIS_HOST
 
+# Redis Sentinel for high availability. When REDIS_SENTINEL_HOSTS is set, the app
+# (and Celery) connect via Sentinel — which discovers the current master and
+# follows failover — instead of REDIS_HOST/REDIS_PORT directly. Format is a
+# comma-separated list of host:port sentinel nodes. REDIS_PASSWORD still
+# authenticates the master/replica; REDIS_SENTINEL_PASSWORD (optional) is for the
+# sentinel nodes themselves if they require separate auth. TLS (REDIS_SSL +
+# certs) applies to both the sentinel and the data connections.
+_REDIS_SENTINEL_HOSTS_STR = os.environ.get("REDIS_SENTINEL_HOSTS", "").strip()
+
+
+def _parse_sentinel_hosts(raw: str) -> list[tuple[str, int]]:
+    hosts: list[tuple[str, int]] = []
+    for entry in (h.strip() for h in raw.split(",") if h.strip()):
+        host, sep, port = entry.rpartition(":")
+        if not sep or not host or not port.isdigit():
+            raise ValueError(
+                f"Invalid REDIS_SENTINEL_HOSTS entry {entry!r}; expected host:port."
+            )
+        port_num = int(port)
+        if not 1 <= port_num <= 65535:
+            raise ValueError(
+                f"Invalid REDIS_SENTINEL_HOSTS port {port!r}; must be 1-65535."
+            )
+        hosts.append((host, port_num))
+    return hosts
+
+
+REDIS_SENTINEL_HOSTS: list[tuple[str, int]] = _parse_sentinel_hosts(
+    _REDIS_SENTINEL_HOSTS_STR
+)
+REDIS_SENTINEL_MASTER_NAME = os.environ.get(
+    "REDIS_SENTINEL_MASTER_NAME", "mymaster"
+).strip()
+REDIS_SENTINEL_PASSWORD = os.environ.get("REDIS_SENTINEL_PASSWORD") or None
+
+# Fail loudly rather than silently falling back to a direct connection when the
+# operator clearly intended Sentinel.
+if _REDIS_SENTINEL_HOSTS_STR and not REDIS_SENTINEL_HOSTS:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS is set but no valid host:port pairs were parsed."
+    )
+if REDIS_SENTINEL_HOSTS and not REDIS_SENTINEL_MASTER_NAME:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS is set but REDIS_SENTINEL_MASTER_NAME is empty."
+    )
+if REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH:
+    raise ValueError(
+        "REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH cannot be combined: Sentinel "
+        "is for self-managed HA Redis, while IAM auth targets AWS ElastiCache "
+        "(which manages failover itself)."
+    )
+
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
 
 # Rate limiting for auth endpoints
@@ -732,6 +823,29 @@ REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 12
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
 REDIS_SSL_CA_CERTS = os.getenv("REDIS_SSL_CA_CERTS", None)
+# Client certificate + key for Redis mutual TLS (the server authenticating us).
+# Both must be set together and require REDIS_SSL=true. A managed Redis may hand
+# these out base64-encoded — decode them to files (e.g. a mounted secret) and
+# point these at the paths.
+REDIS_SSL_CERTFILE: str | None = os.getenv("REDIS_SSL_CERTFILE") or None
+REDIS_SSL_KEYFILE: str | None = os.getenv("REDIS_SSL_KEYFILE") or None
+
+if bool(REDIS_SSL_CERTFILE) != bool(REDIS_SSL_KEYFILE):
+    raise ValueError(
+        "REDIS_SSL_CERTFILE and REDIS_SSL_KEYFILE must both be set (mutual TLS "
+        "needs a client certificate and its private key)."
+    )
+if (REDIS_SSL_CERTFILE or REDIS_SSL_KEYFILE) and not REDIS_SSL:
+    raise ValueError(
+        "REDIS_SSL_CERTFILE / REDIS_SSL_KEYFILE require REDIS_SSL=true so a TLS "
+        "connection is negotiated."
+    )
+for _redis_tls_name, _redis_tls_path in (
+    ("REDIS_SSL_CERTFILE", REDIS_SSL_CERTFILE),
+    ("REDIS_SSL_KEYFILE", REDIS_SSL_KEYFILE),
+):
+    if _redis_tls_path and not os.path.exists(_redis_tls_path):
+        raise ValueError(f"{_redis_tls_name}={_redis_tls_path!r} does not exist.")
 
 CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
 
@@ -1690,6 +1804,8 @@ EXT_APP_LINEAR_CLIENT_ID = os.environ.get("EXT_APP_LINEAR_CLIENT_ID", "")
 EXT_APP_LINEAR_CLIENT_SECRET = os.environ.get("EXT_APP_LINEAR_CLIENT_SECRET", "")
 EXT_APP_GITHUB_CLIENT_ID = os.environ.get("EXT_APP_GITHUB_CLIENT_ID", "")
 EXT_APP_GITHUB_CLIENT_SECRET = os.environ.get("EXT_APP_GITHUB_CLIENT_SECRET", "")
+EXT_APP_HUBSPOT_CLIENT_ID = os.environ.get("EXT_APP_HUBSPOT_CLIENT_ID", "")
+EXT_APP_HUBSPOT_CLIENT_SECRET = os.environ.get("EXT_APP_HUBSPOT_CLIENT_SECRET", "")
 
 INSTANCE_TYPE = (
     "managed"
