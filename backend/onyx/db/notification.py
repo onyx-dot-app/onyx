@@ -199,6 +199,7 @@ def batch_create_notifications(
     title: str,
     description: str | None = None,
     additional_data: dict | None = None,
+    commit: bool = True,
 ) -> set[UUID]:
     """
     Create notifications for multiple users in a single batch operation.
@@ -209,6 +210,9 @@ def batch_create_notifications(
     Returns the set of user_ids whose row was newly inserted (excludes conflicts).
     Callers that need to fire side effects only on fresh inserts (emails, webhooks)
     can iterate the returned set without re-triggering on idempotent retries.
+
+    Pass commit=False to defer the commit to the caller (e.g. to bundle this
+    insert with a preceding delete in one transaction).
 
     Relies on unique index on (user_id, notif_type, COALESCE(additional_data, '{}'))
     """
@@ -240,7 +244,8 @@ def batch_create_notifications(
     )
     result = db_session.execute(stmt)
     inserted_ids = set(result.scalars())
-    db_session.commit()
+    if commit:
+        db_session.commit()
     return inserted_ids  # ty: ignore[invalid-return-type]
 
 

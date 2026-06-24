@@ -56,10 +56,10 @@ def set_admin_banner(
         logger.warning("Admin banner not set: tenant has no eligible users")
         return None
 
-    # DELETE here is uncommitted; batch_create_notifications commits once,
-    # making the swap atomic. Constant additional_data lets the unique index
-    # on (user_id, notif_type, COALESCE(additional_data, '{}'))
-    # serialize concurrent PUTs.
+    # Delete + insert in one transaction we commit ourselves, so the swap is
+    # atomic and owns its commit boundary instead of depending on the helper.
+    # Constant additional_data lets the unique index on
+    # (user_id, notif_type, COALESCE(additional_data, '{}')) serialize concurrent PUTs.
     db_session.query(Notification).filter(
         Notification.notif_type == NotificationType.ADMIN_BANNER
     ).delete(synchronize_session=False)
@@ -71,7 +71,9 @@ def set_admin_banner(
         title=title,
         description=content,
         additional_data={},
+        commit=False,
     )
+    db_session.commit()
     logger.info(
         "Admin banner set for %s eligible users (title=%s chars, content=%s chars)",
         len(user_ids),
