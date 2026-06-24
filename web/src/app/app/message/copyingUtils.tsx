@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkRehype from "remark-rehype";
 import rehypeHighlight from "rehype-highlight";
-import { all } from "lowlight";
+import { highlightLanguages } from "@/lib/highlightLanguages";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
@@ -76,7 +76,7 @@ export function copyAll(content: string) {
     .use(remarkGfm)
     .use(remarkMath)
     .use(remarkRehype)
-    .use(rehypeHighlight, { languages: all })
+    .use(rehypeHighlight, { languages: highlightLanguages })
     .use(rehypeKatex)
     .use(rehypeSanitize)
     .use(rehypeStringify)

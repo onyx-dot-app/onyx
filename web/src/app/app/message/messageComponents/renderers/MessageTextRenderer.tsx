@@ -4,7 +4,7 @@ import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
-import { all } from "lowlight";
+import { highlightLanguages } from "@/lib/highlightLanguages";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 
@@ -85,7 +85,7 @@ const STREAMING_REMARK_PLUGINS: PluggableList = [
 const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex];
 const FULL_REMARK_PLUGINS: PluggableList = STREAMING_REMARK_PLUGINS;
 const FULL_REHYPE_PLUGINS: PluggableList = [
-  [rehypeHighlight, { languages: all }],
+  [rehypeHighlight, { languages: highlightLanguages }],
   rehypeKatex,
 ];
 

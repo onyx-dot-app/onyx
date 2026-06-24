@@ -9,7 +9,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import { all } from "lowlight";
+import { highlightLanguages } from "@/lib/highlightLanguages";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
@@ -42,7 +42,10 @@ export default function MinimalMarkdown({
     () =>
       streaming
         ? [rehypeKatex]
-        : [[rehypeHighlight, { detect: true, languages: all }], rehypeKatex],
+        : [
+            [rehypeHighlight, { detect: true, languages: highlightLanguages }],
+            rehypeKatex,
+          ],
     [streaming]
   );
   const markdownComponents = useMemo(() => {
