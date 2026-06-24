@@ -1593,9 +1593,9 @@ msgpack==1.1.0 \
     # via
     #   distributed
     #   mitmproxy
-msoffcrypto-tool==5.4.2 \
-    --hash=sha256:274fe2181702d1e5a107ec1b68a4c9fea997a44972ae1cc9ae0cb4f6a50fef0e \
-    --hash=sha256:44b545adba0407564a0cc3d6dde6ca36b7c0fdf352b85bca51618fa1d4817370
+msoffcrypto-tool==6.0.0 \
+    --hash=sha256:46c394ed5d9641e802fc79bf3fb0666a53748b23fa8c4aa634ae9d30d46fe397 \
+    --hash=sha256:9a5ebc4c0096b42e5d7ebc2350afdc92dc511061e935ca188468094fdd032bbe
 multidict==6.7.0 \
     --hash=sha256:040f393368e63fb0f3330e70c26bfd336656bed925e5cbe17c9da839a6ab13ec \
     --hash=sha256:05047ada7a2fde2631a0ed706f1fd68b169a681dfe5e4cf0f8e4cb6618bbc2cd \
