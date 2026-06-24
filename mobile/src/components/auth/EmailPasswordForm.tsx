@@ -81,7 +81,8 @@ export function EmailPasswordForm({
   });
   useEffect(() => {
     if (mutation.isError) mutation.reset();
-    // mutation's identity changes every render, so it's excluded from deps.
+    // `mutation` is excluded from deps on purpose: it changes when `isError` flips, so
+    // including it would re-run this and reset the error the instant it's set. Edits only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email, password]);
 
