@@ -745,6 +745,14 @@ class StreamedSheet(NamedTuple):
     csv_file_id: str | None
 
 
+def _row_has_content(row: tuple[Any, ...]) -> bool:
+    return any(v is not None and v != "" for v in row)
+
+
+def _cell(value: Any) -> str:
+    return "" if value is None else str(value)
+
+
 def stage_or_inline_xlsx_sheets(
     file: IO[bytes],
     stage: Callable[[IO[bytes], str], str],
@@ -768,27 +776,23 @@ def stage_or_inline_xlsx_sheets(
             ro_sheet.reset_dimensions()
             with tempfile.TemporaryFile(mode="w+", encoding="utf-8", newline="") as tmp:
                 writer = csv.writer(tmp, lineterminator="\n")
-                wrote = False
                 for row in ro_sheet.iter_rows(values_only=True):
-                    if not any(v is not None and v != "" for v in row):
-                        continue
-                    writer.writerow(["" if v is None else str(v) for v in row])
-                    wrote = True
-                if not wrote:
-                    continue
+                    if _row_has_content(row):
+                        writer.writerow([_cell(v) for v in row])
                 tmp.flush()
                 binary = cast(IO[bytes], tmp.buffer)
                 size = binary.seek(0, io.SEEK_END)
-                binary.seek(0)
-                if size <= max_inline_bytes:
-                    text = binary.read().decode("utf-8").strip()
-                    if not text:
-                        continue
-                    sheets.append(StreamedSheet(ro_sheet.title, text, None))
-                else:
+                if size > max_inline_bytes:
+                    binary.seek(0)
                     sheets.append(
                         StreamedSheet(ro_sheet.title, None, stage(binary, "text/csv"))
                     )
+                    continue
+                binary.seek(0)
+                text = binary.read().decode("utf-8").strip()
+                if not text:
+                    continue
+                sheets.append(StreamedSheet(ro_sheet.title, text, None))
     finally:
         workbook.close()
     return sheets
