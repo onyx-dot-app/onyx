@@ -1,6 +1,6 @@
 import json
+from typing import Any
 from urllib.parse import urlsplit
-
 
 import requests
 from fastapi import HTTPException
@@ -14,6 +14,10 @@ logger = setup_logger()
 
 KEENABLE_DEFAULT_BASE_URL = "https://api.keenable.ai"
 KEENABLE_REQUEST_TIMEOUT_SECONDS = 30
+
+
+class RetryableKeenableSearchError(Exception):
+    """Error type used to trigger retry for transient Keenable search failures."""
 
 
 class KeenableClient(WebSearchProvider):
@@ -64,17 +68,34 @@ class KeenableClient(WebSearchProvider):
             headers["X-API-Key"] = self._api_key
         return headers
 
-    @retry_builder(tries=3, delay=1, backoff=2)
-    def search(self, query: str) -> list[WebSearchResult]:
+    @retry_builder(
+        tries=3,
+        delay=1,
+        backoff=2,
+        exceptions=(RetryableKeenableSearchError,),
+    )
+    def _search_with_retries(self, query: str) -> list[WebSearchResult]:
         # Keyless public endpoint by default; keyed endpoint when a key is set.
         path = "/v1/search" if self._api_key else "/v1/search/public"
-        response = requests.post(
-            f"{self._base_url}{path}",
-            headers=self._headers(),
-            data=json.dumps({"query": query, "mode": "pro"}),
-            timeout=KEENABLE_REQUEST_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
+        try:
+            response = requests.post(
+                f"{self._base_url}{path}",
+                headers=self._headers(),
+                data=json.dumps({"query": query, "mode": "pro"}),
+                timeout=KEENABLE_REQUEST_TIMEOUT_SECONDS,
+            )
+        except requests.RequestException as exc:
+            raise RetryableKeenableSearchError(
+                f"Keenable search request failed: {exc}"
+            ) from exc
+
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            error_msg = _build_error_message(response)
+            if _is_retryable_status(response.status_code):
+                raise RetryableKeenableSearchError(error_msg) from exc
+            raise ValueError(error_msg) from exc
 
         body = response.json()
         results = body.get("results") if isinstance(body, dict) else None
@@ -100,6 +121,12 @@ class KeenableClient(WebSearchProvider):
 
         return validated_results
 
+    def search(self, query: str) -> list[WebSearchResult]:
+        try:
+            return self._search_with_retries(query)
+        except RetryableKeenableSearchError as exc:
+            raise ValueError(str(exc)) from exc
+
     def test_connection(self) -> dict[str, str]:
         try:
             test_results = self.search("test")
@@ -110,12 +137,23 @@ class KeenableClient(WebSearchProvider):
                 )
         except HTTPException:
             raise
-        except Exception as e:
+        except (ValueError, requests.RequestException) as e:
             error_msg = str(e)
-            if any(t in error_msg.lower() for t in ("api", "key", "auth")):
+            lower = error_msg.lower()
+            if (
+                "status 401" in lower
+                or "status 403" in lower
+                or "api key" in lower
+                or "auth" in lower
+            ):
                 raise HTTPException(
                     status_code=400,
                     detail=f"Invalid Keenable API key: {error_msg}",
+                ) from e
+            if "status 429" in lower or "rate limit" in lower:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Keenable rate limit exceeded: {error_msg}",
                 ) from e
             raise HTTPException(
                 status_code=400,
@@ -124,3 +162,37 @@ class KeenableClient(WebSearchProvider):
 
         logger.info("Web search provider test succeeded for Keenable.")
         return {"status": "ok"}
+
+
+def _build_error_message(response: requests.Response) -> str:
+    return (
+        f"Keenable search failed (status {response.status_code}): "
+        f"{_extract_error_detail(response)}"
+    )
+
+
+def _extract_error_detail(response: requests.Response) -> str:
+    try:
+        payload: Any = response.json()
+    except Exception:
+        text = response.text.strip()
+        return text[:200] if text else "No error details"
+
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            detail = error.get("detail") or error.get("message")
+            if isinstance(detail, str):
+                return detail
+        if isinstance(error, str):
+            return error
+
+        message = payload.get("message") or payload.get("detail")
+        if isinstance(message, str):
+            return message
+
+    return str(payload)[:200]
+
+
+def _is_retryable_status(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500

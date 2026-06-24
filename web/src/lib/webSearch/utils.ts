@@ -71,7 +71,7 @@ export const SEARCH_PROVIDER_DETAILS: Record<
   },
   keenable: {
     label: "Keenable",
-    subtitle: "Keenable",
+    subtitle: "Keenable Search API",
     helper:
       "Connect to Keenable to set up web search. Works without an API key (keyless free tier); add a key to lift rate limits.",
     logo: SvgKeenable,
