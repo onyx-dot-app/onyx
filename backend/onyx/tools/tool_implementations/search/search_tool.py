@@ -98,6 +98,7 @@ from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
@@ -288,6 +289,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         self._search_cycles: list[SearchCycle] = []
         self._cached_expansion: tuple[str | None, list[str]] | None = None
+        self._scope_decision_settled = False
 
         self._id = tool_id
 
@@ -565,6 +567,47 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
         )
 
+    def _expand_queries_and_decide_scope(
+        self,
+        skip_query_expansion: bool,
+        message_history: list[ChatMinimalTextMessage],
+        user_info: str | None,
+        memories: list[str],
+        decide_args: tuple[Any, ...],
+    ) -> tuple[str | None, list[str], list[DocumentSource] | None]:
+        """Expand the query and decide the source scope, in parallel when both apply.
+
+        Repeat calls reuse the cached expansion instead of re-expanding. Once the
+        scope decision finds no source directive it latches off for the rest of the
+        turn, since the conversation cannot introduce one mid-turn.
+        """
+        expand_queries = not skip_query_expansion
+        decide_scope = not self._scope_decision_settled
+
+        jobs: list[tuple[Callable, tuple]] = []
+        if expand_queries:
+            expansion_args = (message_history, self.llm, user_info, memories)
+            jobs.append((semantic_query_rephrase, expansion_args))
+            jobs.append((keyword_query_expansion, expansion_args))
+        if decide_scope:
+            jobs.append((decide_search_scope, decide_args))
+
+        results = run_functions_tuples_in_parallel(jobs) if jobs else []
+
+        semantic_query: str | None = None
+        keyword_queries: list[str] = []
+        if expand_queries:
+            semantic_query = results[0]
+            keyword_queries = results[1] or []
+            self._cached_expansion = (semantic_query, keyword_queries)
+
+        plan_scope: list[DocumentSource] | None = None
+        if decide_scope:
+            plan_scope = results[-1]
+            self._scope_decision_settled = plan_scope is None
+
+        return semantic_query, keyword_queries, plan_scope
+
     @log_function_time(print_only=True)
     def run(
         self,
@@ -710,44 +753,21 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             list(self._search_cycles),
             llm_queries,
         )
-        plan_scope: list[DocumentSource] | None = None
-
-        # Skip query expansion if this is a repeat search call
-        if override_kwargs.skip_query_expansion:
-            logger.debug("Search tool - Skipping query expansion (repeat search call)")
-            semantic_query = None
-            keyword_queries: list[str] = []
-            plan_scope = decide_search_scope(*decide_args)
-        else:
-            # Start timing for query expansion/rephrase
-            query_expansion_start_time = time.time()
-
-            functions_with_args: list[tuple[Callable, tuple]] = [
-                (
-                    semantic_query_rephrase,
-                    (message_history, self.llm, user_info, memories),
-                ),
-                (
-                    keyword_query_expansion,
-                    (message_history, self.llm, user_info, memories),
-                ),
-                (decide_search_scope, decide_args),
-            ]
-
-            expansion_results = run_functions_tuples_in_parallel(functions_with_args)
-
-            # End timing for query expansion/rephrase
-            query_expansion_elapsed = time.time() - query_expansion_start_time
-            logger.debug(
-                "Search tool - Query expansion/rephrase took %s seconds",
-                format(query_expansion_elapsed, ".3f"),
+        query_expansion_start_time = time.time()
+        semantic_query, keyword_queries, plan_scope = (
+            self._expand_queries_and_decide_scope(
+                skip_query_expansion=override_kwargs.skip_query_expansion,
+                message_history=message_history,
+                user_info=user_info,
+                memories=memories,
+                decide_args=decide_args,
             )
-            semantic_query = expansion_results[0]  # str
-            keyword_queries = (
-                expansion_results[1] if expansion_results[1] is not None else []
-            )  # list[str]
-            plan_scope = expansion_results[2]
-            self._cached_expansion = (semantic_query, keyword_queries)
+        )
+        query_expansion_elapsed = time.time() - query_expansion_start_time
+        logger.debug(
+            "Search tool - Query expansion + scope decision took %s seconds",
+            format(query_expansion_elapsed, ".3f"),
+        )
 
         resolved_scope = (
             plan_scope if plan_scope is not None else user_source_restriction
