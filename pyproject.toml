@@ -30,7 +30,7 @@ dependencies = [
 
 [dependency-groups]
 backend = [
-    "aiohttp==3.14.0",
+    "aiohttp==3.14.1",
     "alembic==1.18.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==3.41.16",
