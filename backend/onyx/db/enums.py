@@ -446,6 +446,10 @@ class HierarchyNodeType(str, PyEnum):
     # Root-level type
     SOURCE = "source"  # Root node for a source (e.g., "Google Drive")
 
+    # Placeholder created when a child is indexed before its parent exists in the DB.
+    # Promoted to the real type when the parent page is later processed.
+    STUB = "stub"
+
     # Google Drive
     SHARED_DRIVE = "shared_drive"
     MY_DRIVE = "my_drive"
