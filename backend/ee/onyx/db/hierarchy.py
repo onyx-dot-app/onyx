@@ -73,6 +73,35 @@ def _get_accessible_hierarchy_nodes_for_source(
     return list(db_session.execute(stmt).scalars().all())
 
 
+def _search_accessible_hierarchy_nodes(
+    db_session: Session,
+    query: str,
+    sources: list[DocumentSource] | None,
+    user_email: str,
+    external_group_ids: list[str],
+    limit: int = 30,
+) -> list[HierarchyNode]:
+    """EE version: ACL-filtered case-insensitive display_name search."""
+    from onyx.db.hierarchy import _escape_like_pattern
+
+    pattern = f"%{_escape_like_pattern(query)}%"
+    stmt = (
+        select(HierarchyNode)
+        .where(
+            HierarchyNode.node_type.notin_(
+                [HierarchyNodeType.STUB, HierarchyNodeType.SOURCE]
+            ),
+            HierarchyNode.display_name.ilike(pattern, escape="\\"),
+            _build_hierarchy_access_filter(user_email, external_group_ids),
+        )
+        .order_by(HierarchyNode.display_name)
+        .limit(limit)
+    )
+    if sources:
+        stmt = stmt.where(HierarchyNode.source.in_(sources))
+    return list(db_session.execute(stmt).scalars().all())
+
+
 def _filter_accessible_hierarchy_node_ids(
     db_session: Session,
     node_ids: list[int],
