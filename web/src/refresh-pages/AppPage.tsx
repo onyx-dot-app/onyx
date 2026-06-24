@@ -423,6 +423,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const { fullWidthChat } = useFullWidthChat();
 
+  // Full-width only takes effect inside an actual conversation, not the
+  // new-session view (where only the input bar is shown).
+  const fullWidthActive =
+    fullWidthChat && appFocus.isChat() && !!currentChatSessionId;
+
   // Auto-fold sidebar when a multi-model message is submitted.
   // Stays collapsed until the user exits multi-model mode (removes models).
   const { folded: sidebarFolded, setFolded } = useSidebarState();
@@ -827,7 +832,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       autoScroll={autoScrollEnabled}
                       isStreaming={isStreaming}
                       onScrollButtonVisibilityChange={setShowScrollButton}
-                      flushContent={fullWidthChat}
+                      flushContent={fullWidthActive}
                     >
                       <ChatUI
                         liveAgent={liveAgent!}
@@ -843,7 +848,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         onResubmit={handleResubmitLastMessage}
                         anchorNodeId={anchorNodeId}
                         selectedModels={multiModel.selectedModels}
-                        fullWidthChat={fullWidthChat}
+                        fullWidthChat={fullWidthActive}
                       />
                     </ChatScrollContainer>
                   </Fade>
@@ -943,7 +948,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <div
                     className={cn(
                       "relative w-full flex flex-col",
-                      !fullWidthChat && "max-w-(--app-page-main-content-width)"
+                      !fullWidthActive &&
+                        "max-w-(--app-page-main-content-width)"
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
