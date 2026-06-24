@@ -9,6 +9,7 @@ from typing import Optional
 import redis
 from fastapi import Request
 from redis import asyncio as aioredis
+from redis.asyncio.sentinel import Sentinel as AsyncSentinel
 from redis.backoff import ExponentialBackoff
 from redis.client import Redis
 from redis.exceptions import BusyLoadingError
@@ -16,6 +17,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 from redis.lock import Lock as RedisLock
 from redis.retry import Retry
+from redis.sentinel import Sentinel
 
 from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME
 from onyx.auth.constants import API_KEY_HEADER_NAME
@@ -28,6 +30,9 @@ from onyx.configs.app_configs import REDIS_PASSWORD
 from onyx.configs.app_configs import REDIS_POOL_MAX_CONNECTIONS
 from onyx.configs.app_configs import REDIS_PORT
 from onyx.configs.app_configs import REDIS_REPLICA_HOST
+from onyx.configs.app_configs import REDIS_SENTINEL_HOSTS
+from onyx.configs.app_configs import REDIS_SENTINEL_MASTER_NAME
+from onyx.configs.app_configs import REDIS_SENTINEL_PASSWORD
 from onyx.configs.app_configs import REDIS_SSL
 from onyx.configs.app_configs import REDIS_SSL_CA_CERTS
 from onyx.configs.app_configs import REDIS_SSL_CERT_REQS
@@ -64,11 +69,50 @@ def _client_retry_kwargs() -> dict[str, Any]:
     }
 
 
+def _redis_ssl_connect_kwargs() -> dict[str, Any]:
+    """Native redis-py ssl_* kwargs for a TLS Redis connection, shared by the
+    Sentinel sync + async paths (the direct pool builds these inline)."""
+    kwargs: dict[str, Any] = {
+        "ssl": True,
+        "ssl_cert_reqs": REDIS_SSL_CERT_REQS,
+        "ssl_check_hostname": False,
+    }
+    if REDIS_SSL_CA_CERTS:
+        kwargs["ssl_ca_certs"] = REDIS_SSL_CA_CERTS
+    if REDIS_SSL_CERTFILE:
+        kwargs["ssl_certfile"] = REDIS_SSL_CERTFILE
+        kwargs["ssl_keyfile"] = REDIS_SSL_KEYFILE
+    return kwargs
+
+
+def _sentinel_connection_kwargs() -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build (connection_kwargs, sentinel_kwargs) for a Sentinel.
+
+    connection_kwargs apply to the master/replica data connections;
+    sentinel_kwargs apply to the connections to the sentinel nodes themselves.
+    TLS (when enabled) and the relevant auth apply to both.
+    """
+    connection_kwargs: dict[str, Any] = {
+        "password": REDIS_PASSWORD or None,
+        "socket_keepalive": True,
+        "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
+        "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
+    }
+    sentinel_kwargs: dict[str, Any] = {}
+    if REDIS_SENTINEL_PASSWORD:
+        sentinel_kwargs["password"] = REDIS_SENTINEL_PASSWORD
+    if REDIS_SSL:
+        ssl_kwargs = _redis_ssl_connect_kwargs()
+        connection_kwargs.update(ssl_kwargs)
+        sentinel_kwargs.update(ssl_kwargs)
+    return connection_kwargs, sentinel_kwargs
+
+
 class RedisPool:
     _instance: Optional["RedisPool"] = None
     _lock: threading.Lock = threading.Lock()
-    _pool: redis.BlockingConnectionPool
-    _replica_pool: redis.BlockingConnectionPool
+    _pool: redis.ConnectionPool
+    _replica_pool: redis.ConnectionPool
 
     def __new__(cls) -> "RedisPool":
         if not cls._instance:
@@ -81,7 +125,7 @@ class RedisPool:
     def _init_pools(self) -> None:
         self._pool = RedisPool.create_pool(ssl=REDIS_SSL)
         self._replica_pool = RedisPool.create_pool(
-            host=REDIS_REPLICA_HOST, ssl=REDIS_SSL
+            host=REDIS_REPLICA_HOST, ssl=REDIS_SSL, replica=True
         )
 
     def get_client(self, tenant_id: str) -> TenantRedisClient:
@@ -120,22 +164,32 @@ class RedisPool:
         ssl_ca_certs: str | None = REDIS_SSL_CA_CERTS,
         ssl_cert_reqs: str = REDIS_SSL_CERT_REQS,
         ssl: bool = False,
-    ) -> redis.BlockingConnectionPool:
+        replica: bool = False,
+    ) -> redis.ConnectionPool:
         """
         Create a Redis connection pool with appropriate SSL configuration.
         SSL Configuration Priority:
-        1. IAM Authentication (USE_REDIS_IAM_AUTH=true): Uses system CA certificates
-        2. Regular SSL (REDIS_SSL=true): Uses custom SSL configuration
-        3. No SSL: Standard connection without encryption
+        1. Sentinel (REDIS_SENTINEL_HOSTS set): connect through Sentinel, which
+           discovers the current master/replica and follows failover.
+        2. IAM Authentication (USE_REDIS_IAM_AUTH=true): Uses system CA certificates
+        3. Regular SSL (REDIS_SSL=true): Uses custom SSL configuration
+        4. No SSL: Standard connection without encryption
         Note: IAM authentication automatically enables SSL and takes precedence
         over regular SSL configuration to ensure proper security.
 
         We use BlockingConnectionPool because it will block and wait for a connection
         rather than error if max_connections is reached. This is far more deterministic
-        behavior and aligned with how we want to use Redis."""
+        behavior and aligned with how we want to use Redis (Sentinel mode uses
+        redis-py's SentinelConnectionPool instead)."""
 
         # Using ConnectionPool is not well documented.
         # Useful examples: https://github.com/redis/redis-py/issues/780
+
+        # Handle Sentinel (HA) first — it owns master/replica discovery.
+        if REDIS_SENTINEL_HOSTS:
+            return RedisPool._create_sentinel_pool(
+                db=db, max_connections=max_connections, replica=replica
+            )
 
         # Handle IAM authentication
         if USE_REDIS_IAM_AUTH:
@@ -183,6 +237,26 @@ class RedisPool:
             socket_keepalive=True,
             socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
         )
+
+    @staticmethod
+    def _create_sentinel_pool(
+        db: int, max_connections: int, replica: bool
+    ) -> redis.ConnectionPool:
+        """Return a SentinelConnectionPool for the master (or a replica) of
+        REDIS_SENTINEL_MASTER_NAME. Sentinel discovers the node and re-resolves
+        it on failover; the pool plugs into ``redis.Redis(connection_pool=...)``
+        like the direct pool."""
+        connection_kwargs, sentinel_kwargs = _sentinel_connection_kwargs()
+        sentinel = Sentinel(
+            REDIS_SENTINEL_HOSTS,
+            sentinel_kwargs=sentinel_kwargs,
+            **connection_kwargs,
+        )
+        node = sentinel.slave_for if replica else sentinel.master_for
+        client = node(
+            REDIS_SENTINEL_MASTER_NAME, db=db, max_connections=max_connections
+        )
+        return client.connection_pool
 
 
 redis_pool = RedisPool()
@@ -311,7 +385,27 @@ _async_redis_connections: dict["asyncio.AbstractEventLoop", aioredis.Redis] = {}
 _async_redis_init_lock = threading.Lock()
 
 
+def _build_async_sentinel_connection() -> aioredis.Redis:
+    """Async Redis for the current master of REDIS_SENTINEL_MASTER_NAME, via
+    Sentinel (HA / failover-aware)."""
+    connection_kwargs, sentinel_kwargs = _sentinel_connection_kwargs()
+    sentinel = AsyncSentinel(
+        REDIS_SENTINEL_HOSTS,
+        sentinel_kwargs=sentinel_kwargs,
+        **connection_kwargs,
+    )
+    return sentinel.master_for(
+        REDIS_SENTINEL_MASTER_NAME,
+        db=REDIS_DB_NUMBER,
+        max_connections=REDIS_POOL_MAX_CONNECTIONS,
+    )
+
+
 def _build_async_redis_connection() -> aioredis.Redis:
+    # Sentinel (HA) takes precedence — it owns master discovery.
+    if REDIS_SENTINEL_HOSTS:
+        return _build_async_sentinel_connection()
+
     connection_kwargs: dict[str, Any] = {
         "host": REDIS_HOST,
         "port": REDIS_PORT,
