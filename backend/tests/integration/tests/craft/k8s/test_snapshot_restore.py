@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
+import httpx
 import pytest
 from kubernetes import client
 from sqlalchemy.orm import Session
@@ -26,8 +27,6 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 from onyx.server.features.build.sandbox.snapshot_manager import SNAPSHOT_FILE_TYPE
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -235,7 +234,7 @@ def test_restore_re_pushes_skills(
     session_id = handle.session_id
     pod_name = handle.manager._get_pod_name(sandbox_id)
 
-    _populate_session_workspace(k8s_client, pod_name, session_id)
+    payload = _populate_session_workspace(k8s_client, pod_name, session_id)
     snapshot = BuildSessionManager.create_snapshot(handle.api_user, session_id)
     assert snapshot is not None
 
@@ -257,6 +256,16 @@ def test_restore_re_pushes_skills(
         k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
         response = BuildSessionManager.restore(handle.api_user, session_id)
         assert response["session_loaded_in_sandbox"] is True
+
+        restored_notes = pod_exec(
+            k8s_client,
+            pod_name,
+            SANDBOX_NAMESPACE,
+            f"cat /workspace/sessions/{session_id}/attachments/notes.txt",
+        )
+        assert restored_notes.strip() == payload["attachments/notes.txt"].strip(), (
+            "restore must rebuild the session from the snapshot, not a fresh workspace"
+        )
 
         listing = pod_exec(
             k8s_client,
@@ -385,11 +394,9 @@ def test_restore_uses_data_filter_to_block_traversal(
     )
     db_session.commit()
 
-    response = http_client.post(
-        f"{API_SERVER_URL}/build/sessions/{session_id}/restore",
-        headers=api_user.headers,
-        cookies=api_user.cookies,
-    )
+    with pytest.raises(httpx.HTTPStatusError) as excinfo:
+        BuildSessionManager.restore(api_user, session_id)
+    response = excinfo.value.response
     assert response.status_code == 500, (
         f"Restore of a traversal archive should fail; "
         f"got {response.status_code}: {response.text!r}"
@@ -458,11 +465,9 @@ def test_snapshot_corruption_detected_on_restore(
     # /restore only restores when the workspace is absent; clear it first.
     k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
 
-    response = http_client.post(
-        f"{API_SERVER_URL}/build/sessions/{session_id}/restore",
-        headers=pool_api_user.headers,
-        cookies=pool_api_user.cookies,
-    )
+    with pytest.raises(httpx.HTTPStatusError) as excinfo:
+        BuildSessionManager.restore(pool_api_user, session_id)
+    response = excinfo.value.response
     assert response.status_code == 500, (
         f"Restore of a corrupt archive should fail; "
         f"got {response.status_code}: {response.text!r}"
