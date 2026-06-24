@@ -10,10 +10,9 @@ import { loadHighlightLanguages } from "@/lib/highlightLanguages";
 export function useHighlightLanguages(
   enabled: boolean = true
 ): Record<string, LanguageFn> | null {
-  const [languages, setLanguages] = useState<Record<
-    string,
-    LanguageFn
-  > | null>(null);
+  const [languages, setLanguages] = useState<Record<string, LanguageFn> | null>(
+    null
+  );
 
   useEffect(() => {
     if (!enabled || languages) return;
