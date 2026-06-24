@@ -6,7 +6,7 @@ import timeago
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SavedSearchDoc
-from onyx.onyxbot.slack.blocks import _build_documents_blocks
+from onyx.onyxbot.slack.blocks import _build_sources_blocks
 
 
 def _make_saved_doc(updated_at: datetime | None) -> SavedSearchDoc:
@@ -32,7 +32,7 @@ def _make_saved_doc(updated_at: datetime | None) -> SavedSearchDoc:
     )
 
 
-def test_build_documents_blocks_formats_naive_timestamp(
+def test_build_sources_blocks_formats_naive_timestamp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     naive_timestamp: datetime = datetime(2024, 1, 1, 12, 0, 0)
@@ -52,18 +52,18 @@ def test_build_documents_blocks_formats_naive_timestamp(
         fake_timeago_format,
     )
 
-    blocks = _build_documents_blocks(
-        documents=[_make_saved_doc(updated_at=naive_timestamp)],
-        message_id=42,
+    blocks = _build_sources_blocks(
+        cited_documents=[(1, _make_saved_doc(updated_at=naive_timestamp))],
     )
 
-    assert len(blocks) >= 2
-    section_block = blocks[1].to_dict()
+    assert len(blocks) == 2
+    context_block = blocks[1].to_dict()
     assert "result" in captured
     expected_text = (
-        f"<https://example.com|Example Doc>\n_Updated {captured['result']}_\n>"
+        f"*<https://example.com|[1] Example Doc>*\n"
+        f"By user@example.com | {captured['result']}"
     )
-    assert section_block["text"]["text"] == expected_text
+    assert context_block["elements"][1]["text"] == expected_text
 
     assert "doc" in captured
     formatted_timestamp: datetime = captured["doc"]

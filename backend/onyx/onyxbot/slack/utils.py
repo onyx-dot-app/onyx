@@ -35,7 +35,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
-from onyx.utils.text_processing import replace_whitespaces_w_space
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
@@ -411,28 +410,6 @@ def get_view_values(state_values: dict[str, Any]) -> dict[str, str]:
             elif "value" in v:
                 view_values[k] = v["value"]
     return view_values
-
-
-def translate_vespa_highlight_to_slack(match_strs: list[str], used_chars: int) -> str:
-    def _replace_highlight(s: str) -> str:
-        s = re.sub(r"(?<=[^\s])<hi>(.*?)</hi>", r"\1", s)
-        s = s.replace("</hi>", "*").replace("<hi>", "*")
-        return s
-
-    final_matches = [
-        replace_whitespaces_w_space(_replace_highlight(match_str)).strip()
-        for match_str in match_strs
-        if match_str
-    ]
-    combined = "... ".join(final_matches)
-
-    # Slack introduces "Show More" after 300 on desktop which is ugly
-    # But don't trim the message if there is still a highlight after 300 chars
-    remaining = 300 - used_chars
-    if len(combined) > remaining and "*" not in combined[remaining:]:
-        combined = combined[: remaining - 3] + "..."
-
-    return combined
 
 
 def remove_slack_text_interactions(slack_str: str) -> str:
