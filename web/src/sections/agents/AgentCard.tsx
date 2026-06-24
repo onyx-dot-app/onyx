@@ -1,14 +1,13 @@
 "use client";
 
-import { useMemo, useCallback } from "react";
+import { useCallback } from "react";
 import { MinimalAgent } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { usePinnedAgents, useAgent } from "@/lib/agents/hooks";
+import { useAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { checkUserCanEditAgent, checkUserOwnsAgent } from "@/lib/agents/utils";
@@ -20,8 +19,6 @@ import {
   SvgBarChart,
   SvgBubbleText,
   SvgEdit,
-  SvgPin,
-  SvgPinned,
   SvgShare,
   SvgUser,
 } from "@opal/icons";
@@ -40,11 +37,6 @@ export interface AgentCardProps {
 export default function AgentCard({ agent }: AgentCardProps) {
   const route = useAppRouter();
   const router = useRouter();
-  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
-  const pinned = useMemo(
-    () => pinnedAgents.some((pinnedAgent) => pinnedAgent.id === agent.id),
-    [agent.id, pinnedAgents]
-  );
   const { user } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const isOwnedByUser = checkUserOwnsAgent(user, agent);
@@ -53,13 +45,10 @@ export default function AgentCard({ agent }: AgentCardProps) {
   const agentViewerModal = useCreateModal();
   const { agent: fullAgent } = useAgent(agent.id);
 
-  // Start chat and auto-pin unpinned agents to the sidebar
+  // Start chat without changing sidebar state; agents are selected from /app/agents.
   const handleStartChat = useCallback(() => {
-    if (!pinned) {
-      togglePinnedAgent(agent, true);
-    }
     route({ agentId: agent.id });
-  }, [pinned, togglePinnedAgent, agent, route]);
+  }, [agent.id, route]);
 
   return (
     <>
@@ -123,16 +112,6 @@ export default function AgentCard({ agent }: AgentCardProps) {
                       className="hidden group-hover/AgentCard:flex"
                     />
                   )}
-                  {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                  <IconButton
-                    icon={pinned ? SvgPinned : SvgPin}
-                    tertiary
-                    onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
-                    tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
-                    className={cn(
-                      !pinned && "hidden group-hover/AgentCard:flex"
-                    )}
-                  />
                 </>
               }
             />
