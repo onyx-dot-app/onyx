@@ -76,27 +76,38 @@ export default function WebSearchPage() {
   const exaContentProvider = contentProviders.find(
     (p) => p.provider_type === "exa"
   );
+  const tavilySearchProvider = searchProviders.find(
+    (p) => p.provider_type === "tavily"
+  );
+  const tavilyContentProvider = contentProviders.find(
+    (p) => p.provider_type === "tavily"
+  );
   const openSearchModal = (
     providerType: WebSearchProviderType,
     provider?: WebSearchProviderView
   ) => {
     const hasStoredKey = !!provider?.masked_api_key;
-    const isExa = providerType === "exa";
-    const sharedExaMaskedKey =
-      isExa && !hasStoredKey
+    // Exa and Tavily share one API key across the search and content sides, so
+    // pre-fill the search modal from the stored content-provider key when the
+    // search side has none yet (the backend syncs the two on save).
+    const sharedContentMaskedKey = hasStoredKey
+      ? null
+      : providerType === "exa"
         ? (exaContentProvider?.masked_api_key ?? null)
-        : null;
+        : providerType === "tavily"
+          ? (tavilyContentProvider?.masked_api_key ?? null)
+          : null;
 
     const effectiveProvider: WebSearchProviderView | null =
       provider ??
-      (sharedExaMaskedKey
+      (sharedContentMaskedKey
         ? {
             id: -1,
-            name: "Exa",
-            provider_type: "exa",
+            name: SEARCH_PROVIDER_DETAILS[providerType]?.label ?? providerType,
+            provider_type: providerType,
             is_active: false,
             config: null,
-            masked_api_key: sharedExaMaskedKey,
+            masked_api_key: sharedContentMaskedKey,
           }
         : null);
 
@@ -208,6 +219,20 @@ export default function WebSearchPage() {
         } satisfies WebContentProviderView;
       }
 
+      if (providerType === "tavily") {
+        return {
+          id: -4,
+          name: "Tavily",
+          provider_type: "tavily",
+          is_active: false,
+          config: null,
+          masked_api_key:
+            tavilySearchProvider?.masked_api_key ??
+            tavilyContentProvider?.masked_api_key ??
+            null,
+        } satisfies WebContentProviderView;
+      }
+
       return null;
     }).filter(Boolean) as WebContentProviderView[];
 
@@ -216,7 +241,13 @@ export default function WebSearchPage() {
     );
 
     return [...ordered, ...additional];
-  }, [contentProviders, exaSearchProvider, exaContentProvider]);
+  }, [
+    contentProviders,
+    exaSearchProvider,
+    exaContentProvider,
+    tavilySearchProvider,
+    tavilyContentProvider,
+  ]);
 
   const currentContentProviderType =
     getCurrentContentProviderType(contentProviders);

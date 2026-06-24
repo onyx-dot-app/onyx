@@ -27,9 +27,11 @@ class WebSearchProviderType(str, Enum):
     EXA = "exa"
     SEARXNG = "searxng"
     BRAVE = "brave"
+    TAVILY = "tavily"
 
 
 class WebContentProviderType(str, Enum):
     ONYX_WEB_CRAWLER = "onyx_web_crawler"
     FIRECRAWL = "firecrawl"
     EXA = "exa"
+    TAVILY = "tavily"

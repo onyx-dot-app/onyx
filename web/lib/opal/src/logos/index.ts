@@ -78,6 +78,7 @@ export { default as SvgSharepoint } from "@opal/logos/sharepoint";
 export { default as SvgSlack } from "@opal/logos/slack";
 export { default as SvgSlab } from "@opal/logos/slab";
 export { default as SvgSnowflake } from "@opal/logos/snowflake";
+export { default as SvgTavily } from "@opal/logos/tavily";
 export { default as SvgTeams } from "@opal/logos/teams";
 export { default as SvgTestrail } from "@opal/logos/testrail";
 export { default as SvgVoyage } from "@opal/logos/voyage";
