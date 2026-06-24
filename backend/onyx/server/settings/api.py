@@ -103,7 +103,9 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
 
 @basic_router.get("")
 def fetch_settings(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.BASIC_ACCESS, allow_anonymous=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> UserSettings:
     """Settings and notifications are stuffed into this single endpoint to reduce number of
