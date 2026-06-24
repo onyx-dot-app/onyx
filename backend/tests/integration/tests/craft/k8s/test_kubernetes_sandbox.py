@@ -73,7 +73,6 @@ def test_provisioned_pod_has_sandbox_image_directories(
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    """After ``provision()``, the baked-in workspace directories exist and the pod is healthy."""
     sandbox_id, _, pod_name = pool_session
 
     pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
@@ -102,7 +101,6 @@ def test_session_workspace_setup_creates_expected_tree(
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    """After ``setup_session_workspace``, the session dir holds the canonical tree."""
     _, session_id, pod_name = pool_session
     session_path = f"/workspace/sessions/{session_id}"
 
@@ -153,7 +151,6 @@ def test_push_signed_tarball_lands_under_mount_path(
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    """``write_files_to_sandbox`` lands the file under ``/workspace/managed/skills/<slug>/``."""
     sandbox_id, _, pod_name = pool_session
     slug = f"push-test-{uuid4().hex[:8]}"
     body = f"---\nname: {slug}\ndescription: pushed bundle\n---\n# v1\n"
@@ -198,7 +195,6 @@ def test_push_second_call_replaces_previous_via_atomic_swap(
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    """Push v1 then v2; the post-push file content reflects v2 (atomic swap)."""
     sandbox_id, _, pod_name = pool_session
     slug = f"swap-test-{uuid4().hex[:8]}"
     mount_path = f"/workspace/managed/skills/{slug}"
@@ -231,7 +227,6 @@ def test_push_with_bad_signature_returns_401(
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    """A push with a garbage signature (otherwise well-formed) returns 401 from the daemon."""
     sandbox_id, _, pod_name = pool_session
 
     pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
@@ -275,7 +270,6 @@ def test_push_with_bad_signature_returns_401(
 def test_health_check_returns_false_for_missing_pod(
     k8s_manager: KubernetesSandboxManager,
 ) -> None:
-    """``health_check`` returns False when the pod does not exist."""
     nonexistent_sandbox_id = uuid4()
     assert not k8s_manager.health_check(nonexistent_sandbox_id, timeout=5.0), (
         "health_check() should return False for a non-existent pod"
@@ -286,7 +280,6 @@ def test_pod_runs_sandbox_container_and_native_init_sidecar(
     k8s_client: client.CoreV1Api,
     pool_session: tuple[UUID, UUID, str],
 ) -> None:
-    """The pod has one `sandbox` app container and a ready `sidecar` init container."""
     _, _, pod_name = pool_session
     pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
 
@@ -451,7 +444,6 @@ def test_terminate_removes_pod_and_marks_db(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
 ) -> None:
-    """``terminate`` removes the pod (404 on read) and renders ``health_check`` False."""
     sandbox_id = uuid4()
     pod_name = k8s_manager._get_pod_name(sandbox_id)
     try:

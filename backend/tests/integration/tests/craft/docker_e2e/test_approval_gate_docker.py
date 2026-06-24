@@ -6,7 +6,6 @@ import json
 import re
 import subprocess
 import time
-from collections.abc import Generator
 from typing import Any
 from uuid import UUID
 from uuid import uuid4
@@ -113,18 +112,36 @@ def module_sandbox(
     return provision_sandbox(module_user)
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def gated_user() -> DATestUser:
     return UserManager.create(name=f"craft_docker_gated_{uuid4().hex[:8]}")
+
+
+@pytest.fixture(scope="module")
+def gated_module_sandbox(
+    gated_user: DATestUser,
+    provision_sandbox: ProvisionSandbox,
+) -> str:
+    # Sandboxes are per-user, so every later ``gated_session`` mint reuses this
+    # RUNNING container instead of paying the ~40s provisioning cost again.
+    _session_id, container = provision_sandbox(gated_user)
+    return container
 
 
 @pytest.fixture
 def gated_session(
     gated_user: DATestUser,
+    gated_module_sandbox: str,
     provision_sandbox: ProvisionSandbox,
-) -> Generator[tuple[DATestUser, UUID, str], None, None]:
+) -> tuple[DATestUser, UUID, str]:
+    # Reuses the gated user's already-RUNNING container; only the build-session
+    # row -- and thus the proxy tag / approval session id -- is new per test.
     session_id, container = provision_sandbox(gated_user)
-    yield gated_user, session_id, container
+    assert container == gated_module_sandbox, (
+        "gated_session minted a new container instead of reusing the module "
+        f"sandbox: {container!r} != {gated_module_sandbox!r}"
+    )
+    return gated_user, session_id, container
 
 
 def test_sandbox_runs_with_zero_caps_at_uid_1000(
@@ -373,7 +390,26 @@ def test_sessions_directory_writable_by_sandbox_user(
 
 
 # Gate-flow tests depend on the ``slack_external_app`` fixture; without it the
-# matcher claims nothing and no approval parks.
+# matcher claims nothing and no approval parks. They also share one
+# module-scoped sandbox (``gated_module_sandbox``), so the credential-mutating
+# ``test_ask_*`` case below is defined LAST and additionally save/restores the
+# Slack row's credentials around its mutation -- two independent guards so it
+# can never strip the token the approve/reject siblings rely on to gate.
+
+
+def _set_slack_org_credentials(value: dict[str, str]) -> None:
+    with get_session_with_tenant(tenant_id="public") as db:
+        app = get_built_in_external_app(db, ExternalAppType.SLACK)
+        assert app is not None, "slack_external_app fixture must seed the row"
+        app.organization_credentials = value  # ty: ignore[invalid-assignment]
+        db.commit()
+
+
+def _get_slack_org_credentials() -> dict[str, str]:
+    with get_session_with_tenant(tenant_id="public") as db:
+        app = get_built_in_external_app(db, ExternalAppType.SLACK)
+        assert app is not None, "slack_external_app fixture must seed the row"
+        return dict(app.organization_credentials or {})
 
 
 def test_approve_decision_forwards_to_slack(
@@ -445,12 +481,12 @@ def test_ask_with_uninvokable_app_forwards_bare(
 ) -> None:
     user, session_id, container = gated_session
 
+    # Snapshot the row so the strip below is restored exactly, no matter what
+    # the fixture seeded -- the approve/reject siblings share this row.
+    saved_credentials = _get_slack_org_credentials()
+
     # Strip Slack's org credential so app_is_available -> False.
-    with get_session_with_tenant(tenant_id="public") as db:
-        app = get_built_in_external_app(db, ExternalAppType.SLACK)
-        assert app is not None, "slack_external_app fixture must seed the row"
-        app.organization_credentials = {}  # ty: ignore[invalid-assignment]
-        db.commit()
+    _set_slack_org_credentials({})
 
     try:
         curl_proc = _start_slack_post_via_proxy(container, session_id)
@@ -476,11 +512,5 @@ def test_ask_with_uninvokable_app_forwards_bare(
         finally:
             curl_proc.kill()
     finally:
-        # Restore the seeded fake token so sibling tests still gate.
-        with get_session_with_tenant(tenant_id="public") as db:
-            app = get_built_in_external_app(db, ExternalAppType.SLACK)
-            assert app is not None
-            app.organization_credentials = {  # ty: ignore[invalid-assignment]
-                "access_token": "fake-test-token"
-            }
-            db.commit()
+        # Restore the seeded credential so sibling tests still gate.
+        _set_slack_org_credentials(saved_credentials)

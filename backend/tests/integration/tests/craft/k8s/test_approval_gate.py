@@ -27,6 +27,7 @@ from onyx.db.models import Sandbox
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.sandbox_proxy import approval_cache
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
@@ -61,8 +62,7 @@ _PROXY_COMPONENT_LABEL = "app.kubernetes.io/component=sandbox-proxy"
 
 _SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 
-# Spec value for approval_cache.WAIT_TIMEOUT_S; slow tests size their windows off it.
-_WAIT_TIMEOUT_S_SPEC = 180
+_WAIT_TIMEOUT_S_SPEC = SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 
 
 def _upsert_slack_external_app(
@@ -346,7 +346,6 @@ def test_approved_decision_forwards_to_slack(
     gated_session: tuple[DATestUser, UUID, str],
     db_session: Session,
 ) -> None:
-    """APPROVED → proxy forwards to Slack (200 + ``invalid_auth`` proves it reached slack.com)."""
     api_user, session_id, pod_name = gated_session
 
     output_path = f"/tmp/curl_approve_{uuid4().hex[:8]}"
@@ -383,7 +382,7 @@ def test_expired_on_wait_timeout(
     gated_session: tuple[DATestUser, UUID, str],
     db_session: Session,
 ) -> None:
-    """No decision → proxy claims EXPIRED after ``WAIT_TIMEOUT_S``.
+    """No decision → proxy claims EXPIRED after the wait timeout.
 
     curl's --max-time must outlive the spec window so we see the proxy's 403.
     """
@@ -421,7 +420,7 @@ def test_sigterm_drain_unblocks_parked_request(
     gated_session: tuple[DATestUser, UUID, str],
     db_session: Session,
 ) -> None:
-    """Deleting the parked proxy pod must drain → wake → EXPIRED (well inside ``WAIT_TIMEOUT_S``)."""
+    """Deleting the parked proxy pod must drain → wake → EXPIRED (well inside the wait timeout)."""
     _, session_id, pod_name = gated_session
 
     output_path = f"/tmp/curl_drain_{uuid4().hex[:8]}"
@@ -534,7 +533,6 @@ def test_ask_with_uninvokable_app_forwards_bare(
     gated_session: tuple[DATestUser, UUID, str],
     db_session: Session,
 ) -> None:
-    """ASKs on an app whose auth template can't be filled forwards bare, no row."""
     api_user, session_id, pod_name = gated_session
     user_id = UUID(api_user.id)
 
@@ -659,7 +657,6 @@ def test_approval_requested_notification_is_created(
     gated_session: tuple[DATestUser, UUID, str],
     db_session: Session,
 ) -> None:
-    """The gate commits its best-effort ``APPROVAL_REQUESTED`` notification."""
     api_user, session_id, pod_name = gated_session
     user_id = UUID(api_user.id)
 
@@ -716,7 +713,6 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
     gated_session: tuple[DATestUser, UUID, str],
     db_session: Session,
 ) -> None:
-    """``submit_decision`` (REJECTED) after the proxy already claimed EXPIRED → CONFLICT."""
     api_user, session_id, pod_name = gated_session
 
     output_path = f"/tmp/curl_conflict_{uuid4().hex[:8]}"

@@ -56,6 +56,9 @@ configMap:
   # default is 5Gi/20Gi.
   SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST: "2Gi"
   SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT: "8Gi"
+  # Shrink the approval-gate park window so timeout-path tests don't wait the
+  # 180s production default.
+  SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS: "20"
 
 postgresql:
   cluster:
