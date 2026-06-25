@@ -67,7 +67,9 @@ _PROXY_COMPONENT_LABEL = "app.kubernetes.io/component=sandbox-proxy"
 
 _SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 
-_WAIT_TIMEOUT_S_SPEC = SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+# Fake token seeded by ``_seed_slack_external_app``; an unfillable template
+# would short-circuit the ASK gate. Tests that strip it must restore it.
+_SEEDED_SLACK_CREDENTIALS = {"access_token": "fake-test-token"}
 
 
 def _upsert_slack_external_app(
@@ -114,8 +116,7 @@ def _seed_slack_external_app(
     """Seed an enabled Slack ``external_app`` so the matcher claims ``chat.postMessage``."""
     app_id, previous = _upsert_slack_external_app(
         k8s_admin_user,
-        # Fake token; an unfillable template would short-circuit the ASK gate.
-        organization_credentials={"access_token": "fake-test-token"},
+        organization_credentials=_SEEDED_SLACK_CREDENTIALS,
     )
     try:
         yield
@@ -380,14 +381,17 @@ def test_expired_on_wait_timeout(
         pod_name,
         output_path,
         text="never decided",
-        max_time_s=_WAIT_TIMEOUT_S_SPEC + 60,
+        max_time_s=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 60,
         session_id=session_id,
     )
 
     pending = _wait_for_pending_approval(db_session, session_id)
 
     status_code, body = wait_for_pod_exec_output(
-        k8s_client, pod_name, output_path, timeout_s=_WAIT_TIMEOUT_S_SPEC + 30
+        k8s_client,
+        pod_name,
+        output_path,
+        timeout_s=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 30,
     )
     assert status_code == 403, (
         f"sandbox-side curl after timeout should see 403, got {status_code}: {body!r}"
@@ -522,35 +526,42 @@ def test_ask_with_uninvokable_app_forwards_bare(
     api_user, session_id, pod_name = gated_session
     user_id = UUID(api_user.id)
 
-    # Strip the seeded org credential so app_is_available falls to False.
+    # Strip the seeded org credential so app_is_available falls to False, and
+    # restore it in finally — sibling tests in this module share the seeded
+    # Slack row and need a fillable credential for the ASK gate to park.
     _upsert_slack_external_app(
         k8s_admin_user,
         organization_credentials={},
     )
+    try:
+        output_path = f"/tmp/curl_bare_{uuid4().hex[:8]}"
+        _post_slack_via_curl(
+            k8s_client,
+            pod_name,
+            output_path,
+            text="hello",
+            session_id=session_id,
+        )
 
-    output_path = f"/tmp/curl_bare_{uuid4().hex[:8]}"
-    _post_slack_via_curl(
-        k8s_client,
-        pod_name,
-        output_path,
-        text="hello",
-        session_id=session_id,
-    )
-
-    status_code, body = wait_for_pod_exec_output(
-        k8s_client, pod_name, output_path, timeout_s=30
-    )
-    assert status_code == 200, (
-        f"Uninvokable ASK should forward bare to Slack and Slack should 200 "
-        f"with invalid_auth in the body, got {status_code}: {body!r}"
-    )
-    assert "invalid_auth" in body.strip(), (
-        f"Bare-forwarded request should reach slack.com and get invalid_auth, "
-        f"got body {body!r}"
-    )
-    assert _approval_count_for_user(db_session, user_id) == 0, (
-        "Uninvokable ASK must not mint an approval row."
-    )
+        status_code, body = wait_for_pod_exec_output(
+            k8s_client, pod_name, output_path, timeout_s=30
+        )
+        assert status_code == 200, (
+            f"Uninvokable ASK should forward bare to Slack and Slack should 200 "
+            f"with invalid_auth in the body, got {status_code}: {body!r}"
+        )
+        assert "invalid_auth" in body.strip(), (
+            f"Bare-forwarded request should reach slack.com and get invalid_auth, "
+            f"got body {body!r}"
+        )
+        assert _approval_count_for_user(db_session, user_id) == 0, (
+            "Uninvokable ASK must not mint an approval row."
+        )
+    finally:
+        _upsert_slack_external_app(
+            k8s_admin_user,
+            organization_credentials=_SEEDED_SLACK_CREDENTIALS,
+        )
 
 
 def test_sse_merger_emits_approval_requested_packet(
@@ -707,14 +718,17 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
         pod_name,
         output_path,
         text="conflict me",
-        max_time_s=_WAIT_TIMEOUT_S_SPEC + 60,
+        max_time_s=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 60,
         session_id=session_id,
     )
 
     pending = _wait_for_pending_approval(db_session, session_id)
 
     status_code, body = wait_for_pod_exec_output(
-        k8s_client, pod_name, output_path, timeout_s=_WAIT_TIMEOUT_S_SPEC + 30
+        k8s_client,
+        pod_name,
+        output_path,
+        timeout_s=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 30,
     )
     assert status_code == 403, (
         f"Expected 403 after wait-timeout, got {status_code}: {body!r}"

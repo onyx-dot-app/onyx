@@ -113,6 +113,7 @@ jobs:
               - '.github/workflows/pr-craft-k8s-tests.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
               - '.github/actions/setup-test-license/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
 
   craft-k8s-tests:
     needs: changes
@@ -681,3 +682,37 @@ jobs:
           kind delete cluster --name onyx-craft-ci || true
           docker network disconnect kind "${KIND_REGISTRY_NAME}" 2>/dev/null || true
           docker rm -f "${KIND_REGISTRY_NAME}" 2>/dev/null || true
+
+  craft-k8s-tests-required:
+    # Single required status check for the craft-k8s suite. Always runs so
+    # branch protection has a stable target, and passes cleanly when `changes`
+    # reports no relevant paths changed (i.e. the test job was legitimately
+    # skipped).
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes, craft-k8s-tests]
+    if: ${{ always() }}
+    steps:
+      - name: Check job status
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_TESTS: ${{ needs.changes.outputs.craft_k8s }}
+          TEST_RESULT: ${{ needs.craft-k8s-tests.result }}
+        run: |
+          # Fail closed if `changes` didn't succeed. Otherwise an empty
+          # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
+          # would be indistinguishable from "no relevant paths changed" and we
+          # would incorrectly pass the required check.
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
+          if [ "${RUN_TESTS}" != "true" ]; then
+            echo "No relevant paths changed -- required check passes."
+            exit 0
+          fi
+          if [ "${TEST_RESULT}" != "success" ]; then
+            echo "Test result: ${TEST_RESULT}"
+            exit 1
+          fi
+          echo "All tests passed."
