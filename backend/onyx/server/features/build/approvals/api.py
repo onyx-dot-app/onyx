@@ -34,6 +34,7 @@ from onyx.external_apps.matching.engine import actions_requiring_approval
 from onyx.external_apps.matching.engine import MatchedAction
 from onyx.external_apps.presentation.decode import decode_payload
 from onyx.sandbox_proxy import approval_cache
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.db import action_approval
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.utils.logger import setup_logger
@@ -78,7 +79,7 @@ class ApprovalView(BaseModel):
         if self.decision is not None:
             return False
         cutoff = datetime.now(timezone.utc) - timedelta(
-            seconds=approval_cache.WAIT_TIMEOUT_S
+            seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
         )
         return self.created_at >= cutoff
 
@@ -133,7 +134,7 @@ def list_live_approvals(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "session not found")
 
     cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=approval_cache.WAIT_TIMEOUT_S
+        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
     )
     pending_rows = action_approval.list_session_pending_action_approvals(
         db_session, session_id, created_after=cutoff
@@ -225,7 +226,7 @@ def submit_session_grant(
             "approval request already resolved",
         )
     cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=approval_cache.WAIT_TIMEOUT_S
+        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
     )
     if current.created_at < cutoff:
         raise OnyxError(

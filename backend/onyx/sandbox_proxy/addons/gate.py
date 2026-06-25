@@ -59,6 +59,7 @@ from onyx.sandbox_proxy.logging_utils import sandbox_log_label
 from onyx.sandbox_proxy.logging_utils import short_log_id
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.server.features.build.configs import SANDBOX_API_SERVER_URL
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.db import action_approval
 from onyx.utils.logger import setup_logger
 
@@ -972,7 +973,7 @@ class GateAddon:
         cache = self._cache_factory(ctx.tenant_id)
         try:
             decision = await approval_cache.wait_for_wake(
-                approval_id, approval_cache.WAIT_TIMEOUT_S, cache
+                approval_id, SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS, cache
             )
             if decision is not None:
                 logger.info(

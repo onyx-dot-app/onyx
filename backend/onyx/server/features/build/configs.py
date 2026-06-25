@@ -25,11 +25,18 @@ OPENCODE_DISABLED_TOOLS: list[str] = [
     t.strip() for t in _disabled_tools_str.split(",") if t.strip()
 ]
 
+
 SANDBOX_IDLE_TIMEOUT_SECONDS = int(
     os.environ.get("SANDBOX_IDLE_TIMEOUT_SECONDS", "3600")
 )
 SANDBOX_MAX_CONCURRENT_PER_ORG = int(
     os.environ.get("SANDBOX_MAX_CONCURRENT_PER_ORG", "10")
+)
+SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS = int(
+    os.environ.get("SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS", "180")
+)
+SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS = int(
+    os.environ.get("SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS", "60")
 )
 
 SANDBOX_NEXTJS_PORT_START = int(os.environ.get("SANDBOX_NEXTJS_PORT_START", "3010"))
