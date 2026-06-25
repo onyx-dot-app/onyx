@@ -106,7 +106,7 @@ class TestListDirectory:
             "outputs",
         )
 
-        entry_names = {entry["name"] for entry in result["entries"]}
+        entry_names = {entry.name for entry in result.entries}
         assert "file.txt" in entry_names
         assert "subdir" in entry_names
 
@@ -148,7 +148,7 @@ class TestDeleteFile:
             "test.txt",
             b"content",
         )
-        path = str(upload["path"])
+        path = str(upload.path)
 
         BuildSessionManager.delete_file(handle.api_user, handle.session_id, path)
 
@@ -222,7 +222,7 @@ class TestUploadFile:
             content,
         )
 
-        assert result["path"] == "attachments/test.txt"
+        assert result.path == "attachments/test.txt"
 
         readback = BuildSessionManager.download_artifact(
             handle.api_user,
@@ -251,7 +251,7 @@ class TestUploadFile:
             b"second",
         )
 
-        assert result["path"] == "attachments/collide_1.txt"
+        assert result.path == "attachments/collide_1.txt"
         assert (
             BuildSessionManager.download_artifact(
                 handle.api_user,

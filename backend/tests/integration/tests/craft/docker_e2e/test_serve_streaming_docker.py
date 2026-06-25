@@ -77,7 +77,7 @@ def _drive_turn(
     timeout: float = 180.0,
 ) -> _Collected:
     turn = BuildSessionManager.start_turn(user, session_id, prompt)
-    turn_id = turn["turn_id"]
+    turn_id = turn.turn_id
 
     out = _Collected()
     url = f"{API_SERVER_URL}/build/sessions/{session_id}/turns/{turn_id}/events"
@@ -177,7 +177,7 @@ def test_concurrent_turn_is_rejected(
     first = BuildSessionManager.start_turn(
         streaming_user, session_id, "Say hi briefly."
     )
-    assert first["turn_id"]
+    assert first.turn_id
 
     second = client.post(
         f"{API_SERVER_URL}/build/sessions/{session_id}/send-message",

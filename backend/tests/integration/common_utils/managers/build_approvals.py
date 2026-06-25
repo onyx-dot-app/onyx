@@ -8,9 +8,10 @@ used elsewhere in ``common_utils.managers``.
 from __future__ import annotations
 
 import time
-from typing import Any
 from uuid import UUID
 
+from onyx.server.features.build.approvals.api import ApprovalListResponse
+from onyx.server.features.build.approvals.api import ApprovalView
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
@@ -20,21 +21,19 @@ class BuildApprovalsManager:
     """Static wrapper around the build-mode approval HTTP API."""
 
     @staticmethod
-    def list_live(user: DATestUser, session_id: UUID) -> list[dict[str, Any]]:
+    def list_live(user: DATestUser, session_id: UUID) -> list[ApprovalView]:
         response = client.get(
             f"{API_SERVER_URL}/build/approvals/sessions/{session_id}/live",
             headers=user.headers,
             cookies=user.cookies,
         )
         response.raise_for_status()
-        items = response.json().get("items", [])
-        assert isinstance(items, list)
-        return items
+        return ApprovalListResponse.model_validate(response.json()).items
 
     @staticmethod
     def wait_for_pending(
         user: DATestUser, session_id: UUID, timeout_s: float = 30.0
-    ) -> dict[str, Any]:
+    ) -> ApprovalView:
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
             items = BuildApprovalsManager.list_live(user, session_id)

@@ -9,6 +9,8 @@ import pytest
 
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.user_library.api import DeleteFileResponse
+from onyx.server.features.build.user_library.api import UploadResponse
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
 from tests.integration.tests.craft.k8s.k8s_fixtures import WorkspaceProxy
 from tests.integration.tests.craft.user_library_http import delete_user_library_file
@@ -101,16 +103,17 @@ class TestUserLibrarySync:
             [(filename, b"bye", "text/plain")],
         )
         response.raise_for_status()
-        document_id = response.json()["entries"][0]["id"]
+        upload_body = UploadResponse.model_validate(response.json())
+        document_id = upload_body.entries[0].id
         target = _library_path(handle.workspace_path, filename)
         target.wait_for_file(expected=b"bye")
 
         delete_response = delete_user_library_file(handle.api_user, document_id)
         delete_response.raise_for_status()
-        assert delete_response.json()["deleted"] == document_id
+        delete_body = DeleteFileResponse.model_validate(delete_response.json())
+        assert delete_body.deleted == document_id
         assert all(
-            entry["id"] != document_id
-            for entry in list_user_library_tree(handle.api_user)
+            entry.id != document_id for entry in list_user_library_tree(handle.api_user)
         )
 
         target.wait_for_absent()

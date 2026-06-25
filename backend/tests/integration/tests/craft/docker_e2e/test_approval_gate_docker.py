@@ -409,7 +409,9 @@ def test_approve_decision_forwards_to_slack(
         approval = BuildApprovalsManager.wait_for_pending(
             user, session_id, timeout_s=30.0
         )
-        resp = _post_decision(user, approval["approval_id"], ApprovalDecision.APPROVED)
+        resp = _post_decision(
+            user, str(approval.approval_id), ApprovalDecision.APPROVED
+        )
         assert resp.status_code == 200, (
             f"APPROVE failed: {resp.status_code} {resp.text!r}"
         )
@@ -443,7 +445,9 @@ def test_reject_decision_returns_403_user_rejected(
         approval = BuildApprovalsManager.wait_for_pending(
             user, session_id, timeout_s=30.0
         )
-        resp = _post_decision(user, approval["approval_id"], ApprovalDecision.REJECTED)
+        resp = _post_decision(
+            user, str(approval.approval_id), ApprovalDecision.REJECTED
+        )
         assert resp.status_code == 200, (
             f"REJECT failed: {resp.status_code} {resp.text!r}"
         )

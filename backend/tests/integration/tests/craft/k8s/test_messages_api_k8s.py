@@ -14,9 +14,11 @@ import pytest
 from onyx.configs.constants import MessageType
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.interactive_turns.models import InteractiveTurnResponse
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
+from onyx.server.features.build.session.models import MessageResponse
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.tests.craft.k8s.k8s_fixtures import cleanup_api_user_sandbox_rows
@@ -35,15 +37,12 @@ pytestmark = [
 _TERMINAL_TURN_STATUSES = {"SUCCEEDED", "FAILED", "CANCELLED"}
 
 
-def _assistant_text(messages: list[dict[str, object]]) -> str:
+def _assistant_text(messages: list[MessageResponse]) -> str:
     chunks: list[str] = []
     for message in messages:
-        if message.get("type") != MessageType.ASSISTANT.value:
+        if message.type != MessageType.ASSISTANT:
             continue
-        metadata = message.get("message_metadata")
-        if not isinstance(metadata, dict):
-            continue
-        metadata = cast(dict[str, object], metadata)
+        metadata = message.message_metadata
         if metadata.get("type") != "agent_message":
             continue
         content = metadata.get("content")
@@ -54,11 +53,10 @@ def _assistant_text(messages: list[dict[str, object]]) -> str:
     return "".join(chunks)
 
 
-def _turn_status(turn: dict[str, object] | None) -> str | None:
+def _turn_status(turn: InteractiveTurnResponse | None) -> str | None:
     if turn is None:
         return None
-    status = turn.get("status")
-    return status if isinstance(status, str) else None
+    return turn.status
 
 
 def test_send_message_api_runs_real_celery_turn(
@@ -85,12 +83,12 @@ def test_send_message_api_runs_real_celery_turn(
             "Reply with a short greeting.",
             client_request_id=f"req-{uuid4()}",
         )
-        assert turn["session_id"] == str(session_id)
-        assert turn["status"] in {"QUEUED", "RUNNING"}
+        assert turn.session_id == str(session_id)
+        assert turn.status in {"QUEUED", "RUNNING"}
 
         deadline = time.monotonic() + 180
-        last_messages: list[dict[str, object]] = []
-        last_turn: dict[str, object] | None = None
+        last_messages: list[MessageResponse] = []
+        last_turn: InteractiveTurnResponse | None = None
         saw_assistant_text = False
         while time.monotonic() < deadline:
             last_messages = BuildSessionManager.list_messages(api_user, session_id)

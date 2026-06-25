@@ -117,7 +117,7 @@ def test_snapshot_includes_outputs_and_attachments_only(
     assert snapshot is not None, "create_snapshot returned None for populated session"
 
     archive = tmp_path / "snapshot.tar.gz"
-    _download_snapshot(snapshot["storage_path"], archive)
+    _download_snapshot(snapshot.storage_path, archive)
 
     members = _list_archive_members(archive)
     # tarfile may emit "outputs" or "./outputs" depending on version.
@@ -151,7 +151,7 @@ def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
     assert snapshot is not None
 
     archive = tmp_path / "snapshot.tar.gz"
-    _download_snapshot(snapshot["storage_path"], archive)
+    _download_snapshot(snapshot.storage_path, archive)
 
     members = _list_archive_members(archive)
     # Match the session-root path only: outputs/web/ ships its own legitimate AGENTS.md.
@@ -255,7 +255,7 @@ def test_restore_re_pushes_skills(
 
         k8s_manager.cleanup_session_workspace(sandbox_id, session_id)
         response = BuildSessionManager.restore(handle.api_user, session_id)
-        assert response["session_loaded_in_sandbox"] is True
+        assert response.session_loaded_in_sandbox is True
 
         restored_notes = pod_exec(
             k8s_client,
@@ -333,7 +333,7 @@ def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
     )
 
     result = BuildSessionManager.create_opencode_history_snapshot(api_user, session_id)
-    assert result["created"] is True
+    assert result.created is True
 
     k8s_manager.terminate(sandbox_id)
     wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
