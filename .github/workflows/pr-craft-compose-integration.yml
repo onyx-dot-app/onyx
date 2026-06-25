@@ -214,6 +214,7 @@ jobs:
           SANDBOX_PROXY_PORT: "8080"
           SANDBOX_DOCKER_NETWORK: "onyx_craft_sandbox"
           SANDBOX_DOCKER_SOCKET: "/var/run/docker.sock"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -o pipefail
           mkdir -p ../compose-logs

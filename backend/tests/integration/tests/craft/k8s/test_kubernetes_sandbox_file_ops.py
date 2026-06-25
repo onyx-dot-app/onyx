@@ -314,3 +314,30 @@ class TestUploadFile:
             "second upload should not duplicate the attachments section; "
             f"got {after_second.count(section_marker)} occurrences"
         )
+
+
+class TestUploadStats:
+    def test_get_upload_stats_counts_and_sizes_attachments(
+        self,
+        k8s_manager: KubernetesSandboxManager,
+        running_sandbox: Callable[..., SandboxHandle],
+    ) -> None:
+        """``get_upload_stats`` reports the real (count, total_bytes) of a
+        session's attachments, queried in-pod via kube-exec."""
+        handle = running_sandbox(with_session=True)
+        assert handle.session_id is not None
+        session_id = handle.session_id
+
+        # No attachments directory exists until the first upload.
+        assert k8s_manager.get_upload_stats(handle.sandbox_id, session_id) == (0, 0)
+
+        first = b"hello"
+        second = b"world!!"
+        BuildSessionManager.upload_file(handle.api_user, session_id, "a.txt", first)
+        BuildSessionManager.upload_file(handle.api_user, session_id, "b.txt", second)
+
+        # find -type f counts the two files; du -sb sums their bytes exactly
+        assert k8s_manager.get_upload_stats(handle.sandbox_id, session_id) == (
+            2,
+            len(first) + len(second),
+        )

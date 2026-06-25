@@ -36,7 +36,13 @@ class DockerExec(Protocol):
 
 
 class ProvisionSandbox(Protocol):
-    def __call__(self, user: DATestUser) -> DockerSandbox: ...
+    def __call__(
+        self,
+        user: DATestUser,
+        *,
+        llm_provider_type: str | None = None,
+        llm_model_name: str | None = None,
+    ) -> DockerSandbox: ...
 
 
 def _container_name(sandbox_id: str) -> str:
@@ -63,8 +69,19 @@ def _docker_exec(
     )
 
 
-def _provision_sandbox(user: DATestUser) -> DockerSandbox:
-    session = BuildSessionManager.create(user)
+def _provision_sandbox(
+    user: DATestUser,
+    *,
+    llm_provider_type: str | None = None,
+    llm_model_name: str | None = None,
+) -> DockerSandbox:
+    # Both default to None on the create request, so passing them through
+    # unconditionally is equivalent to omitting them.
+    session = BuildSessionManager.create(
+        user,
+        llm_provider_type=llm_provider_type,
+        llm_model_name=llm_model_name,
+    )
     sandbox = session.sandbox
     assert sandbox is not None, f"Session response missing sandbox: {session!r}"
     assert sandbox.status == SandboxStatus.RUNNING, (

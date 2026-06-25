@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import pytest
 
+from onyx.llm.constants import LlmProviderNames
 from onyx.server.features.build.configs import OPENCODE_SERVER_PASSWORD
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
@@ -134,12 +135,25 @@ def live_session(
     real_key = os.environ.get("OPENAI_API_KEY")
     if not real_key:
         pytest.skip("OPENAI_API_KEY not set; live-turn streaming tests need it.")
+    # The base craft conftest seeds a fake-keyed openai provider, and both the
+    # session-config and sandbox-proxy key resolvers pick the *first* openai
+    # provider. Delete any existing openai provider so the real key is the only
+    # one in play, then seed it (with gpt-5-mini visible).
+    for provider in LLMProviderManager.get_all(admin_user):
+        if provider.provider == LlmProviderNames.OPENAI:
+            LLMProviderManager.delete(provider, admin_user)
     LLMProviderManager.create(
         user_performing_action=admin_user,
         api_key=real_key,
         default_model_name=_LIVE_MODEL,
     )
-    result = provision_sandbox(streaming_user)
+    # Pin the cheap model on the turn; provisioning otherwise selects the
+    # provider's recommended (flagship) model, ignoring default_model_name.
+    result = provision_sandbox(
+        streaming_user,
+        llm_provider_type=LlmProviderNames.OPENAI,
+        llm_model_name=_LIVE_MODEL,
+    )
     try:
         yield DockerLiveSession(user=streaming_user, session_id=result.session_id)
     finally:
