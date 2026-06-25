@@ -154,16 +154,36 @@ jobs:
           echo "test-files=[${entries%,}]" >> "$GITHUB_OUTPUT"
 
   build-images:
-    # Build the 3 images once and push to the shared ECR repo so each shard pulls
-    # prebuilt images instead of cold-building all 3.
+    # Build the 3 images in parallel (one matrix leg each) and push to the shared
+    # ECR repo so each test shard pulls prebuilt images instead of cold-building.
     needs: changes
     if: needs.changes.outputs.craft_k8s == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: sandbox
+            context: ./backend/onyx/server/features/build/sandbox/image
+            file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
+            # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
+            # so skip LibreOffice et al. to keep the CI image lean.
+            extra_build_args: "ENABLE_SKILLS=false"
+          - image: backend
+            context: ./backend
+            file: ./backend/Dockerfile
+            extra_build_args: ""
+          - image: web
+            context: ./web
+            file: ./web/Dockerfile
+            extra_build_args: |
+              NEXT_PUBLIC_CLOUD_ENABLED=false
+              WEB_FRAME_PROTECTION_ENABLED=false
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
       - spot=false
       - volume=100gb
-      - ${{ format('run-id={0}-craft-k8s-build-images', github.run_id) }}
+      - ${{ format('run-id={0}-craft-k8s-build-{1}', github.run_id, matrix.image) }}
       - extras=ecr-cache
     timeout-minutes: 30
     permissions:
@@ -184,50 +204,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
 
-      - name: Build and push sandbox image
+      - name: Build and push ${{ matrix.image }} image
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
         with:
-          context: ./backend/onyx/server/features/build/sandbox/image
-          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           platforms: linux/amd64
-          # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
-          # so skip LibreOffice et al. to keep the CI image lean.
-          build-args: |
-            ENABLE_SKILLS=false
-            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-k8s-sandbox-${{ github.run_id }}
-          push: true
-          cache-from: type=gha,scope=craft-sandbox
-          cache-to: type=gha,scope=craft-sandbox,mode=max
-
-      # Backend image runs the sandbox-proxy via `python -m onyx.sandbox_proxy.server`.
-      - name: Build and push backend image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/amd64
-          tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-k8s-backend-${{ github.run_id }}
-          push: true
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          cache-from: type=gha,scope=craft-backend
-          cache-to: type=gha,scope=craft-backend,mode=max
-
-      - name: Build and push web image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
-        with:
-          context: ./web
-          file: ./web/Dockerfile
-          platforms: linux/amd64
-          tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-k8s-web-${{ github.run_id }}
+            ${{ matrix.extra_build_args }}
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-k8s-${{ matrix.image }}-${{ github.run_id }}
           push: true
-          build-args: |
-            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-            NEXT_PUBLIC_CLOUD_ENABLED=false
-            WEB_FRAME_PROTECTION_ENABLED=false
-          cache-from: type=gha,scope=craft-web
-          cache-to: type=gha,scope=craft-web,mode=max
+          cache-from: type=gha,scope=craft-${{ matrix.image }}
+          cache-to: type=gha,scope=craft-${{ matrix.image }},mode=max
 
   craft-k8s-tests:
     needs: [changes, discover-test-files, build-images]
