@@ -76,7 +76,7 @@ PR 3 is the spine; PR 4/5/6 and all of PR 9 fan out from it independently. PR 7�
 
 ## PR 1 — Authed chat shell + sessions history
 - **Goal:** A reachable, authed chat surface showing real chat history; navigation works end-to-end with no streaming yet.
-- **Scope (in):** `(app)` expo-router group under `AuthGate`; new-chat home (empty state); `chat/[id]` scaffold (static input shell, `send` disabled); history list via a TanStack Query hook over the sessions-list endpoint; `chatSessions`/`chatSession` query keys; sidebar wired to sessions.
+- **Scope (in):** `(app)` expo-router group under `AuthGate`; new-chat home (empty state); `chat/[id]` scaffold (static input shell, `send` disabled); history list via a TanStack Query hook over the sessions-list endpoint; `chatSessions`/`chatSession` query keys; sidebar wired to sessions; **add chat session/message query keys to the `dehydrateOptions` PII-exclusion list (`mobile/src/query/client.ts`) before any history persists to MMKV — required, not optional.**
 - **Out of scope:** Streaming, message rendering, agents, projects, attachments.
 - **Files:** `mobile/src/app/(app)/_layout.tsx` (new), `app/(app)/index.tsx` (new), `app/(app)/chat/[id].tsx` (new, scaffold), `app/(app)/history.tsx` (new), `app/_layout.tsx` (modified: mount group), `api/chat/sessions.ts` (new, list only), `api/query-keys.ts` (modified), sidebar (modified).
 - **Est. size:** ~550 LOC.

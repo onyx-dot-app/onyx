@@ -120,7 +120,7 @@ mobile/src/
 
 - **Auth / HTTP** — list calls reuse `mobile/src/api/client.ts apiFetch` (bearer + `ApiError`). The streaming call (`api/chat/stream.ts`) reuses `getBaseUrl()` (`config.ts`) + the token from `tokenStore.ts`, but uses `expo/fetch` directly.
 - **Navigation** — `(app)` group mounts under the existing `AuthGate` in `mobile/src/app/_layout.tsx`; sidebar (`mobile/src/components/sidebar`) surfaces sessions/projects.
-- **Query cache** — extend `mobile/src/api/query-keys.ts` + reuse the persisted client in `mobile/src/query/client.ts` (add chat keys to PII-exclusion if any response carries sensitive content).
+- **Query cache** — extend `mobile/src/api/query-keys.ts` + reuse the persisted client in `mobile/src/query/client.ts`. **Required (not conditional):** chat content is sensitive by nature, so the chat session-list + session-detail/message query keys **must** be added to the `dehydrateOptions` PII-exclusion list (alongside the existing `me` exclusion) in PR 1, **before any chat history is persisted to MMKV**. Consequence: chat history is not cached to disk and refetches on launch — the correct PII-safe default (mirrors the `me`-exclusion pattern).
 - **Web re-points (per phase, mechanical)** — `web/src/lib/search/streamingUtils.ts` → shared `ndjson`; `web/src/app/app/services/messageTree.ts` → shared `messageTree`; `web/src/app/app/services/fileUtils.ts` → shared `fileDescriptors`. Each verified by web's existing tests/e2e (`test_chat_stream`).
 - **Shared build** — `@onyx-ai/shared` `dist` must be rebuilt and the mobile `file:` dep re-linked whenever contracts/utils change (shared has a `watch.mjs`).
 
