@@ -3,27 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from contextlib import suppress
 from uuid import UUID
-from uuid import uuid4
 
 import httpx
 import pytest
 from kubernetes import client
 
-from onyx.db.enums import SandboxStatus
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
-from tests.common.craft.payloads import default_llm_config
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.k8s.k8s_fixtures import CRAFT_TEST_USER_ID
+from tests.integration.tests.craft.k8s.k8s_fixtures import OwnedLivePod
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
 from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
@@ -57,30 +53,18 @@ class TestHealthCheck:
         self,
         k8s_manager: KubernetesSandboxManager,
         k8s_client: client.CoreV1Api,
+        owned_live_pod: OwnedLivePod,
     ) -> None:
-        sandbox_id = uuid4()
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
-        try:
-            info = k8s_manager.provision(
-                sandbox_id=sandbox_id,
-                user_id=CRAFT_TEST_USER_ID,
-                tenant_id="tenant_test",
-                llm_config=default_llm_config(),
-                onyx_pat="ci-test-pat",
-            )
-            assert info.status == SandboxStatus.RUNNING
+        sandbox_id = owned_live_pod.sandbox_id
+        pod_name = owned_live_pod.pod_name
 
-            wait_until_healthy(k8s_manager, sandbox_id)
+        wait_until_healthy(k8s_manager, sandbox_id)
 
-            k8s_manager.terminate(sandbox_id)
-            wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
+        k8s_manager.terminate(sandbox_id)
+        wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
 
-            assert k8s_manager.health_check(sandbox_id, timeout=5.0) is False
-        finally:
-            with suppress(Exception):
-                k8s_manager.terminate(sandbox_id)
-            with suppress(Exception):
-                wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
+        # Pod is gone, so health_check hits a kube-API 404 (no pod-IP HTTP).
+        assert k8s_manager.health_check(sandbox_id, timeout=5.0) is False
 
 
 class TestListDirectory:
@@ -185,26 +169,15 @@ class TestTerminate:
         self,
         k8s_manager: KubernetesSandboxManager,
         k8s_client: client.CoreV1Api,
+        owned_live_pod: OwnedLivePod,
     ) -> None:
-        sandbox_id = uuid4()
-        pod_name = k8s_manager._get_pod_name(sandbox_id)
-        try:
-            k8s_manager.provision(
-                sandbox_id=sandbox_id,
-                user_id=CRAFT_TEST_USER_ID,
-                tenant_id="tenant_test",
-                llm_config=default_llm_config(),
-                onyx_pat="ci-test-pat",
-            )
-            wait_until_healthy(k8s_manager, sandbox_id)
+        sandbox_id = owned_live_pod.sandbox_id
+        pod_name = owned_live_pod.pod_name
 
-            k8s_manager.terminate(sandbox_id)
-            wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
-        finally:
-            with suppress(Exception):
-                k8s_manager.terminate(sandbox_id)
-            with suppress(Exception):
-                wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
+        wait_until_healthy(k8s_manager, sandbox_id)
+
+        k8s_manager.terminate(sandbox_id)
+        wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
 
 
 class TestUploadFile:

@@ -30,12 +30,12 @@ from tests.common.craft.payloads import default_llm_config
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.tests.craft.k8s.k8s_fixtures import cleanup_api_user_sandbox_rows
 from tests.integration.tests.craft.k8s.k8s_fixtures import OwnedLivePod
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
 from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
+from tests.integration.tests.craft.k8s.k8s_fixtures import wait_until_healthy
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
@@ -340,25 +340,16 @@ def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
     k8s_manager.terminate(sandbox_id)
     wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
 
-    # Throwaway user; reap its row explicitly (live_pod only reaps the original).
-    reprovision_user_id = uuid4()
-    k8s_manager.provision(
-        sandbox_id=sandbox_id,
-        user_id=reprovision_user_id,
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-        llm_config=default_llm_config(),
-        onyx_pat="test-onyx-pat",
+    BuildSessionManager.restore(api_user, session_id)
+    wait_until_healthy(k8s_manager, sandbox_id)
+
+    restored = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"cat {marker_path}",
     )
-    try:
-        restored = pod_exec(
-            k8s_client,
-            pod_name,
-            SANDBOX_NAMESPACE,
-            f"cat {marker_path}",
-        )
-        assert restored == "restored-opencode-history"
-    finally:
-        cleanup_api_user_sandbox_rows(reprovision_user_id)
+    assert restored == "restored-opencode-history"
 
 
 def test_restore_uses_data_filter_to_block_traversal(

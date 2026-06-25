@@ -56,7 +56,6 @@ env:
   SANDBOX_TURN_TIMEOUT_SECONDS: "120"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
-  KIND_POD_SUBNET: "192.168.0.0/16"
 
   # The pytest process runs on the runner, so it reaches chart-managed
   # Postgres/Redis through kubectl port-forwards.
@@ -251,13 +250,6 @@ jobs:
           docker exec onyx-craft-ci-control-plane bash -c "cat > ${REGISTRY_DIR}/hosts.toml <<EOF
           [host.\"http://${KIND_REGISTRY_NAME}:5000\"]
           EOF"
-
-      # Make pod IPs routable from the CI runner so write_files_to_sandbox
-      # (which does httpx.post to pod_ip:8731) can reach the in-pod daemon.
-      - name: Add host route to kind pod subnet
-        run: |
-          NODE_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' onyx-craft-ci-control-plane)
-          sudo ip route add "${KIND_POD_SUBNET}" via "$NODE_IP"
 
       # Pod spec sets nodeSelector onyx.app/workload=sandbox
       # (kubernetes_sandbox_manager.py). In prod this matches a dedicated
@@ -678,7 +670,6 @@ jobs:
               kill "$(cat "${pid_file}")" 2>/dev/null || true
             fi
           done
-          sudo ip route del "${KIND_POD_SUBNET}" 2>/dev/null || true
           kind delete cluster --name onyx-craft-ci || true
           docker network disconnect kind "${KIND_REGISTRY_NAME}" 2>/dev/null || true
           docker rm -f "${KIND_REGISTRY_NAME}" 2>/dev/null || true
