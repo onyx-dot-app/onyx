@@ -413,7 +413,7 @@ export default function TutorChatPage() {
       }
 
       return (
-        <div className="flex h-full w-full bg-background-neutral-00">
+        <div className="flex h-full w-full bg-background-tint-01">
           <div className="flex h-full w-[3.25rem] shrink-0 flex-col gap-2 border-r border-border-01 bg-background-tint-02 px-2 py-3">
             <SidebarTab
               folded
