@@ -120,6 +120,14 @@ class LLMRateLimitError(Exception):
     """
 
 
+class LLMStreamError(Exception):
+    """
+    Exception raised when an LLM stream is aborted by a safety guard (too many
+    consecutive empty packets, or exceeding the max stream duration) to free the
+    worker thread consuming the stream.
+    """
+
+
 def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
     """Convert Pydantic message models to dictionaries for LiteLLM.
 
