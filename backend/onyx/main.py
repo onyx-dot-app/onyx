@@ -8,6 +8,7 @@ from typing import Any
 from typing import cast
 
 import uvicorn
+from anyio import to_thread
 from fastapi import APIRouter
 from fastapi import FastAPI
 from fastapi import HTTPException
@@ -34,6 +35,7 @@ from onyx.auth.users import fastapi_users
 from onyx.auth.users import mobile_auth_backend
 from onyx.auth.users import verify_user_auth_secret
 from onyx.cache.interface import CacheBackendType
+from onyx.configs.app_configs import API_SERVER_THREADPOOL_SIZE
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.configs.app_configs import APP_HOST
 from onyx.configs.app_configs import APP_PORT
@@ -325,6 +327,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     if SYSTEM_RECURSION_LIMIT is not None:
         sys.setrecursionlimit(SYSTEM_RECURSION_LIMIT)
         logger.notice("System recursion limit set to %s", SYSTEM_RECURSION_LIMIT)
+
+    # Size the anyio threadpool that serves sync endpoints (incl. the streaming
+    # chat generator). Must run inside the event loop, as the limiter is per-loop.
+    if API_SERVER_THREADPOOL_SIZE > 0:
+        to_thread.current_default_thread_limiter().total_tokens = (
+            API_SERVER_THREADPOOL_SIZE
+        )
+        logger.notice(
+            "API server threadpool size set to %s", API_SERVER_THREADPOOL_SIZE
+        )
 
     SqlEngine.set_app_name(POSTGRES_WEB_APP_NAME)
 
