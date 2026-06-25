@@ -502,6 +502,9 @@ def restore_session(
                 sandbox.status,
             )
 
+    except OnyxError:
+        db_session.rollback()
+        raise
     except Exception as e:
         logger.error("Failed to restore session %s: %s", session_id, e, exc_info=True)
         # Recover so the next attempt isn't blocked by a half-finished state.
