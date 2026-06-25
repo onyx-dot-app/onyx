@@ -50,8 +50,10 @@ export default function ResetPasswordPage() {
   return (
     <AuthLayouts.Card
       title="Reset Password"
-      description={`for account ${user?.email}`}
-      bottomPrompt={markdown("[Back to Login](/auth/login)")}
+      description={markdown(`for account **${user?.email}**`)}
+      bottomPrompt={markdown(
+        "Back to [Sign In](/auth/login) or [Create an Account](/auth/signup)"
+      )}
       logoSrc={logoUrl}
     >
       <Formik
@@ -59,7 +61,7 @@ export default function ResetPasswordPage() {
         validationSchema={validationSchema}
         onSubmit={handleSubmit}
       >
-        {({ isSubmitting }) => (
+        {({ isSubmitting, isValid, dirty }) => (
           <Form className="w-full flex flex-col items-stretch gap-4">
             <AuthLayouts.Fields>
               <InputVertical title="New Password" withLabel="password">
@@ -78,7 +80,10 @@ export default function ResetPasswordPage() {
                 />
               </InputVertical>
             </AuthLayouts.Fields>
-            <AuthLayouts.Submit label="reset" disabled={isSubmitting} />
+            <AuthLayouts.Submit
+              label="reset"
+              disabled={isSubmitting || !dirty || !isValid}
+            />
           </Form>
         )}
       </Formik>
