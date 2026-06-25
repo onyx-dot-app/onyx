@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.enums import HierarchyNodeType
 from onyx.db.models import HierarchyNode
 
 
@@ -63,7 +64,10 @@ def _get_accessible_hierarchy_nodes_for_source(
     Returns:
         List of HierarchyNode objects the user has access to
     """
-    stmt = select(HierarchyNode).where(HierarchyNode.source == source)
+    stmt = select(HierarchyNode).where(
+        HierarchyNode.source == source,
+        HierarchyNode.node_type != HierarchyNodeType.STUB,
+    )
     stmt = stmt.where(_build_hierarchy_access_filter(user_email, external_group_ids))
     stmt = stmt.order_by(HierarchyNode.display_name)
     return list(db_session.execute(stmt).scalars().all())

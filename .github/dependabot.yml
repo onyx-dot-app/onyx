@@ -11,8 +11,8 @@ updates:
       - "jmelahman"
     labels:
       - "dependabot:actions"
-  - package-ecosystem: "pip"
-    directory: "/backend"
+  - package-ecosystem: "uv"
+    directory: "/"
     schedule:
       interval: "weekly"
     cooldown:

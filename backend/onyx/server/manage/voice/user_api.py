@@ -24,6 +24,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import store_ws_token
 from onyx.redis.redis_pool import WsTokenRateLimitExceeded
 from onyx.server.manage.models import VoiceSettingsUpdateRequest
+from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
 
@@ -151,7 +152,7 @@ async def synthesize_speech(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> StreamingResponse:
     """Synthesize text to speech using the default TTS provider."""
-    text = body.text
+    text = strip_markdown_for_tts(body.text)
     voice = body.voice
     speed = body.speed
     logger.info(

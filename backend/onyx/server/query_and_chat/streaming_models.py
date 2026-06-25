@@ -24,6 +24,7 @@ class StreamingType(Enum):
     MESSAGE_DELTA = "message_delta"
     SEARCH_TOOL_START = "search_tool_start"
     SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
+    SEARCH_TOOL_FILTER_DELTA = "search_tool_filter_delta"
     SEARCH_TOOL_DOCUMENTS_DELTA = "search_tool_documents_delta"
     OPEN_URL_START = "open_url_start"
     OPEN_URL_URLS = "open_url_urls"
@@ -176,6 +177,16 @@ class SearchToolQueriesDelta(BaseObj):
     )
 
     queries: list[str]
+
+
+# The connector/source filter applied to this internal search (which sources are
+# being searched). Absent == no filter applied (searched everything).
+class SearchToolFilterDelta(BaseObj):
+    type: Literal["search_tool_filter_delta"] = (
+        StreamingType.SEARCH_TOOL_FILTER_DELTA.value
+    )
+
+    sources: list[str]
 
 
 # Documents coming through as the system knows what to add to the context
@@ -434,6 +445,7 @@ PacketObj = Union[
     # Tool Packets
     SearchToolStart,
     SearchToolQueriesDelta,
+    SearchToolFilterDelta,
     SearchToolDocumentsDelta,
     ImageGenerationToolStart,
     ImageGenerationToolHeartbeat,

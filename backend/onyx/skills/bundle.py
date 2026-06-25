@@ -10,6 +10,7 @@ import shutil
 import stat
 import zipfile
 from pathlib import Path
+from typing import BinaryIO
 from typing import Final
 
 import yaml
@@ -59,6 +60,17 @@ def slug_from_filename(filename: str | None) -> str:
         candidate = candidate[:-4]
     check_slug(candidate)
     return candidate
+
+
+def read_bundle_file(bundle_file: BinaryIO) -> bytes:
+    """Read a bundle stream without buffering an arbitrarily large body."""
+    data = bundle_file.read(DEFAULT_TOTAL_MAX_BYTES + 1)
+    if len(data) > DEFAULT_TOTAL_MAX_BYTES:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            f"Skill bundle exceeds the {DEFAULT_TOTAL_MAX_BYTES} byte limit.",
+        )
+    return data
 
 
 def parse_skill_md_metadata(zip_bytes: bytes) -> tuple[str, str]:

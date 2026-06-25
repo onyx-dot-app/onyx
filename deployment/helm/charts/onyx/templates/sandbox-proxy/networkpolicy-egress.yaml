@@ -1,0 +1,45 @@
+{{- if eq (include "onyx.craftEnabled" .) "true" }}
+# Egress lockdown for the sandbox egress proxy.
+#
+# The proxy forwards arbitrary sandbox traffic to the internet (LLM providers, GitHub, package
+# registries, etc.), so its egress CANNOT be a fixed allow-list. What we DO block is the
+# link-local / cloud-metadata range so a sandbox can't use the proxy as an SSRF pivot to the
+# node's instance metadata service (IMDS) and steal the node IAM role credentials.
+#
+# Why not also block internal-cluster egress: on EKS with the VPC CNI, pods + RDS + ElastiCache +
+# OpenSearch all share the VPC private CIDR, so internal egress can't be CIDR-blocked without also
+# cutting off the proxy's own datastores. 169.254.0.0/16 (link-local) is outside the VPC range, so
+# it's the one block that's both safe and high-value. DNS, datastores, api-server, and the public
+# internet remain reachable via the 0.0.0.0/0 allow.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "onyx.fullname" . }}-sandbox-proxy-egress
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sandbox-proxy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sandbox-proxy
+  policyTypes: [Egress]
+  # IPv4 and IPv6 are kept in SEPARATE egress rules on purpose. AWS VPC CNI fails the
+  # whole policy closed (drops ALL egress) when both an IPv4 and an IPv6 ipBlock share a
+  # single `to:` peer list; splitting them into distinct rules programs correctly.
+  # Verified on the craft-dev EKS cluster (VPC CNI enforcing).
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16 # link-local incl. cloud metadata (IMDS) — SSRF block
+    # IPv6: once an Egress policy selects the pod, unmatched IPv6 is denied, so an
+    # IPv4-only allow would silently drop all IPv6 egress on dual-stack clusters.
+    - to:
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - fe80::/10         # link-local
+              - fd00:ec2::254/128 # IPv6 cloud metadata (IMDS) — SSRF block
+{{- end }}

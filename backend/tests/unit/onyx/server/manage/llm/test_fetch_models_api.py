@@ -5,6 +5,8 @@ from dynamic providers (Ollama, OpenRouter, Litellm), including the
 sync-to-DB behavior when provider_name is specified.
 """
 
+import os
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -13,6 +15,7 @@ import pytest
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.manage.llm.models import BedrockModelsRequest
 from onyx.server.manage.llm.models import BifrostFinalModelResponse
 from onyx.server.manage.llm.models import BifrostModelsRequest
 from onyx.server.manage.llm.models import LitellmFinalModelResponse
@@ -1484,3 +1487,159 @@ class TestGetBifrostAvailableModels:
 
         assert exc_info.value.error_code == OnyxErrorCode.VALIDATION_ERROR
         assert exc_info.value.status_code == 400
+
+
+class _StopBeforeSend(Exception):
+    """Aborts a boto3 call right after signing so tests can inspect headers
+    without making a network request."""
+
+
+class TestGetBedrockAvailableModels:
+    """Tests for the Bedrock model fetch endpoint."""
+
+    @pytest.fixture
+    def mock_bedrock_client(self) -> MagicMock:
+        client = MagicMock()
+        client.list_foundation_models.return_value = {
+            "modelSummaries": [
+                {
+                    "modelId": "anthropic.claude-opus-4-7",
+                    "modelName": "Claude Opus 4.7",
+                    "inputModalities": ["TEXT", "IMAGE"],
+                    "responseStreamingSupported": True,
+                }
+            ]
+        }
+        client.list_inference_profiles.return_value = {"inferenceProfileSummaries": []}
+        return client
+
+    def test_bearer_token_delivered_via_per_session_provider(
+        self, mock_bedrock_client: MagicMock
+    ) -> None:
+        """Bearer token must reach boto3 via a per-session token provider with
+        signature_version='bearer' — not via the process-wide
+        AWS_BEARER_TOKEN_BEDROCK env var, which would race across concurrent
+        admin requests."""
+        from onyx.server.manage.llm.api import get_bedrock_available_models
+
+        env_before = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+
+        mock_session = MagicMock()
+        mock_session.client.return_value = mock_bedrock_client
+
+        with patch(
+            "onyx.server.manage.llm.api.boto3.Session",
+            return_value=mock_session,
+        ) as mock_session_cls:
+            request = BedrockModelsRequest(
+                aws_region_name="us-west-2",
+                aws_bearer_token_bedrock="test-bearer-token",
+            )
+            get_bedrock_available_models(request, MagicMock(), MagicMock())
+
+        # Session was built from a botocore_session carrying our token provider.
+        botocore_session = mock_session_cls.call_args.kwargs["botocore_session"]
+        provider = botocore_session.get_component("token_provider")
+        assert provider.load_token(signing_name="bedrock").token == "test-bearer-token"
+        # Provider is scoped to bedrock — won't leak into other AWS services.
+        assert provider.load_token(signing_name="sso") is None
+
+        # Client was created with bearer signing.
+        client_config = mock_session.client.call_args.kwargs["config"]
+        assert client_config.signature_version == "bearer"
+
+        # The process-wide env var was never touched.
+        assert os.environ.get("AWS_BEARER_TOKEN_BEDROCK") == env_before
+
+    def test_no_bearer_token_means_no_signature_override(
+        self, mock_bedrock_client: MagicMock
+    ) -> None:
+        """When the request omits the bearer token (key/IAM auth path), we must
+        not force signature_version='bearer' — that would break SigV4."""
+        from onyx.server.manage.llm.api import get_bedrock_available_models
+
+        mock_session = MagicMock()
+        mock_session.client.return_value = mock_bedrock_client
+
+        with patch(
+            "onyx.server.manage.llm.api.boto3.Session",
+            return_value=mock_session,
+        ):
+            request = BedrockModelsRequest(
+                aws_region_name="us-west-2",
+                aws_access_key_id="AKIAEXAMPLE",
+                aws_secret_access_key="secret",
+            )
+            get_bedrock_available_models(request, MagicMock(), MagicMock())
+
+        assert mock_session.client.call_args.kwargs["config"] is None
+
+    def test_masked_bearer_token_resolved_from_existing_provider(
+        self, mock_bedrock_client: MagicMock
+    ) -> None:
+        """Editing an existing provider sends the masked bearer token. The
+        endpoint must swap it back for the stored value so the per-session
+        token provider carries real credentials, not the masked placeholder."""
+        from onyx.server.manage.llm.api import _mask_string
+        from onyx.server.manage.llm.api import get_bedrock_available_models
+
+        real_token = "real-bearer-token-secret"
+        masked_token = _mask_string(real_token)
+        assert masked_token != real_token
+
+        existing_provider = MagicMock()
+        existing_provider.custom_config = {"AWS_BEARER_TOKEN_BEDROCK": real_token}
+
+        mock_session = MagicMock()
+        mock_session.client.return_value = mock_bedrock_client
+
+        with (
+            patch(
+                "onyx.server.manage.llm.api.boto3.Session",
+                return_value=mock_session,
+            ) as mock_session_cls,
+            patch(
+                "onyx.server.manage.llm.api.fetch_existing_llm_provider",
+                return_value=existing_provider,
+            ),
+            patch("onyx.server.manage.llm.api._sync_fetched_models"),
+        ):
+            request = BedrockModelsRequest(
+                aws_region_name="us-west-2",
+                aws_bearer_token_bedrock=masked_token,
+                provider_name="my-bedrock",
+            )
+            get_bedrock_available_models(request, MagicMock(), MagicMock())
+
+        # The real stored token — not the masked placeholder — is what the
+        # per-session provider hands to boto3.
+        botocore_session = mock_session_cls.call_args.kwargs["botocore_session"]
+        provider = botocore_session.get_component("token_provider")
+        assert provider.load_token(signing_name="bedrock").token == real_token
+
+    def test_real_client_signs_with_bearer_token(self) -> None:
+        """End-to-end (no mocks): a client built by the session helper signs
+        Bedrock requests with ``Authorization: Bearer <token>``. Guards the
+        botocore-internals coupling against silent breakage on upgrades."""
+        from botocore.config import Config
+
+        from onyx.server.manage.llm.api import _build_bedrock_bearer_token_session
+
+        session = _build_bedrock_bearer_token_session(
+            token="my-secret-bearer-token", region_name="us-west-2"
+        )
+        client = session.client("bedrock", config=Config(signature_version="bearer"))
+
+        captured: dict[str, object] = {}
+
+        def _capture(request: Any, **_: object) -> None:
+            captured["auth"] = request.headers.get("Authorization")
+            raise _StopBeforeSend()
+
+        client.meta.events.register(
+            "before-send.bedrock.ListFoundationModels", _capture
+        )
+        with pytest.raises(_StopBeforeSend):
+            client.list_foundation_models()
+
+        assert captured["auth"] == b"Bearer my-secret-bearer-token"

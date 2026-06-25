@@ -1,14 +1,17 @@
-import os
 from collections import defaultdict
 from datetime import datetime
 from datetime import timezone
 from typing import Any
 
 import boto3
+import botocore.session
 import httpx
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError
 from botocore.exceptions import ClientError
 from botocore.exceptions import NoCredentialsError
+from botocore.tokens import FrozenAuthToken
+from botocore.tokens import TokenProviderChain
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Query
@@ -85,6 +88,8 @@ from onyx.server.manage.llm.models import LLMProviderView
 from onyx.server.manage.llm.models import LMStudioFinalModelResponse
 from onyx.server.manage.llm.models import LMStudioModelsRequest
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import NebiusTokenfactoryFinalModelResponse
+from onyx.server.manage.llm.models import NebiusTokenfactoryModelsRequest
 from onyx.server.manage.llm.models import OllamaFinalModelResponse
 from onyx.server.manage.llm.models import OllamaModelDetails
 from onyx.server.manage.llm.models import OllamaModelsRequest
@@ -107,6 +112,10 @@ from onyx.server.manage.llm.utils import is_reasoning_model
 from onyx.server.manage.llm.utils import is_valid_bedrock_model
 from onyx.server.manage.llm.utils import ModelMetadata
 from onyx.server.manage.llm.utils import strip_openrouter_vendor_prefix
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.encryption import mask_string as mask_with_ellipsis
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -129,22 +138,27 @@ def _resolve_api_key(
     provider_name: str | None,
     api_base: str | None,
     db_session: Session,
+    provider_id: int | None = None,
 ) -> str | None:
     """Return the real API key for model-fetch endpoints.
 
     When editing an existing provider the form value is masked (e.g.
-    ``sk-a****b1c2``).  If *provider_name* is supplied we can look up
-    the unmasked key from the database so the external request succeeds.
+    ``sk-a****b1c2``). We look up the unmasked key from the database so the
+    external request succeeds; a freshly typed (non-masked) key is used as-is.
 
-    The stored key is only returned when the request's *api_base*
-    matches the value stored in the database.
+    The provider is resolved by *provider_id* when given (reliable — the edit
+    form always has it, and well-known providers are frequently saved with a
+    NULL name), otherwise by *provider_name*. The stored key is only returned
+    when the request's *api_base* matches the value stored in the database.
     """
-    if not provider_name:
-        return api_key
+    existing_provider = None
+    if provider_id is not None:
+        existing_provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
+    elif provider_name:
+        existing_provider = fetch_existing_llm_provider(
+            name=provider_name, db_session=db_session
+        )
 
-    existing_provider = fetch_existing_llm_provider(
-        name=provider_name, db_session=db_session
-    )
     if existing_provider and existing_provider.api_key:
         # Normalise both URLs before comparing so trailing-slash
         # differences don't cause a false mismatch.
@@ -159,6 +173,35 @@ def _resolve_api_key(
         if api_key and api_key == _mask_string(stored_key):
             return stored_key
     return api_key
+
+
+def _resolve_bedrock_bearer_token(
+    bearer_token: str | None,
+    provider_name: str | None,
+    db_session: Session,
+) -> str | None:
+    """Return the real Bedrock bearer token for the model-fetch endpoint.
+
+    When editing an existing provider the form value is masked (e.g.
+    ``abcd****wxyz``). If *provider_name* is supplied we look up the unmasked
+    token from the provider's stored ``custom_config`` so the AWS request
+    succeeds instead of being rejected for using the masked placeholder.
+    """
+    if not bearer_token or not provider_name:
+        return bearer_token
+
+    existing_provider = fetch_existing_llm_provider(
+        name=provider_name, db_session=db_session
+    )
+    if not existing_provider or not existing_provider.custom_config:
+        return bearer_token
+
+    stored_token = existing_provider.custom_config.get("AWS_BEARER_TOKEN_BEDROCK")
+    if stored_token and _is_masked_value_for_existing(
+        bearer_token, stored_token, "AWS_BEARER_TOKEN_BEDROCK"
+    ):
+        return stored_token
+    return bearer_token
 
 
 def _sync_fetched_models(
@@ -504,7 +547,7 @@ def put_llm_provider(
         False,
         description="True if creating a new one, False if updating an existing provider",
     ),
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> LLMProviderView:
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
@@ -620,6 +663,16 @@ def put_llm_provider(
                     result = LLMProviderView.from_model(updated_provider)
 
         _mask_provider_credentials(result)
+        emit_audit_event(
+            AuditAction.LLM_PROVIDER_CREATE
+            if is_creation
+            else AuditAction.LLM_PROVIDER_UPDATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="llm_provider",
+            resource_id=result.id,
+            extra={"name": result.name, "provider": result.provider},
+        )
         return result
     except ValueError as e:
         logger.exception("Failed to upsert LLM Provider")
@@ -634,7 +687,7 @@ def put_llm_provider(
 def delete_llm_provider(
     provider_id: int,
     force: bool = Query(False),
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     if not force:
@@ -651,6 +704,13 @@ def delete_llm_provider(
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
 
+    emit_audit_event(
+        AuditAction.LLM_PROVIDER_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="llm_provider",
+        resource_id=provider_id,
+    )
     invalidate_provider_listing_cache()
 
 
@@ -1021,6 +1081,41 @@ def get_provider_contextual_cost(
     return costs
 
 
+class _StaticBedrockBearerTokenProvider:
+    """Supplies a fixed bearer token for the ``bedrock`` signing name only.
+
+    Scoped to a single botocore session so concurrent requests can't observe
+    each other's token — unlike ``AWS_BEARER_TOKEN_BEDROCK``, which is
+    process-global and races across the threaded API server.
+    """
+
+    METHOD = "static-bedrock-bearer"
+
+    def __init__(self, token: str) -> None:
+        self._token = token
+
+    def load_token(self, **kwargs: Any) -> FrozenAuthToken | None:
+        # botocore forwards `signing_name` into the token-provider chain at
+        # client-creation time. This is an internal botocore contract, not a
+        # published API — re-validate on botocore upgrades. The end-to-end
+        # `test_real_client_signs_with_bearer_token` guards against drift.
+        if kwargs.get("signing_name") != "bedrock":
+            return None
+        return FrozenAuthToken(self._token)
+
+
+def _build_bedrock_bearer_token_session(token: str, region_name: str) -> boto3.Session:
+    """Build a boto3 session that authenticates Bedrock calls with the given
+    bearer token, without touching process-wide environment state."""
+    botocore_session = botocore.session.Session()
+    botocore_session.set_config_variable("region", region_name)
+    botocore_session.register_component(
+        "token_provider",
+        TokenProviderChain(providers=[_StaticBedrockBearerTokenProvider(token)]),
+    )
+    return boto3.Session(botocore_session=botocore_session)
+
+
 @admin_router.post("/bedrock/available-models")
 def get_bedrock_available_models(
     request: BedrockModelsRequest,
@@ -1032,16 +1127,21 @@ def get_bedrock_available_models(
     Returns model IDs with display names from AWS. Prefers inference profiles
     (for cross-region support) over base models when available.
     """
+    # When editing an existing provider the form sends the masked bearer token;
+    # swap it back for the stored value so the AWS call uses real credentials.
+    bearer_token = _resolve_bedrock_bearer_token(
+        request.aws_bearer_token_bedrock, request.provider_name, db_session
+    )
+
     try:
         # Precedence: bearer → keys → IAM
-        if request.aws_bearer_token_bedrock:
-            try:
-                os.environ["AWS_BEARER_TOKEN_BEDROCK"] = (
-                    request.aws_bearer_token_bedrock
-                )
-                session = boto3.Session(region_name=request.aws_region_name)
-            finally:
-                os.environ.pop("AWS_BEARER_TOKEN_BEDROCK", None)
+        client_config: Config | None = None
+        if bearer_token:
+            session = _build_bedrock_bearer_token_session(
+                token=bearer_token,
+                region_name=request.aws_region_name,
+            )
+            client_config = Config(signature_version="bearer")
         elif request.aws_access_key_id and request.aws_secret_access_key:
             session = boto3.Session(
                 aws_access_key_id=request.aws_access_key_id,
@@ -1052,7 +1152,7 @@ def get_bedrock_available_models(
             session = boto3.Session(region_name=request.aws_region_name)
 
         try:
-            bedrock = session.client("bedrock")
+            bedrock = session.client("bedrock", config=client_config)
         except Exception as e:
             raise OnyxError(
                 OnyxErrorCode.CREDENTIAL_INVALID,
@@ -1784,6 +1884,153 @@ def _get_bifrost_models_response(api_base: str, api_key: str | None = None) -> d
         source_name="Bifrost",
         api_key=api_key,
     )
+
+
+def _get_nebius_tokenfactory_models_response(
+    api_base: str, api_key: str | None = None
+) -> dict:
+    """GET Nebius TokenFactory /v1/models?verbose=true and return parsed JSON.
+
+    The verbose flag is what surfaces per-model `context_length`,
+    `architecture.modality`, and `supported_features` (which lists "tools",
+    "reasoning", etc.).
+    """
+    cleaned_api_base = api_base.strip().rstrip("/")
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models"
+    else:
+        url = f"{cleaned_api_base}/v1/models"
+
+    return _get_openai_compatible_models_response(
+        url=f"{url}?verbose=true",
+        source_name="Nebius TokenFactory",
+        api_key=api_key,
+    )
+
+
+def _nebius_modality_supports_image(model: dict) -> bool:
+    """Vision support = the model's input modality includes images.
+
+    `architecture.modality` looks like "text->text" or "text+image->text".
+    """
+    architecture = model.get("architecture") or {}
+    modality = architecture.get("modality") or ""
+    input_modality = modality.split("->")[0] if "->" in modality else modality
+    return "image" in input_modality.lower()
+
+
+@admin_router.post("/nebius-tokenfactory/available-models")
+def get_nebius_tokenfactory_available_models(
+    request: NebiusTokenfactoryModelsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[NebiusTokenfactoryFinalModelResponse]:
+    """Fetch chat models from Nebius TokenFactory, with per-model context
+    length and tool/vision capabilities read straight from the source API."""
+    api_key = _resolve_api_key(
+        request.api_key,
+        request.provider_name,
+        request.api_base,
+        db_session,
+        provider_id=request.provider_id,
+    )
+
+    response_json = _get_nebius_tokenfactory_models_response(
+        api_base=request.api_base, api_key=api_key
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your Nebius TokenFactory endpoint",
+        )
+
+    results: list[NebiusTokenfactoryFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            if not model_id:
+                continue
+            if is_embedding_model(model_id):
+                continue
+
+            # Only keep models whose output modality is text (chat / vision-chat);
+            # this drops embeddings/rerankers that slip past the name check.
+            architecture = model.get("architecture") or {}
+            modality = architecture.get("modality") or "text->text"
+            output_modality = modality.split("->")[-1] if "->" in modality else "text"
+            if output_modality.strip().lower() != "text":
+                continue
+
+            display_name = model.get("name") or model_id
+            context_length = model.get("context_length") or None
+
+            features = model.get("supported_features")
+            if isinstance(features, list):
+                feature_list = [str(f) for f in features]
+                supports_reasoning = "reasoning" in feature_list
+            else:
+                feature_list = []
+                supports_reasoning = is_reasoning_model(model_id, display_name)
+
+            # Display-only metadata for the model picker.
+            regions = model.get("regions") or []
+            country_code = (
+                regions[0].get("country_code")
+                if regions and isinstance(regions[0], dict)
+                else None
+            )
+            limits = model.get("per_request_limits") or {}
+            requests_per_minute = (
+                limits.get("requests_per_minute") if isinstance(limits, dict) else None
+            )
+
+            results.append(
+                NebiusTokenfactoryFinalModelResponse(
+                    name=model_id,
+                    display_name=display_name,
+                    max_input_tokens=context_length,
+                    supports_image_input=_nebius_modality_supports_image(model),
+                    supports_reasoning=supports_reasoning,
+                    quantization=model.get("quantization"),
+                    country_code=country_code,
+                    requests_per_minute=requests_per_minute,
+                    supported_features=feature_list,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Nebius TokenFactory model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from Nebius TokenFactory",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    if request.provider_name:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_name=request.provider_name,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Nebius TokenFactory",
+        )
+
+    return sorted_results
 
 
 @admin_router.post("/openai-compatible/available-models")

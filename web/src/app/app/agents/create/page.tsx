@@ -1,4 +1,4 @@
-import AgentEditorPage from "@/refresh-pages/AgentEditorPage";
+import AgentEditorPage from "@/views/AgentEditorPage";
 
 export default async function Page() {
   return <AgentEditorPage />;

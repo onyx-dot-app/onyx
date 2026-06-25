@@ -43,9 +43,15 @@ from onyx.db.models import ScheduledTaskRun
 from onyx.db.models import User
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
+from onyx.server.features.build.sandbox.event_schema import Error
+from onyx.server.features.build.sandbox.event_schema import PromptResponse
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TIMEOUT
+from onyx.server.features.build.sandbox.event_schema import TURN_ERROR_CODE_TRANSPORT
 from onyx.server.features.build.scheduled_tasks.executor import run_scheduled_task_logic
+from onyx.server.features.build.session.manager import SessionManager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox
 from tests.external_dependency_unit.craft.db_helpers import make_user
 
@@ -331,3 +337,141 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
     assert refreshed is not None
     assert refreshed.status == ScheduledTaskRunStatus.FAILED
     assert refreshed.error_class == "stuck"
+
+
+def test_timeout_error_event_marks_run_failed_with_timeout_class(
+    db_session: Session,
+    test_user: User,
+    sandbox: Any,  # noqa: ARG001
+    session_manager_with_stub: SessionManager,  # noqa: ARG001
+    stub_sandbox_manager: StubSandboxManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for ENG-4234: terminal timeout Error → FAILED/timeout."""
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        lambda *_: ("", {}),
+    )
+
+    sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    _, run = _seed_task_and_queued_run(db_session, test_user)
+
+    stub_sandbox_manager.health_check_returns = True
+    stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+    stub_sandbox_manager.send_message_events = [
+        Error.model_validate(
+            {"code": TURN_ERROR_CODE_TIMEOUT, "message": "Timeout waiting for response"}
+        ),
+    ]
+
+    run_scheduled_task_logic(run.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(ScheduledTaskRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == ScheduledTaskRunStatus.FAILED
+    assert refreshed.error_class == ScheduledTaskErrorClass.TIMEOUT.value
+
+
+def test_prompt_response_marks_run_succeeded(
+    db_session: Session,
+    test_user: User,
+    sandbox: Any,  # noqa: ARG001
+    session_manager_with_stub: SessionManager,  # noqa: ARG001
+    stub_sandbox_manager: StubSandboxManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Happy-path regression: clean PromptResponse → SUCCEEDED, not FAILED."""
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        lambda *_: ("", {}),
+    )
+
+    sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    _, run = _seed_task_and_queued_run(db_session, test_user)
+
+    stub_sandbox_manager.health_check_returns = True
+    stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+    stub_sandbox_manager.send_message_events = [
+        PromptResponse.model_validate({"stopReason": "end_turn"}),
+    ]
+
+    run_scheduled_task_logic(run.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(ScheduledTaskRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == ScheduledTaskRunStatus.SUCCEEDED
+    assert refreshed.error_class is None
+
+
+def test_transport_error_event_marks_run_failed_with_agent_exception_class(
+    db_session: Session,
+    test_user: User,
+    sandbox: Any,  # noqa: ARG001
+    session_manager_with_stub: SessionManager,  # noqa: ARG001
+    stub_sandbox_manager: StubSandboxManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-timeout terminal Error → FAILED with error_class=agent_exception."""
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        lambda *_: ("", {}),
+    )
+
+    sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    _, run = _seed_task_and_queued_run(db_session, test_user)
+
+    stub_sandbox_manager.health_check_returns = True
+    stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+    stub_sandbox_manager.send_message_events = [
+        Error.model_validate(
+            {"code": TURN_ERROR_CODE_TRANSPORT, "message": "event bus closed"}
+        ),
+    ]
+
+    run_scheduled_task_logic(run.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(ScheduledTaskRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == ScheduledTaskRunStatus.FAILED
+    assert refreshed.error_class == ScheduledTaskErrorClass.AGENT_EXCEPTION.value
+
+
+def test_stream_without_prompt_response_marks_run_failed(
+    db_session: Session,
+    test_user: User,
+    sandbox: Any,  # noqa: ARG001
+    session_manager_with_stub: SessionManager,  # noqa: ARG001
+    stub_sandbox_manager: StubSandboxManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Stream ending with no PromptResponse (and no Error) → FAILED, not SUCCEEDED."""
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        lambda *_: ("", {}),
+    )
+
+    sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    _, run = _seed_task_and_queued_run(db_session, test_user)
+
+    stub_sandbox_manager.health_check_returns = True
+    stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+    stub_sandbox_manager.send_message_events = []
+
+    run_scheduled_task_logic(run.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(ScheduledTaskRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == ScheduledTaskRunStatus.FAILED
+    assert refreshed.error_class == ScheduledTaskErrorClass.AGENT_EXCEPTION.value

@@ -45,7 +45,7 @@ from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.server.features.skill.models import SkillsList
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
-from onyx.skills.bundle import DEFAULT_TOTAL_MAX_BYTES
+from onyx.skills.bundle import read_bundle_file
 from onyx.skills.bundle import slug_from_filename
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
@@ -129,18 +129,6 @@ def _ensure_custom(skill: Skill) -> None:
         )
 
 
-def _read_bundle_upload(bundle: UploadFile) -> bytes:
-    """Read an uploaded bundle without buffering an arbitrarily large body —
-    nginx allows multi-GB uploads, and these endpoints are open to all users."""
-    data = bundle.file.read(DEFAULT_TOTAL_MAX_BYTES + 1)
-    if len(data) > DEFAULT_TOTAL_MAX_BYTES:
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
-            f"Skill bundle exceeds the {DEFAULT_TOTAL_MAX_BYTES} byte limit.",
-        )
-    return data
-
-
 def _reject_reserved_slug(bundle: UploadFile) -> None:
     """Reject a bundle whose slug collides with a built-in or external-app slug,
     before any blob is written. Applies to both admin and personal creation — a
@@ -191,7 +179,7 @@ def create_custom_skill(
 
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
-        _read_bundle_upload(bundle), bundle.filename, file_store
+        read_bundle_file(bundle.file), bundle.filename, file_store
     )
 
     try:
@@ -266,7 +254,7 @@ def replace_custom_skill_bundle(
 
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
-        _read_bundle_upload(bundle), bundle.filename, file_store, slug=skill.slug
+        read_bundle_file(bundle.file), bundle.filename, file_store, slug=skill.slug
     )
 
     try:
@@ -401,7 +389,7 @@ def create_personal_skill(
 
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
-        _read_bundle_upload(bundle), bundle.filename, file_store
+        read_bundle_file(bundle.file), bundle.filename, file_store
     )
 
     try:
@@ -440,7 +428,7 @@ def replace_personal_skill_bundle(
 
     file_store = get_default_file_store()
     ingested = ingest_skill_bundle(
-        _read_bundle_upload(bundle), bundle.filename, file_store, slug=skill.slug
+        read_bundle_file(bundle.file), bundle.filename, file_store, slug=skill.slug
     )
 
     try:

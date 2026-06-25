@@ -87,10 +87,11 @@ class ExternalAppUserResponse(BaseModel):
 
     `credential_keys` are the parameter names the calling user must supply —
     derived from the app's `auth_template` minus whatever the organization
-    has already filled in. `credential_values` are the values the user has
-    previously stored for those keys (intersection — stale keys from
-    deleted/migrated templates are filtered out). `authenticated` is true
-    iff `credential_values` covers every key in `credential_keys`.
+    has already filled in. `credential_values` are display-safe masked values
+    for credentials the user has previously stored for those keys (intersection
+    — stale keys from deleted/migrated templates are filtered out).
+    `authenticated` is true iff the user has a stored value for every key in
+    `credential_keys`.
 
     Admin-only fields (``organization_credentials``, ``auth_template``,
     ``upstream_url_patterns``, ``enabled``) are intentionally omitted.

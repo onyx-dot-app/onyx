@@ -98,6 +98,10 @@ def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
     return "".join(c if c.isalnum() or c in safe else "_" for c in name)
 
 
+def _is_hidden_workspace_entry(entry: FilesystemEntry) -> bool:
+    return entry.name in HIDDEN_PATTERNS or entry.name.startswith(".")
+
+
 class SessionManager:
     """Public interface for session operations.
 
@@ -908,6 +912,8 @@ class SessionManager:
             except ValueError:
                 return
             for entry in entries:
+                if _is_hidden_workspace_entry(entry):
+                    continue
                 if entry.is_directory:
                     _walk(entry.path)
                 else:
@@ -1336,9 +1342,7 @@ class SessionManager:
 
         # Filter hidden files and directories
         entries: list[FilesystemEntry] = [
-            entry
-            for entry in raw_entries
-            if entry.name not in HIDDEN_PATTERNS and not entry.name.startswith(".")
+            entry for entry in raw_entries if not _is_hidden_workspace_entry(entry)
         ]
 
         # Sort: directories first, then files, both alphabetically

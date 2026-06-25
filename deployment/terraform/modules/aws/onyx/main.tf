@@ -76,11 +76,12 @@ module "eks" {
 
   irsa_additional_service_account_names = var.irsa_additional_service_account_names
 
-  enable_craft_sandbox_node_group   = var.enable_craft_sandbox_node_group
+  enable_craft                      = var.enable_craft
   craft_sandbox_node_instance_types = var.craft_sandbox_node_instance_types
   craft_sandbox_node_min_size       = var.craft_sandbox_node_min_size
   craft_sandbox_node_max_size       = var.craft_sandbox_node_max_size
   craft_sandbox_node_desired_size   = var.craft_sandbox_node_desired_size
+  craft_sandbox_node_disk_size_gb   = var.craft_sandbox_node_disk_size_gb
 
   main_node_subnet_ids = length(var.main_node_subnet_ids) > 0 ? var.main_node_subnet_ids : (
     var.main_node_private_subnets_only ? local.private_subnets : []
