@@ -1,12 +1,15 @@
 # Stands up the full Craft docker-compose stack with the --include-craft overlay
-# once per run and exercises the Docker-backed Craft E2E suite: approval-gate
-# flow, workspace setup, and docker-specific posture invariants the K8s lane
-# can't catch by construction (image ENTRYPOINT concat, HOME after setpriv,
-# curl httpoxy on the bridge).
+# and exercises the Docker-backed Craft E2E suite: approval-gate flow, workspace
+# setup, and docker-specific posture invariants the K8s lane can't catch by
+# construction (image ENTRYPOINT concat, HOME after setpriv, curl httpoxy on the
+# bridge).
+#
+# Images are built once and pushed to ECR; the lane shards per test file, each
+# shard pulling the prebuilt images onto its own compose stack.
 #
 # Always triggers on PRs + merge_group so the `craft-compose-required` job below
 # can serve as the single stable required status check in branch protection; the
-# heavy integration job is gated internally by the `changes` job and is a no-op
+# heavy test job is gated internally by the `changes` job and is a no-op
 # when no relevant paths changed. Also runs nightly, on release tags, and on
 # demand.
 
@@ -89,18 +92,125 @@ jobs:
               - 'backend/tests/integration/tests/craft/docker_e2e/**'
               - '.github/workflows/pr-craft-compose-integration.yml'
               - '.github/actions/setup-python-and-install-dependencies/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
+
+  discover-test-files:
+    # One shard per craft compose test file (top-level craft/ + docker_e2e/,
+    # excluding the k8s/ subdir).
+    needs: changes
+    if: needs.changes.outputs.craft_compose == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      test-files: ${{ steps.set-matrix.outputs.test-files }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Discover craft compose test files
+        id: set-matrix
+        run: |
+          set -eo pipefail
+          # `path` is relative to backend/ (the test job's working-directory).
+          entries=""
+          files=$(
+            find backend/tests/integration/tests/craft \
+              -maxdepth 1 -name 'test_*.py' -type f
+            find backend/tests/integration/tests/craft/docker_e2e \
+              -maxdepth 1 -name 'test_*.py' -type f
+          )
+          for f in $(echo "${files}" | sort); do
+            base=$(basename "$f" .py)
+            shard="${base#test_}"
+            rel="${f#backend/}"
+            entries="${entries}{\"path\":\"${rel}\",\"name\":\"${shard}\"},"
+          done
+          if [ -z "${entries}" ]; then
+            echo "::error::no craft compose test files discovered"
+            exit 1
+          fi
+          echo "test-files=[${entries%,}]" >> "$GITHUB_OUTPUT"
+
+  build-images:
+    # Build the 2 images in parallel (one matrix leg each) and push to the shared
+    # ECR repo so each test shard pulls prebuilt images instead of cold-building.
+    name: build-image (${{ matrix.image }})
+    needs: changes
+    if: needs.changes.outputs.craft_compose == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: sandbox
+            context: ./backend/onyx/server/features/build/sandbox/image
+            file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
+            # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
+            # so skip LibreOffice et al. to keep the CI image lean.
+            extra_build_args: "ENABLE_SKILLS=false"
+          - image: backend
+            context: ./backend
+            file: ./backend/Dockerfile
+            extra_build_args: ""
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - spot=false
+      - volume=100gb
+      - ${{ format('run-id={0}-craft-compose-build-{1}', github.run_id, matrix.image) }}
+      - extras=ecr-cache
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+
+      - name: Build and push ${{ matrix.image }} image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+            ${{ matrix.extra_build_args }}
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-compose-${{ matrix.image }}-${{ github.run_id }}
+          push: true
+          cache-from: type=gha,scope=craft-compose-${{ matrix.image }}
+          cache-to: type=gha,scope=craft-compose-${{ matrix.image }},mode=max
 
   craft-compose-integration-test:
-    needs: changes
+    name: craft-compose (${{ matrix.test-file.name }})
+    needs: [changes, discover-test-files, build-images]
     if: needs.changes.outputs.craft_compose == 'true'
     runs-on:
       - runs-on
       - runner=4cpu-linux-x64
       - spot=false
       - volume=100gb
-      - run-id=${{ github.run_id }}-craft-compose-integration
+      - ${{ format('run-id={0}-craft-compose-tests-{1}', github.run_id, matrix.test-file.name) }}
       - extras=ecr-cache
     timeout-minutes: 30
+
+    strategy:
+      # fail-fast off so one shard's failure doesn't cancel the others.
+      fail-fast: false
+      matrix:
+        test-file: ${{ fromJson(needs.discover-test-files.outputs.test-files) }}
 
     env:
       PYTHONPATH: ./backend
@@ -122,30 +232,26 @@ jobs:
             backend/requirements/dev.txt
             backend/requirements/ee.txt
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
-
-      - name: Build sandbox image (proxy-aware firewall-init.sh + opencode)
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
         with:
-          context: ./backend/onyx/server/features/build/sandbox/image
-          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
-          tags: ${{ env.SANDBOX_CONTAINER_IMAGE }}
-          load: true
-          build-args: |
-            ENABLE_SKILLS=false
-          cache-from: type=gha,scope=craft-compose-sandbox
-          cache-to: type=gha,scope=craft-compose-sandbox,mode=max
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
 
-      - name: Build backend image (api_server + background + sandbox-proxy)
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          tags: onyxdotapp/onyx-backend:latest
-          load: true
-          cache-from: type=gha,scope=craft-compose-backend
-          cache-to: type=gha,scope=craft-compose-backend,mode=max
+      # Retag the prebuilt ECR images to the local names compose expects (compose
+      # consumes local docker images directly, so pull+tag is enough).
+      - name: Pull and tag prebuilt images
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -eo pipefail
+          retag() {
+            local src="$1" dst="$2"
+            docker pull "$src"
+            docker tag "$src" "$dst"
+          }
+          retag "${ECR_CACHE}:craft-compose-sandbox-${RUN_ID}" "${SANDBOX_CONTAINER_IMAGE}"
+          retag "${ECR_CACHE}:craft-compose-backend-${RUN_ID}" "onyxdotapp/onyx-backend:latest"
 
       - name: Create compose-external resources
         # docker-compose.craft.yml declares both as external. In prod install.sh
@@ -223,8 +329,7 @@ jobs:
             --tb=short \
             -rs \
             --durations=10 \
-            tests/integration/tests/craft \
-            --ignore=tests/integration/tests/craft/k8s \
+            "${{ matrix.test-file.path }}" \
             2>&1 | tee ../compose-logs/pytest.log
 
       - name: Stack state + log tails on failure
@@ -267,7 +372,7 @@ jobs:
         if: ${{ !success() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: craft-compose-integration-logs
+          name: craft-compose-logs-${{ matrix.test-file.name }}
           path: compose-logs/
           retention-days: 7
 
@@ -292,13 +397,15 @@ jobs:
     # legitimately skipped).
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [changes, craft-compose-integration-test]
+    needs: [changes, discover-test-files, build-images, craft-compose-integration-test]
     if: ${{ always() }}
     steps:
       - name: Check job status
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           RUN_TESTS: ${{ needs.changes.outputs.craft_compose }}
+          DISCOVER_RESULT: ${{ needs.discover-test-files.result }}
+          BUILD_RESULT: ${{ needs.build-images.result }}
           TEST_RESULT: ${{ needs.craft-compose-integration-test.result }}
         run: |
           # Fail closed if `changes` didn't succeed. Otherwise an empty
@@ -312,6 +419,10 @@ jobs:
           if [ "${RUN_TESTS}" != "true" ]; then
             echo "No relevant paths changed -- required check passes."
             exit 0
+          fi
+          if [ "${DISCOVER_RESULT}" != "success" ] || [ "${BUILD_RESULT}" != "success" ]; then
+            echo "Setup results: discover-test-files=${DISCOVER_RESULT}, build-images=${BUILD_RESULT}"
+            exit 1
           fi
           if [ "${TEST_RESULT}" != "success" ]; then
             echo "Test result: ${TEST_RESULT}"
