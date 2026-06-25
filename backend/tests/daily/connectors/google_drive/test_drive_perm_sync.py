@@ -94,7 +94,12 @@ def _build_connector(
 
 
 @pytest.mark.secrets(TestSecret.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR)
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
 def test_gdrive_perm_sync_with_real_data(
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
     enable_ee: None,  # noqa: ARG001
 ) -> None:

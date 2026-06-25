@@ -533,7 +533,12 @@ def test_shared_folder_owned_by_external_user(
     assert expected_docs[0] in output.documents[0].id
 
 
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
 def test_shared_with_me(
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_with_me")
