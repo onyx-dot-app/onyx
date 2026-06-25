@@ -20,7 +20,7 @@ export default function SignupPage() {
   const defaultEmail = searchParams.get("email");
   const { user } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
-  const { logoUrl } = useSettings();
+  const { logoUrl, appName } = useSettings();
   const isSignupDisabled = usePHFeatureFlag(PHFeatureFlag.SIGNUP_DISABLED);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export default function SignupPage() {
     return (
       <AuthLayouts.Card
         title="Create account"
-        description="Get started with Onyx"
+        description={`Get started with ${appName}`}
         bottomPrompt={bottomPrompt}
         logoSrc={logoUrl}
       >
@@ -65,7 +65,7 @@ export default function SignupPage() {
   return (
     <AuthLayouts.Card
       title="Create account"
-      description="Get started with Onyx"
+      description={`Get started with ${appName}`}
       bottomPrompt={bottomPrompt}
       logoSrc={logoUrl}
     >

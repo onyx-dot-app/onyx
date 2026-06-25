@@ -46,7 +46,7 @@ export default function LoginPage() {
 
   const { user } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
-  const { logoUrl } = useSettings();
+  const { logoUrl, appName } = useSettings();
 
   useSendAuthRequiredMessage();
 
@@ -96,12 +96,12 @@ export default function LoginPage() {
 
   const bottomPrompt = isSso
     ? "Need access? Reach out to your IT admin to get access."
-    : markdown("New to Onyx? [Create an Account](/auth/signup)");
+    : markdown(`New to ${appName}? [Create an Account](/auth/signup)`);
 
   return (
     <AuthLayouts.Card
-      title="Welcome to Onyx"
-      description="Your open source AI platform for work"
+      title={`Welcome to ${appName}`}
+      description="Your AI platform for work"
       bottomPrompt={bottomPrompt}
       logoSrc={logoUrl}
     >
