@@ -1,13 +1,12 @@
-// Login screen — mobile port of web's login UI. Password sign-in via the shared
-// EmailPasswordForm; V1 is password-only (the provider registry adds Google/SSO later).
+// Login screen: sign-in methods from the shared AuthMethods, gated on /auth/type.
 import { router } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 
 import { useAuthConfig } from "@/api/auth/useAuthConfig";
 import { visibleProviders } from "@/api/auth/providers";
+import { AuthMethods } from "@/components/auth/AuthMethods";
 import { AuthScreenShell } from "@/components/auth/AuthScreenShell";
 import { AuthSwitchLink } from "@/components/auth/AuthSwitchLink";
-import { EmailPasswordForm } from "@/components/auth/EmailPasswordForm";
 import { InputErrorText } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -57,12 +56,12 @@ export default function LoginScreen() {
         <InputErrorText>
           Couldn&apos;t load sign-in options for this instance.
         </InputErrorText>
-      ) : hasPassword ? (
-        <EmailPasswordForm />
-      ) : (
+      ) : providers.length === 0 ? (
         <Text font="main-content-body" color="text-03">
           Sign-in for this instance isn&apos;t supported in the mobile app yet.
         </Text>
+      ) : (
+        <AuthMethods providers={providers} />
       )}
     </AuthScreenShell>
   );
