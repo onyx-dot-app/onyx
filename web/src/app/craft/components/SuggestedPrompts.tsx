@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
@@ -74,46 +75,55 @@ export default function SuggestedPrompts({
         ))}
       </div>
 
-      {expandedDomain && (
-        <div className="absolute top-full left-0 right-0 z-20 mt-3 w-full rounded-16 border border-border-01 bg-background-neutral-00 p-2 shadow-lg">
-          <div className="flex items-center justify-between px-3 pt-2 pb-1">
-            <div className="flex items-center gap-2">
-              <expandedDomain.icon className="w-3.5 h-3.5 text-text-02" />
-              <Text font="figure-small-label" color="text-02">
-                {expandedDomain.label}
-              </Text>
-            </div>
-            <button
-              type="button"
-              onClick={() => setExpandedId(null)}
-              aria-label="Close suggestions"
-              className="flex items-center justify-center cursor-pointer"
-            >
-              <SvgX className="w-4 h-4 text-text-03" />
-            </button>
-          </div>
-
-          <div className="flex flex-col">
-            {expandedDomain.prompts.map((prompt) => (
-              <button
-                key={prompt.id}
-                type="button"
-                onClick={() => handlePromptClick(prompt.fullText)}
-                className={cn(
-                  "w-full rounded-12 px-3 py-2.5 text-left",
-                  "hover:bg-background-tint-02",
-                  "transition-colors cursor-pointer",
-                  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action-link-01 focus-visible:ring-offset-2"
-                )}
-              >
-                <Text font="main-content-body" color="text-04">
-                  {prompt.summary}
+      <AnimatePresence>
+        {expandedDomain && (
+          <motion.div
+            key={expandedDomain.id}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className="absolute top-full left-0 right-0 z-20 mt-3 w-full p-2"
+          >
+            <div className="flex items-center justify-between px-3 pt-2 pb-1">
+              <div className="flex items-center gap-2">
+                <expandedDomain.icon className="w-3.5 h-3.5 text-text-02" />
+                <Text font="figure-small-label" color="text-02">
+                  {expandedDomain.label}
                 </Text>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpandedId(null)}
+                aria-label="Close suggestions"
+                className="flex items-center justify-center cursor-pointer"
+              >
+                <SvgX className="w-4 h-4 text-text-03" />
               </button>
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
+
+            <div className="flex flex-col">
+              {expandedDomain.prompts.map((prompt) => (
+                <button
+                  key={prompt.id}
+                  type="button"
+                  onClick={() => handlePromptClick(prompt.fullText)}
+                  className={cn(
+                    "w-full rounded-12 px-3 py-2.5 text-left",
+                    "hover:bg-background-tint-02",
+                    "transition-colors cursor-pointer",
+                    "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action-link-01 focus-visible:ring-offset-2"
+                  )}
+                >
+                  <Text font="main-content-body" color="text-04">
+                    {prompt.summary}
+                  </Text>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
