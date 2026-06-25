@@ -14,6 +14,7 @@ from ee.onyx.db.hierarchy import _search_accessible_hierarchy_nodes as ee_search
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.hierarchy import _search_accessible_hierarchy_nodes as mit_search
+from onyx.db.hierarchy import get_source_hierarchy_node
 from onyx.db.models import HierarchyNode
 
 
@@ -143,8 +144,12 @@ def test_stub_nodes_excluded(
 
 def test_source_nodes_never_returned(db_session: Session) -> None:
     """SOURCE-type root nodes must never appear in search results."""
-    results = mit_search(db_session, "", None, "", [], 1000)
-    assert all(n.node_type != HierarchyNodeType.SOURCE for n in results)
+    source_node = get_source_hierarchy_node(db_session, DocumentSource.GOOGLE_DRIVE)
+    assert source_node is not None
+    # Searching by the SOURCE node's display_name would return it if the notin_ filter
+    # were absent — asserting it's missing proves the filter is active.
+    results = mit_search(db_session, source_node.display_name, None, "", [], 1000)
+    assert all(n.id != source_node.id for n in results)
 
 
 def test_source_filter_narrows_results(
