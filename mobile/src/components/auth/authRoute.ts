@@ -1,5 +1,4 @@
-// AuthGate's routing decision as a pure function, so the branching is unit-tested
-// without rendering RN. `AuthGate.tsx` wires live session + /api/me state in.
+// Pure so the branching is unit-tested without rendering RN; AuthGate.tsx wires live state in.
 import type { SessionStatus } from "@/state/session";
 
 const AUTH_GROUP = "(auth)";
@@ -14,15 +13,13 @@ export type AuthGateResolution =
 
 export interface AuthGateInput {
   serverUrl: string | null;
-  // `"anon"` = explicit logout / rejected token; the gate treats it as a decisive "logged out"
-  // with no `/api/me` round-trip, so logout redirects instantly and works offline.
+  // `"anon"` = explicit logout: decisive "logged out" with no `/api/me` round-trip (instant, offline).
   status: SessionStatus;
   isAuthed: boolean;
   // `/api/me` failed with 401/402/403 — a decisive "logged out".
   isAuthError: boolean;
-  // `/api/me` settled in a non-auth failure (backend unreachable); not "still loading" — retries are done.
+  // `/api/me` settled in a non-auth failure (backend unreachable); not "still loading".
   isUnreachable: boolean;
-  // expo-router route segments, e.g. ["(auth)", "connect"].
   segments: readonly string[];
 }
 
@@ -38,7 +35,6 @@ export function resolveAuthGate(input: AuthGateInput): AuthGateResolution {
       : { kind: "redirect", to: "/(auth)/connect" };
   }
 
-  // Decisive logout → straight to login (see `status` above).
   if (status === "anon") {
     return inAuthGroup
       ? { kind: "render" }
@@ -55,12 +51,11 @@ export function resolveAuthGate(input: AuthGateInput): AuthGateResolution {
       : { kind: "redirect", to: "/(auth)/login" };
   }
 
-  // Won't self-resolve: error+retry screen on protected routes instead of an endless splash.
-  // Auth screens own their errors, so render them as usual.
+  // Won't self-resolve: error+retry on protected routes instead of an endless splash; auth screens own their errors.
   if (isUnreachable) {
     return inAuthGroup ? { kind: "render" } : { kind: "error" };
   }
 
-  // Still resolving: splash on protected routes, render in the auth group (mid-connect/login).
+  // Still resolving: splash on protected routes, render in the auth group.
   return inAuthGroup ? { kind: "render" } : { kind: "splash" };
 }

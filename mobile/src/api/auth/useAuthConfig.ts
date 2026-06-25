@@ -1,4 +1,3 @@
-// Public endpoint (auth:false) called before the user has a token; keyed by serverUrl so switching instances refetches.
 import { useQuery } from "@tanstack/react-query";
 
 import { apiFetch } from "@/api/client";
@@ -10,7 +9,7 @@ export function useAuthConfig() {
   const serverUrl = useSession((state) => state.serverUrl);
   return useQuery({
     queryKey: QUERY_KEYS.authType(serverUrl),
-    // Idle until connected: without a URL getBaseUrl() throws a plain Error, which TanStack would retry and park in error state.
+    // Without a URL getBaseUrl() throws; staying idle avoids a parked error state.
     enabled: serverUrl !== null,
     queryFn: ({ signal }) =>
       apiFetch<AuthTypeMetadata>("/auth/type", { auth: false, signal }),

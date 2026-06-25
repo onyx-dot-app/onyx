@@ -1,5 +1,3 @@
-// Shared email/password form for login + signup (web reuses one form via `isSignup`); signup
-// creates the account then logs in (see sessionManager.register).
 import { router } from "expo-router";
 import { useEffect } from "react";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
@@ -34,7 +32,7 @@ function loginErrorMessage(error: unknown): string {
 }
 
 function signupErrorMessage(error: unknown): string {
-  // Account was created; only the auto-login failed — point them at sign-in, not retry-signup.
+  // Account created; only auto-login failed — point at sign-in, not retry-signup.
   if (error instanceof PostRegisterLoginError) {
     return "Account created. Please sign in.";
   }
@@ -45,8 +43,7 @@ function signupErrorMessage(error: unknown): string {
     if (error.status === 429) {
       return "Too many requests. Please try again later.";
     }
-    // fastapi-users rejects a weak password as `{ detail: { reason } }`; apiFetch can't
-    // flatten an object detail, so reach into the raw body for the reason.
+    // Weak-password rejection is `{ detail: { reason } }`; apiFetch can't flatten an object detail, so read the raw body.
     const body = error.body as { detail?: { reason?: string } } | undefined;
     const reason = body?.detail?.reason;
     if (typeof reason === "string" && reason) return reason;
@@ -81,8 +78,7 @@ export function EmailPasswordForm({
   });
   useEffect(() => {
     if (mutation.isError) mutation.reset();
-    // `mutation` is excluded from deps on purpose: it changes when `isError` flips, so
-    // including it would re-run this and reset the error the instant it's set. Edits only.
+    // `mutation` excluded from deps: it changes when `isError` flips, so including it would reset the error the instant it's set.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email, password]);
 

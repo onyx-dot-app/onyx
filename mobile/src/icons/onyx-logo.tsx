@@ -2,8 +2,7 @@ import Svg, { Path } from "react-native-svg";
 
 import type { IconProps } from "@/icons/types";
 
-// RN port of web Opal `SvgOnyxLogo`. Paths use `currentColor` (RN can't read the CSS var
-// web fills with), tinted via `<Icon as={SvgOnyxLogo} className="text-theme-primary-05" />`.
+// Paths fill with `currentColor` (RN can't read a CSS var), tinted via the `Icon` color class.
 const SvgOnyxLogo = ({ size = 16, ...props }: IconProps) => (
   <Svg
     width={size}

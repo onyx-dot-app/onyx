@@ -1,4 +1,4 @@
-// One "Continue with <provider>" button; per-provider so each owns its own mutation.
+// Per-provider component so each owns its own mutation.
 import { router } from "expo-router";
 import { View } from "react-native";
 

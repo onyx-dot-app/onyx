@@ -1,6 +1,5 @@
-// Mobile-local, minimal mirror of web's src/lib/types.ts — only fields the app renders.
-// Must list all 7 backend UserRole members: apiFetch casts without runtime validation,
-// so the type can't claim API-returnable values are impossible.
+// Must list all 7 backend UserRole members: apiFetch casts without runtime
+// validation, so the type can't claim API-returnable values are impossible.
 export type UserRole =
   | "limited"
   | "basic"
@@ -20,7 +19,6 @@ export interface CurrentUser {
 // `cloud` = Google OAuth + basic email/password.
 export type AuthType = "basic" | "google_oauth" | "oidc" | "saml" | "cloud";
 
-// Subset of AuthTypeResponse read by the mobile auth flow; from public GET /api/auth/type.
 export interface AuthTypeMetadata {
   auth_type: AuthType;
   requires_verification: boolean;

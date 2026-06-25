@@ -1,4 +1,3 @@
-// Single source of truth for sign-in methods; adding a provider is a one-line addition here.
 import type { AuthType, AuthTypeMetadata } from "@/api/types";
 
 export type ProviderId = "password" | "google" | "oidc" | "saml" | "apple";
@@ -8,7 +7,7 @@ export interface ProviderDescriptor {
   id: ProviderId;
   label: string;
   kind: ProviderKind;
-  // Browser-SSO authorize path, relative to the API prefix; unused for `password`.
+  // Relative to the API prefix; unused for `password`.
   authorizePath?: string;
 }
 
@@ -20,7 +19,7 @@ export const PROVIDER_REGISTRY: Partial<
     id: "google",
     label: "Google",
     kind: "browser",
-    // Dedicated mobile OAuth route; its callback is under /api → returns to the backend, not web.
+    // Mobile-only route; its callback returns to the backend, not the web app.
     authorizePath: "/auth/mobile/oauth/authorize",
   },
 };
@@ -36,7 +35,7 @@ const GOOGLE_AUTH_TYPES: ReadonlySet<AuthType> = new Set<AuthType>([
   "cloud",
 ]);
 
-// Filtered by the backend's reported config; returns [] until config loads.
+// Returns [] until the backend config loads.
 export function visibleProviders(
   config: AuthTypeMetadata | undefined,
 ): ProviderDescriptor[] {

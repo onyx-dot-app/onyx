@@ -1,4 +1,3 @@
-// Login screen: sign-in methods from the shared AuthMethods, gated on /auth/type.
 import { router } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 

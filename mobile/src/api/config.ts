@@ -1,11 +1,9 @@
-// EXPO_PUBLIC_* ships in the client bundle — never put secrets here, base URL only.
-// Resolved lazily per request, not at module load: a module-eval throw crashes the
-// bundle uncatchably, whereas a throw here surfaces as a rejected query the UI can
-// render — and per-request reads make an instance switch take effect on the next call.
+// EXPO_PUBLIC_* ships in the client bundle — base URL only, never secrets.
+// Resolved lazily per request so a config error is a catchable rejected query
+// (not an uncatchable module-eval crash) and instance switches apply next call.
 import { getStoredServerUrl } from "@/state/session";
 
-// `/api` for nginx-fronted deployments (proxy strips it); set EXPO_PUBLIC_API_PREFIX=""
-// for a bare dev backend.
+// `/api` for nginx-fronted deployments (proxy strips it); set "" for a bare dev backend.
 function normalizePrefix(raw: string): string {
   const trimmed = raw.replace(/^\/+|\/+$/g, "");
   return trimmed ? `/${trimmed}` : "";
@@ -27,6 +25,5 @@ export function getBaseUrl(): string {
         "(or set EXPO_PUBLIC_API_URL in mobile/.env.local for development).",
     );
   }
-  // Host + prefix; callers pass bare paths like "/me".
   return `${raw.replace(/\/+$/, "")}${API_PREFIX}`;
 }

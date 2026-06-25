@@ -1,6 +1,4 @@
-// RN port of web Opal's input-layout primitives (web/lib/opal/src/layouts/inputs/),
-// RHF-free. Spacing uses explicit margins, not `gap` (unreliable in NativeWind on RN
-// — see components/sidebar/SidebarTab.tsx).
+// Spacing uses explicit margins, not `gap` (unreliable in NativeWind on RN).
 import type { ReactNode } from "react";
 import { View } from "react-native";
 
@@ -19,7 +17,7 @@ interface InputLayoutBaseProps {
   description?: string;
   /** "optional" renders "(Optional)"; any other string verbatim. */
   suffix?: "optional" | (string & {});
-  /** Pre-resolved message (Layer 1 never reads RHF); presence renders the error row. */
+  /** Pre-resolved message; these primitives never read RHF. */
   error?: string;
   errorType?: InputErrorType;
   disabled?: boolean;
@@ -119,7 +117,6 @@ function Vertical({
 }
 
 export interface HorizontalProps extends InputLayoutBaseProps {
-  /** Vertically center the input against the label block. */
   center?: boolean;
   icon?: IconFunctionComponent;
 }

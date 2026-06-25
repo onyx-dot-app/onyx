@@ -1,4 +1,3 @@
-// On success SessionManager has already stored the Bearer token and reset the cache; caller just navigates.
 import { useMutation } from "@tanstack/react-query";
 
 import { login } from "@/api/auth/sessionManager";

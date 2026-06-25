@@ -2,7 +2,6 @@ import Svg, { Path } from "react-native-svg";
 
 import type { IconProps } from "@/icons/types";
 
-// RN port of web Opal `SvgArrowRightCircle` (web/lib/opal/src/icons/arrow-right-circle.tsx).
 const SvgArrowRightCircle = ({ size = 16, ...props }: IconProps) => (
   <Svg
     width={size}

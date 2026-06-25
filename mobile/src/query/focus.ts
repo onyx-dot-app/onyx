@@ -1,4 +1,4 @@
-// Bridges RN AppState into TanStack focusManager: the mobile equivalent of browser window-focus refetching.
+// RN AppState -> focusManager: the mobile equivalent of browser window-focus refetching.
 import { AppState, type AppStateStatus } from "react-native";
 import { focusManager } from "@tanstack/react-query";
 

@@ -1,8 +1,4 @@
-// React Native port of web's Opal Button
-// (web/lib/opal/src/components/buttons/button/components.tsx); the color matrix
-// and sizing live in button.styles. Web "hover" maps to RN "pressed". Spacing
-// uses margins, not `gap-*` (unreliable in RN/NativeWind — see SidebarTab).
-// `children` is plain string; web's RichStr/markdown is intentionally unsupported.
+// Spacing uses margins, not `gap-*` (unreliable in RN/NativeWind).
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { router, type Href } from "expo-router";
 import { cssInterop } from "nativewind";
@@ -21,39 +17,26 @@ import {
   type ButtonWidth,
 } from "@/components/ui/button.styles";
 
-// ActivityIndicator ignores `style.color`; bridge the text-color class onto its `color` prop so
-// the spinner matches the label (like text-input's placeholder).
+// ActivityIndicator ignores `style.color`; bridge the text-color class onto its `color` prop.
 const Spinner = cssInterop(ActivityIndicator, {
   className: { target: false, nativeStyleToProp: { color: "color" } },
 }) as React.ComponentType<{ className?: string; size?: "small" | "large" }>;
 
 type ButtonBaseProps = InteractiveContract & {
-  /** Size preset. @default "lg" */
   size?: ButtonSize;
-  /** `"fit"` shrink-wraps to content; `"full"` stretches to parent. @default "fit" */
   width?: ButtonWidth;
-  /**
-   * Forces the pressed visual without a touch (e.g. an open popover trigger).
-   * @default "rest"
-   */
   interaction?: ButtonInteraction;
-  /** Shows a spinner, dims to the disabled look, and blocks presses. @default false */
   loading?: boolean;
   rightIcon?: IconFunctionComponent;
   onPress?: () => void;
-  /** Navigates here on press (expo-router). */
   href?: Href;
-  /** Accepted for web API parity; a no-op on touch. */
   tooltip?: string;
-  /** Layout overrides, applied to the outer pressable. */
   className?: string;
-  /** Screen-reader name — required for icon-only buttons (they have no text). */
+  // Required for icon-only buttons — without text a screen reader announces just "button".
   accessibilityLabel?: string;
 };
 
-// Mirrors web's discriminated `ButtonContentProps`: a label or a leading icon,
-// never neither. Icon-only (no children) must supply `accessibilityLabel` —
-// with no text, a screen reader would otherwise announce just "button".
+// A label or a leading icon, never neither; icon-only must supply `accessibilityLabel`.
 type ButtonProps = ButtonBaseProps &
   (
     | { icon?: IconFunctionComponent; children: string }
@@ -96,8 +79,7 @@ function Button({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: disabled || loading, busy: loading }}
-      // RN stretches flex children on the cross axis, so `fit` needs `self-start`
-      // to shrink-wrap like web's `w-fit` (RN has no `fit-content`).
+      // RN stretches flex children cross-axis; `self-start` shrink-wraps `fit` (no `fit-content`).
       className={cn(width === "full" ? "w-full" : "self-start", className)}
     >
       {({ pressed }) => {
@@ -121,7 +103,6 @@ function Button({
             )}
           >
             {loading ? (
-              // Replaces the leading icon while working; rightIcon is suppressed below.
               <View className={cn("items-center justify-center", spec.iconPad)}>
                 <Spinner size="small" className={colors.fg} />
               </View>
@@ -132,9 +113,8 @@ function Button({
             ) : null}
 
             {hasLabel ? (
-              // `mx-4` reproduces web's `gap-1` around the label (RN `gap-*` is
-              // unreliable). `shrink` + `ellipsizeMode="clip"` clip a long label
-              // (matching web) instead of pushing the trailing icon out.
+              // `mx-4` substitutes for `gap-*`; `shrink`+clip trims a long label
+              // instead of pushing the trailing icon out.
               <Text
                 font={spec.font}
                 numberOfLines={1}

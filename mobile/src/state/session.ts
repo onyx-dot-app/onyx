@@ -1,10 +1,7 @@
-// Auth-session store: the Onyx instance URL we target + a coarse auth status.
-//
-// `serverUrl` persists straight to MMKV (not via zustand's persist) because the HTTP
-// layer (`config.ts#getBaseUrl`) reads it *synchronously*, once per request, through
-// `getStoredServerUrl`. `status` is in-memory only: `useCurrentUser` (/api/me) is the
-// authoritative identity check, except `"anon"` (explicit logout / rejected token), which
-// the auth gate treats as a decisive logged-out signal.
+// `serverUrl` persists straight to MMKV (not zustand's persist) because the HTTP layer
+// reads it synchronously per request via getStoredServerUrl. `status` is in-memory only;
+// /api/me is the authoritative identity check, except "anon" which the gate treats as a
+// decisive logged-out signal.
 import { create } from "zustand";
 
 import { appStorage } from "@/state/storage";

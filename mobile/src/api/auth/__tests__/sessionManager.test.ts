@@ -1,12 +1,4 @@
-// SessionManager unit tests — the tricky pure logic that warrants coverage:
-// the single-flight refresh (concurrent callers collapse to one network call),
-// the login/logout cache-purge invariants, and the session-epoch guard that
-// stops a late refresh from resurrecting a logged-out session. Everything
-// touching a native module (HTTP, keychain, MMKV cache, the zustand store) is
-// mocked so the test runs as plain logic with no device dependencies.
-//
-// Globals are imported explicitly from `@jest/globals` so the app's TS config
-// stays free of ambient test types.
+// Globals imported from `@jest/globals` so the app's TS config stays free of ambient test types.
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { Mock } from "jest-mock";
 
@@ -27,13 +19,9 @@ import { apiFetch, type ApiFetchInit } from "@/api/client";
 import { ApiError } from "@/api/errors";
 import { persister, queryClient } from "@/query/client";
 
-// `jest.mock` calls are hoisted above the imports by babel-jest, so the mocks
-// are registered before the module under test is loaded (despite the source
-// order here). Mocking the whole `@/state/session` / `@/query/client` modules
-// also keeps their native deps (MMKV) out of the test entirely.
+// `jest.mock` is hoisted above the imports by babel-jest; mocking whole modules also keeps native deps (MMKV) out.
 jest.mock("@/api/client");
 jest.mock("@/api/auth/tokenStore");
-// Mock browserSso to keep expo-web-browser/expo-crypto out of this test.
 jest.mock("@/api/auth/browserSso");
 jest.mock("@/query/client", () => ({
   queryClient: { clear: jest.fn() },
@@ -43,9 +31,7 @@ jest.mock("@/state/session", () => ({
   useSession: { getState: () => ({ setStatus: jest.fn() }) },
 }));
 
-// `apiFetch` is generic (`<T>`), which makes jest.mocked()'s mockResolvedValue /
-// mockImplementation infer `never`. Cast each handle to a concrete, non-generic
-// Mock signature so the matchers and resolved values type cleanly.
+// generic `apiFetch<T>` makes jest.mocked() infer `never`; cast to a concrete Mock signature.
 const mockApiFetch = apiFetch as unknown as Mock<
   (path: string, init?: ApiFetchInit) => Promise<unknown>
 >;
@@ -75,8 +61,7 @@ const token = (access: string): BearerTokenResponse => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // Reset the module-level session epoch + single-flight handle so a test can't
-  // leak state (e.g. a non-null inFlightRefresh) into the next one.
+  // Reset module-level session epoch + single-flight handle so state can't leak across tests.
   __resetSessionStateForTests();
   mockSetToken.mockResolvedValue(undefined);
   mockGetToken.mockResolvedValue(null);
@@ -100,8 +85,7 @@ describe("login", () => {
     expect(body.get("password")).toBe("pw");
 
     expect(mockSetToken).toHaveBeenCalledWith("tok-login");
-    // Token must be installed BEFORE the cache is purged, so a query firing
-    // mid-purge reads the new identity's token, not the prior user's.
+    // Token installed BEFORE cache purge, so a query firing mid-purge reads the new token.
     expect(mockSetToken.mock.invocationCallOrder[0]).toBeLessThan(
       mockClear.mock.invocationCallOrder[0],
     );
@@ -221,9 +205,7 @@ describe("logout", () => {
 
     await logout();
 
-    // The failure is surfaced (traceable) rather than silently swallowed...
     expect(warnSpy).toHaveBeenCalledWith(expect.any(String), revocationError);
-    // ...and the local wipe still runs regardless of the network outcome.
     expect(mockSetToken).toHaveBeenCalledWith(null);
     expect(mockClear).toHaveBeenCalledTimes(1);
     expect(mockRemoveClient).toHaveBeenCalledTimes(1);
@@ -241,7 +223,6 @@ describe("refreshToken (single-flight)", () => {
       }),
     );
 
-    // Three near-simultaneous refresh triggers.
     const p1 = refreshToken();
     const p2 = refreshToken();
     const p3 = refreshToken();
@@ -296,16 +277,16 @@ describe("refreshToken (single-flight)", () => {
           resolveRefresh = resolve;
         });
       }
-      return Promise.resolve(undefined); // logout call
+      return Promise.resolve(undefined);
     });
 
-    const refreshP = refreshToken(); // in flight
-    await logout(); // completes: clears token + bumps the session epoch
+    const refreshP = refreshToken();
+    await logout(); // bumps the session epoch
 
-    resolveRefresh(token("tok-late")); // refresh resolves AFTER logout
+    resolveRefresh(token("tok-late")); // resolves AFTER logout
     await expect(refreshP).resolves.toBeNull();
 
-    // The late token must NOT be written back over the logged-out session.
+    // Late token must NOT be written back over the logged-out session.
     expect(mockSetToken).not.toHaveBeenCalledWith("tok-late");
     expect(mockSetToken).toHaveBeenLastCalledWith(null);
   });
@@ -349,7 +330,7 @@ describe("getValidToken", () => {
     const refreshP = refreshToken();
     const validP = getValidToken();
 
-    rejectFetch(new ApiError({ status: 500 })); // transient
+    rejectFetch(new ApiError({ status: 500 }));
 
     // refresh propagates the transient error; getValidToken must not.
     await expect(refreshP).rejects.toBeInstanceOf(ApiError);

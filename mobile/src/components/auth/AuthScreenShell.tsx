@@ -1,5 +1,3 @@
-// Shared chrome for the connect/login/signup screens (mobile take on web's AuthFlowContainer
-// + LoginText): logo + heading + the caller's form in a card, with `footer` below it.
 import type { ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,8 +25,7 @@ export function AuthScreenShell({
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* No explicit width: `width:"100%"` doesn't resolve inside a ScrollView content view
-            (it overflowed the screen), so the card stretches via the default `align-items: stretch`. */}
+        {/* No explicit width: `width:"100%"` overflows inside a ScrollView; card stretches via default `align-items: stretch`. */}
         <ScrollView
           contentContainerClassName="grow justify-center px-16 py-40"
           keyboardShouldPersistTaps="handled"

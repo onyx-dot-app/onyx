@@ -1,5 +1,3 @@
-// Public surface. Layer 1 (RHF-free): `InputLayouts` primitives + `TextInput` /
-// `PasswordTextInput` atoms. Layer 2 (RHF-bound): `TextInputField` / `PasswordInputField`.
 import {
   InputDivider,
   InputErrorText,
@@ -26,7 +24,6 @@ export type {
   InputErrorType,
 } from "@/components/form/input-layouts";
 
-/** Namespace for web-parity ergonomics: `<InputLayouts.Vertical .../>`. */
 export const InputLayouts = {
   Vertical,
   Horizontal,

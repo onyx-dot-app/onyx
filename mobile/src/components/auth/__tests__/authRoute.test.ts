@@ -1,4 +1,3 @@
-// resolveAuthGate decisions as pure logic — every branch + the precedence between them.
 import { describe, expect, it } from "@jest/globals";
 
 import {
@@ -12,7 +11,6 @@ const CONNECT: readonly string[] = ["(auth)", "connect"];
 const LOGIN: readonly string[] = ["(auth)", "login"];
 const SIGNUP: readonly string[] = ["(auth)", "signup"];
 
-// Defaults to the logged-out, unresolved state; each test overrides what it exercises.
 function input(overrides: Partial<AuthGateInput>): AuthGateInput {
   return {
     serverUrl: "https://cloud.onyx.app",
