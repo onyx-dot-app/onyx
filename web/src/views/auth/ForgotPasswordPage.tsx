@@ -12,6 +12,12 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { toast } from "@/hooks/useToast";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 
+const initialValues = { email: "" };
+
+const validationSchema = Yup.object().shape({
+  email: Yup.string().email().required(),
+});
+
 function ForgotPasswordPage() {
   const router = useRouter();
   const { logoUrl } = useSettings();
@@ -24,6 +30,19 @@ function ForgotPasswordPage() {
 
   if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) return null;
 
+  async function handleSubmit(values: typeof initialValues) {
+    try {
+      await forgotPassword(values.email);
+      toast.success("Password reset email sent. Please check your inbox.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "An error occurred. Please try again."
+      );
+    }
+  }
+
   return (
     <AuthLayouts.Card
       title="Forgot Password"
@@ -32,24 +51,9 @@ function ForgotPasswordPage() {
       logoSrc={logoUrl}
     >
       <Formik
-        initialValues={{ email: "" }}
-        validationSchema={Yup.object().shape({
-          email: Yup.string().email().required(),
-        })}
-        onSubmit={async (values) => {
-          try {
-            await forgotPassword(values.email);
-            toast.success(
-              "Password reset email sent. Please check your inbox."
-            );
-          } catch (error) {
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : "An error occurred. Please try again."
-            );
-          }
-        }}
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
       >
         {({ isSubmitting }) => (
           <Form className="w-full flex flex-col items-stretch gap-4">

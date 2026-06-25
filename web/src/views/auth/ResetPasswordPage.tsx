@@ -11,12 +11,41 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import { toast } from "@/hooks/useToast";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 
+const initialValues = { password: "", confirmPassword: "" };
+
+const validationSchema = Yup.object().shape({
+  password: Yup.string().required("Password is required"),
+  confirmPassword: Yup.string()
+    .oneOf([Yup.ref("password"), undefined], "Passwords must match")
+    .required("Confirm Password is required"),
+});
+
 export default function ResetPasswordPage() {
   const router = useRouter();
   const { user } = useCurrentUser();
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
   const { logoUrl } = useSettings();
+
+  async function handleSubmit(values: typeof initialValues) {
+    if (!token) {
+      toast.error("Invalid or missing reset token.");
+      return;
+    }
+    try {
+      await resetPassword(token, values.password);
+      toast.success("Password reset successfully. Redirecting to login...");
+      setTimeout(() => {
+        router.replace("/auth/login");
+      }, 1000);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message || "An error occurred during password reset."
+          : "An unexpected error occurred. Please try again."
+      );
+    }
+  }
 
   return (
     <AuthLayouts.Card
@@ -26,34 +55,9 @@ export default function ResetPasswordPage() {
       logoSrc={logoUrl}
     >
       <Formik
-        initialValues={{ password: "", confirmPassword: "" }}
-        validationSchema={Yup.object().shape({
-          password: Yup.string().required("Password is required"),
-          confirmPassword: Yup.string()
-            .oneOf([Yup.ref("password"), undefined], "Passwords must match")
-            .required("Confirm Password is required"),
-        })}
-        onSubmit={async (values) => {
-          if (!token) {
-            toast.error("Invalid or missing reset token.");
-            return;
-          }
-          try {
-            await resetPassword(token, values.password);
-            toast.success(
-              "Password reset successfully. Redirecting to login..."
-            );
-            setTimeout(() => {
-              router.replace("/auth/login");
-            }, 1000);
-          } catch (error) {
-            toast.error(
-              error instanceof Error
-                ? error.message || "An error occurred during password reset."
-                : "An unexpected error occurred. Please try again."
-            );
-          }
-        }}
+        initialValues={initialValues}
+        validationSchema={validationSchema}
+        onSubmit={handleSubmit}
       >
         {({ isSubmitting }) => (
           <Form className="w-full flex flex-col items-stretch gap-4">
