@@ -158,6 +158,33 @@ export function useBuildStreaming() {
         return !session || session.turnGeneration !== generation;
       };
 
+      // Reload backend state (artifacts, sandbox, ...) while the session is
+      // still "running" — loadSession preserves the live turn in that state —
+      // and only then flip to the terminal status. Reloading before the flip
+      // avoids a TOCTOU: the flip to "active" triggers the queued auto-send, so
+      // a reload after it would race the freshly-started next turn.
+      const settleToActive = async (): Promise<void> => {
+        await useBuildSessionStore
+          .getState()
+          .loadSession(sessionId, { force: true })
+          .catch((err) =>
+            console.warn(
+              "[Streaming] Failed to reload reconciled interrupted turn:",
+              err
+            )
+          );
+        if (isSuperseded()) {
+          return;
+        }
+        updateSessionData(sessionId, {
+          status: "active",
+          isInterrupting: false,
+          activeTurnId: null,
+          activeTurnIndex: null,
+          activeTurnLocalOwner: false,
+        });
+      };
+
       let reconciledTurnId = interruptedTurnId;
       for (
         let attempt = 0;
@@ -202,46 +229,44 @@ export function useBuildStreaming() {
           return;
         }
 
-        // Re-check after the await — a newer turn may have started meanwhile.
         if (isSuperseded()) {
           return;
         }
-
-        updateSessionData(sessionId, {
-          status: "active",
-          isInterrupting: false,
-          activeTurnId: null,
-          activeTurnIndex: null,
-          activeTurnLocalOwner: false,
-        });
-        await useBuildSessionStore
-          .getState()
-          .loadSession(sessionId, { force: true })
-          .catch((err) =>
-            console.warn(
-              "[Streaming] Failed to reload reconciled interrupted turn:",
-              err
-            )
-          );
+        await settleToActive();
         return;
       }
 
-      const currentSession = useBuildSessionStore
-        .getState()
-        .sessions.get(sessionId);
+      // Timed out: the interrupt didn't visibly settle within the budget. Do one
+      // final check — if the backend turn is actually gone, settle so the UI
+      // unblocks and any queued message can send (rather than leaving the
+      // session stuck on a stale "running"). If it's still running (or the check
+      // fails), just drop the "stopping" affordance and leave it running.
       if (
-        !currentSession ||
-        currentSession.turnGeneration !== generation ||
-        currentSession.status !== "running" ||
-        (reconciledTurnId &&
-          currentSession.activeTurnId &&
-          currentSession.activeTurnId !== reconciledTurnId)
+        isSuperseded() ||
+        useBuildSessionStore.getState().sessions.get(sessionId)?.status !==
+          "running"
       ) {
         return;
       }
 
+      let finalActiveTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
+      let finalFetchSucceeded = true;
+      try {
+        finalActiveTurn = await fetchActiveTurn(sessionId);
+      } catch (err) {
+        finalFetchSucceeded = false;
+        console.warn("[Streaming] Final reconcile check failed:", err);
+      }
+      if (isSuperseded()) {
+        return;
+      }
+
       console.warn("[Streaming] Interrupted turn reconciliation timed out");
-      updateSessionData(sessionId, { isInterrupting: false });
+      if (finalFetchSucceeded && finalActiveTurn === null) {
+        await settleToActive();
+      } else {
+        updateSessionData(sessionId, { isInterrupting: false });
+      }
     },
     [updateSessionData]
   );

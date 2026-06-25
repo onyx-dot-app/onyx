@@ -1310,7 +1310,7 @@ describe("useBuildStreaming thinking packets", () => {
     });
   });
 
-  it("clears only interrupt state when interrupted turn reconciliation times out", async () => {
+  it("clears only interrupt state when a timed-out turn is still running", async () => {
     const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
     jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
     const activeTurn = {
@@ -1319,7 +1319,9 @@ describe("useBuildStreaming thinking packets", () => {
       status: "RUNNING",
       turn_index: 3,
     } as never;
-    for (let attempt = 0; attempt < 30; attempt++) {
+    // 30 poll attempts + 1 final post-timeout check, all reporting the turn
+    // still running.
+    for (let attempt = 0; attempt < 31; attempt++) {
       jest.mocked(fetchActiveTurn).mockResolvedValueOnce(activeTurn);
     }
     useBuildSessionStore.getState().updateSessionData(sessionId, {
@@ -1341,7 +1343,7 @@ describe("useBuildStreaming thinking packets", () => {
       });
     }
 
-    expect(fetchActiveTurn).toHaveBeenCalledTimes(30);
+    expect(fetchActiveTurn).toHaveBeenCalledTimes(31);
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)
     ).toMatchObject({
@@ -1353,6 +1355,55 @@ describe("useBuildStreaming thinking packets", () => {
     expect(useBuildSessionStore.getState().loadSession).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(
       "[Streaming] Interrupted turn reconciliation timed out"
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("settles a timed-out turn that the backend reports as gone", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    const activeTurn = {
+      session_id: sessionId,
+      turn_id: "turn-interrupted",
+      status: "RUNNING",
+      turn_index: 3,
+    } as never;
+    // 30 poll attempts report the turn still running, but the final
+    // post-timeout check finds it gone → settle so the UI unblocks.
+    for (let attempt = 0; attempt < 30; attempt++) {
+      jest.mocked(fetchActiveTurn).mockResolvedValueOnce(activeTurn);
+    }
+    jest.mocked(fetchActiveTurn).mockResolvedValueOnce(null as never);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    for (let attempt = 0; attempt < 31; attempt++) {
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+        await Promise.resolve();
+      });
+    }
+
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "active",
+      activeTurnId: null,
+      activeTurnLocalOwner: false,
+      isInterrupting: false,
+    });
+    expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
+      sessionId,
+      { force: true }
     );
     warnSpy.mockRestore();
   });
