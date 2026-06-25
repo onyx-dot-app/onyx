@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime
 import threading
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import patch
 from unittest.mock import PropertyMock
@@ -38,6 +39,7 @@ from onyx.db.enums import ScheduledTaskErrorClass
 from onyx.db.enums import ScheduledTaskRunStatus
 from onyx.db.enums import ScheduledTaskStatus
 from onyx.db.enums import ScheduledTaskTriggerSource
+from onyx.db.models import Sandbox
 from onyx.db.models import ScheduledTask
 from onyx.db.models import ScheduledTaskRun
 from onyx.db.models import User
@@ -429,3 +431,29 @@ def test_stream_without_prompt_response_marks_run_failed(
     assert refreshed is not None
     assert refreshed.status == ScheduledTaskRunStatus.FAILED
     assert refreshed.error_class == ScheduledTaskErrorClass.AGENT_EXCEPTION.value
+
+
+def test_run_fails_when_wake_fails(
+    db_session: Session,
+    test_user: User,
+    sandbox: Callable[..., Sandbox],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A PROVISIONING sandbox with a 0s wait window makes the wake deterministically
+    raise, which must mark the run FAILED / sandbox_wake_failed. Backend-agnostic:
+    ensure_sandbox_running times out polling the DB row before touching any manager."""
+    monkeypatch.setattr(
+        "onyx.server.features.build.scheduled_tasks.executor.PROVISIONING_WAIT_SECONDS",
+        0,
+    )
+
+    sandbox(user=test_user, status=SandboxStatus.PROVISIONING)
+    _, run = _seed_task_and_queued_run(db_session, test_user)
+
+    run_scheduled_task_logic(run.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(ScheduledTaskRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == ScheduledTaskRunStatus.FAILED
+    assert refreshed.error_class == ScheduledTaskErrorClass.SANDBOX_WAKE_FAILED.value
