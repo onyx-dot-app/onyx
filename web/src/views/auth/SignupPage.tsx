@@ -29,7 +29,7 @@ export default function SignupPage() {
       if (!authTypeMetadata.requiresVerification || user.is_verified) {
         router.replace("/app");
       } else {
-        router.replace("/auth/waiting-on-verification");
+        router.replace("/auth/email-verification");
       }
       return;
     }

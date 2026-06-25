@@ -11,7 +11,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
 import RequestNewVerificationEmail from "@/sections/auth/RequestNewVerificationEmail";
 
-export default function WaitingOnVerificationPage() {
+export default function EmailVerificationPage() {
   const router = useRouter();
   const { user } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();

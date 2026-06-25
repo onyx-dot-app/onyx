@@ -41,7 +41,7 @@ export default function JoinPage() {
 
     if (user && user.is_active && !user.is_anonymous_user) {
       if (authTypeMetadata.requiresVerification && !user.is_verified) {
-        router.replace("/auth/waiting-on-verification" as Route);
+        router.replace("/auth/email-verification" as Route);
       } else {
         router.replace("/app" as Route);
       }
