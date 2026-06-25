@@ -170,7 +170,7 @@ export default function EmailPasswordForm({
                 >
                   <PasswordInputTypeInField
                     name="password"
-                    shrinkPlaceholder
+                    placeholder="Password"
                     data-testid="password"
                     autoComplete={
                       isSignup ? "new-password" : "current-password"
