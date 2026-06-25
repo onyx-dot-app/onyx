@@ -9,7 +9,7 @@ import { Text } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
-import { RequestNewVerificationEmail } from "@/sections/auth/RequestNewVerificationEmail";
+import RequestNewVerificationEmail from "@/sections/auth/RequestNewVerificationEmail";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 export default function VerifyEmailPage() {
@@ -79,13 +79,9 @@ export default function VerifyEmailPage() {
             {error}
           </Text>
           {user && (
-            <div className="text-center">
-              <RequestNewVerificationEmail email={user.email}>
-                <Text font="main-ui-body" color="text-03">
-                  Get new verification email
-                </Text>
-              </RequestNewVerificationEmail>
-            </div>
+            <RequestNewVerificationEmail email={user.email}>
+              Get new verification email
+            </RequestNewVerificationEmail>
           )}
         </div>
       )}

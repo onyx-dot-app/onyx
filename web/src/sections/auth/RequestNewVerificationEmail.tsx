@@ -1,40 +1,43 @@
 "use client";
 
+import { useState } from "react";
+import { Button } from "@opal/components";
+import { SvgSimpleLoader } from "@opal/icons";
 import { toast } from "@/hooks/useToast";
 import { requestEmailVerification } from "@/lib/auth/svc";
-import { Spinner } from "@/components/Spinner";
-import { useState, JSX } from "react";
 
-export function RequestNewVerificationEmail({
+interface RequestNewVerificationEmailProps {
+  children: string;
+  email: string;
+}
+
+export default function RequestNewVerificationEmail({
   children,
   email,
-}: {
-  children: JSX.Element | string;
-  email: string;
-}) {
-  const [isRequestingVerification, setIsRequestingVerification] =
-    useState(false);
+}: RequestNewVerificationEmailProps) {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleClick = async () => {
+    setIsLoading(true);
+    const response = await requestEmailVerification(email);
+    setIsLoading(false);
+
+    if (response.ok) {
+      toast.success("A new verification email has been sent!");
+    } else {
+      const errorDetail = (await response.json()).detail;
+      toast.error(`Failed to send a new verification email - ${errorDetail}`);
+    }
+  };
 
   return (
-    <button
-      className="text-link"
-      onClick={async () => {
-        setIsRequestingVerification(true);
-        const response = await requestEmailVerification(email);
-        setIsRequestingVerification(false);
-
-        if (response.ok) {
-          toast.success("A new verification email has been sent!");
-        } else {
-          const errorDetail = (await response.json()).detail;
-          toast.error(
-            `Failed to send a new verification email - ${errorDetail}`
-          );
-        }
-      }}
+    <Button
+      prominence="internal"
+      icon={isLoading ? SvgSimpleLoader : undefined}
+      onClick={handleClick}
+      disabled={isLoading}
     >
-      {isRequestingVerification && <Spinner />}
       {children}
-    </button>
+    </Button>
   );
 }

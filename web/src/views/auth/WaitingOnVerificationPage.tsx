@@ -9,7 +9,7 @@ import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
-import { RequestNewVerificationEmail } from "@/sections/auth/RequestNewVerificationEmail";
+import RequestNewVerificationEmail from "@/sections/auth/RequestNewVerificationEmail";
 
 export default function WaitingOnVerificationPage() {
   const router = useRouter();
@@ -40,19 +40,9 @@ export default function WaitingOnVerificationPage() {
             `Hey, *${user.email}*, it looks like you haven't verified your email yet.\nCheck your inbox for an email from us to get started!`
           )}
         </Text>
-        <div className="flex flex-row items-center gap-1">
-          <Text font="main-ui-body" color="text-03">
-            If you don&apos;t see anything, click
-          </Text>
-          <RequestNewVerificationEmail email={user.email}>
-            <Text font="main-ui-body" color="text-03">
-              here
-            </Text>
-          </RequestNewVerificationEmail>
-          <Text font="main-ui-body" color="text-03">
-            to request a new email.
-          </Text>
-        </div>
+        <RequestNewVerificationEmail email={user.email}>
+          Resend verification email
+        </RequestNewVerificationEmail>
       </div>
     </AuthLayouts.Card>
   );
