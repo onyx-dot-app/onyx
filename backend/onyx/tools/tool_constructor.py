@@ -60,6 +60,8 @@ class SearchToolConfig(BaseModel):
     # must be found via vector DB search instead.
     project_id_filter: int | None = None
     persona_id_filter: int | None = None
+    dynamic_attached_document_ids: list[str] | None = None
+    hard_dynamic_knowledge_scope: bool = False
     bypass_acl: bool = False
     additional_context: str | None = None
     slack_context: SlackContext | None = None
@@ -180,11 +182,20 @@ def _construct_tools_impl(
     document_index = get_default_document_index(search_settings, None, db_session)
 
     def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
+        attached_document_ids = [doc.id for doc in persona.attached_documents]
+        document_set_names = [ds.name for ds in persona.document_sets]
+        hierarchy_node_ids = [node.id for node in persona.hierarchy_nodes]
+        if config.dynamic_attached_document_ids:
+            attached_document_ids = config.dynamic_attached_document_ids
+            if config.hard_dynamic_knowledge_scope:
+                document_set_names = []
+                hierarchy_node_ids = []
+
         persona_search_info = PersonaSearchInfo(
-            document_set_names=[ds.name for ds in persona.document_sets],
+            document_set_names=document_set_names,
             search_start_date=persona.search_start_date,
-            attached_document_ids=[doc.id for doc in persona.attached_documents],
-            hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
+            attached_document_ids=attached_document_ids,
+            hierarchy_node_ids=hierarchy_node_ids,
         )
         return SearchTool(
             tool_id=tool_id,

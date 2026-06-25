@@ -1,0 +1,16 @@
+services:
+  api_server:
+    environment:
+      - OPENSEARCH_USE_SSL=false
+
+  background:
+    environment:
+      - OPENSEARCH_USE_SSL=false
+
+  web_server:
+    build:
+      args:
+        - NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+
+  code-interpreter:
+    profiles: ["code-interpreter"]

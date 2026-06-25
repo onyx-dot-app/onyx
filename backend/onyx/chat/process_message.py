@@ -54,6 +54,8 @@ from onyx.chat.models import FileToolMetadata
 from onyx.chat.models import SearchParams
 from onyx.chat.models import StreamingError
 from onyx.chat.models import ToolCallResponse
+from onyx.chat.brand_required_docs import add_brand_required_file_descriptors
+from onyx.chat.brand_required_docs import brand_required_search_document_ids
 from onyx.chat.prompt_utils import calculate_reserved_tokens
 from onyx.chat.save_chat import save_chat_turn
 from onyx.chat.stop_signal_checker import is_connected as check_stop_signal
@@ -634,6 +636,16 @@ def build_chat_turn(
 
     persona = chat_session.persona
     message_text = new_msg_req.message
+    new_msg_req.file_descriptors = add_brand_required_file_descriptors(
+        message=message_text,
+        persona=persona,
+        file_descriptors=new_msg_req.file_descriptors,
+        db_session=db_session,
+    )
+    dynamic_search_document_ids = brand_required_search_document_ids(
+        message=message_text,
+        persona=persona,
+    )
 
     user_identity = LLMUserIdentity(
         user_id=llm_user_identifier, session_id=str(chat_session.id)
@@ -841,6 +853,13 @@ def build_chat_turn(
         user_id=user_id,
         db_session=db_session,
     )
+    if dynamic_search_document_ids:
+        dynamic_search_document_id_set = set(dynamic_search_document_ids)
+        context_user_files = [
+            user_file
+            for user_file in context_user_files
+            if user_file.file_id in dynamic_search_document_id_set
+        ]
 
     # Use the smallest context window across models for safety (harmless for N=1).
     llm_max_context_window = min(llm.config.max_input_tokens for llm in llms)
@@ -859,9 +878,10 @@ def build_chat_turn(
     )
 
     # Also grant access to persona-attached user files for FileReaderTool
-    if persona.user_files:
+    persona_files_for_tools = context_user_files if dynamic_search_document_ids else persona.user_files
+    if persona_files_for_tools:
         existing = set(available_files.user_file_ids)
-        for uf in persona.user_files:
+        for uf in persona_files_for_tools:
             if uf.id not in existing:
                 available_files.user_file_ids.append(uf.id)
 
@@ -1007,6 +1027,7 @@ def build_chat_turn(
         processing_run_id=processing_run_id,
         reserved_token_count=reserved_token_count,
         search_params=search_params,
+        dynamic_search_document_ids=dynamic_search_document_ids,
         all_injected_file_metadata=all_injected_file_metadata,
         available_files=available_files,
         tool_id_to_name_map=tool_id_to_name_map,
@@ -1203,6 +1224,7 @@ def _run_models(
         model_llm = setup.llms[model_idx]
 
         try:
+            hard_dynamic_search_scope = bool(setup.dynamic_search_document_ids)
             # Each function opens short-lived DB sessions on demand.
             # Do NOT pass a long-lived session here — it would hold a
             # connection for the entire LLM loop (minutes), and cloud
@@ -1214,8 +1236,22 @@ def _run_models(
                 llm=model_llm,
                 search_tool_config=SearchToolConfig(
                     user_selected_filters=setup.new_msg_req.internal_search_filters,
-                    project_id_filter=setup.search_params.project_id_filter,
-                    persona_id_filter=setup.search_params.persona_id_filter,
+                    project_id_filter=(
+                        None
+                        if hard_dynamic_search_scope
+                        else setup.search_params.project_id_filter
+                    ),
+                    persona_id_filter=(
+                        None
+                        if hard_dynamic_search_scope
+                        else setup.search_params.persona_id_filter
+                    ),
+                    dynamic_attached_document_ids=(
+                        setup.dynamic_search_document_ids
+                        if hard_dynamic_search_scope
+                        else None
+                    ),
+                    hard_dynamic_knowledge_scope=hard_dynamic_search_scope,
                     bypass_acl=setup.bypass_acl,
                     slack_context=setup.slack_context,
                     enable_slack_search=_should_enable_slack_search(

@@ -15,6 +15,7 @@ import AddInstructionModal from "@/sections/modals/AddInstructionModal";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { FileCard } from "@/sections/cards/FileCard";
+import ProjectContentIntakePanel from "@/sections/projects/ProjectContentIntakePanel";
 import { hasNonImageFiles } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import {
@@ -82,6 +83,17 @@ export default function ProjectContextPanel({
       e.target.value = "";
     },
     [handleUploadFiles]
+  );
+
+  const handlePublishIntakeFile = useCallback(
+    (file: File, onSuccess: () => void, onFailure: () => void) => {
+      if (!currentProjectId) {
+        onFailure();
+        return;
+      }
+      void beginUpload([file], currentProjectId, onSuccess, onFailure);
+    },
+    [beginUpload, currentProjectId]
   );
 
   // Nested dropzone for drag-and-drop within ProjectContextPanel
@@ -204,6 +216,12 @@ export default function ProjectContextPanel({
                 )}
               />
             }
+          />
+
+          <ProjectContentIntakePanel
+            projectId={currentProjectId}
+            projectName={projectName}
+            onPublishFile={handlePublishIntakeFile}
           />
 
           {/* Hidden input just to satisfy dropzone contract; we rely on FilePicker for clicks */}

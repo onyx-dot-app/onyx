@@ -34,11 +34,9 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
         </Text>
       </div>
       <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-2">
-        {agents
-          .sort((a, b) => b.id - a.id)
-          .map((agent) => (
-            <AgentCard key={agent.id} agent={agent} />
-          ))}
+        {agents.map((agent) => (
+          <AgentCard key={agent.id} agent={agent} />
+        ))}
       </div>
     </div>
   );
@@ -79,14 +77,18 @@ export default function AgentsNavigationPage() {
     });
   }, [agentsFilteredByFilters, searchQuery, activeTab, user]);
 
-  const featuredAgents = memoizedCurrentlyVisibleAgents.filter(
-    (agent) => agent.is_featured
-  );
-  const allAgents = memoizedCurrentlyVisibleAgents.filter(
-    (agent) => !agent.is_featured
+  const visibleAgents = useMemo(
+    () =>
+      [...memoizedCurrentlyVisibleAgents].sort((a, b) => {
+        if (a.is_featured !== b.is_featured) {
+          return a.is_featured ? -1 : 1;
+        }
+        return b.id - a.id;
+      }),
+    [memoizedCurrentlyVisibleAgents]
   );
 
-  const agentCount = featuredAgents.length + allAgents.length;
+  const agentCount = visibleAgents.length;
 
   return (
     <SettingsLayouts.Root
@@ -95,8 +97,8 @@ export default function AgentsNavigationPage() {
     >
       <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
-        title="Agents"
-        description="Customize AI behavior and knowledge for you and your team's use cases."
+        title="智能体 Agent"
+        description="选择一个智能体并进入对应对话。"
         rightChildren={
           <Button
             href="/app/agents/create"
@@ -147,11 +149,10 @@ export default function AgentsNavigationPage() {
         ) : (
           <>
             <AgentsSection
-              title="Featured Agents"
-              description="Curated by your team"
-              agents={featuredAgents}
+              title="All Agents"
+              description="Available NOVAWEAR agents"
+              agents={visibleAgents}
             />
-            <AgentsSection title="All Agents" agents={allAgents} />
             <TextSeparator
               count={agentCount}
               text={agentCount === 1 ? "Agent" : "Agents"}
