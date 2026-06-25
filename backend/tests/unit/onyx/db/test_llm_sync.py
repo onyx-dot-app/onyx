@@ -7,7 +7,6 @@ import pytest
 
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import sync_model_configurations
-from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import SyncModelEntry
 
 
@@ -32,7 +31,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             models = [
                 SyncModelEntry(
@@ -51,7 +50,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name=LlmProviderNames.OPENAI,
+                provider_id=1,
                 models=models,
             )
 
@@ -75,7 +74,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             models = [
                 SyncModelEntry(
@@ -94,7 +93,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name=LlmProviderNames.OPENAI,
+                provider_id=1,
                 models=models,
             )
 
@@ -114,7 +113,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             models = [
                 SyncModelEntry(
@@ -127,7 +126,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name=LlmProviderNames.OPENAI,
+                provider_id=1,
                 models=models,
             )
 
@@ -138,11 +137,11 @@ class TestSyncModelConfigurations:
         """Test that ValueError is raised when provider not found."""
         mock_session = MagicMock()
 
-        with patch("onyx.db.llm.fetch_existing_llm_provider", return_value=None):
+        with patch("onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=None):
             with pytest.raises(ValueError, match="not found"):
                 sync_model_configurations(
                     db_session=mock_session,
-                    provider_name="nonexistent",
+                    provider_id=999,
                     models=[SyncModelEntry(name="model", display_name="Model")],
                 )
 
@@ -155,7 +154,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             models = [
                 SyncModelEntry(
@@ -169,7 +168,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name=LlmProviderNames.OPENAI,
+                provider_id=1,
                 models=models,
             )
 
@@ -187,7 +186,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             # Model with only required fields (max_input_tokens and supports_image_input default)
             models = [
@@ -199,7 +198,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name="custom",
+                provider_id=1,
                 models=models,
             )
 
@@ -224,7 +223,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             models = [
                 SyncModelEntry(
@@ -236,7 +235,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name=LlmProviderNames.BIFROST,
+                provider_id=1,
                 models=models,
             )
 
@@ -258,7 +257,7 @@ class TestSyncModelConfigurations:
         mock_session = MagicMock()
 
         with patch(
-            "onyx.db.llm.fetch_existing_llm_provider", return_value=mock_provider
+            "onyx.db.llm.fetch_existing_llm_provider_by_id", return_value=mock_provider
         ):
             models = [
                 SyncModelEntry(
@@ -270,7 +269,7 @@ class TestSyncModelConfigurations:
 
             result = sync_model_configurations(
                 db_session=mock_session,
-                provider_name=LlmProviderNames.BIFROST,
+                provider_id=1,
                 models=models,
             )
 
