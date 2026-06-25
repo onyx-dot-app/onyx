@@ -27,6 +27,7 @@ from onyx.server.features.build.approvals.api import DecisionBody
 from onyx.server.features.build.approvals.api import list_live_approvals
 from onyx.server.features.build.approvals.api import submit_decision
 from onyx.server.features.build.approvals.api import submit_session_grant
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.db import action_approval
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import action_entry
@@ -39,14 +40,6 @@ from tests.external_dependency_unit.craft.db_helpers import make_user
 
 def _stub_send_wake_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(approval_cache, "send_wake", lambda *_args, **_kwargs: None)
-
-
-# Hardcoded spec; the completeness check below pins the source constant to it.
-WAIT_TIMEOUT_S_SPEC = 180
-
-
-def test_wait_timeout_spec() -> None:
-    assert approval_cache.WAIT_TIMEOUT_S == WAIT_TIMEOUT_S_SPEC
 
 
 # --------------------------------------------------------------------------- #
@@ -92,8 +85,9 @@ def test_list_live_approvals_filter_logic(
     assert result is not None
     db_session.commit()
 
-    # Push the stale row just past the 180s spec cutoff (hardcoded, not derived).
-    stale_when = datetime.now(timezone.utc) - timedelta(seconds=190)
+    stale_when = datetime.now(timezone.utc) - timedelta(
+        seconds=SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 10
+    )
     force_approval_created_at(db_session, stale.approval_id, stale_when)
 
     response = list_live_approvals(

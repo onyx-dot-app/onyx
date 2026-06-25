@@ -164,6 +164,7 @@ jobs:
             echo 'BUILD_MAX_UPLOAD_FILES_PER_SESSION=5'
             echo 'BUILD_MAX_TOTAL_UPLOAD_SIZE_MB=4'
             echo 'USER_LIBRARY_MAX_FILES_PER_UPLOAD=5'
+            echo 'SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS=10'
           } > .env
 
       # Raw docker compose (ods compose has no craft overlay yet). Only

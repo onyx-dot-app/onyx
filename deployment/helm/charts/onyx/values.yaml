@@ -1534,6 +1534,8 @@ configMap:
   SANDBOX_SERVICE_ACCOUNT_NAME: "sandbox"
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
+  SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS: "180"
+  SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS: "60"
 
 # -- Craft sandbox RBAC (rendered when configMap.ENABLE_CRAFT=true).
 craft:

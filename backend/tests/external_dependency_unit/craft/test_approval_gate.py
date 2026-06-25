@@ -52,6 +52,7 @@ from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.approvals.api import DecisionBody
 from onyx.server.features.build.approvals.api import list_live_approvals
 from onyx.server.features.build.approvals.api import submit_decision
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
@@ -79,9 +80,7 @@ _PROXY_COMPONENT_LABEL = "app.kubernetes.io/component=sandbox-proxy"
 # Matches catalog action ``slack.messages.write``.
 _SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 
-# Spec value for approval_cache.WAIT_TIMEOUT_S; pinned by
-# test_wait_timeout_constant_matches_spec.
-_WAIT_TIMEOUT_S_SPEC = 180
+_APPROVAL_WAIT_TIMEOUT_S = SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -385,7 +384,7 @@ def test_expired_on_wait_timeout(
     gated_session: tuple[User, UUID, str],
     db_session: Session,
 ) -> None:
-    """No decision → proxy claims EXPIRED after ``WAIT_TIMEOUT_S``.
+    """No decision → proxy claims EXPIRED after the approval wait timeout.
 
     curl's --max-time must outlive the spec window so we see the proxy's 403
     rather than the client tearing down first.
@@ -398,14 +397,14 @@ def test_expired_on_wait_timeout(
         pod_name,
         output_path,
         text="never decided",
-        max_time_s=_WAIT_TIMEOUT_S_SPEC + 60,
+        max_time_s=_APPROVAL_WAIT_TIMEOUT_S + 60,
         session_id=session_id,
     )
 
     pending = _wait_for_pending_approval(db_session, session_id)
 
     status_code, body = wait_for_pod_exec_output(
-        k8s_client, pod_name, output_path, timeout_s=_WAIT_TIMEOUT_S_SPEC + 30
+        k8s_client, pod_name, output_path, timeout_s=_APPROVAL_WAIT_TIMEOUT_S + 30
     )
     assert status_code == 403, (
         f"sandbox-side curl after timeout should see 403, got {status_code}: {body!r}"
@@ -418,11 +417,6 @@ def test_expired_on_wait_timeout(
     assert refreshed.decision == ApprovalDecision.EXPIRED
 
 
-def test_wait_timeout_constant_matches_spec() -> None:
-    """``approval_cache.WAIT_TIMEOUT_S`` must equal the value tests assume."""
-    assert approval_cache.WAIT_TIMEOUT_S == _WAIT_TIMEOUT_S_SPEC
-
-
 def test_sigterm_drain_unblocks_parked_request(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
@@ -431,7 +425,7 @@ def test_sigterm_drain_unblocks_parked_request(
 ) -> None:
     """Deleting the parked proxy pod must drain → wake → EXPIRED.
 
-    Without the drain hook the curl would hang until ``WAIT_TIMEOUT_S``; we
+    Without the drain hook the curl would hang until the wait timeout; we
     assert it unblocks well inside that window.
     """
     _, session_id, pod_name = gated_session
@@ -761,7 +755,7 @@ def test_list_live_excludes_aged_pending_rows(
     gated_session: tuple[User, UUID, str],
     db_session: Session,
 ) -> None:
-    """Pending rows older than ``WAIT_TIMEOUT_S`` are excluded from /live.
+    """Pending rows older than the approval wait timeout are excluded from /live.
 
     Two boundary rows (5s either side of the cutoff) make an off-by-one in the
     ``created_after`` filter (``>=`` vs ``>``) fail this test.
@@ -800,7 +794,7 @@ def test_list_live_excludes_aged_pending_rows(
             actions=slack_actions,
             app_name="Slack",
             payload={"boundary": "just_live"},
-            created_at=now - timedelta(seconds=_WAIT_TIMEOUT_S_SPEC - 5),
+            created_at=now - timedelta(seconds=_APPROVAL_WAIT_TIMEOUT_S - 5),
         )
     )
     db_session.add(
@@ -810,7 +804,7 @@ def test_list_live_excludes_aged_pending_rows(
             actions=slack_actions,
             app_name="Slack",
             payload={"boundary": "just_expired"},
-            created_at=now - timedelta(seconds=_WAIT_TIMEOUT_S_SPEC + 5),
+            created_at=now - timedelta(seconds=_APPROVAL_WAIT_TIMEOUT_S + 5),
         )
     )
     db_session.commit()
@@ -821,16 +815,18 @@ def test_list_live_excludes_aged_pending_rows(
     )
     boundary_ids = {item.approval_id for item in boundary.items}
     assert just_live_id in boundary_ids, (
-        f"Row created {_WAIT_TIMEOUT_S_SPEC - 5}s ago should be live "
+        f"Row created {_APPROVAL_WAIT_TIMEOUT_S - 5}s ago should be live "
         f"(cutoff edge), got: {boundary_ids}"
     )
     assert just_expired_id not in boundary_ids, (
-        f"Row created {_WAIT_TIMEOUT_S_SPEC + 5}s ago should be excluded "
+        f"Row created {_APPROVAL_WAIT_TIMEOUT_S + 5}s ago should be excluded "
         f"(just past cutoff), got: {boundary_ids}"
     )
 
     # Backdate well past the cutoff so the parked row drops out of /live.
-    aged_at = datetime.now(timezone.utc) - timedelta(seconds=_WAIT_TIMEOUT_S_SPEC + 60)
+    aged_at = datetime.now(timezone.utc) - timedelta(
+        seconds=_APPROVAL_WAIT_TIMEOUT_S + 60
+    )
     db_session.execute(
         text("UPDATE action_approval SET created_at = :ts WHERE approval_id = :aid"),
         {"ts": aged_at, "aid": pending.approval_id},
@@ -880,7 +876,7 @@ def test_row_missing_on_claim_returns_expired(
         pod_name,
         output_path,
         text="drop me",
-        max_time_s=_WAIT_TIMEOUT_S_SPEC + 60,
+        max_time_s=_APPROVAL_WAIT_TIMEOUT_S + 60,
         session_id=session_id,
     )
 
@@ -894,7 +890,7 @@ def test_row_missing_on_claim_returns_expired(
     db_session.commit()
 
     status_code, body = wait_for_pod_exec_output(
-        k8s_client, pod_name, output_path, timeout_s=_WAIT_TIMEOUT_S_SPEC + 30
+        k8s_client, pod_name, output_path, timeout_s=_APPROVAL_WAIT_TIMEOUT_S + 30
     )
     assert status_code == 403, (
         f"sandbox-side curl after row-missing claim should see 403, "
@@ -937,7 +933,7 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
         pod_name,
         output_path,
         text="conflict me",
-        max_time_s=_WAIT_TIMEOUT_S_SPEC + 60,
+        max_time_s=_APPROVAL_WAIT_TIMEOUT_S + 60,
         session_id=session_id,
     )
 
@@ -945,7 +941,7 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
 
     # Wait out the park window so the proxy claims EXPIRED.
     status_code, body = wait_for_pod_exec_output(
-        k8s_client, pod_name, output_path, timeout_s=_WAIT_TIMEOUT_S_SPEC + 30
+        k8s_client, pod_name, output_path, timeout_s=_APPROVAL_WAIT_TIMEOUT_S + 30
     )
     assert status_code == 403, (
         f"Expected 403 after wait-timeout, got {status_code}: {body!r}"
