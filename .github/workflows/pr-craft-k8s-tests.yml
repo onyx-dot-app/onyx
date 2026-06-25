@@ -551,7 +551,7 @@ jobs:
           py.test \
             --durations=8 \
             -o junit_family=xunit2 \
-            -xv \
+            -v \
             --ff \
             -m "not nightly" \
             --log-cli-level=INFO \
