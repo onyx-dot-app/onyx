@@ -1,7 +1,13 @@
 "use client";
 
 import "@opal/layouts/auth/styles.css";
-import { Button, Card as OpalCard, EndOfList, Text } from "@opal/components";
+import {
+  Button,
+  Card as OpalCard,
+  EndOfList,
+  MessageCard,
+  Text,
+} from "@opal/components";
 import SvgArrowRightCircle from "@opal/icons/arrow-right-circle";
 import { Content } from "@opal/layouts";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -128,6 +134,34 @@ function Submit({ label, disabled }: SubmitProps) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Message — restrictive wrapper over MessageCard for auth pages
+// ---------------------------------------------------------------------------
+
+type MessageType = "default" | "warning";
+
+interface MessageProps {
+  messageType?: MessageType;
+  title: string | RichStr;
+  description: string | RichStr;
+}
+
+function Message({
+  messageType = "default",
+  title,
+  description,
+}: MessageProps) {
+  return (
+    <div className="pt-2">
+      <MessageCard
+        variant={messageType}
+        title={title}
+        description={description}
+      />
+    </div>
+  );
+}
+
 export {
   Root,
   type CardProps,
@@ -138,4 +172,7 @@ export {
   type SubmitLabel,
   type SubmitProps,
   Submit,
+  type MessageType,
+  type MessageProps,
+  Message,
 };

@@ -9,7 +9,6 @@ import { AuthType } from "@/lib/constants";
 import { AuthLayouts } from "@opal/layouts";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import EmailPasswordForm from "@/views/auth/EmailPasswordForm";
-import { MessageCard } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 
@@ -52,11 +51,9 @@ export default function SignupPage() {
         bottomPrompt={bottomPrompt}
         logoSrc={logoUrl}
       >
-        <MessageCard
+        <AuthLayouts.Message
           title="New account creation unavailable."
-          description={markdown(
-            "Existing accounts can still [sign in](/auth/login?autoRedirectToSignup=false). New account creation will be available again soon. You can also try Onyx by [self-hosting](https://docs.onyx.app/deployment/overview)."
-          )}
+          description="New account creation will be available again soon."
         />
       </AuthLayouts.Card>
     );

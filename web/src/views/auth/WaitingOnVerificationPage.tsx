@@ -17,33 +17,31 @@ export default function WaitingOnVerificationPage() {
   const { authTypeMetadata } = useAuthTypeMetadata();
   const { logoUrl } = useSettings();
 
-  useEffect(() => {
-    if (user === undefined) return;
+  // useEffect(() => {
+  //   if (!user) {
+  //     router.replace("/auth/login" as Route);
+  //     return;
+  //   }
 
-    if (!user) {
-      router.replace("/auth/login" as Route);
-      return;
-    }
+  //   if (!authTypeMetadata.requiresVerification || user.is_verified) {
+  //     router.replace("/app" as Route);
+  //   }
+  // }, [user, authTypeMetadata, router]);
 
-    if (!authTypeMetadata.requiresVerification || user.is_verified) {
-      router.replace("/app" as Route);
-    }
-  }, [user, authTypeMetadata, router]);
-
-  if (!user) return null;
+  // if (!user) return null;
 
   return (
-    <AuthLayouts.Card title="Verify your email" logoSrc={logoUrl}>
-      <div className="flex flex-col gap-2">
-        <Text font="main-ui-body" color="text-03">
-          {markdown(
-            `Hey, *${user.email}*, it looks like you haven't verified your email yet.\nCheck your inbox for an email from us to get started!`
-          )}
-        </Text>
-        <RequestNewVerificationEmail email={user.email}>
-          Resend verification email
-        </RequestNewVerificationEmail>
-      </div>
+    <AuthLayouts.Card
+      title="Check your inbox"
+      logoSrc={logoUrl}
+      description="We’ve sent a verification link to your email address."
+    >
+      <AuthLayouts.Message
+        title={`Email sent to ${user?.email}`}
+        description={markdown(
+          "Didn't receive an email? [Resend](/link-here-???)"
+        )}
+      />
     </AuthLayouts.Card>
   );
 }
