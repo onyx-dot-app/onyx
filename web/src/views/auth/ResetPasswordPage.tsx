@@ -1,51 +1,30 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { resetPassword } from "@/lib/auth/svc";
-import { AuthLayouts } from "@opal/layouts";
+import { AuthLayouts, InputVertical } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
-import { Button } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { TextFormField } from "@/components/Field";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { toast } from "@/hooks/useToast";
-import { Spinner } from "@/components/Spinner";
-import { redirect, useSearchParams } from "next/navigation";
-import {
-  NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED,
-  TENANT_ID_COOKIE_NAME,
-} from "@/lib/constants";
-import Cookies from "js-cookie";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
-function ResetPasswordPage() {
-  const [isWorking, setIsWorking] = useState(false);
+export default function ResetPasswordPage() {
+  const router = useRouter();
+  const { user } = useCurrentUser();
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
-  const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
   const { logoUrl } = useSettings();
-
-  useEffect(() => {
-    if (tenantId) {
-      Cookies.set(TENANT_ID_COOKIE_NAME, tenantId, {
-        path: "/",
-        expires: 1 / 24,
-      });
-    }
-  }, [tenantId]);
-
-  if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
-    redirect("/auth/login");
-  }
 
   return (
     <AuthLayouts.Card
       title="Reset Password"
-      description="Enter your new password below."
+      description={`for account ${user?.email}`}
       bottomPrompt={markdown("[Back to Login](/auth/login)")}
       logoSrc={logoUrl}
     >
-      {isWorking && <Spinner />}
       <Formik
         initialValues={{ password: "", confirmPassword: "" }}
         validationSchema={Yup.object().shape({
@@ -59,50 +38,46 @@ function ResetPasswordPage() {
             toast.error("Invalid or missing reset token.");
             return;
           }
-          setIsWorking(true);
           try {
             await resetPassword(token, values.password);
             toast.success(
               "Password reset successfully. Redirecting to login..."
             );
             setTimeout(() => {
-              redirect("/auth/login");
+              router.replace("/auth/login");
             }, 1000);
           } catch (error) {
-            if (error instanceof Error) {
-              toast.error(
-                error.message || "An error occurred during password reset."
-              );
-            } else {
-              toast.error("An unexpected error occurred. Please try again.");
-            }
-          } finally {
-            setIsWorking(false);
+            toast.error(
+              error instanceof Error
+                ? error.message || "An error occurred during password reset."
+                : "An unexpected error occurred. Please try again."
+            );
           }
         }}
       >
         {({ isSubmitting }) => (
           <Form className="w-full flex flex-col items-stretch gap-4">
-            <TextFormField
-              name="password"
-              label="New Password"
-              type="password"
-              placeholder="Enter your new password"
-            />
-            <TextFormField
-              name="confirmPassword"
-              label="Confirm New Password"
-              type="password"
-              placeholder="Confirm your new password"
-            />
-            <Button disabled={isSubmitting} type="submit" width="full">
-              Reset Password
-            </Button>
+            <AuthLayouts.Fields>
+              <InputVertical title="New Password" withLabel="password">
+                <PasswordInputTypeInField
+                  name="password"
+                  placeholder="Enter your new password"
+                />
+              </InputVertical>
+              <InputVertical
+                title="Confirm New Password"
+                withLabel="confirmPassword"
+              >
+                <PasswordInputTypeInField
+                  name="confirmPassword"
+                  placeholder="Confirm your new password"
+                />
+              </InputVertical>
+            </AuthLayouts.Fields>
+            <AuthLayouts.Submit label="reset" disabled={isSubmitting} />
           </Form>
         )}
       </Formik>
     </AuthLayouts.Card>
   );
 }
-
-export default ResetPasswordPage;

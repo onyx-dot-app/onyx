@@ -108,7 +108,7 @@ function Fields({ children }: FieldsProps) {
 // Submit — full-width submit button
 // ---------------------------------------------------------------------------
 
-type SubmitLabel = "submit" | "create" | "join";
+type SubmitLabel = "submit" | "create" | "join" | "reset";
 
 interface SubmitProps {
   label: SubmitLabel;
@@ -119,6 +119,7 @@ const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
   submit: "Submit",
   create: "Create",
   join: "Join",
+  reset: "Reset Password",
 };
 
 function Submit({ label, disabled }: SubmitProps) {
