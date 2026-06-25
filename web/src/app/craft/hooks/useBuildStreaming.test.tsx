@@ -112,6 +112,28 @@ describe("useBuildStreaming thinking packets", () => {
     });
   });
 
+  it("does not reset the abort controller when a newer turn took ownership mid-stream", async () => {
+    const newerController = new AbortController();
+    jest.mocked(processSSEStream).mockImplementationOnce(async () => {
+      // Simulate a queued message auto-sending mid-stream: the newer turn
+      // installs its own controller while this one is still settling.
+      useBuildSessionStore
+        .getState()
+        .setAbortController(sessionId, newerController);
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "hello");
+    });
+
+    // The completed turn's finally must not clobber the newer turn's controller,
+    // or the newer turn's streamTurnEvents trips the duplicate-watcher guard.
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.abortController
+    ).toBe(newerController);
+  });
+
   it("seeds clickable subagent metadata from a task start packet", async () => {
     jest
       .mocked(processSSEStream)
@@ -683,6 +705,38 @@ describe("useBuildStreaming thinking packets", () => {
     ]);
   });
 
+  it("defers to reconcile when an error packet arrives mid-interrupt", async () => {
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        onPacket({ type: "error", message: "Aborted" } as never);
+      });
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnLocalOwner: false,
+      isInterrupting: true,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.streamTurnEvents(
+        sessionId,
+        "turn-interrupted",
+        new AbortController().signal
+      );
+    });
+
+    // An error mid-interrupt (opencode's abort surfaces as one) must not mark the
+    // session failed — that strands the queued auto-send. Settlement defers to
+    // reconcile, so status/error/streamItems are left untouched.
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.status).toBe("running");
+    expect(session?.error).toBeNull();
+    expect(session?.isInterrupting).toBe(true);
+    expect(session?.streamItems).toEqual([]);
+  });
+
   it("clears stale turn metadata when the backend says the turn is not running", async () => {
     jest.mocked(fetchTurnEventStream).mockResolvedValueOnce(null);
     const { result } = renderHook(() => useBuildStreaming());
@@ -707,7 +761,7 @@ describe("useBuildStreaming thinking packets", () => {
     );
   });
 
-  it("clears interrupt state when an attached stream settles", async () => {
+  it("defers settlement to reconcile when a stream settles mid-interrupt", async () => {
     jest.mocked(processSSEStream).mockResolvedValueOnce(undefined);
     useBuildSessionStore.getState().updateSessionData(sessionId, {
       status: "running",
@@ -725,17 +779,14 @@ describe("useBuildStreaming thinking packets", () => {
       );
     });
 
+    // Settlement is deferred to reconcile, so the stream end leaves state untouched.
     const session = useBuildSessionStore.getState().sessions.get(sessionId);
     expect(session).toMatchObject({
-      status: "active",
-      activeTurnId: null,
-      activeTurnLocalOwner: false,
-      isInterrupting: false,
+      status: "running",
+      activeTurnId: "turn-interrupted-settled",
+      isInterrupting: true,
     });
-    expect(useBuildSessionStore.getState().loadSession).toHaveBeenCalledWith(
-      sessionId,
-      { force: true }
-    );
+    expect(useBuildSessionStore.getState().loadSession).not.toHaveBeenCalled();
   });
 
   it("skips duplicate watchers for a locally owned turn", async () => {
@@ -956,7 +1007,53 @@ describe("useBuildStreaming thinking packets", () => {
 
     expect(interruptMessageStream).toHaveBeenCalledWith(sessionId);
     expect(session?.isInterrupting).toBe(true);
+    expect(session?.wasInterrupted).toBe(true);
     expect(toolStatuses).toEqual(["completed", "cancelled"]);
+  });
+
+  it("sets wasInterrupted on interrupt and clears it on the next turn", async () => {
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-x",
+      activeTurnLocalOwner: true,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.wasInterrupted
+    ).toBe(true);
+
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "next");
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.wasInterrupted
+    ).toBe(false);
+  });
+
+  it("clears wasInterrupted when the interrupt request fails", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    jest
+      .mocked(interruptMessageStream)
+      .mockRejectedValueOnce(new Error("network down"));
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-x",
+      activeTurnLocalOwner: true,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.isInterrupting).toBe(false);
+    expect(session?.wasInterrupted).toBe(false);
+    errorSpy.mockRestore();
   });
 
   it("persists an interrupted in-flight tool call as cancelled on prompt_response", async () => {
@@ -1008,7 +1105,8 @@ describe("useBuildStreaming thinking packets", () => {
       | undefined;
 
     expect(session?.streamItems).toEqual([]);
-    expect(session?.isInterrupting).toBe(false);
+    // Settlement is deferred to reconcile, so isInterrupting stays set here.
+    expect(session?.isInterrupting).toBe(true);
     expect(metadata?.streamItems).toEqual([
       expect.objectContaining({
         type: "tool_call",
@@ -1129,6 +1227,47 @@ describe("useBuildStreaming thinking packets", () => {
       sessionId,
       { force: true }
     );
+  });
+
+  it("bails a stale reconcile once a newer turn supersedes the interrupt", async () => {
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+      turnGeneration: 5,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+
+    // A queued message auto-sends: a new turn starts and bumps turnGeneration.
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-next",
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+      turnGeneration: 6,
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    // The stale reconcile must not poll or settle — the live turn is untouched.
+    expect(fetchActiveTurn).not.toHaveBeenCalled();
+    expect(useBuildSessionStore.getState().loadSession).not.toHaveBeenCalled();
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "running",
+      activeTurnId: "turn-next",
+    });
   });
 
   it("does not clear local interrupt state while the backend turn is still active", async () => {
