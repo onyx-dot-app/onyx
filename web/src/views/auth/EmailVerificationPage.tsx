@@ -19,7 +19,7 @@ export default function EmailVerificationPage() {
   const { logoUrl } = useSettings();
 
   useEffect(() => {
-    if (user === undefined) return;
+    // if (user === undefined) return;
 
     if (!user) {
       router.replace("/auth/login" as Route);
@@ -49,6 +49,8 @@ export default function EmailVerificationPage() {
     }
   }, [user, authTypeMetadata, router, searchParams]);
 
+  if (!user) return null;
+
   return (
     <AuthLayouts.Card
       title="Check your inbox"
@@ -56,7 +58,7 @@ export default function EmailVerificationPage() {
       description="We've sent a verification link to your email address."
     >
       <AuthLayouts.Message
-        title={`Email sent to ${user?.email}`}
+        title={`Email sent to ${user.email}`}
         description={markdown(
           "Didn't receive an email? [Resend](/auth/email-verification?resend=true)"
         )}
