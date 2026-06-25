@@ -224,6 +224,10 @@ override-dependencies = [
 [tool.ty.environment]
 python-version = "3.13"
 root = ["./backend"]
+# Ensure ty resolves onyx.* from this project's backend directory first, even
+# when PYTHONPATH contains another checkout (e.g. when working in a git worktree
+# alongside the main repo).
+extra-paths = ["backend"]
 
 [tool.ty.src]
 include = ["backend"]

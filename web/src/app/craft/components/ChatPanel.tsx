@@ -719,7 +719,7 @@ export default function BuildChatPanel({
                             "flex items-center justify-center",
                             "w-8 h-8 rounded-full",
                             "bg-background-neutral-inverted-00 border border-border-01",
-                            "shadow-01 hover:shadow-02",
+                            "shadow-box-01 hover:shadow-box-02",
                             "transition-all duration-200",
                             "hover:bg-background-tint-inverted-01"
                           )}

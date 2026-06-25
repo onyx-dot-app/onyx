@@ -1599,8 +1599,9 @@ async def test_await_decision_wake_received_returns_decision(
     ctx = _ctx(tenant_id="tenant-1")
 
     async def _fake_wait_for_wake(
-        _approval_id: UUID, _timeout: int, _cache: Any
+        _approval_id: UUID, timeout: int, _cache: Any
     ) -> ApprovalDecision | None:
+        assert timeout == gate.SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
         return ApprovalDecision.APPROVED
 
     monkeypatch.setattr(gate.approval_cache, "wait_for_wake", _fake_wait_for_wake)

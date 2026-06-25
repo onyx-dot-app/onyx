@@ -89,3 +89,15 @@ class HierarchyNodeDocumentsResponse(BaseModel):
     sort_field: DocumentSortField = DocumentSortField.LAST_UPDATED
     sort_direction: DocumentSortDirection = DocumentSortDirection.DESC
     folder_position: FolderPosition = FolderPosition.ON_TOP
+
+
+class HierarchyNodeSearchSummary(BaseModel):
+    id: int
+    title: str
+    link: str | None
+    parent_id: int | None
+    source: DocumentSource
+
+
+class HierarchyNodeSearchResponse(BaseModel):
+    nodes: list[HierarchyNodeSearchSummary]

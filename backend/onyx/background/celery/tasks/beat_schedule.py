@@ -16,6 +16,7 @@ from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
 from onyx.utils.variable_functionality import _LICENSE_ENFORCEMENT_ENABLED
 from shared_configs.configs import MULTI_TENANT
 
@@ -182,9 +183,10 @@ beat_task_templates: list[dict] = [
         "name": "cleanup-idle-sandboxes",
         "task": OnyxCeleryTask.CLEANUP_IDLE_SANDBOXES,
         # Ticks are cheap (DB-only when nothing is stale); snapshot pacing is
-        # gated inside the task at idle_timeout/4, so cloud's x8 multiplier
-        # (~8 min effective) still lands under the ~15 min data-loss bound.
-        "schedule": timedelta(minutes=1),
+        # gated inside the task at idle_timeout/4. With the cloud x8 multiplier
+        # the effective interval is SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 8;
+        # keep that product under ~15 min to stay within the data-loss bound.
+        "schedule": timedelta(seconds=SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS),
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
