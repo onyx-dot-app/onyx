@@ -533,6 +533,12 @@ class Permission(str, PyEnum):
     CREATE_SERVICE_ACCOUNT_API_KEYS = "create:service_account_api_keys"
     CREATE_SLACK_DISCORD_BOTS = "create:slack_discord_bots"
 
+    # Role scopes — a bundle token implying the surfaces a given machine
+    # identity may use. PAT-only; never granted to a group/user.
+    CRAFT_SANDBOX = "craft_sandbox"
+
+    REQUEST_APP_SETUP = "request:app_setup"
+
     # Override — any permission check passes
     FULL_ADMIN_PANEL_ACCESS = "admin"
 
@@ -551,6 +557,7 @@ Permission.IMPLIED = frozenset(
         Permission.READ_CHAT,
         Permission.WRITE_CHAT,
         Permission.READ_ADMIN,
+        Permission.REQUEST_APP_SETUP,
     }
 )
 
