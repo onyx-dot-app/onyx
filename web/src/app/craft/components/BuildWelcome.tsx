@@ -66,10 +66,10 @@ export default function BuildWelcome({
                 text05
                 style={{
                   fontFamily: "var(--font-kh-teka)",
-                  fontWeight: 500,
+                  fontWeight: 400,
                   // Sized so the x-height matches the custom "onyx" logotype
                   // (its x-height ≈ 0.595em vs KH Teka's 0.504em at size 28).
-                  fontSize: "33px",
+                  fontSize: "34px",
                   lineHeight: "1",
                   letterSpacing: "-0.02em",
                 }}
