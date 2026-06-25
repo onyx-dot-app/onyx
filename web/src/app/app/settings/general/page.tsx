@@ -1,4 +1,4 @@
-import { GeneralSettings } from "@/refresh-pages/SettingsPage";
+import { GeneralSettings } from "@/views/SettingsPage";
 
 export default function GeneralSettingsPage() {
   return <GeneralSettings />;

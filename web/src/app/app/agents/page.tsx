@@ -1,4 +1,4 @@
-import AgentsNavigationPage from "@/refresh-pages/AgentsNavigationPage";
+import AgentsNavigationPage from "@/views/AgentsNavigationPage";
 
 export default async function Page() {
   return <AgentsNavigationPage />;

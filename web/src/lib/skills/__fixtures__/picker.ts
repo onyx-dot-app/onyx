@@ -5,7 +5,7 @@ import type {
 import type {
   BuiltinSkill,
   CustomSkill,
-} from "@/refresh-pages/admin/SkillsPage/interfaces";
+} from "@/views/admin/SkillsPage/interfaces";
 
 export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
   return {
