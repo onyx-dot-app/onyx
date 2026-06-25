@@ -78,9 +78,12 @@ export default function TutorPickerView({
           ltiCanvasCourseNodeId
         );
       }
+      if (projectId !== null) {
+        params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
+      }
       return `/tutor/edit/${agentId}?${params.toString()}`;
     },
-    [isEmbedded, ltiContextId, ltiCanvasCourseNodeId]
+    [isEmbedded, ltiContextId, ltiCanvasCourseNodeId, projectId]
   );
 
   const buildCreateTutorUrl = useCallback(() => {
@@ -93,8 +96,11 @@ export default function TutorPickerView({
         ltiCanvasCourseNodeId
       );
     }
+    if (projectId !== null) {
+      params.set(SEARCH_PARAM_NAMES.PROJECT_ID, String(projectId));
+    }
     return `/tutor/create?${params.toString()}`;
-  }, [isEmbedded, ltiContextId, ltiCanvasCourseNodeId]);
+  }, [isEmbedded, ltiContextId, ltiCanvasCourseNodeId, projectId]);
 
   const handleSelect = useCallback(
     (agentId: number) => {

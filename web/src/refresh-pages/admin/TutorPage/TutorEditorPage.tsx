@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import * as SettingsLayouts from "@/layouts/settings-layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
@@ -169,8 +170,36 @@ export default function TutorEditorPage({
   const ltiCanvasCourseNodeId = ltiCanvasCourseNodeIdRaw
     ? parseInt(ltiCanvasCourseNodeIdRaw)
     : null;
+  // Carried through verbatim from the launch so the instructor lands back on
+  // an embedded, project-scoped /tutor view. The Knowledge / Insights tabs
+  // only render when `projectId` is present, so dropping it here is what made
+  // them vanish until a full LTI re-launch (page refresh).
+  const projectIdRaw = searchParams?.get(SEARCH_PARAM_NAMES.PROJECT_ID) ?? null;
+  const embeddedRaw = searchParams?.get(SEARCH_PARAM_NAMES.EMBEDDED) ?? null;
   const isCreating = !existingTutor;
   const missingLtiContextOnCreate = isCreating && !ltiContextId;
+
+  // Build the /tutor return URL, preserving the LTI launch context (course
+  // node, project, embedded mode) so the picker and instructor tabs render
+  // correctly without needing a refresh.
+  function buildCourseReturnUrl(courseLabelName: string): Route {
+    const params = new URLSearchParams({
+      [SEARCH_PARAM_NAMES.LTI_CONTEXT_ID]: courseLabelName,
+    });
+    if (ltiCanvasCourseNodeIdRaw) {
+      params.set(
+        SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
+        ltiCanvasCourseNodeIdRaw
+      );
+    }
+    if (projectIdRaw) {
+      params.set(SEARCH_PARAM_NAMES.PROJECT_ID, projectIdRaw);
+    }
+    if (embeddedRaw) {
+      params.set(SEARCH_PARAM_NAMES.EMBEDDED, embeddedRaw);
+    }
+    return `/tutor?${params.toString()}` as Route;
+  }
 
   const { tools: availableTools, isLoading: isToolsLoading } =
     useAvailableTools();
@@ -362,16 +391,7 @@ export default function TutorEditorPage({
         ? existingCourseLabel?.name
         : ltiContextId;
       if (courseLabelName) {
-        const params = new URLSearchParams({
-          [SEARCH_PARAM_NAMES.LTI_CONTEXT_ID]: courseLabelName,
-        });
-        if (ltiCanvasCourseNodeIdRaw) {
-          params.set(
-            SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
-            ltiCanvasCourseNodeIdRaw
-          );
-        }
-        router.push(`/tutor?${params.toString()}`);
+        router.push(buildCourseReturnUrl(courseLabelName));
       } else {
         router.push("/admin/tutor");
       }
@@ -391,16 +411,7 @@ export default function TutorEditorPage({
       await refreshAgents();
       const courseLabelName = existingCourseLabel?.name;
       if (courseLabelName) {
-        const params = new URLSearchParams({
-          [SEARCH_PARAM_NAMES.LTI_CONTEXT_ID]: courseLabelName,
-        });
-        if (ltiCanvasCourseNodeIdRaw) {
-          params.set(
-            SEARCH_PARAM_NAMES.LTI_CANVAS_COURSE_NODE_ID,
-            ltiCanvasCourseNodeIdRaw
-          );
-        }
-        router.push(`/tutor?${params.toString()}`);
+        router.push(buildCourseReturnUrl(courseLabelName));
       } else {
         router.push("/admin/tutor");
       }
