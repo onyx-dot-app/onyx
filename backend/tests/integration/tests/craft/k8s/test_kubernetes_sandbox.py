@@ -33,6 +33,8 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
 from tests.integration.tests.craft.k8s.k8s_fixtures import CRAFT_TEST_USER_ID
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
+from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
+from tests.integration.tests.craft.k8s.k8s_fixtures import ProvisionedSandboxId
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_until_healthy
 
@@ -70,7 +72,7 @@ def _read_pod_file(k8s: client.CoreV1Api, pod_name: str, path: str) -> str:
 def test_provisioned_pod_has_sandbox_image_directories(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
 ) -> None:
     sandbox_id, _, pod_name = pool_session
 
@@ -98,7 +100,7 @@ def test_provisioned_pod_has_sandbox_image_directories(
 def test_session_workspace_setup_creates_expected_tree(
     k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build live_pod
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
 ) -> None:
     _, session_id, pod_name = pool_session
     session_path = f"/workspace/sessions/{session_id}"
@@ -148,7 +150,7 @@ def test_session_workspace_setup_creates_expected_tree(
 def test_push_signed_tarball_lands_under_mount_path(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
 ) -> None:
     sandbox_id, _, pod_name = pool_session
     slug = f"push-test-{uuid4().hex[:8]}"
@@ -192,7 +194,7 @@ def test_push_signed_tarball_lands_under_mount_path(
 def test_push_second_call_replaces_previous_via_atomic_swap(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
 ) -> None:
     sandbox_id, _, pod_name = pool_session
     slug = f"swap-test-{uuid4().hex[:8]}"
@@ -224,7 +226,7 @@ def test_push_second_call_replaces_previous_via_atomic_swap(
 def test_push_with_bad_signature_returns_401(
     k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build live_pod
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
 ) -> None:
     sandbox_id, _, pod_name = pool_session
 
@@ -277,7 +279,7 @@ def test_health_check_returns_false_for_missing_pod(
 
 def test_pod_runs_sandbox_container_and_native_init_sidecar(
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
 ) -> None:
     _, _, pod_name = pool_session
     pod = k8s_client.read_namespaced_pod(name=pod_name, namespace=SANDBOX_NAMESPACE)
@@ -298,7 +300,7 @@ def test_pod_runs_sandbox_container_and_native_init_sidecar(
 
 def test_irsa_credentials_stripped_from_sandbox_container(
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
 ) -> None:
     """The sandbox container must never see IRSA credentials (AWS_* env, token mount)."""
     _, _, pod_name = pool_session
@@ -338,7 +340,7 @@ def test_irsa_credentials_stripped_from_sandbox_container(
 def test_managed_directory_is_read_only_from_sandbox_container(
     k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build live_pod
     k8s_client: client.CoreV1Api,
-    live_pod: tuple[UUID, UUID, str],
+    live_pod: PoolSession,
 ) -> None:
     """A write to `/workspace/managed/` from the agent container must fail at the kernel (EROFS).
 
@@ -380,7 +382,7 @@ def test_managed_directory_is_read_only_from_sandbox_container(
 
 def test_sandbox_etc_hosts_resolves_proxy_alias(
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
 ) -> None:
     """The main container's /etc/hosts must contain the `sandbox-proxy` alias.
 
@@ -400,7 +402,7 @@ def test_sandbox_etc_hosts_resolves_proxy_alias(
 
 
 def test_sandbox_egress_only_flows_via_proxy(
-    provisioned_sandbox: tuple[UUID, str],
+    provisioned_sandbox: ProvisionedSandboxId,
     k8s_client: client.CoreV1Api,
 ) -> None:
     """TLS through the proxy reaches the internet while direct egress is iptables-blocked.

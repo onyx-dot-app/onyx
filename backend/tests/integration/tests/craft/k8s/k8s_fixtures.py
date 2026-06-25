@@ -14,6 +14,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from dataclasses import field
 from pathlib import PurePosixPath
+from typing import NamedTuple
 from typing import TYPE_CHECKING
 from uuid import UUID
 from uuid import uuid4
@@ -50,6 +51,38 @@ from tests.integration.common_utils.managers.user import UserManager
 logger = setup_logger()
 
 CRAFT_TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
+
+
+class PoolSession(NamedTuple):
+    """Returned by ``pool_session`` and ``live_pod`` fixtures."""
+
+    sandbox_id: UUID
+    session_id: UUID
+    pod_name: str
+
+
+class OwnedLivePod(NamedTuple):
+    """Returned by ``owned_live_pod`` and ``_provisioned_sandbox``."""
+
+    api_user: "DATestUser"
+    sandbox_id: UUID
+    session_id: UUID
+    pod_name: str
+
+
+class ProvisionedSandboxId(NamedTuple):
+    """Returned by ``provisioned_sandbox`` fixture."""
+
+    sandbox_id: UUID
+    pod_name: str
+
+
+class PodExecResult(NamedTuple):
+    """Returned by ``wait_for_pod_exec_output``."""
+
+    status_code: int
+    body: str
+
 
 _K8S_CRAFT_PATHS = (
     "backend/tests/integration/tests/craft/k8s/",
@@ -378,7 +411,7 @@ def cleanup_api_user_sandbox_rows(user_id: UUID) -> None:
 def _provisioned_sandbox(
     manager: KubernetesSandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",
-) -> Generator[tuple["DATestUser", UUID, UUID, str], None, None]:
+) -> Generator[OwnedLivePod, None, None]:
     """API-provisioned sandbox with committed DB rows; tears down pod + rows on exit.
 
     The proxy resolves identity via the DB (pod IP -> Sandbox.user_id), so a pod
@@ -390,7 +423,12 @@ def _provisioned_sandbox(
     try:
         pod_name = manager._get_pod_name(str(sandbox_id))
         try:
-            yield api_user, sandbox_id, session_id, pod_name
+            yield OwnedLivePod(
+                api_user=api_user,
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                pod_name=pod_name,
+            )
         finally:
             try:
                 manager.terminate(sandbox_id)
@@ -686,7 +724,7 @@ def wait_for_pod_exec_output(
     timeout_s: float,
     namespace: str = SANDBOX_NAMESPACE,
     container: str = "sandbox",
-) -> tuple[int, str]:
+) -> PodExecResult:
     """Poll the ``pod_exec_async`` tempfile until it appears, returning
     ``(status_code, body)``. Raises on timeout."""
     deadline = time.monotonic() + timeout_s
@@ -702,7 +740,7 @@ def wait_for_pod_exec_output(
             head, _, rest = raw.partition("\n")
             head = head.strip()
             if head.isdigit():
-                return int(head), rest
+                return PodExecResult(status_code=int(head), body=rest)
         time.sleep(2)
     raise RuntimeError(
         f"pod_exec output {output_path} on pod {pod_name} did not arrive within "
@@ -764,7 +802,7 @@ def k8s_manager() -> Generator[KubernetesSandboxManager, None, None]:
 @pytest.fixture(scope="function")
 def pool_session(
     _pool_pod: _PoolPod,
-) -> tuple[UUID, UUID, str]:
+) -> PoolSession:
     """Fresh API-created session on the module pool pod; returns ``(sandbox_id, session_id, pod_name)``.
 
     Same shape as ``live_pod`` but reuses the pool pod. Use this unless the test
@@ -781,14 +819,18 @@ def pool_session(
             f"of the pool pod {_pool_pod.sandbox_id!r}; the pool pod may have "
             "been terminated externally."
         )
-    return sandbox_id, session_id, _pool_pod.pod_name
+    return PoolSession(
+        sandbox_id=sandbox_id,
+        session_id=session_id,
+        pod_name=_pool_pod.pod_name,
+    )
 
 
 @pytest.fixture(scope="function")
 def live_pod(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",
-) -> Generator[tuple[UUID, UUID, str], None, None]:
+) -> Generator[PoolSession, None, None]:
     """Provision a fresh sandbox + session pod, torn down on exit.
 
     Yields ``(sandbox_id, session_id, pod_name)``. Prefer ``pool_session``
@@ -800,25 +842,24 @@ def live_pod(
         session_id,
         pod_name,
     ):
-        yield sandbox_id, session_id, pod_name
+        yield PoolSession(
+            sandbox_id=sandbox_id,
+            session_id=session_id,
+            pod_name=pod_name,
+        )
 
 
 @pytest.fixture(scope="function")
 def owned_live_pod(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",
-) -> Generator[tuple["DATestUser", UUID, UUID, str], None, None]:
+) -> Generator[OwnedLivePod, None, None]:
     """Like ``live_pod`` but also yields the owning API user for API-driven calls.
 
     Yields ``(api_user, sandbox_id, session_id, pod_name)``.
     """
-    with _provisioned_sandbox(k8s_manager, k8s_client) as (
-        api_user,
-        sandbox_id,
-        session_id,
-        pod_name,
-    ):
-        yield api_user, sandbox_id, session_id, pod_name
+    with _provisioned_sandbox(k8s_manager, k8s_client) as result:
+        yield result
 
 
 @pytest.fixture(scope="function")
@@ -831,7 +872,7 @@ def pool_api_user(_pool_pod: _PoolPod) -> "DATestUser":
 def provisioned_sandbox(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: "k8s_client_module.CoreV1Api",
-) -> Generator[tuple[UUID, str], None, None]:
+) -> Generator[ProvisionedSandboxId, None, None]:
     """A provisioned sandbox (committed rows + pod), without a session.
 
     Yields ``(sandbox_id, pod_name)``.
@@ -842,4 +883,7 @@ def provisioned_sandbox(
         _session_id,
         pod_name,
     ):
-        yield sandbox_id, pod_name
+        yield ProvisionedSandboxId(
+            sandbox_id=sandbox_id,
+            pod_name=pod_name,
+        )

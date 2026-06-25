@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from typing import NamedTuple
 from uuid import UUID
 from uuid import uuid4
 
@@ -29,12 +30,20 @@ from tests.integration.common_utils.managers.build_approvals import (
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
+from tests.integration.tests.craft.docker_e2e.conftest import DockerSandbox
 from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.DOCKER,
     reason="Docker integration tests require SANDBOX_BACKEND=docker.",
 )
+
+
+class DockerGatedSession(NamedTuple):
+    user: DATestUser
+    session_id: UUID
+    container_name: str
+
 
 _SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 _PROXY_CA_ISSUER_RE = re.compile(r"CN=Onyx Sandbox Proxy CA")
@@ -92,7 +101,7 @@ def module_user() -> DATestUser:
 def module_sandbox(
     module_user: DATestUser,
     provision_sandbox: ProvisionSandbox,
-) -> tuple[UUID, str]:
+) -> DockerSandbox:
     return provision_sandbox(module_user)
 
 
@@ -117,19 +126,23 @@ def gated_session(
     gated_user: DATestUser,
     gated_module_sandbox: str,
     provision_sandbox: ProvisionSandbox,
-) -> tuple[DATestUser, UUID, str]:
+) -> DockerGatedSession:
     # Reuses the gated user's already-RUNNING container; only the build-session
     # row -- and thus the proxy tag / approval session id -- is new per test.
-    session_id, container = provision_sandbox(gated_user)
-    assert container == gated_module_sandbox, (
+    result = provision_sandbox(gated_user)
+    assert result.container_name == gated_module_sandbox, (
         "gated_session minted a new container instead of reusing the module "
-        f"sandbox: {container!r} != {gated_module_sandbox!r}"
+        f"sandbox: {result.container_name!r} != {gated_module_sandbox!r}"
     )
-    return gated_user, session_id, container
+    return DockerGatedSession(
+        user=gated_user,
+        session_id=result.session_id,
+        container_name=result.container_name,
+    )
 
 
 def test_sandbox_runs_with_zero_caps_at_uid_1000(
-    module_sandbox: tuple[UUID, str],
+    module_sandbox: DockerSandbox,
     docker_exec: DockerExec,
 ) -> None:
     _session_id, container = module_sandbox
@@ -152,7 +165,7 @@ def test_sandbox_runs_with_zero_caps_at_uid_1000(
 
 
 def test_sandbox_https_is_mitmd_by_proxy_ca(
-    module_sandbox: tuple[UUID, str],
+    module_sandbox: DockerSandbox,
     docker_exec: DockerExec,
 ) -> None:
     _session_id, container = module_sandbox
@@ -175,7 +188,7 @@ def test_sandbox_https_is_mitmd_by_proxy_ca(
 
 def test_credentials_injected_on_wire_returns_real_user(
     module_user: DATestUser,
-    module_sandbox: tuple[UUID, str],
+    module_sandbox: DockerSandbox,
     docker_exec: DockerExec,
 ) -> None:
     _session_id, container = module_sandbox
@@ -207,7 +220,7 @@ def test_credentials_injected_on_wire_returns_real_user(
 
 
 def test_iptables_rejects_bypass_attempts(
-    module_sandbox: tuple[UUID, str],
+    module_sandbox: DockerSandbox,
     docker_exec: DockerExec,
 ) -> None:
     _session_id, container = module_sandbox
@@ -344,7 +357,7 @@ def test_unlabeled_container_gets_unidentified_sandbox_403() -> None:
 
 
 def test_sessions_directory_writable_by_sandbox_user(
-    module_sandbox: tuple[UUID, str],
+    module_sandbox: DockerSandbox,
     docker_exec: DockerExec,
 ) -> None:
     _session_id, container = module_sandbox
@@ -398,7 +411,7 @@ def _get_slack_org_credentials() -> dict[str, str]:
 
 def test_approve_decision_forwards_to_slack(
     slack_external_app: None,  # noqa: ARG001 -- side-effect fixture
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: DockerGatedSession,
     docker_exec: DockerExec,
 ) -> None:
     user, session_id, container = gated_session
@@ -434,7 +447,7 @@ def test_approve_decision_forwards_to_slack(
 
 def test_reject_decision_returns_403_user_rejected(
     slack_external_app: None,  # noqa: ARG001 -- side-effect fixture
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: DockerGatedSession,
     docker_exec: DockerExec,
 ) -> None:
     user, session_id, container = gated_session
@@ -468,7 +481,7 @@ def test_reject_decision_returns_403_user_rejected(
 
 def test_ask_with_uninvokable_app_forwards_bare(
     slack_external_app: None,  # noqa: ARG001 -- side-effect fixture
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: DockerGatedSession,
     docker_exec: DockerExec,
 ) -> None:
     user, session_id, container = gated_session

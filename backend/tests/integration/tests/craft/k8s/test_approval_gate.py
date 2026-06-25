@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Generator
+from typing import NamedTuple
 from uuid import UUID
 from uuid import uuid4
 
@@ -45,10 +46,20 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec_async
+from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_exec_output
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_proxy_redeploy
 
 logger = setup_logger()
+
+
+class GatedSession(NamedTuple):
+    """Returned by the ``gated_session`` fixture."""
+
+    api_user: DATestUser
+    session_id: UUID
+    pod_name: str
+
 
 pytestmark = [
     pytest.mark.skipif(
@@ -282,8 +293,8 @@ def _submit_decision(
 @pytest.fixture(scope="function")
 def gated_session(
     db_session: Session,
-    live_pod: tuple[UUID, UUID, str],
-) -> Generator[tuple[DATestUser, UUID, str], None, None]:
+    live_pod: PoolSession,
+) -> Generator[GatedSession, None, None]:
     """Resolve the API-created active ``BuildSession`` backing ``live_pod``.
 
     ``live_pod`` (via ``k8s_manager``) already sets ``CURRENT_TENANT_ID_CONTEXTVAR``.
@@ -301,13 +312,17 @@ def gated_session(
     assert row.user_id == user.id
     assert row.status == BuildSessionStatus.ACTIVE
 
-    yield api_user, session_id, pod_name
+    yield GatedSession(
+        api_user=api_user,
+        session_id=session_id,
+        pod_name=pod_name,
+    )
 
 
 def test_rejected_decision_returns_403_user_rejected(
     k8s_manager: object,  # noqa: ARG001 — required to construct live_pod
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     api_user, session_id, pod_name = gated_session
@@ -343,7 +358,7 @@ def test_rejected_decision_returns_403_user_rejected(
 def test_approved_decision_forwards_to_slack(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     api_user, session_id, pod_name = gated_session
@@ -379,7 +394,7 @@ def test_approved_decision_forwards_to_slack(
 def test_expired_on_wait_timeout(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     """No decision → proxy claims EXPIRED after the wait timeout.
@@ -417,7 +432,7 @@ def test_expired_on_wait_timeout(
 def test_sigterm_drain_unblocks_parked_request(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     """Deleting the parked proxy pod must drain → wake → EXPIRED (well inside the wait timeout)."""
@@ -465,7 +480,7 @@ def test_sigterm_drain_unblocks_parked_request(
 def test_non_gated_egress_works_without_active_session(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     """Non-matching egress (npm registry) flows through untagged."""
@@ -499,7 +514,7 @@ def test_non_gated_egress_works_without_active_session(
 def test_gated_egress_without_session_tag_fails_closed(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     """Gated request with no session tag → 403 ``no_active_session``, no row.
@@ -530,7 +545,7 @@ def test_ask_with_uninvokable_app_forwards_bare(
     k8s_manager: object,  # noqa: ARG001 -- required to construct live_pod
     k8s_client: client.CoreV1Api,
     k8s_admin_user: DATestUser,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     api_user, session_id, pod_name = gated_session
@@ -570,7 +585,7 @@ def test_ask_with_uninvokable_app_forwards_bare(
 def test_sse_merger_emits_approval_requested_packet(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     """The proxy RPUSHes the announce onto real Redis (not the full SSE path)."""
@@ -601,7 +616,7 @@ def test_sse_merger_emits_approval_requested_packet(
 def test_body_too_large_returns_403(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     """Body exceeding ``PARSER_MAX_BODY_BYTES`` (32 MiB) is rejected pre-match.
@@ -654,7 +669,7 @@ def test_body_too_large_returns_403(
 def test_approval_requested_notification_is_created(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     api_user, session_id, pod_name = gated_session
@@ -710,7 +725,7 @@ def test_approval_requested_notification_is_created(
 def test_post_decision_after_proxy_claimed_expired_returns_conflict(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],
+    gated_session: GatedSession,
     db_session: Session,
 ) -> None:
     api_user, session_id, pod_name = gated_session
@@ -756,7 +771,7 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
 def test_unidentified_sandbox_403_from_non_sandbox_pod(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
-    gated_session: tuple[DATestUser, UUID, str],  # noqa: ARG001 — for fixture chain
+    gated_session: GatedSession,  # noqa: ARG001 — for fixture chain
 ) -> None:
     """A pod in the sandbox namespace without the managed-by label → 403 ``unidentified_sandbox``.
 

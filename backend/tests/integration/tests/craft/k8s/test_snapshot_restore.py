@@ -31,7 +31,9 @@ from tests.integration.common_utils.managers.build_session import BuildSessionMa
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.k8s.k8s_fixtures import cleanup_api_user_sandbox_rows
+from tests.integration.tests.craft.k8s.k8s_fixtures import OwnedLivePod
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
+from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
 
@@ -105,7 +107,7 @@ def _list_archive_members(tar_path: Path) -> list[str]:
 
 def test_snapshot_includes_outputs_and_attachments_only(
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
     pool_api_user: DATestUser,
     tmp_path: Path,
 ) -> None:
@@ -137,7 +139,7 @@ def test_snapshot_includes_outputs_and_attachments_only(
 
 def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
     pool_api_user: DATestUser,
     tmp_path: Path,
 ) -> None:
@@ -170,7 +172,7 @@ def test_snapshot_excludes_managed_skills_agents_md_opencode_json(
 def test_restore_from_snapshot_recreates_workspace(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
     pool_api_user: DATestUser,
 ) -> None:
     sandbox_id, session_id, pod_name = pool_session
@@ -291,7 +293,7 @@ def test_restore_re_pushes_skills(
 def test_restore_with_missing_snapshot_creates_fresh_workspace(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
 ) -> None:
     sandbox_id, session_id, pod_name = pool_session
 
@@ -319,7 +321,7 @@ def test_restore_with_missing_snapshot_creates_fresh_workspace(
 def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    owned_live_pod: tuple[DATestUser, UUID, UUID, str],
+    owned_live_pod: OwnedLivePod,
 ) -> None:
     api_user, sandbox_id, session_id, pod_name = owned_live_pod
     marker_path = "/workspace/opencode-data/cache/history-roundtrip.txt"
@@ -362,7 +364,7 @@ def test_opencode_history_snapshot_restores_into_reprovisioned_pod(
 def test_restore_uses_data_filter_to_block_traversal(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
-    owned_live_pod: tuple[DATestUser, UUID, UUID, str],
+    owned_live_pod: OwnedLivePod,
     tenant_context: None,  # noqa: ARG001
     db_session: Session,
     tmp_path: Path,
@@ -443,7 +445,7 @@ def test_restore_uses_data_filter_to_block_traversal(
 
 def test_snapshot_corruption_detected_on_restore(
     k8s_manager: KubernetesSandboxManager,
-    pool_session: tuple[UUID, UUID, str],
+    pool_session: PoolSession,
     pool_api_user: DATestUser,
     tenant_context: None,  # noqa: ARG001
     db_session: Session,

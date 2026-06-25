@@ -9,6 +9,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
+from typing import NamedTuple
 from uuid import UUID
 from uuid import uuid4
 
@@ -30,6 +31,12 @@ pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.DOCKER,
     reason="Docker integration tests require SANDBOX_BACKEND=docker.",
 )
+
+
+class DockerLiveSession(NamedTuple):
+    user: DATestUser
+    session_id: UUID
+
 
 _LIVE_MODEL = "gpt-5-mini"
 
@@ -123,7 +130,7 @@ def live_session(
     admin_user: DATestUser,
     streaming_user: DATestUser,
     provision_sandbox: ProvisionSandbox,
-) -> Generator[tuple[DATestUser, UUID], None, None]:
+) -> Generator[DockerLiveSession, None, None]:
     real_key = os.environ.get("OPENAI_API_KEY")
     if not real_key:
         pytest.skip("OPENAI_API_KEY not set; live-turn streaming tests need it.")
@@ -132,13 +139,13 @@ def live_session(
         api_key=real_key,
         default_model_name=_LIVE_MODEL,
     )
-    session_id, container = provision_sandbox(streaming_user)
+    result = provision_sandbox(streaming_user)
     try:
-        yield streaming_user, session_id
+        yield DockerLiveSession(user=streaming_user, session_id=result.session_id)
     finally:
         try:
             subprocess.run(
-                ["docker", "rm", "-f", container],
+                ["docker", "rm", "-f", result.container_name],
                 capture_output=True,
                 text=True,
                 timeout=30.0,
@@ -193,7 +200,7 @@ def test_concurrent_turn_is_rejected(
 
 @_SKIP_NO_LLM_KEY
 def test_simple_message_streams_text_and_terminates(
-    live_session: tuple[DATestUser, UUID],
+    live_session: DockerLiveSession,
 ) -> None:
     user, session_id = live_session
     out = _drive_turn(user, session_id, "Say hi briefly.")
@@ -211,7 +218,7 @@ def test_simple_message_streams_text_and_terminates(
 
 @_SKIP_NO_LLM_KEY
 def test_bash_tool_call_lifecycle(
-    live_session: tuple[DATestUser, UUID],
+    live_session: DockerLiveSession,
 ) -> None:
     user, session_id = live_session
     out = _drive_turn(
@@ -237,7 +244,7 @@ def test_bash_tool_call_lifecycle(
 
 @_SKIP_NO_LLM_KEY
 def test_multi_turn_session_terminates_each_turn(
-    live_session: tuple[DATestUser, UUID],
+    live_session: DockerLiveSession,
 ) -> None:
     user, session_id = live_session
     for i, prompt in enumerate(

@@ -25,6 +25,7 @@ from tests.integration.common_utils.managers.build_session import BuildSessionMa
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.k8s.k8s_fixtures import CRAFT_TEST_USER_ID
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
+from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_until_healthy
@@ -47,7 +48,7 @@ class TestHealthCheck:
     def test_health_check_returns_true_for_provisioned_sandbox(
         self,
         k8s_manager: KubernetesSandboxManager,
-        pool_session: tuple[UUID, UUID, str],
+        pool_session: PoolSession,
     ) -> None:
         sandbox_id, _, _ = pool_session
         wait_until_healthy(k8s_manager, sandbox_id)
@@ -160,7 +161,7 @@ class TestCreateSnapshot:
     def test_create_snapshot_returns_none_when_session_has_no_outputs(
         self,
         k8s_client: client.CoreV1Api,
-        pool_session: tuple[UUID, UUID, str],
+        pool_session: PoolSession,
         pool_api_user: DATestUser,
     ) -> None:
         _sandbox_id, session_id, pod_name = pool_session

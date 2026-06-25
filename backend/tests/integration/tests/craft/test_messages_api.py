@@ -11,6 +11,7 @@ from tests.integration.common_utils.managers.build_session import BuildSessionMa
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.conftest import SharedSession
+from tests.integration.tests.craft.conftest import SharedSession
 
 
 def test_send_message_starts_background_turn_and_is_idempotent(
