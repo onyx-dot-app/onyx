@@ -1,15 +1,22 @@
 from uuid import uuid4
 
+import pytest
+
 from onyx.cache.interface import CacheBackend
 from onyx.cache.interface import CacheLock
+from onyx.db.enums import ApprovalDecision
+from onyx.sandbox_proxy.approval_cache import _wake_key
 from onyx.sandbox_proxy.approval_cache import cache_session_grant_actions
 from onyx.sandbox_proxy.approval_cache import cached_session_grants_cover
+from onyx.sandbox_proxy.approval_cache import wait_for_wake
 
 
 class _MemoryCache(CacheBackend):
     def __init__(self) -> None:
         self.values: dict[str, bytes] = {}
         self.expirations: list[tuple[str, int]] = []
+        self.blpop_result: tuple[bytes, bytes] | None = None
+        self.blpop_calls: list[tuple[list[str], int]] = []
 
     def get(self, key: str) -> bytes | None:
         return self.values.get(key)
@@ -42,8 +49,24 @@ class _MemoryCache(CacheBackend):
     def rpush(self, key: str, value: str | bytes) -> None:  # noqa: ARG002
         raise NotImplementedError
 
-    def blpop(self, keys: list[str], timeout: int = 0) -> tuple[bytes, bytes] | None:  # noqa: ARG002
-        raise NotImplementedError
+    def blpop(self, keys: list[str], timeout: int = 0) -> tuple[bytes, bytes] | None:
+        self.blpop_calls.append((keys, timeout))
+        return self.blpop_result
+
+
+@pytest.mark.asyncio
+async def test_wait_for_wake_uses_short_poll_timeout() -> None:
+    cache = _MemoryCache()
+    approval_id = uuid4()
+    cache.blpop_result = (
+        _wake_key(approval_id).encode(),
+        ApprovalDecision.APPROVED.value.encode(),
+    )
+
+    decision = await wait_for_wake(approval_id, timeout_s=30, cache=cache)
+
+    assert decision == ApprovalDecision.APPROVED
+    assert cache.blpop_calls == [([_wake_key(approval_id)], 1)]
 
 
 def test_cached_session_grants_cover_requires_every_action() -> None:

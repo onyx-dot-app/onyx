@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from onyx.db.models import Skill
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -138,6 +139,14 @@ def generate_agent_instructions(
     content = content.replace("{{LLM_MODEL_NAME}}", model_name or "Unknown")
     content = content.replace(
         "{{NEXTJS_PORT}}", str(nextjs_port) if nextjs_port else "Unknown"
+    )
+    content = content.replace(
+        "{{APPROVAL_WAIT_TIMEOUT_SECONDS}}",
+        str(SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS),
+    )
+    content = content.replace(
+        "{{APPROVAL_CLIENT_TIMEOUT_SECONDS}}",
+        str(SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS + 20),
     )
     content = content.replace("{{DISABLED_TOOLS_SECTION}}", disabled_tools_section)
     content = content.replace("{{AVAILABLE_SKILLS_SECTION}}", skills_section)
