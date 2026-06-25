@@ -910,13 +910,10 @@ class JiraConnector(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-        callback: IndexingHeartbeatInterface | None = None,
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
         *,
         include_permissions: bool,
     ) -> GenerateSlimDocumentOutput:
-        # callback is accepted to mirror the slim-connector interface; the pruning /
-        # perm-sync extract loops drive heartbeat progress themselves.
-        _ = callback
         one_day = timedelta(hours=24).total_seconds()
 
         start = start or 0
