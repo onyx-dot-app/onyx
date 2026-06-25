@@ -1,15 +1,12 @@
 import datetime
 import time
-from typing import Any
 from uuid import UUID
 
-import httpx
 import sqlalchemy as sa
 from celery import Celery
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
-from retry import retry
 from sqlalchemy import select
 
 from onyx.access.access import build_access_for_user_files
@@ -48,7 +45,6 @@ from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.interfaces_new import MetadataUpdateRequest
-from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.utils import store_user_file_plaintext
 from onyx.file_store.utils import user_file_id_to_plaintext_file_name
@@ -146,52 +142,6 @@ def enqueue_user_file_project_sync_task(
         raise
 
     return True
-
-
-@retry(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
-def _visit_chunks(
-    *,
-    http_client: httpx.Client,
-    index_name: str,
-    selection: str,
-    continuation: str | None = None,
-) -> tuple[list[dict[str, Any]], str | None]:
-    task_logger.info(
-        f"Visiting chunks for index={index_name} with selection={selection}"
-    )
-    base_url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)
-    params: dict[str, str] = {
-        "selection": selection,
-        "wantedDocumentCount": "100",  # Use smaller batch size to avoid timeouts
-    }
-    if continuation:
-        params["continuation"] = continuation
-    resp = http_client.get(base_url, params=params, timeout=None)
-    resp.raise_for_status()
-    payload = resp.json()
-    return payload.get("documents", []), payload.get("continuation")
-
-
-def _get_document_chunk_count(
-    *,
-    index_name: str,
-    selection: str,
-) -> int:
-    chunk_count = 0
-    continuation = None
-    while True:
-        docs, continuation = _visit_chunks(
-            http_client=HttpxPool.get("vespa"),
-            index_name=index_name,
-            selection=selection,
-            continuation=continuation,
-        )
-        if not docs:
-            break
-        chunk_count += len(docs)
-        if not continuation:
-            break
-    return chunk_count
 
 
 @shared_task(
@@ -693,8 +643,6 @@ def delete_user_file_impl(
         skip_vespa = DISABLE_VECTOR_DB
         retry_document_indices: list[RetryDocumentIndex] = []
         chunk_count_from_db: int | None = None
-        index_name: str = ""
-        selection: str = ""
         file_id: str = ""
 
         if not skip_vespa:
@@ -728,18 +676,16 @@ def delete_user_file_impl(
                     RetryDocumentIndex(document_index)
                     for document_index in document_indices
                 ]
-                index_name = active_search_settings.primary.index_name
-                selection = f"{index_name}.document_id=='{user_file_id}'"
 
-        # Phase 2: Vespa deletes + file store deletes (no DB session held)
+        # Phase 2: vector DB deletes + file store deletes (no DB session held).
+        # Pass the DB chunk count when known; otherwise None, which each document
+        # index resolves itself (Vespa fans out to find chunks, OpenSearch deletes
+        # by document id). This keeps the path backend-agnostic.
         if not skip_vespa:
-            chunk_count: int = (
+            chunk_count: int | None = (
                 chunk_count_from_db
                 if chunk_count_from_db is not None and chunk_count_from_db > 0
-                else _get_document_chunk_count(
-                    index_name=index_name,
-                    selection=selection,
-                )
+                else None
             )
             for retry_document_index in retry_document_indices:
                 retry_document_index.delete(
