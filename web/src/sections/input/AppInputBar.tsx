@@ -776,7 +776,7 @@ const AppInputBar = React.memo(
               isClassifying
                 ? SvgSimpleLoader
                 : (chatState !== "input" || awaitingPreferredSelection) &&
-                    message.trim()
+                    trimmedMessage
                   ? SvgArrowUp
                   : chatState === "streaming" || isVoicePlaybackControllable
                     ? SvgStop
@@ -785,9 +785,9 @@ const AppInputBar = React.memo(
             onClick={() => {
               const canSubmitNormally =
                 chatState === "input" && !awaitingPreferredSelection;
-              if (!canSubmitNormally && message.trim()) {
+              if (!canSubmitNormally && trimmedMessage) {
                 if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
-                  enqueueCurrentMessage(message.trim());
+                  enqueueCurrentMessage(trimmedMessage);
                   clearMessage();
                   // Drop the draft now; a reload could outrace the debounced
                   // empty-save.
@@ -958,16 +958,16 @@ const AppInputBar = React.memo(
                               !isClassifying &&
                               !hasUploadingFiles
                             ) {
-                              submitMessage(message);
+                              submitMessage(trimmedMessage);
                             }
                           } else if (
-                            message.trim() &&
+                            trimmedMessage &&
                             !disabled &&
                             !isClassifying &&
                             !hasUploadingFiles &&
                             queuedMessages.length < MAX_QUEUED_MESSAGES
                           ) {
-                            enqueueCurrentMessage(message.trim());
+                            enqueueCurrentMessage(trimmedMessage);
                             clearMessage();
                             // Drop the draft now; a reload could outrace the
                             // debounced empty-save.

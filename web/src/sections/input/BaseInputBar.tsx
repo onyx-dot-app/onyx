@@ -258,7 +258,7 @@ const BaseInputBar = memo(
       }, [onSelectionChange]);
 
       const canSubmit =
-        message.trim().length > 0 &&
+        trimmedMessage.length > 0 &&
         !disabled &&
         !submitBlocked &&
         !sandboxInitializing &&
