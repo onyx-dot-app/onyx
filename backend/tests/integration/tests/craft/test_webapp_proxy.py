@@ -11,6 +11,7 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.craft.conftest import SharedSession
 
 
 def _webapp_url(session_id: UUID, path: str = "") -> str:
@@ -48,7 +49,7 @@ def _auth_get(
 
 
 def test_proxy_requires_auth_when_private(
-    shared_session: tuple[DATestUser, UUID],
+    shared_session: SharedSession,
 ) -> None:
     """Auth-required surfaces as either 401 or a 302 to /auth/login."""
     owner, session_id = shared_session
@@ -63,7 +64,7 @@ def test_proxy_requires_auth_when_private(
 
 
 def test_proxy_rejects_forged_auth_cookie(
-    shared_session: tuple[DATestUser, UUID],
+    shared_session: SharedSession,
 ) -> None:
     """A forged cookie resolves to no user; public_org still requires auth."""
     owner, session_id = shared_session
@@ -82,14 +83,15 @@ def test_proxy_rejects_forged_auth_cookie(
 
 
 def test_proxy_no_webapp_port_renders_branded_offline_page(
-    shared_session: tuple[DATestUser, UUID],
+    shared_session: SharedSession,
 ) -> None:
     # shared_session is headless, so no Next.js port is allocated.
     owner, session_id = shared_session
 
     response = _auth_get(owner, session_id, follow_redirects=False)
 
-    assert response.status_code in (502, 503, 504)
+    # No Next.js port -> _offline_html_response, which is always 503.
+    assert response.status_code == 503
     assert "text/html" in response.headers.get("content-type", "").lower()
     body = response.text
     assert "Craft" in body
@@ -100,7 +102,7 @@ def test_webapp_download_route_not_shadowed_by_catchall(
     admin_user: DATestUser,
 ) -> None:
     """``/webapp-download`` resolves to the zip endpoint, not the catch-all proxy."""
-    session_id = BuildSessionManager.create(admin_user)["id"]
+    session_id = BuildSessionManager.create(admin_user).id
 
     response = client.get(
         f"{API_SERVER_URL}/build/sessions/{session_id}/webapp-download",

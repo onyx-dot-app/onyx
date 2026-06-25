@@ -100,7 +100,7 @@ class LLMProviderManager:
 
     @staticmethod
     def delete(
-        llm_provider: DATestLLMProvider,
+        llm_provider: DATestLLMProvider | LLMProviderView,
         user_performing_action: DATestUser,
     ) -> bool:
         response = client.delete(

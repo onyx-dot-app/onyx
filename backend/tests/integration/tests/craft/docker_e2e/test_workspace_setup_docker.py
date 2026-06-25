@@ -148,7 +148,7 @@ def test_session_setup_creates_user_writable_workspace(
     private_listing = BuildSessionManager.list_files(
         workspace_user, session_id, "outputs/private"
     )
-    private_names = {entry["name"] for entry in private_listing["entries"]}
+    private_names = {entry.name for entry in private_listing.entries}
     assert "private.txt" in private_names
 
     downloaded = BuildSessionManager.download_artifact(
@@ -163,16 +163,16 @@ def test_session_setup_creates_user_writable_workspace(
         filename=upload_name,
         content=b"docker workspace setup check",
     )
-    assert upload["filename"] == upload_name
-    assert upload["path"] == f"attachments/{upload_name}"
+    assert upload.filename == upload_name
+    assert upload.path == f"attachments/{upload_name}"
 
     listing = BuildSessionManager.list_files(workspace_user, session_id, "attachments")
-    attachment_names = {entry["name"] for entry in listing["entries"]}
+    attachment_names = {entry.name for entry in listing.entries}
     assert upload_name in attachment_names
 
-    BuildSessionManager.delete_file(workspace_user, session_id, upload["path"])
+    BuildSessionManager.delete_file(workspace_user, session_id, upload.path)
     post_delete_listing = BuildSessionManager.list_files(
         workspace_user, session_id, "attachments"
     )
-    post_delete_names = {entry["name"] for entry in post_delete_listing["entries"]}
+    post_delete_names = {entry.name for entry in post_delete_listing.entries}
     assert upload_name not in post_delete_names
