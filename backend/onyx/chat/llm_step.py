@@ -19,6 +19,8 @@ from onyx.chat.tool_call_args_streaming import maybe_emit_argument_delta
 from onyx.configs.app_configs import ENABLE_AZURE_IMAGE_CAP
 from onyx.configs.app_configs import LOG_ONYX_MODEL_INTERACTIONS
 from onyx.configs.app_configs import PROMPT_CACHE_CHAT_HISTORY
+from onyx.configs.chat_configs import LLM_STREAM_MAX_CONSECUTIVE_EMPTY_PACKETS
+from onyx.configs.chat_configs import LLM_STREAM_MAX_DURATION_SECONDS
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import ChatFileType
@@ -40,6 +42,7 @@ from onyx.llm.models import TextContentPart
 from onyx.llm.models import ToolCall
 from onyx.llm.models import ToolMessage
 from onyx.llm.models import UserMessage
+from onyx.llm.multi_llm import LLMStreamError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.llm.utils import model_needs_formatting_reenabled
 from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
@@ -1140,6 +1143,7 @@ def run_llm_step_pkt_generator(
     stream_chunk_count = 0
     actionable_chunk_count = 0
     empty_chunk_count = 0
+    consecutive_empty_count = 0
     finish_reasons: set[str] = set()
     xml_tool_call_content_filter = _XmlToolCallContentFilter()
 
@@ -1275,6 +1279,23 @@ def run_llm_step_pkt_generator(
             timeout_override=timeout_override,
         ):
             stream_chunk_count += 1
+            if (
+                LLM_STREAM_MAX_DURATION_SECONDS > 0
+                and time.monotonic() - stream_start_time
+                > LLM_STREAM_MAX_DURATION_SECONDS
+            ):
+                logger.error(
+                    "LLM stream exceeded max duration of %ss; aborting to free "
+                    "the worker. chunks=%s, provider=%s, model=%s",
+                    LLM_STREAM_MAX_DURATION_SECONDS,
+                    stream_chunk_count,
+                    llm.config.model_provider,
+                    llm.config.model_name,
+                )
+                raise LLMStreamError(
+                    "LLM stream exceeded max duration of "
+                    f"{LLM_STREAM_MAX_DURATION_SECONDS}s"
+                )
             if packet.usage:
                 usage = packet.usage
                 span_generation.span_data.usage = {
@@ -1296,6 +1317,25 @@ def run_llm_step_pkt_generator(
                 and not delta.tool_calls
             ):
                 empty_chunk_count += 1
+                consecutive_empty_count += 1
+                if (
+                    LLM_STREAM_MAX_CONSECUTIVE_EMPTY_PACKETS > 0
+                    and consecutive_empty_count
+                    >= LLM_STREAM_MAX_CONSECUTIVE_EMPTY_PACKETS
+                ):
+                    logger.error(
+                        "LLM stream produced %s consecutive empty packets; "
+                        "aborting to free the worker. "
+                        "finish_reason=%s, provider=%s, model=%s",
+                        consecutive_empty_count,
+                        finish_reason,
+                        llm.config.model_provider,
+                        llm.config.model_name,
+                    )
+                    raise LLMStreamError(
+                        f"LLM stream aborted after {consecutive_empty_count} "
+                        "consecutive empty packets"
+                    )
                 logger.warning(
                     "LLM packet is empty (no content, reasoning, or tool calls). "
                     "finish_reason=%s. Skipping: %s",
@@ -1303,6 +1343,7 @@ def run_llm_step_pkt_generator(
                     packet,
                 )
                 continue
+            consecutive_empty_count = 0
 
             if not first_action_recorded and _delta_has_action(delta):
                 span_generation.span_data.time_to_first_action_seconds = (
