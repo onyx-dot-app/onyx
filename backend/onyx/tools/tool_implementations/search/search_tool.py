@@ -39,6 +39,7 @@ from collections.abc import Callable
 from typing import Any
 from typing import cast
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
@@ -130,6 +131,14 @@ from shared_configs.configs import MODEL_SERVER_PORT
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+
+
+class QueryExpansionAndScope(BaseModel):
+    """Result of one search cycle's query expansion + source-scope decision."""
+
+    semantic_query: str | None
+    keyword_queries: list[str]
+    plan_scope: list[DocumentSource] | None
 
 
 def _build_scope_note(
@@ -567,6 +576,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
         )
 
+    @log_function_time(
+        func_name="Search tool - query expansion + scope decision",
+        print_only=True,
+        debug_only=True,
+    )
     def _expand_queries_and_decide_scope(
         self,
         skip_query_expansion: bool,
@@ -574,7 +588,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         user_info: str | None,
         memories: list[str],
         decide_args: tuple[Any, ...],
-    ) -> tuple[str | None, list[str], list[DocumentSource] | None]:
+    ) -> QueryExpansionAndScope:
         """Expand the query and decide the source scope, in parallel when both apply.
 
         Repeat calls reuse the cached expansion instead of re-expanding. Once the
@@ -608,7 +622,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             plan_scope = results[scope_job_index]
             self._scope_decision_settled = plan_scope is None
 
-        return semantic_query, keyword_queries, plan_scope
+        return QueryExpansionAndScope(
+            semantic_query=semantic_query,
+            keyword_queries=keyword_queries,
+            plan_scope=plan_scope,
+        )
 
     @log_function_time(print_only=True)
     def run(
@@ -621,7 +639,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         overall_start_time = time.time()
 
         # Initialize timing variables (in case of early exceptions)
-        query_expansion_elapsed = 0.0
         document_selection_elapsed = 0.0
         document_expansion_elapsed = 0.0
 
@@ -755,21 +772,16 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             list(self._search_cycles),
             llm_queries,
         )
-        query_expansion_start_time = time.time()
-        semantic_query, keyword_queries, plan_scope = (
-            self._expand_queries_and_decide_scope(
-                skip_query_expansion=override_kwargs.skip_query_expansion,
-                message_history=message_history,
-                user_info=user_info,
-                memories=memories,
-                decide_args=decide_args,
-            )
+        expansion = self._expand_queries_and_decide_scope(
+            skip_query_expansion=override_kwargs.skip_query_expansion,
+            message_history=message_history,
+            user_info=user_info,
+            memories=memories,
+            decide_args=decide_args,
         )
-        query_expansion_elapsed = time.time() - query_expansion_start_time
-        logger.debug(
-            "Search tool - Query expansion + scope decision took %s seconds",
-            format(query_expansion_elapsed, ".3f"),
-        )
+        semantic_query = expansion.semantic_query
+        keyword_queries = expansion.keyword_queries
+        plan_scope = expansion.plan_scope
 
         resolved_scope = (
             plan_scope if plan_scope is not None else user_source_restriction
@@ -1147,9 +1159,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # End overall timing
         overall_elapsed = time.time() - overall_start_time
         logger.debug(
-            "Search tool - Total execution time: %s seconds (query expansion: %ss, document selection: %ss, document expansion: %ss)",
+            "Search tool - Total execution time: %s seconds (document selection: %ss, document expansion: %ss)",
             format(overall_elapsed, ".3f"),
-            format(query_expansion_elapsed, ".3f"),
             format(document_selection_elapsed, ".3f"),
             format(document_expansion_elapsed, ".3f"),
         )
