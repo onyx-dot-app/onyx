@@ -585,11 +585,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         decide_scope = not self._scope_decision_settled
 
         jobs: list[tuple[Callable, tuple]] = []
+        scope_job_index: int | None = None
         if expand_queries:
             expansion_args = (message_history, self.llm, user_info, memories)
             jobs.append((semantic_query_rephrase, expansion_args))
             jobs.append((keyword_query_expansion, expansion_args))
         if decide_scope:
+            scope_job_index = len(jobs)
             jobs.append((decide_search_scope, decide_args))
 
         results = run_functions_tuples_in_parallel(jobs) if jobs else []
@@ -602,8 +604,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             self._cached_expansion = (semantic_query, keyword_queries)
 
         plan_scope: list[DocumentSource] | None = None
-        if decide_scope:
-            plan_scope = results[-1]
+        if scope_job_index is not None:
+            plan_scope = results[scope_job_index]
             self._scope_decision_settled = plan_scope is None
 
         return semantic_query, keyword_queries, plan_scope
