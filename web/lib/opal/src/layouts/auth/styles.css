@@ -11,12 +11,12 @@
 }
 
 .opal-auth-card-outer {
-  @apply w-full;
+  @apply w-full flex flex-col gap-6;
   max-width: var(--auth-container-width);
 }
 
 .opal-auth-card-bottom-prompt {
-  @apply mt-6 text-center;
+  @apply text-center;
 }
 
 .opal-auth-fields {
