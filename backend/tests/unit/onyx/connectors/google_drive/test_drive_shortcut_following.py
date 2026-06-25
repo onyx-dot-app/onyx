@@ -10,8 +10,11 @@ from googleapiclient.discovery import Resource
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
 from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
+from onyx.connectors.google_drive.doc_conversion import download_request
 from onyx.connectors.google_drive.file_retrieval import _get_files_in_parent
 from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
+from onyx.connectors.google_drive.file_retrieval import DRIVE_RESOURCE_KEY_FIELD
+from onyx.connectors.google_drive.file_retrieval import DRIVE_RESOURCE_KEY_HEADER
 from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.models import DriveRetrievalStage
 
@@ -22,6 +25,7 @@ _PDF_MIME_TYPE = "application/pdf"
 class _FakeRequest:
     def __init__(self, response: dict[str, Any]) -> None:
         self._response = response
+        self.headers: dict[str, str] = {}
 
     def execute(self) -> dict[str, Any]:
         return self._response
@@ -31,13 +35,26 @@ class _FakeFilesResource:
     def __init__(self, files_by_id: dict[str, dict[str, Any]]) -> None:
         self.files_by_id = files_by_id
         self.get_calls: list[dict[str, Any]] = []
+        self.get_requests: list[_FakeRequest] = []
 
     def list(self, **_kwargs: object) -> object:
         return object()
 
     def get(self, **kwargs: Any) -> _FakeRequest:
+        if "resourceKey" in kwargs:
+            raise TypeError("Got an unexpected keyword argument resourceKey")
         self.get_calls.append(kwargs)
-        return _FakeRequest(self.files_by_id[kwargs["fileId"]])
+        request = _FakeRequest(self.files_by_id[kwargs["fileId"]])
+        self.get_requests.append(request)
+        return request
+
+    def get_media(self, **kwargs: Any) -> _FakeRequest:
+        if "resourceKey" in kwargs:
+            raise TypeError("Got an unexpected keyword argument resourceKey")
+        self.get_calls.append(kwargs)
+        request = _FakeRequest(self.files_by_id.get(kwargs["fileId"], {}))
+        self.get_requests.append(request)
+        return request
 
 
 class _FakeDriveService:
@@ -52,15 +69,20 @@ def _shortcut(
     shortcut_id: str,
     target_id: str,
     target_mime_type: str,
+    target_resource_key: str | None = None,
 ) -> dict[str, Any]:
+    shortcut_details = {
+        "targetId": target_id,
+        "targetMimeType": target_mime_type,
+    }
+    if target_resource_key:
+        shortcut_details["targetResourceKey"] = target_resource_key
+
     return {
         "id": shortcut_id,
         "name": shortcut_id,
         "mimeType": DRIVE_SHORTCUT_TYPE,
-        "shortcutDetails": {
-            "targetId": target_id,
-            "targetMimeType": target_mime_type,
-        },
+        "shortcutDetails": shortcut_details,
     }
 
 
@@ -120,6 +142,71 @@ def test_shortcut_to_file_yields_target_with_true_parent() -> None:
     assert files == [target]
     assert service.files_resource.get_calls[0]["fileId"] == "target_file"
     assert len(service.files_resource.get_calls) == 1
+
+
+def test_shortcut_to_resource_key_file_uses_header() -> None:
+    target = _target_file("target_file", "true_parent")
+    service = _FakeDriveService(
+        {
+            "shortcut_file": _shortcut(
+                "shortcut_file",
+                "target_file",
+                _PDF_MIME_TYPE,
+                target_resource_key="resource_key",
+            ),
+            "target_file": target,
+        }
+    )
+
+    def _fake_paginated_retrieval(**_kwargs: object) -> Iterator[dict[str, Any]]:
+        yield _shortcut(
+            "shortcut_file",
+            "target_file",
+            _PDF_MIME_TYPE,
+            target_resource_key="resource_key",
+        )
+
+    with patch(
+        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
+        side_effect=_fake_paginated_retrieval,
+    ):
+        files = list(
+            _get_files_in_parent(
+                service=cast(Resource, service),
+                parent_id="shortcut_parent",
+                field_type=DriveFileFieldType.STANDARD,
+            )
+        )
+
+    assert files == [target]
+    assert service.files_resource.get_calls[0]["fileId"] == "target_file"
+    assert "resourceKey" not in service.files_resource.get_calls[0]
+    assert service.files_resource.get_requests[0].headers == {
+        DRIVE_RESOURCE_KEY_HEADER: "target_file/resource_key"
+    }
+    assert target[DRIVE_RESOURCE_KEY_FIELD] == "resource_key"
+
+
+def test_resource_key_download_uses_header() -> None:
+    service = _FakeDriveService({})
+
+    with patch(
+        "onyx.connectors.google_drive.doc_conversion._download_request",
+        return_value=b"content",
+    ) as mock_download:
+        content = download_request(
+            cast(Any, service),
+            file_id="target_file",
+            size_threshold=1_000,
+            resource_key="resource_key",
+        )
+
+    assert content == b"content"
+    assert service.files_resource.get_calls[0] == {"fileId": "target_file"}
+    assert service.files_resource.get_requests[0].headers == {
+        DRIVE_RESOURCE_KEY_HEADER: "target_file/resource_key"
+    }
+    mock_download.assert_called_once()
 
 
 def test_shortcut_to_folder_crawls_target_folder() -> None:
