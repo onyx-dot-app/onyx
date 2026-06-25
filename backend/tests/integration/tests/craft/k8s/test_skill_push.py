@@ -282,8 +282,13 @@ def db_group_factory(
         yield _create
     finally:
         db_session.rollback()
+        ids = group_ids or [-1]
+        # cc_pair links FK-reference the group; drop them before the group.
+        db_session.query(UserGroup__ConnectorCredentialPair).filter(
+            UserGroup__ConnectorCredentialPair.user_group_id.in_(ids)
+        ).delete(synchronize_session=False)
         db_session.query(User__UserGroup).filter(
-            User__UserGroup.user_group_id.in_(group_ids or [-1])
+            User__UserGroup.user_group_id.in_(ids)
         ).delete(synchronize_session=False)
         for group_id in group_ids:
             row = db_session.get(UserGroup, group_id)
