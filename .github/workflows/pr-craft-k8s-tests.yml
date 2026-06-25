@@ -538,36 +538,24 @@ jobs:
           kubectl -n "${HELM_RELEASE_NAMESPACE}" exec deployment/onyx-api-server -- \
             env ONYX_DEV_LICENSE="${ONYX_DEV_LICENSE}" python -m scripts.seed_dev_license
 
-      - name: Forward chart API to runner
+      - name: Forward chart API and webserver to runner
         run: |
           set -eo pipefail
           setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-api-service \"$API_SERVER_PORT\":8080; sleep 1; done" \
             > "${RUNNER_TEMP}/api-port-forward.log" 2>&1 &
           echo "$!" > "${RUNNER_TEMP}/api-port-forward.pid"
-          for _ in $(seq 1 60); do
-            if curl -fsS "http://${API_SERVER_HOST}:${API_SERVER_PORT}/health"; then
-              echo "chart API is reachable at ${API_SERVER_HOST}:${API_SERVER_PORT}"
-              exit 0
-            fi
-            sleep 2
-          done
-          cat "${RUNNER_TEMP}/api-port-forward.log" || true
-          exit 1
-
-      - name: Forward chart webserver to runner
-        run: |
-          set -eo pipefail
           setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-webserver \"$WEB_SERVER_PORT\":3000; sleep 1; done" \
             > "${RUNNER_TEMP}/web-port-forward.log" 2>&1 &
           echo "$!" > "${RUNNER_TEMP}/web-port-forward.pid"
           for _ in $(seq 1 60); do
-            if curl -fsS "http://${WEB_SERVER_HOST}:${WEB_SERVER_PORT}/" >/dev/null; then
-              echo "chart webserver is reachable at ${WEB_SERVER_HOST}:${WEB_SERVER_PORT}"
+            if curl -fsS "http://${API_SERVER_HOST}:${API_SERVER_PORT}/health" \
+                && curl -fsS "http://${WEB_SERVER_HOST}:${WEB_SERVER_PORT}/" >/dev/null; then
+              echo "chart API + webserver reachable"
               exit 0
             fi
             sleep 2
           done
-          cat "${RUNNER_TEMP}/web-port-forward.log" || true
+          cat "${RUNNER_TEMP}/api-port-forward.log" "${RUNNER_TEMP}/web-port-forward.log" || true
           exit 1
 
       # The test process runs on the CI runner, which has no cluster DNS.
@@ -626,41 +614,29 @@ jobs:
             -m "not nightly" \
             "${{ matrix.test-file.path }}"
 
-      # Surface the live-captured sandbox pod logs inline so the serve
-      # startup output is visible in the run without downloading artifacts.
-      - name: Dump captured sandbox pod logs on failure
+      # Surface live-captured pod logs + cluster state inline, and bundle cluster
+      # logs into the upload artifact. One step so a failure dumps everything.
+      - name: Collect diagnostics on failure
         if: failure()
         run: |
+          mkdir -p kind-logs
+
+          echo "::group::sandbox pod logs"
           if compgen -G "sandbox-logs/*.log" > /dev/null; then
-            for f in sandbox-logs/*.log; do
-              echo "::group::${f}"
-              cat "${f}" || true
-              echo "::endgroup::"
-            done
+            for f in sandbox-logs/*.log; do echo "--- ${f} ---"; cat "${f}" || true; done
           else
             echo "no sandbox pod logs were captured"
           fi
+          echo "::endgroup::"
 
-      - name: Disk and docker status on failure
-        if: failure()
-        run: |
-          echo "=== df -h ==="; df -h || true
-          echo "=== docker system df ==="; docker system df || true
-          echo "=== docker images ==="; docker images || true
-          echo "=== /tmp contents ==="; ls -lah /tmp || true
+          echo "::group::disk and docker status"
+          df -h || true; docker system df || true; docker images || true; ls -lah /tmp || true
+          echo "::endgroup::"
 
-      - name: MinIO FileStore diagnostics on failure
-        if: failure()
-        run: |
-          echo "=== chart MinIO resources ==="
+          echo "::group::MinIO diagnostics"
           kubectl -n "${HELM_RELEASE_NAMESPACE}" get pods,svc,job -l release=onyx || true
-          echo "=== chart MinIO deployment logs ==="
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-minio --tail=500 || true
-          echo "=== chart MinIO bucket job logs ==="
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs job/onyx-minio-post-job --all-containers --tail=500 || true
-          echo "=== MinIO port-forward log ==="
-          cat "${RUNNER_TEMP}/minio-port-forward.log" || true
-          echo "=== host boto3 view via S3_ENDPOINT_URL ==="
           python - <<'PY' || true
           import os, boto3
           from botocore.config import Config
@@ -677,49 +653,32 @@ jobs:
               objs = s3.list_objects_v2(Bucket=b["Name"]).get("Contents", [])
               print(b["Name"], "->", [o["Key"] for o in objs][:20])
           PY
+          echo "::endgroup::"
 
-      - name: Collect kind logs on failure
-        if: failure()
-        run: |
-          mkdir -p kind-logs
+          echo "::group::chart resources and app logs"
+          helm status onyx -n "${HELM_RELEASE_NAMESPACE}" || true
+          for dep in onyx-api-server onyx-web-server onyx-celery-worker-primary \
+              onyx-celery-worker-heavy onyx-celery-worker-scheduled-tasks \
+              onyx-cloudnative-pg redis-operator; do
+            kubectl -n "${HELM_RELEASE_NAMESPACE}" logs "deployment/${dep}" --all-containers --tail=500 || true
+          done
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs statefulset/onyx-opensearch-master --all-containers --tail=500 || true
+          kubectl -n "${HELM_RELEASE_NAMESPACE}" get cluster,redis,statefulset,pods,svc,pvc || true
+          echo "::endgroup::"
+
+          echo "::group::port-forward logs"
+          for f in postgres redis minio api web; do
+            echo "--- ${f} ---"; cat "${RUNNER_TEMP}/${f}-port-forward.log" 2>/dev/null || true
+          done
+          echo "::endgroup::"
+
           kind export logs ./kind-logs --name onyx-craft-ci || true
-          helm status onyx -n "${HELM_RELEASE_NAMESPACE}" > kind-logs/helm-status.txt 2>&1 || true
           kubectl get pods -A -o wide > kind-logs/pods.txt 2>&1 || true
           kubectl get svc -A -o wide > kind-logs/services.txt 2>&1 || true
           kubectl describe pods -n onyx-sandboxes > kind-logs/sandbox-pods-describe.txt 2>&1 || true
           kubectl describe pods -n "${HELM_RELEASE_NAMESPACE}" > kind-logs/release-ns-pods-describe.txt 2>&1 || true
           kubectl -n "${HELM_RELEASE_NAMESPACE}" logs -l app.kubernetes.io/component=sandbox-proxy --tail=500 > kind-logs/sandbox-proxy.log 2>&1 || true
-          cp "${RUNNER_TEMP}/postgres-port-forward.log" kind-logs/ 2>/dev/null || true
-          cp "${RUNNER_TEMP}/redis-port-forward.log" kind-logs/ 2>/dev/null || true
-          cp "${RUNNER_TEMP}/minio-port-forward.log" kind-logs/ 2>/dev/null || true
-          cp "${RUNNER_TEMP}/api-port-forward.log" kind-logs/ 2>/dev/null || true
-          cp "${RUNNER_TEMP}/web-port-forward.log" kind-logs/ 2>/dev/null || true
-
-      - name: Chart dependency diagnostics on failure
-        if: failure()
-        run: |
-          echo "=== Helm status ==="
-          helm status onyx -n "${HELM_RELEASE_NAMESPACE}" || true
-          echo "=== App runtime logs ==="
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-api-server --all-containers --tail=500 || true
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-web-server --all-containers --tail=500 || true
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-celery-worker-primary --all-containers --tail=500 || true
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-celery-worker-heavy --all-containers --tail=500 || true
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-celery-worker-scheduled-tasks --all-containers --tail=500 || true
-          echo "=== Postgres resources ==="
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" get cluster,pods,svc,pvc || true
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/onyx-cloudnative-pg --tail=500 || true
-          echo "=== Redis resources ==="
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" get redis,statefulset,pods,svc,pvc || true
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs deployment/redis-operator --tail=500 || true
-          echo "=== OpenSearch resources ==="
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" get statefulset,pods,svc -l app.kubernetes.io/name=opensearch || true
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" logs statefulset/onyx-opensearch-master --all-containers --tail=500 || true
-          echo "=== port-forward logs ==="
-          cat "${RUNNER_TEMP}/postgres-port-forward.log" || true
-          cat "${RUNNER_TEMP}/redis-port-forward.log" || true
-          cat "${RUNNER_TEMP}/api-port-forward.log" || true
-          cat "${RUNNER_TEMP}/web-port-forward.log" || true
+          cp "${RUNNER_TEMP}"/*-port-forward.log kind-logs/ 2>/dev/null || true
 
       - name: Upload logs
         if: failure()
