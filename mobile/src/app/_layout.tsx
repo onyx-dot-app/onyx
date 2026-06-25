@@ -22,6 +22,7 @@ import {
 import { bindAppStateFocus } from "@/query/focus";
 import { bindOnlineManager } from "@/query/online";
 import { SidebarProvider } from "@/components/sidebar";
+import { AuthGate } from "@/components/auth/AuthGate";
 
 // Show the native Onyx splash until the first frame is ready, then reveal the app.
 SplashScreen.preventAutoHideAsync();
@@ -74,7 +75,9 @@ export default function RootLayout() {
               while still inheriting the vars() theme + safe-area insets. */}
           <SidebarProvider>
             <StatusBar style="auto" />
-            <Stack screenOptions={{ headerShown: false }} />
+            <AuthGate>
+              <Stack screenOptions={{ headerShown: false }} />
+            </AuthGate>
             <PortalHost />
           </SidebarProvider>
         </PersistQueryClientProvider>
