@@ -1,9 +1,7 @@
-export const forgotPassword = async (email: string): Promise<void> => {
+export async function forgotPassword(email: string): Promise<void> {
   const response = await fetch(`/api/auth/forgot-password`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
   });
 
@@ -13,17 +11,15 @@ export const forgotPassword = async (email: string): Promise<void> => {
       error?.detail || "An error occurred during password reset.";
     throw new Error(errorMessage);
   }
-};
+}
 
-export const resetPassword = async (
+export async function resetPassword(
   token: string,
   password: string
-): Promise<void> => {
+): Promise<void> {
   const response = await fetch(`/api/auth/reset-password`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, password }),
   });
 
@@ -36,4 +32,14 @@ export const resetPassword = async (
       error?.detail || "An error occurred during password reset.";
     throw new Error(errorMessage);
   }
-};
+}
+
+export async function requestEmailVerification(
+  email: string
+): Promise<Response> {
+  return fetch("/api/auth/request-verify-token", {
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}

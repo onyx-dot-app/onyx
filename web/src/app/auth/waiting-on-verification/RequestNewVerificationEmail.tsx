@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "@/hooks/useToast";
-import { requestEmailVerification } from "../lib";
+import { requestEmailVerification } from "@/lib/auth/svc";
 import { Spinner } from "@/components/Spinner";
 import { useState, JSX } from "react";
 

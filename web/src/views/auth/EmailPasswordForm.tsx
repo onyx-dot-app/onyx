@@ -4,7 +4,7 @@ import { toast } from "@/hooks/useToast";
 import { basicLogin, basicSignup } from "@/lib/user";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { requestEmailVerification } from "@/app/auth/lib";
+import { requestEmailVerification } from "@/lib/auth/svc";
 import { useMemo, useState } from "react";
 import { Spinner } from "@/components/Spinner";
 import Link from "next/link";
