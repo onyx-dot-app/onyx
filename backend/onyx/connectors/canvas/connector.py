@@ -1702,7 +1702,15 @@ class CanvasConnector(
         """
         self._release_check_time = datetime.now(timezone.utc)
         batch: list[SlimDocument | HierarchyNode] = []
-        courses = self._list_courses()
+        courses = (
+            [
+                self._get_course(course_id)
+                or CanvasCourse(id=course_id, name=f"Course {course_id}")
+                for course_id in self.course_ids
+            ]
+            if self.course_ids
+            else self._list_courses()
+        )
 
         def _maybe_flush() -> Iterator[list[SlimDocument | HierarchyNode]]:
             nonlocal batch
@@ -1815,4 +1823,5 @@ class CanvasConnector(
 
         if batch:
             yield batch
+            batch = []
         self._release_check_time = None
