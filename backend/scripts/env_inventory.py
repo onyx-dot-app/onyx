@@ -10,6 +10,11 @@ values/configmap) to surface drift:
   * duplicate assignments  -> same module-level constant assigned 2+ times
                               (last write wins; the rest are dead code)
 
+It also classifies every variable on two axes (see classify_var) — a category
+(platform / connector / internal / tunable) and a sensitive flag — to turn the
+raw read-but-undocumented list into an actionable "operator-facing tunables that
+should be documented" shortlist, plus an "operator-set secrets" sublist.
+
 This is read-only: it never edits anything. It is meant to be the single
 source of truth that `env.template` / Helm `values.yaml` can be diff-checked
 against in CI.
@@ -19,6 +24,7 @@ Usage:
     python backend/scripts/env_inventory.py --csv out.csv  # full manifest
     python backend/scripts/env_inventory.py --json out.json
     python backend/scripts/env_inventory.py --drift-only   # just the drift report
+    python backend/scripts/env_inventory.py --shortlist    # should-document names
 
 Run from the repo root (it auto-detects paths relative to this file).
 """
@@ -88,6 +94,84 @@ DRIFT_IGNORE_PREFIXES = ("TEST_",)
 DRIFT_IGNORE_SUBSTRINGS = ("_TEST_", "TEST_")
 
 
+# --- variable classification --------------------------------------------------
+#
+# Two orthogonal axes per variable:
+#   category  -> where it belongs / who sets it
+#                 platform  : injected by the runtime (k8s/docker/OS), not operators
+#                 connector : connector credential/config (set per-connector in the
+#                             UI, NOT in the global env templates)
+#                 internal  : dev/test/debug/eval only — never operator-facing
+#                 tunable   : operator-facing knob (timeout/limit/flag) — the set
+#                             that SHOULD be documented in env.template / Helm values
+#   sensitive -> credential-shaped (must never sit in a plaintext template; belongs
+#                in a secrets manager). Orthogonal to category.
+#
+# Heuristic, name- + read-location-based. Known misclassifications go in
+# TAG_OVERRIDES rather than contorting the regexes.
+
+# Set by the runtime platform; an operator never puts these in a template.
+PLATFORM_VARS = {
+    "HOSTNAME",
+    "HOME",
+    "PATH",
+    "POD_NAME",
+    "POD_NAMESPACE",
+    "KUBERNETES_SERVICE_HOST",
+    "TOKENIZERS_PARALLELISM",
+    "HF_HUB_DISABLE_TELEMETRY",
+}
+
+# Credential-shaped names. Excludes the suffixes that mark a non-secret reference
+# (a path/url/id/username pointing AT a secret is not itself the secret).
+# `_PASSWORD$` (suffix) is a real secret; `PASSWORD_*` (prefix) is policy config
+# (PASSWORD_MIN_LENGTH, PASSWORD_REQUIRE_DIGIT, ...) and must NOT match.
+_SENSITIVE_RE = re.compile(
+    r"(SECRET|_PASSWORD$|^PASSWORD$|PASSWD|_TOKEN$|ACCESS_TOKEN|_API_KEY$|ACCESS_KEY"
+    r"|PRIVATE_KEY|SERVICE_ACCOUNT_KEY|CREDENTIAL|_PEM$|_DSN$|SIGNING_KEY|AUTH_SECRET"
+    r"|(^|_)SALT$)"
+)
+_NOT_SENSITIVE_SUFFIX_RE = re.compile(
+    r"(_URL|_PATH|_FILE|_NAME|_ID|_ROUNDS|_TTL|_TIMEOUT|_HOST|_PORT|_VERSION"
+    r"|_PREFIX|_USERNAME|_USER|_KEYFILE)$"
+)
+# High precision on purpose: anything wrongly tagged internal drops off the
+# "should be documented" radar, so only clearly dev/test/eval names match.
+_INTERNAL_RE = re.compile(
+    r"(^DEV_|_DEV$|^MOCK_|_MOCK_|_DEBUG$|DEBUGGING|^TEST_|_TEST_|EXPERIMENTAL"
+    r"|DANSWER|(^|_)EVAL(_|$))"
+)
+
+# name -> (category, sensitive) manual overrides for heuristic misses.
+TAG_OVERRIDES: dict[str, tuple[str, bool]] = {}
+
+VALID_CATEGORIES = ("platform", "connector", "internal", "tunable")
+
+
+def is_sensitive(name: str) -> bool:
+    if "PUBLIC" in name:  # a public key / id is not a secret to protect
+        return False
+    return bool(_SENSITIVE_RE.search(name)) and not _NOT_SENSITIVE_SUFFIX_RE.search(
+        name
+    )
+
+
+def classify_var(name: str, files: set[str]) -> tuple[str, bool]:
+    """Return (category, sensitive). `files` are the repo-relative read sites."""
+    if name in TAG_OVERRIDES:
+        return TAG_OVERRIDES[name]
+    sensitive = is_sensitive(name)
+    if name in PLATFORM_VARS:
+        category = "platform"
+    elif any("/connectors/" in f for f in files):
+        category = "connector"
+    elif _INTERNAL_RE.search(name):
+        category = "internal"
+    else:
+        category = "tunable"
+    return category, sensitive
+
+
 @dataclass
 class EnvRead:
     name: str
@@ -115,6 +199,8 @@ class VarSummary:
     in_config_dir: bool = False
     ad_hoc_only: bool = True
     is_ee: bool = False
+    category: str = "tunable"
+    sensitive: bool = False
 
 
 # --- AST extraction -----------------------------------------------------------
@@ -379,6 +465,8 @@ def summarize(reads: list[EnvRead]) -> dict[str, VarSummary]:
             s.ad_hoc_only = False
         if r.is_ee:
             s.is_ee = True
+    for s in summaries.values():
+        s.category, s.sensitive = classify_var(s.name, s.files)
     return summaries
 
 
@@ -459,6 +547,28 @@ def _drift_ignored(name: str) -> bool:
 # --- reporting ----------------------------------------------------------------
 
 
+def documented_names() -> set[str]:
+    """Union of var names advertised by the env templates and Helm chart."""
+    names: set[str] = set()
+    for t in ENV_TEMPLATES:
+        names |= parse_env_template(t)
+    names |= parse_helm_values_configmap(HELM_VALUES)
+    names |= parse_helm_configmap_template(HELM_CONFIGMAP)
+    return names
+
+
+def should_document_list(reads: list[EnvRead]) -> list[str]:
+    """Operator-facing tunables that no template advertises — the 'should be
+    documented' shortlist (excludes connector/platform/internal/test vars)."""
+    summaries = summarize(reads)
+    documented = documented_names()
+    return sorted(
+        n
+        for n, s in summaries.items()
+        if s.category == "tunable" and n not in documented and not _drift_ignored(n)
+    )
+
+
 def human_report(reads: list[EnvRead], drift_only: bool = False) -> None:
     summaries = summarize(reads)
     dupes = find_duplicate_assignments(reads)
@@ -522,6 +632,17 @@ def human_report(reads: list[EnvRead], drift_only: bool = False) -> None:
             print(f"  {key}  -> lines {line_str} ({len(lines)}x, last wins)")
         print()
 
+        # variable classification (see classify_var)
+        cat_counts: dict[str, int] = defaultdict(int)
+        for s in summaries.values():
+            cat_counts[s.category] += 1
+        sensitive_count = sum(1 for s in summaries.values() if s.sensitive)
+        print("Classification (category = who sets it / where it belongs):")
+        for c in VALID_CATEGORIES:
+            print(f"  {c:10s} {cat_counts.get(c, 0)}")
+        print(f"  sensitive (credential-shaped, orthogonal): {sensitive_count}")
+        print()
+
         # ad-hoc hotspots
         ad_hoc_by_file: dict[str, int] = defaultdict(int)
         for r in reads:
@@ -549,7 +670,8 @@ def human_report(reads: list[EnvRead], drift_only: bool = False) -> None:
     for n in read_undocumented:
         s = summaries[n]
         loc = "config" if s.in_config_dir else "ad-hoc"
-        print(f"  {n:45s} [{loc}] {sorted(s.types)}")
+        sens = " SECRET" if s.sensitive else ""
+        print(f"  {n:45s} [{s.category:9s}|{loc}]{sens} {sorted(s.types)}")
     print()
     print(
         f"DOCUMENTED-BUT-UNREAD ({len(documented_unread)}): templates advertise "
@@ -557,9 +679,36 @@ def human_report(reads: list[EnvRead], drift_only: bool = False) -> None:
     )
     for n in documented_unread:
         print(f"  {n}")
+    print()
+
+    # actionable shortlists derived from category + drift
+    should_document = [
+        n for n in read_undocumented if summaries[n].category == "tunable"
+    ]
+    operator_secrets = [n for n in should_document if summaries[n].sensitive]
+    print("=" * 78)
+    print("ACTIONABLE SHORTLIST")
+    print("=" * 78)
+    print(
+        f"OPERATOR-FACING TUNABLES, UNDOCUMENTED ({len(should_document)}): the set "
+        "that\n  most plausibly SHOULD be in env.template / Helm values but isn't.\n"
+        "  (Excludes connector creds, platform-injected, and dev/test/eval vars.)"
+    )
+    for n in should_document:
+        sens = " SECRET" if summaries[n].sensitive else ""
+        print(f"  {n}{sens}")
+    print()
+    print(
+        f"OPERATOR-SET SECRETS, UNDOCUMENTED ({len(operator_secrets)}): credential-"
+        "shaped\n  tunables with no template entry — wire via a secrets manager, "
+        "not plaintext."
+    )
+    for n in operator_secrets:
+        print(f"  {n}")
 
 
 def write_csv(reads: list[EnvRead], out: Path) -> None:
+    summaries = summarize(reads)
     with out.open("w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(
@@ -575,9 +724,12 @@ def write_csv(reads: list[EnvRead], out: Path) -> None:
                 "module_scope",
                 "in_config_dir",
                 "is_ee",
+                "category",
+                "sensitive",
             ]
         )
         for r in sorted(reads, key=lambda r: (r.name, r.file, r.line)):
+            s = summaries[r.name]
             w.writerow(
                 [
                     r.name,
@@ -591,6 +743,8 @@ def write_csv(reads: list[EnvRead], out: Path) -> None:
                     r.module_scope,
                     r.in_config_dir,
                     r.is_ee,
+                    s.category,
+                    s.sensitive,
                 ]
             )
 
@@ -608,6 +762,8 @@ def write_json(reads: list[EnvRead], out: Path) -> None:
                 "in_config_dir": s.in_config_dir,
                 "ad_hoc_only": s.ad_hoc_only,
                 "is_ee": s.is_ee,
+                "category": s.category,
+                "sensitive": s.sensitive,
             }
             for name, s in sorted(summaries.items())
         },
@@ -633,6 +789,12 @@ def main() -> int:
         action="store_true",
         help="print only the deployment drift report",
     )
+    parser.add_argument(
+        "--shortlist",
+        action="store_true",
+        help="print only the operator-facing-tunable + undocumented names "
+        "(one per line; for piping into doc-gen / a CI gate)",
+    )
     args = parser.parse_args()
 
     reads = collect_reads()
@@ -641,6 +803,11 @@ def main() -> int:
             "No env reads found — are you running from the repo root?", file=sys.stderr
         )
         return 1
+
+    if args.shortlist:
+        for n in should_document_list(reads):
+            print(n)
+        return 0
 
     if args.csv:
         write_csv(reads, args.csv)

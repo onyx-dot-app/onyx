@@ -8,7 +8,7 @@ export interface ProviderDescriptor {
   id: ProviderId;
   label: string;
   kind: ProviderKind;
-  // Backend authorize endpoint for browser-SSO redirects; unused for `password`.
+  // Browser-SSO authorize path, relative to the API prefix; unused for `password`.
   authorizePath?: string;
 }
 
@@ -16,11 +16,23 @@ export const PROVIDER_REGISTRY: Partial<
   Record<ProviderId, ProviderDescriptor>
 > = {
   password: { id: "password", label: "Email", kind: "password" },
+  google: {
+    id: "google",
+    label: "Google",
+    kind: "browser",
+    // Dedicated mobile OAuth route; its callback is under /api → returns to the backend, not web.
+    authorizePath: "/auth/mobile/oauth/authorize",
+  },
 };
 
 // `cloud` accepts password too (Google + basic).
 const PASSWORD_AUTH_TYPES: ReadonlySet<AuthType> = new Set<AuthType>([
   "basic",
+  "cloud",
+]);
+
+const GOOGLE_AUTH_TYPES: ReadonlySet<AuthType> = new Set<AuthType>([
+  "google_oauth",
   "cloud",
 ]);
 
@@ -34,6 +46,14 @@ export function visibleProviders(
   const password = PROVIDER_REGISTRY.password;
   if (password && PASSWORD_AUTH_TYPES.has(config.auth_type)) {
     providers.push(password);
+  }
+  const google = PROVIDER_REGISTRY.google;
+  if (
+    google &&
+    config.oauth_enabled &&
+    GOOGLE_AUTH_TYPES.has(config.auth_type)
+  ) {
+    providers.push(google);
   }
   return providers;
 }
