@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
@@ -17,10 +17,26 @@ export default function SuggestedPrompts({
   onPromptClick,
 }: SuggestedPromptsProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const expandedDomain: UseCaseDomain | undefined = useCaseDomains.find(
     (domain) => domain.id === expandedId
   );
+
+  // Collapse the expanded panel when the user clicks anywhere outside it.
+  useEffect(() => {
+    if (expandedId === null) return;
+    function handleOutsideClick(event: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setExpandedId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [expandedId]);
 
   function handlePillClick(domainId: string) {
     setExpandedId((current) => (current === domainId ? null : domainId));
@@ -32,7 +48,10 @@ export default function SuggestedPrompts({
   }
 
   return (
-    <div className="relative mt-4 w-full flex flex-col items-center">
+    <div
+      ref={containerRef}
+      className="relative mt-4 w-full flex flex-col items-center"
+    >
       <div className="flex flex-row flex-wrap items-center justify-center gap-2">
         {useCaseDomains.map((domain) => (
           <button
@@ -41,6 +60,7 @@ export default function SuggestedPrompts({
             onClick={() => handlePillClick(domain.id)}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-12 px-3 py-2 cursor-pointer transition-colors",
+              "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action-link-01 focus-visible:ring-offset-2",
               expandedId === domain.id
                 ? "bg-background-tint-01 text-text-05"
                 : "text-text-03 hover:bg-background-tint-02 hover:text-text-04"
@@ -83,7 +103,7 @@ export default function SuggestedPrompts({
                   "w-full rounded-12 px-3 py-2.5 text-left",
                   "hover:bg-background-tint-02",
                   "transition-colors cursor-pointer",
-                  "focus:outline-hidden"
+                  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action-link-01 focus-visible:ring-offset-2"
                 )}
               >
                 <Text font="main-content-body" color="text-04">
