@@ -534,9 +534,22 @@ jobs:
           aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       - name: Seed dev license
+        # The api-server can briefly restart if Postgres/cnpg flaps right after
+        # rollout, so re-assert readiness and retry the exec.
         run: |
-          kubectl -n "${HELM_RELEASE_NAMESPACE}" exec deployment/onyx-api-server -- \
-            env ONYX_DEV_LICENSE="${ONYX_DEV_LICENSE}" python -m scripts.seed_dev_license
+          set -eo pipefail
+          for attempt in $(seq 1 5); do
+            kubectl -n "${HELM_RELEASE_NAMESPACE}" rollout status \
+              deployment/onyx-api-server --timeout=120s || true
+            if kubectl -n "${HELM_RELEASE_NAMESPACE}" exec deployment/onyx-api-server -- \
+                env ONYX_DEV_LICENSE="${ONYX_DEV_LICENSE}" python -m scripts.seed_dev_license; then
+              echo "seeded dev license (attempt ${attempt})"
+              exit 0
+            fi
+            echo "seed dev license failed (attempt ${attempt}); retrying ..."
+            sleep 10
+          done
+          exit 1
 
       - name: Forward chart API and webserver to runner
         run: |
