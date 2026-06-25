@@ -263,8 +263,8 @@ export default function TutorEditorPage({
         ""
     ),
 
-    // Canvas knowledge — always enabled for tutors. The user picks which
-    // folders / documents to scope the tutor to (none means "all of Canvas").
+    // Tutor knowledge. The user picks which folders / documents / pages to
+    // scope the tutor to (none means "all available course knowledge").
     document_ids: existingTutor?.attached_documents?.map((doc) => doc.id) ?? [],
     hierarchy_node_ids:
       existingTutor?.hierarchy_nodes?.map((node) => node.id) ?? [],
@@ -565,7 +565,7 @@ export default function TutorEditorPage({
 
                       <Separator noPadding />
 
-                      {/* Section 3: Canvas course materials */}
+                      {/* Section 3: Knowledge */}
                       <TutorKnowledgePane
                         selectedDocumentIds={values.document_ids}
                         onDocumentIdsChange={(ids) =>
@@ -578,12 +578,8 @@ export default function TutorEditorPage({
                         initialAttachedDocuments={
                           existingTutor?.attached_documents
                         }
+                        initialHierarchyNodes={existingTutor?.hierarchy_nodes}
                         canvasCourseNodeId={ltiCanvasCourseNodeId}
-                        courseId={
-                          existingTutor
-                            ? existingCourseLabel?.name ?? null
-                            : ltiContextId
-                        }
                       />
 
                       <Separator noPadding />

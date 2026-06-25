@@ -1,20 +1,46 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
+import * as TableLayouts from "@/layouts/table-layouts";
 import { Content } from "@opal/layouts";
 import { Card } from "@/refresh-components/cards";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import Text from "@/refresh-components/texts/Text";
 import SourceHierarchyBrowser from "@/sections/knowledge/SourceHierarchyBrowser";
 import { ValidSources } from "@/lib/types";
-import { AttachedDocumentSnapshot } from "@/app/admin/agents/interfaces";
-import TutorInstructorWebsites from "@/refresh-pages/tutor/TutorInstructorWebsites";
+import { getSourceMetadata } from "@/lib/sources";
+import {
+  AttachedDocumentSnapshot,
+  HierarchyNodeSnapshot,
+} from "@/app/admin/agents/interfaces";
 
-// The Virtual Tutor knowledge pane is intentionally narrower than the generic
-// AgentKnowledgePane: a tutor's knowledge is its Canvas course plus any public
-// websites the instructor adds for that course. We render the Canvas hierarchy
-// browser inline (no source picker, no document sets, no on/off toggle —
-// Canvas is always enabled) and, when a course is bound, the per-course website
-// manager below it.
+const TUTOR_KNOWLEDGE_SOURCES = [
+  ValidSources.Canvas,
+  ValidSources.GoogleDrive,
+  ValidSources.Web,
+] as const;
+
+function buildInitialSourceSelectionCounts(
+  initialAttachedDocuments?: AttachedDocumentSnapshot[],
+  initialHierarchyNodes?: HierarchyNodeSnapshot[]
+) {
+  const counts = new Map<ValidSources, number>();
+
+  const increment = (source: ValidSources | null | undefined) => {
+    if (!source) return;
+    counts.set(source, (counts.get(source) ?? 0) + 1);
+  };
+
+  initialAttachedDocuments?.forEach((document) => {
+    increment(document.source);
+  });
+  initialHierarchyNodes?.forEach((node) => {
+    increment(node.source);
+  });
+
+  return counts;
+}
 
 interface TutorKnowledgePaneProps {
   selectedDocumentIds: string[];
@@ -22,16 +48,13 @@ interface TutorKnowledgePaneProps {
   selectedFolderIds: number[];
   onFolderIdsChange: (ids: number[]) => void;
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
+  initialHierarchyNodes?: HierarchyNodeSnapshot[];
   // The Canvas course's hierarchy node id, resolved at LTI launch by
   // matching context.title against indexed course nodes. When provided,
   // the browser is scoped to just that course's subtree. When null
   // (Canvas not yet indexed, or duplicate course names), we fall back to
   // showing the whole Canvas hierarchy.
   canvasCourseNodeId: number | null;
-  // The LTI `context.id` this tutor is bound to. Required to manage the
-  // course's website connectors; when null (no course bound) the website
-  // manager is hidden.
-  courseId: string | null;
 }
 
 export default function TutorKnowledgePane({
@@ -40,9 +63,40 @@ export default function TutorKnowledgePane({
   selectedFolderIds,
   onFolderIdsChange,
   initialAttachedDocuments,
+  initialHierarchyNodes,
   canvasCourseNodeId,
-  courseId,
 }: TutorKnowledgePaneProps) {
+  const [activeSource, setActiveSource] = useState<ValidSources>(
+    ValidSources.Canvas
+  );
+  const initialSourceSelectionCounts = useMemo(
+    () =>
+      buildInitialSourceSelectionCounts(
+        initialAttachedDocuments,
+        initialHierarchyNodes
+      ),
+    [initialAttachedDocuments, initialHierarchyNodes]
+  );
+  const [sourceSelectionCountOverrides, setSourceSelectionCountOverrides] =
+    useState<Map<ValidSources, number>>(() => new Map());
+
+  const sourceSelectionCounts = useMemo(() => {
+    if (selectedDocumentIds.length === 0 && selectedFolderIds.length === 0) {
+      return new Map<ValidSources, number>();
+    }
+
+    const counts = new Map(initialSourceSelectionCounts);
+    sourceSelectionCountOverrides.forEach((count, source) => {
+      counts.set(source, count);
+    });
+    return counts;
+  }, [
+    initialSourceSelectionCounts,
+    sourceSelectionCountOverrides,
+    selectedDocumentIds.length,
+    selectedFolderIds.length,
+  ]);
+
   const handleToggleDocument = useCallback(
     (documentId: string) => {
       const next = selectedDocumentIds.includes(documentId)
@@ -72,35 +126,105 @@ export default function TutorKnowledgePane({
     [onFolderIdsChange]
   );
 
+  const handleDeselectSourceItems = useCallback(
+    (source: ValidSources, documentIds: string[], folderIds: number[]) => {
+      const nextDocumentIds = selectedDocumentIds.filter(
+        (id) => !documentIds.includes(id)
+      );
+      const nextFolderIds = selectedFolderIds.filter(
+        (id) => !folderIds.includes(id)
+      );
+      onDocumentIdsChange(nextDocumentIds);
+      onFolderIdsChange(nextFolderIds);
+      setSourceSelectionCountOverrides((prev) => {
+        const next = new Map(prev);
+        next.set(source, 0);
+        return next;
+      });
+    },
+    [
+      selectedDocumentIds,
+      selectedFolderIds,
+      onDocumentIdsChange,
+      onFolderIdsChange,
+    ]
+  );
+
+  const handleSelectionCountChange = useCallback(
+    (source: ValidSources, count: number) => {
+      setSourceSelectionCountOverrides((prev) => {
+        if (prev.get(source) === count) {
+          return prev;
+        }
+        const next = new Map(prev);
+        next.set(source, count);
+        return next;
+      });
+    },
+    []
+  );
+
   return (
     <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
       <Content
         title="Knowledge"
-        description="Pick the Canvas folders and documents this tutor should reference when answering students."
+        description="Choose a source, then select the folders, files, or web pages this tutor should reference."
         sizePreset="main-content"
         variant="section"
       />
 
-      <Card>
-        <GeneralLayouts.Section alignItems="stretch" height="auto">
-          <SourceHierarchyBrowser
-            source={ValidSources.Canvas}
-            selectedDocumentIds={selectedDocumentIds}
-            onToggleDocument={handleToggleDocument}
-            onSetDocumentIds={onDocumentIdsChange}
-            selectedFolderIds={selectedFolderIds}
-            onToggleFolder={handleToggleFolder}
-            onSetFolderIds={onFolderIdsChange}
-            onDeselectAllDocuments={handleDeselectAllDocuments}
-            onDeselectAllFolders={handleDeselectAllFolders}
-            initialAttachedDocuments={initialAttachedDocuments}
-            hideRootNode
-            restrictToRootNodeId={canvasCourseNodeId}
-          />
-        </GeneralLayouts.Section>
-      </Card>
+      <Card alignItems="stretch">
+        <TableLayouts.TwoColumnLayout minHeight={18.75}>
+          <TableLayouts.SidebarLayout aria-label="tutor-knowledge-sources">
+            {TUTOR_KNOWLEDGE_SOURCES.map((source) => {
+              const sourceMetadata = getSourceMetadata(source);
+              const isActive = activeSource === source;
+              const selectionCount = sourceSelectionCounts.get(source) ?? 0;
 
-      {courseId && <TutorInstructorWebsites courseId={courseId} />}
+              return (
+                <LineItem
+                  key={source}
+                  icon={sourceMetadata.icon}
+                  onClick={() => setActiveSource(source)}
+                  selected={isActive}
+                  emphasized={isActive || selectionCount > 0}
+                  aria-label={`tutor-knowledge-source-${source}`}
+                  rightChildren={
+                    selectionCount > 0 ? (
+                      <Text mainUiAction className="text-action-link-05">
+                        {selectionCount}
+                      </Text>
+                    ) : undefined
+                  }
+                >
+                  {sourceMetadata.displayName}
+                </LineItem>
+              );
+            })}
+          </TableLayouts.SidebarLayout>
+
+          <TableLayouts.ContentColumn>
+            <SourceHierarchyBrowser
+              source={activeSource}
+              selectedDocumentIds={selectedDocumentIds}
+              onToggleDocument={handleToggleDocument}
+              onSetDocumentIds={onDocumentIdsChange}
+              selectedFolderIds={selectedFolderIds}
+              onToggleFolder={handleToggleFolder}
+              onSetFolderIds={onFolderIdsChange}
+              onDeselectAllDocuments={handleDeselectAllDocuments}
+              onDeselectAllFolders={handleDeselectAllFolders}
+              onDeselectSourceItems={handleDeselectSourceItems}
+              initialAttachedDocuments={initialAttachedDocuments}
+              onSelectionCountChange={handleSelectionCountChange}
+              hideRootNode={activeSource === ValidSources.Canvas}
+              restrictToRootNodeId={
+                activeSource === ValidSources.Canvas ? canvasCourseNodeId : null
+              }
+            />
+          </TableLayouts.ContentColumn>
+        </TableLayouts.TwoColumnLayout>
+      </Card>
     </GeneralLayouts.Section>
   );
 }

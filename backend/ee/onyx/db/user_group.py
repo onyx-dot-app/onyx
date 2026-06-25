@@ -1186,6 +1186,7 @@ def add_user_to_lti_group_by_email(
     course_title: str | None,
     nrps_url: str | None,
     user_email: str,
+    is_curator: bool = False,
 ) -> None:
     """Ensure the course's group exists and add a single user to it by email.
 
@@ -1205,6 +1206,28 @@ def add_user_to_lti_group_by_email(
         # On first launch seed the user at creation; subsequent launches add below.
         initial_user_ids=[user.id] if existing is None else None,
     )
+
+    if is_curator:
+        relationship = db_session.scalar(
+            select(User__UserGroup).where(
+                User__UserGroup.user_group_id == db_user_group.id,
+                User__UserGroup.user_id == user.id,
+            )
+        )
+        if relationship is None:
+            relationship = User__UserGroup(
+                user_group_id=db_user_group.id,
+                user_id=user.id,
+                is_curator=True,
+            )
+            db_session.add(relationship)
+        else:
+            relationship.is_curator = True
+
+        if user.role not in [UserRole.ADMIN, UserRole.GLOBAL_CURATOR]:
+            _validate_curator_status__no_commit(db_session, [user])
+        recompute_user_permissions__no_commit(user.id, db_session)
+        db_session.commit()
 
     if existing is None:
         return

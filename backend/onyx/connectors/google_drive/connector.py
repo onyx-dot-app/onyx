@@ -221,6 +221,7 @@ class GoogleDriveConnector(
         shared_folder_urls: str | None = None,
         specific_user_emails: str | None = None,
         exclude_domain_link_only: bool = False,
+        lti_context_id: str | None = None,  # noqa: ARG002
         batch_size: int = INDEX_BATCH_SIZE,  # noqa: ARG002
         # OLD PARAMETERS
         folder_paths: list[str] | None = None,

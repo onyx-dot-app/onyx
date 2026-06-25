@@ -10,9 +10,12 @@ to type or paste a course ID — the launch handler threads `lti_context_id`
 through to the editor and picker views via URL params.
 """
 
+import re
 import secrets
 import uuid
 from datetime import datetime
+from typing import Any
+from urllib.parse import quote
 from urllib.parse import urlencode
 from urllib.parse import urlparse
 
@@ -49,19 +52,28 @@ from onyx.configs.lti_configs import LTI_ISSUER
 from onyx.configs.lti_configs import LTI_JWKS_URL
 from onyx.connectors.canvas.client import CanvasApiClient
 from onyx.connectors.canvas.connector import CanvasCourse
+from onyx.connectors.google_utils.google_kv import get_auth_url
+from onyx.connectors.google_utils.google_kv import get_google_app_cred
+from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+)
 from onyx.connectors.models import InputType
 from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
 from onyx.db.connector import connector_by_name_source_exists
 from onyx.db.connector import create_connector
 from onyx.db.connector import fetch_canvas_cc_pair_for_lti_course
+from onyx.db.connector import fetch_lti_course_google_drive_cc_pair
 from onyx.db.connector import fetch_lti_course_website_cc_pairs
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
+from onyx.db.connector import update_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
 from onyx.db.credentials import create_credential
+from onyx.db.credentials import fetch_credentials_by_source_for_user
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -71,10 +83,12 @@ from onyx.db.enums import IndexingMode
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Credential
 from onyx.db.models import User
 from onyx.db.persona import get_tutor_persona_snapshots_for_course
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import ConnectorBase
@@ -135,6 +149,14 @@ _ALLOWED_WEBSITE_CRAWL_TYPES = {
     WEB_CONNECTOR_VALID_SETTINGS.SINGLE.value,
     WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value,
 }
+_GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME = "google_drive_credential_id"
+_LTI_GOOGLE_DRIVE_OAUTH_COOKIE_NAME = "lti_google_drive_oauth"
+_GOOGLE_DRIVE_FOLDER_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+_LTI_GOOGLE_DRIVE_CREDENTIAL_NAME = "Canvas instructor Google Drive"
+_LEGACY_LTI_GOOGLE_DRIVE_CREDENTIAL_NAME_RE = re.compile(
+    r"^Google Drive for Canvas course [A-Za-z0-9_-]+$"
+)
+_CHECK_FOR_DELETION_EXPIRES_SECONDS = 15 * 60
 
 
 class LtiCourseWebsiteCreateRequest(BaseModel):
@@ -154,6 +176,41 @@ class LtiCourseWebsiteSnapshot(BaseModel):
     total_docs_indexed: int
     has_indexed_documents: bool
     last_successful_index_time: datetime | None
+
+
+class LtiGoogleDriveConnectResponse(BaseModel):
+    credential_id: int
+    auth_url: str
+
+
+class LtiGoogleDriveFolderSelection(BaseModel):
+    id: str | None = None
+    url: str | None = None
+
+
+class LtiGoogleDriveFoldersRequest(BaseModel):
+    folders: list[LtiGoogleDriveFolderSelection]
+
+
+class LtiGoogleDriveFolderSnapshot(BaseModel):
+    id: str
+    url: str
+
+
+class LtiCourseGoogleDriveSnapshot(BaseModel):
+    oauth_app_configured: bool
+    connected: bool
+    credential_id: int | None
+    credential_name: str | None
+    credential_email: str | None
+    cc_pair_id: int | None
+    connector_id: int | None
+    cc_pair_status: ConnectorCredentialPairStatus | None
+    indexing_status: str | None
+    total_docs_indexed: int
+    has_indexed_documents: bool
+    last_successful_index_time: datetime | None
+    folders: list[LtiGoogleDriveFolderSnapshot]
 
 
 def _origin_from_url(raw_url: str | None) -> str | None:
@@ -209,6 +266,92 @@ def _canvas_course_id_from_lti_claims(claims: dict) -> int | None:
     return _canvas_course_id_from_url(str(return_url)) if return_url else None
 
 
+def _extract_google_drive_folder_id(raw_folder: str) -> str:
+    value = raw_folder.strip()
+    if not value:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Folder selection cannot be empty")
+
+    if _GOOGLE_DRIVE_FOLDER_ID_RE.fullmatch(value):
+        return value
+
+    parsed_url = urlparse(value)
+    if parsed_url.scheme not in ("http", "https") or not parsed_url.netloc:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Google Drive folder must be a folder URL or folder ID",
+        )
+
+    path_parts = [part for part in parsed_url.path.split("/") if part]
+    for index, path_part in enumerate(path_parts[:-1]):
+        if path_part == "folders":
+            folder_id = path_parts[index + 1]
+            if _GOOGLE_DRIVE_FOLDER_ID_RE.fullmatch(folder_id):
+                return folder_id
+
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        "Google Drive folder URL must contain /folders/<folder_id>",
+    )
+
+
+def _google_drive_folder_url(folder_id: str) -> str:
+    return f"https://drive.google.com/drive/folders/{folder_id}"
+
+
+def _normalize_google_drive_folder_selection(
+    folder_selection: LtiGoogleDriveFolderSelection,
+) -> LtiGoogleDriveFolderSnapshot:
+    raw_folder = folder_selection.id or folder_selection.url
+    if raw_folder is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Google Drive folder selection requires an id or url",
+        )
+
+    folder_id = _extract_google_drive_folder_id(raw_folder)
+    return LtiGoogleDriveFolderSnapshot(
+        id=folder_id,
+        url=_google_drive_folder_url(folder_id),
+    )
+
+
+def _normalize_google_drive_folder_selections(
+    folder_selections: list[LtiGoogleDriveFolderSelection],
+) -> list[LtiGoogleDriveFolderSnapshot]:
+    folder_by_id: dict[str, LtiGoogleDriveFolderSnapshot] = {}
+    for folder_selection in folder_selections:
+        normalized_folder = _normalize_google_drive_folder_selection(folder_selection)
+        folder_by_id[normalized_folder.id] = normalized_folder
+
+    folders = list(folder_by_id.values())
+    if not folders:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Select at least one Google Drive folder",
+        )
+    return folders
+
+
+def _google_drive_folders_from_config(
+    connector_specific_config: dict[str, object],
+) -> list[LtiGoogleDriveFolderSnapshot]:
+    shared_folder_urls = connector_specific_config.get("shared_folder_urls")
+    if not isinstance(shared_folder_urls, str) or not shared_folder_urls.strip():
+        return []
+
+    return [
+        LtiGoogleDriveFolderSnapshot(
+            id=folder_id,
+            url=_google_drive_folder_url(folder_id),
+        )
+        for folder_id in (
+            _extract_google_drive_folder_id(folder_url)
+            for folder_url in shared_folder_urls.split(",")
+            if folder_url.strip()
+        )
+    ]
+
+
 def _get_launch_context_for_course_or_raise(
     user: User,
     course_id: str,
@@ -233,6 +376,7 @@ def _add_lti_launch_user_to_group(
     course_title: str | None,
     nrps_url: str | None,
     user_email: str,
+    is_curator: bool,
 ) -> None:
     """Ensure the course's Canvas-managed UserGroup exists and add the launching
     user to it, so a student lands in their class group on the first request.
@@ -251,6 +395,7 @@ def _add_lti_launch_user_to_group(
                 course_title=course_title,
                 nrps_url=nrps_url,
                 user_email=user_email,
+                is_curator=is_curator,
             )
     except Exception:
         logger.exception(
@@ -667,11 +812,11 @@ def _resolve_lti_course_user_group_id(
     lti_context_id: str,
     db_session: Session,
 ) -> int:
-    """Resolve the Canvas-managed UserGroup id that scopes a course's websites.
+    """Resolve the Canvas-managed UserGroup id that scopes course sources.
 
-    Websites are scoped to the course's roster-mirroring group (created by the
-    LTI student-group-sync). The group must exist — we deliberately refuse to
-    create a website connector otherwise rather than fall back to a public /
+    Instructor-managed sources are scoped to the course's roster-mirroring group
+    (created by the LTI student-group-sync). The group must exist — we
+    deliberately refuse to create a connector otherwise rather than fall back to a public /
     unscoped one, which would leak course content to other classes. Also
     requires EE (group-based access control); on non-EE the lookup is a no-op
     returning None, which surfaces the same clear error.
@@ -686,7 +831,7 @@ def _resolve_lti_course_user_group_id(
     if user_group is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
-            "No class group exists yet for this course, so a website cannot be "
+            "No class group exists yet for this course, so this source cannot be "
             "scoped to it. Make sure student group sync is enabled.",
         )
     return user_group.id
@@ -715,6 +860,201 @@ def _website_snapshot(
         total_docs_indexed=indexing_status.total_docs_indexed,
         has_indexed_documents=indexing_status.has_indexed_documents,
         last_successful_index_time=cc_pair.last_successful_index_time,
+    )
+
+
+def _google_drive_credential_json(credential: Credential) -> dict[str, Any]:
+    if credential.credential_json is None:
+        return {}
+    return credential.credential_json.get_value(apply_mask=False)
+
+
+def _google_drive_credential_is_connected(credential: Credential | None) -> bool:
+    if credential is None:
+        return False
+    return DB_CREDENTIALS_DICT_TOKEN_KEY in _google_drive_credential_json(credential)
+
+
+def _google_drive_credential_email(credential: Credential | None) -> str | None:
+    if credential is None:
+        return None
+    credential_json = _google_drive_credential_json(credential)
+    primary_email = credential_json.get(DB_CREDENTIALS_PRIMARY_ADMIN_KEY)
+    return primary_email if isinstance(primary_email, str) else None
+
+
+def _google_drive_oauth_app_is_configured() -> bool:
+    try:
+        get_google_app_cred(DocumentSource.GOOGLE_DRIVE)
+    except KvKeyNotFoundError:
+        return False
+    return True
+
+
+def _get_lti_google_drive_credential(
+    *,
+    db_session: Session,
+    user: User,
+) -> Credential | None:
+    credentials = fetch_credentials_by_source_for_user(
+        db_session=db_session,
+        user=user,
+        document_source=DocumentSource.GOOGLE_DRIVE,
+        get_editable=False,
+    )
+    user_credentials = [
+        credential for credential in credentials if credential.user_id == user.id
+    ]
+    connected_credentials = [
+        credential
+        for credential in user_credentials
+        if _google_drive_credential_is_connected(credential)
+    ]
+    if connected_credentials:
+        credential = sorted(
+            connected_credentials, key=lambda credential: credential.id
+        )[0]
+        _normalize_lti_google_drive_credential_name(
+            db_session=db_session,
+            credential=credential,
+        )
+        return credential
+    if user_credentials:
+        credential = sorted(user_credentials, key=lambda credential: credential.id)[0]
+        _normalize_lti_google_drive_credential_name(
+            db_session=db_session,
+            credential=credential,
+        )
+        return credential
+    return None
+
+
+def _normalize_lti_google_drive_credential_name(
+    *,
+    db_session: Session,
+    credential: Credential,
+) -> None:
+    if not _LEGACY_LTI_GOOGLE_DRIVE_CREDENTIAL_NAME_RE.fullmatch(credential.name or ""):
+        return
+
+    credential.name = _LTI_GOOGLE_DRIVE_CREDENTIAL_NAME
+    db_session.commit()
+    db_session.refresh(credential)
+
+
+def _get_or_create_lti_google_drive_credential(
+    *,
+    db_session: Session,
+    user: User,
+) -> Credential:
+    credential = _get_lti_google_drive_credential(db_session=db_session, user=user)
+    if credential is not None:
+        return credential
+
+    return create_credential(
+        credential_data=CredentialBase(
+            credential_json={},
+            admin_public=False,
+            curator_public=False,
+            source=DocumentSource.GOOGLE_DRIVE,
+            name=_LTI_GOOGLE_DRIVE_CREDENTIAL_NAME,
+        ),
+        user=user,
+        db_session=db_session,
+    )
+
+
+def _require_connected_lti_google_drive_credential(
+    *,
+    db_session: Session,
+    user: User,
+) -> Credential:
+    credential = _get_lti_google_drive_credential(db_session=db_session, user=user)
+    if credential is None or not _google_drive_credential_is_connected(credential):
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            "Connect Google Drive before selecting folders",
+        )
+    return credential
+
+
+def _build_lti_google_drive_connector_name(
+    *,
+    course_id: str,
+    db_session: Session,
+) -> str:
+    base_name = f"Course Google Drive ({course_id})"
+    if not connector_by_name_source_exists(
+        base_name, DocumentSource.GOOGLE_DRIVE, db_session
+    ):
+        return base_name
+    return f"{base_name} {uuid.uuid4().hex[:8]}"
+
+
+def _trigger_cc_pair_reindex(cc_pair_id: int, db_session: Session) -> None:
+    mark_ccpair_with_indexing_trigger(
+        cc_pair_id=cc_pair_id,
+        indexing_mode=IndexingMode.REINDEX,
+        db_session=db_session,
+    )
+    client_app.send_task(
+        OnyxCeleryTask.CHECK_FOR_INDEXING,
+        priority=OnyxCeleryPriority.HIGH,
+        kwargs={"tenant_id": get_current_tenant_id()},
+        expires=_CHECK_FOR_INDEXING_EXPIRES_SECONDS,
+    )
+
+
+def _validate_lti_course_private_object_scope(
+    *,
+    db_session: Session,
+    user: User,
+    user_group_id: int,
+) -> None:
+    fetch_ee_implementation_or_noop(
+        "onyx.db.user_group", "validate_object_creation_for_user", None
+    )(
+        db_session=db_session,
+        user=user,
+        target_group_ids=[user_group_id],
+        object_is_public=False,
+        object_is_perm_sync=False,
+        object_is_new=True,
+    )
+
+
+def _lti_google_drive_snapshot(
+    *,
+    credential: Credential | None,
+    cc_pair: ConnectorCredentialPair | None,
+    db_session: Session,
+) -> LtiCourseGoogleDriveSnapshot:
+    indexing_status = (
+        _cc_pair_indexing_status(cc_pair, db_session)
+        if cc_pair is not None
+        else _CcPairIndexingStatus(
+            indexing_status=None,
+            total_docs_indexed=0,
+            has_indexed_documents=False,
+        )
+    )
+    config = cc_pair.connector.connector_specific_config if cc_pair else {}
+    return LtiCourseGoogleDriveSnapshot(
+        oauth_app_configured=_google_drive_oauth_app_is_configured(),
+        connected=_google_drive_credential_is_connected(credential),
+        credential_id=credential.id if credential else None,
+        credential_name=credential.name if credential else None,
+        credential_email=_google_drive_credential_email(credential),
+        cc_pair_id=cc_pair.id if cc_pair else None,
+        connector_id=cc_pair.connector_id if cc_pair else None,
+        cc_pair_status=cc_pair.status if cc_pair else None,
+        indexing_status=indexing_status.indexing_status,
+        total_docs_indexed=indexing_status.total_docs_indexed,
+        has_indexed_documents=indexing_status.has_indexed_documents,
+        last_successful_index_time=(
+            cc_pair.last_successful_index_time if cc_pair else None
+        ),
+        folders=_google_drive_folders_from_config(config or {}),
     )
 
 
@@ -894,6 +1234,298 @@ def delete_lti_course_website(
         OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
         priority=OnyxCeleryPriority.HIGH,
         kwargs={"tenant_id": get_current_tenant_id()},
+    )
+
+
+@router.post("/course/{course_id}/google-drive/connect")
+def connect_lti_course_google_drive(
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> LtiGoogleDriveConnectResponse:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can connect Google Drive",
+        )
+
+    if not _google_drive_oauth_app_is_configured():
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "An admin needs to upload Google Drive OAuth app credentials before instructors can connect",
+        )
+
+    credential = _get_or_create_lti_google_drive_credential(
+        db_session=db_session,
+        user=user,
+    )
+    auth_url = (
+        f"{WEB_DOMAIN}/api/auth/lti/course/{quote(course_id, safe='')}"
+        f"/google-drive/authorize/{credential.id}"
+    )
+    return LtiGoogleDriveConnectResponse(
+        credential_id=credential.id,
+        auth_url=auth_url,
+    )
+
+
+@router.get("/course/{course_id}/google-drive/authorize/{credential_id}")
+def authorize_lti_course_google_drive(
+    course_id: str = Path(..., min_length=1),
+    credential_id: int = Path(...),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> RedirectResponse:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can connect Google Drive",
+        )
+
+    credential = _get_lti_google_drive_credential(
+        db_session=db_session,
+        user=user,
+    )
+    if credential is None or credential.id != credential_id:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Google Drive credential not found for this instructor",
+        )
+
+    try:
+        auth_url = get_auth_url(credential.id, DocumentSource.GOOGLE_DRIVE)
+    except KvKeyNotFoundError as e:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Google Drive OAuth app credentials have not been configured",
+        ) from e
+
+    redirect_response = RedirectResponse(url=auth_url, status_code=302)
+    redirect_response.set_cookie(
+        key=_GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME,
+        value=str(credential.id),
+        httponly=True,
+        max_age=600,
+    )
+    redirect_response.set_cookie(
+        key=_LTI_GOOGLE_DRIVE_OAUTH_COOKIE_NAME,
+        value="true",
+        httponly=True,
+        max_age=600,
+    )
+    return redirect_response
+
+
+@router.get("/course/{course_id}/google-drive")
+def get_lti_course_google_drive(
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> LtiCourseGoogleDriveSnapshot:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can view course Google Drive",
+        )
+
+    credential = _get_lti_google_drive_credential(db_session=db_session, user=user)
+    cc_pair = fetch_lti_course_google_drive_cc_pair(
+        db_session=db_session,
+        lti_context_id=course_id,
+    )
+    return _lti_google_drive_snapshot(
+        credential=credential,
+        cc_pair=cc_pair,
+        db_session=db_session,
+    )
+
+
+@router.put("/course/{course_id}/google-drive")
+def save_lti_course_google_drive_folders(
+    folders_request: LtiGoogleDriveFoldersRequest,
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> LtiCourseGoogleDriveSnapshot:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can manage course Google Drive folders",
+        )
+
+    folders = _normalize_google_drive_folder_selections(folders_request.folders)
+    folder_urls = [folder.url for folder in folders]
+    credential = _require_connected_lti_google_drive_credential(
+        db_session=db_session,
+        user=user,
+    )
+    course_group_id = _resolve_lti_course_user_group_id(
+        lti_context_id=course_id,
+        db_session=db_session,
+    )
+    _validate_lti_course_private_object_scope(
+        db_session=db_session,
+        user=user,
+        user_group_id=course_group_id,
+    )
+
+    cc_pair = fetch_lti_course_google_drive_cc_pair(
+        db_session=db_session,
+        lti_context_id=course_id,
+    )
+    connector_config = {
+        "shared_folder_urls": ",".join(folder_urls),
+        "lti_context_id": course_id,
+    }
+
+    if cc_pair is None:
+        connector_name = _build_lti_google_drive_connector_name(
+            course_id=course_id,
+            db_session=db_session,
+        )
+        try:
+            connector_response = create_connector(
+                db_session=db_session,
+                connector_data=ConnectorBase(
+                    name=connector_name,
+                    source=DocumentSource.GOOGLE_DRIVE,
+                    input_type=InputType.POLL,
+                    connector_specific_config=connector_config,
+                ),
+            )
+        except ValueError as e:
+            raise OnyxError(OnyxErrorCode.DUPLICATE_RESOURCE, str(e)) from e
+
+        cc_pair_response = add_credential_to_connector(
+            db_session=db_session,
+            user=user,
+            connector_id=int(connector_response.id),
+            credential_id=credential.id,
+            cc_pair_name=connector_name,
+            access_type=AccessType.PRIVATE,
+            groups=[course_group_id],
+        )
+        if not cc_pair_response.success or cc_pair_response.data is None:
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                cc_pair_response.message,
+            )
+
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=int(cc_pair_response.data),
+            eager_load_connector=True,
+        )
+        if cc_pair is None:
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                "Google Drive connector was created but could not be loaded",
+            )
+    else:
+        update_connector(
+            connector_id=cc_pair.connector_id,
+            connector_data=ConnectorBase(
+                name=cc_pair.connector.name,
+                source=DocumentSource.GOOGLE_DRIVE,
+                input_type=cc_pair.connector.input_type,
+                connector_specific_config=connector_config,
+                refresh_freq=cc_pair.connector.refresh_freq,
+                prune_freq=cc_pair.connector.prune_freq,
+                indexing_start=cc_pair.connector.indexing_start,
+            ),
+            db_session=db_session,
+        )
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=cc_pair.id,
+            eager_load_connector=True,
+        )
+        if cc_pair is None:
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                "Google Drive connector could not be loaded after update",
+            )
+
+    _trigger_cc_pair_reindex(cc_pair.id, db_session)
+    return _lti_google_drive_snapshot(
+        credential=credential,
+        cc_pair=cc_pair,
+        db_session=db_session,
+    )
+
+
+@router.post("/course/{course_id}/google-drive/sync")
+def sync_lti_course_google_drive(
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> LtiCourseGoogleDriveSnapshot:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can sync course Google Drive folders",
+        )
+
+    credential = _get_lti_google_drive_credential(db_session=db_session, user=user)
+    cc_pair = fetch_lti_course_google_drive_cc_pair(
+        db_session=db_session,
+        lti_context_id=course_id,
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "No course Google Drive source found",
+        )
+
+    _trigger_cc_pair_reindex(cc_pair.id, db_session)
+    return _lti_google_drive_snapshot(
+        credential=credential,
+        cc_pair=cc_pair,
+        db_session=db_session,
+    )
+
+
+@router.delete("/course/{course_id}/google-drive")
+def delete_lti_course_google_drive(
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can disconnect course Google Drive folders",
+        )
+
+    cc_pair = fetch_lti_course_google_drive_cc_pair(
+        db_session=db_session,
+        lti_context_id=course_id,
+    )
+    if cc_pair is None:
+        return None
+
+    cancel_indexing_attempts_for_ccpair(
+        cc_pair_id=cc_pair.id,
+        db_session=db_session,
+        include_secondary_index=True,
+    )
+    update_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair.id,
+        status=ConnectorCredentialPairStatus.DELETING,
+    )
+    db_session.commit()
+    client_app.send_task(
+        OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
+        priority=OnyxCeleryPriority.HIGH,
+        kwargs={"tenant_id": get_current_tenant_id()},
+        expires=_CHECK_FOR_DELETION_EXPIRES_SECONDS,
     )
 
 
@@ -1099,6 +1731,7 @@ async def lti_launch(
                 course_title=course_title,
                 nrps_url=extract_nrps_url(claims),
                 user_email=email,
+                is_curator=lti_roles_include_instructor(lti_roles),
             )
 
     # Try to resolve the Canvas course's indexed hierarchy node so the editor

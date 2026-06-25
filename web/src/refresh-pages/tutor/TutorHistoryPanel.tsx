@@ -111,7 +111,7 @@ export default function TutorHistoryPanel({
                 <SimpleLoader className="h-6 w-6" />
               </div>
             ) : (
-              <div className="min-h-0 flex-1 overflow-y-auto py-2">
+              <div className="min-h-0 flex-1 overflow-y-auto pb-2">
                 {grouped.length === 0 && (
                   <div className="px-4 py-8 text-center">
                     <Text font="secondary-body" color="text-03">
@@ -119,9 +119,14 @@ export default function TutorHistoryPanel({
                     </Text>
                   </div>
                 )}
-                {grouped.map((group) => (
+                {grouped.map((group, groupIndex) => (
                   <div key={group.label}>
-                    <div className="px-4 pb-1 pt-3">
+                    <div
+                      className={cn(
+                        "px-4 pb-1",
+                        groupIndex === 0 ? "pt-1" : "pt-3"
+                      )}
+                    >
                       <Text font="secondary-action" color="text-03">
                         {group.label}
                       </Text>
@@ -146,7 +151,7 @@ export default function TutorHistoryPanel({
                             <Interactive.Container
                               widthVariant="full"
                               roundingVariant="sm"
-                              heightVariant="md"
+                              heightVariant="fit"
                             >
                               <div
                                 className={cn(

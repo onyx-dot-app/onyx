@@ -39,6 +39,7 @@ import {
 } from "@/app/admin/connector/[ccPairId]/types";
 import TutorTabHeader from "@/refresh-pages/tutor/TutorTabHeader";
 import TutorInstructorWebsites from "@/refresh-pages/tutor/TutorInstructorWebsites";
+import TutorInstructorGoogleDrive from "@/refresh-pages/tutor/TutorInstructorGoogleDrive";
 
 const CANVAS_STATUS_KEY = "tutor-instructor-canvas-knowledge";
 
@@ -391,6 +392,7 @@ export default function TutorInstructorKnowledge({
           </div>
 
           {courseId && <TutorInstructorWebsites courseId={courseId} />}
+          {courseId && <TutorInstructorGoogleDrive courseId={courseId} />}
         </div>
       </div>
     </div>

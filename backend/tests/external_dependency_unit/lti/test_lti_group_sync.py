@@ -22,7 +22,9 @@ from ee.onyx.db.user_group import fetch_lti_managed_user_groups
 from ee.onyx.db.user_group import fetch_user_group
 from ee.onyx.db.user_group import fetch_user_group_by_lti_context_id
 from ee.onyx.db.user_group import sync_lti_group_membership_by_emails
+from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
+from onyx.db.models import UserRole
 from onyx.server.lti.nrps import NrpsRoster
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import global_version
@@ -66,7 +68,8 @@ def _member_emails(db_session: Session, user_group_id: int) -> set[str]:
 
 
 def test_ensure_creates_canvas_managed_group(
-    db_session: Session, tenant_context: None  # noqa: ARG001
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
 ) -> None:
     context_id = _unique("ctx_create")
     title = _unique("BIO 101")
@@ -96,7 +99,8 @@ def test_ensure_creates_canvas_managed_group(
 
 
 def test_launch_adds_user_as_sole_member(
-    db_session: Session, tenant_context: None  # noqa: ARG001
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
 ) -> None:
     context_id = _unique("ctx_launch_sole")
     student = create_test_user(db_session, "lti_student")
@@ -114,8 +118,41 @@ def test_launch_adds_user_as_sole_member(
     assert _member_emails(db_session, group.id) == {student.email.lower()}
 
 
+def test_instructor_launch_adds_user_as_group_curator(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    context_id = _unique("ctx_launch_instructor_curator")
+    instructor = create_test_user(db_session, "lti_instructor")
+
+    add_user_to_lti_group_by_email(
+        db_session=db_session,
+        lti_context_id=context_id,
+        course_title=_unique("BIO 200"),
+        nrps_url="https://canvas.example.edu/nrps/instructor",
+        user_email=instructor.email,
+        is_curator=True,
+    )
+
+    group = fetch_user_group_by_lti_context_id(db_session, context_id)
+    assert group is not None
+    relationship = db_session.scalar(
+        select(User__UserGroup).where(
+            User__UserGroup.user_group_id == group.id,
+            User__UserGroup.user_id == instructor.id,
+        )
+    )
+
+    assert relationship is not None
+    assert relationship.is_curator is True
+    db_session.refresh(instructor)
+    assert instructor.role == UserRole.CURATOR
+    assert _member_emails(db_session, group.id) == {instructor.email.lower()}
+
+
 def test_second_launch_joins_existing_group(
-    db_session: Session, tenant_context: None  # noqa: ARG001
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
 ) -> None:
     context_id = _unique("ctx_launch_two")
     title = _unique("HIST 101")
@@ -153,7 +190,8 @@ def test_second_launch_joins_existing_group(
 
 
 def test_sync_adds_and_skips_unknown_emails(
-    db_session: Session, tenant_context: None  # noqa: ARG001
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
 ) -> None:
     context_id = _unique("ctx_sync_add")
     enrolled = create_test_user(db_session, "lti_enrolled")
@@ -177,7 +215,8 @@ def test_sync_adds_and_skips_unknown_emails(
 
 
 def test_sync_removes_dropped_student(
-    db_session: Session, tenant_context: None  # noqa: ARG001
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
 ) -> None:
     context_id = _unique("ctx_sync_remove")
     stays = create_test_user(db_session, "lti_stays")
@@ -211,7 +250,8 @@ def test_sync_removes_dropped_student(
 
 
 def test_ensure_overwrites_renamed_group(
-    db_session: Session, tenant_context: None  # noqa: ARG001
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
 ) -> None:
     context_id = _unique("ctx_rename")
     title = _unique("Original Title")

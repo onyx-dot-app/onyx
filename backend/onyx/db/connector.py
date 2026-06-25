@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
@@ -145,6 +146,42 @@ def fetch_lti_course_website_cc_pairs(
         )
         == lti_context_id
     ]
+
+
+def fetch_lti_course_google_drive_cc_pair(
+    db_session: Session,
+    lti_context_id: str,
+) -> ConnectorCredentialPair | None:
+    """Return the active Google Drive cc-pair an instructor added for an LTI course."""
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(Connector)
+        .options(
+            joinedload(ConnectorCredentialPair.connector),
+            joinedload(ConnectorCredentialPair.credential),
+        )
+        .where(
+            Connector.source == DocumentSource.GOOGLE_DRIVE,
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        )
+        .order_by(ConnectorCredentialPair.id.asc())
+    )
+
+    cc_pairs = db_session.scalars(stmt).unique().all()
+    for cc_pair in cc_pairs:
+        if cc_pair.connector is None:
+            continue
+        if (
+            str(
+                (cc_pair.connector.connector_specific_config or {}).get(
+                    "lti_context_id"
+                )
+            )
+            == lti_context_id
+        ):
+            return cc_pair
+
+    return None
 
 
 def connector_by_name_source_exists(

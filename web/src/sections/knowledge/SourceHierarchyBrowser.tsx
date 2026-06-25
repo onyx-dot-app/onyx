@@ -147,6 +147,11 @@ export interface SourceHierarchyBrowserProps {
   onSetFolderIds: (ids: number[]) => void;
   onDeselectAllDocuments: () => void;
   onDeselectAllFolders: () => void;
+  onDeselectSourceItems?: (
+    source: ValidSources,
+    documentIds: string[],
+    folderIds: number[]
+  ) => void;
   initialAttachedDocuments?: AttachedDocumentSnapshot[];
   // Callback to report selection count changes for this source
   onSelectionCountChange?: (source: ValidSources, count: number) => void;
@@ -172,6 +177,7 @@ export default function SourceHierarchyBrowser({
   onSetFolderIds,
   onDeselectAllDocuments,
   onDeselectAllFolders,
+  onDeselectSourceItems,
   initialAttachedDocuments,
   onSelectionCountChange,
   hideRootNode = false,
@@ -468,6 +474,27 @@ export default function SourceHierarchyBrowser({
     return [...documentItems, ...sortedFolders];
   }, [childFolders, documents, sortField, sortDirection, folderPosition]);
 
+  const selectedItemIdsInSource = useMemo(() => {
+    const folderIds = allNodes
+      .filter((node) => selectedFolderIds.includes(node.id))
+      .map((node) => node.id);
+
+    const nodeIdsInSource = new Set(allNodes.map((node) => node.id));
+    const documentIds = selectedDocumentIds.filter((docId) => {
+      const doc = selectedDocumentDetails.get(docId);
+      return (
+        doc && doc.parent_id !== null && nodeIdsInSource.has(doc.parent_id)
+      );
+    });
+
+    return { documentIds, folderIds };
+  }, [
+    allNodes,
+    selectedFolderIds,
+    selectedDocumentIds,
+    selectedDocumentDetails,
+  ]);
+
   // Filter items by search and view selected mode
   const filteredItems = useMemo(() => {
     let result: HierarchyItem[];
@@ -476,19 +503,13 @@ export default function SourceHierarchyBrowser({
       // In view selected mode, show selected items from THIS source only
       // allNodes is already source-specific, so filtering against it gives us source-specific folders
       const selectedFolders: HierarchyItem[] = allNodes
-        .filter((node) => selectedFolderIds.includes(node.id))
+        .filter((node) => selectedItemIdsInSource.folderIds.includes(node.id))
         .map((node) => ({ type: "folder" as const, data: node }));
 
-      // Create a set of node IDs from this source to filter documents
-      const nodeIdsInSource = new Set(allNodes.map((node) => node.id));
-
       // Only include documents whose parent belongs to this source
-      const selectedDocs: HierarchyItem[] = selectedDocumentIds
+      const selectedDocs: HierarchyItem[] = selectedItemIdsInSource.documentIds
         .map((docId) => selectedDocumentDetails.get(docId))
         .filter((doc): doc is DocumentSummary => doc !== undefined)
-        .filter(
-          (doc) => doc.parent_id !== null && nodeIdsInSource.has(doc.parent_id)
-        )
         .map((doc) => ({ type: "document" as const, data: doc }));
 
       result = [...selectedFolders, ...selectedDocs];
@@ -510,35 +531,18 @@ export default function SourceHierarchyBrowser({
     items,
     searchValue,
     viewSelectedOnly,
-    selectedFolderIds,
-    selectedDocumentIds,
     allNodes,
     selectedDocumentDetails,
+    selectedItemIdsInSource,
   ]);
 
   // Count selected items for this source only
   const currentSourceSelectedCount = useMemo(() => {
-    // Folders: count how many selectedFolderIds are in allNodes (source-specific)
-    const folderCount = allNodes.filter((node) =>
-      selectedFolderIds.includes(node.id)
-    ).length;
-
-    // Documents: count how many selected documents have parent in this source
-    const nodeIdsInSource = new Set(allNodes.map((node) => node.id));
-    const docCount = selectedDocumentIds.filter((docId) => {
-      const doc = selectedDocumentDetails.get(docId);
-      return (
-        doc && doc.parent_id !== null && nodeIdsInSource.has(doc.parent_id)
-      );
-    }).length;
-
-    return folderCount + docCount;
-  }, [
-    allNodes,
-    selectedFolderIds,
-    selectedDocumentIds,
-    selectedDocumentDetails,
-  ]);
+    return (
+      selectedItemIdsInSource.folderIds.length +
+      selectedItemIdsInSource.documentIds.length
+    );
+  }, [selectedItemIdsInSource]);
 
   // Report selection count changes to parent
   useEffect(() => {
@@ -681,9 +685,22 @@ export default function SourceHierarchyBrowser({
 
   // Handler for deselecting all items
   const handleDeselectAll = () => {
-    onDeselectAllDocuments();
-    onDeselectAllFolders();
-    setSelectedDocumentDetails(new Map());
+    if (onDeselectSourceItems) {
+      onDeselectSourceItems(
+        source,
+        selectedItemIdsInSource.documentIds,
+        selectedItemIdsInSource.folderIds
+      );
+      setSelectedDocumentDetails((prev) => {
+        const updated = new Map(prev);
+        selectedItemIdsInSource.documentIds.forEach((id) => updated.delete(id));
+        return updated;
+      });
+    } else {
+      onDeselectAllDocuments();
+      onDeselectAllFolders();
+      setSelectedDocumentDetails(new Map());
+    }
     setViewSelectedOnly(false);
   };
 

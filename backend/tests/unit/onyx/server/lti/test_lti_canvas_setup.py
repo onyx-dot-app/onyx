@@ -6,6 +6,7 @@ import pytest
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.lti import api
 from onyx.server.lti.utils import LtiLaunchContext
 
@@ -30,6 +31,48 @@ def test_canvas_course_id_from_lti_claims_uses_launch_return_url() -> None:
     }
 
     assert api._canvas_course_id_from_lti_claims(claims) == 123
+
+
+def test_normalize_google_drive_folder_selections_accepts_urls_and_ids() -> None:
+    folders = api._normalize_google_drive_folder_selections(
+        [
+            api.LtiGoogleDriveFolderSelection(
+                url="https://drive.google.com/drive/folders/folder_123"
+            ),
+            api.LtiGoogleDriveFolderSelection(id="folder_456"),
+            api.LtiGoogleDriveFolderSelection(id="folder_123"),
+        ]
+    )
+
+    assert [(folder.id, folder.url) for folder in folders] == [
+        ("folder_123", "https://drive.google.com/drive/folders/folder_123"),
+        ("folder_456", "https://drive.google.com/drive/folders/folder_456"),
+    ]
+
+
+def test_normalize_google_drive_folder_selections_rejects_empty_input() -> None:
+    with pytest.raises(OnyxError) as exc_info:
+        api._normalize_google_drive_folder_selections([])
+
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+@patch("onyx.server.lti.api.get_google_app_cred")
+def test_google_drive_oauth_app_configured_when_admin_credentials_exist(
+    mock_get_google_app_cred: MagicMock,
+) -> None:
+    mock_get_google_app_cred.return_value = MagicMock()
+
+    assert api._google_drive_oauth_app_is_configured() is True
+
+
+@patch("onyx.server.lti.api.get_google_app_cred")
+def test_google_drive_oauth_app_not_configured_when_admin_credentials_missing(
+    mock_get_google_app_cred: MagicMock,
+) -> None:
+    mock_get_google_app_cred.side_effect = KvKeyNotFoundError()
+
+    assert api._google_drive_oauth_app_is_configured() is False
 
 
 def test_canvas_base_url_for_launch_context_uses_local_lti_endpoint_config(
