@@ -69,7 +69,7 @@ function Card({
               description={description}
             />
           </div>
-          {children}
+          <div className="flex flex-col gap-4">{children}</div>
         </div>
       </OpalCard>
 
