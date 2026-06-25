@@ -1229,6 +1229,43 @@ describe("useBuildStreaming thinking packets", () => {
     );
   });
 
+  it("reloads before flipping to active (avoids the auto-send TOCTOU)", async () => {
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    jest.mocked(fetchActiveTurn).mockResolvedValueOnce(null as never);
+    // Capture the session status at the moment loadSession runs. The flip to
+    // "active" triggers the queued auto-send, so the reload must happen while
+    // still "running" — before the flip — or it races the next turn.
+    let statusAtLoad: string | undefined;
+    useBuildSessionStore.setState({
+      loadSession: jest.fn(async () => {
+        statusAtLoad = useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId)?.status;
+      }),
+    } as never);
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "turn-interrupted",
+      activeTurnIndex: 3,
+      activeTurnLocalOwner: true,
+      isInterrupting: false,
+    });
+    const { result } = renderHook(() => useBuildStreaming());
+
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+    });
+
+    expect(statusAtLoad).toBe("running");
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.status
+    ).toBe("active");
+  });
+
   it("bails a stale reconcile once a newer turn supersedes the interrupt", async () => {
     jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
     useBuildSessionStore.getState().updateSessionData(sessionId, {
