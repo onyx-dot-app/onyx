@@ -14,23 +14,35 @@ import { fetchSS } from "@/lib/utilsSS";
 import { getWebVersion } from "@/lib/version";
 
 export async function fetchStandardSettingsSS(): Promise<Settings | null> {
-  const response = await fetchSS("/settings");
-  if (!response?.ok) return null;
-  return response.json();
+  try {
+    const response = await fetchSS("/settings");
+    if (!response?.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchEnterpriseSettingsSS(): Promise<EnterpriseSettings | null> {
-  const response = await fetchSS("/enterprise-settings");
-  if (!response?.ok) return null;
-  return response.json();
+  try {
+    const response = await fetchSS("/enterprise-settings");
+    if (!response?.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
 }
 
 async function fetchCustomAnalyticsScriptSS(): Promise<string | null> {
-  const response = await fetchSS(
-    "/enterprise-settings/custom-analytics-script"
-  );
-  if (!response?.ok) return null;
-  return response.json();
+  try {
+    const response = await fetchSS(
+      "/enterprise-settings/custom-analytics-script"
+    );
+    if (!response?.ok) return null;
+    return response.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
