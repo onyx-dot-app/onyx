@@ -2,7 +2,14 @@
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
@@ -147,7 +154,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const settings = useSettings();
   const { appName } = settings;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.title = currentChatSession?.name
       ? `${currentChatSession.name} — ${appName}`
       : appName;
