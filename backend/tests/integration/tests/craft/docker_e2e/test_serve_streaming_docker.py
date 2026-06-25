@@ -141,7 +141,7 @@ def live_session(
     # one in play, then seed it (with gpt-5-mini visible).
     for provider in LLMProviderManager.get_all(admin_user):
         if provider.provider == LlmProviderNames.OPENAI:
-            LLMProviderManager.delete(provider, admin_user)
+            LLMProviderManager.delete(provider, admin_user, force=True)
     LLMProviderManager.create(
         user_performing_action=admin_user,
         api_key=real_key,

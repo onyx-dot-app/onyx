@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import UUID
 from uuid import uuid4
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
@@ -30,7 +31,7 @@ from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.push import hydrate_sandbox_skills
+from onyx.skills.push import build_skills_fileset_for_user
 from onyx.skills.push import push_skill_to_affected_sandboxes
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -132,7 +133,11 @@ def user_group_factory(
         yield _create
     finally:
         for group in reversed(groups):
-            UserGroupManager.delete(group, k8s_admin_user)
+            try:
+                UserGroupManager.delete(group, k8s_admin_user)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code != 404:
+                    raise
 
 
 def _make_db_group(db_session: Session, name: str) -> UserGroup:
@@ -298,6 +303,11 @@ def _api_sandbox_id(db_session: Session, api_user: DATestUser) -> UUID:
     db_session.expire_all()
     row = db_session.query(Sandbox).filter(Sandbox.user_id == UUID(api_user.id)).one()
     return row.id
+
+
+def _rendered_company_search_lines(db_session: Session, user: User) -> list[str]:
+    fileset = build_skills_fileset_for_user(user, db_session)
+    return fileset["company-search/SKILL.md"].decode("utf-8").splitlines()
 
 
 class TestSkillPush:
@@ -519,7 +529,7 @@ class TestSkillPushLowLevel:
         push_skill_to_affected_sandboxes(skill, db_session)
 
         assert workspace.exists()
-        assert not _skills_dir(workspace).exists()
+        assert not (_skills_dir(workspace) / skill.slug).exists()
 
     def test_push_skips_terminated_sandboxes(
         self,
@@ -545,22 +555,18 @@ class TestSkillPushLowLevel:
         push_skill_to_affected_sandboxes(skill, db_session)
 
         assert workspace.exists()
-        assert not _skills_dir(workspace).exists()
+        assert not (_skills_dir(workspace) / skill.slug).exists()
 
     def test_company_search_skill_rendered_per_user(
         self,
         db_session: Session,
         tenant_context: None,  # noqa: ARG002
-        running_sandbox: Callable[..., SandboxHandle],
         db_group_factory: Callable[[str], UserGroup],
     ) -> None:
-        handle = running_sandbox()
-
         _reset_built_in_skill_row(db_session, built_in_skill_id="company-search")
         db_session.commit()
 
         api_user_a, api_user_b = _create_users(2)
-        [ws_a, ws_b] = handle.provision_api_users([api_user_a, api_user_b])
         user_a = _orm_user(db_session, api_user_a)
         user_b = _orm_user(db_session, api_user_b)
 
@@ -570,26 +576,15 @@ class TestSkillPushLowLevel:
         _add_user_to_group(db_session, user_b, group_b)
         db_session.commit()
 
-        sandbox_a = _api_sandbox_id(db_session, api_user_a)
-        sandbox_b = _api_sandbox_id(db_session, api_user_b)
-
-        hydrate_sandbox_skills(sandbox_id=sandbox_a, user=user_a, db_session=db_session)
-        hydrate_sandbox_skills(sandbox_id=sandbox_b, user=user_b, db_session=db_session)
-        baseline_a = set(
-            _skill_file_path(ws_a, "company-search").read_text().splitlines()
-        )
-        baseline_b = set(
-            _skill_file_path(ws_b, "company-search").read_text().splitlines()
-        )
+        baseline_a = set(_rendered_company_search_lines(db_session, user_a))
+        baseline_b = set(_rendered_company_search_lines(db_session, user_b))
 
         _make_private_cc_pair(db_session, DocumentSource.SLACK, group_a)
         _make_private_cc_pair(db_session, DocumentSource.GOOGLE_DRIVE, group_b)
         db_session.commit()
 
-        hydrate_sandbox_skills(sandbox_id=sandbox_a, user=user_a, db_session=db_session)
-        hydrate_sandbox_skills(sandbox_id=sandbox_b, user=user_b, db_session=db_session)
-        after_a = set(_skill_file_path(ws_a, "company-search").read_text().splitlines())
-        after_b = set(_skill_file_path(ws_b, "company-search").read_text().splitlines())
+        after_a = set(_rendered_company_search_lines(db_session, user_a))
+        after_b = set(_rendered_company_search_lines(db_session, user_b))
 
         # Diff against baseline to cancel out PUBLIC cc_pairs leaked by other tests.
         gained_a = after_a - baseline_a
@@ -607,10 +602,7 @@ class TestSkillPushLowLevel:
         tenant_context: None,  # noqa: ARG002
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        running_sandbox: Callable[..., SandboxHandle],
     ) -> None:
-        handle = running_sandbox()
-
         slug = f"excl-builtin-{uuid4().hex[:6]}"
         skills_root = tmp_path / "builtin_src"
         source_dir = skills_root / slug
@@ -638,19 +630,15 @@ class TestSkillPushLowLevel:
         _make_built_in_skill_row(db_session, built_in_skill_id=slug)
 
         [api_user] = _create_users(1)
-        [workspace] = handle.provision_api_users([api_user])
         user = _orm_user(db_session, api_user)
-        sandbox_id = _api_sandbox_id(db_session, api_user)
         db_session.commit()
 
-        hydrate_sandbox_skills(sandbox_id=sandbox_id, user=user, db_session=db_session)
+        fileset = build_skills_fileset_for_user(user, db_session)
+        shipped = {Path(rel).name for rel in fileset if rel.startswith(f"{slug}/")}
 
-        skill_dir = _skills_dir(workspace) / slug
-        names_present = {p.name for p in skill_dir.rglob("*") if p.is_file()}
-
-        assert "SKILL.md" in names_present
-        assert "script.py" in names_present
-        assert "notes.template" not in names_present
-        assert ".hidden" not in names_present
-        assert "foo.pyc" not in names_present
-        assert not (skill_dir / "__pycache__").exists()
+        assert "SKILL.md" in shipped
+        assert "script.py" in shipped
+        assert "notes.template" not in shipped
+        assert ".hidden" not in shipped
+        assert "foo.pyc" not in shipped
+        assert not any(rel.startswith(f"{slug}/__pycache__/") for rel in fileset)
