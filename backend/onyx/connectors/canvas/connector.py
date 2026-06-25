@@ -1708,7 +1708,7 @@ class CanvasConnector(
                 or CanvasCourse(id=course_id, name=f"Course {course_id}")
                 for course_id in self.course_ids
             ]
-            if self.course_ids is not None
+            if self.course_ids
             else self._list_courses()
         )
 
