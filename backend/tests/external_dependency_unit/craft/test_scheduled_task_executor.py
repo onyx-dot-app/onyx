@@ -409,6 +409,44 @@ def test_prompt_response_marks_run_succeeded(
     assert refreshed.error_class is None
 
 
+def test_cancelled_prompt_response_marks_run_failed(
+    db_session: Session,
+    test_user: User,
+    sandbox: Any,  # noqa: ARG001
+    session_manager_with_stub: SessionManager,  # noqa: ARG001
+    stub_sandbox_manager: StubSandboxManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A cancelled terminal (opencode aborted the agent) → FAILED, not SUCCEEDED.
+
+    Scheduled runs have no interrupt mechanism, so a cancelled PromptResponse
+    is an abnormal abort, not a clean completion.
+    """
+    # Bypass skill-payload: encrypted ExternalApp creds break local MIT decryption.
+    monkeypatch.setattr(
+        "onyx.server.features.build.session.manager.build_user_skills_payload",
+        lambda *_: ("", {}),
+    )
+
+    sandbox(user=test_user, status=SandboxStatus.RUNNING)
+    _, run = _seed_task_and_queued_run(db_session, test_user)
+
+    stub_sandbox_manager.health_check_returns = True
+    stub_sandbox_manager.setup_session_workspace_silent = True
+    stub_sandbox_manager.write_files_to_sandbox_silent = True
+    stub_sandbox_manager.send_message_events = [
+        PromptResponse.model_validate({"stopReason": "cancelled"}),
+    ]
+
+    run_scheduled_task_logic(run.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(ScheduledTaskRun, run.id)
+    assert refreshed is not None
+    assert refreshed.status == ScheduledTaskRunStatus.FAILED
+    assert refreshed.error_class == ScheduledTaskErrorClass.AGENT_EXCEPTION.value
+
+
 def test_transport_error_event_marks_run_failed_with_agent_exception_class(
     db_session: Session,
     test_user: User,
