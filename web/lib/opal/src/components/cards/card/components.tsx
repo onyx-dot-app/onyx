@@ -242,13 +242,12 @@ function Card(props: CardProps) {
     : cardRoundingVariants[roundingProp];
 
   return (
-    <div ref={ref} className="opal-card-expandable">
+    <div ref={ref} className="opal-card-expandable" data-shadow={shadow}>
       <div
         className={cn("opal-card-expandable-header", padding, headerRounding)}
         data-background={background}
         data-border={border}
         data-opal-status-border={borderColor}
-        data-shadow={shadow}
       >
         {children}
       </div>
