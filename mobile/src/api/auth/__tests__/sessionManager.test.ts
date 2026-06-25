@@ -21,6 +21,8 @@ import {
   refreshToken,
   register,
 } from "@/api/auth/sessionManager";
+import { runBrowserSso } from "@/api/auth/browserSso";
+import type { ProviderDescriptor } from "@/api/auth/providers";
 import { apiFetch, type ApiFetchInit } from "@/api/client";
 import { ApiError } from "@/api/errors";
 import { persister, queryClient } from "@/query/client";
@@ -31,6 +33,8 @@ import { persister, queryClient } from "@/query/client";
 // also keeps their native deps (MMKV) out of the test entirely.
 jest.mock("@/api/client");
 jest.mock("@/api/auth/tokenStore");
+// Mock browserSso to keep expo-web-browser/expo-crypto out of this test.
+jest.mock("@/api/auth/browserSso");
 jest.mock("@/query/client", () => ({
   queryClient: { clear: jest.fn() },
   persister: { removeClient: jest.fn() },
@@ -53,6 +57,16 @@ const mockClear = queryClient.clear as unknown as Mock<() => void>;
 const mockRemoveClient = persister.removeClient as unknown as Mock<
   () => Promise<undefined>
 >;
+const mockRunBrowserSso = runBrowserSso as unknown as Mock<
+  () => Promise<{ code: string; codeVerifier: string }>
+>;
+
+const GOOGLE: ProviderDescriptor = {
+  id: "google",
+  label: "Google",
+  kind: "browser",
+  authorizePath: "/auth/mobile/oauth/authorize",
+};
 
 const token = (access: string): BearerTokenResponse => ({
   access_token: access,
@@ -93,6 +107,48 @@ describe("login", () => {
     );
     expect(mockClear).toHaveBeenCalledTimes(1);
     expect(mockRemoveClient).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("login (browser SSO)", () => {
+  it("exchanges the one-time code + verifier, stores the token, then purges the cache", async () => {
+    mockRunBrowserSso.mockResolvedValue({
+      code: "one-time-code",
+      codeVerifier: "the-verifier",
+    });
+    mockApiFetch.mockResolvedValue(token("tok-sso"));
+
+    await login({ kind: "browser", provider: GOOGLE });
+
+    expect(mockRunBrowserSso).toHaveBeenCalledWith(GOOGLE);
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+    const [path, init] = mockApiFetch.mock.calls[0];
+    expect(path).toBe("/auth/mobile/sso/exchange");
+    expect(init?.method).toBe("POST");
+    expect(init?.auth).toBe(false);
+    // snake_case `code_verifier` for the backend.
+    expect(init?.body).toEqual({
+      code: "one-time-code",
+      code_verifier: "the-verifier",
+    });
+
+    expect(mockSetToken).toHaveBeenCalledWith("tok-sso");
+    expect(mockSetToken.mock.invocationCallOrder[0]).toBeLessThan(
+      mockClear.mock.invocationCallOrder[0],
+    );
+    expect(mockClear).toHaveBeenCalledTimes(1);
+    expect(mockRemoveClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not exchange or store a token when the browser flow fails/cancels", async () => {
+    mockRunBrowserSso.mockRejectedValue(new Error("cancelled"));
+
+    await expect(
+      login({ kind: "browser", provider: GOOGLE }),
+    ).rejects.toThrow();
+
+    expect(mockApiFetch).not.toHaveBeenCalled();
+    expect(mockSetToken).not.toHaveBeenCalled();
   });
 });
 

@@ -1,27 +1,27 @@
 // Single orchestration point for the mobile session lifecycle; all session
 // mutations route through here so the token-and-cache invariants live in one place.
+import { runBrowserSso } from "@/api/auth/browserSso";
+import type { ProviderDescriptor } from "@/api/auth/providers";
 import { apiFetch } from "@/api/client";
 import { getToken, setToken } from "@/api/auth/tokenStore";
 import { isAuthError } from "@/api/errors";
 import { persister, queryClient } from "@/query/client";
 import { useSession } from "@/state/session";
 
-// fastapi-users BearerTransport login/refresh response shape.
+// fastapi-users BearerTransport login/refresh response shape (also the SSO exchange).
 export interface BearerTokenResponse {
   access_token: string;
   token_type: string;
 }
 
-// V1 supports only email/password; PR5 widens this union with a `browser` SSO variant.
-export type LoginMethod = {
-  kind: "password";
-  email: string;
-  password: string;
-};
+export type LoginMethod =
+  | { kind: "password"; email: string; password: string }
+  | { kind: "browser"; provider: ProviderDescriptor };
 
 const LOGIN_PATH = "/auth/mobile/login";
 const REFRESH_PATH = "/auth/mobile/refresh";
 const LOGOUT_PATH = "/auth/mobile/logout";
+const SSO_EXCHANGE_PATH = "/auth/mobile/sso/exchange";
 // Shared (non-mobile) fastapi-users route; only creates the user.
 const REGISTER_PATH = "/auth/register";
 
@@ -46,18 +46,41 @@ function passwordForm(email: string, password: string): URLSearchParams {
   return form;
 }
 
-export async function login(method: LoginMethod): Promise<void> {
-  const res = await apiFetch<BearerTokenResponse>(LOGIN_PATH, {
-    method: "POST",
-    auth: false, // no token yet
-    body: passwordForm(method.email, method.password),
-  });
+async function installSession(accessToken: string): Promise<void> {
   sessionEpoch += 1; // new identity → invalidate any in-flight refresh
   // Install the new token before purging so a query firing mid-purge reads the
   // new identity's token, not the prior user's (which would repopulate the cache).
-  await setToken(res.access_token);
+  await setToken(accessToken);
   await purgeCache();
   useSession.getState().setStatus("authed");
+}
+
+async function passwordLogin(email: string, password: string): Promise<string> {
+  const res = await apiFetch<BearerTokenResponse>(LOGIN_PATH, {
+    method: "POST",
+    auth: false, // no token yet
+    body: passwordForm(email, password),
+  });
+  return res.access_token;
+}
+
+// Verifier rides only this TLS exchange, never the deep link.
+async function browserLogin(provider: ProviderDescriptor): Promise<string> {
+  const { code, codeVerifier } = await runBrowserSso(provider);
+  const res = await apiFetch<BearerTokenResponse>(SSO_EXCHANGE_PATH, {
+    method: "POST",
+    auth: false, // the code itself is the credential
+    body: { code, code_verifier: codeVerifier },
+  });
+  return res.access_token;
+}
+
+export async function login(method: LoginMethod): Promise<void> {
+  const accessToken =
+    method.kind === "password"
+      ? await passwordLogin(method.email, method.password)
+      : await browserLogin(method.provider);
+  await installSession(accessToken);
 }
 
 // register() succeeded but the follow-up auto-login failed (e.g. the instance requires email
