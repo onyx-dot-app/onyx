@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 from kubernetes import client
 from kubernetes import config
@@ -8,13 +9,27 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# (connect, read) deadline for synchronous boot-time API calls. The in-cluster
-# client has no default per-request deadline, so on a half-open apiserver socket
-# it blocks until the kernel's TCP retransmission limit (minutes) — turning a
-# transient hiccup into a crash loop. Every boot call must pass this.
-K8S_BOOT_REQUEST_TIMEOUT_S: tuple[float, float] = (5.0, 15.0)
+# (connect, read) deadline applied to every request made through the boot client.
+# The kubernetes client has no Configuration-level request timeout, so on a
+# half-open apiserver socket a call blocks until the kernel's TCP retransmission
+# limit (minutes) — turning a transient hiccup into a crash loop.
+_REQUEST_TIMEOUT_S: tuple[float, float] = (5.0, 15.0)
 
 _BOOT_CONNECT_RETRIES = 2
+
+
+class _DeadlinedApiClient(client.ApiClient):
+    """ApiClient that applies `_REQUEST_TIMEOUT_S` to any call that omits one.
+
+    Configuring the deadline here (rather than at every call site) means callers
+    can't forget it, and there is no other place to set it: the kubernetes client
+    exposes no Configuration-level request timeout.
+    """
+
+    def request(self, *args: Any, _request_timeout: Any = None, **kwargs: Any) -> Any:
+        if _request_timeout is None:
+            _request_timeout = _REQUEST_TIMEOUT_S
+        return super().request(*args, _request_timeout=_request_timeout, **kwargs)
 
 
 def load_kube_config() -> None:
@@ -42,10 +57,10 @@ def load_kube_config() -> None:
 
 
 def build_core_v1_api() -> client.CoreV1Api:
-    """CoreV1Api whose transport retries dropped connections, for boot-time use.
+    """CoreV1Api for boot-time use: per-request deadline + connect retries.
 
-    Callers must still pass `_request_timeout=K8S_BOOT_REQUEST_TIMEOUT_S` on each
-    synchronous boot call; the client has no default per-request deadline.
+    Every request gets `_REQUEST_TIMEOUT_S` (see `_DeadlinedApiClient`) so a
+    stalled connection fails fast instead of blocking for minutes.
     """
     load_kube_config()
     configuration = client.Configuration.get_default_copy()
@@ -57,4 +72,4 @@ def build_core_v1_api() -> client.CoreV1Api:
         read=0,
         backoff_factor=0.5,
     )
-    return client.CoreV1Api(client.ApiClient(configuration))
+    return client.CoreV1Api(_DeadlinedApiClient(configuration))

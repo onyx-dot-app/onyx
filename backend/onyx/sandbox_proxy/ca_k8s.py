@@ -20,9 +20,6 @@ from onyx.server.features.build.configs import SANDBOX_PROXY_CA_CONFIGMAP
 from onyx.server.features.build.configs import SANDBOX_PROXY_CA_SECRET
 from onyx.server.features.build.configs import SANDBOX_PROXY_NAMESPACE
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import build_core_v1_api
-from onyx.server.features.build.sandbox.kubernetes.k8s_client import (
-    K8S_BOOT_REQUEST_TIMEOUT_S,
-)
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY_ONYX
@@ -73,7 +70,6 @@ class K8sSecretCAStore(CAStore):
             secret = self._core.read_namespaced_secret(
                 name=self._secret_name,
                 namespace=self._proxy_ns,
-                _request_timeout=K8S_BOOT_REQUEST_TIMEOUT_S,
             )
         except ApiException as e:
             if e.status == 404:
@@ -127,7 +123,6 @@ class K8sSecretCAStore(CAStore):
             self._core.create_namespaced_secret(
                 namespace=self._proxy_ns,
                 body=secret,
-                _request_timeout=K8S_BOOT_REQUEST_TIMEOUT_S,
             )
         except ApiException as e:
             # 409 on create = cold-cluster race lost.
@@ -159,7 +154,6 @@ class K8sSecretCAStore(CAStore):
             self._core.create_namespaced_config_map(
                 namespace=self._sandbox_ns,
                 body=body,
-                _request_timeout=K8S_BOOT_REQUEST_TIMEOUT_S,
             )
             return
         except ApiException as e:
@@ -175,7 +169,6 @@ class K8sSecretCAStore(CAStore):
                     name=self._configmap_name,
                     namespace=self._sandbox_ns,
                     body=body,
-                    _request_timeout=K8S_BOOT_REQUEST_TIMEOUT_S,
                 )
                 return
             except ApiException as e:

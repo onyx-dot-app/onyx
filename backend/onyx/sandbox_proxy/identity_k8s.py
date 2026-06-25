@@ -18,9 +18,6 @@ from onyx.sandbox_proxy.identity import SandboxIdentity
 from onyx.sandbox_proxy.identity import SandboxIPLookup
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.sandbox.kubernetes.k8s_client import build_core_v1_api
-from onyx.server.features.build.sandbox.kubernetes.k8s_client import (
-    K8S_BOOT_REQUEST_TIMEOUT_S,
-)
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_COMPONENT_SANDBOX
 from onyx.server.features.build.sandbox.labels import LABEL_K8S_MANAGED_BY
@@ -32,6 +29,11 @@ from onyx.utils.logger import setup_logger
 _RECONNECT_INITIAL_SECONDS = 1.0
 _RECONNECT_MAX_SECONDS = 30.0
 _WATCH_TIMEOUT_SECONDS = 300
+# Connect deadline for the long-lived watch. It must opt out of the boot client's
+# short read deadline (an idle watch reads nothing for up to
+# `_WATCH_TIMEOUT_SECONDS`), but a connect deadline still lets a half-open
+# reconnect fail fast into the backoff loop.
+_WATCH_CONNECT_TIMEOUT_S = 15.0
 
 _SANDBOX_POD_SELECTOR = ",".join(
     [
@@ -167,7 +169,6 @@ class K8sInformerLookup(SandboxIPLookup):
         listing = self._core.list_namespaced_pod(
             namespace=self._namespace,
             label_selector=_SANDBOX_POD_SELECTOR,
-            _request_timeout=K8S_BOOT_REQUEST_TIMEOUT_S,
         )
         new_cache: dict[str, SandboxIdentity] = {}
         for pod in listing.items:
@@ -207,6 +208,7 @@ class K8sInformerLookup(SandboxIPLookup):
                 label_selector=_SANDBOX_POD_SELECTOR,
                 resource_version=resource_version,
                 timeout_seconds=_WATCH_TIMEOUT_SECONDS,
+                _request_timeout=(_WATCH_CONNECT_TIMEOUT_S, None),
             )
             for event in stream:
                 if self._stop_event.is_set():
