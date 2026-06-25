@@ -113,7 +113,7 @@ function BedrockModalInternals({
         formikProps.values.custom_config?.AWS_SECRET_ACCESS_KEY,
       aws_bearer_token_bedrock:
         formikProps.values.custom_config?.AWS_BEARER_TOKEN_BEDROCK,
-      provider_name: LLMProviderName.BEDROCK,
+      provider_id: existingLlmProvider?.id ?? undefined,
     });
     if (error) {
       throw new Error(error);

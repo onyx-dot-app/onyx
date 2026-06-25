@@ -1,6 +1,6 @@
 "use client";
 
-import ChatPreferencesPage from "@/refresh-pages/admin/ChatPreferencesPage";
+import ChatPreferencesPage from "@/views/admin/ChatPreferencesPage";
 
 export default function Page() {
   return <ChatPreferencesPage />;

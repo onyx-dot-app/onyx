@@ -2,7 +2,6 @@ import Svg, { Path } from "react-native-svg";
 
 import type { IconProps } from "@/icons/types";
 
-// RN variant of web Opal `SvgFolder` (web/lib/opal/src/icons/folder.tsx).
 const SvgFolder = ({ size = 16, ...props }: IconProps) => (
   <Svg
     width={size}

@@ -15,7 +15,7 @@ logger = setup_logger()
 
 
 def generate_data_plane_token() -> str:
-    if DATA_PLANE_SECRET is None:
+    if not DATA_PLANE_SECRET:
         raise ValueError("DATA_PLANE_SECRET is not set")
 
     payload = {

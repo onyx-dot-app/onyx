@@ -7,6 +7,7 @@ from ee.onyx.server.scim.models import ScimMeta
 from ee.onyx.server.scim.models import ScimName
 from ee.onyx.server.scim.models import ScimPatchOperation
 from ee.onyx.server.scim.models import ScimPatchOperationType
+from ee.onyx.server.scim.models import ScimPatchRequest
 from ee.onyx.server.scim.models import ScimPatchResourceValue
 from ee.onyx.server.scim.models import ScimPatchValue
 from ee.onyx.server.scim.models import ScimUserResource
@@ -395,6 +396,84 @@ class TestApplyGroupPatch:
         )
         assert len(result.members) == 1
         assert removed == []
+
+    def test_remove_member_entra_value_list(self) -> None:
+        """Entra ID removes members via path="members" + a value list rather
+        than Okta's members[value eq "..."] filter."""
+        group = _make_group(
+            members=[
+                ScimGroupMember(value="user-1"),
+                ScimGroupMember(value="user-2"),
+            ]
+        )
+        result, added, removed = apply_group_patch(
+            [
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REMOVE,
+                    path="members",
+                    value=[ScimGroupMember(value="user-1")],
+                )
+            ],
+            group,
+        )
+        assert [m.value for m in result.members] == ["user-2"]
+        assert removed == ["user-1"]
+        assert added == []
+
+    def test_remove_member_entra_multiple(self) -> None:
+        group = _make_group(
+            members=[
+                ScimGroupMember(value="user-1"),
+                ScimGroupMember(value="user-2"),
+                ScimGroupMember(value="user-3"),
+            ]
+        )
+        result, _, removed = apply_group_patch(
+            [
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REMOVE,
+                    path="members",
+                    value=[
+                        ScimGroupMember(value="user-1"),
+                        ScimGroupMember(value="user-3"),
+                    ],
+                )
+            ],
+            group,
+        )
+        assert [m.value for m in result.members] == ["user-2"]
+        assert sorted(removed) == ["user-1", "user-3"]
+
+    def test_remove_member_entra_nonexistent(self) -> None:
+        group = _make_group(members=[ScimGroupMember(value="user-1")])
+        result, _, removed = apply_group_patch(
+            [
+                ScimPatchOperation(
+                    op=ScimPatchOperationType.REMOVE,
+                    path="members",
+                    value=[ScimGroupMember(value="user-999")],
+                )
+            ],
+            group,
+        )
+        assert len(result.members) == 1
+        assert removed == []
+
+    def test_remove_member_entra_raw_payload(self) -> None:
+        """The exact body Entra ID sends — capitalized "Remove" op, path
+        "members", value list — must parse and remove the member."""
+        group = _make_group(members=[ScimGroupMember(value="user-1")])
+        request = ScimPatchRequest.model_validate(
+            {
+                "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+                "Operations": [
+                    {"op": "Remove", "path": "members", "value": [{"value": "user-1"}]}
+                ],
+            }
+        )
+        result, _, removed = apply_group_patch(request.Operations, group)
+        assert result.members == []
+        assert removed == ["user-1"]
 
     def test_mixed_operations(self) -> None:
         group = _make_group(members=[ScimGroupMember(value="user-1")])

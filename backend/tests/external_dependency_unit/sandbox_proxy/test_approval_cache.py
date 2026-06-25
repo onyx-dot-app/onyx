@@ -45,7 +45,6 @@ def test_announce_applies_ttl() -> None:
     announce_approval(uuid4(), session_id, cache)
     remaining = cache.ttl(announce_key(session_id))
 
-    # Hardcoded spec; test_approval_decision_values_complete pins the constant.
     assert 0 < remaining <= 60
 
 
@@ -113,7 +112,6 @@ def test_send_wake_applies_ttl() -> None:
     send_wake(approval_id, ApprovalDecision.APPROVED, cache)
     remaining = cache.ttl(_wake_key(approval_id))
 
-    # Hardcoded spec; the completeness check below pins the constant.
     assert 0 < remaining <= 30
 
 
@@ -170,8 +168,7 @@ def test_cached_session_grants_cover_requires_every_action() -> None:
 
 @pytest.mark.asyncio
 async def test_decision_value_round_trips() -> None:
-    """Pins the enum → bytes → enum encoding; the completeness check below
-    independently pins the full enum value set."""
+    """Pins the enum → bytes → enum encoding."""
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     approval_id = uuid4()
 
@@ -182,10 +179,7 @@ async def test_decision_value_round_trips() -> None:
 
 
 def test_approval_decision_values_complete() -> None:
-    """Pins the full `ApprovalDecision` value set and the cache-layer TTL
-    constants to their spec values (the TTL bound checks elsewhere hardcode
-    the same specs)."""
+    """Pins the full `ApprovalDecision` value set and cache-layer TTL constants."""
     assert {d.value for d in ApprovalDecision} == {"APPROVED", "REJECTED", "EXPIRED"}
     assert approval_cache_module.ANNOUNCE_TTL_S == 60
     assert approval_cache_module.WAKE_TTL_S == 30
-    assert approval_cache_module.WAIT_TIMEOUT_S == 180

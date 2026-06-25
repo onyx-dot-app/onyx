@@ -10,7 +10,7 @@ import {
   builtinFixture,
   customFixture,
 } from "@/lib/skills/__fixtures__/picker";
-import type { SkillsList } from "@/refresh-pages/admin/SkillsPage/interfaces";
+import type { SkillsList } from "@/views/admin/SkillsPage/interfaces";
 import type { PickerEntry } from "@/lib/skills/picker";
 import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
 import type { LibraryEntry } from "@/app/craft/types/user-library";

@@ -14,7 +14,9 @@ def _restore_configs() -> Iterator[None]:
     # to leave clean module state for other tests.
     yield
     os.environ.pop("SANDBOX_BACKEND", None)
+    os.environ.pop("SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS", None)
     os.environ.pop("SANDBOX_CONTAINER_IMAGE", None)
+    os.environ.pop("SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS", None)
     os.environ.pop("ONYX_VERSION", None)
     importlib.reload(configs)
 
@@ -95,3 +97,27 @@ def test_blank_sandbox_image_override_does_not_emit_blank_image(
     reloaded = importlib.reload(configs)
 
     assert reloaded.SANDBOX_CONTAINER_IMAGE == "onyxdotapp/sandbox:latest"
+
+
+def test_sandbox_timing_defaults_match_existing_behavior(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS", raising=False)
+
+    reloaded = importlib.reload(configs)
+
+    assert reloaded.SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS == 180
+    assert reloaded.SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS == 60
+
+
+def test_sandbox_timing_env_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS", "20")
+    monkeypatch.setenv("SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS", "10")
+
+    reloaded = importlib.reload(configs)
+
+    assert reloaded.SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS == 20
+    assert reloaded.SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS == 10

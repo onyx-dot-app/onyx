@@ -1,57 +1,72 @@
+from collections.abc import Mapping
+
 from onyx.configs.constants import DocumentSource
 
+_PUBLIC_SOURCE_IMAGE_BASE_URL = "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/slackbot-source-icons"
+_DEFAULT_SOURCE_IMAGE_FILENAME = "File.png"
 
-def source_to_github_img_link(source: DocumentSource) -> str | None:
-    # TODO: store these images somewhere better
-    if source == DocumentSource.WEB.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Web.png"
-    if source == DocumentSource.FILE.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/File.png"
-    if source == DocumentSource.GOOGLE_SITES.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/GoogleSites.png"
-    if source == DocumentSource.SLACK.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Slack.png"
-    if source == DocumentSource.GMAIL.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Gmail.png"
-    if source == DocumentSource.GOOGLE_DRIVE.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/GoogleDrive.png"
-    if source == DocumentSource.GITHUB.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Github.png"
-    if source == DocumentSource.GITLAB.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Gitlab.png"
-    if source == DocumentSource.CONFLUENCE.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Confluence.png"
-    if source == DocumentSource.JIRA.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Jira.png"
-    if source == DocumentSource.NOTION.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Notion.png"
-    if source == DocumentSource.ZENDESK.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Zendesk.png"
-    if source == DocumentSource.GONG.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Gong.png"
-    if source == DocumentSource.LINEAR.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Linear.png"
-    if source == DocumentSource.PRODUCTBOARD.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Productboard.webp"
-    if source == DocumentSource.SLAB.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/SlabLogo.png"
-    if source == DocumentSource.ZULIP.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Zulip.png"
-    if source == DocumentSource.GURU.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Guru.png"
-    if source == DocumentSource.HUBSPOT.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/HubSpot.png"
-    if source == DocumentSource.DOCUMENT360.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Document360.png"
-    if source == DocumentSource.BOOKSTACK.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Bookstack.png"
-    if source == DocumentSource.OUTLINE.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Outline.png"
-    if source == DocumentSource.LOOPIO.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Loopio.png"
-    if source == DocumentSource.SHAREPOINT.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Sharepoint.png"
-    if source == DocumentSource.INGESTION_API.value:
-        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/File.png"
+_SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
+    DocumentSource.INGESTION_API: _DEFAULT_SOURCE_IMAGE_FILENAME,
+    DocumentSource.SLACK: "Slack.png",
+    DocumentSource.WEB: "Web.png",
+    DocumentSource.GOOGLE_DRIVE: "GoogleDrive.png",
+    DocumentSource.GMAIL: "Gmail.png",
+    DocumentSource.GITHUB: "Github.png",
+    DocumentSource.GITBOOK: "Gitbook.png",
+    DocumentSource.GITLAB: "Gitlab.png",
+    DocumentSource.GURU: "Guru.png",
+    DocumentSource.BOOKSTACK: "Bookstack.png",
+    DocumentSource.OUTLINE: "Outline.png",
+    DocumentSource.CONFLUENCE: "Confluence.png",
+    DocumentSource.JIRA: "Jira.png",
+    DocumentSource.SLAB: "Slab.png",
+    DocumentSource.PRODUCTBOARD: "Productboard.png",
+    DocumentSource.FILE: _DEFAULT_SOURCE_IMAGE_FILENAME,
+    DocumentSource.CODA: "Coda.png",
+    DocumentSource.CANVAS: _DEFAULT_SOURCE_IMAGE_FILENAME,
+    DocumentSource.NOTION: "Notion.png",
+    DocumentSource.ZULIP: "Zulip.png",
+    DocumentSource.LINEAR: "Linear.png",
+    DocumentSource.HUBSPOT: "HubSpot.png",
+    DocumentSource.DOCUMENT360: "Document360.png",
+    DocumentSource.GONG: "Gong.png",
+    DocumentSource.GOOGLE_SITES: "GoogleSites.png",
+    DocumentSource.ZENDESK: "Zendesk.png",
+    DocumentSource.LOOPIO: "Loopio.png",
+    DocumentSource.DROPBOX: "Dropbox.png",
+    DocumentSource.SHAREPOINT: "Sharepoint.png",
+    DocumentSource.TEAMS: "Teams.png",
+    DocumentSource.SALESFORCE: "Salesforce.png",
+    DocumentSource.DISCOURSE: "Discourse.png",
+    DocumentSource.AXERO: "Axero.png",
+    DocumentSource.CLICKUP: "Clickup.png",
+    DocumentSource.MEDIAWIKI: "MediaWiki.png",
+    DocumentSource.WIKIPEDIA: "Wikipedia.png",
+    DocumentSource.ASANA: "Asana.png",
+    DocumentSource.S3: "S3.png",
+    DocumentSource.R2: "R2.png",
+    DocumentSource.GOOGLE_CLOUD_STORAGE: "GoogleCloudStorage.png",
+    DocumentSource.OCI_STORAGE: "OCI.png",
+    DocumentSource.XENFORO: "Xenforo.png",
+    DocumentSource.NOT_APPLICABLE: _DEFAULT_SOURCE_IMAGE_FILENAME,
+    DocumentSource.DISCORD: "Discord.png",
+    DocumentSource.FRESHDESK: "Freshdesk.png",
+    DocumentSource.FIREFLIES: "Fireflies.png",
+    DocumentSource.EGNYTE: "Egnyte.png",
+    DocumentSource.AIRTABLE: "Airtable.png",
+    DocumentSource.HIGHSPOT: "Highspot.png",
+    DocumentSource.DRUPAL_WIKI: "Drupal.png",
+    DocumentSource.IMAP: "Mail.png",
+    DocumentSource.BITBUCKET: "Bitbucket.png",
+    DocumentSource.TESTRAIL: "Testrail.png",
+    DocumentSource.BRAINTRUST: "Braintrust.png",
+    DocumentSource.MOCK_CONNECTOR: _DEFAULT_SOURCE_IMAGE_FILENAME,
+    DocumentSource.USER_FILE: _DEFAULT_SOURCE_IMAGE_FILENAME,
+    DocumentSource.CRAFT_FILE: _DEFAULT_SOURCE_IMAGE_FILENAME,
+}
 
-    return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/File.png"
+
+def source_to_github_img_link(source: DocumentSource) -> str:
+    filename = _SOURCE_IMAGE_FILENAMES[source]
+
+    return f"{_PUBLIC_SOURCE_IMAGE_BASE_URL}/{filename}"

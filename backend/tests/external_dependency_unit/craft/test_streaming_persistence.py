@@ -237,6 +237,26 @@ class TestStreamingPersistence:
         assert messages[3].type == MessageType.ASSISTANT
         assert messages[3].message_metadata["content"]["text"] == "Done with tool."
 
+    def test_tool_output_with_nul_byte_is_stripped_for_postgres_jsonb(
+        self,
+        db_session: Session,
+        build_session: BuildSession,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        create_message(
+            session_id=build_session.id,
+            message_type=MessageType.ASSISTANT,
+            turn_index=0,
+            message_metadata={
+                "type": "tool_call_progress",
+                "rawOutput": {"output": "prefix\x00suffix"},
+            },
+            db_session=db_session,
+        )
+
+        messages = get_session_messages(build_session.id, db_session)
+        assert messages[-1].message_metadata["rawOutput"]["output"] == "prefixsuffix"
+
     def test_agent_thought_chunks_persist_as_single_collapsed_row(
         self,
         db_session: Session,

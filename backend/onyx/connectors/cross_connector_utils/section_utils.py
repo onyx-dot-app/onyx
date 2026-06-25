@@ -21,6 +21,10 @@ def cap_sections_text(
     for i, section in enumerate(sections):
         if isinstance(section, ImageSection):
             continue
+        if section.text is None:
+            # File-backed (e.g. streamed TabularSection) — content lives in the
+            # file store and is already bounded; nothing inline to cap.
+            continue
         if len(section.text) > remaining:
             logger.warning(
                 "Extracted text for %s exceeds %s chars. Truncating.",

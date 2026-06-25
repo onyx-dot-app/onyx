@@ -1,4 +1,4 @@
-import { ConnectorsSettings } from "@/refresh-pages/SettingsPage";
+import { ConnectorsSettings } from "@/views/SettingsPage";
 
 export default function ConnectorsPage() {
   return <ConnectorsSettings />;

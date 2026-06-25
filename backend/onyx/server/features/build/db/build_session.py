@@ -26,11 +26,14 @@ from onyx.db.models import BuildSession
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Sandbox
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_json_like
 
 logger = setup_logger()
 
@@ -327,11 +330,12 @@ def create_message(
         message_metadata: Required structured data (the raw sandbox event packet JSON)
         db_session: Database session
     """
+    sanitized_metadata = sanitize_json_like(message_metadata)
     message = BuildMessage(
         session_id=session_id,
         turn_index=turn_index,
         type=message_type,
-        message_metadata=message_metadata,
+        message_metadata=sanitized_metadata,
     )
     db_session.add(message)
     db_session.commit()
@@ -343,7 +347,7 @@ def create_message(
         message.id,
         session_id,
         turn_index,
-        message_metadata.get("type"),
+        sanitized_metadata.get("type"),
     )
     return message
 
@@ -383,12 +387,15 @@ def update_message(
     if message is None:
         return None
 
-    message.message_metadata = message_metadata
+    sanitized_metadata = sanitize_json_like(message_metadata)
+    message.message_metadata = sanitized_metadata
     db_session.commit()
     db_session.refresh(message)
 
     logger.info(
-        "Updated message %s metadata type=%s", message_id, message_metadata.get("type")
+        "Updated message %s metadata type=%s",
+        message_id,
+        sanitized_metadata.get("type"),
     )
     return message
 
@@ -433,7 +440,8 @@ def upsert_agent_plan(
     )
 
     if existing_plan:
-        existing_plan.message_metadata = plan_metadata
+        sanitized_metadata = sanitize_json_like(plan_metadata)
+        existing_plan.message_metadata = sanitized_metadata
         db_session.commit()
         db_session.refresh(existing_plan)
         logger.info(
@@ -515,7 +523,7 @@ def allocate_nextjs_port(db_session: Session) -> int:
         An available port number
 
     Raises:
-        RuntimeError: If no ports are available in the configured range
+        OnyxError: If no ports are available in the configured range
     """
     from onyx.db.models import BuildSession
 
@@ -532,8 +540,9 @@ def allocate_nextjs_port(db_session: Session) -> int:
         if port not in allocated_ports and _is_port_available(port):
             return port
 
-    raise RuntimeError(
-        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})"
+    raise OnyxError(
+        OnyxErrorCode.SERVICE_UNAVAILABLE,
+        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})",
     )
 
 

@@ -36,7 +36,7 @@ jobs:
       - name: Install node dependencies
         working-directory: ./web
         run: bun install --frozen-lockfile
-      - uses: j178/prek-action@6ad80277337ad479fe43bd70701c3f7f8aa74db3
+      - uses: j178/prek-action@bdca6f102f98e2b4c7029491a53dfd366469e33d
         env:
           SKIP: ty
         with:

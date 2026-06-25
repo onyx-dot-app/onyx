@@ -151,25 +151,25 @@ export interface BedrockFetchParams {
   aws_access_key_id?: string;
   aws_secret_access_key?: string;
   aws_bearer_token_bedrock?: string;
-  provider_name?: string;
+  provider_id?: number;
 }
 
 export interface OllamaFetchParams {
   api_base?: string;
-  provider_name?: string;
+  provider_id?: number;
   signal?: AbortSignal;
 }
 
 export interface OpenRouterFetchParams {
   api_base?: string;
   api_key?: string;
-  provider_name?: string;
+  provider_id?: number;
 }
 
 export interface LiteLLMProxyFetchParams {
   api_base?: string;
   api_key?: string;
-  provider_name?: string;
+  provider_id?: number;
   signal?: AbortSignal;
 }
 
@@ -185,7 +185,7 @@ export interface LiteLLMProxyModelResponse {
 export interface BifrostFetchParams {
   api_base?: string;
   api_key?: string;
-  provider_name?: string;
+  provider_id?: number;
   signal?: AbortSignal;
 }
 
@@ -200,7 +200,7 @@ export interface BifrostModelResponse {
 export interface OpenAICompatibleFetchParams {
   api_base?: string;
   api_key?: string;
-  provider_name?: string;
+  provider_id?: number;
   signal?: AbortSignal;
 }
 
@@ -215,7 +215,6 @@ export interface OpenAICompatibleModelResponse {
 export interface NebiusTokenfactoryFetchParams {
   api_base?: string;
   api_key?: string;
-  provider_name?: string;
   provider_id?: number;
   signal?: AbortSignal;
 }
@@ -240,7 +239,7 @@ export interface LMStudioFetchParams {
   api_base?: string;
   api_key?: string;
   api_key_changed?: boolean;
-  provider_name?: string;
+  provider_id?: number;
   signal?: AbortSignal;
 }
 
