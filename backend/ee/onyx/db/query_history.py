@@ -1,11 +1,14 @@
 from collections.abc import Sequence
 from datetime import datetime
+from uuid import UUID
 
+from sqlalchemy import and_
 from sqlalchemy import asc
 from sqlalchemy import BinaryExpression
 from sqlalchemy import ColumnElement
 from sqlalchemy import desc
 from sqlalchemy import distinct
+from sqlalchemy import or_
 from sqlalchemy.orm import contains_eager
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
@@ -136,10 +139,20 @@ def fetch_chat_sessions_eagerly_by_time(
     db_session: Session,
     limit: int | None = 500,
     initial_time: datetime | None = None,
+    initial_id: UUID | None = None,
 ) -> list[ChatSession]:
-    """Sorted by oldest to newest, then by message id"""
+    """Sorted by oldest to newest, by (time_created, id), then by message id.
+
+    Pagination uses a composite ``(time_created, id)`` keyset cursor. Because
+    ``ChatSession.time_created`` is not unique (it defaults to the transaction
+    clock, so sessions created together share a timestamp), a cursor on
+    ``time_created`` alone would skip every session sharing the previous page's
+    final timestamp. Passing the previous page's last ``(initial_time,
+    initial_id)`` resumes strictly after that row without dropping ties.
+    """
 
     asc_time_order: UnaryExpression = asc(ChatSession.time_created)
+    id_order: UnaryExpression = asc(ChatSession.id)
     message_order: UnaryExpression = asc(ChatMessage.id)
 
     filters: list[ColumnElement | BinaryExpression] = [
@@ -147,12 +160,23 @@ def fetch_chat_sessions_eagerly_by_time(
     ]
 
     if initial_time:
-        filters.append(ChatSession.time_created > initial_time)
+        if initial_id is not None:
+            filters.append(
+                or_(
+                    ChatSession.time_created > initial_time,
+                    and_(
+                        ChatSession.time_created == initial_time,
+                        ChatSession.id > initial_id,
+                    ),
+                )
+            )
+        else:
+            filters.append(ChatSession.time_created > initial_time)
 
     subquery = (
         db_session.query(ChatSession.id, ChatSession.time_created)
         .filter(*filters)
-        .order_by(asc_time_order)
+        .order_by(asc_time_order, id_order)
         .limit(limit)
         .subquery()
     )
@@ -168,7 +192,7 @@ def fetch_chat_sessions_eagerly_by_time(
                 ChatMessage.chat_message_feedbacks
             ),
         )
-        .order_by(asc_time_order, message_order)
+        .order_by(asc_time_order, id_order, message_order)
     )
 
     chat_sessions = query.all()
