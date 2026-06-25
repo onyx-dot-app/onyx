@@ -116,18 +116,11 @@ The API server container already has built-in skill files on disk at
    `ln -sf /workspace/managed/skills {session_path}/.opencode/skills`. Drop the
    `if [ -d /workspace/skills ]` guard — the directory is gone after Phase 5.
 
-3. **Local sandbox manager** (`local_sandbox_manager.py:368-369`): change
-   `skills_target=sandbox_path / "skills"` to
-   `skills_target=sandbox_path / "managed" / "skills"`. (Local push lands files at
-   `$sandbox_path/managed/skills/` after the `/workspace/` strip in
-   `write_files_to_sandbox`.) Also ensure that directory exists before the symlink is
-   created.
-
-4. **K8s manager hardcoded pptx path** (`kubernetes_sandbox_manager.py:2012`): change
+3. **K8s manager hardcoded pptx path** (`kubernetes_sandbox_manager.py:2012`): change
    `/workspace/skills/pptx/scripts/preview.py` to
    `/workspace/managed/skills/pptx/scripts/preview.py`.
 
-5. `/workspace/managed/` already exists in the sandbox image (Dockerfile L61:
+4. `/workspace/managed/` already exists in the sandbox image (Dockerfile L61:
    `mkdir -p /workspace/sessions /workspace/templates /workspace/managed`).
 
 ### Phase 4: Update AGENTS.md skills section
@@ -162,20 +155,18 @@ scan. Sandbox managers stay DB-agnostic.
 
 1. **Dockerfile L92**: remove `COPY --exclude=__pycache__ skills/ /workspace/skills/`.
 
-2. **`LocalSandboxManager.provision()` L212-218**: remove the
-   `shutil.copytree(skills_source_path, sandbox_skills)` block.
+2. **`DirectoryManager.setup_skills()`**: remove. It should have no production callers
+   after Phase 3 moves skill delivery to sandbox push; remove or update any tests that
+   still depend on it.
 
-3. **`DirectoryManager.setup_skills()`**: remove. Only callers are the local sandbox
-   manager (Phase 3 step 3 inlines the equivalent) and tests.
-
-4. **`DirectoryManager._skills_path` / `skills_source_path`**: remove if no remaining
-   callers after step 3. Both `DirectoryManager` constructors still pass it for now to
+3. **`DirectoryManager._skills_path` / `skills_source_path`**: remove if no remaining
+   callers after step 2. Both `DirectoryManager` constructors still pass it for now to
    keep diffs small; can be removed in a follow-up.
 
-5. **`sandbox/skills/rendering.py`** and the `sandbox/skills/` package: delete after
+4. **`sandbox/skills/rendering.py`** and the `sandbox/skills/` package: delete after
    Phase 2 step 1 moves the function out.
 
-6. **`SKILLS_TEMPLATE_PATH`**: keep — Phase 2 step 2 reads from it.
+5. **`SKILLS_TEMPLATE_PATH`**: keep — Phase 2 step 2 reads from it.
 
 ## Tests
 
