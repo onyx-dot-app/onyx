@@ -17,7 +17,9 @@ import {
   getValidToken,
   login,
   logout,
+  PostRegisterLoginError,
   refreshToken,
+  register,
 } from "@/api/auth/sessionManager";
 import { apiFetch, type ApiFetchInit } from "@/api/client";
 import { ApiError } from "@/api/errors";
@@ -75,7 +77,7 @@ describe("login", () => {
 
     expect(mockApiFetch).toHaveBeenCalledTimes(1);
     const [path, init] = mockApiFetch.mock.calls[0];
-    expect(path).toBe("/api/auth/mobile/login");
+    expect(path).toBe("/auth/mobile/login");
     expect(init?.method).toBe("POST");
     expect(init?.auth).toBe(false);
     const body = init?.body as URLSearchParams;
@@ -94,13 +96,61 @@ describe("login", () => {
   });
 });
 
+describe("register", () => {
+  it("creates the account as JSON, then logs in to mint the token", async () => {
+    // register returns no token; the subsequent login does.
+    mockApiFetch.mockImplementation((path) =>
+      Promise.resolve(path === "/auth/register" ? undefined : token("tok-new")),
+    );
+
+    await register({ email: "a@example.com", password: "pw" });
+
+    const [registerPath, registerInit] = mockApiFetch.mock.calls[0];
+    expect(registerPath).toBe("/auth/register");
+    expect(registerInit?.method).toBe("POST");
+    expect(registerInit?.auth).toBe(false);
+    expect(registerInit?.body).toEqual({
+      email: "a@example.com",
+      password: "pw",
+    });
+
+    expect(mockApiFetch.mock.calls[1][0]).toBe("/auth/mobile/login");
+    expect(mockSetToken).toHaveBeenCalledWith("tok-new");
+  });
+
+  it("does not log in when account creation fails", async () => {
+    mockApiFetch.mockRejectedValueOnce(new ApiError({ status: 400 }));
+
+    await expect(
+      register({ email: "taken@example.com", password: "pw" }),
+    ).rejects.toBeInstanceOf(ApiError);
+
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+    expect(mockSetToken).not.toHaveBeenCalled();
+  });
+
+  it("flags a post-register login failure distinctly (the account exists)", async () => {
+    // register OK, auto-login fails (e.g. verification required): account created, not signed in.
+    mockApiFetch.mockImplementation((path) =>
+      path === "/auth/register"
+        ? Promise.resolve(undefined)
+        : Promise.reject(new ApiError({ status: 400 })),
+    );
+
+    await expect(
+      register({ email: "a@example.com", password: "pw" }),
+    ).rejects.toBeInstanceOf(PostRegisterLoginError);
+    expect(mockSetToken).not.toHaveBeenCalled();
+  });
+});
+
 describe("logout", () => {
   it("revokes server-side, then wipes the token + query cache", async () => {
     mockApiFetch.mockResolvedValue(undefined);
 
     await logout();
 
-    expect(mockApiFetch).toHaveBeenCalledWith("/api/auth/mobile/logout", {
+    expect(mockApiFetch).toHaveBeenCalledWith("/auth/mobile/logout", {
       method: "POST",
     });
     expect(mockSetToken).toHaveBeenCalledWith(null);
@@ -185,7 +235,7 @@ describe("refreshToken (single-flight)", () => {
   it("does not resurrect the session when a logout completes mid-refresh", async () => {
     let resolveRefresh!: (value: BearerTokenResponse) => void;
     mockApiFetch.mockImplementation((path) => {
-      if (path === "/api/auth/mobile/refresh") {
+      if (path === "/auth/mobile/refresh") {
         return new Promise<BearerTokenResponse>((resolve) => {
           resolveRefresh = resolve;
         });

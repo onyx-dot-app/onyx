@@ -1,12 +1,6 @@
-// Shared API response types (mirrors web's src/lib/types.ts).
-//
-// Mobile-local and deliberately minimal — only the fields the app renders. Do
-// not mirror web's larger `User` type. If web later shares a DTO for one of
-// these via @onyx-ai/shared, reuse that instead (policy: extract-on-proven-reuse).
-// Mirrors the backend UserRole enum (backend/onyx/auth/schemas.py) exactly — all
-// 7 members. slack_user / ext_perm_user are non-web-login roles unlikely to reach
-// a mobile session, but the type must not claim values the API can return are
-// impossible (apiFetch casts the response without runtime validation).
+// Mobile-local, minimal mirror of web's src/lib/types.ts — only fields the app renders.
+// Must list all 7 backend UserRole members: apiFetch casts without runtime validation,
+// so the type can't claim API-returnable values are impossible.
 export type UserRole =
   | "limited"
   | "basic"
@@ -23,12 +17,10 @@ export interface CurrentUser {
   is_active: boolean;
 }
 
-// Mirrors the backend AuthType enum (backend/onyx/configs/constants.py).
 // `cloud` = Google OAuth + basic email/password.
 export type AuthType = "basic" | "google_oauth" | "oidc" | "saml" | "cloud";
 
-// Mirrors AuthTypeResponse (backend/onyx/server/manage/models.py) — only the
-// fields the mobile auth flow reads. Returned by the public `GET /api/auth/type`.
+// Subset of AuthTypeResponse read by the mobile auth flow; from public GET /api/auth/type.
 export interface AuthTypeMetadata {
   auth_type: AuthType;
   requires_verification: boolean;

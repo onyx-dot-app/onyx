@@ -1,5 +1,4 @@
-// Logout mutation. SessionManager.logout best-effort-revokes server-side, then
-// wipes the local token + query cache regardless of network outcome.
+// Wipes local token + query cache even if the server-side revoke fails.
 import { useMutation } from "@tanstack/react-query";
 
 import { logout } from "@/api/auth/sessionManager";

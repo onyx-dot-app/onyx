@@ -1,7 +1,4 @@
-// Discovers the connected instance's auth configuration (`/api/auth/type`):
-// which login methods to show + password rules. This is a *public* endpoint
-// (auth:false) — it's what we call before the user has a token. Keyed by
-// serverUrl so switching instances refetches against the new backend.
+// Public endpoint (auth:false) called before the user has a token; keyed by serverUrl so switching instances refetches.
 import { useQuery } from "@tanstack/react-query";
 
 import { apiFetch } from "@/api/client";
@@ -13,12 +10,9 @@ export function useAuthConfig() {
   const serverUrl = useSession((state) => state.serverUrl);
   return useQuery({
     queryKey: QUERY_KEYS.authType(serverUrl),
-    // Stay idle until an instance is connected. Before then `getBaseUrl()`
-    // throws a plain Error (the dev-only EXPO_PUBLIC_API_URL aside), which isn't
-    // an auth error, so TanStack would retry once and park the query in error
-    // state instead of simply waiting for a URL.
+    // Idle until connected: without a URL getBaseUrl() throws a plain Error, which TanStack would retry and park in error state.
     enabled: serverUrl !== null,
     queryFn: ({ signal }) =>
-      apiFetch<AuthTypeMetadata>("/api/auth/type", { auth: false, signal }),
+      apiFetch<AuthTypeMetadata>("/auth/type", { auth: false, signal }),
   });
 }
