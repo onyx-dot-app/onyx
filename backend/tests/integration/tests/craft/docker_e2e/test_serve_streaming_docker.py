@@ -27,6 +27,7 @@ from tests.integration.common_utils.managers.llm_provider import LLMProviderMana
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
+from tests.integration.tests.craft.docker_e2e.conftest import DockerSandbox
 from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
 
 pytestmark = pytest.mark.skipif(
@@ -151,31 +152,43 @@ def live_session(
     for provider in LLMProviderManager.get_all(admin_user):
         if provider.provider == LlmProviderNames.OPENAI:
             LLMProviderManager.delete(provider, admin_user, force=True)
-    LLMProviderManager.create(
+    created_provider = LLMProviderManager.create(
         user_performing_action=admin_user,
         api_key=real_key,
         default_model_name=_LIVE_MODEL,
     )
-    # Pin the cheap model on the turn; provisioning otherwise selects the
-    # provider's recommended (flagship) model, ignoring default_model_name.
-    result = provision_sandbox(
-        streaming_user,
-        llm_provider_type=LlmProviderNames.OPENAI,
-        llm_model_name=_LIVE_MODEL,
-    )
+    result: DockerSandbox | None = None
     try:
+        # Pin the cheap model on the turn; provisioning otherwise selects the
+        # provider's recommended (flagship) model, ignoring default_model_name.
+        result = provision_sandbox(
+            streaming_user,
+            llm_provider_type=LlmProviderNames.OPENAI,
+            llm_model_name=_LIVE_MODEL,
+        )
         yield DockerLiveSession(user=streaming_user, session_id=result.session_id)
     finally:
         try:
-            subprocess.run(
-                ["docker", "rm", "-f", result.container_name],
-                capture_output=True,
-                text=True,
-                timeout=30.0,
-                check=False,
+            LLMProviderManager.delete(created_provider, admin_user, force=True)
+        except Exception as exc:
+            print(
+                "WARNING: failed to delete live-test LLM provider "
+                f"{created_provider.id!r}: {exc}"
             )
-        except Exception:
-            pass
+        if result is not None:
+            try:
+                subprocess.run(
+                    ["docker", "rm", "-f", result.container_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=30.0,
+                    check=False,
+                )
+            except Exception as exc:
+                print(
+                    "WARNING: failed to remove container "
+                    f"{result.container_name!r}: {exc}"
+                )
 
 
 def test_provision_injects_serve_env_into_real_container(

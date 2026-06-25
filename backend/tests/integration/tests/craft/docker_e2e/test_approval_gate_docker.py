@@ -25,6 +25,7 @@ from tests.integration.common_utils.managers.build_approvals import (
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
+from tests.integration.tests.craft.docker_e2e.conftest import DockerSandbox
 from tests.integration.tests.craft.docker_e2e.conftest import ProvisionSandbox
 
 pytestmark = pytest.mark.skipif(
@@ -83,25 +84,25 @@ def gated_user() -> DATestUser:
 def gated_module_sandbox(
     gated_user: DATestUser,
     provision_sandbox: ProvisionSandbox,
-) -> str:
+) -> DockerSandbox:
     # Sandboxes are per-user, so every later ``gated_session`` mint reuses this
     # RUNNING container instead of paying the ~40s provisioning cost again.
-    _session_id, container = provision_sandbox(gated_user)
-    return container
+    return provision_sandbox(gated_user)
 
 
 @pytest.fixture
 def gated_session(
     gated_user: DATestUser,
-    gated_module_sandbox: str,
+    gated_module_sandbox: DockerSandbox,
     provision_sandbox: ProvisionSandbox,
 ) -> DockerGatedSession:
     # Reuses the gated user's already-RUNNING container; only the build-session
     # row -- and thus the proxy tag / approval session id -- is new per test.
     result = provision_sandbox(gated_user)
-    assert result.container_name == gated_module_sandbox, (
+    assert result.container_name == gated_module_sandbox.container_name, (
         "gated_session minted a new container instead of reusing the module "
-        f"sandbox: {result.container_name!r} != {gated_module_sandbox!r}"
+        f"sandbox: {result.container_name!r} != "
+        f"{gated_module_sandbox.container_name!r}"
     )
     return DockerGatedSession(
         user=gated_user,
