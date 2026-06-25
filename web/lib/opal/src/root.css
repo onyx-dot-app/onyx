@@ -17,6 +17,7 @@
  * should be applied in the app's own CSS.
  */
 
+@import "./styles/shadows.css";
 @import "./styles/sizes.css";
 @import "./styles/typography.css";
 @import "./styles/z-index.css";
