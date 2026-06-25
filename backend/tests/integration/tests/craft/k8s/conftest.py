@@ -17,10 +17,12 @@ from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.users import create_or_login_admin
-from tests.integration.common_utils import http_client
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
+from tests.integration.common_utils.http_client import RetryingTransport
+from tests.integration.common_utils.http_client import set_test_client
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.craft.k8s.k8s_fixtures import suite_sandbox_ids
 
 pytest_plugins = (
     "tests.integration.tests.craft.k8s.k8s_db_fixtures",
@@ -30,15 +32,22 @@ pytest_plugins = (
 
 @pytest.fixture(scope="module", autouse=True)
 def _reap_module_pods() -> Generator[None, None, None]:
+    """Safety net for leaked suite sandboxes only.
+
+    Filters to sandboxes this suite provisioned (tracked in
+    ``k8s_fixtures._SUITE_SANDBOX_IDS``) so unrelated sandboxes on a shared
+    cluster are never terminated.
+    """
     yield
     if SANDBOX_BACKEND != SandboxBackend.KUBERNETES:
         return
+    suite_ids = suite_sandbox_ids()
     with get_session_with_tenant(
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
     ) as db:
-        running = get_running_sandboxes(db)
+        leaked = [s for s in get_running_sandboxes(db) if s.id in suite_ids]
     manager = get_sandbox_manager()
-    for sandbox in running:
+    for sandbox in leaked:
         with contextlib.suppress(Exception):
             manager.terminate(sandbox.id)
 
@@ -70,13 +79,16 @@ def _start_celery_workers() -> None:
 @pytest.fixture(scope="session", autouse=True)
 def _test_client() -> Generator[httpx.Client, None, None]:
     """Bind integration HTTP helpers to the deployed api_server."""
-    real_client = httpx.Client(timeout=httpx.Timeout(120.0, connect=10.0))
-    http_client.set_test_client(real_client)
+    real_client = httpx.Client(
+        transport=RetryingTransport(),
+        timeout=httpx.Timeout(120.0, connect=10.0),
+    )
+    set_test_client(real_client)
     try:
         yield real_client
     finally:
         real_client.close()
-        http_client.set_test_client(None)
+        set_test_client(None)
 
 
 @pytest.fixture(scope="session", autouse=True)

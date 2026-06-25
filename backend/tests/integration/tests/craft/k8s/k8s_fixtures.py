@@ -20,8 +20,6 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 if TYPE_CHECKING:
     from kubernetes import client as k8s_client_module
@@ -51,6 +49,15 @@ from tests.integration.common_utils.managers.user import UserManager
 logger = setup_logger()
 
 CRAFT_TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
+
+# Sandboxes this suite provisions, so the autouse reaper only terminates our own
+# leaks and never touches unrelated sandboxes on a shared/local cluster.
+_SUITE_SANDBOX_IDS: set[UUID] = set()
+
+
+def suite_sandbox_ids() -> set[UUID]:
+    """Snapshot of sandbox IDs created by this suite (for the leaked-pod reaper)."""
+    return set(_SUITE_SANDBOX_IDS)
 
 
 class PoolSession(NamedTuple):
@@ -97,18 +104,15 @@ def _is_k8s_craft_request(request: pytest.FixtureRequest) -> bool:
 
 def _sandbox_push_private_key() -> str:
     configured = os.environ.get("ONYX_SANDBOX_PUSH_PRIVATE_KEY")
-    if configured:
-        return configured
-
-    private_key = Ed25519PrivateKey.generate()
-    private_bytes = private_key.private_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PrivateFormat.Raw,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    import base64
-
-    return base64.b64encode(private_bytes).decode("ascii")
+    if not configured:
+        pytest.fail(
+            "ONYX_SANDBOX_PUSH_PRIVATE_KEY must be set for the k8s Craft suite. "
+            "API-provisioned pods verify pushes against the deployed server's key, "
+            "so a generated fallback would silently mismatch (false-pass negative "
+            "skip tests, hard-fail positive push tests). CI provides this from the "
+            "deployed server's config."
+        )
+    return configured
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -353,6 +357,7 @@ class SandboxHandle:
         api_user: "DATestUser",
     ) -> WorkspaceProxy:
         _session_id, sandbox_id = BuildSessionManager.create_with_sandbox(api_user)
+        _SUITE_SANDBOX_IDS.add(sandbox_id)
         if sandbox_id == self.sandbox_id:
             if self._api_user is not None and api_user.id != self._api_user.id:
                 raise AssertionError(
@@ -419,6 +424,7 @@ def _provisioned_sandbox(
     """
     api_user = UserManager.create(name=f"craft-k8s-{uuid4().hex[:8]}")
     session_id, sandbox_id = BuildSessionManager.create_with_sandbox(api_user)
+    _SUITE_SANDBOX_IDS.add(sandbox_id)
     user_id = UUID(api_user.id)
     try:
         pod_name = manager._get_pod_name(str(sandbox_id))
@@ -548,6 +554,7 @@ def running_sandbox(
             session_id, sandbox_id = BuildSessionManager.create_with_sandbox(
                 pool.api_user
             )
+            _SUITE_SANDBOX_IDS.add(sandbox_id)
             if sandbox_id != pool.sandbox_id:
                 _register_extra(sandbox_id, pool.api_user)
 
@@ -810,6 +817,7 @@ def pool_session(
     """
     _cleanup_pool_workspace(_pool_pod.k8s_client, _pool_pod.pod_name)
     session_id, sandbox_id = BuildSessionManager.create_with_sandbox(_pool_pod.api_user)
+    _SUITE_SANDBOX_IDS.add(sandbox_id)
     if sandbox_id != _pool_pod.sandbox_id:
         # Pool invariant broke (pool pod terminated externally). Reap the stray and fail loudly.
         with suppress(Exception):

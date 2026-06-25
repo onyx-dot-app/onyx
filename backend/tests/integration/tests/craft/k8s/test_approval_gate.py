@@ -24,7 +24,7 @@ from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.db.models import Notification
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.sandbox_proxy import approval_cache
+from onyx.sandbox_proxy.approval_cache import pop_announcement
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE
@@ -570,7 +570,7 @@ def test_sse_merger_emits_approval_requested_packet(
     pending = _wait_for_pending_approval(db_session, session_id)
 
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    popped = approval_cache.pop_announcement(session_id, timeout_s=5, cache=cache)
+    popped = pop_announcement(session_id, timeout_s=5, cache=cache)
     assert popped == pending.approval_id, (
         f"announce list should contain the parked approval id "
         f"{pending.approval_id}, got {popped}"

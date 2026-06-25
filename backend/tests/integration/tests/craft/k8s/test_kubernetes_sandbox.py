@@ -441,7 +441,7 @@ def test_sandbox_egress_only_flows_via_proxy(
     )
 
 
-def test_terminate_removes_pod_and_marks_db(
+def test_terminate_removes_pod_and_fails_health_check(
     k8s_manager: KubernetesSandboxManager,
     k8s_client: client.CoreV1Api,
 ) -> None:

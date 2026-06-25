@@ -10,6 +10,7 @@ from uuid import UUID
 from uuid import uuid4
 
 import pytest
+from kubernetes import client
 
 from onyx.configs.constants import MessageType
 from onyx.server.features.build.configs import SANDBOX_BACKEND
@@ -22,6 +23,7 @@ from onyx.server.features.build.session.models import MessageResponse
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.tests.craft.k8s.k8s_fixtures import cleanup_api_user_sandbox_rows
+from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
 
 pytestmark = [
     pytest.mark.skipif(
@@ -61,9 +63,11 @@ def _turn_status(turn: InteractiveTurnResponse | None) -> str | None:
 
 def test_send_message_api_runs_real_celery_turn(
     k8s_manager: KubernetesSandboxManager,
+    k8s_client: client.CoreV1Api,
 ) -> None:
     api_user = UserManager.create(name=f"craft-k8s-message-{uuid4().hex[:8]}")
     sandbox_id: UUID | None = None
+    pod_name: str | None = None
     try:
         # Pin the cheap model; the Build path defaults to gpt-5.5 otherwise.
         session = BuildSessionManager.create(
@@ -76,6 +80,7 @@ def test_send_message_api_runs_real_celery_turn(
         sandbox = session.sandbox
         assert sandbox is not None
         sandbox_id = UUID(sandbox.id)
+        pod_name = k8s_manager._get_pod_name(sandbox_id)
 
         turn = BuildSessionManager.start_turn(
             api_user,
@@ -118,4 +123,10 @@ def test_send_message_api_runs_real_celery_turn(
         if sandbox_id is not None:
             with suppress(Exception):
                 k8s_manager.terminate(sandbox_id)
+            # Wait for pod deletion before removing DB rows: the egress proxy resolves
+            # sandbox identity via Sandbox.user_id, so deleting the row while the pod
+            # is still alive would leave an unattributable orphaned pod.
+            if pod_name is not None:
+                with suppress(Exception):
+                    wait_for_pod_deletion(k8s_client, pod_name)
         cleanup_api_user_sandbox_rows(UUID(api_user.id))

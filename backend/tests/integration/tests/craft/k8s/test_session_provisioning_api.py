@@ -19,6 +19,7 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.tests.craft.k8s.k8s_fixtures import cleanup_api_user_sandbox_rows
+from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
 
 pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
@@ -32,6 +33,7 @@ def test_create_session_provisions_running_sandbox_pod_via_api(
 ) -> None:
     api_user = UserManager.create(name=f"craft-k8s-session-smoke-{uuid4().hex[:8]}")
     sandbox_id: UUID | None = None
+    pod_name: str | None = None
     try:
         session = BuildSessionManager.create(api_user, headless=True)
         sandbox = session.sandbox
@@ -50,4 +52,10 @@ def test_create_session_provisions_running_sandbox_pod_via_api(
         if sandbox_id is not None:
             with suppress(Exception):
                 k8s_manager.terminate(sandbox_id)
+            # Wait for pod deletion before removing DB rows: the egress proxy resolves
+            # sandbox identity via Sandbox.user_id, so deleting the row while the pod
+            # is still alive would leave an unattributable orphaned pod.
+            if pod_name is not None:
+                with suppress(Exception):
+                    wait_for_pod_deletion(k8s_client, pod_name)
         cleanup_api_user_sandbox_rows(UUID(api_user.id))
