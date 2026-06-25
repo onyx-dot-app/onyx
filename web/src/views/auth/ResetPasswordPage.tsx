@@ -34,18 +34,12 @@ export default function ResetPasswordPage() {
   const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
   const { logoUrl } = useSettings();
 
-  // Tenant IDs are UUIDs. Reject anything else to prevent tenant-confusion
-  // attacks where an attacker crafts a reset link with an arbitrary tenantId
-  // query param and hijacks the victim's tenant cookie.
-  const UUID_RE =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
   useEffect(() => {
     if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
       router.replace("/auth/login");
       return;
     }
-    if (tenantId && UUID_RE.test(tenantId)) {
+    if (tenantId) {
       Cookies.set(TENANT_ID_COOKIE_NAME, tenantId, {
         path: "/",
         expires: 1 / 24,
