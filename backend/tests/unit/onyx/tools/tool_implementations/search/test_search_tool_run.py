@@ -249,6 +249,37 @@ def test_cached_expansion_is_reused_on_a_new_filter_not_a_repeat() -> None:
     )
 
 
+def test_no_scope_decision_is_not_repeated_within_a_turn() -> None:
+    """Once a cycle's scope decision comes back unscoped, the conversation has no
+    source directive (which can't change this turn), so later cycles skip the
+    decision instead of burning another LLM call."""
+    tool = _make_tool()
+    connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
+    decide_mock = MagicMock(return_value=None)
+
+    _run(tool, decide_mock=decide_mock, connected_sources=connected)
+    _run(tool, decide_mock=decide_mock, connected_sources=connected)
+
+    assert decide_mock.call_count == 1, (
+        "decide_search_scope should run once, then latch off after a no-scope result"
+    )
+
+
+def test_scope_decision_keeps_running_while_a_directive_is_present() -> None:
+    """A routed decision does not latch the skip — the walk must keep deciding on
+    later cycles (e.g. to advance a backoff sequence to the next source)."""
+    tool = _make_tool()
+    connected = [DocumentSource.ZENDESK, DocumentSource.CONFLUENCE]
+    decide_mock = MagicMock(
+        side_effect=[[DocumentSource.ZENDESK], [DocumentSource.CONFLUENCE]]
+    )
+
+    _run(tool, decide_mock=decide_mock, connected_sources=connected)
+    _run(tool, decide_mock=decide_mock, connected_sources=connected)
+
+    assert decide_mock.call_count == 2
+
+
 def test_prior_cycles_accumulate_across_calls_for_the_walk() -> None:
     """A backoff sequence advances: the first call's queries + resolved scope are
     passed back to decide_search_scope as previous_cycles on the second."""
