@@ -682,7 +682,7 @@ def delete_user_file_impl(
         # index resolves itself (Vespa fans out to find chunks, OpenSearch deletes
         # by document id). This keeps the path backend-agnostic.
         if not skip_vespa:
-            chunk_count = (
+            chunk_count: int | None = (
                 chunk_count_from_db
                 if chunk_count_from_db is not None and chunk_count_from_db > 0
                 else None
