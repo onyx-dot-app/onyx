@@ -546,8 +546,6 @@ jobs:
             -v \
             --ff \
             -m "not nightly" \
-            --log-cli-level=INFO \
-            --log-cli-format='%(asctime)s %(levelname)s %(name)s:%(funcName)s:%(lineno)d %(message)s' \
             backend/tests/integration/tests/craft/k8s
 
       # Surface the live-captured sandbox pod logs inline so the serve
@@ -555,11 +553,11 @@ jobs:
       - name: Dump captured sandbox pod logs on failure
         if: failure()
         run: |
-          echo "=== captured sandbox pod logs ==="
           if compgen -G "sandbox-logs/*.log" > /dev/null; then
             for f in sandbox-logs/*.log; do
-              echo "----- ${f} -----"
+              echo "::group::${f}"
               cat "${f}" || true
+              echo "::endgroup::"
             done
           else
             echo "no sandbox pod logs were captured"
