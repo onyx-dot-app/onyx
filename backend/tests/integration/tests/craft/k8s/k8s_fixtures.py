@@ -75,13 +75,6 @@ class OwnedLivePod(NamedTuple):
     pod_name: str
 
 
-class ProvisionedSandboxId(NamedTuple):
-    """Returned by ``provisioned_sandbox`` fixture."""
-
-    sandbox_id: UUID
-    pod_name: str
-
-
 class PodExecResult(NamedTuple):
     """Returned by ``wait_for_pod_exec_output``."""
 
@@ -882,24 +875,3 @@ def owned_live_pod(
 def pool_api_user(_pool_pod: _PoolPod) -> "DATestUser":
     """The API user owning ``pool_session`` sessions; for API-driven snapshot/restore."""
     return _pool_pod.api_user
-
-
-@pytest.fixture(scope="function")
-def provisioned_sandbox(
-    k8s_manager: KubernetesSandboxManager,
-    k8s_client: "k8s_client_module.CoreV1Api",
-) -> Generator[ProvisionedSandboxId, None, None]:
-    """A provisioned sandbox (committed rows + pod), without a session.
-
-    Yields ``(sandbox_id, pod_name)``.
-    """
-    with _provisioned_sandbox(k8s_manager, k8s_client) as (
-        _api_user,
-        sandbox_id,
-        _session_id,
-        pod_name,
-    ):
-        yield ProvisionedSandboxId(
-            sandbox_id=sandbox_id,
-            pod_name=pod_name,
-        )

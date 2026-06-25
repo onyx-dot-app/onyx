@@ -18,7 +18,6 @@ from onyx.utils.logger import setup_logger
 from tests.integration.tests.craft.k8s.k8s_fixtures import OwnedLivePod
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
 from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
-from tests.integration.tests.craft.k8s.k8s_fixtures import ProvisionedSandboxId
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_until_healthy
 
@@ -246,14 +245,15 @@ def test_sandbox_etc_hosts_resolves_proxy_alias(
 
 
 def test_sandbox_egress_only_flows_via_proxy(
-    provisioned_sandbox: ProvisionedSandboxId,
+    pool_session: PoolSession,
     k8s_client: client.CoreV1Api,
 ) -> None:
     """TLS through the proxy reaches the internet while direct egress is iptables-blocked.
 
-    Uses ``provisioned_sandbox`` (committed rows) so the proxy can resolve identity.
+    Uses the pool pod (committed rows) so the proxy can resolve identity; egress
+    leaves no workspace residue, so a shared pod is safe.
     """
-    _sandbox_id, pod_name = provisioned_sandbox
+    _sandbox_id, _session_id, pod_name = pool_session
 
     proxied = pod_exec(
         k8s_client,
