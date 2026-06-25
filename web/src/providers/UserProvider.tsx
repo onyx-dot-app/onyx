@@ -43,7 +43,7 @@ interface UserContextType {
   ) => Promise<boolean>;
   updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
   updateUserPersonalization: (
-    personalization: UserPersonalization
+    changes: Partial<UserPersonalization>
   ) => Promise<void>;
   updateUserThemePreference: (
     themePreference: ThemePreference
@@ -292,21 +292,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateUserPersonalization = async (
-    personalization: UserPersonalization
+    changes: Partial<UserPersonalization>
   ) => {
     try {
       setUpToDateUser((prevUser) => {
-        if (!prevUser) {
+        if (!prevUser?.personalization) {
           return prevUser;
         }
 
+        // Merge only the changed fields so an update to one field never
+        // optimistically wipes the others.
         return {
           ...prevUser,
-          personalization,
+          personalization: {
+            ...prevUser.personalization,
+            ...changes,
+          },
         };
       });
 
-      const response = await persistPersonalization(personalization);
+      const response = await persistPersonalization(changes);
 
       if (!response.ok) {
         await refreshUser();
