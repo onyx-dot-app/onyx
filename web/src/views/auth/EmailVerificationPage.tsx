@@ -26,27 +26,28 @@ export default function EmailVerificationPage() {
       return;
     }
 
+    if (searchParams.get("resend")) {
+      router.replace("/auth/email-verification" as Route);
+      requestEmailVerification(user.email).then((response) => {
+        if (response.ok) {
+          toast.success("Verification email resent!");
+        } else {
+          response
+            .json()
+            .then((body) =>
+              toast.error(
+                `Failed to resend verification email - ${body.detail}`
+              )
+            );
+        }
+      });
+      return;
+    }
+
     if (!authTypeMetadata.requiresVerification || user.is_verified) {
       router.replace("/app" as Route);
     }
-  }, [user, authTypeMetadata, router]);
-
-  useEffect(() => {
-    if (!searchParams.get("resend") || !user?.email) return;
-
-    router.replace("/auth/email-verification" as Route);
-    requestEmailVerification(user.email).then((response) => {
-      if (response.ok) {
-        toast.success("Verification email resent!");
-      } else {
-        response
-          .json()
-          .then((body) =>
-            toast.error(`Failed to resend verification email - ${body.detail}`)
-          );
-      }
-    });
-  }, [searchParams, user?.email, router]);
+  }, [user, authTypeMetadata, router, searchParams]);
 
   return (
     <AuthLayouts.Card
