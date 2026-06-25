@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 from collections.abc import Generator
 from dataclasses import dataclass
 from dataclasses import field
@@ -111,6 +112,14 @@ def _drive_turn(
                 out.terminators.append(event)
             elif etype == "error":
                 out.errors.append(event)
+
+    # The SSE stream closes slightly before the server releases the turn slot;
+    # wait for it to clear so a follow-up start_turn isn't refused with 409.
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        if BuildSessionManager.get_active_turn(user, session_id) is None:
+            break
+        time.sleep(0.5)
     return out
 
 
