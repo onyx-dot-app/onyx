@@ -48,8 +48,6 @@ from tests.integration.common_utils.managers.user import UserManager
 
 logger = setup_logger()
 
-CRAFT_TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
-
 # Sandboxes this suite provisions, so the autouse reaper only terminates our own
 # leaks and never touches unrelated sandboxes on a shared/local cluster.
 _SUITE_SANDBOX_IDS: set[UUID] = set()
