@@ -14,7 +14,10 @@ import {
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { Artifact } from "@/app/craft/hooks/useBuildSessionStore";
-import { useFilesNeedsRefresh } from "@/app/craft/hooks/useBuildSessionStore";
+import {
+  useFilesNeedsRefresh,
+  useBuildSessionStore,
+} from "@/app/craft/hooks/useBuildSessionStore";
 import {
   fetchDirectoryListing,
   downloadArtifactFile,
@@ -35,6 +38,24 @@ export default function ArtifactsTab({
 }: ArtifactsTabProps) {
   const webappArtifacts = artifacts.filter(
     (a) => a.type === "nextjs_app" || a.type === "web_app"
+  );
+
+  const setActiveOutputTab = useBuildSessionStore(
+    (state) => state.setActiveOutputTab
+  );
+  const openFilePreview = useBuildSessionStore(
+    (state) => state.openFilePreview
+  );
+
+  const handleWebappOpen = useCallback(() => {
+    if (sessionId) setActiveOutputTab(sessionId, "preview");
+  }, [sessionId, setActiveOutputTab]);
+
+  const handleFileOpen = useCallback(
+    (path: string, fileName: string) => {
+      if (sessionId) openFilePreview(sessionId, path, fileName);
+    },
+    [sessionId, openFilePreview]
   );
 
   const filesNeedsRefresh = useFilesNeedsRefresh();
@@ -144,9 +165,13 @@ export default function ArtifactsTab({
           {webappArtifacts.map((artifact) => (
             <div
               key={artifact.id}
-              className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors"
+              className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
+              style={{ paddingLeft: 12 }}
+              onClick={handleWebappOpen}
             >
-              <SvgGlobe size={24} className="stroke-text-02 shrink-0" />
+              <div className="w-4 shrink-0" />
+
+              <SvgGlobe size={20} className="stroke-text-02 shrink-0" />
 
               <div className="flex-1 min-w-0 flex items-center gap-2">
                 <Text font="secondary-body" color="text-04" maxLines={1}>
@@ -162,7 +187,10 @@ export default function ArtifactsTab({
                   variant="action"
                   prominence="tertiary"
                   icon={SvgDownloadCloud}
-                  onClick={handleWebappDownload}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleWebappDownload();
+                  }}
                 >
                   Download
                 </Button>
@@ -178,6 +206,7 @@ export default function ArtifactsTab({
               sessionId={sessionId!}
               depth={0}
               onDownload={handleOutputDownload}
+              onFileOpen={handleFileOpen}
             />
           ))}
         </div>
@@ -191,6 +220,7 @@ interface OutputEntryRowProps {
   sessionId: string;
   depth: number;
   onDownload: (path: string, isDirectory: boolean) => void;
+  onFileOpen: (path: string, fileName: string) => void;
 }
 
 function OutputEntryRow({
@@ -198,6 +228,7 @@ function OutputEntryRow({
   sessionId,
   depth,
   onDownload,
+  onFileOpen,
 }: OutputEntryRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<FileSystemEntry[]>([]);
@@ -223,11 +254,14 @@ function OutputEntryRow({
     <>
       <div
         className={cn(
-          "flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors",
-          entry.is_directory && "cursor-pointer"
+          "flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
         )}
         style={{ paddingLeft: 12 + paddingLeft }}
-        onClick={entry.is_directory ? toggleExpand : undefined}
+        onClick={
+          entry.is_directory
+            ? toggleExpand
+            : () => onFileOpen(entry.path, entry.name)
+        }
       >
         {entry.is_directory ? (
           expanded ? (
@@ -275,6 +309,7 @@ function OutputEntryRow({
             sessionId={sessionId}
             depth={depth + 1}
             onDownload={onDownload}
+            onFileOpen={onFileOpen}
           />
         ))}
     </>
