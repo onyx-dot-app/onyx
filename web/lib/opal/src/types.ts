@@ -95,7 +95,7 @@ export type ExtremaSizeVariants = Extract<SizeVariants, "fit" | "full">;
  * | `"md"`   | Medium elevation (`--shadow-02`)|
  * | `"lg"`   | Strong elevation (`--shadow-03`)|
  */
-export type ShadowVariants = "none" | "sm" | "md" | "lg";
+export type ShadowVariants = "none" | Extract<SizeVariants, "sm" | "md" | "lg">;
 
 /**
  * Size variants with numeric overrides.
