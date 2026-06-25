@@ -463,7 +463,7 @@ export default function TutorChatPage() {
               </>
             )}
           </div>
-          <div className="min-h-0 flex-1">{content}</div>
+          <div className="min-h-0 min-w-0 flex-1">{content}</div>
         </div>
       );
     },
