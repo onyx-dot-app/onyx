@@ -1,10 +1,17 @@
 # Runs the Craft Kubernetes integration tests against a Helm-installed kind
 # cluster with the real API, web_server, Celery workers, sandbox proxy, and
-# sandbox pods. Images are built from the current tree and served from a local
-# docker registry; kind pulls from that registry rather than going through
-# `kind load docker-image`, which would write a multi-GB tar to tmpfs-backed
-# /tmp.
-# Canonical kind-in-CI pattern: https://kind.sigs.k8s.io/docs/user/local-registry/
+# sandbox pods.
+#
+# Each test file owns a module-scoped sandbox pod and the single-node kind
+# cluster fits one sandbox pod at a time, so the lane shards per test file, each
+# shard on its own kind cluster (dynamic `fail-fast: false` matrix).
+#
+# Images are built once and pushed to the shared ECR repo, then each shard
+# mirrors them into a local `localhost:5001` registry that kind pulls from
+# unauthenticated — sandbox pods have no `imagePullSecrets`, so the image must
+# come from an unauthenticated registry. (kind pulls from the local registry
+# rather than `kind load`, which writes a multi-GB tar to tmpfs /tmp.)
+# https://kind.sigs.k8s.io/docs/user/local-registry/
 name: Craft Kubernetes Integration Tests
 concurrency:
   group: Craft-K8s-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -114,19 +121,133 @@ jobs:
               - '.github/actions/setup-test-license/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
 
-  craft-k8s-tests:
+  discover-test-files:
+    # One shard per craft k8s test file (module-scoped pool fixtures keep a file on one shard).
     needs: changes
     if: needs.changes.outputs.craft_k8s == 'true'
-    # spot=false: this is the longest lane (~40min, full kind cluster); on-demand
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      test-files: ${{ steps.set-matrix.outputs.test-files }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Discover craft k8s test files
+        id: set-matrix
+        run: |
+          set -eo pipefail
+          # `name` = log-friendly shard id; `path` = repo-root-relative pytest target.
+          entries=""
+          for f in $(find backend/tests/integration/tests/craft/k8s \
+              -maxdepth 1 -name 'test_*.py' -type f | sort); do
+            base=$(basename "$f" .py)
+            shard="${base#test_}"
+            entries="${entries}{\"path\":\"${f}\",\"name\":\"${shard}\"},"
+          done
+          if [ -z "${entries}" ]; then
+            echo "::error::no craft k8s test files discovered"
+            exit 1
+          fi
+          echo "test-files=[${entries%,}]" >> "$GITHUB_OUTPUT"
+
+  build-images:
+    # Build the 3 images once and push to the shared ECR repo so each shard pulls
+    # prebuilt images instead of cold-building all 3.
+    needs: changes
+    if: needs.changes.outputs.craft_k8s == 'true'
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - spot=false
+      - volume=100gb
+      - ${{ format('run-id={0}-craft-k8s-build-images', github.run_id) }}
+      - extras=ecr-cache
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
+
+      - name: Build and push sandbox image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: ./backend/onyx/server/features/build/sandbox/image
+          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
+          platforms: linux/amd64
+          # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
+          # so skip LibreOffice et al. to keep the CI image lean.
+          build-args: |
+            ENABLE_SKILLS=false
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-k8s-sandbox-${{ github.run_id }}
+          push: true
+          cache-from: type=gha,scope=craft-sandbox
+          cache-to: type=gha,scope=craft-sandbox,mode=max
+
+      # Backend image runs the sandbox-proxy via `python -m onyx.sandbox_proxy.server`.
+      - name: Build and push backend image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-k8s-backend-${{ github.run_id }}
+          push: true
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          cache-from: type=gha,scope=craft-backend
+          cache-to: type=gha,scope=craft-backend,mode=max
+
+      - name: Build and push web image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: ./web
+          file: ./web/Dockerfile
+          platforms: linux/amd64
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-k8s-web-${{ github.run_id }}
+          push: true
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+            NEXT_PUBLIC_CLOUD_ENABLED=false
+            WEB_FRAME_PROTECTION_ENABLED=false
+          cache-from: type=gha,scope=craft-web
+          cache-to: type=gha,scope=craft-web,mode=max
+
+  craft-k8s-tests:
+    needs: [changes, discover-test-files, build-images]
+    if: needs.changes.outputs.craft_k8s == 'true'
+    # spot=false: this is a long lane (full kind cluster per shard); on-demand
     # avoids mid-run spot reclamation. Matches the compose lane.
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
       - spot=false
       - volume=100gb
-      - ${{ format('run-id={0}-craft-k8s-tests', github.run_id) }}
-      - extras=s3-cache
+      - ${{ format('run-id={0}-craft-k8s-tests-{1}', github.run_id, matrix.test-file.name) }}
+      - extras=ecr-cache
     timeout-minutes: 40
+
+    strategy:
+      # fail-fast off so one shard's failure doesn't cancel the others.
+      fail-fast: false
+      matrix:
+        test-file: ${{ fromJson(needs.discover-test-files.outputs.test-files) }}
 
     # id-token: OIDC for the setup-test-license step.
     permissions:
@@ -160,13 +281,6 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
-      # network=host so buildx (running in a container) can push to the
-      # host's registry at localhost:5001.
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # ratchet:docker/setup-buildx-action@v4
-        with:
-          driver-opts: network=host
-
       - name: Start local image registry
         run: |
           docker run -d --restart=always \
@@ -174,50 +288,23 @@ jobs:
             --name "${KIND_REGISTRY_NAME}" \
             "${BASE_IMAGE_REGISTRY:-docker.io}/library/registry:2"
 
-      - name: Build and push sandbox image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
-        with:
-          context: ./backend/onyx/server/features/build/sandbox/image
-          file: ./backend/onyx/server/features/build/sandbox/image/Dockerfile
-          platforms: linux/amd64
-          # CI tests don't exercise skill runtime deps (soffice/pdftoppm/pptxgenjs),
-          # so skip LibreOffice et al. to keep the CI image lean.
-          build-args: |
-            ENABLE_SKILLS=false
-            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          tags: localhost:5001/onyx-sandbox:ci
-          push: true
-          cache-from: type=gha,scope=craft-sandbox
-          cache-to: type=gha,scope=craft-sandbox,mode=max
-
-      # Backend image runs the sandbox-proxy via `python -m onyx.sandbox_proxy.server`.
-      - name: Build and push backend image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/amd64
-          tags: ${{ env.BACKEND_IMAGE }}
-          push: true
-          build-args: |
-            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-          cache-from: type=gha,scope=craft-backend
-          cache-to: type=gha,scope=craft-backend,mode=max
-
-      - name: Build and push web image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
-        with:
-          context: ./web
-          file: ./web/Dockerfile
-          platforms: linux/amd64
-          tags: ${{ env.WEB_IMAGE }}
-          push: true
-          build-args: |
-            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
-            NEXT_PUBLIC_CLOUD_ENABLED=false
-            WEB_FRAME_PROTECTION_ENABLED=false
-          cache-from: type=gha,scope=craft-web
-          cache-to: type=gha,scope=craft-web,mode=max
+      # Re-push the prebuilt ECR images into this shard's local registry under the
+      # tags kind pulls (unauthenticated); the blob copy is cheap vs a cold build.
+      - name: Mirror prebuilt images into local registry
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -eo pipefail
+          mirror() {
+            local src="$1" dst="$2"
+            docker pull "$src"
+            docker tag "$src" "$dst"
+            docker push "$dst"
+          }
+          mirror "${ECR_CACHE}:craft-k8s-sandbox-${RUN_ID}" "${SANDBOX_CONTAINER_IMAGE}"
+          mirror "${ECR_CACHE}:craft-k8s-backend-${RUN_ID}" "${BACKEND_IMAGE}"
+          mirror "${ECR_CACHE}:craft-k8s-web-${RUN_ID}" "${WEB_IMAGE}"
 
       - name: Write kind config
         run: |
@@ -537,7 +624,7 @@ jobs:
           disown || true
           echo "sandbox pod log capture started (pid $!)"
 
-      - name: Run Craft K8s tests
+      - name: Run Craft K8s tests (${{ matrix.test-file.name }})
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           py.test \
@@ -546,7 +633,7 @@ jobs:
             -v \
             --ff \
             -m "not nightly" \
-            backend/tests/integration/tests/craft/k8s
+            "${{ matrix.test-file.path }}"
 
       # Surface the live-captured sandbox pod logs inline so the serve
       # startup output is visible in the run without downloading artifacts.
@@ -647,7 +734,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: craft-k8s-logs
+          name: craft-k8s-logs-${{ matrix.test-file.name }}
           path: |
             kind-logs/
             sandbox-logs/
@@ -679,13 +766,15 @@ jobs:
     # skipped).
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [changes, craft-k8s-tests]
+    needs: [changes, discover-test-files, build-images, craft-k8s-tests]
     if: ${{ always() }}
     steps:
       - name: Check job status
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           RUN_TESTS: ${{ needs.changes.outputs.craft_k8s }}
+          DISCOVER_RESULT: ${{ needs.discover-test-files.result }}
+          BUILD_RESULT: ${{ needs.build-images.result }}
           TEST_RESULT: ${{ needs.craft-k8s-tests.result }}
         run: |
           # Fail closed if `changes` didn't succeed. Otherwise an empty
@@ -699,6 +788,10 @@ jobs:
           if [ "${RUN_TESTS}" != "true" ]; then
             echo "No relevant paths changed -- required check passes."
             exit 0
+          fi
+          if [ "${DISCOVER_RESULT}" != "success" ] || [ "${BUILD_RESULT}" != "success" ]; then
+            echo "Setup results: discover-test-files=${DISCOVER_RESULT}, build-images=${BUILD_RESULT}"
+            exit 1
           fi
           if [ "${TEST_RESULT}" != "success" ]; then
             echo "Test result: ${TEST_RESULT}"
