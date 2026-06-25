@@ -1,9 +1,13 @@
 import "./globals.css";
 
-import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
-import { Metadata } from "next";
+import type { Metadata } from "next";
+import {
+  GTM_ENABLED,
+  MODAL_ROOT_ID,
+  SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
+} from "@/lib/constants";
+import { fetchEnterpriseSettingsSS } from "@/lib/settings/svcSS";
 import AppProvider from "@/providers/AppProvider";
-import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
 import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
@@ -56,15 +60,30 @@ export const metadata: Metadata = {
 
 // force-dynamic prevents Next.js from statically prerendering pages at build
 // time — many child routes use cookies() which requires dynamic rendering.
-// This is safe because the layout itself has no server-side data fetching;
-// all data is fetched client-side via SWR in the provider tree.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
-  children,
-}: {
+export async function generateMetadata(): Promise<Metadata> {
+  let title = "Onyx";
+  let iconSrc = "/onyx.ico";
+
+  if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
+    const enterprise = await fetchEnterpriseSettingsSS();
+    if (enterprise) {
+      title = enterprise.application_name?.trim() || "Onyx";
+      if (enterprise.use_custom_logo) {
+        iconSrc = "/api/enterprise-settings/logo";
+      }
+    }
+  }
+
+  return { title, icons: { icon: iconSrc } };
+}
+
+interface LayoutProps {
   children: React.ReactNode;
-}) {
+}
+
+export default function RootLayout({ children }: LayoutProps) {
   return (
     <html
       lang="en"
@@ -108,7 +127,6 @@ export default function RootLayout({
                   <AppHealthBanner />
                   <LicenseExpiryBanner />
                   <AppProvider>
-                    <DynamicMetadata />
                     <CustomAnalyticsScript />
                     <Suspense fallback={null}>
                       <PostHogPageView />
