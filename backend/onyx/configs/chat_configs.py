@@ -30,6 +30,16 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Abort after this many back-to-back empty packets (resets on any non-empty one);
+# bounds a degenerate stream that would pin a worker thread and wedge the pod.
+# 0 disables.
+LLM_STREAM_MAX_CONSECUTIVE_EMPTY_PACKETS = int(
+    os.environ.get("LLM_STREAM_MAX_CONSECUTIVE_EMPTY_PACKETS") or "1000"
+)
+# Wall-clock backstop for any runaway stream; 0 disables.
+LLM_STREAM_MAX_DURATION_SECONDS = int(
+    os.environ.get("LLM_STREAM_MAX_DURATION_SECONDS") or "900"
+)
 # Max silent gap before the chat stream emits a keepalive packet; must stay below
 # the smallest proxy idle timeout in front (ALBs default to 60s).
 CHAT_HEARTBEAT_INTERVAL_S = int(os.environ.get("CHAT_HEARTBEAT_INTERVAL_S") or "15")
