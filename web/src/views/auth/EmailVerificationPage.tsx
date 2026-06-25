@@ -18,18 +18,18 @@ export default function EmailVerificationPage() {
   const { authTypeMetadata } = useAuthTypeMetadata();
   const { logoUrl } = useSettings();
 
-  // useEffect(() => {
-  //   if (!user) {
-  //     router.replace("/auth/login" as Route);
-  //     return;
-  //   }
+  useEffect(() => {
+    if (user === undefined) return;
 
-  //   if (!authTypeMetadata.requiresVerification || user.is_verified) {
-  //     router.replace("/app" as Route);
-  //   }
-  // }, [user, authTypeMetadata, router]);
+    if (!user) {
+      router.replace("/auth/login" as Route);
+      return;
+    }
 
-  // if (!user) return null;
+    if (!authTypeMetadata.requiresVerification || user.is_verified) {
+      router.replace("/app" as Route);
+    }
+  }, [user, authTypeMetadata, router]);
 
   useEffect(() => {
     if (!searchParams.get("resend") || !user?.email) return;
