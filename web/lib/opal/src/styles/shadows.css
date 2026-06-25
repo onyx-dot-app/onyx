@@ -7,14 +7,14 @@
  * reference raw CSS vars directly.
  */
 
-@utility shadow-00 {
+@utility shadow-box-00 {
   box-shadow: var(--shadow-box-00);
 }
 
-@utility shadow-01 {
+@utility shadow-box-01 {
   box-shadow: var(--shadow-box-01);
 }
 
-@utility shadow-02 {
+@utility shadow-box-02 {
   box-shadow: var(--shadow-box-02);
 }

@@ -70,7 +70,7 @@ export default function SkillCard({
         gap={0}
         height="full"
         className={
-          isDisabled ? "radial-00 opacity-50" : "radial-00 hover:shadow-00"
+          isDisabled ? "radial-00 opacity-50" : "radial-00 hover:shadow-box-00"
         }
       >
         <div className="flex self-stretch h-24">

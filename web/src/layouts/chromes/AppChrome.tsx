@@ -452,7 +452,7 @@ function Footer() {
           // # Note (from @raunakab):
           //
           // The conditional rendering of vertical padding based on the current page is intentional.
-          // The `AppInputBar` has `shadow-01` applied, which extends ~14px below it.
+          // The `AppInputBar` has `shadow-box-01` applied, which extends ~14px below it.
           // Because the content area in `AppChrome` uses `overflow-auto`, the shadow would be
           // clipped at the container boundary — causing a visible rendering artefact.
           //

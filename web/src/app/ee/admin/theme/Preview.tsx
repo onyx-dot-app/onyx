@@ -100,7 +100,7 @@ function PreviewChat({
   highlightTarget?: PreviewHighlightTarget | null;
 }) {
   return (
-    <div className="flex flex-col h-60 relative bg-background-tint-01 rounded-12 shadow-00">
+    <div className="flex flex-col h-60 relative bg-background-tint-01 rounded-12 shadow-box-00">
       {/* Header */}
       <div className="flex justify-center w-full">
         <div className="flex w-full max-w-[300px] justify-center">
@@ -182,7 +182,7 @@ function PreviewStart({
   highlightTarget,
 }: PreviewProps) {
   return (
-    <div className="flex h-60 rounded-12 shadow-00 bg-background-tint-01 relative">
+    <div className="flex h-60 rounded-12 shadow-box-00 bg-background-tint-01 relative">
       {/* Sidebar */}
       <div className="flex w-24 h-full bg-background-tint-02 rounded-l-12 p-1 justify-start">
         <div className="flex flex-col h-fit w-full justify-start">
