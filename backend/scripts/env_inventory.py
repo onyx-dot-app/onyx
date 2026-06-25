@@ -144,9 +144,19 @@ def _literal_default(node: ast.AST | None) -> str | None:
 class EnvVisitor(ast.NodeVisitor):
     """Collects env reads and infers a type from the enclosing cast/comparison."""
 
-    def __init__(self, rel_path: str, is_ee: bool) -> None:
+    def __init__(
+        self,
+        rel_path: str,
+        is_ee: bool,
+        environ_aliases: set[str],
+        getenv_aliases: set[str],
+    ) -> None:
         self.rel_path = rel_path
         self.is_ee = is_ee
+        # Names bound to os.environ / os.getenv via `from os import environ, getenv`
+        # (possibly aliased). Lets us catch bare `environ.get("X")` / `getenv("X")`.
+        self._environ_aliases = environ_aliases
+        self._getenv_aliases = getenv_aliases
         self.in_config_dir = any(m in f"/{rel_path}" for m in CONFIG_DIR_MARKERS)
         self.reads: list[EnvRead] = []
         # parent map so we can look "up" for casts and assignment targets
@@ -163,6 +173,13 @@ class EnvVisitor(ast.NodeVisitor):
         super().visit(node)
 
     # -- helpers --
+
+    def _is_environ(self, node: ast.AST) -> bool:
+        """True if `node` refers to os.environ — as `os.environ` (Attribute) or a
+        bare name bound via `from os import environ`."""
+        if isinstance(node, ast.Attribute) and node.attr == "environ":
+            return True
+        return isinstance(node, ast.Name) and node.id in self._environ_aliases
 
     def _enclosing_type(self, call_node: ast.AST) -> str:
         """Infer type from the immediate wrapper: int(...), float(...), bool comparison."""
@@ -230,31 +247,22 @@ class EnvVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
-        # os.environ.get("X", default) / os.getenv("X", default)
+        name = _str_const(node.args[0]) if node.args else None
+        # env_name is the first arg only when it's a valid VAR_NAME literal
+        env_name = name if (name and re.fullmatch(r"[A-Z][A-Z0-9_]*", name)) else None
+        default = _literal_default(node.args[1]) if len(node.args) > 1 else None
+        # os.environ.get("X") / environ.get("X")  and  os.getenv("X")
         if isinstance(func, ast.Attribute):
-            name = _str_const(node.args[0]) if node.args else None
-            if name is not None and re.fullmatch(r"[A-Z][A-Z0-9_]*", name):
-                # os.environ.get(...)
-                if (
-                    func.attr == "get"
-                    and isinstance(func.value, ast.Attribute)
-                    and func.value.attr == "environ"
-                ):
-                    default = (
-                        _literal_default(node.args[1]) if len(node.args) > 1 else None
-                    )
-                    self._record(name, node.lineno, "environ.get", node, default)
-                # os.getenv(...)
-                elif func.attr == "getenv":
-                    default = (
-                        _literal_default(node.args[1]) if len(node.args) > 1 else None
-                    )
-                    self._record(name, node.lineno, "getenv", node, default)
-        # custom helper: _non_negative_int_env("X", 250)
-        elif isinstance(func, ast.Name) and func.id in ENV_HELPER_FUNCS:
-            name = _str_const(node.args[0]) if node.args else None
-            if name is not None:
-                default = _literal_default(node.args[1]) if len(node.args) > 1 else None
+            if env_name and func.attr == "get" and self._is_environ(func.value):
+                self._record(env_name, node.lineno, "environ.get", node, default)
+            elif env_name and func.attr == "getenv":
+                self._record(env_name, node.lineno, "getenv", node, default)
+        elif isinstance(func, ast.Name):
+            # bare getenv("X") after `from os import getenv`
+            if env_name and func.id in self._getenv_aliases:
+                self._record(env_name, node.lineno, "getenv", node, default)
+            # custom helper: _non_negative_int_env("X", 250)
+            elif name is not None and func.id in ENV_HELPER_FUNCS:
                 self._record(
                     name,
                     node.lineno,
@@ -266,9 +274,8 @@ class EnvVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Subscript(self, node: ast.Subscript) -> None:
-        # os.environ["X"]
-        value = node.value
-        if isinstance(value, ast.Attribute) and value.attr == "environ":
+        # os.environ["X"] / environ["X"]
+        if self._is_environ(node.value):
             name = _str_const(node.slice)
             if name is not None and re.fullmatch(r"[A-Z][A-Z0-9_]*", name):
                 self._record(name, node.lineno, "environ[]", node, default=None)
@@ -280,6 +287,24 @@ def iter_python_files(root: Path):
         if any(part in SKIP_DIR_NAMES for part in path.parts):
             continue
         yield path
+
+
+def _scan_os_imports(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Find names bound to os.environ / os.getenv via `from os import ...`.
+
+    Catches aliased forms (`from os import environ as env`) so the visitor can
+    recognise bare `env.get("X")` / `getenv("X")` reads, not just `os.environ`.
+    """
+    environ_aliases: set[str] = set()
+    getenv_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "os":
+            for alias in node.names:
+                if alias.name == "environ":
+                    environ_aliases.add(alias.asname or "environ")
+                elif alias.name == "getenv":
+                    getenv_aliases.add(alias.asname or "getenv")
+    return environ_aliases, getenv_aliases
 
 
 def collect_reads() -> list[EnvRead]:
@@ -294,7 +319,8 @@ def collect_reads() -> list[EnvRead]:
                 tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             except SyntaxError:
                 continue
-            visitor = EnvVisitor(rel, is_ee)
+            environ_aliases, getenv_aliases = _scan_os_imports(tree)
+            visitor = EnvVisitor(rel, is_ee, environ_aliases, getenv_aliases)
             visitor.visit(tree)
             reads.extend(visitor.reads)
     return reads
@@ -585,6 +611,10 @@ def write_json(reads: list[EnvRead], out: Path) -> None:
             }
             for name, s in sorted(summaries.items())
         },
+        # `file::const -> [assignment line numbers]`; dead code (last write wins).
+        # Surfaced here so the --json artifact carries the duplication signal for
+        # a CI drift gate, not just the human report.
+        "duplicates": find_duplicate_assignments(reads),
         "reads": [
             asdict(r) for r in sorted(reads, key=lambda r: (r.name, r.file, r.line))
         ],
