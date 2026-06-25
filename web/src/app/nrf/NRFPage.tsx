@@ -15,7 +15,7 @@ import { useNRFPreferences } from "@/components/context/NRFPreferencesContext";
 import SidePanelHeader from "@/app/nrf/side-panel/SidePanelHeader";
 import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
-import EmailPasswordForm from "@/refresh-pages/auth/EmailPasswordForm";
+import EmailPasswordForm from "@/views/auth/EmailPasswordForm";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/utils";
 import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";

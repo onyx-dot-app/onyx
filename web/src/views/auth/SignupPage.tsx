@@ -8,7 +8,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { AuthType } from "@/lib/constants";
 import { AuthLayouts } from "@opal/layouts";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
-import EmailPasswordForm from "@/refresh-pages/auth/EmailPasswordForm";
+import EmailPasswordForm from "@/views/auth/EmailPasswordForm";
 import { MessageCard } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";

@@ -9,8 +9,8 @@ import { useSettings } from "@/lib/settings/hooks";
 import { AuthType } from "@/lib/constants";
 import { AuthLayouts } from "@opal/layouts";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
-import EmailPasswordForm from "@/refresh-pages/auth/EmailPasswordForm";
-import SignInButton from "@/refresh-pages/auth/SignInButton";
+import EmailPasswordForm from "@/views/auth/EmailPasswordForm";
+import SignInButton from "@/views/auth/SignInButton";
 
 function getAuthUrl(authType: AuthType): string | null {
   switch (authType) {

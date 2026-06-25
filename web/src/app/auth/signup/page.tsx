@@ -1,1 +1,1 @@
-export { default } from "@/refresh-pages/auth/SignupPage";
+export { default } from "@/views/auth/SignupPage";
