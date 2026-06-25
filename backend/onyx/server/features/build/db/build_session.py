@@ -26,6 +26,8 @@ from onyx.db.models import BuildSession
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Sandbox
 from onyx.db.models import User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.configs import BUILD_MODE_ALLOWED_PROVIDER_TYPES
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_END
 from onyx.server.features.build.configs import SANDBOX_NEXTJS_PORT_START
@@ -521,7 +523,7 @@ def allocate_nextjs_port(db_session: Session) -> int:
         An available port number
 
     Raises:
-        RuntimeError: If no ports are available in the configured range
+        OnyxError: If no ports are available in the configured range
     """
     from onyx.db.models import BuildSession
 
@@ -538,8 +540,9 @@ def allocate_nextjs_port(db_session: Session) -> int:
         if port not in allocated_ports and _is_port_available(port):
             return port
 
-    raise RuntimeError(
-        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})"
+    raise OnyxError(
+        OnyxErrorCode.SERVICE_UNAVAILABLE,
+        f"No available ports in range [{SANDBOX_NEXTJS_PORT_START}, {SANDBOX_NEXTJS_PORT_END})",
     )
 
 
