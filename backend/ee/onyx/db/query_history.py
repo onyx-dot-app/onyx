@@ -159,19 +159,25 @@ def fetch_chat_sessions_eagerly_by_time(
         ChatSession.time_created.between(start, end)
     ]
 
-    if initial_time:
-        if initial_id is not None:
-            filters.append(
-                or_(
-                    ChatSession.time_created > initial_time,
-                    and_(
-                        ChatSession.time_created == initial_time,
-                        ChatSession.id > initial_id,
-                    ),
-                )
+    if initial_time is not None or initial_id is not None:
+        # The two halves form a single composite (time_created, id) keyset
+        # cursor. Accepting only one would silently fall back to a cursor on the
+        # non-unique time_created alone and reintroduce the ONX-2293 row drop, so
+        # require them together.
+        if initial_time is None or initial_id is None:
+            raise ValueError(
+                "initial_time and initial_id are a composite keyset cursor and "
+                "must be provided together"
             )
-        else:
-            filters.append(ChatSession.time_created > initial_time)
+        filters.append(
+            or_(
+                ChatSession.time_created > initial_time,
+                and_(
+                    ChatSession.time_created == initial_time,
+                    ChatSession.id > initial_id,
+                ),
+            )
+        )
 
     subquery = (
         db_session.query(ChatSession.id, ChatSession.time_created)
