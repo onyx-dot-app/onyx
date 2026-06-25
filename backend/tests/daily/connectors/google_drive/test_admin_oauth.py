@@ -19,6 +19,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
 from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_hierarchy_nodes_match_expected,
 )
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_resource_key_shortcut_target_in_retrieved_docs,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
@@ -104,6 +107,7 @@ def test_include_all(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
@@ -216,6 +220,7 @@ def test_include_my_drives_only(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     expected_nodes = _pick(
         FOLDER_3_ID,

@@ -22,6 +22,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_hierarchy_nodes_match_expected,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_resource_key_shortcut_target_in_retrieved_docs,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_DOC_SINGLETON,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
@@ -146,6 +149,7 @@ def test_include_all(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
@@ -338,6 +342,7 @@ def test_include_my_drives_only(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     expected_nodes = _pick(
         FOLDER_3_ID,
@@ -528,7 +533,12 @@ def test_shared_folder_owned_by_external_user(
     assert expected_docs[0] in output.documents[0].id
 
 
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
 def test_shared_with_me(
+    mock_get_api_key: MagicMock,  # noqa: ARG001
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
     print("\n\nRunning test_shared_with_me")
@@ -556,6 +566,7 @@ def test_shared_with_me(
         retrieved_docs=output.documents,
         expected_file_ids=expected_file_ids,
     )
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     retrieved_ids = {urlparse(doc.id).path.split("/")[-1] for doc in output.documents}
     for id in retrieved_ids:
