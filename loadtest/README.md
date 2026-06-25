@@ -150,6 +150,44 @@ ONYX_API_KEY=<key> uv run --group loadtest locust --headless -t 25m -H https://<
 The API key is created by an admin via `POST /api/admin/api-key`
 (`{"name": "loadtest", "role": "basic"}`) or Admin Panel → API Keys.
 
+### Worker concurrency sweep (`ThreadHogUser` + `HealthProbeUser`)
+
+Validates the api-server worker config (`api.workers` / `api.threadpoolSize` /
+CPU in the Helm chart) against the production failure mode: long-running agent
+requests pin the anyio threadpool, the event loop starves, and the liveness
+`httpGet /health` probe (`timeoutSeconds: 10`, `failureThreshold: 3`) starts
+failing → the pod is SIGKILLed.
+
+- **ThreadHogUser** (`hog:*`) — each turn streams a deliberately slow mock
+  response (default `mock-ttft1000-itl200-len600` ≈ 121s), holding one
+  threadpool thread for the whole turn. Concurrency (`-u`) maps directly to
+  pool pressure.
+- **HealthProbeUser** (`HEALTH:probe`) — pins `ONYX_HEALTH_PROBES` (default 1)
+  users that GET `/health` once per `ONYX_HEALTH_INTERVAL` (default 1s),
+  **independent of `-u`**, and fail any probe slower than `ONYX_HEALTH_SLA_MS`
+  (default 10000, the liveness `timeoutSeconds`). The `HEALTH:probe` failure
+  rate is the experiment's primary signal — when it goes non-zero, this config
+  would start getting liveness-killed at that concurrency.
+
+```bash
+# One run: hold ~49 long requests, probe /health throughout.
+ONYX_API_KEY=<key> ONYX_HEALTH_PATH=/health \
+  uv run --group loadtest locust --headless -u 50 -r 5 -t 15m \
+  -H https://<your-onyx-url> ThreadHogUser HealthProbeUser
+```
+
+Sweep `concurrent-long-requests ∈ {10,20,40,80}` (use `ONYX_SHAPE=stepramp`)
+against chart configs `api.workers ∈ {1,2,4}` × `api.threadpoolSize ∈ {40,80}`
+× CPU `∈ {2,4}`. The right config is the smallest one where `HEALTH:probe`
+stays at **0 failures** through your target concurrency.
+
+> **st-dev routing caveats:** the `/loadtest` subpath is shadowed by the
+> catch-all route — point `LOCUST_HOST` at a dedicated host or port-forward.
+> When `LOCUST_HOST` is the web/nginx host, set `ONYX_HEALTH_PATH=/api/health`;
+> when it targets the api Service directly, `/health` is correct. st-dev is
+> direct-RDS, so absolute numbers differ from customer infra — compare configs
+> **relative** to each other, not against an absolute SLA.
+
 ## Configuration (env vars)
 
 | Variable | Default | Purpose |
@@ -160,6 +198,12 @@ The API key is created by an admin via `POST /api/admin/api-key`
 | `ONYX_SEARCH_MODEL` | `mock-tools1` | Model for ChatWithSearchUser |
 | `ONYX_MULTITOOL_MODEL` | `mock-tools3` | Model for MultiToolUser |
 | `ONYX_DR_MODEL` | `mock-agents2` | Model for DeepResearchUser |
+| `ONYX_HOG_MODEL` | `mock-ttft1000-itl200-len600` | Slow model for ThreadHogUser (sets per-turn thread-hold time) |
+| `ONYX_HOG_WAIT_SECONDS` / `ONYX_HOG_STREAM_READ_TIMEOUT` | 1 / 600 | ThreadHogUser think time / max inter-chunk wait |
+| `ONYX_HEALTH_PATH` | `/health` | Health-probe path (`/api/health` via web/nginx host) |
+| `ONYX_HEALTH_PROBES` | 1 | Number of HealthProbeUser instances to pin (independent of `-u`) |
+| `ONYX_HEALTH_INTERVAL` | 1.0 | Seconds between health probes |
+| `ONYX_HEALTH_SLA_MS` | 10000 | Fail a probe slower than this (liveness `timeoutSeconds`) |
 | `ONYX_LONGCONV_MODEL` | unset | Model for LongConversationUser (unset = persona default) |
 | `ONYX_SESSION_TURNS` | 1 | Turns to keep one session alive (LongConversationUser 20, CompressionUser 60) |
 | `ONYX_MSG_CHARS` | 0 | Per-message size in chars (CompressionUser defaults to 8000; 0 = short questions) |
