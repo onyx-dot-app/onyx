@@ -13,6 +13,7 @@ import {
   CHAT_BACKGROUND_NONE,
   ChatBackgroundOption,
 } from "@/lib/constants/chatBackgrounds";
+import { ThemePreference } from "@/lib/types";
 
 interface SettingRowProps {
   label: string;
@@ -102,8 +103,10 @@ export const SettingsPanel = ({
   const currentBackgroundId = user?.preferences?.chat_background ?? "none";
   const isDark = theme === "dark";
 
-  const toggleTheme = () => {
-    setTheme(isDark ? "light" : "dark");
+  const toggleTheme = async () => {
+    const nextTheme = isDark ? ThemePreference.LIGHT : ThemePreference.DARK;
+    setTheme(nextTheme);
+    await updateUserThemePreference(nextTheme);
   };
 
   const handleBackgroundChange = async (bg: ChatBackgroundOption) => {
