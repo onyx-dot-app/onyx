@@ -40,8 +40,6 @@ export interface MultiModelPanelProps {
   errorCode?: string | null;
   /** Whether the error is retryable */
   isRetryable?: boolean;
-  /** Stack trace for debugging */
-  errorStackTrace?: string | null;
   /** Additional error details */
   errorDetails?: Record<string, any> | null;
   /** Whether any model is still streaming — disables preferred selection */
@@ -73,7 +71,6 @@ export default function MultiModelPanel({
   errorMessage,
   errorCode,
   isRetryable,
-  errorStackTrace,
   errorDetails,
   isGenerating,
 }: MultiModelPanelProps) {
@@ -156,7 +153,6 @@ export default function MultiModelPanel({
             errorCode={errorCode || undefined}
             isRetryable={isRetryable ?? true}
             details={errorDetails || undefined}
-            stackTrace={errorStackTrace}
           />
         </div>
       ) : (

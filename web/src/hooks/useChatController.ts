@@ -40,6 +40,7 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "@/app/app/interfaces";
+import { sanitizeChatErrorForDisplay } from "@/app/app/message/sanitizeChatError";
 import { StreamStopReason } from "@/lib/search/interfaces";
 import { createChatSession } from "@/app/app/services/lib";
 import {
@@ -682,7 +683,6 @@ export default function useChatController({
       let citations: CitationMap = {};
       let aiMessageImages: FileDescriptor[] | null = null;
       let error: string | null = null;
-      let stackTrace: string | null = null;
       let errorCode: string | null = null;
       let isRetryable: boolean = true;
       let errorDetails: Record<string, any> | null = null;
@@ -824,7 +824,7 @@ export default function useChatController({
               citations: finalMessage?.citations || citations || {},
               files: finalMessage?.files || aiMessageImages || [],
               toolCall: finalMessage?.tool_call || toolCall,
-              stackTrace: stackTrace,
+              stackTrace: null,
               overridden_model: finalMessage?.overridden_model,
               stopReason: stopReason,
               packets: packets,
@@ -1077,9 +1077,11 @@ export default function useChatController({
                         ...errorNode,
                         messageId:
                           assistantMessageIds[errorModelIndex] ?? undefined,
-                        message: streamingError.error,
+                        message: sanitizeChatErrorForDisplay(
+                          streamingError.error
+                        ),
                         type: "error",
-                        stackTrace: streamingError.stack_trace || null,
+                        stackTrace: null,
                         errorCode: streamingError.error_code || null,
                         isRetryable: streamingError.is_retryable ?? true,
                         errorDetails: streamingError.details || null,
@@ -1109,17 +1111,19 @@ export default function useChatController({
                 continue;
               } else {
                 // Single-model: kill the stream
-                error = streamingError.error;
-                stackTrace = streamingError.stack_trace || null;
+                const sanitizedError = sanitizeChatErrorForDisplay(
+                  streamingError.error
+                );
+                error = sanitizedError;
                 errorCode = streamingError.error_code || null;
                 isRetryable = streamingError.is_retryable ?? true;
                 errorDetails = streamingError.details || null;
 
-                setUncaughtError(frozenSessionId, streamingError.error);
+                setUncaughtError(frozenSessionId, sanitizedError);
                 updateChatStateAction(frozenSessionId, "input");
                 updateSubmittedMessage(getCurrentSessionId(), "");
 
-                throw new Error(streamingError.error);
+                throw new Error(sanitizedError);
               }
             } else if (Object.hasOwn(packet, "message_id")) {
               finalMessage = packet as BackendMessage;
@@ -1236,7 +1240,8 @@ export default function useChatController({
         streamSucceeded = true;
       } catch (e: any) {
         console.log("Error:", e);
-        const errorMsg = e.message;
+        // `error` is already sanitized in the single-model streaming error path.
+        const errorMsg = error ?? sanitizeChatErrorForDisplay(e.message);
         const userErrorNode: Message = {
           nodeId: initialUserNode.nodeId,
           message: currMessage,
@@ -1257,7 +1262,7 @@ export default function useChatController({
               type: "error" as const,
               packets: [],
               packetCount: 0,
-              stackTrace,
+              stackTrace: null,
               errorCode,
               isRetryable,
               errorDetails,
@@ -1273,7 +1278,7 @@ export default function useChatController({
                 parentNodeId: initialUserNode.nodeId,
                 packets: [],
                 packetCount: 0,
-                stackTrace: stackTrace,
+                stackTrace: null,
                 errorCode: errorCode,
                 isRetryable: isRetryable,
                 errorDetails: errorDetails,

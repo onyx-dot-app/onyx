@@ -201,7 +201,6 @@ const ChatUI = React.memo(
             errorMessage: isError ? msg.message : null,
             errorCode: isError ? msg.errorCode : null,
             isRetryable: isError ? msg.isRetryable : undefined,
-            errorStackTrace: isError ? msg.stackTrace : null,
             errorDetails: isError ? msg.errorDetails : null,
           };
         });
@@ -288,7 +287,6 @@ const ChatUI = React.memo(
                       errorCode={message.errorCode || undefined}
                       isRetryable={message.isRetryable ?? true}
                       details={message.errorDetails || undefined}
-                      stackTrace={message.stackTrace || undefined}
                     />
                   </div>
                 );
@@ -361,9 +359,6 @@ const ChatUI = React.memo(
                 isRetryable={messages[messages.length - 1]?.isRetryable ?? true}
                 details={
                   messages[messages.length - 1]?.errorDetails || undefined
-                }
-                stackTrace={
-                  messages[messages.length - 1]?.stackTrace || undefined
                 }
               />
             </div>

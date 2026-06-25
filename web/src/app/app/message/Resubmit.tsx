@@ -1,9 +1,7 @@
-import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Button } from "@opal/components";
-import { CopyButton } from "@opal/components";
 import { getErrorIcon, getErrorTitle } from "./errorHelpers";
+import { sanitizeChatErrorForDisplay } from "./sanitizeChatError";
 
 interface ResubmitProps {
   resubmit: () => void;
@@ -25,17 +23,15 @@ export const ErrorBanner = ({
   errorCode,
   isRetryable = true,
   details,
-  stackTrace,
   resubmit,
 }: {
   error: string;
   errorCode?: string;
   isRetryable?: boolean;
   details?: Record<string, any>;
-  stackTrace?: string | null;
   resubmit?: () => void;
 }) => {
-  const [isStackTraceExpanded, setIsStackTraceExpanded] = useState(false);
+  const displayError = sanitizeChatErrorForDisplay(error);
 
   return (
     <div className="text-red-700 mt-4 text-sm my-auto">
@@ -43,7 +39,7 @@ export const ErrorBanner = ({
         {getErrorIcon(errorCode)}
         <AlertTitle>{getErrorTitle(errorCode)}</AlertTitle>
         <AlertDescription className="flex flex-col gap-y-1">
-          <span>{error}</span>
+          <span>{displayError}</span>
           {details?.model && (
             <span className="text-xs text-muted-foreground">
               Model: {details.model}
@@ -54,28 +50,6 @@ export const ErrorBanner = ({
             <span className="text-xs text-muted-foreground">
               Tool: {details.tool_name}
             </span>
-          )}
-          {stackTrace && (
-            <div className="mt-2 border-t border-neutral-200 dark:border-neutral-700 pt-2">
-              <div className="flex flex-1 items-center justify-between">
-                <Button
-                  prominence="tertiary"
-                  icon={isStackTraceExpanded ? SvgChevronDown : SvgChevronRight}
-                  onClick={() => setIsStackTraceExpanded(!isStackTraceExpanded)}
-                >
-                  Stack trace
-                </Button>
-                <CopyButton
-                  prominence="tertiary"
-                  getCopyText={() => stackTrace}
-                />
-              </div>
-              {isStackTraceExpanded && (
-                <pre className="mt-2 p-3 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-sm text-xs text-neutral-700 dark:text-neutral-300 overflow-auto max-h-48 whitespace-pre-wrap font-mono">
-                  {stackTrace}
-                </pre>
-              )}
-            </div>
           )}
         </AlertDescription>
       </Alert>

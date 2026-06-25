@@ -437,7 +437,6 @@ export default function MultiModelResponseView({
       errorMessage: response.errorMessage,
       errorCode: response.errorCode,
       isRetryable: response.isRetryable,
-      errorStackTrace: response.errorStackTrace,
       errorDetails: response.errorDetails,
       isGenerating,
     }),
