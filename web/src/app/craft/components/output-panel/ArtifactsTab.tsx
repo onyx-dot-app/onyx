@@ -25,7 +25,6 @@ import {
 } from "@/app/craft/services/apiServices";
 import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
 import { getFileIcon } from "@/lib/utils";
-import { cn } from "@opal/utils";
 
 interface ArtifactsTabProps {
   artifacts: Artifact[];
@@ -253,9 +252,7 @@ function OutputEntryRow({
   return (
     <>
       <div
-        className={cn(
-          "flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
-        )}
+        className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
         style={{ paddingLeft: 12 + paddingLeft }}
         onClick={
           entry.is_directory
