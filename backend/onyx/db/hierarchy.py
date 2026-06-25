@@ -575,7 +575,10 @@ def get_accessible_hierarchy_nodes_for_source(
     return versioned_fn(db_session, source, user_email, external_group_ids)
 
 
-def _escape_like_pattern(s: str) -> str:
+HIERARCHY_NODE_SEARCH_LIMIT = 30
+
+
+def escape_like_pattern(s: str) -> str:
     """Escape LIKE metacharacters so user input is treated as a literal substring."""
     return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
@@ -586,10 +589,10 @@ def _search_accessible_hierarchy_nodes(
     sources: list[DocumentSource] | None,
     user_email: str,  # noqa: ARG001
     external_group_ids: list[str],  # noqa: ARG001
-    limit: int = 30,
+    limit: int = HIERARCHY_NODE_SEARCH_LIMIT,
 ) -> list[HierarchyNode]:
     """MIT version: case-insensitive display_name search without ACL filtering."""
-    pattern = f"%{_escape_like_pattern(query)}%"
+    pattern = f"%{escape_like_pattern(query)}%"
     stmt = (
         select(HierarchyNode)
         .where(
@@ -612,7 +615,7 @@ def search_accessible_hierarchy_nodes(
     sources: list[DocumentSource] | None,
     user_email: str,
     external_group_ids: list[str],
-    limit: int = 30,
+    limit: int = HIERARCHY_NODE_SEARCH_LIMIT,
 ) -> list[HierarchyNode]:
     """Search hierarchy nodes by display_name substring, ACL-gated.
 

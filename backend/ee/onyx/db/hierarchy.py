@@ -15,6 +15,8 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
+from onyx.db.hierarchy import escape_like_pattern
+from onyx.db.hierarchy import HIERARCHY_NODE_SEARCH_LIMIT
 from onyx.db.models import HierarchyNode
 
 
@@ -79,12 +81,10 @@ def _search_accessible_hierarchy_nodes(
     sources: list[DocumentSource] | None,
     user_email: str,
     external_group_ids: list[str],
-    limit: int = 30,
+    limit: int = HIERARCHY_NODE_SEARCH_LIMIT,
 ) -> list[HierarchyNode]:
     """EE version: ACL-filtered case-insensitive display_name search."""
-    from onyx.db.hierarchy import _escape_like_pattern
-
-    pattern = f"%{_escape_like_pattern(query)}%"
+    pattern = f"%{escape_like_pattern(query)}%"
     stmt = (
         select(HierarchyNode)
         .where(
