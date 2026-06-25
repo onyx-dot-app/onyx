@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Table, createTableColumns } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -23,34 +25,45 @@ import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
 // Column renderers
 // ---------------------------------------------------------------------------
 
-function renderCreatedByColumn(_value: MinimalUserSnapshot | null, row: Agent) {
+function renderCreatedByColumn(
+  t: TFunction,
+  _value: MinimalUserSnapshot | null,
+  row: Agent
+) {
   return (
     <Content
       sizePreset="main-ui"
       variant="section"
       icon={SvgUser}
-      title={row.builtin_persona ? "System" : (row.owner?.email ?? "—")}
+      title={
+        row.builtin_persona
+          ? t("admin.agents.system")
+          : (row.owner?.email ?? "—")
+      }
     />
   );
 }
 
-function getAccessTitle(row: Agent): string {
-  if (row.is_public) return "Public";
-  // Group ownership counts as shared even with an empty share list
+function getAccessTitle(t: TFunction, row: Agent): string {
+  if (row.is_public) return t("admin.agents.public");
   if (row.groups.length > 0 || row.users.length > 0 || row.owner_group) {
-    return "Shared";
+    return t("admin.agents.shared");
   }
-  return "Private";
+  return t("admin.agents.private");
 }
 
-function renderAccessColumn(_isPublic: boolean, row: Agent) {
+function renderAccessColumn(t: TFunction, _isPublic: boolean, row: Agent) {
   return (
     <Content
       sizePreset="main-ui"
       variant="section"
-      title={getAccessTitle(row)}
+      title={getAccessTitle(t, row)}
       description={
-        !row.is_listed ? "Unlisted" : row.is_featured ? "Featured" : undefined
+        !row.is_listed
+          ? t("admin.agents.unlisted")
+          : row.is_featured
+            ? t("admin.agents.featured")
+            : undefined
       }
     />
   );
@@ -62,7 +75,7 @@ function renderAccessColumn(_isPublic: boolean, row: Agent) {
 
 const tc = createTableColumns<Agent>();
 
-function buildColumns(onMutate: () => void) {
+function buildColumns(onMutate: () => void, t: TFunction) {
   return [
     tc.qualifier({
       content: "icon",
@@ -72,7 +85,7 @@ function buildColumns(onMutate: () => void) {
       ),
     }),
     tc.column("name", {
-      header: "Name",
+      header: t("admin.agents.column_name"),
       weight: 25,
       cell: (value) => (
         <Text as="span" mainUiBody text05>
@@ -81,7 +94,7 @@ function buildColumns(onMutate: () => void) {
       ),
     }),
     tc.column("description", {
-      header: "Description",
+      header: t("admin.agents.column_description"),
       weight: 35,
       cell: (value) => (
         <Text as="span" mainUiBody text03>
@@ -90,14 +103,14 @@ function buildColumns(onMutate: () => void) {
       ),
     }),
     tc.column("owner", {
-      header: "Created By",
+      header: t("admin.agents.column_created_by"),
       weight: 20,
-      cell: renderCreatedByColumn,
+      cell: (_value, row) => renderCreatedByColumn(t, _value, row),
     }),
     tc.column("is_public", {
-      header: "Access",
+      header: t("admin.agents.column_access"),
       weight: 12,
-      cell: renderAccessColumn,
+      cell: (_value, row) => renderAccessColumn(t, _value, row),
     }),
     tc.actions({
       cell: (row) => <AgentRowActions agent={row} onMutate={onMutate} />,
@@ -110,11 +123,12 @@ function buildColumns(onMutate: () => void) {
 // ---------------------------------------------------------------------------
 
 export default function AgentsTable() {
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState("");
 
   const { agents, isLoading, refresh } = useAdminAgents();
 
-  const columns = useMemo(() => buildColumns(refresh), [refresh]);
+  const columns = useMemo(() => buildColumns(refresh, t), [refresh, t]);
 
   const nonBuiltinAgents = useMemo(
     () => agents.filter((p) => !p.builtin_persona),
@@ -133,7 +147,7 @@ export default function AgentsTable() {
       refresh();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update agent order"
+        err instanceof Error ? err.message : t("admin.agents.reorder_failed")
       );
       refresh();
     }
@@ -149,7 +163,7 @@ export default function AgentsTable() {
         <InputTypeIn
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search agents..."
+          placeholder={t("admin.agents.search_placeholder")}
           searchIcon
         />
         <Section gap={0.25} flexDirection="row" justifyContent="start">
@@ -168,8 +182,8 @@ export default function AgentsTable() {
         emptyState={
           <IllustrationContent
             illustration={SvgNoResult}
-            title="No agents found"
-            description="No agents match the current search."
+            title={t("admin.agents.no_agents")}
+            description={t("admin.agents.no_agents_desc")}
           />
         }
         footer={{}}

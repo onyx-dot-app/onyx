@@ -24,6 +24,7 @@ import AccountPopover from "@/sections/sidebar/AccountPopover";
 import { renderAppLogo } from "@/sections/sidebar/SidebarWrapper";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import { markdown } from "@opal/utils";
+import { useTranslation } from "react-i18next";
 
 const SECTIONS = {
   UNLABELED: null,
@@ -179,7 +180,25 @@ function groupBySection(items: SidebarItemEntry[]) {
   return groups;
 }
 
+const SECTION_KEYS: Record<string, string> = {
+  "Agents & Actions": "admin.sidebar.sections.agents_and_actions",
+  "Documents & Knowledge": "admin.sidebar.sections.documents_and_knowledge",
+  "Integrations": "admin.sidebar.sections.integrations",
+  "Permissions": "admin.sidebar.sections.permissions",
+  "Organization": "admin.sidebar.sections.organization",
+  "Usage": "admin.sidebar.sections.usage",
+};
+
+const getRouteTranslationKey = (path: string, name: string): string => {
+  if (name === "Upgrade Plan") {
+    return "admin.sidebar.routes.upgrade_plan";
+  }
+  const cleaned = path.replace(/^\/admin\//, "").replace(/[/-]/g, "_");
+  return `admin.sidebar.routes.${cleaned}`;
+};
+
 export default function AdminSidebar() {
+  const { t } = useTranslation();
   const { folded, setFolded } = useSidebarState();
   const showLogoWhenFolded = useShowLogoWhenFolded();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -223,9 +242,14 @@ export default function AdminSidebar() {
     hooksEnabled
   );
 
+  const translatedItems = allItems.map((item) => ({
+    ...item,
+    name: t(getRouteTranslationKey(item.link, item.name), item.name),
+  }));
+
   const itemExtractor = useCallback((item: SidebarItemEntry) => item.name, []);
 
-  const { query, setQuery, filtered } = useFilter(allItems, itemExtractor);
+  const { query, setQuery, filtered } = useFilter(translatedItems, itemExtractor);
 
   const enabled = filtered.filter((item) => !item.disabled);
   const disabled = filtered.filter((item) => item.disabled);
@@ -247,14 +271,14 @@ export default function AdminSidebar() {
               setFocusSearch(true);
             }}
           >
-            Search
+            {t("admin.sidebar.search", "Search")}
           </SidebarTab>
         ) : (
           <InputTypeIn
             ref={searchRef}
             variant="internal"
             searchIcon
-            placeholder="Search..."
+            placeholder={t("admin.sidebar.search_placeholder", "Search...")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             clearButton
@@ -265,7 +289,13 @@ export default function AdminSidebar() {
       <SidebarLayouts.Body scrollKey="admin-sidebar">
         {enabledGroups.map((group, groupIndex) => (
           <React.Fragment key={groupIndex}>
-            <SidebarLayouts.Section title={group.section ?? undefined}>
+            <SidebarLayouts.Section
+              title={
+                group.section
+                  ? t(SECTION_KEYS[group.section] || group.section, group.section)
+                  : undefined
+              }
+            >
               {group.items.map(({ link, icon, name }) => (
                 <SidebarTab
                   key={link}
@@ -289,7 +319,14 @@ export default function AdminSidebar() {
         )}
         {disabledGroups.map((group, groupIndex) => (
           <React.Fragment key={`disabled-${groupIndex}`}>
-            <SidebarLayouts.Section title={group.section ?? undefined} disabled>
+            <SidebarLayouts.Section
+              title={
+                group.section
+                  ? t(SECTION_KEYS[group.section] || group.section, group.section)
+                  : undefined
+              }
+              disabled
+            >
               {group.items.map(({ link, icon, name, requiredTier }) => (
                 <SidebarTab
                   key={link}
@@ -297,8 +334,14 @@ export default function AdminSidebar() {
                   icon={icon}
                   tooltip={markdown(
                     requiredTier === Tier.ENTERPRISE
-                      ? "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
-                      : "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                      ? t(
+                          "admin.sidebar.enterprise_only",
+                          "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
+                        )
+                      : t(
+                          "admin.sidebar.business_or_enterprise_only",
+                          "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                        )
                   )}
                 >
                   {name}
@@ -317,7 +360,7 @@ export default function AdminSidebar() {
           variant="sidebar-light"
           folded={folded}
         >
-          Exit Admin Panel
+          {t("admin.sidebar.exit_admin_panel", "Exit Admin Panel")}
         </SidebarTab>
         <AccountPopover folded={folded} />
       </SidebarLayouts.Footer>

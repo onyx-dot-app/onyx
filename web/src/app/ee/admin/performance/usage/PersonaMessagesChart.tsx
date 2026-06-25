@@ -20,6 +20,8 @@ import {
 import { useState, useMemo, useEffect } from "react";
 import { Agent } from "@/lib/agents/types";
 
+import { useTranslation } from "react-i18next";
+
 export function PersonaMessagesChart({
   availablePersonas,
   timeRange,
@@ -27,6 +29,7 @@ export function PersonaMessagesChart({
   availablePersonas: Agent[];
   timeRange: DateRangePickerValue;
 }) {
+  const { t } = useTranslation();
   const [selectedPersonaId, setSelectedPersonaId] = useState<
     number | undefined
   >(undefined);
@@ -125,8 +128,8 @@ export function PersonaMessagesChart({
       const uniqueUserData = uniqueUsersMap.get(dateStr);
       return {
         Day: dateStr,
-        Messages: messageData?.total_messages || 0,
-        "Unique Users": uniqueUserData?.unique_users || 0,
+        [t("admin.usage.messages")]: messageData?.total_messages || 0,
+        [t("admin.usage.unique_users")]: uniqueUserData?.unique_users || 0,
       };
     });
   }, [
@@ -134,6 +137,7 @@ export function PersonaMessagesChart({
     personaUniqueUsersData,
     timeRange.from,
     selectedPersonaId,
+    t,
   ]);
 
   let content;
@@ -146,20 +150,20 @@ export function PersonaMessagesChart({
   } else if (!availablePersonas || hasError) {
     content = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch data...</p>
+        <p className="m-auto">{t("admin.usage.failed_to_fetch_general")}</p>
       </div>
     );
   } else if (selectedPersonaId === undefined) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
-        <p className="m-auto">Select an agent to view analytics</p>
+        <p className="m-auto">{t("admin.usage.select_agent_to_view")}</p>
       </div>
     );
   } else if (!personaMessagesData?.length) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
         <p className="m-auto">
-          No data found for selected agent in the specified time range
+          {t("admin.usage.no_agent_data")}
         </p>
       </div>
     );
@@ -168,7 +172,7 @@ export function PersonaMessagesChart({
       <AreaChartDisplay
         className="mt-4"
         data={chartData}
-        categories={["Messages", "Unique Users"]}
+        categories={[t("admin.usage.messages"), t("admin.usage.unique_users")]}
         index="Day"
         colors={["indigo", "fuchsia"]}
         yAxisWidth={60}
@@ -178,10 +182,10 @@ export function PersonaMessagesChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>Agent Analytics</Title>
+      <Title>{t("admin.usage.agent_analytics_title")}</Title>
       <div className="flex flex-col gap-4">
         <Text as="p">
-          Messages and unique users per day for the selected agent
+          {t("admin.usage.agent_analytics_desc")}
         </Text>
         <div className="flex items-center gap-4">
           <Select
@@ -191,14 +195,14 @@ export function PersonaMessagesChart({
             }}
           >
             <SelectTrigger className="flex w-full max-w-xs">
-              <SelectValue placeholder="Select an agent to display" />
+              <SelectValue placeholder={t("admin.usage.select_agent_placeholder")} />
             </SelectTrigger>
             <SelectContent>
               <div className="flex items-center px-2 pb-2 sticky top-0 bg-background border-b">
                 <Search className="h-4 w-4 mr-2 shrink-0 opacity-50" />
                 <input
                   className="flex h-8 w-full rounded-xs bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="Search agents..."
+                  placeholder={t("admin.usage.search_agents_placeholder")}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onClick={(e) => e.stopPropagation()}

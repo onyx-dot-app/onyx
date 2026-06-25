@@ -13,6 +13,7 @@ import { SvgPlusCircle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { LLMOption, buildLlmOptions } from "@/lib/languageModels/options";
+import { useTranslation } from "react-i18next";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent from "@/sections/model-selector/ModelSelectorContent";
 
@@ -42,6 +43,7 @@ export default function MultiModelSelector({
   onRemove,
   onReplace,
 }: MultiModelSelectorProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
@@ -64,10 +66,10 @@ export default function MultiModelSelector({
   // precedence; otherwise it labels the add affordance. When at max there is
   // no add action, so the tooltip is omitted.
   const selectorTooltip = noModelsToSelect
-    ? "No models currently configured"
+    ? t("chat.model_selector.no_models", "No models currently configured")
     : atMax
       ? undefined
-      : "Add Model";
+      : t("chat.model_selector.add_model", "Add Model");
 
   const selectedKeys = useMemo(
     () => new Set(selectedModels.map((m) => modelKey(m.provider, m.modelName))),

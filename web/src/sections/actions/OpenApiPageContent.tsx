@@ -2,6 +2,7 @@
 
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import OpenAPIAuthenticationModal, {
   AuthMethod,
@@ -19,6 +20,7 @@ import ActionCardSkeleton from "./skeleton/ActionCardSkeleton";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 
 export default function OpenApiPageContent() {
+  const { t } = useTranslation();
   const {
     openApiTools,
     mutateOpenApiTools,
@@ -355,8 +357,8 @@ export default function OpenApiPageContent() {
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           onAction={handleAddAction}
-          actionLabel="Add OpenAPI Action"
-          emptyStateText="Add custom actions from OpenAPI schemas."
+          actionLabel={t("admin.actions_open_api.add_action")}
+          emptyStateText={t("admin.actions_open_api.empty_list")}
         />
       </div>
 

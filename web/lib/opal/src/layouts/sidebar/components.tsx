@@ -17,6 +17,7 @@ import { SvgSidebar } from "@opal/icons";
 import type { RichStr } from "@opal/types";
 import { useSidebarState } from "@opal/layouts/root/components";
 import useScreenSize from "@opal/hooks/useScreenSize";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -129,6 +130,7 @@ function SidebarHeader({
   showLogoWhenFolded = true,
   children,
 }: SidebarHeaderProps) {
+  const { t } = useTranslation();
   const foldable = useContext(SidebarFoldableContext);
   const { folded, setFolded } = useSidebarState();
   const toggleFolded = useCallback(
@@ -142,14 +144,14 @@ function SidebarHeader({
         <Button
           icon={SvgSidebar}
           prominence="tertiary"
-          tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
+          tooltip={folded ? t("chat.sidebar.open_sidebar", "Open Sidebar") : t("chat.sidebar.close_sidebar", "Close Sidebar")}
           tooltipSide={folded ? "right" : "bottom"}
           size="md"
           onClick={toggleFolded}
         />
       </div>
     ),
-    [folded, toggleFolded]
+    [folded, toggleFolded, t]
   );
 
   if (logo == null && !children) return null;

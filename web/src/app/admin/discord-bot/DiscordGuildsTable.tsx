@@ -24,12 +24,15 @@ import {
 import { toast } from "@/hooks/useToast";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
+import { useTranslation } from "react-i18next";
+
 interface Props {
   guilds: DiscordGuildConfig[];
   onRefresh: () => void;
 }
 
 export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
+  const { t } = useTranslation();
   const router = useRouter();
   const [guildToDelete, setGuildToDelete] = useState<DiscordGuildConfig | null>(
     null
@@ -84,8 +87,8 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
       <EmptyMessageCard
         sizePreset="main-ui"
         icon={SvgServer}
-        title="No Discord servers configured yet"
-        description="Create a server configuration to get started."
+        title={t("admin.bots.no_discord_servers")}
+        description={t("admin.bots.discord_servers_empty_desc")}
       />
     );
   }
@@ -105,11 +108,11 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Server</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Registered</TableHead>
-            <TableHead>Enabled</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead>{t("admin.bots.table_server")}</TableHead>
+            <TableHead>{t("admin.bots.table_status")}</TableHead>
+            <TableHead>{t("admin.bots.table_registered")}</TableHead>
+            <TableHead>{t("admin.bots.table_enabled")}</TableHead>
+            <TableHead>{t("admin.bots.table_actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -127,9 +130,9 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
               </TableCell>
               <TableCell>
                 {guild.guild_id ? (
-                  <Badge variant="success">Registered</Badge>
+                  <Badge variant="success">{t("admin.bots.badge_registered")}</Badge>
                 ) : (
-                  <Badge variant="secondary">Pending</Badge>
+                  <Badge variant="secondary">{t("admin.bots.badge_pending", "Pending")}</Badge>
                 )}
               </TableCell>
               <TableCell>

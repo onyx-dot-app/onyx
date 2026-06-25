@@ -13,6 +13,8 @@ import { SvgGlobe } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import { MessageCard } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
+import { useTranslation } from "react-i18next";
 import {
   WebSearchSetupModal,
   type ProviderModalState,
@@ -50,6 +52,8 @@ const route = ADMIN_ROUTES.WEB_SEARCH;
 // ---------------------------------------------------------------------------
 
 export default function WebSearchPage() {
+  const { t } = useTranslation();
+  const title = useAdminPageTitle(route);
   const [activeProvider, setActiveProvider] =
     useState<ProviderModalState | null>(null);
   const [disconnectTarget, setDisconnectTarget] =
@@ -268,14 +272,14 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description="Search settings for external search across the internet."
+          title={title}
+          description={t("admin.web_search.desc", "Search settings for external search across the internet.")}
           divider
         />
         <SettingsLayouts.Body>
           <MessageCard
             variant="error"
-            title="Failed to load web search settings"
+            title={t("admin.web_search.load_failed")}
             description={detail ?? message}
           />
         </SettingsLayouts.Body>
@@ -288,8 +292,8 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description="Search settings for external search across the internet."
+          title={title}
+          description={t("admin.web_search.desc", "Search settings for external search across the internet.")}
           divider
         />
         <SettingsLayouts.Body>
@@ -353,16 +357,16 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description="Search settings for external search across the internet."
+          title={title}
+          description={t("admin.web_search.desc", "Search settings for external search across the internet.")}
           divider
         />
 
         <SettingsLayouts.Body>
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Search Engine"
-              description="External search engine API used for web search result URLs, snippets, and metadata."
+              title={t("admin.web_search.search_engine", "Search Engine")}
+              description={t("admin.web_search.search_engine_desc", "External search engine API used for web search result URLs, snippets, and metadata.")}
               sizePreset="main-content"
               variant="section"
             />
@@ -372,8 +376,8 @@ export default function WebSearchPage() {
                 variant="info"
                 title={
                   hasConfiguredSearchProvider
-                    ? "Select a search engine to enable web search."
-                    : "Connect a search engine to set up web search."
+                    ? t("admin.web_search.select_to_enable", "Select a search engine to enable web search.")
+                    : t("admin.web_search.connect_to_setup", "Connect a search engine to set up web search.")
                 }
               />
             )}
@@ -470,8 +474,8 @@ export default function WebSearchPage() {
 
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Web Crawler"
-              description="Used to read the full contents of search result pages."
+              title={t("admin.web_search.web_crawler", "Web Crawler")}
+              description={t("admin.web_search.web_crawler_desc", "Used to read the full contents of search result pages.")}
               sizePreset="main-content"
               variant="section"
             />
@@ -525,7 +529,7 @@ export default function WebSearchPage() {
                     title={label}
                     description={subtitle}
                     status={status}
-                    selectedLabel="Current Crawler"
+                    selectedLabel={t("admin.web_search.current_crawler", "Current Crawler")}
                     onConnect={() => {
                       openContentModal(provider.provider_type, provider);
                     }}

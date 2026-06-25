@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { MinimalAgent } from "@/lib/agents/types";
 import { InputPrompt } from "@/app/app/interfaces";
@@ -123,6 +124,7 @@ const AppInputBar = React.memo(
     currentTabUrl,
     onToggleTabReading,
   }: AppInputBarProps) => {
+    const { t } = useTranslation();
     const [isRecording, setIsRecording] = useState(false);
     const [recordingCycleCount, setRecordingCycleCount] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
@@ -583,7 +585,7 @@ const AppInputBar = React.memo(
               <Button
                 disabled={disabled}
                 icon={SvgPaperclip}
-                tooltip="Attach Files"
+                tooltip={t("chat.input.attach_files")}
                 interaction={open ? "hover" : "rest"}
                 prominence="tertiary"
               />
@@ -623,8 +625,8 @@ const AppInputBar = React.memo(
                           return currentTabUrl;
                         }
                       })()
-                    : "Reading tab..."
-                  : "Read this tab"}
+                    : t("chat.input.reading_tab")
+                  : t("chat.input.read_this_tab")}
               </SelectButton>
             ) : (
               showDeepResearch && (
@@ -637,11 +639,11 @@ const AppInputBar = React.memo(
                   foldable={!deepResearchEnabled}
                   tooltip={
                     isMultiModelActive
-                      ? "Deep Research is disabled in multi-model mode"
+                      ? t("chat.input.deep_research_disabled_multimodel")
                       : undefined
                   }
                 >
-                  Deep Research
+                  {t("chat.input.deep_research")}
                 </SelectButton>
               )
             )}
@@ -701,9 +703,9 @@ const AppInputBar = React.memo(
               <Button
                 disabled
                 icon={SvgMicrophone}
-                aria-label="Set up voice"
+                aria-label={t("chat.input.setup_voice")}
                 prominence="tertiary"
-                tooltip="Voice not configured. Set up in admin settings."
+                tooltip={t("chat.input.voice_not_configured")}
               />
             ))}
 
@@ -718,7 +720,7 @@ const AppInputBar = React.memo(
             }
             tooltip={
               hasUploadingFiles || hasIndexingFiles
-                ? "Waiting for attached file(s) to finish processing"
+                ? t("chat.input.waiting_files")
                 : undefined
             }
             id="onyx-chat-input-send-button"
@@ -867,17 +869,17 @@ const AppInputBar = React.memo(
                       }}
                       aria-multiline={true}
                       aria-disabled={disabled}
-                      aria-placeholder="How can I help you today?"
+                      aria-placeholder={t("chat.input.placeholder_help", "How can I help you today?")}
                       data-placeholder={
                         queuedMessages.length > 0 && !message
-                          ? "Press up to edit queued messages"
+                          ? t("chat.input.press_up_to_edit", "Press up to edit queued messages")
                           : isRecording
-                            ? "Listening..."
+                            ? t("chat.input.listening", "Listening...")
                             : isVoicePlaybackActive
-                              ? "Onyx is speaking..."
+                              ? t("chat.input.speaking", "Onyx is speaking...")
                               : isSearchMode
-                                ? "Search connected sources"
-                                : "How can I help you today?"
+                                ? t("chat.input.search_sources", "Search connected sources")
+                                : t("chat.input.placeholder_help", "How can I help you today?")
                       }
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {

@@ -5,12 +5,14 @@ import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
 import CardSection from "@/components/admin/CardSection";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
+import { useTranslation } from "react-i18next";
 
 export function OnyxBotChart({
   timeRange,
 }: {
   timeRange: DateRangePickerValue;
 }) {
+  const { t } = useTranslation();
   const {
     data: onyxBotAnalyticsData,
     isLoading: isOnyxBotAnalyticsLoading,
@@ -31,7 +33,7 @@ export function OnyxBotChart({
   ) {
     chart = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch feedback data...</p>
+        <p className="m-auto">{t("admin.usage.failed_to_fetch_general")}</p>
       </div>
     );
   } else {
@@ -53,12 +55,12 @@ export function OnyxBotChart({
           const onyxBotAnalyticsForDate = dateToOnyxBotAnalytics.get(dateStr);
           return {
             Day: dateStr,
-            "Total Queries": onyxBotAnalyticsForDate?.total_queries || 0,
-            "Automatically Resolved":
+            [t("admin.usage.total_queries")]: onyxBotAnalyticsForDate?.total_queries || 0,
+            [t("admin.usage.auto_resolved")]:
               onyxBotAnalyticsForDate?.auto_resolved || 0,
           };
         })}
-        categories={["Total Queries", "Automatically Resolved"]}
+        categories={[t("admin.usage.total_queries"), t("admin.usage.auto_resolved")]}
         index="Day"
         colors={["indigo", "fuchsia"]}
         yAxisWidth={60}
@@ -68,8 +70,8 @@ export function OnyxBotChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>Slack Channel</Title>
-      <Text as="p">Total Queries vs Auto Resolved</Text>
+      <Title>{t("admin.usage.slack_title")}</Title>
+      <Text as="p">{t("admin.usage.slack_over_time")}</Text>
       {chart}
     </CardSection>
   );

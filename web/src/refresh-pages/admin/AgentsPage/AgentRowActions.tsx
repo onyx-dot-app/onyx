@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -50,6 +51,7 @@ export default function AgentRowActions({
   agent,
   onMutate,
 }: AgentRowActionsProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareModal = useCreateModal();
@@ -65,10 +67,12 @@ export default function AgentRowActions({
     try {
       await action();
       onMutate();
-      toast.success(`${agent.name} updated successfully.`);
+      toast.success(t("admin.agents.updated_success", { name: agent.name }));
       close();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "An error occurred");
+      toast.error(
+        err instanceof Error ? err.message : t("admin.common.generic_error")
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -91,7 +95,7 @@ export default function AgentRowActions({
             <Button
               prominence="tertiary"
               icon={SvgEdit}
-              tooltip="Edit Agent"
+              tooltip={t("admin.agents.edit_agent")}
               onClick={() =>
                 router.push(
                   `/app/agents/edit/${
@@ -106,7 +110,7 @@ export default function AgentRowActions({
           <Button
             prominence="tertiary"
             icon={SvgEyeOff}
-            tooltip="Re-list Agent"
+            tooltip={t("admin.agents.relist_agent")}
             onClick={() =>
               handleAction(
                 () => toggleAgentListed(agent.id, agent.is_listed),
@@ -126,7 +130,9 @@ export default function AgentRowActions({
               icon={SvgStar}
               interaction={featuredOpen ? "hover" : "rest"}
               tooltip={
-                agent.is_featured ? "Remove Featured" : "Set as Featured"
+                agent.is_featured
+                  ? t("admin.agents.remove_featured_tooltip")
+                  : t("admin.agents.set_featured")
               }
               onClick={() => {
                 setPopoverOpen(false);
@@ -166,7 +172,9 @@ export default function AgentRowActions({
                     }
                   }}
                 >
-                  {agent.is_listed ? "Unlist Agent" : "List Agent"}
+                  {agent.is_listed
+                    ? t("admin.agents.unlist_agent")
+                    : t("admin.agents.list_agent")}
                 </LineItem>,
                 <LineItem
                   key="share"
@@ -176,7 +184,7 @@ export default function AgentRowActions({
                     shareModal.toggle(true);
                   }}
                 >
-                  Share
+                  {t("admin.agents.share")}
                 </LineItem>,
                 businessTier ? (
                   <LineItem
@@ -187,7 +195,7 @@ export default function AgentRowActions({
                       router.push(`/ee/agents/stats/${agent.id}` as Route);
                     }}
                   >
-                    Stats
+                    {t("admin.agents.stats")}
                   </LineItem>
                 ) : undefined,
                 !agent.builtin_persona ? null : undefined,
@@ -201,7 +209,7 @@ export default function AgentRowActions({
                       setDeleteOpen(true);
                     }}
                   >
-                    Delete
+                    {t("general.delete")}
                   </LineItem>
                 ) : undefined,
               ]}
@@ -213,7 +221,7 @@ export default function AgentRowActions({
       {deleteOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete Agent"
+          title={t("admin.agents.delete_agent_title")}
           onClose={isSubmitting ? undefined : () => setDeleteOpen(false)}
           submit={
             <Button
@@ -226,16 +234,12 @@ export default function AgentRowActions({
                 );
               }}
             >
-              Delete
+              {t("general.delete")}
             </Button>
           }
         >
           <Text as="p" text03>
-            Are you sure you want to delete{" "}
-            <Text as="span" text05>
-              {agent.name}
-            </Text>
-            ? This action cannot be undone.
+            {t("admin.agents.delete_confirm", { name: agent.name })}
           </Text>
         </ConfirmationModalLayout>
       )}
@@ -245,8 +249,8 @@ export default function AgentRowActions({
           icon={agent.is_featured ? SvgStarOff : SvgStar}
           title={
             agent.is_featured
-              ? `Remove ${agent.name} from Featured`
-              : `Feature ${agent.name}`
+              ? t("admin.agents.remove_featured", { name: agent.name })
+              : t("admin.agents.feature_name", { name: agent.name })
           }
           onClose={isSubmitting ? undefined : () => setFeaturedOpen(false)}
           submit={
@@ -259,18 +263,20 @@ export default function AgentRowActions({
                 );
               }}
             >
-              {agent.is_featured ? "Unfeature" : "Feature"}
+              {agent.is_featured
+                ? t("admin.agents.unfeature")
+                : t("admin.agents.feature")}
             </Button>
           }
         >
           <div className="flex flex-col gap-2">
             <Text as="p" text03>
               {agent.is_featured
-                ? `This will remove ${agent.name} from the featured section on top of the explore agents list. New users will no longer see it pinned to their sidebar, but existing pins are unaffected.`
-                : "Featured agents appear at the top of the explore agents list and are automatically pinned to the sidebar for new users with access. Use this to highlight recommended agents across your organization."}
+                ? t("admin.agents.unfeature_desc", { name: agent.name })
+                : t("admin.agents.feature_desc")}
             </Text>
             <Text as="p" text03>
-              This does not change who can access this agent.
+              {t("admin.agents.access_unchanged")}
             </Text>
           </div>
         </ConfirmationModalLayout>
@@ -291,18 +297,16 @@ export default function AgentRowActions({
                 );
               }}
             >
-              Unlist
+              {t("admin.agents.unlist")}
             </Button>
           }
         >
           <div className="flex flex-col gap-2">
             <Text as="p" text03>
-              Unlisted agents don&apos;t appear in the explore agents list but
-              remain accessible via direct link, and to users who have
-              previously used or pinned them.
+              {t("admin.agents.unlist_desc")}
             </Text>
             <Text as="p" text03>
-              This does not change who can access this agent.
+              {t("admin.agents.access_unchanged")}
             </Text>
           </div>
         </ConfirmationModalLayout>

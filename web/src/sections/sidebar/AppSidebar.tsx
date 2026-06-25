@@ -80,6 +80,7 @@ import { dismissNotification } from "@/lib/notifications/api";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
+import { useTranslation } from "react-i18next";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -120,6 +121,7 @@ function RecentsSection({
   isLoadingMore,
   onLoadMore,
 }: RecentsSectionProps) {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
@@ -162,10 +164,10 @@ function RecentsSection({
         isOver && "bg-background-tint-03"
       )}
     >
-      <SidebarLayouts.Section title="Recents">
+      <SidebarLayouts.Section title={t("sidebar.recents")}>
         {chatSessions.length === 0 ? (
           <Text as="p" text01 className="px-3">
-            Try sending a message! Your chat history will appear here.
+            {t("sidebar.recents_empty")}
           </Text>
         ) : (
           <>
@@ -197,6 +199,7 @@ function RecentsSection({
 }
 
 const AppSidebar = memo(function AppSidebarInner() {
+  const { t } = useTranslation();
   const { folded } = useSidebarState();
   const router = useRouter();
   const combinedSettingsData = useSettings();
@@ -493,11 +496,12 @@ const AppSidebar = memo(function AppSidebarInner() {
             reset();
           }}
         >
-          New Session
+          {t("sidebar.new_session")}
         </SidebarTab>
       </div>
     );
   }, [
+    t,
     folded,
     activeSidebarTab,
     combinedSettingsData,
@@ -526,12 +530,12 @@ const AppSidebar = memo(function AppSidebarInner() {
       <ChatSearchCommandMenu
         trigger={
           <SidebarTab icon={SvgSearchMenu} folded={folded}>
-            Search Chats
+            {t("sidebar.search_chats")}
           </SidebarTab>
         }
       />
     ),
-    [folded]
+    [t, folded]
   );
   const moreAgentsButton = useMemo(
     () => (
@@ -547,11 +551,11 @@ const AppSidebar = memo(function AppSidebarInner() {
           selected={activeSidebarTab.isMoreAgents()}
           variant={folded ? "sidebar-heavy" : "sidebar-light"}
         >
-          {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
+          {visibleAgents.length === 0 ? t("sidebar.explore_agents") : t("sidebar.more_agents")}
         </SidebarTab>
       </div>
     ),
-    [folded, activeSidebarTab, visibleAgents]
+    [t, folded, activeSidebarTab, visibleAgents]
   );
   const newProjectButton = useMemo(
     () => (
@@ -562,10 +566,10 @@ const AppSidebar = memo(function AppSidebarInner() {
         folded={folded}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
-        New Project
+        {t("sidebar.new_project")}
       </SidebarTab>
     ),
-    [folded, createProjectModal.toggle, createProjectModal.isOpen]
+    [t, folded, createProjectModal.toggle, createProjectModal.isOpen]
   );
   const handleShowBuildIntro = useCallback(() => {
     setShowIntroAnimation(true);
@@ -584,7 +588,7 @@ const AppSidebar = memo(function AppSidebarInner() {
             icon={SvgSettings}
             folded={folded}
           >
-            {isAdmin ? "Admin Panel" : "Curator Panel"}
+            {isAdmin ? t("sidebar.admin_panel") : t("sidebar.curator_panel")}
           </SidebarTab>
         )}
         <AccountPopover
@@ -595,7 +599,7 @@ const AppSidebar = memo(function AppSidebarInner() {
         />
       </div>
     ),
-    [folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
+    [t, folded, isAdmin, isCurator, handleShowBuildIntro, isOnyxCraftEnabled]
   );
 
   return (
@@ -683,7 +687,7 @@ const AppSidebar = memo(function AppSidebarInner() {
                 collisionDetection={closestCenter}
                 onDragEnd={handleAgentDragEnd}
               >
-                <SidebarLayouts.Section title="Agents">
+                <SidebarLayouts.Section title={t("sidebar.agents")}>
                   <SortableContext
                     items={visibleAgentIds}
                     strategy={verticalListSortingStrategy}
@@ -708,7 +712,7 @@ const AppSidebar = memo(function AppSidebarInner() {
               >
                 {/* Projects */}
                 <SidebarLayouts.Section
-                  title="Projects"
+                  title={t("sidebar.projects")}
                   action={
                     <OpalButton
                       icon={SvgFolderPlus}

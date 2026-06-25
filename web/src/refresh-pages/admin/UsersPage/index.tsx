@@ -4,11 +4,14 @@ import { useState } from "react";
 import { SvgExternalLink, SvgUser, SvgUserPlus } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
+import { useTranslation } from "react-i18next";
 import { useScimToken } from "@/hooks/useScimToken";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import useUserCounts from "@/hooks/useUserCounts";
 import { UserStatus } from "@/lib/types";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
 import type { StatusFilter } from "./interfaces";
 
 import UsersSummary from "./UsersSummary";
@@ -65,23 +68,25 @@ function UsersContent() {
 // ---------------------------------------------------------------------------
 
 export default function UsersPage() {
+  const { t } = useTranslation();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const title = useAdminPageTitle(ADMIN_ROUTES.USERS);
 
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
-        title="Users & Requests"
+        title={title}
         icon={SvgUser}
         rightChildren={
           <Button icon={SvgUserPlus} onClick={() => setInviteOpen(true)}>
-            Invite Users
+            {t("admin.users.invite_users")}
           </Button>
         }
       >
         <MessageCard
           variant="info"
-          title="Upcoming changes to permissions"
-          description="Onyx is transitioning to group-based permissions for more granular access control. Curator and Global Curator roles will be replaced by configurable group permissions. We recommend reviewing current role assignments to ensure a smooth transition."
+          title={t("admin.common.permissions_banner_title")}
+          description={t("admin.common.permissions_banner_users_desc")}
           rightChildren={
             <Button
               icon={SvgExternalLink}
@@ -93,7 +98,7 @@ export default function UsersPage() {
                 )
               }
             >
-              Learn more
+              {t("admin.common.learn_more")}
             </Button>
           }
         />

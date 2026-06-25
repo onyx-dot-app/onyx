@@ -9,6 +9,7 @@ import Modal, { BasicModalFooter } from "@/refresh-components/Modal";
 import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationModalLayout";
 import { toast } from "@/hooks/useToast";
 import { downloadFile } from "@/lib/download";
+import { useTranslation } from "react-i18next";
 
 import type { ScimModalView } from "./interfaces";
 
@@ -27,12 +28,12 @@ interface ScimModalProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function copyToClipboard(text: string) {
+async function copyToClipboard(text: string, t: (key: string) => string) {
   try {
     await navigator.clipboard.writeText(text);
-    toast.success("Token copied to clipboard");
+    toast.success(t("admin.scim.token_copied"));
   } catch {
-    toast.error("Failed to copy token");
+    toast.error(t("admin.scim.copy_failed"));
   }
 }
 
@@ -46,12 +47,14 @@ export default function ScimModal({
   onRegenerate,
   onClose,
 }: ScimModalProps) {
+  const { t } = useTranslation();
+
   switch (view.kind) {
     case "regenerate":
       return (
         <ConfirmationModalLayout
           icon={SvgRefreshCw}
-          title="Regenerate SCIM Token"
+          title={t("admin.scim.regenerate_token_title", "Regenerate SCIM Token")}
           onClose={onClose}
           submit={
             <Button
@@ -59,15 +62,16 @@ export default function ScimModal({
               variant="danger"
               onClick={onRegenerate}
             >
-              Regenerate Token
+              {t("admin.scim.regenerate_token_btn", "Regenerate Token")}
             </Button>
           }
         >
           <Section alignItems="start" gap={0.5}>
             <Text as="p" text03>
-              Your current SCIM token will be revoked and a new token will be
-              generated. You will need to update the token on your identity
-              provider before SCIM provisioning will resume.
+              {t(
+                "admin.scim.regenerate_token_desc",
+                "Your current SCIM token will be revoked and a new token will be generated. You will need to update the token on your identity provider before SCIM provisioning will resume."
+              )}
             </Text>
           </Section>
         </ConfirmationModalLayout>
@@ -79,14 +83,17 @@ export default function ScimModal({
           <Modal.Content width="sm">
             <Modal.Header
               icon={SvgKey}
-              title="SCIM Token"
-              description="Save this key before continuing. It won't be shown again."
+              title={t("admin.scim.token_title", "SCIM Token")}
+              description={t(
+                "admin.scim.token_desc",
+                "Save this key before continuing. It won't be shown again."
+              )}
               onClose={onClose}
             />
             <Modal.Body>
               <Hoverable.Root group="token">
                 <Interactive.Stateless
-                  onClick={() => copyToClipboard(view.rawToken)}
+                  onClick={() => copyToClipboard(view.rawToken, t)}
                 >
                   <InputTextArea
                     value={view.rawToken}
@@ -118,15 +125,15 @@ export default function ScimModal({
                       })
                     }
                   >
-                    Download
+                    {t("admin.scim.download", "Download")}
                   </Button>
                 }
                 submit={
                   <Button
                     autoFocus
-                    onClick={() => copyToClipboard(view.rawToken)}
+                    onClick={() => copyToClipboard(view.rawToken, t)}
                   >
-                    Copy Token
+                    {t("admin.scim.copy_token", "Copy Token")}
                   </Button>
                 }
               />

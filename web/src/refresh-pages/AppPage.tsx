@@ -4,6 +4,7 @@ import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast, useToastFromQuery } from "@/hooks/useToast";
+import { useTranslation } from "react-i18next";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
@@ -107,6 +108,7 @@ export interface ChatPageProps {
 }
 
 export default function AppPage({ firstMessage }: ChatPageProps) {
+  const { t } = useTranslation();
   // Performance tracking
   // Keeping this here in case we need to track down slow renders in the future
   // const renderCount = useRef(0);
@@ -130,7 +132,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   useToastFromQuery({
     oauth_connected: {
-      message: "Authentication successful",
+      message: t("chat.auth_successful"),
       type: "success",
     },
   });
@@ -541,7 +543,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      toast.error("No previously-submitted user message found.");
+      toast.error(t("chat.no_previous_message"));
       return;
     }
 
@@ -872,21 +874,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           }
                           title={
                             sessionFetchError.type === "not_found"
-                              ? "Chat not found"
+                              ? t("chat.chat_not_found")
                               : sessionFetchError.type === "access_denied"
-                                ? "Access denied"
-                                : "Something went wrong"
+                                ? t("chat.access_denied")
+                                : t("chat.something_went_wrong")
                           }
                           description={
                             sessionFetchError.type === "not_found"
-                              ? "This chat session doesn't exist or has been deleted."
+                              ? t("chat.chat_not_found_desc")
                               : sessionFetchError.type === "access_denied"
-                                ? "You don't have permission to view this chat session."
+                                ? t("chat.access_denied_desc")
                                 : sessionFetchError.detail
                           }
                         />
                         <Button href="/app" prominence="secondary">
-                          Start a new chat
+                          {t("chat.start_new_chat")}
                         </Button>
                       </Section>
                     )}

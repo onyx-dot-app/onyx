@@ -2,6 +2,7 @@ import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { getDatesList, useQueryAnalytics } from "../lib";
 import { Text } from "@opal/components";
 import Title from "@/components/ui/title";
+import { useTranslation } from "react-i18next";
 
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import CardSection from "@/components/admin/CardSection";
@@ -12,6 +13,7 @@ export function FeedbackChart({
 }: {
   timeRange: DateRangePickerValue;
 }) {
+  const { t } = useTranslation();
   const {
     data: queryAnalyticsData,
     isLoading: isQueryAnalyticsLoading,
@@ -32,7 +34,7 @@ export function FeedbackChart({
   ) {
     chart = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch feedback data...</p>
+        <p className="m-auto">{t("admin.usage.failed_to_fetch_feedback")}</p>
       </div>
     );
   } else {
@@ -53,11 +55,11 @@ export function FeedbackChart({
           const queryAnalyticsForDate = dateToQueryAnalytics.get(dateStr);
           return {
             Day: dateStr,
-            "Positive Feedback": queryAnalyticsForDate?.total_likes || 0,
-            "Negative Feedback": queryAnalyticsForDate?.total_dislikes || 0,
+            [t("admin.usage.positive_feedback")]: queryAnalyticsForDate?.total_likes || 0,
+            [t("admin.usage.negative_feedback")]: queryAnalyticsForDate?.total_dislikes || 0,
           };
         })}
-        categories={["Positive Feedback", "Negative Feedback"]}
+        categories={[t("admin.usage.positive_feedback"), t("admin.usage.negative_feedback")]}
         index="Day"
         colors={["indigo", "fuchsia"]}
         yAxisWidth={60}
@@ -67,8 +69,8 @@ export function FeedbackChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>Feedback</Title>
-      <Text as="p">Thumbs Up / Thumbs Down over time</Text>
+      <Title>{t("admin.usage.feedback_title")}</Title>
+      <Text as="p">{t("admin.usage.feedback_over_time")}</Text>
       {chart}
     </CardSection>
   );

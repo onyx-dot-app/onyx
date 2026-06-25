@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import { Route } from "next";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
@@ -108,6 +109,7 @@ export default function NotificationsPopover({
   onNavigate,
   onShowBuildIntro,
 }: NotificationsPopoverProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const {
     notifications,
@@ -267,13 +269,13 @@ export default function NotificationsPopover({
             prominence="tertiary"
             onClick={onClose}
           />
-          <Text color="text-02">Notifications</Text>
+          <Text color="text-02">{t("account.notifications")}</Text>
         </Section>
 
         <Section flexDirection="row" gap={0.25} justifyContent="end">
           {undismissedCount !== 0 && (
             <span className="text-action-link-05 font-secondary-body">
-              {`${undismissedCount} unread`}
+              {t("account.unread", { count: undismissedCount })}
             </span>
           )}
           <Button
@@ -281,7 +283,7 @@ export default function NotificationsPopover({
             size="sm"
             prominence="tertiary"
             onClick={handleDismissAll}
-            tooltip="Mark All as Read"
+            tooltip={t("account.mark_all_read")}
             disabled={undismissedCount === 0}
           />
         </Section>
@@ -297,7 +299,7 @@ export default function NotificationsPopover({
         <div className="h-(--notifications-popover)">
           <Section>
             <IllustrationContent
-              title="No notifications"
+              title={t("account.no_notifications")}
               illustration={SvgEmpty}
             />
           </Section>
@@ -309,7 +311,7 @@ export default function NotificationsPopover({
         >
           {newNotifications.length > 0 && (
             <>
-              <Divider title="New" />
+              <Divider title={t("account.new")} />
               <div className="flex flex-col gap-1">
                 {newNotifications.map((notification) => (
                   <NotificationItem
@@ -326,7 +328,7 @@ export default function NotificationsPopover({
 
           {olderNotifications.length > 0 && (
             <>
-              <Divider title="Older" />
+              <Divider title={t("account.older")} />
               <div className="flex flex-col gap-1">
                 {olderNotifications.map((notification) => (
                   <NotificationItem

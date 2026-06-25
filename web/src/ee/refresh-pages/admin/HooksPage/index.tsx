@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -37,6 +38,7 @@ import type { IconFunctionComponent } from "@opal/types";
 import { SvgNoResult, SvgEmpty } from "@opal/illustrations";
 import { InputTypeIn } from "@opal/components";
 import HookFormModal from "@/ee/refresh-pages/admin/HooksPage/HookFormModal";
+import { localizeHookField } from "@/ee/refresh-pages/admin/HooksPage/hookPoints";
 import HookStatusPopover from "@/ee/refresh-pages/admin/HooksPage/HookStatusPopover";
 import {
   activateHook,
@@ -79,6 +81,7 @@ function DisconnectConfirmModal({
   onDisconnectAndDelete,
 }: DisconnectConfirmModalProps) {
   const onClose = useModalClose();
+  const { t } = useTranslation();
 
   return (
     <Modal open onOpenChange={onClose}>
@@ -86,34 +89,32 @@ function DisconnectConfirmModal({
         <Modal.Header
           // TODO(@raunakab): replace the colour of this SVG with red.
           icon={SvgUnplug}
-          title={markdown(`Disconnect *${hook.name}*`)}
+          title={markdown(t("admin.hooks.disconnect_title", { name: hook.name }))}
           onClose={onClose}
         />
         <Modal.Body>
           <div className="flex flex-col gap-2">
             <Text font="main-ui-body" color="text-03">
-              {markdown(
-                `Onyx will stop calling this endpoint for hook ***${hook.name}***. In-flight requests will continue to run. The external endpoint may still retain data previously sent to it. You can reconnect this hook later if needed.`
-              )}
+              {markdown(t("admin.hooks.disconnect_body_1", { name: hook.name }))}
             </Text>
             <Text font="main-ui-body" color="text-03">
-              You can also delete this hook. Deletion cannot be undone.
+              {t("admin.hooks.disconnect_body_2")}
             </Text>
           </div>
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={onClose}>
-            Cancel
+            {t("general.cancel")}
           </Button>
           <Button
             variant="danger"
             prominence="secondary"
             onClick={onDisconnectAndDelete}
           >
-            Disconnect &amp; Delete
+            {t("admin.hooks.disconnect_and_delete")}
           </Button>
           <Button variant="danger" prominence="primary" onClick={onDisconnect}>
-            Disconnect
+            {t("admin.hooks.disconnect")}
           </Button>
         </Modal.Footer>
       </Modal.Content>
@@ -132,6 +133,7 @@ interface DeleteConfirmModalProps {
 
 function DeleteConfirmModal({ hook, onDelete }: DeleteConfirmModalProps) {
   const onClose = useModalClose();
+  const { t } = useTranslation();
 
   return (
     <Modal open onOpenChange={onClose}>
@@ -139,27 +141,25 @@ function DeleteConfirmModal({ hook, onDelete }: DeleteConfirmModalProps) {
         <Modal.Header
           // TODO(@raunakab): replace the colour of this SVG with red.
           icon={SvgTrash}
-          title={markdown(`Delete *${hook.name}*`)}
+          title={markdown(t("admin.hooks.delete_title", { name: hook.name }))}
           onClose={onClose}
         />
         <Modal.Body>
           <div className="flex flex-col gap-2">
             <Text font="main-ui-body" color="text-03">
-              {markdown(
-                `Hook ***${hook.name}*** will be permanently removed from this hook point. The external endpoint may still retain data previously sent to it.`
-              )}
+              {markdown(t("admin.hooks.delete_body_1", { name: hook.name }))}
             </Text>
             <Text font="main-ui-body" color="text-03">
-              Deletion cannot be undone.
+              {t("admin.hooks.delete_body_2")}
             </Text>
           </div>
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={onClose}>
-            Cancel
+            {t("general.cancel")}
           </Button>
           <Button variant="danger" prominence="primary" onClick={onDelete}>
-            Delete
+            {t("general.delete")}
           </Button>
         </Modal.Footer>
       </Modal.Content>
@@ -178,6 +178,7 @@ interface UnconnectedHookCardProps {
 
 function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
   const Icon = getHookPointIcon(spec.hook_point);
+  const { t } = useTranslation();
 
   return (
     <SelectCard state="empty" padding="sm" rounding="lg" onClick={onConnect}>
@@ -187,14 +188,19 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
             sizePreset="main-ui"
             variant="section"
             icon={Icon}
-            title={spec.display_name}
-            description={spec.description}
+            title={localizeHookField(t, spec.hook_point, "name", spec.display_name)}
+            description={localizeHookField(
+              t,
+              spec.hook_point,
+              "desc",
+              spec.description
+            )}
           />
 
           {spec.docs_url && (
             <div className="ml-6">
               <LinkButton href={spec.docs_url} target="_blank">
-                Documentation
+                {t("admin.hooks.documentation")}
               </LinkButton>
             </div>
           )}
@@ -205,7 +211,7 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
           rightIcon={SvgArrowExchange}
           onClick={noProp(onConnect)}
         >
-          Connect
+          {t("admin.hooks.connect")}
         </Button>
       </div>
     </SelectCard>
@@ -234,6 +240,7 @@ function ConnectedHookCard({
   const [isBusy, setIsBusy] = useState(false);
   const disconnectModal = useCreateModal();
   const deleteModal = useCreateModal();
+  const { t } = useTranslation();
 
   async function handleDelete() {
     deleteModal.toggle(false);
@@ -244,7 +251,7 @@ function ConnectedHookCard({
     } catch (err) {
       console.error("Failed to delete hook:", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to delete hook."
+        err instanceof Error ? err.message : t("admin.hooks.failed_delete")
       );
     } finally {
       setIsBusy(false);
@@ -259,7 +266,7 @@ function ConnectedHookCard({
     } catch (err) {
       console.error("Failed to reconnect hook:", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to reconnect hook."
+        err instanceof Error ? err.message : t("admin.hooks.failed_reconnect")
       );
     } finally {
       setIsBusy(false);
@@ -275,7 +282,7 @@ function ConnectedHookCard({
     } catch (err) {
       console.error("Failed to deactivate hook:", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to deactivate hook."
+        err instanceof Error ? err.message : t("admin.hooks.failed_deactivate")
       );
     } finally {
       setIsBusy(false);
@@ -293,7 +300,7 @@ function ConnectedHookCard({
     } catch (err) {
       console.error("Failed to disconnect hook:", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to disconnect hook."
+        err instanceof Error ? err.message : t("admin.hooks.failed_disconnect")
       );
     } finally {
       setIsBusy(false);
@@ -305,16 +312,16 @@ function ConnectedHookCard({
     try {
       const result = await validateHook(hook.id);
       if (result.status === "passed") {
-        toast.success("Hook validated successfully.");
+        toast.success(t("admin.hooks.validate_success"));
       } else {
         toast.error(
-          result.error_message ?? `Validation failed: ${result.status}`
+          result.error_message ?? t("admin.hooks.validate_failed", { status: result.status })
         );
       }
     } catch (err) {
       console.error("Failed to validate hook:", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to validate hook."
+        err instanceof Error ? err.message : t("admin.hooks.failed_validate")
       );
       return;
     } finally {
@@ -358,16 +365,21 @@ function ConnectedHookCard({
                     ? markdown(`~~${hook.name}~~`)
                     : hook.name
                 }
-                suffix={!hook.is_active ? "(Disconnected)" : undefined}
-                description={`Hook Point: ${
-                  spec?.display_name ?? hook.hook_point
-                }`}
+                suffix={!hook.is_active ? t("admin.hooks.disconnected_suffix") : undefined}
+                description={t("admin.hooks.hook_point_label", {
+                  name: localizeHookField(
+                    t,
+                    hook.hook_point,
+                    "name",
+                    spec?.display_name ?? hook.hook_point
+                  ),
+                })}
               />
 
               {spec?.docs_url && (
                 <div className="ml-6">
                   <LinkButton href={spec.docs_url} target="_blank">
-                    Documentation
+                    {t("admin.hooks.documentation")}
                   </LinkButton>
                 </div>
               )}
@@ -384,7 +396,7 @@ function ConnectedHookCard({
                     onClick={noProp(handleActivate)}
                     disabled={isBusy}
                   >
-                    Reconnect
+                    {t("admin.hooks.reconnect")}
                   </Button>
                 )}
               </div>
@@ -402,7 +414,7 @@ function ConnectedHookCard({
                           size="md"
                           icon={SvgUnplug}
                           onClick={noProp(() => disconnectModal.toggle(true))}
-                          tooltip="Disconnect Hook"
+                          tooltip={t("admin.hooks.disconnect_tooltip")}
                           aria-label="Deactivate hook"
                         />
                       </Hoverable.Item>
@@ -411,7 +423,7 @@ function ConnectedHookCard({
                         size="md"
                         icon={SvgRefreshCw}
                         onClick={noProp(handleValidate)}
-                        tooltip="Test Connection"
+                        tooltip={t("admin.hooks.test_connection_tooltip")}
                         aria-label="Re-validate hook"
                       />
                     </>
@@ -421,7 +433,7 @@ function ConnectedHookCard({
                       size="md"
                       icon={SvgTrash}
                       onClick={noProp(() => deleteModal.toggle(true))}
-                      tooltip="Delete"
+                      tooltip={t("admin.hooks.delete_tooltip")}
                       aria-label="Delete hook"
                     />
                   )}
@@ -430,7 +442,7 @@ function ConnectedHookCard({
                     size="md"
                     icon={SvgSettings}
                     onClick={noProp(onEdit)}
-                    tooltip="Manage"
+                    tooltip={t("admin.hooks.manage_tooltip")}
                     aria-label="Configure hook"
                   />
                 </div>
@@ -451,6 +463,7 @@ export default function HooksPage() {
   const router = useRouter();
   const settings = useSettings();
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const { t } = useTranslation();
 
   const [connectSpec, setConnectSpec] = useState<HookPointMeta | null>(null);
   const [editHook, setEditHook] = useState<HookResponse | null>(null);
@@ -464,12 +477,18 @@ export default function HooksPage() {
   } = useHooks();
 
   const hookExtractor = useCallback(
-    (hook: HookResponse) =>
-      `${hook.name} ${
-        specs?.find((s: HookPointMeta) => s.hook_point === hook.hook_point)
-          ?.display_name ?? ""
-      }`,
-    [specs]
+    (hook: HookResponse) => {
+      const spec = specs?.find(
+        (s: HookPointMeta) => s.hook_point === hook.hook_point
+      );
+      return `${hook.name} ${localizeHookField(
+        t,
+        hook.hook_point,
+        "name",
+        spec?.display_name
+      )}`;
+    },
+    [specs, t]
   );
 
   const sortedHooks = useMemo(
@@ -493,26 +512,30 @@ export default function HooksPage() {
 
   const unconnectedSpecs = useMemo(() => {
     const searchLower = search.toLowerCase();
+    const name = (spec: HookPointMeta) =>
+      localizeHookField(t, spec.hook_point, "name", spec.display_name);
+    const desc = (spec: HookPointMeta) =>
+      localizeHookField(t, spec.hook_point, "desc", spec.description);
     return (specs ?? [])
       .filter(
         (spec: HookPointMeta) =>
           (hooksByPoint[spec.hook_point]?.length ?? 0) === 0 &&
           (!searchLower ||
-            spec.display_name.toLowerCase().includes(searchLower) ||
-            spec.description.toLowerCase().includes(searchLower))
+            name(spec).toLowerCase().includes(searchLower) ||
+            desc(spec).toLowerCase().includes(searchLower))
       )
       .sort((a: HookPointMeta, b: HookPointMeta) =>
-        a.display_name.localeCompare(b.display_name)
+        name(a).localeCompare(name(b))
       );
-  }, [specs, hooksByPoint, search]);
+  }, [specs, hooksByPoint, search, t]);
 
   useEffect(() => {
     if (settings.isLoading) return;
     if (!enterpriseTier) {
-      toast.info("Hook Extensions require an Enterprise license.");
+      toast.info(t("admin.hooks.enterprise_required"));
       router.replace("/");
     } else if (!settings.hooks_enabled) {
-      toast.info("Hook Extensions are not enabled for this deployment.");
+      toast.info(t("admin.hooks.not_enabled"));
       router.replace("/");
     }
   }, [settings.isLoading, enterpriseTier, settings.hooks_enabled, router]);
@@ -579,7 +602,7 @@ export default function HooksPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Extend Onyx pipelines by registering external API endpoints as callbacks at predefined hook points."
+          description={t("admin.hooks.page_description")}
           divider
         />
         <SettingsLayouts.Body>
@@ -587,15 +610,13 @@ export default function HooksPage() {
             <SvgSimpleLoader />
           ) : specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
-              {`Failed to load${
-                specsError ? " hook specifications" : " hooks"
-              }. Please refresh the page.`}
+              {specsError ? t("admin.hooks.failed_load_specs") : t("admin.hooks.failed_load_hooks")}
             </Text>
           ) : (
             <div className="flex flex-col gap-3 h-full">
               <div className="pb-3">
                 <InputTypeIn
-                  placeholder="Search hooks..."
+                  placeholder={t("admin.hooks.search_placeholder")}
                   value={search}
                   variant="internal"
                   searchIcon
@@ -607,10 +628,10 @@ export default function HooksPage() {
                 <div>
                   <IllustrationContent
                     title={
-                      search ? "No results found" : "No hook points available"
+                      search ? t("admin.hooks.no_results_title") : t("admin.hooks.no_hook_points_title")
                     }
                     description={
-                      search ? "Try using a different search term." : undefined
+                      search ? t("admin.hooks.no_results_desc") : undefined
                     }
                     illustration={search ? SvgNoResult : SvgEmpty}
                   />

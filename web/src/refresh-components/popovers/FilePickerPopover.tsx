@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Popover, PopoverMenu } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
@@ -114,7 +115,8 @@ function FilePickerPopoverContents({
   triggerUploadPicker,
   openRecentFilesModal,
 }: FilePickerPopoverContentsProps) {
-  // These are the "quick" files that we show. Essentially "speed dial", but for files.
+  const { t } = useTranslation();
+  // These are the "quick" files that we show.
   // The rest of the files will be hidden behind the "All Recent Files" button, should there be more files left to show!
   const hasFiles = recentFiles.length > 0;
   const shouldShowMoreFilesButton = recentFiles.length > MAX_FILES_TO_SHOW;
@@ -127,10 +129,10 @@ function FilePickerPopoverContents({
         <LineItem
           key="upload-files"
           icon={SvgUploadSquare}
-          description="Upload a file from your device"
+          description={t("admin.files.upload_from_device")}
           onClick={triggerUploadPicker}
         >
-          Upload Files
+          {t("admin.files.upload_files")}
         </LineItem>,
 
         // Separator

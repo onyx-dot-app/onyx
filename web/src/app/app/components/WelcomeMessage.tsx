@@ -1,10 +1,7 @@
 "use client";
 
 import Logo from "@/refresh-components/Logo";
-import {
-  getRandomGreeting,
-  GREETING_MESSAGES,
-} from "@/lib/chat/greetingMessages";
+import { useTranslation } from "react-i18next";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalAgent } from "@/lib/agents/types";
@@ -22,18 +19,21 @@ export default function WelcomeMessage({
   agent,
   isDefaultAgent,
 }: WelcomeMessageProps) {
+  const { t } = useTranslation();
   const settings = useSettings();
 
   // Use a stable default for SSR, then randomize on client after hydration
-  const [greeting, setGreeting] = useState(GREETING_MESSAGES[0]);
+  const [greetingIndex, setGreetingIndex] = useState(0);
 
   useEffect(() => {
-    if (settings.enterprise?.custom_greeting_message) {
-      setGreeting(settings.enterprise.custom_greeting_message);
-    } else {
-      setGreeting(getRandomGreeting());
+    if (!settings.enterprise?.custom_greeting_message) {
+      setGreetingIndex(Math.floor(Math.random() * 2));
     }
   }, [settings.enterprise?.custom_greeting_message]);
+
+  const greeting = settings.enterprise?.custom_greeting_message
+    ? settings.enterprise.custom_greeting_message
+    : t(`chat.greetings.${greetingIndex}`);
 
   let content: React.ReactNode = null;
 

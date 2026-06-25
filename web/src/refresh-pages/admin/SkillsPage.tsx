@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Button, MessageCard } from "@opal/components";
+import { useTranslation } from "react-i18next";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SvgArrowLeft, SvgBlocks, SvgPlus, SvgSimpleLoader } from "@opal/icons";
@@ -30,6 +31,7 @@ interface SkillsPageProps {
 }
 
 export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
+  const { t } = useTranslation();
   const { data, error, isLoading, refresh } = useAdminSkills();
 
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -41,13 +43,17 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
     try {
       await patchCustomSkill(skill.id, { enabled: !skill.enabled });
       toast.success(
-        `${skill.enabled ? "Disabled" : "Re-enabled"} "${skill.name}"`
+        skill.enabled
+          ? t("admin.skills.disabled_success", { name: skill.name })
+          : t("admin.skills.enabled_success", { name: skill.name })
       );
       refresh();
     } catch (err) {
       console.error("Failed to update skill enabled state", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to update skill"
+        err instanceof Error
+          ? err.message
+          : t("admin.skills.toggle_failed", "Failed to update skill")
       );
     }
   }
@@ -55,11 +61,15 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
   async function handleDelete(skill: CustomSkill) {
     try {
       await deleteCustomSkill(skill.id);
-      toast.success(`Deleted "${skill.name}"`);
+      toast.success(t("admin.skills.delete_success", { name: skill.name }));
       refresh();
     } catch (err) {
       console.error("Failed to delete skill", err);
-      toast.error(err instanceof Error ? err.message : "Failed to delete");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.skills.delete_failed", "Failed to delete")
+      );
     }
   }
 
@@ -79,12 +89,14 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
 
     try {
       await replaceCustomSkillBundle(target.id, file);
-      toast.success(`Replaced bundle for "${target.name}"`);
+      toast.success(t("admin.skills.replace_success", { name: target.name }));
       refresh();
     } catch (err) {
       console.error("Failed to replace skill bundle", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to replace bundle"
+        err instanceof Error
+          ? err.message
+          : t("admin.skills.replace_failed", "Failed to replace bundle")
       );
     }
   }
@@ -93,8 +105,8 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgBlocks}
-        title="Skills"
-        description="Capability bundles the Craft agent can reach for. Built-in skills ship with Onyx; custom skills are uploaded zip bundles, gated by group grants."
+        title={t("admin.skills.title", "Skills")}
+        description={t("admin.skills.header_description", "Capability bundles the Craft agent can reach for. Built-in skills ship with Onyx; custom skills are uploaded zip bundles, gated by group grants.")}
         rightChildren={
           onBack ? (
             <div className="flex items-center gap-2">
@@ -103,7 +115,7 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
                 icon={SvgArrowLeft}
                 onClick={onBack}
               >
-                Back
+                {t("general.back", "Back")}
               </Button>
             </div>
           ) : undefined
@@ -115,8 +127,8 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
         {error && !isLoading && (
           <MessageCard
             variant="error"
-            title="Failed to load skills"
-            description="Check the console for details and try refreshing the page."
+            title={t("admin.skills.load_failed", "Failed to load skills")}
+            description={t("admin.skills.load_failed_desc", "Check the console for details and try refreshing the page.")}
           />
         )}
 
@@ -125,13 +137,13 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
             {/* Built-ins */}
             <Section gap={0.5} alignItems="stretch">
               <Text as="p" headingH3 text05>
-                Built-in skills
+                {t("admin.skills.builtin_skills", "Built-in skills")}
               </Text>
               {data.builtins.length === 0 ? (
                 <IllustrationContent
                   illustration={SvgNoResult}
-                  title="No built-in skills registered"
-                  description="Built-ins ship with the deploy."
+                  title={t("admin.skills.no_builtin_skills", "No built-in skills registered")}
+                  description={t("admin.skills.builtin_skills_desc", "Built-ins ship with the deploy.")}
                 />
               ) : (
                 <BuiltinSkillsTable skills={data.builtins} />
@@ -142,10 +154,10 @@ export default function SkillsPage({ onBack }: SkillsPageProps = {}) {
             <Section gap={0.5} alignItems="stretch">
               <div className="flex items-center justify-between gap-2">
                 <Text as="p" headingH3 text05>
-                  Custom skills
+                  {t("admin.skills.custom_skills", "Custom skills")}
                 </Text>
                 <Button icon={SvgPlus} onClick={() => setUploadOpen(true)}>
-                  Upload skill
+                  {t("admin.skills.upload_skill", "Upload skill")}
                 </Button>
               </div>
               <CustomSkillsTable

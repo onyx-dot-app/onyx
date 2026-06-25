@@ -69,6 +69,9 @@ function CountBadge({ count }: { count: number | undefined }) {
 // Component
 // ---------------------------------------------------------------------------
 
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
+
 interface UserFiltersProps {
   selectedRoles: UserRole[];
   onRolesChange: (roles: UserRole[]) => void;
@@ -92,11 +95,28 @@ export default function UserFilters({
   roleCounts,
   statusCounts,
 }: UserFiltersProps) {
+  const { t } = useTranslation();
   const hasRoleFilter = selectedRoles.length > 0;
   const hasGroupFilter = selectedGroups.length > 0;
   const hasStatusFilter = selectedStatuses.length > 0;
   const [groupSearch, setGroupSearch] = useState("");
   const [groupPopoverOpen, setGroupPopoverOpen] = useState(false);
+
+  const filterableRoles = useMemo(() => {
+    return VISIBLE_FILTER_ROLES.map(
+      (role) => [role, t(`admin.users.role_${role}`, USER_ROLE_LABELS[role])] as [UserRole, string]
+    );
+  }, [t]);
+
+  const filterableStatuses = useMemo(() => {
+    return (
+      Object.entries(USER_STATUS_LABELS) as [UserStatus, string][]
+    ).filter(
+      ([value]) => value !== UserStatus.REQUESTED || NEXT_PUBLIC_CLOUD_ENABLED
+    ).map(
+      ([status, label]) => [status, t(`admin.users.status_${status}`, label)] as [UserStatus, string]
+    );
+  }, [t]);
 
   const toggleRole = (role: UserRole) => {
     if (selectedRoles.includes(role)) {
@@ -123,12 +143,12 @@ export default function UserFilters({
   };
 
   const roleLabel = hasRoleFilter
-    ? FILTERABLE_ROLES.filter(([role]) => selectedRoles.includes(role))
+    ? filterableRoles.filter(([role]) => selectedRoles.includes(role))
         .map(([, label]) => label)
         .slice(0, 2)
         .join(", ") +
       (selectedRoles.length > 2 ? `, +${selectedRoles.length - 2}` : "")
-    : "All Account Types";
+    : t("admin.users.all_account_types");
 
   const groupLabel = hasGroupFilter
     ? groups
@@ -137,17 +157,17 @@ export default function UserFilters({
         .slice(0, 2)
         .join(", ") +
       (selectedGroups.length > 2 ? `, +${selectedGroups.length - 2}` : "")
-    : "All Groups";
+    : t("admin.users.all_groups");
 
   const statusLabel = hasStatusFilter
-    ? FILTERABLE_STATUSES.filter(([status]) =>
+    ? filterableStatuses.filter(([status]) =>
         selectedStatuses.includes(status)
       )
         .map(([, label]) => label)
         .slice(0, 2)
         .join(", ") +
       (selectedStatuses.length > 2 ? `, +${selectedStatuses.length - 2}` : "")
-    : "All Status";
+    : t("admin.users.all_statuses");
 
   const filteredGroups = groupSearch
     ? groups.filter((g) =>
@@ -177,9 +197,9 @@ export default function UserFilters({
               emphasized={!hasRoleFilter}
               onClick={() => onRolesChange([])}
             >
-              All Account Types
+              {t("admin.users.all_account_types")}
             </LineItem>
-            {FILTERABLE_ROLES.map(([role, label]) => {
+            {filterableRoles.map(([role, label]) => {
               const isSelected = selectedRoles.includes(role);
               const roleIcon = ROLE_ICONS[role] ?? SvgUser;
               return (
@@ -223,7 +243,7 @@ export default function UserFilters({
             <InputTypeIn
               value={groupSearch}
               onChange={(e) => setGroupSearch(e.target.value)}
-              placeholder="Search groups..."
+              placeholder={t("admin.users.search_groups")}
               searchIcon
               variant="internal"
             />
@@ -233,7 +253,7 @@ export default function UserFilters({
               emphasized={!hasGroupFilter}
               onClick={() => onGroupsChange([])}
             >
-              All Groups
+              {t("admin.users.all_groups")}
             </LineItem>
             <ShadowDiv className="flex flex-col gap-1 max-h-[240px]">
               {filteredGroups.map((group) => {
@@ -253,7 +273,7 @@ export default function UserFilters({
               })}
               {filteredGroups.length === 0 && (
                 <Text as="span" secondaryBody text03 className="px-2 py-1.5">
-                  No groups found
+                  {t("admin.users.no_groups_found")}
                 </Text>
               )}
             </ShadowDiv>
@@ -281,9 +301,9 @@ export default function UserFilters({
               emphasized={!hasStatusFilter}
               onClick={() => onStatusesChange([])}
             >
-              All Status
+              {t("admin.users.all_statuses")}
             </LineItem>
-            {FILTERABLE_STATUSES.map(([status, label]) => {
+            {filterableStatuses.map(([status, label]) => {
               const isSelected = selectedStatuses.includes(status);
               const countKey = STATUS_COUNT_KEY[status];
               return (

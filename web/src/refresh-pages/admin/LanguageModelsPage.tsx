@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useSWRConfig } from "swr";
 import { toast } from "@/hooks/useToast";
+import { useTranslation } from "react-i18next";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import { PageLoader } from "@/refresh-components/PageLoader";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
@@ -18,6 +19,7 @@ import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { getProvider } from "@/lib/languageModels";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
@@ -76,6 +78,7 @@ function ExistingProviderCard({
   isDefault,
   isLastProvider,
 }: ExistingProviderCardProps) {
+  const { t } = useTranslation();
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
@@ -85,10 +88,10 @@ function ExistingProviderCard({
       await deleteLlmProvider(provider.id, isLastProvider);
       await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
-      toast.success("Provider deleted successfully!");
+      toast.success(t("admin.llm.delete_success", "Provider deleted successfully!"));
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to delete provider: ${message}`);
+      toast.error(t("admin.llm.delete_failed", { defaultValue: `Failed to delete provider: ${message}`, message }));
     }
   };
 
@@ -103,7 +106,7 @@ function ExistingProviderCard({
       {deleteModal.isOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={markdown(`Delete *${providerDisplayName(provider)}*`)}
+          title={markdown(t("admin.llm.delete_title", { defaultValue: `Delete *${providerDisplayName(provider)}*`, name: providerDisplayName(provider) }))}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -111,28 +114,28 @@ function ExistingProviderCard({
               onClick={handleDelete}
               disabled={isDefault && !isLastProvider}
             >
-              Delete
+              {t("admin.llm.delete_button", "Delete")}
             </Button>
           }
         >
           <Section alignItems="start" gap={0.5}>
             {isDefault && !isLastProvider ? (
               <Text font="main-ui-body" color="text-03">
-                Cannot delete the default provider. Select another provider as
-                the default prior to deleting this one.
+                {t("admin.llm.cannot_delete_default", "Cannot delete the default provider. Select another provider as the default prior to deleting this one.")}
               </Text>
             ) : (
               <>
                 <Text font="main-ui-body" color="text-03">
                   {markdown(
-                    `All LLM models from provider **${providerDisplayName(
-                      provider
-                    )}** will be removed and unavailable for future chats. Chat history will be preserved.`
+                    t("admin.llm.delete_warning", {
+                      defaultValue: `All LLM models from provider **${providerDisplayName(provider)}** will be removed and unavailable for future chats. Chat history will be preserved.`,
+                      name: providerDisplayName(provider)
+                    })
                   )}
                 </Text>
                 {isLastProvider && (
                   <Text font="main-ui-body" color="text-03">
-                    Connect another provider to continue using chats.
+                    {t("admin.llm.delete_warning_last", "Connect another provider to continue using chats.")}
                   </Text>
                 )}
               </>
@@ -158,7 +161,7 @@ function ExistingProviderCard({
             sizePreset="main-ui"
             variant="section"
             padding="lg"
-            tag={isDefault ? { title: "Default", color: "blue" } : undefined}
+            tag={isDefault ? { title: t("admin.llm.default_tag", "Default"), color: "blue" } : undefined}
             rightChildren={
               <div className="flex flex-row">
                 <Hoverable.Item
@@ -206,6 +209,7 @@ function NewProviderCard({
   providerName,
   isFirstProvider,
 }: NewProviderCardProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider(providerName);
 
@@ -232,7 +236,7 @@ function NewProviderCard({
               setIsOpen(true);
             }}
           >
-            Connect
+            {t("admin.llm.connect", "Connect")}
           </Button>
         }
       />
@@ -254,6 +258,7 @@ interface NewCustomProviderCardProps {
 function NewCustomProviderCard({
   isFirstProvider,
 }: NewCustomProviderCardProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider("custom");
 
@@ -285,7 +290,7 @@ function NewCustomProviderCard({
                 setIsOpen(true);
               }}
             >
-              Set Up
+              {t("admin.llm.set_up", "Set Up")}
             </Button>
           }
         />
@@ -299,6 +304,8 @@ function NewCustomProviderCard({
 // ============================================================================
 
 export default function LanguageModelsPage() {
+  const { t } = useTranslation();
+  const title = useAdminPageTitle(route);
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
@@ -356,23 +363,27 @@ export default function LanguageModelsPage() {
     try {
       await setDefaultLlmModel(providerId, modelName);
       await refreshLlmProviderCaches(mutate);
-      toast.success("Default model updated successfully!");
+      toast.success(t("admin.llm.update_success", "Default model updated successfully!"));
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to set default model: ${message}`);
+      toast.error(t("admin.llm.update_failed", { defaultValue: `Failed to set default model: ${message}`, message }));
     }
   }
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={title}
+        divider
+      />
 
       <SettingsLayouts.Body>
         {hasProviders ? (
           <Card border="solid" rounding="lg">
             <InputHorizontal
-              title="Default Model"
-              description="This model will be used by Onyx by default in your chats."
+              title={t("admin.llm.default_model", "Default Model")}
+              description={t("admin.llm.default_model_description", "This model will be used by Onyx by default in your chats.")}
               center
               withLabel
             >
@@ -397,7 +408,7 @@ export default function LanguageModelsPage() {
         ) : (
           <MessageCard
             variant="info"
-            title="Set up an LLM provider to start chatting."
+            title={t("admin.llm.no_providers_info", "Set up an LLM provider to start chatting.")}
           />
         )}
 
@@ -411,7 +422,7 @@ export default function LanguageModelsPage() {
               justifyContent="start"
             >
               <Content
-                title="Available Providers"
+                title={t("admin.llm.available_providers", "Available Providers")}
                 sizePreset="main-content"
                 variant="section"
               />
@@ -435,8 +446,8 @@ export default function LanguageModelsPage() {
         {/* ── LLM configuration disablement notice ── */}
         {isConfigurationDisabled && (
           <MessageCard
-            title="New LLM configuration temporarily unavailable."
-            description="Existing LLM providers can still be used and updated."
+            title={t("admin.llm.config_disabled_title", "New LLM configuration temporarily unavailable.")}
+            description={t("admin.llm.config_disabled_desc", "Existing LLM providers can still be used and updated.")}
             headerPadding="xs"
           />
         )}
@@ -450,8 +461,8 @@ export default function LanguageModelsPage() {
             justifyContent="start"
           >
             <Content
-              title="Add Provider"
-              description="Onyx supports both popular providers and self-hosted models."
+              title={t("admin.llm.add_provider", "Add Provider")}
+              description={t("admin.llm.add_provider_description", "Onyx supports both popular providers and self-hosted models.")}
               sizePreset="main-content"
               variant="section"
             />

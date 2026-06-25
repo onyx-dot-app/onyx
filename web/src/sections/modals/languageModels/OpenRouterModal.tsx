@@ -27,6 +27,7 @@ import {
 } from "@/sections/modals/languageModels/shared";
 import { toast } from "@/hooks/useToast";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
+import { useTranslation } from "react-i18next";
 
 const DEFAULT_API_BASE = "https://openrouter.ai/api/v1";
 
@@ -44,6 +45,7 @@ function OpenRouterModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: OpenRouterModalInternalsProps) {
+  const { t } = useTranslation();
   const formikProps = useFormikContext<OpenRouterModalValues>();
 
   const isFetchDisabled =
@@ -70,8 +72,8 @@ function OpenRouterModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription="Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly."
-        placeholder="Your OpenRouter base URL"
+        subDescription={t("admin.llm.form.api_base_openrouter_desc")}
+        placeholder={t("admin.llm.form.api_base_openrouter_placeholder")}
       />
 
       <APIKeyField providerName="OpenRouter" />
@@ -106,6 +108,7 @@ export default function OpenRouterModal({
   onOpenChange,
   onSuccess,
 }: LLMProviderFormProps) {
+  const { t } = useTranslation();
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -152,8 +155,8 @@ export default function OpenRouterModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("admin.llm.provider_updated")
+                  : t("admin.llm.provider_enabled")
               );
             }
           },

@@ -5,6 +5,7 @@ import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import { SettingsLayouts } from "@opal/layouts";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
 import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
@@ -13,6 +14,7 @@ import { useToastFromQuery } from "@/hooks/useToast";
 import { Button } from "@opal/components";
 import { useSettings } from "@/lib/settings/hooks";
 import { useState, useRef, useMemo, RefObject } from "react";
+import { useTranslation } from "react-i18next";
 import { FilterOptions } from "./FilterComponent";
 import { ValidSources } from "@/lib/types";
 import Cookies from "js-cookie";
@@ -23,6 +25,7 @@ import { IndexingStatusRequest } from "@/lib/types";
 const route = ADMIN_ROUTES.INDEXING_STATUS;
 
 function Main() {
+  const { t } = useTranslation();
   const { vectorDbEnabled } = useSettings();
 
   // State for filter management
@@ -190,9 +193,7 @@ function Main() {
         <div>
           <Spacer rem={3} />
           <Text as="p">
-            {markdown(
-              "It looks like you don't have any connectors setup yet. Visit the [Add Connector](/admin/add-connector) page to get started!"
-            )}
+            {markdown(t("admin.connector_setup.empty_indexing"))}
           </Text>
         </div>
       ) : (
@@ -209,9 +210,12 @@ function Main() {
 }
 
 export default function Status() {
+  const { t } = useTranslation();
+  const title = useAdminPageTitle(route);
+
   useToastFromQuery({
     "connector-created": {
-      message: "Connector created successfully",
+      message: t("admin.connector_setup.connector_created"),
       type: "success",
     },
   });
@@ -220,9 +224,11 @@ export default function Status() {
     <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={title}
         rightChildren={
-          <Button href="/admin/add-connector">Add Connector</Button>
+          <Button href="/admin/add-connector">
+            {t("admin.connector_setup.add_connector")}
+          </Button>
         }
         divider
       />

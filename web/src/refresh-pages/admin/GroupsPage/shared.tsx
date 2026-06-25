@@ -5,6 +5,7 @@ import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { UserRole, UserStatus, USER_ROLE_LABELS } from "@/lib/types";
+import i18n from "@/lib/i18n";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
 
 // ---------------------------------------------------------------------------
@@ -20,12 +21,12 @@ export const PAGE_SIZE = 10;
 export function apiKeyToMemberRow(key: ApiKeyDescriptor): MemberRow {
   return {
     id: key.user_id,
-    email: "Service Account",
+    email: i18n.t("admin.groups.service_account"),
     role: key.api_key_role,
     status: UserStatus.ACTIVE,
     is_active: true,
     is_scim_synced: false,
-    personal_name: key.api_key_name ?? "Unnamed Key",
+    personal_name: key.api_key_name ?? i18n.t("admin.groups.unnamed_key"),
     created_at: null,
     updated_at: null,
     groups: [],
@@ -83,7 +84,7 @@ export const baseColumns = [
   // "Service Account" placeholder — are findable by their API-key name.
   tc.column((row) => [row.personal_name, row.email].filter(Boolean).join(" "), {
     id: "name",
-    header: "Name",
+    header: i18n.t("admin.groups.col_name"),
     weight: 25,
     cell: renderNameColumn,
   }),
@@ -99,7 +100,7 @@ export const baseColumns = [
       ) : null,
   }),
   tc.column("role", {
-    header: "Account Type",
+    header: i18n.t("admin.groups.col_account_type"),
     weight: 15,
     cell: renderAccountTypeColumn,
   }),

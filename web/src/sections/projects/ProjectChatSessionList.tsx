@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { deleteChatSession } from "@/app/app/services/lib";
 import {
   moveChatSession as moveChatSessionService,
@@ -51,6 +52,7 @@ function ProjectChatItem({
   icon,
   afterRefresh,
 }: ProjectChatItemProps) {
+  const { t } = useTranslation();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
@@ -134,7 +136,7 @@ function ProjectChatItem({
           sizePreset="main-ui"
           rounding="sm"
           icon={SvgFolderIn}
-          title="Move to Project"
+          title={t("projects.move_to_project")}
           onClick={noProp(() => setShowMoveOptions(true))}
         />,
         <LineItemButton
@@ -142,7 +144,11 @@ function ProjectChatItem({
           sizePreset="main-ui"
           rounding="sm"
           icon={SvgFolder}
-          title={`Remove from ${projects.find((p) => p.id === projectId)?.name ?? "Project"}`}
+          title={t("projects.remove_from_project", {
+            name:
+              projects.find((p) => p.id === projectId)?.name ??
+              t("sidebar.projects"),
+          })}
           onClick={noProp(handleRemoveFromProject)}
         />,
         null,
@@ -152,7 +158,7 @@ function ProjectChatItem({
           rounding="sm"
           color="danger"
           icon={SvgTrash}
-          title="Delete"
+          title={t("projects.delete")}
           onClick={noProp(() => setIsDeleteModalOpen(true))}
         />,
       ];
@@ -185,23 +191,23 @@ function ProjectChatItem({
     filteredProjects,
     handleMoveChatSession,
     handleRemoveFromProject,
+    t,
   ]);
 
   return (
     <>
       {isDeleteModalOpen && (
         <ConfirmationModalLayout
-          title="Delete Chat"
+          title={t("projects.delete_chat_title")}
           icon={SvgTrash}
           onClose={() => setIsDeleteModalOpen(false)}
           submit={
             <Button variant="danger" onClick={handleConfirmDelete}>
-              Delete
+              {t("projects.delete")}
             </Button>
           }
         >
-          Are you sure you want to delete this chat? This action cannot be
-          undone.
+          {t("projects.delete_chat_confirm")}
         </ConfirmationModalLayout>
       )}
 
@@ -233,7 +239,9 @@ function ProjectChatItem({
           icon={icon}
           title={chat.name || UNNAMED_CHAT}
           description={
-            lastUpdateTime ? `Last message ${lastUpdateTime}` : undefined
+            lastUpdateTime
+              ? t("projects.last_message", { time: lastUpdateTime })
+              : undefined
           }
           sizePreset="main-ui"
           interaction={popoverOpen ? "active" : undefined}
@@ -272,6 +280,7 @@ function ProjectChatItem({
 }
 
 export default function ProjectChatSessionList() {
+  const { t } = useTranslation();
   const {
     currentProjectDetails,
     currentProjectId,
@@ -295,7 +304,7 @@ export default function ProjectChatSessionList() {
       <div>
         <div className="px-3 py-2">
           <Text as="p" font="secondary-body" color="text-02">
-            Recent Chats
+            {t("projects.recent_chats")}
           </Text>
         </div>
 

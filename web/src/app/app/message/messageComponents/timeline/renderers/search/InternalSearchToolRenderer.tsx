@@ -1,4 +1,5 @@
 import { SvgSearch, SvgSearchMenu } from "@opal/icons";
+import { useTranslation } from "react-i18next";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -61,6 +62,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
   renderType,
   children,
 }) => {
+  const { t } = useTranslation();
   const searchState = constructCurrentSearchState(packets);
   const { queries, results, sourceFilters, isComplete } = searchState;
 
@@ -71,7 +73,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
   const hasResults = results.length > 0;
 
   // A source filter overrides the header with the connector(s) it scoped to.
-  const queriesHeader = formatSearchHeader(sourceFilters);
+  const queriesHeader = formatSearchHeader(sourceFilters, t);
 
   if (queries.length === 0) {
     return children([

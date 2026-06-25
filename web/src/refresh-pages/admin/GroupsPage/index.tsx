@@ -7,17 +7,22 @@ import useSWR from "swr";
 import { SvgExternalLink, SvgUsers, SvgSimpleLoader } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
+import { useTranslation } from "react-i18next";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
 import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 
 function GroupsPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const title = useAdminPageTitle(ADMIN_ROUTES.GROUPS);
 
   const {
     data: groups,
@@ -28,11 +33,11 @@ function GroupsPage() {
   return (
     <SettingsLayouts.Root>
       <div data-testid="groups-page-heading">
-        <SettingsLayouts.Header icon={SvgUsers} title="Groups" divider>
+        <SettingsLayouts.Header icon={SvgUsers} title={title} divider>
           <MessageCard
             variant="info"
-            title="Upcoming changes to permissions"
-            description="Onyx is transitioning to group-based permissions, enabling more flexible access control through configurable permissions per group. We recommend reviewing your group structure to prepare for this update."
+            title={t("admin.common.permissions_banner_title")}
+            description={t("admin.common.permissions_banner_groups_desc")}
             rightChildren={
               <Button
                 icon={SvgExternalLink}
@@ -44,7 +49,7 @@ function GroupsPage() {
                   )
                 }
               >
-                Learn more
+                {t("admin.common.learn_more")}
               </Button>
             }
           />
@@ -56,10 +61,10 @@ function GroupsPage() {
           hasItems={!isLoading && !error && (groups?.length ?? 0) > 0}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          placeholder="Search groups..."
-          emptyStateText="Create groups to organize users and manage access."
+          placeholder={t("admin.groups.search_placeholder")}
+          emptyStateText={t("admin.groups.empty_state")}
           onAction={() => router.push("/admin/groups/create" as Route)}
-          actionLabel="New Group"
+          actionLabel={t("admin.groups.new_group")}
         />
 
         {isLoading && <SvgSimpleLoader />}
@@ -67,8 +72,8 @@ function GroupsPage() {
         {error && (
           <IllustrationContent
             illustration={SvgNoResult}
-            title="Failed to load groups."
-            description="Please check the console for more details."
+            title={t("admin.groups.load_failed")}
+            description={t("admin.common.check_console")}
           />
         )}
 

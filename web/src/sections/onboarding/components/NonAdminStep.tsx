@@ -13,8 +13,10 @@ import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
+import { useTranslation } from "react-i18next";
 
 export default function NonAdminStep() {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const { user, refreshUser } = useUser();
   const [name, setName] = useState("");
@@ -38,6 +40,7 @@ export default function NonAdminStep() {
     updateUserPersonalization({ name })
       .then(() => {
         setSavedName(name);
+        showHeader && setShowHeader(true); // check safety or set normally
         setShowHeader(true);
         setIsEditing(false);
         // Don't call refreshUser() here — it would cause OnboardingFlow to
@@ -46,7 +49,7 @@ export default function NonAdminStep() {
         // refreshUser() is called in handleDismissConfirmation instead.
       })
       .catch((error) => {
-        toast.error("Failed to save name. Please try again.");
+        toast.error(t("onboarding.toast_save_name_failed", "Failed to save name. Please try again."));
         console.error(error);
       });
   };
@@ -70,7 +73,7 @@ export default function NonAdminStep() {
                 {...props}
               />
             )}
-            title="You're all set!"
+            title={t("onboarding.all_set", "You're all set!")}
             sizePreset="main-ui"
             variant="body"
             color="muted"
@@ -95,8 +98,8 @@ export default function NonAdminStep() {
         >
           <ContentAction
             icon={SvgUser}
-            title="What should Onyx call you?"
-            description="We will display this name in the app."
+            title={t("onboarding.name_prompt", "What should Onyx call you?")}
+            description={t("settings.profile.fullname_description", "We'll display this name in the app.")}
             sizePreset="main-ui"
             variant="section"
             padding="fit"
@@ -104,7 +107,7 @@ export default function NonAdminStep() {
               <div className="flex items-center justify-end gap-2">
                 <InputTypeIn
                   ref={inputRef}
-                  placeholder="Your name"
+                  placeholder={t("settings.profile.fullname_placeholder", "Your name")}
                   value={name || ""}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setName(e.target.value)
@@ -117,7 +120,7 @@ export default function NonAdminStep() {
                   }}
                 />
                 <Button disabled={name === ""} onClick={handleSave}>
-                  Save
+                  {t("onboarding.btn_save", "Save")}
                 </Button>
               </div>
             }
@@ -127,7 +130,7 @@ export default function NonAdminStep() {
         <Hoverable.Root group="nonAdminName" width="full">
           <div
             className={containerClasses}
-            aria-label="Edit display name"
+            aria-label={t("onboarding.edit_display_name", "Edit display name")}
             role="button"
             tabIndex={0}
             onClick={() => {
@@ -153,7 +156,7 @@ export default function NonAdminStep() {
             <div className="p-1 flex items-center gap-1">
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
-                <IconButton internal icon={SvgEdit} tooltip="Edit" />
+                <IconButton internal icon={SvgEdit} tooltip={t("chat.edit", "Edit")} />
               </Hoverable.Item>
               <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
             </div>

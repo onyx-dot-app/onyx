@@ -2,7 +2,7 @@
 
 import * as Yup from "yup";
 import { Button } from "@opal/components";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Modal from "@/refresh-components/Modal";
 import { Form, Formik } from "formik";
 import { SelectorFormField, TextFormField } from "@/components/Field";
@@ -10,6 +10,8 @@ import { UserGroup } from "@/lib/types";
 import { Scope } from "./types";
 import { toast } from "@/hooks/useToast";
 import { SvgSettings } from "@opal/icons";
+import { useTranslation } from "react-i18next";
+
 interface CreateRateLimitModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
@@ -30,6 +32,7 @@ export default function CreateRateLimitModal({
   forSpecificScope,
   forSpecificUserGroup,
 }: CreateRateLimitModalProps) {
+  const { t } = useTranslation();
   const [modalUserGroups, setModalUserGroups] = useState([]);
   const [shouldFetchUserGroups, setShouldFetchUserGroups] = useState(
     forSpecificScope === Scope.USER_GROUP
@@ -56,12 +59,37 @@ export default function CreateRateLimitModal({
     }
   }, [shouldFetchUserGroups]);
 
+  const validationSchema = useMemo(() => {
+    return Yup.object().shape({
+      period_hours: Yup.number()
+        .required(t("admin.token_rate_limits.required_field", { field: t("admin.token_rate_limits.time_window_label") }))
+        .min(1, t("admin.token_rate_limits.time_window_min")),
+      token_budget: Yup.number()
+        .required(t("admin.token_rate_limits.required_field", { field: t("admin.token_rate_limits.token_budget_label") }))
+        .min(1, t("admin.token_rate_limits.token_budget_min")),
+      target_scope: Yup.string().required(
+        t("admin.token_rate_limits.required_field", { field: t("admin.token_rate_limits.target_scope_label") })
+      ),
+      user_group_id: Yup.string().test(
+        "user_group_id",
+        t("admin.token_rate_limits.required_field", { field: t("admin.token_rate_limits.user_group_label") }),
+        (value, context) => {
+          return (
+            context.parent.target_scope !== "user_group" ||
+            (context.parent.target_scope === "user_group" &&
+              value !== undefined)
+          );
+        }
+      ),
+    });
+  }, [t]);
+
   return (
     <Modal open={isOpen} onOpenChange={() => setIsOpen(false)}>
       <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgSettings}
-          title="Create a Token Rate Limit"
+          title={t("admin.token_rate_limits.modal_title")}
           onClose={() => setIsOpen(false)}
         />
         <Formik
@@ -72,28 +100,7 @@ export default function CreateRateLimitModal({
             target_scope: forSpecificScope || Scope.GLOBAL,
             user_group_id: forSpecificUserGroup,
           }}
-          validationSchema={Yup.object().shape({
-            period_hours: Yup.number()
-              .required("Time Window is a required field")
-              .min(1, "Time Window must be at least 1 hour"),
-            token_budget: Yup.number()
-              .required("Token Budget is a required field")
-              .min(1, "Token Budget must be at least 1"),
-            target_scope: Yup.string().required(
-              "Target Scope is a required field"
-            ),
-            user_group_id: Yup.string().test(
-              "user_group_id",
-              "User Group is a required field",
-              (value, context) => {
-                return (
-                  context.parent.target_scope !== "user_group" ||
-                  (context.parent.target_scope === "user_group" &&
-                    value !== undefined)
-                );
-              }
-            ),
-          })}
+          validationSchema={validationSchema}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
             onSubmit(
@@ -111,11 +118,11 @@ export default function CreateRateLimitModal({
                 {!forSpecificScope && (
                   <SelectorFormField
                     name="target_scope"
-                    label="Target Scope"
+                    label={t("admin.token_rate_limits.target_scope_label")}
                     options={[
-                      { name: "Global", value: Scope.GLOBAL },
-                      { name: "User", value: Scope.USER },
-                      { name: "User Group", value: Scope.USER_GROUP },
+                      { name: t("admin.token_rate_limits.tab_global"), value: Scope.GLOBAL },
+                      { name: t("admin.token_rate_limits.tab_user"), value: Scope.USER },
+                      { name: t("admin.token_rate_limits.tab_groups"), value: Scope.USER_GROUP },
                     ]}
                     includeDefault={false}
                     onSelect={(selected) => {
@@ -130,27 +137,27 @@ export default function CreateRateLimitModal({
                   values.target_scope === Scope.USER_GROUP && (
                     <SelectorFormField
                       name="user_group_id"
-                      label="User Group"
+                      label={t("admin.token_rate_limits.user_group_label")}
                       options={modalUserGroups}
                       includeDefault={false}
                     />
                   )}
                 <TextFormField
                   name="period_hours"
-                  label="Time Window (Hours)"
+                  label={t("admin.token_rate_limits.time_window_label")}
                   type="number"
                   placeholder=""
                 />
                 <TextFormField
                   name="token_budget"
-                  label="Token Budget (Thousands)"
+                  label={t("admin.token_rate_limits.token_budget_label")}
                   type="number"
                   placeholder=""
                 />
               </Modal.Body>
               <Modal.Footer>
                 <Button disabled={isSubmitting} type="submit">
-                  Create
+                  {t("admin.token_rate_limits.create_modal_btn")}
                 </Button>
               </Modal.Footer>
             </Form>

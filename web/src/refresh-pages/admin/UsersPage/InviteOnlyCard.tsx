@@ -5,6 +5,7 @@ import { mutate } from "swr";
 import { ContentAction } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import { Switch } from "@opal/components";
+import { useTranslation } from "react-i18next";
 import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@/hooks/useToast";
@@ -12,6 +13,7 @@ import { Settings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 
 export default function InviteOnlyCard() {
+  const { t } = useTranslation();
   const settings = useSettings();
 
   const saveSettings = useCallback(
@@ -30,24 +32,24 @@ export default function InviteOnlyCard() {
             rollbackOnError: true,
           }
         );
-        toast.success("Settings updated");
+        toast.success(t("admin.common.settings_updated"));
       } catch (err) {
         console.error("Failed to update invite_only_enabled", err);
         const message =
           err instanceof Error && err.message
             ? err.message
-            : "Failed to update settings";
+            : t("admin.common.settings_update_failed");
         toast.error(message);
       }
     },
-    [settings]
+    [settings, t]
   );
 
   return (
     <Card gap={0.5} padding={0.75}>
       <ContentAction
-        title="Restrict Open Sign-Up"
-        description="New users must be invited to join this workspace."
+        title={t("admin.users.restrict_signup")}
+        description={t("admin.users.restrict_signup_desc")}
         sizePreset="main-ui"
         variant="section"
         padding="fit"

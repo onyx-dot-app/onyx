@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import { Table, Button, Divider } from "@opal/components";
@@ -54,12 +55,13 @@ interface EditGroupPageProps {
 }
 
 function EditGroupPage({ groupId }: EditGroupPageProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const settings = useSettings();
   const isEnterpriseTier = tierAtLeast(settings.tier, Tier.ENTERPRISE);
   const tokenLimitsDisabledTooltip = markdown(
-    "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only."
+    t("admin.groups.token_limits_enterprise")
   );
 
   // Fetch the group data — poll every 5s while syncing so the UI updates
@@ -208,7 +210,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
     const trimmed = groupName.trim();
     if (!trimmed) {
-      toast.error("Group name is required");
+      toast.error(t("admin.groups.name_required"));
       return;
     }
 
@@ -218,9 +220,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     );
     const freshGroup = freshGroups.find((g: UserGroup) => g.id === groupId);
     if (freshGroup && !freshGroup.is_up_to_date) {
-      toast.error(
-        "This group is currently syncing. Please wait a moment and try again."
-      );
+      toast.error(t("admin.groups.syncing_wait"));
       return;
     }
 
@@ -260,10 +260,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
       mutate(SWR_KEYS.adminUserGroups);
       mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
-      toast.success(`Group "${trimmed}" updated`);
+      toast.success(t("admin.groups.update_success", { name: trimmed }));
       router.push("/admin/groups");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update group");
+      toast.error(
+        e instanceof Error ? e.message : t("admin.groups.update_failed")
+      );
     } finally {
       isSubmittingRef.current = false;
       setIsSubmitting(false);
@@ -275,10 +277,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     try {
       await deleteGroup(groupId);
       mutate(SWR_KEYS.adminUserGroups);
-      toast.success(`Group "${group?.name}" deleted`);
+      toast.success(t("admin.groups.delete_success", { name: group?.name }));
       router.push("/admin/groups");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete group");
+      toast.error(
+        e instanceof Error ? e.message : t("admin.groups.delete_failed")
+      );
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);
@@ -291,14 +295,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgUsers}
-          title="Group Not Found"
+          title={t("admin.groups.not_found_header")}
           divider
         />
         <SettingsLayouts.Body>
           <IllustrationContent
             illustration={SvgNoResult}
-            title="Group not found"
-            description="This group doesn't exist or may have been deleted."
+            title={t("admin.groups.not_found_title")}
+            description={t("admin.groups.not_found_desc")}
           />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -311,18 +315,18 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         prominence="secondary"
         onClick={() => router.push("/admin/groups")}
       >
-        Cancel
+        {t("general.cancel")}
       </Button>
       <Button
         onClick={handleSave}
         disabled={!groupName.trim() || isSubmitting || isSyncing}
-        tooltip={
-          isSyncing
-            ? "Document embeddings are being updated due to recent changes to this group."
-            : undefined
-        }
+        tooltip={isSyncing ? t("admin.groups.syncing_tooltip") : undefined}
       >
-        {isSubmitting ? "Saving..." : isSyncing ? "Syncing..." : "Save Changes"}
+        {isSubmitting
+          ? t("admin.groups.saving")
+          : isSyncing
+            ? t("admin.groups.syncing")
+            : t("admin.groups.save_changes")}
       </Button>
     </Section>
   );
@@ -332,7 +336,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgUsers}
-          title="Edit Group"
+          title={t("admin.groups.edit_title")}
           divider
           rightChildren={headerActions}
         />
@@ -342,7 +346,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
           {error && (
             <Text as="p" secondaryBody text03>
-              Failed to load group data.
+              {t("admin.groups.load_failed")}
             </Text>
           )}
 
@@ -356,10 +360,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 justifyContent="start"
               >
                 <Text mainUiBody text04>
-                  Group Name
+                  {t("admin.groups.group_name_label")}
                 </Text>
                 <InputTypeIn
-                  placeholder="Name your group"
+                  placeholder={t("admin.groups.name_placeholder")}
                   value={groupName}
                   onChange={(e) => setGroupName(e.target.value)}
                 />
@@ -386,8 +390,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder={
                       isAddingMembers
-                        ? "Search users and accounts..."
-                        : "Search members..."
+                        ? t("admin.groups.search_members_placeholder")
+                        : t("admin.groups.search_members_short")
                     }
                     searchIcon
                   />
@@ -396,7 +400,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                       prominence="secondary"
                       onClick={() => setIsAddingMembers(false)}
                     >
-                      Done
+                      {t("admin.groups.done")}
                     </Button>
                   ) : (
                     <Button
@@ -404,7 +408,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                       icon={SvgPlusCircle}
                       onClick={() => setIsAddingMembers(true)}
                     >
-                      Add
+                      {t("admin.groups.add_members")}
                     </Button>
                   )}
                 </Section>
@@ -424,8 +428,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     emptyState={
                       <IllustrationContent
                         illustration={SvgNoResult}
-                        title="No users found"
-                        description="No users match your search."
+                        title={t("admin.groups.no_users")}
+                        description={t("admin.groups.no_users_desc")}
                       />
                     }
                   />
@@ -440,8 +444,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     emptyState={
                       <IllustrationContent
                         illustration={SvgNoResult}
-                        title="No members"
-                        description="Add members to this group."
+                        title={t("admin.groups.no_members_title")}
+                        description={t("admin.groups.no_members_desc")}
                       />
                     }
                   />
@@ -467,8 +471,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               {/* Delete This Group */}
               <Card>
                 <InputHorizontal
-                  title="Delete This Group"
-                  description="Members will lose access to any resources shared with this group."
+                  title={t("admin.groups.delete_section_title")}
+                  description={t("admin.groups.delete_section_desc")}
                   center
                 >
                   <Button
@@ -477,7 +481,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                     icon={SvgTrash}
                     onClick={() => setShowDeleteModal(true)}
                   >
-                    Delete Group
+                    {t("admin.groups.delete_btn")}
                   </Button>
                 </InputHorizontal>
               </Card>
@@ -489,7 +493,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       {showDeleteModal && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete Group"
+          title={t("admin.groups.delete_btn")}
           onClose={() => setShowDeleteModal(false)}
           submit={
             <Button
@@ -497,17 +501,16 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               onClick={handleDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? t("admin.groups.deleting") : t("general.delete")}
             </Button>
           }
         >
           <Text as="p" text03>
-            Members of group{" "}
+            {t("admin.groups.delete_modal_body_pre")}{" "}
             <Text as="span" text05>
               {group?.name}
             </Text>{" "}
-            will lose access to any resources shared with this group, unless
-            they have been granted access directly. Deletion cannot be undone.
+            {t("admin.groups.delete_modal_body_post")}
           </Text>
         </ConfirmationModalLayout>
       )}

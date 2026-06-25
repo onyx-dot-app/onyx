@@ -11,6 +11,7 @@ import { toast } from "@/hooks/useToast";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { inviteUsers } from "./svc";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -38,6 +39,7 @@ export default function InviteUsersModal({
   const [chips, setChips] = useState<ChipItem[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { t } = useTranslation();
 
   /** Parse a comma-separated string into de-duped ChipItems */
   function parseEmails(value: string, existing: ChipItem[]): ChipItem[] {
@@ -111,7 +113,7 @@ export default function InviteUsersModal({
     const validEmails = allChips.filter((c) => !c.error).map((c) => c.label);
 
     if (validEmails.length === 0) {
-      toast.error("Please add at least one valid email address");
+      toast.error(t("admin.users.add_valid_email_error"));
       return;
     }
 
@@ -128,12 +130,14 @@ export default function InviteUsersModal({
         mutate(SWR_KEYS.userCounts),
       ]).catch(() => {});
       toast.success(
-        `Invited ${validEmails.length} user${validEmails.length > 1 ? "s" : ""}`
+        validEmails.length === 1
+          ? t("admin.users.invite_success_single")
+          : t("admin.users.invite_success_plural", { count: validEmails.length })
       );
       handleClose();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to invite users"
+        err instanceof Error ? err.message : t("admin.users.invite_failed")
       );
     } finally {
       setIsSubmitting(false);
@@ -145,7 +149,7 @@ export default function InviteUsersModal({
       <Modal.Content width="sm" height="fit">
         <Modal.Header
           icon={SvgUsers}
-          title="Invite Users"
+          title={t("admin.users.invite_title")}
           onClose={isSubmitting ? undefined : handleClose}
         />
 
@@ -156,7 +160,7 @@ export default function InviteUsersModal({
             onAdd={addEmail}
             value={inputValue}
             onChange={setInputValue}
-            placeholder="Add an email and press enter"
+            placeholder={t("admin.users.email_placeholder")}
             layout="stacked"
           />
           {chips.some((c) => c.error) && (
@@ -166,7 +170,7 @@ export default function InviteUsersModal({
                 className="text-status-warning-05 shrink-0"
               />
               <Text secondaryBody text03>
-                Some email addresses are invalid and will be skipped.
+                {t("admin.users.invalid_emails_warning")}
               </Text>
             </div>
           )}
@@ -180,7 +184,7 @@ export default function InviteUsersModal({
                 prominence="tertiary"
                 onClick={handleClose}
               >
-                Cancel
+                {t("general.cancel")}
               </Button>
             }
             submit={
@@ -193,7 +197,7 @@ export default function InviteUsersModal({
                 }
                 onClick={handleInvite}
               >
-                Invite
+                {t("general.invite")}
               </Button>
             }
           />

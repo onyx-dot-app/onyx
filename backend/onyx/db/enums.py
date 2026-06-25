@@ -239,6 +239,14 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class SupportedLanguage(str, PyEnum):
+    EN = "en"
+    ES = "es"
+    PT = "pt"
+    FR = "fr"
+    DE = "de"
+
+
 class DefaultAppMode(str, PyEnum):
     AUTO = "AUTO"
     CHAT = "CHAT"

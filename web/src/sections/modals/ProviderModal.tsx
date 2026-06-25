@@ -3,6 +3,8 @@ import { Button } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import Modal from "@/refresh-components/Modal";
 import { SvgLoader } from "@opal/icons";
+import { useTranslation } from "react-i18next";
+
 export interface ProviderModalProps {
   // Modal configurations
   clickOutsideToClose?: boolean;
@@ -35,8 +37,10 @@ export default function ProviderModal({
   submitDisabled = false,
   isSubmitting = false,
   submitLabel = "Connect",
-  cancelLabel = "Cancel",
+  cancelLabel,
 }: ProviderModalProps) {
+  const { t } = useTranslation();
+  const resolvedCancelLabel = cancelLabel || t("general.cancel");
   const SpinningLoader: React.FunctionComponent<IconProps> = (props) => (
     <SvgLoader
       {...props}
@@ -81,7 +85,7 @@ export default function ProviderModal({
               type="button"
               onClick={() => onOpenChange(false)}
             >
-              {cancelLabel}
+              {resolvedCancelLabel}
             </Button>
             <Button
               disabled={submitDisabled || isSubmitting}

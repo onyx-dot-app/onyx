@@ -5,7 +5,10 @@ import {
   type ModelConfiguration,
 } from "@/lib/languageModels/types";
 import * as Yup from "yup";
+import i18n from "@/lib/i18n";
 import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
+
+const t = (key: string) => i18n.t(key);
 
 // ─── useInitialValues ─────────────────────────────────────────────────────
 
@@ -81,17 +84,17 @@ export function buildValidationSchema(
 ) {
   const providerFields: Yup.ObjectShape = {
     ...(apiKey && {
-      api_key: Yup.string().required("API Key is required"),
+      api_key: Yup.string().required(t("admin.llm.form.api_key_required")),
     }),
     ...(apiBase && {
-      api_base: Yup.string().required("API Base URL is required"),
+      api_base: Yup.string().required(t("admin.llm.form.api_base_required")),
     }),
     ...extra,
   };
 
   if (isOnboarding) {
     return Yup.object().shape({
-      test_model_name: Yup.string().required("Model name is required"),
+      test_model_name: Yup.string().required(t("admin.llm.form.model_name_required")),
       ...providerFields,
     });
   }
@@ -102,7 +105,7 @@ export function buildValidationSchema(
     is_auto_mode: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
     personas: Yup.array().of(Yup.number()),
-    test_model_name: Yup.string().required("Model name is required"),
+    test_model_name: Yup.string().required(t("admin.llm.form.model_name_required")),
     ...providerFields,
   });
 }

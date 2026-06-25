@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { SvgUserSync } from "@opal/icons";
+import { useTranslation } from "react-i18next";
 import { toast } from "@/hooks/useToast";
 import { useScimToken } from "@/hooks/useScimToken";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
@@ -20,6 +21,7 @@ import ScimModal from "./ScimModal";
 // ---------------------------------------------------------------------------
 
 function ScimContent() {
+  const { t } = useTranslation();
   const { data: token, error: tokenError, isLoading, mutate } = useScimToken();
 
   const modal = useCreateModal();
@@ -37,7 +39,7 @@ function ScimContent() {
   if (tokenError) {
     return (
       <Text as="p" text03>
-        Failed to load SCIM token status.
+        {t("admin.scim.load_status_failed")}
       </Text>
     );
   }
@@ -68,15 +70,15 @@ function ScimContent() {
         } catch {
           detail = await response.text();
         }
-        toast.error(`Failed to generate token: ${detail}`);
+        toast.error(t("admin.scim.generate_failed", { detail }));
         return;
       }
       const created: ScimTokenCreatedResponse = await response.json();
       await mutate();
       openModal({ kind: "token", rawToken: created.raw_token });
-      if (hasToken) toast.success("Token regenerated");
+      if (hasToken) toast.success(t("admin.scim.token_regenerated"));
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      toast.error(t("admin.scim.something_wrong"));
     } finally {
       setIsSubmitting(false);
     }
@@ -117,12 +119,13 @@ function ScimContent() {
 // ---------------------------------------------------------------------------
 
 export default function Page() {
+  const { t } = useTranslation();
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgUserSync}
-        title="SCIM"
-        description="Sync users and groups via System for Cross-domain Identity Management (SCIM) protocol."
+        title={t("admin.scim.page_title")}
+        description={t("admin.scim.page_desc")}
         divider
       />
       <SettingsLayouts.Body>

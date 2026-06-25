@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useRouter } from "next/navigation";
@@ -45,6 +46,7 @@ import SwitchField from "@/refresh-components/form/SwitchField";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import {
   EmbeddingProviderName,
@@ -125,11 +127,12 @@ interface EmbeddingProviderInfoProps {
 }
 
 function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
+  const { t } = useTranslation();
   if (!isCloudBased(providerName)) {
     return (
       <Content
         icon={SvgServer}
-        title="Self-hosted"
+        title={t("admin.index_settings.self_hosted")}
         sizePreset="secondary"
         variant="body"
         color="muted"
@@ -571,6 +574,8 @@ interface IndexSettingsFormValues {
 }
 
 export default function IndexSettingsPage() {
+  const { t } = useTranslation();
+  const pageTitle = useAdminPageTitle(route);
   const router = useRouter();
   const settings = useSettings();
   const editModal = useCreateModal();
@@ -789,7 +794,7 @@ export default function IndexSettingsPage() {
   ) {
     return (
       <SettingsLayouts.Root>
-        <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+        <SettingsLayouts.Header icon={route.icon} title={pageTitle} divider />
         <SettingsLayouts.Body>
           <PageLoader />
         </SettingsLayouts.Body>
@@ -818,16 +823,15 @@ export default function IndexSettingsPage() {
       <cancelReindexModal.Provider>
         <ConfirmationModalLayout
           icon={SvgRevert}
-          title="Cancel Re-index"
+          title={t("admin.index_settings.cancel_reindex_title")}
           submit={
             <Button variant="danger" onClick={handleCancelReindex}>
-              Cancel
+              {t("admin.index_settings.cancel_reindex_title")}
             </Button>
           }
         >
           <Text font="main-ui-body" color="text-03" as="p">
-            Cancelling will revert to the previous embedding model and all
-            re-indexing progress will be lost.
+            {t("admin.index_settings.cancel_reindex_desc")}
           </Text>
         </ConfirmationModalLayout>
       </cancelReindexModal.Provider>
@@ -835,8 +839,8 @@ export default function IndexSettingsPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description="Configure how documents are indexed, embedded, and prepared for search and retrieval."
+          title={pageTitle}
+          description={t("admin.index_settings.description")}
           divider
         />
 
@@ -947,7 +951,7 @@ export default function IndexSettingsPage() {
                             prominence="secondary"
                             onClick={() => cancelReindexModal.toggle(true)}
                           >
-                            Cancel Re-index
+                            {t("admin.index_settings.cancel_reindex_title")}
                           </Button>
                         </GeneralLayouts.Section>
                       }
@@ -957,9 +961,9 @@ export default function IndexSettingsPage() {
                       <MessageCard
                         variant={statusVariant}
                         headerPadding="sm"
-                        title="Changes require a full re-index."
+                        title={t("admin.index_settings.changes_require_reindex")}
                         description={markdown(
-                          "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+                          t("admin.index_settings.reindex_warning_desc")
                         )}
                         bottomChildren={
                           dirty ? (
@@ -1029,8 +1033,8 @@ export default function IndexSettingsPage() {
                     justifyContent="start"
                   >
                     <Content
-                      title="Embedding Model"
-                      description="Onyx uses this model to encode documents for search and retrieval."
+                      title={t("admin.index_settings.embedding_model")}
+                      description={t("admin.index_settings.embedding_model_desc")}
                       sizePreset="main-content"
                       variant="section"
                     />
@@ -1305,10 +1309,10 @@ export default function IndexSettingsPage() {
                                   <div className="px-2">
                                     <Tabs.List>
                                       <Tabs.Trigger value={MODEL_TAB_CLOUD}>
-                                        Cloud-based
+                                        {t("admin.index_settings.cloud_based")}
                                       </Tabs.Trigger>
                                       <Tabs.Trigger value={MODEL_TAB_SELF}>
-                                        Self-hosted
+                                        {t("admin.index_settings.self_hosted")}
                                       </Tabs.Trigger>
                                     </Tabs.List>
                                   </div>
@@ -1364,7 +1368,7 @@ export default function IndexSettingsPage() {
                                         setViewAllModelsOpen(true);
                                       }}
                                     >
-                                      View All Models
+                                      {t("admin.index_settings.view_all_models")}
                                     </Button>
                                     {isCurrentCloudBased && (
                                       <div className="p-1">
@@ -1396,8 +1400,10 @@ export default function IndexSettingsPage() {
                     justifyContent="start"
                   >
                     <Content
-                      title="Retrieval Optimization"
-                      description="Additional indexing features that improve search accuracy by configuring how documents are chunked and contextualized. These can increase embedding cost."
+                      title={t("admin.index_settings.retrieval_optimization")}
+                      description={t(
+                        "admin.index_settings.retrieval_optimization_desc"
+                      )}
                       sizePreset="main-content"
                       variant="section"
                     />
@@ -1445,20 +1451,22 @@ export default function IndexSettingsPage() {
                       >
                         <GeneralLayouts.Section width="full">
                           <InputHorizontal
-                            title="Contextual Retrieval"
-                            description="Add document-level context to every indexed chunk to improve hybrid search relevance. This can increase embedding cost significantly."
+                            title={t("admin.index_settings.contextual_retrieval")}
+                            description={t(
+                              "admin.index_settings.contextual_retrieval_desc"
+                            )}
                             withLabel
                           >
                             <SwitchField name="enable_contextual_rag" />
                           </InputHorizontal>
 
-                          <Disabled
+                           <Disabled
                             disabled={!values.enable_contextual_rag}
-                            tooltip="Cannot modify while Contextual Retrieval is off."
+                            tooltip={t("admin.index_settings.contextual_retrieval_disabled_tooltip", "Cannot modify while Contextual Retrieval is off.")}
                           >
                             <InputHorizontal
-                              title="Contextual Retrieval LLM"
-                              description="This model will be used to generate context for chunks."
+                              title={t("admin.index_settings.contextual_retrieval_llm")}
+                              description={t("admin.index_settings.contextual_retrieval_llm_desc")}
                               disabled={!values.enable_contextual_rag}
                               withLabel
                             >
@@ -1491,8 +1499,8 @@ export default function IndexSettingsPage() {
                     justifyContent="start"
                   >
                     <Content
-                      title="Image Processing"
-                      description="Use LLM model to analyze and add descriptions to images during indexing."
+                      title={t("admin.index_settings.image_processing")}
+                      description={t("admin.index_settings.image_processing_desc")}
                       sizePreset="main-content"
                       variant="section"
                     />
@@ -1502,7 +1510,7 @@ export default function IndexSettingsPage() {
                       tooltip={
                         !hasAnyVisionLlm
                           ? markdown(
-                              "Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable [Language Model](/admin/configuration/language-models) first."
+                              t("admin.index_settings.image_processing_disabled_tooltip", "Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable Language Model first.")
                             )
                           : undefined
                       }
@@ -1510,8 +1518,8 @@ export default function IndexSettingsPage() {
                       <Card border="solid" rounding="lg">
                         <GeneralLayouts.Section width="full">
                           <InputHorizontal
-                            title="Extract & Caption Images"
-                            description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
+                            title={t("admin.index_settings.extract_caption_images")}
+                            description={t("admin.index_settings.extract_caption_images_desc")}
                             withLabel
                           >
                             <Switch
@@ -1527,11 +1535,11 @@ export default function IndexSettingsPage() {
 
                           <Disabled
                             disabled={!imageProcessingEnabled}
-                            tooltip="Enable Extract & Caption Images to configure this."
+                            tooltip={t("admin.index_settings.enable_extract_caption_images_to_configure")}
                           >
                             <InputHorizontal
-                              title="Captioning LLM"
-                              description="This model will be used to analyze images during indexing. Only vision-capable models can be selected. Updates apply to documents indexed going forward — existing captions are baked into prior embeddings."
+                              title={t("admin.index_settings.captioning_llm")}
+                              description={t("admin.index_settings.captioning_llm_desc")}
                               disabled={!imageProcessingEnabled}
                               withLabel
                             >
@@ -1551,12 +1559,12 @@ export default function IndexSettingsPage() {
 
                           <Disabled
                             disabled={!imageProcessingEnabled}
-                            tooltip="Enable Extract & Caption Images to configure this."
+                            tooltip={t("admin.index_settings.enable_extract_caption_images_to_configure")}
                           >
                             <InputHorizontal
-                              title="Max Image Size for Analysis"
+                              title={t("admin.index_settings.max_image_size")}
                               suffix="(MB)"
-                              description="Images above this size will be skipped to limit resource usage."
+                              description={t("admin.index_settings.max_image_size_desc")}
                               disabled={!imageProcessingEnabled}
                               withLabel
                             >

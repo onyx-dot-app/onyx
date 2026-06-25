@@ -16,12 +16,14 @@ import { Spacer } from "@opal/components";
 import Title from "@/components/ui/title";
 import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useDocumentSets } from "./hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
 import { deleteDocumentSet } from "./lib";
 import { toast } from "@/hooks/useToast";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
 import {
   FiAlertTriangle,
   FiCheckCircle,
@@ -349,6 +351,7 @@ const DocumentSetTable = ({
 };
 
 function Main() {
+  const { t } = useTranslation();
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
@@ -382,9 +385,7 @@ function Main() {
   return (
     <div className="mb-8">
       <Text as="p">
-        {markdown(
-          "**Document Sets** allow you to group logically connected documents into a single bundle. These can then be used as a filter when performing searches to control the scope of information Onyx searches over."
-        )}
+        {markdown(t("admin.document_sets.intro"))}
       </Text>
       <Spacer rem={0.75} />
 
@@ -396,7 +397,7 @@ function Main() {
           prominence="secondary"
           href="/admin/documents/sets/new"
         >
-          New Document Set
+          {t("admin.document_sets.new")}
         </Button>
       </div>
 
@@ -416,9 +417,10 @@ function Main() {
 }
 
 export default function Page() {
+  const title = useAdminPageTitle(route);
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header icon={route.icon} title={title} divider />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

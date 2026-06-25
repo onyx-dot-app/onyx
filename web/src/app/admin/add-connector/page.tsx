@@ -11,7 +11,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Tooltip } from "@opal/components";
+import { markdown } from "@opal/utils";
 import { useFederatedConnectors } from "@/lib/hooks";
 import {
   FederatedConnectorDetail,
@@ -27,6 +29,8 @@ import SourceTile from "@/components/SourceTile";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useAdminPageTitle } from "@/lib/admin-i18n";
+import { useSourceCategoryLabel } from "@/lib/connector-i18n";
 
 const route = ADMIN_ROUTES.ADD_CONNECTOR;
 
@@ -41,6 +45,7 @@ function SourceTileTooltipWrapper({
   federatedConnectors?: FederatedConnectorDetail[];
   slackCredentials?: Credential<any>[];
 }) {
+  const { t } = useTranslation();
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
     if (!sourceMetadata.federated || !federatedConnectors) {
@@ -93,17 +98,11 @@ function SourceTileTooltipWrapper({
     <Tooltip
       side="top"
       tooltip={
-        existingFederatedConnector ? (
-          <Text as="p" textLight05 secondaryBody>
-            <strong>Federated connector already configured.</strong> Click to
-            edit the existing connector.
-          </Text>
-        ) : hasExistingSlackCredentials ? (
-          <Text as="p" textLight05 secondaryBody>
-            <strong>Existing Slack credentials found.</strong> Click to manage
-            your Slack connector.
-          </Text>
-        ) : undefined
+        existingFederatedConnector
+          ? markdown(t("admin.connector_setup.federated_configured"))
+          : hasExistingSlackCredentials
+            ? markdown(t("admin.connector_setup.slack_credentials_found"))
+            : undefined
       }
     >
       <div>
@@ -118,7 +117,50 @@ function SourceTileTooltipWrapper({
   );
 }
 
+function ConnectorCategorySection({
+  category,
+  sources,
+  searchTerm,
+  categoryInd,
+  federatedConnectors,
+  slackCredentials,
+}: {
+  category: SourceCategory;
+  sources: SourceMetadata[];
+  searchTerm: string;
+  categoryInd: number;
+  federatedConnectors?: FederatedConnectorDetail[];
+  slackCredentials?: Credential<any>[];
+}) {
+  const categoryLabel = useSourceCategoryLabel(category);
+
+  return (
+    <div className="pt-8">
+      <Text as="p" headingH3>
+        {categoryLabel}
+      </Text>
+      <div className="flex flex-wrap gap-4 p-4">
+        {sources.map((source, sourceInd) => (
+          <SourceTileTooltipWrapper
+            preSelect={
+              (searchTerm?.length ?? 0) > 0 &&
+              categoryInd == 0 &&
+              sourceInd == 0
+            }
+            key={source.internalName}
+            sourceMetadata={source}
+            federatedConnectors={federatedConnectors}
+            slackCredentials={slackCredentials}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Page() {
+  const { t } = useTranslation();
+  const title = useAdminPageTitle(ADMIN_ROUTES.ADD_CONNECTOR);
   const sources = useMemo(() => listSourceMetadata(), []);
 
   const [rawSearchTerm, setSearchTerm] = useState("");
@@ -241,16 +283,18 @@ export default function Page() {
     <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={title}
         rightChildren={
-          <Button href="/admin/indexing/status">See Connectors</Button>
+          <Button href="/admin/indexing/status">
+            {t("admin.connector_setup.see_connectors")}
+          </Button>
         }
         divider
       />
       <SettingsLayouts.Body>
         <InputTypeIn
           type="text"
-          placeholder="Search Connectors"
+          placeholder={t("admin.connector_setup.search_placeholder")}
           ref={searchInputRef}
           value={rawSearchTerm} // keep the input bound to immediate state
           onChange={(event) => setSearchTerm(event.target.value)}
@@ -260,7 +304,7 @@ export default function Page() {
         {dedupedPopular.length > 0 && (
           <div className="pt-8">
             <Text as="p" headingH3>
-              Popular
+              {t("admin.connector_setup.popular")}
             </Text>
             <div className="flex flex-wrap gap-4 p-4">
               {dedupedPopular.map((source) => (
@@ -279,26 +323,15 @@ export default function Page() {
         {Object.entries(categorizedSources)
           .filter(([_, sources]) => sources.length > 0)
           .map(([category, sources], categoryInd) => (
-            <div key={category} className="pt-8">
-              <Text as="p" headingH3>
-                {category}
-              </Text>
-              <div className="flex flex-wrap gap-4 p-4">
-                {sources.map((source, sourceInd) => (
-                  <SourceTileTooltipWrapper
-                    preSelect={
-                      (searchTerm?.length ?? 0) > 0 &&
-                      categoryInd == 0 &&
-                      sourceInd == 0
-                    }
-                    key={source.internalName}
-                    sourceMetadata={source}
-                    federatedConnectors={federatedConnectors}
-                    slackCredentials={slackCredentials}
-                  />
-                ))}
-              </div>
-            </div>
+            <ConnectorCategorySection
+              key={category}
+              category={category as SourceCategory}
+              sources={sources}
+              searchTerm={searchTerm}
+              categoryInd={categoryInd}
+              federatedConnectors={federatedConnectors}
+              slackCredentials={slackCredentials}
+            />
           ))}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
