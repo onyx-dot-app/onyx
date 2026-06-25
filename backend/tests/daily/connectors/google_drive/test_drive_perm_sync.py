@@ -27,6 +27,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_hierarchy_nodes_match_expected,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_resource_key_shortcut_target_in_retrieved_docs,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
     EXTERNAL_SHARED_FOLDER_ID,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_ID
@@ -255,6 +258,7 @@ def test_gdrive_perm_sync_with_real_data(
     # Use include_permissions=True to populate external_access on hierarchy nodes
     hierarchy_connector = _build_connector(google_drive_service_acct_connector_factory)
     output = load_connector_outputs(hierarchy_connector, include_permissions=True)
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,

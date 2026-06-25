@@ -8,7 +8,16 @@ from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    assert_resource_key_shortcut_target_in_retrieved_docs,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import load_connector_outputs
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    RESOURCE_KEY_SHORTCUT_TARGET_DOC_ID,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    RESOURCE_KEY_SHORTCUT_TARGET_NAME,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import (
     SHORTCUTS_GALORE_FOLDER_ID,
 )
@@ -25,6 +34,7 @@ SILLY_GUY_DOC_ID = "1l1eAJy9llAQBa3fcOpjLijswXi2fiDJFGst0EmVONk0"
 NUMBER_2_DOC_ID = "1TJN3XJ-rzfnIv0qdyiKdXp__FJt1npRqp3WKLO3R-dM"
 
 EXPECTED_DOC_NAMES = {
+    RESOURCE_KEY_SHORTCUT_TARGET_NAME,
     "just checking",
     "file_0.txt",
     "file_1.txt",
@@ -74,6 +84,8 @@ def test_shared_folder_shortcuts_resolve_files_and_folders(
     assert JUST_CHECKING_DOC_ID in retrieved_ids
     assert SILLY_GUY_DOC_ID in retrieved_ids
     assert NUMBER_2_DOC_ID in retrieved_ids
+    assert RESOURCE_KEY_SHORTCUT_TARGET_DOC_ID in retrieved_ids
+    assert_resource_key_shortcut_target_in_retrieved_docs(output.documents)
 
     assert _doc_text(docs_by_name["file_0.txt"]) == "This is file 0"
     assert _doc_text(docs_by_name["file_1.txt"]) == "This is file 1"
