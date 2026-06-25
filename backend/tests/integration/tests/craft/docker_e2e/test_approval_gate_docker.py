@@ -110,12 +110,10 @@ def gated_session(
     )
 
 
-# Gate-flow tests depend on the ``slack_external_app`` fixture; without it the
-# matcher claims nothing and no approval parks. They also share one
-# module-scoped sandbox (``gated_module_sandbox``), so the credential-mutating
-# ``test_ask_*`` case below is defined LAST and additionally save/restores the
-# Slack row's credentials around its mutation -- two independent guards so it
-# can never strip the token the approve/reject siblings rely on to gate.
+# Gate-flow tests depend on the ``slack_external_app`` fixture.
+#  They also share one module-scoped sandbox (``gated_module_sandbox``),
+# so the credential-mutating ``test_ask_*`` case below is defined LAST
+# and additionally save/restores the Slack row's credentials around its mutation
 
 
 def _set_slack_org_credentials(value: dict[str, str]) -> None:
@@ -124,13 +122,6 @@ def _set_slack_org_credentials(value: dict[str, str]) -> None:
         assert app is not None, "slack_external_app fixture must seed the row"
         app.organization_credentials = value  # ty: ignore[invalid-assignment]
         db.commit()
-
-
-def _get_slack_org_credentials() -> dict[str, str]:
-    with get_session_with_tenant(tenant_id="public") as db:
-        app = get_built_in_external_app(db, ExternalAppType.SLACK)
-        assert app is not None, "slack_external_app fixture must seed the row"
-        return dict(app.organization_credentials or {})
 
 
 def test_approve_decision_forwards_to_slack(
@@ -212,7 +203,12 @@ def test_ask_with_uninvokable_app_forwards_bare(
 
     # Snapshot the row so the strip below is restored exactly, no matter what
     # the fixture seeded -- the approve/reject siblings share this row.
-    saved_credentials = _get_slack_org_credentials()
+    with get_session_with_tenant(tenant_id="public") as db:
+        app = get_built_in_external_app(db, ExternalAppType.SLACK)
+        assert app is not None, "slack_external_app fixture must seed the row"
+        saved_credentials = dict(
+            app.organization_credentials.get_value(apply_mask=False) or {}
+        )
 
     # Strip Slack's org credential so app_is_available -> False.
     _set_slack_org_credentials({})

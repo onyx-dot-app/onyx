@@ -713,12 +713,22 @@ def wait_until_healthy(
     manager: KubernetesSandboxManager,
     sandbox_id: UUID,
     max_attempts: int = 15,
-    timeout: float = 5.0,
 ) -> None:
-    """Poll ``health_check`` until it passes; the sidecar probe can lag from the
-    out-of-cluster runner, so a single-shot check is flaky."""
+    """Poll the pod's ``Ready`` condition via the kube-API.
+
+    Uses a pod read (the apiserver path, reachable from the out-of-cluster
+    runner), NOT ``manager.health_check`` — which does a direct HTTP GET to the
+    pod IP that the runner cannot route to. The sidecar's own ``readinessProbe``
+    (``/health`` on the push-daemon port) gates pod readiness, so ``Ready=True``
+    already means the sidecar is healthy and the agent container is running.
+    """
+    pod_name = manager._get_pod_name(str(sandbox_id))
     for _ in range(max_attempts):
-        if manager.health_check(sandbox_id, timeout=timeout):
+        pod = manager._core_api.read_namespaced_pod(
+            name=pod_name, namespace=manager._namespace
+        )
+        conditions = pod.status.conditions or []
+        if any(c.type == "Ready" and c.status == "True" for c in conditions):
             return
         time.sleep(2)
     raise RuntimeError(f"Sandbox {sandbox_id} never became healthy")
