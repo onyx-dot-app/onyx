@@ -39,7 +39,9 @@ def search_chat_sessions(
     if not query or not query.strip():
         stmt = (
             select(ChatSession)
-            .order_by(desc(ChatSession.time_created))
+            # `id` breaks ties on the non-unique `time_created` so OFFSET/LIMIT
+            # pages stay disjoint and stable across separate page queries.
+            .order_by(desc(ChatSession.time_created), desc(ChatSession.id))
             .offset(offset_val)
             .limit(page_size + 1)
         )
@@ -95,7 +97,7 @@ def search_chat_sessions(
     final_stmt = (
         select(ChatSession)
         .join(combined_ids, ChatSession.id == combined_ids.c.id)
-        .order_by(desc(ChatSession.time_created))
+        .order_by(desc(ChatSession.time_created), desc(ChatSession.id))
         .distinct()
         .offset(offset_val)
         .limit(page_size + 1)
