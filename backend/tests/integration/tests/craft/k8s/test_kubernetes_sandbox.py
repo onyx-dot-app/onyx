@@ -98,7 +98,7 @@ def test_provisioned_pod_has_sandbox_image_directories(
 
 
 def test_session_workspace_setup_creates_expected_tree(
-    k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build live_pod
+    k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build pool_session
     k8s_client: client.CoreV1Api,
     pool_session: PoolSession,
 ) -> None:
@@ -224,7 +224,7 @@ def test_push_second_call_replaces_previous_via_atomic_swap(
 
 
 def test_push_with_bad_signature_returns_401(
-    k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build live_pod
+    k8s_manager: KubernetesSandboxManager,  # noqa: ARG001 — required to build pool_session
     k8s_client: client.CoreV1Api,
     pool_session: PoolSession,
 ) -> None:

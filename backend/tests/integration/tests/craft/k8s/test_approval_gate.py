@@ -14,7 +14,6 @@ import pytest
 from kubernetes import client
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole as AuthUserRole
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import NotificationType
 from onyx.db.enums import ApprovalDecision
@@ -24,8 +23,6 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import ActionApproval
 from onyx.db.models import BuildSession
 from onyx.db.models import Notification
-from onyx.db.models import Sandbox
-from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.sandbox_proxy import approval_cache
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
@@ -38,15 +35,12 @@ from onyx.server.features.build.external_apps.models import ExternalAppAdminResp
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.craft.k8s.k8s_fixtures import OwnedLivePod
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec_async
-from tests.integration.tests.craft.k8s.k8s_fixtures import PoolSession
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_exec_output
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_proxy_redeploy
 
@@ -248,30 +242,13 @@ def _assert_403_error_code(body: str, expected_code: str) -> None:
     )
 
 
-def _approvals_url(*parts: object) -> str:
-    return f"{API_SERVER_URL}/build/approvals/" + "/".join(str(part) for part in parts)
-
-
-def _api_user_from_db_user(user: User) -> DATestUser:
-    return UserManager.login_as_user(
-        DATestUser(
-            id=str(user.id),
-            email=user.email,
-            password=DEFAULT_PASSWORD,
-            headers=GENERAL_HEADERS.copy(),
-            role=AuthUserRole(user.role.value),
-            is_active=True,
-        )
-    )
-
-
 def _submit_decision_response(
     api_user: DATestUser,
     approval_id: UUID,
     decision: ApprovalDecision,
 ) -> httpx.Response:
     return http_client.post(
-        _approvals_url(approval_id, "decision"),
+        f"{API_SERVER_URL}/build/approvals/{approval_id}/decision",
         json={"decision": decision.value},
         headers=api_user.headers,
         cookies=api_user.cookies,
@@ -293,23 +270,17 @@ def _submit_decision(
 @pytest.fixture(scope="function")
 def gated_session(
     db_session: Session,
-    live_pod: PoolSession,
+    owned_live_pod: OwnedLivePod,
 ) -> Generator[GatedSession, None, None]:
-    """Resolve the API-created active ``BuildSession`` backing ``live_pod``.
+    """Resolve the API-created active ``BuildSession`` backing ``owned_live_pod``.
 
-    ``live_pod`` (via ``k8s_manager``) already sets ``CURRENT_TENANT_ID_CONTEXTVAR``.
+    ``owned_live_pod`` (via ``k8s_manager``) already sets ``CURRENT_TENANT_ID_CONTEXTVAR``.
     """
-    sandbox_id, session_id, pod_name = live_pod
-
-    sandbox = db_session.get(Sandbox, sandbox_id)
-    assert sandbox is not None, "live_pod must back its sandbox with a committed row"
-    user = db_session.get(User, sandbox.user_id)
-    assert user is not None
-    api_user = _api_user_from_db_user(user)
+    api_user, _sandbox_id, session_id, pod_name = owned_live_pod
 
     row = db_session.get(BuildSession, session_id)
     assert row is not None
-    assert row.user_id == user.id
+    assert row.user_id == UUID(api_user.id)
     assert row.status == BuildSessionStatus.ACTIVE
 
     yield GatedSession(
@@ -320,7 +291,7 @@ def gated_session(
 
 
 def test_rejected_decision_returns_403_user_rejected(
-    k8s_manager: object,  # noqa: ARG001 — required to construct live_pod
+    k8s_manager: object,  # noqa: ARG001 — required to construct owned_live_pod
     k8s_client: client.CoreV1Api,
     gated_session: GatedSession,
     db_session: Session,
@@ -542,7 +513,7 @@ def test_gated_egress_without_session_tag_fails_closed(
 
 
 def test_ask_with_uninvokable_app_forwards_bare(
-    k8s_manager: object,  # noqa: ARG001 -- required to construct live_pod
+    k8s_manager: object,  # noqa: ARG001 -- required to construct owned_live_pod
     k8s_client: client.CoreV1Api,
     k8s_admin_user: DATestUser,
     gated_session: GatedSession,
