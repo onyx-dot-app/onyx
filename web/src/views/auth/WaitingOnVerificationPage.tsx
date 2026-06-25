@@ -9,7 +9,7 @@ import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
-import { RequestNewVerificationEmail } from "@/app/auth/waiting-on-verification/RequestNewVerificationEmail";
+import { RequestNewVerificationEmail } from "@/sections/auth/RequestNewVerificationEmail";
 
 export default function WaitingOnVerificationPage() {
   const router = useRouter();
