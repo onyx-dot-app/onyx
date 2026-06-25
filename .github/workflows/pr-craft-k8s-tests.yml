@@ -156,6 +156,7 @@ jobs:
   build-images:
     # Build the 3 images in parallel (one matrix leg each) and push to the shared
     # ECR repo so each test shard pulls prebuilt images instead of cold-building.
+    name: build-image (${{ matrix.image }})
     needs: changes
     if: needs.changes.outputs.craft_k8s == 'true'
     strategy:
@@ -219,6 +220,7 @@ jobs:
           cache-to: type=gha,scope=craft-${{ matrix.image }},mode=max
 
   craft-k8s-tests:
+    name: craft-k8s (${{ matrix.test-file.name }})
     needs: [changes, discover-test-files, build-images]
     if: needs.changes.outputs.craft_k8s == 'true'
     # spot=false: this is a long lane (full kind cluster per shard); on-demand
