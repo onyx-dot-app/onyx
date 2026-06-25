@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { resetPassword } from "@/lib/auth/svc";
 import { AuthLayouts, InputVertical } from "@opal/layouts";
@@ -9,6 +10,11 @@ import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { toast } from "@/hooks/useToast";
+import Cookies from "js-cookie";
+import {
+  NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED,
+  TENANT_ID_COOKIE_NAME,
+} from "@/lib/constants";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 const initialValues = { password: "", confirmPassword: "" };
@@ -25,7 +31,23 @@ export default function ResetPasswordPage() {
   const { user } = useCurrentUser();
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
+  const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
   const { logoUrl } = useSettings();
+
+  useEffect(() => {
+    if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) {
+      router.replace("/auth/login");
+      return;
+    }
+    if (tenantId) {
+      Cookies.set(TENANT_ID_COOKIE_NAME, tenantId, {
+        path: "/",
+        expires: 1 / 24,
+      });
+    }
+  }, [tenantId, router]);
+
+  if (!NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED) return null;
 
   async function handleSubmit(values: typeof initialValues) {
     if (!token) {
