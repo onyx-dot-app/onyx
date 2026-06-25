@@ -1,18 +1,19 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { AuthLayouts } from "@opal/layouts";
-import { Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
-import RequestNewVerificationEmail from "@/sections/auth/RequestNewVerificationEmail";
+import { requestEmailVerification } from "@/lib/auth/svc";
+import { toast } from "@/hooks/useToast";
 
 export default function EmailVerificationPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useCurrentUser();
   const { authTypeMetadata } = useAuthTypeMetadata();
   const { logoUrl } = useSettings();
@@ -30,16 +31,33 @@ export default function EmailVerificationPage() {
 
   // if (!user) return null;
 
+  useEffect(() => {
+    if (!searchParams.get("resend") || !user?.email) return;
+
+    router.replace("/auth/email-verification" as Route);
+    requestEmailVerification(user.email).then((response) => {
+      if (response.ok) {
+        toast.success("Verification email resent!");
+      } else {
+        response
+          .json()
+          .then((body) =>
+            toast.error(`Failed to resend verification email - ${body.detail}`)
+          );
+      }
+    });
+  }, [searchParams, user?.email, router]);
+
   return (
     <AuthLayouts.Card
       title="Check your inbox"
       logoSrc={logoUrl}
-      description="We’ve sent a verification link to your email address."
+      description="We've sent a verification link to your email address."
     >
       <AuthLayouts.Message
         title={`Email sent to ${user?.email}`}
         description={markdown(
-          "Didn't receive an email? [Resend](/link-here-???)"
+          "Didn't receive an email? [Resend](/auth/email-verification?resend=true)"
         )}
       />
     </AuthLayouts.Card>
