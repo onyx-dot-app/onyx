@@ -56,7 +56,7 @@ IMPLIED_PERMISSIONS: dict[str, set[str]] = {
     Permission.WRITE_CHAT.value: {Permission.READ_CHAT.value},
     Permission.CRAFT_SANDBOX.value: {
         Permission.READ_SEARCH.value,
-        Permission.REQUEST_APP_SETUP.value,
+        Permission.CRAFT_REQUEST_APP_SETUP.value,
     },
 }
 

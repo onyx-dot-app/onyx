@@ -133,7 +133,7 @@ class TestResolveEffectivePermissions:
         """The Craft sandbox PAT may only company-search and request app setup —
         it must NOT inherit the chat surfaces (the reason it isn't `basic`)."""
         result = resolve_effective_permissions({"craft_sandbox"})
-        assert result == {"craft_sandbox", "read:search", "request:app_setup"}
+        assert result == {"craft_sandbox", "read:search", "craft:request_app_setup"}
         assert "read:chat" not in result
         assert "write:chat" not in result
         assert "basic" not in result
@@ -299,12 +299,12 @@ class TestRequireScopedToken:
 
     @pytest.mark.asyncio
     async def test_craft_pat_passes(self) -> None:
-        """The Craft PAT (craft_sandbox implies request:app_setup) is admitted."""
+        """The Craft PAT (craft_sandbox implies craft:request_app_setup) is admitted."""
         user = MagicMock()
         user.effective_permissions = ["basic"]
 
         dep = require_permission(
-            Permission.REQUEST_APP_SETUP, require_scoped_token=True
+            Permission.CRAFT_REQUEST_APP_SETUP, require_scoped_token=True
         )
         result = await dep(request=_request([Permission.CRAFT_SANDBOX]), user=user)
         assert result is user
@@ -317,7 +317,7 @@ class TestRequireScopedToken:
         user.effective_permissions = ["admin"]
 
         dep = require_permission(
-            Permission.REQUEST_APP_SETUP, require_scoped_token=True
+            Permission.CRAFT_REQUEST_APP_SETUP, require_scoped_token=True
         )
         with pytest.raises(OnyxError) as exc_info:
             await dep(request=_request(None), user=user)
@@ -330,7 +330,7 @@ class TestRequireScopedToken:
         user.effective_permissions = ["basic"]
 
         dep = require_permission(
-            Permission.REQUEST_APP_SETUP, require_scoped_token=True
+            Permission.CRAFT_REQUEST_APP_SETUP, require_scoped_token=True
         )
         with pytest.raises(OnyxError):
             await dep(request=_request([Permission.READ_SEARCH]), user=user)
@@ -379,7 +379,7 @@ class TestApiSurfaceScopeRegistration:
         "read:chat",
         "write:chat",
         "read:admin",
-        "request:app_setup",
+        "craft:request_app_setup",
     }
 
     def test_implied_set_matches_spec(self) -> None:
@@ -397,9 +397,9 @@ class TestApiSurfaceScopeRegistration:
             "write:chat",
         }
         assert IMPLIED_PERMISSIONS["write:chat"] == {"read:chat"}
-        # request:app_setup is reachable ONLY via the craft role scope, never basic.
+        # craft:request_app_setup is reachable ONLY via the craft role scope, never basic.
         assert IMPLIED_PERMISSIONS["craft_sandbox"] == {
             "read:search",
-            "request:app_setup",
+            "craft:request_app_setup",
         }
-        assert "request:app_setup" not in IMPLIED_PERMISSIONS["basic"]
+        assert "craft:request_app_setup" not in IMPLIED_PERMISSIONS["basic"]
