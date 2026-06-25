@@ -74,10 +74,10 @@ def test_send_message_api_runs_real_celery_turn(
             llm_provider_type="openai",
             llm_model_name="gpt-5-mini",
         )
-        session_id = UUID(session["id"])
-        sandbox = session["sandbox"]
+        session_id = UUID(session.id)
+        sandbox = session.sandbox
         assert sandbox is not None
-        sandbox_id = UUID(sandbox["id"])
+        sandbox_id = UUID(sandbox.id)
 
         turn = BuildSessionManager.start_turn(
             api_user,

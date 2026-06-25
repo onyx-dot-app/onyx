@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from contextlib import suppress
 from uuid import UUID
@@ -24,6 +23,7 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.tests.craft.k8s.k8s_fixtures import CRAFT_TEST_USER_ID
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
@@ -62,17 +62,14 @@ class TestHealthCheck:
         try:
             info = k8s_manager.provision(
                 sandbox_id=sandbox_id,
-                user_id=UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c"),
+                user_id=CRAFT_TEST_USER_ID,
                 tenant_id="tenant_test",
                 llm_config=default_llm_config(),
                 onyx_pat="ci-test-pat",
             )
             assert info.status == SandboxStatus.RUNNING
 
-            for _ in range(15):
-                if k8s_manager.health_check(sandbox_id, timeout=5.0):
-                    break
-                time.sleep(2)
+            wait_until_healthy(k8s_manager, sandbox_id)
 
             k8s_manager.terminate(sandbox_id)
             wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)
@@ -193,15 +190,12 @@ class TestTerminate:
         try:
             k8s_manager.provision(
                 sandbox_id=sandbox_id,
-                user_id=UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c"),
+                user_id=CRAFT_TEST_USER_ID,
                 tenant_id="tenant_test",
                 llm_config=default_llm_config(),
                 onyx_pat="ci-test-pat",
             )
-            for _ in range(15):
-                if k8s_manager.health_check(sandbox_id, timeout=5.0):
-                    break
-                time.sleep(2)
+            wait_until_healthy(k8s_manager, sandbox_id)
 
             k8s_manager.terminate(sandbox_id)
             wait_for_pod_deletion(k8s_client, pod_name, SANDBOX_NAMESPACE)

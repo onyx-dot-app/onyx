@@ -29,7 +29,6 @@ if TYPE_CHECKING:
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.enums import SandboxStatus
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Sandbox
@@ -45,8 +44,12 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.integration.common_utils.managers.build_session import BuildSessionManager
+from tests.integration.common_utils.managers.user import UserManager
 
 logger = setup_logger()
+
+CRAFT_TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 
 _K8S_CRAFT_PATHS = (
     "backend/tests/integration/tests/craft/k8s/",
@@ -226,6 +229,53 @@ class WorkspaceProxy:
             )
         return results
 
+    def wait_for_file(
+        self,
+        *,
+        expected: bytes | None = None,
+        timeout_s: float = 20,
+    ) -> None:
+        deadline = time.monotonic() + timeout_s
+        last_error: Exception | None = None
+        while time.monotonic() < deadline:
+            try:
+                if self.exists() and (
+                    expected is None or self.read_bytes() == expected
+                ):
+                    return
+            except Exception as e:
+                last_error = e
+            time.sleep(0.5)
+        if last_error is not None:
+            raise AssertionError(f"Timed out waiting for {self}: {last_error}") from (
+                last_error
+            )
+        raise AssertionError(f"Timed out waiting for {self}")
+
+    def wait_for_bytes(self, expected: bytes, *, timeout_s: float = 20) -> None:
+        deadline = time.monotonic() + timeout_s
+        last_error: Exception | None = None
+        while time.monotonic() < deadline:
+            try:
+                if self.exists() and self.read_bytes().endswith(expected):
+                    return
+            except Exception as e:
+                last_error = e
+            time.sleep(0.5)
+        if last_error is not None:
+            raise AssertionError(f"Timed out waiting for {self}: {last_error}") from (
+                last_error
+            )
+        raise AssertionError(f"Timed out waiting for {self}")
+
+    def wait_for_absent(self, *, timeout_s: float = 20) -> None:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            if not self.exists():
+                return
+            time.sleep(0.5)
+        raise AssertionError(f"Timed out waiting for {self} to be absent")
+
     def __fspath__(self) -> str:
         return self._abs_posix
 
@@ -269,7 +319,7 @@ class SandboxHandle:
         self,
         api_user: "DATestUser",
     ) -> WorkspaceProxy:
-        sandbox_id, _session_id = _create_api_session_for_user(api_user)
+        _session_id, sandbox_id = BuildSessionManager.create_with_sandbox(api_user)
         if sandbox_id == self.sandbox_id:
             if self._api_user is not None and api_user.id != self._api_user.id:
                 raise AssertionError(
@@ -289,32 +339,6 @@ class SandboxHandle:
         users: Sequence["DATestUser"],
     ) -> list[WorkspaceProxy]:
         return [self.provision_api_user(user) for user in users]
-
-
-def _create_api_user_and_session() -> tuple["DATestUser", UUID, UUID]:
-    from tests.integration.common_utils.managers.build_session import (
-        BuildSessionManager,
-    )
-    from tests.integration.common_utils.managers.user import UserManager
-
-    api_user = UserManager.create(name=f"craft-k8s-{uuid4().hex[:8]}")
-    session = BuildSessionManager.create(api_user, headless=True)
-    sandbox = session["sandbox"]
-    assert sandbox is not None, f"Session response missing sandbox: {session!r}"
-    assert sandbox["status"].upper() == SandboxStatus.RUNNING.value.upper()
-    return api_user, UUID(sandbox["id"]), UUID(session["id"])
-
-
-def _create_api_session_for_user(api_user: "DATestUser") -> tuple[UUID, UUID]:
-    from tests.integration.common_utils.managers.build_session import (
-        BuildSessionManager,
-    )
-
-    session = BuildSessionManager.create(api_user, headless=True)
-    sandbox = session["sandbox"]
-    assert sandbox is not None, f"Session response missing sandbox: {session!r}"
-    assert sandbox["status"].upper() == SandboxStatus.RUNNING.value.upper()
-    return UUID(sandbox["id"]), UUID(session["id"])
 
 
 def cleanup_api_user_sandbox_rows(user_id: UUID) -> None:
@@ -360,7 +384,8 @@ def _provisioned_sandbox(
     The proxy resolves identity via the DB (pod IP -> Sandbox.user_id), so a pod
     without a committed Sandbox row fails closed.
     """
-    api_user, sandbox_id, session_id = _create_api_user_and_session()
+    api_user = UserManager.create(name=f"craft-k8s-{uuid4().hex[:8]}")
+    session_id, sandbox_id = BuildSessionManager.create_with_sandbox(api_user)
     user_id = UUID(api_user.id)
     try:
         pod_name = manager._get_pod_name(str(sandbox_id))
@@ -482,7 +507,9 @@ def running_sandbox(
         sandbox_id = pool.sandbox_id
         api_user: "DATestUser | None" = pool.api_user
         if with_session:
-            sandbox_id, session_id = _create_api_session_for_user(pool.api_user)
+            session_id, sandbox_id = BuildSessionManager.create_with_sandbox(
+                pool.api_user
+            )
             if sandbox_id != pool.sandbox_id:
                 _register_extra(sandbox_id, pool.api_user)
 
@@ -744,7 +771,7 @@ def pool_session(
     mutates pod-level state (lifecycle/terminate/restart); those must use ``live_pod``.
     """
     _cleanup_pool_workspace(_pool_pod.k8s_client, _pool_pod.pod_name)
-    sandbox_id, session_id = _create_api_session_for_user(_pool_pod.api_user)
+    session_id, sandbox_id = BuildSessionManager.create_with_sandbox(_pool_pod.api_user)
     if sandbox_id != _pool_pod.sandbox_id:
         # Pool invariant broke (pool pod terminated externally). Reap the stray and fail loudly.
         with suppress(Exception):

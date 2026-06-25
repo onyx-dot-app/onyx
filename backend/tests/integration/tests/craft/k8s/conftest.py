@@ -10,20 +10,16 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from onyx.auth.schemas import UserRole as AuthUserRole
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.server.features.build.configs import SANDBOX_BACKEND
 from onyx.server.features.build.configs import SandboxBackend
 from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.common.craft.users import create_or_login_admin
 from tests.integration.common_utils import http_client
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
-from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
-from tests.integration.common_utils.managers.user import build_email
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 pytest_plugins = (
@@ -89,41 +85,6 @@ def seed_dev_license_for_session() -> None:
     return None
 
 
-def _is_user_already_exists(response: httpx.Response) -> bool:
-    # Only a 400 with detail REGISTER_USER_ALREADY_EXISTS counts; a malformed
-    # request also 400s but must not be treated as "exists".
-    if response.status_code == 409:
-        return True
-    if response.status_code != 400:
-        return False
-    try:
-        body = response.json()
-    except ValueError:
-        return False
-    return (
-        isinstance(body, dict) and body.get("detail") == "REGISTER_USER_ALREADY_EXISTS"
-    )
-
-
-def _create_or_login_seed_admin() -> DATestUser:
-    try:
-        return UserManager.create(name=ADMIN_USER_NAME)
-    except httpx.HTTPStatusError as e:
-        if not _is_user_already_exists(e.response):
-            raise
-
-    return UserManager.login_as_user(
-        DATestUser(
-            id="",
-            email=build_email(ADMIN_USER_NAME),
-            password=DEFAULT_PASSWORD,
-            headers=GENERAL_HEADERS.copy(),
-            role=AuthUserRole.BASIC,
-            is_active=True,
-        )
-    )
-
-
 @pytest.fixture(scope="session", autouse=True)
 def _module_reset_and_seed(  # noqa: ARG001
     _test_client: httpx.Client,
@@ -133,7 +94,7 @@ def _module_reset_and_seed(  # noqa: ARG001
     Name must match the parent craft autouse fixture so it overrides (rather
     than runs alongside) the parent's admin seeding.
     """
-    admin = _create_or_login_seed_admin()
+    admin = create_or_login_admin(ADMIN_USER_NAME)
     provider = LLMProviderManager.create(
         user_performing_action=admin,
         name=f"craft-k8s-openai-{uuid4().hex[:8]}",

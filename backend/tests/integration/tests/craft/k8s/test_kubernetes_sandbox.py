@@ -31,6 +31,7 @@ from onyx.server.features.build.sandbox.models import LLMProviderConfig
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import default_llm_config
+from tests.integration.tests.craft.k8s.k8s_fixtures import CRAFT_TEST_USER_ID
 from tests.integration.tests.craft.k8s.k8s_fixtures import pod_exec
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_for_pod_deletion
 from tests.integration.tests.craft.k8s.k8s_fixtures import wait_until_healthy
@@ -41,8 +42,6 @@ pytestmark = pytest.mark.skipif(
     SANDBOX_BACKEND != SandboxBackend.KUBERNETES,
     reason="K8s tests require SANDBOX_BACKEND=kubernetes; run in the dedicated K8s CI job.",
 )
-
-TEST_USER_ID = UUID("ee0dd46a-23dc-4128-abab-6712b3f4464c")
 
 
 def _provisioned_sandbox(
@@ -55,7 +54,7 @@ def _provisioned_sandbox(
     )
     info = manager.provision(
         sandbox_id=sandbox_id,
-        user_id=TEST_USER_ID,
+        user_id=CRAFT_TEST_USER_ID,
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         llm_config=config,
         onyx_pat="ci-test-pat",

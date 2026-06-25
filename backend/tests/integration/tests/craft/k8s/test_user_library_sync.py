@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from uuid import uuid4
 
@@ -28,37 +27,6 @@ def _library_path(workspace: WorkspaceProxy, file_path: str) -> WorkspaceProxy:
     return workspace / "managed" / "user_library" / file_path
 
 
-def _wait_for_file(
-    path: WorkspaceProxy,
-    *,
-    expected: bytes | None = None,
-    timeout_s: float = 20,
-) -> None:
-    deadline = time.monotonic() + timeout_s
-    last_error: Exception | None = None
-    while time.monotonic() < deadline:
-        try:
-            if path.exists() and (expected is None or path.read_bytes() == expected):
-                return
-        except Exception as e:
-            last_error = e
-        time.sleep(0.5)
-    if last_error is not None:
-        raise AssertionError(
-            f"Timed out waiting for {path}: {last_error}"
-        ) from last_error
-    raise AssertionError(f"Timed out waiting for {path}")
-
-
-def _wait_for_absent(path: WorkspaceProxy, *, timeout_s: float = 20) -> None:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if not path.exists():
-            return
-        time.sleep(0.5)
-    raise AssertionError(f"Timed out waiting for {path} to be absent")
-
-
 class TestUserLibrarySync:
     def test_upload_api_syncs_file_to_running_sandbox(
         self,
@@ -74,8 +42,7 @@ class TestUserLibrarySync:
         )
         response.raise_for_status()
 
-        _wait_for_file(
-            _library_path(handle.workspace_path, filename),
+        _library_path(handle.workspace_path, filename).wait_for_file(
             expected=payload,
         )
 
@@ -93,8 +60,7 @@ class TestUserLibrarySync:
         )
         response.raise_for_status()
 
-        _wait_for_file(
-            _library_path(handle.workspace_path, f"bundle/{member}"),
+        _library_path(handle.workspace_path, f"bundle/{member}").wait_for_file(
             expected=payload,
         )
 
@@ -121,7 +87,7 @@ class TestUserLibrarySync:
             link.resolve()
             == (handle.workspace_path / "managed" / "user_library").resolve()
         )
-        _wait_for_file(link / filename, expected=payload)
+        (link / filename).wait_for_file(expected=payload)
 
     def test_delete_api_removes_file_from_running_sandbox(
         self,
@@ -137,7 +103,7 @@ class TestUserLibrarySync:
         response.raise_for_status()
         document_id = response.json()["entries"][0]["id"]
         target = _library_path(handle.workspace_path, filename)
-        _wait_for_file(target, expected=b"bye")
+        target.wait_for_file(expected=b"bye")
 
         delete_response = delete_user_library_file(handle.api_user, document_id)
         delete_response.raise_for_status()
@@ -147,4 +113,4 @@ class TestUserLibrarySync:
             for entry in list_user_library_tree(handle.api_user)
         )
 
-        _wait_for_absent(target)
+        target.wait_for_absent()

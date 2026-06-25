@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import time
 import zipfile
 from collections.abc import Callable
 from collections.abc import Generator
@@ -107,37 +106,6 @@ def _replace_bundle(
         _bundle(skill.slug, body),
         admin,
     )
-
-
-def _wait_for_bytes(
-    path: WorkspaceProxy,
-    expected: bytes,
-    *,
-    timeout_s: float = 20,
-) -> None:
-    deadline = time.monotonic() + timeout_s
-    last_error: Exception | None = None
-    while time.monotonic() < deadline:
-        try:
-            if path.exists() and path.read_bytes().endswith(expected):
-                return
-        except Exception as e:
-            last_error = e
-        time.sleep(0.5)
-    if last_error is not None:
-        raise AssertionError(
-            f"Timed out waiting for {path}: {last_error}"
-        ) from last_error
-    raise AssertionError(f"Timed out waiting for {path}")
-
-
-def _wait_for_absent(path: WorkspaceProxy, *, timeout_s: float = 20) -> None:
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if not path.exists():
-            return
-        time.sleep(0.5)
-    raise AssertionError(f"Timed out waiting for {path} to be absent")
 
 
 def _create_users(count: int) -> list[DATestUser]:
@@ -351,8 +319,7 @@ class TestSkillPush:
         )
 
         for workspace in workspaces:
-            _wait_for_bytes(
-                _skill_file_path(workspace, skill.slug),
+            _skill_file_path(workspace, skill.slug).wait_for_bytes(
                 b"public skill body\n",
             )
 
@@ -379,9 +346,9 @@ class TestSkillPush:
             body="engineering only\n",
         )
 
-        _wait_for_bytes(_skill_file_path(ws_a, skill.slug), b"engineering only\n")
-        _wait_for_absent(_skill_file_path(ws_b, skill.slug))
-        _wait_for_absent(_skill_file_path(ws_c, skill.slug))
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"engineering only\n")
+        _skill_file_path(ws_b, skill.slug).wait_for_absent()
+        _skill_file_path(ws_c, skill.slug).wait_for_absent()
 
     def test_disable_skill_removes_files_from_affected_sandboxes(
         self,
@@ -405,11 +372,11 @@ class TestSkillPush:
             group_ids=[group.id],
             body="to be disabled\n",
         )
-        _wait_for_bytes(_skill_file_path(workspace, skill.slug), b"to be disabled\n")
+        _skill_file_path(workspace, skill.slug).wait_for_bytes(b"to be disabled\n")
 
         SkillManager.patch_custom(skill, k8s_admin_user, enabled=False)
 
-        _wait_for_absent(_skills_dir(workspace) / skill.slug)
+        (_skills_dir(workspace) / skill.slug).wait_for_absent()
 
     def test_grants_change_adds_to_newly_granted_and_removes_from_revoked(
         self,
@@ -437,13 +404,13 @@ class TestSkillPush:
             group_ids=[group_x.id],
             body="shifting grants\n",
         )
-        _wait_for_bytes(_skill_file_path(ws_a, skill.slug), b"shifting grants\n")
-        _wait_for_absent(_skill_file_path(ws_b, skill.slug))
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"shifting grants\n")
+        _skill_file_path(ws_b, skill.slug).wait_for_absent()
 
         SkillManager.replace_grants(skill, [group_y.id], k8s_admin_user)
 
-        _wait_for_absent(_skill_file_path(ws_a, skill.slug))
-        _wait_for_bytes(_skill_file_path(ws_b, skill.slug), b"shifting grants\n")
+        _skill_file_path(ws_a, skill.slug).wait_for_absent()
+        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"shifting grants\n")
 
     def test_replace_bundle_propagates_new_content(
         self,
@@ -461,11 +428,11 @@ class TestSkillPush:
             is_public=True,
             body="version one\n",
         )
-        _wait_for_bytes(_skill_file_path(workspace, skill.slug), b"version one\n")
+        _skill_file_path(workspace, skill.slug).wait_for_bytes(b"version one\n")
 
         _replace_bundle(k8s_admin_user, skill, body="version two\n")
 
-        _wait_for_bytes(_skill_file_path(workspace, skill.slug), b"version two\n")
+        _skill_file_path(workspace, skill.slug).wait_for_bytes(b"version two\n")
 
     def test_delete_skill_removes_directory_from_all_affected_sandboxes(
         self,
@@ -483,13 +450,13 @@ class TestSkillPush:
             is_public=True,
             body="will be deleted\n",
         )
-        _wait_for_bytes(_skill_file_path(ws_a, skill.slug), b"will be deleted\n")
-        _wait_for_bytes(_skill_file_path(ws_b, skill.slug), b"will be deleted\n")
+        _skill_file_path(ws_a, skill.slug).wait_for_bytes(b"will be deleted\n")
+        _skill_file_path(ws_b, skill.slug).wait_for_bytes(b"will be deleted\n")
 
         SkillManager.delete_custom(skill, k8s_admin_user)
 
-        _wait_for_absent(_skills_dir(ws_a) / skill.slug)
-        _wait_for_absent(_skills_dir(ws_b) / skill.slug)
+        (_skills_dir(ws_a) / skill.slug).wait_for_absent()
+        (_skills_dir(ws_b) / skill.slug).wait_for_absent()
 
     def test_user_with_overlapping_grants_receives_skill_once(
         self,
@@ -518,7 +485,7 @@ class TestSkillPush:
             body="dedup\n",
         )
 
-        _wait_for_bytes(_skill_file_path(workspace, skill.slug), b"dedup\n")
+        _skill_file_path(workspace, skill.slug).wait_for_bytes(b"dedup\n")
         skill_dir = _skills_dir(workspace) / skill.slug
         skill_files = [p for p in skill_dir.rglob("*") if p.is_file()]
         assert len(skill_files) == 1

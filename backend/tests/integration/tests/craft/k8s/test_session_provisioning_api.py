@@ -34,11 +34,11 @@ def test_create_session_provisions_running_sandbox_pod_via_api(
     sandbox_id: UUID | None = None
     try:
         session = BuildSessionManager.create(api_user, headless=True)
-        sandbox = session["sandbox"]
+        sandbox = session.sandbox
         assert sandbox is not None
-        assert sandbox["status"].upper() == SandboxStatus.RUNNING.value.upper()
+        assert sandbox.status == SandboxStatus.RUNNING
 
-        sandbox_id = UUID(sandbox["id"])
+        sandbox_id = UUID(sandbox.id)
         pod_name = k8s_manager._get_pod_name(sandbox_id)
         pod = k8s_client.read_namespaced_pod(
             name=pod_name,

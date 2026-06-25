@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-import time
-from typing import Any
 from uuid import UUID
 from uuid import uuid4
 
@@ -25,6 +23,9 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.managers.build_approvals import (
+    BuildApprovalsManager,
+)
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.docker_e2e.conftest import DockerExec
@@ -67,23 +68,6 @@ def _start_slack_post_via_proxy(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-    )
-
-
-def _wait_for_pending_approval(
-    user: DATestUser, session_id: UUID, timeout_s: float = 30.0
-) -> dict[str, Any]:
-    deadline = time.monotonic() + timeout_s
-    url = f"{API_SERVER_URL}/build/approvals/sessions/{session_id}/live"
-    while time.monotonic() < deadline:
-        resp = client.get(url, headers=user.headers, cookies=user.cookies)
-        resp.raise_for_status()
-        items = resp.json().get("items", [])
-        if items:
-            return items[0]
-        time.sleep(0.5)
-    raise AssertionError(
-        f"No pending approval surfaced for session {session_id} within {timeout_s}s."
     )
 
 
@@ -422,7 +406,9 @@ def test_approve_decision_forwards_to_slack(
     curl_proc = _start_slack_post_via_proxy(container, session_id)
 
     try:
-        approval = _wait_for_pending_approval(user, session_id, timeout_s=30.0)
+        approval = BuildApprovalsManager.wait_for_pending(
+            user, session_id, timeout_s=30.0
+        )
         resp = _post_decision(user, approval["approval_id"], ApprovalDecision.APPROVED)
         assert resp.status_code == 200, (
             f"APPROVE failed: {resp.status_code} {resp.text!r}"
@@ -454,7 +440,9 @@ def test_reject_decision_returns_403_user_rejected(
     curl_proc = _start_slack_post_via_proxy(container, session_id)
 
     try:
-        approval = _wait_for_pending_approval(user, session_id, timeout_s=30.0)
+        approval = BuildApprovalsManager.wait_for_pending(
+            user, session_id, timeout_s=30.0
+        )
         resp = _post_decision(user, approval["approval_id"], ApprovalDecision.REJECTED)
         assert resp.status_code == 200, (
             f"REJECT failed: {resp.status_code} {resp.text!r}"
