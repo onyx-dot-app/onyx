@@ -15,6 +15,8 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import HierarchyNodeType
+from onyx.db.hierarchy import escape_like_pattern
+from onyx.db.hierarchy import HIERARCHY_NODE_SEARCH_LIMIT
 from onyx.db.models import HierarchyNode
 
 
@@ -70,6 +72,33 @@ def _get_accessible_hierarchy_nodes_for_source(
     )
     stmt = stmt.where(_build_hierarchy_access_filter(user_email, external_group_ids))
     stmt = stmt.order_by(HierarchyNode.display_name)
+    return list(db_session.execute(stmt).scalars().all())
+
+
+def _search_accessible_hierarchy_nodes(
+    db_session: Session,
+    query: str,
+    sources: list[DocumentSource] | None,
+    user_email: str,
+    external_group_ids: list[str],
+    limit: int = HIERARCHY_NODE_SEARCH_LIMIT,
+) -> list[HierarchyNode]:
+    """EE version: ACL-filtered case-insensitive display_name search."""
+    pattern = f"%{escape_like_pattern(query)}%"
+    stmt = (
+        select(HierarchyNode)
+        .where(
+            HierarchyNode.node_type.notin_(
+                [HierarchyNodeType.STUB, HierarchyNodeType.SOURCE]
+            ),
+            HierarchyNode.display_name.ilike(pattern, escape="\\"),
+            _build_hierarchy_access_filter(user_email, external_group_ids),
+        )
+        .order_by(HierarchyNode.display_name)
+        .limit(limit)
+    )
+    if sources:
+        stmt = stmt.where(HierarchyNode.source.in_(sources))
     return list(db_session.execute(stmt).scalars().all())
 
 
