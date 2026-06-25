@@ -5,7 +5,7 @@ const eslintConfigPrettier = require("eslint-config-prettier");
 
 module.exports = defineConfig([
   expoConfig,
-  // Disable ESLint rules that conflict with Prettier; keep this last so it wins.
+  // Must stay last to override conflicting rules.
   eslintConfigPrettier,
   {
     ignores: ["dist/*", ".expo/*", "node_modules/*", "android/*", "ios/*"],

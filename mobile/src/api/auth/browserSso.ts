@@ -1,7 +1,5 @@
-// System-browser OAuth leg of mobile SSO. Non-obvious invariants:
-//   * authorize URL is OPENED (302), never fetched — else the CSRF cookie sets on the wrong client.
-//   * only `code_challenge` rides the authorize URL; `code_verifier` stays on-device until the exchange.
-//   * `app_state` is verified on return.
+// Authorize URL is OPENED, never fetched — else the CSRF cookie sets on the wrong client.
+// Only `code_challenge` rides the URL; `code_verifier` stays on-device until the exchange.
 import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";

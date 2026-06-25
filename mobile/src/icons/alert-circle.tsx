@@ -2,7 +2,6 @@ import Svg, { Circle, Path } from "react-native-svg";
 
 import type { IconProps } from "@/icons/types";
 
-// RN variant of web Opal `SvgAlertCircle` (web/lib/opal/src/icons/alert-circle.tsx).
 const SvgAlertCircle = ({ size = 16, ...props }: IconProps) => (
   <Svg
     width={size}

@@ -1,5 +1,4 @@
-// digestStringAsync delegates to node's real SHA-256 so the S256-match assertion is
-// meaningful; getRandomBytesAsync is deterministic; WebBrowser echoes app_state back.
+// digestStringAsync delegates to node's real SHA-256 so the S256-match assertion is meaningful.
 import { createHash } from "crypto";
 
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
@@ -9,7 +8,7 @@ import { runBrowserSso, BrowserSsoCancelledError } from "@/api/auth/browserSso";
 import type { ProviderDescriptor } from "@/api/auth/providers";
 import { openAuthSessionAsync } from "expo-web-browser";
 
-// `jest.mock` is hoisted above the imports by babel-jest, despite source order.
+// `jest.mock` is hoisted above the imports by babel-jest.
 jest.mock("@/api/config", () => ({ getApiPrefix: () => "/api" }));
 jest.mock("@/state/session", () => ({
   getStoredServerUrl: () => "https://acme.onyx.app",
@@ -24,8 +23,7 @@ jest.mock("expo-crypto", () => ({
       Uint8Array.from({ length: n }, (_, i) => (i * 31 + 7) & 0xff),
     ),
   ),
-  // Real SHA-256 of the verifier string, standard-base64 (what expo returns).
-  // `require` inside the factory: jest forbids referencing out-of-scope imports.
+  // Real SHA-256, standard-base64 (what expo returns); `require` since jest forbids out-of-scope imports here.
   digestStringAsync: jest.fn((_algo: string, data: string) =>
     Promise.resolve(
       // eslint-disable-next-line @typescript-eslint/no-require-imports

@@ -1,4 +1,3 @@
-// Shared login/signup body: password form + browser-SSO buttons, split by "or".
 import { View } from "react-native";
 
 import type { ProviderDescriptor } from "@/api/auth/providers";

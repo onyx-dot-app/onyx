@@ -1,9 +1,5 @@
-// AuthGate — wraps the root navigator and steers between the app and the auth screens
-// (decision in `resolveAuthGate`, pure + unit-tested).
-//
-// Navigation is imperative (`router.replace`), not `<Redirect>`: at the root layout
-// <Redirect>'s `useFocusEffect` has no focused route to bind to. `children` (the <Stack>)
-// renders in every branch so the navigator stays mounted; the splash overlays it.
+// Imperative nav, not `<Redirect>`: at the root layout <Redirect>'s `useFocusEffect` has no
+// focused route to bind to. `children` renders in every branch so the navigator stays mounted.
 import { router, useSegments } from "expo-router";
 import * as React from "react";
 import { ActivityIndicator, View } from "react-native";

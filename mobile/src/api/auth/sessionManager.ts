@@ -1,5 +1,3 @@
-// Single orchestration point for the mobile session lifecycle; all session
-// mutations route through here so the token-and-cache invariants live in one place.
 import { runBrowserSso } from "@/api/auth/browserSso";
 import type { ProviderDescriptor } from "@/api/auth/providers";
 import { apiFetch } from "@/api/client";
@@ -8,7 +6,6 @@ import { isAuthError } from "@/api/errors";
 import { persister, queryClient } from "@/query/client";
 import { useSession } from "@/state/session";
 
-// fastapi-users BearerTransport login/refresh response shape (also the SSO exchange).
 export interface BearerTokenResponse {
   access_token: string;
   token_type: string;
@@ -22,23 +19,20 @@ const LOGIN_PATH = "/auth/mobile/login";
 const REFRESH_PATH = "/auth/mobile/refresh";
 const LOGOUT_PATH = "/auth/mobile/logout";
 const SSO_EXCHANGE_PATH = "/auth/mobile/sso/exchange";
-// Shared (non-mobile) fastapi-users route; only creates the user.
+// Shared (non-mobile) route; only creates the user, mints no token.
 const REGISTER_PATH = "/auth/register";
 
-// Bumped on every identity change; an in-flight refresh applies its result only
-// if this is unchanged, so a refresh resolving after logout/re-login can't
-// resurrect a cleared session or cross-contaminate a new one. (Single-flight
-// dedupes concurrent refreshes; it does nothing to order them against login/logout.)
+// Bumped on every identity change; a late refresh applies its result only if
+// unchanged, so it can't resurrect a logged-out or cross-contaminate a new session.
 let sessionEpoch = 0;
 
-// Drop in-memory + on-disk query cache on both login and logout so a new
-// identity can never read a previous user's cached data.
+// Drop in-memory + on-disk cache so a new identity can't read a prior user's data.
 async function purgeCache(): Promise<void> {
   queryClient.clear();
   await persister.removeClient();
 }
 
-// fastapi-users `/login` expects an OAuth2 password form (`username`/`password`), not JSON.
+// `/login` expects an OAuth2 password form (`username`/`password`), not JSON.
 function passwordForm(email: string, password: string): URLSearchParams {
   const form = new URLSearchParams();
   form.set("username", email);
@@ -48,8 +42,7 @@ function passwordForm(email: string, password: string): URLSearchParams {
 
 async function installSession(accessToken: string): Promise<void> {
   sessionEpoch += 1; // new identity → invalidate any in-flight refresh
-  // Install the new token before purging so a query firing mid-purge reads the
-  // new identity's token, not the prior user's (which would repopulate the cache).
+  // Install the new token before purging, else a query firing mid-purge repopulates the cache with the prior user's data.
   await setToken(accessToken);
   await purgeCache();
   useSession.getState().setStatus("authed");
@@ -58,7 +51,7 @@ async function installSession(accessToken: string): Promise<void> {
 async function passwordLogin(email: string, password: string): Promise<string> {
   const res = await apiFetch<BearerTokenResponse>(LOGIN_PATH, {
     method: "POST",
-    auth: false, // no token yet
+    auth: false,
     body: passwordForm(email, password),
   });
   return res.access_token;
@@ -83,8 +76,8 @@ export async function login(method: LoginMethod): Promise<void> {
   await installSession(accessToken);
 }
 
-// register() succeeded but the follow-up auto-login failed (e.g. the instance requires email
-// verification): the account exists, so the UI must say "sign in", not "signup failed".
+// Register succeeded but auto-login failed (e.g. email verification required):
+// account exists, so the UI must say "sign in", not "signup failed".
 export class PostRegisterLoginError extends Error {
   readonly loginError: unknown;
   constructor(loginError: unknown) {
@@ -115,17 +108,15 @@ export async function register(params: {
   }
 }
 
-// Wipe the session locally; used by logout and on an irrecoverable refresh failure.
 export async function clearLocalSession(): Promise<void> {
-  sessionEpoch += 1; // invalidate any in-flight refresh so it can't resurrect us
+  sessionEpoch += 1; // a late refresh can't resurrect us
   await setToken(null);
   await purgeCache();
   useSession.getState().setStatus("anon");
 }
 
 export async function logout(): Promise<void> {
-  // Best-effort server-side revocation; the local wipe runs regardless so a
-  // network failure can't strand the user half-logged-out.
+  // Best-effort revoke; the local wipe below runs regardless of network failure.
   try {
     await apiFetch<void>(LOGOUT_PATH, { method: "POST" });
   } catch (err) {
@@ -134,8 +125,7 @@ export async function logout(): Promise<void> {
   await clearLocalSession();
 }
 
-// Single-flight refresh: concurrent callers share one in-flight request, so a
-// burst of near-simultaneous triggers can't fan out into N refresh calls.
+// Single-flight: concurrent callers share one in-flight refresh.
 let inFlightRefresh: Promise<string | null> | null = null;
 
 export function refreshToken(): Promise<string | null> {
@@ -146,15 +136,14 @@ export function refreshToken(): Promise<string | null> {
       const res = await apiFetch<BearerTokenResponse>(REFRESH_PATH, {
         method: "POST",
       });
-      // Session logged out/replaced mid-flight: discard rather than mix identities.
+      // Logged out/replaced mid-flight: discard rather than mix identities.
       if (sessionEpoch !== startedEpoch) return null;
       await setToken(res.access_token);
       useSession.getState().setStatus("authed");
       return res.access_token;
     } catch (err) {
-      // Auth error = token already rejected (revoked/expired), unrecoverable: drop
-      // to logged-out, but only if still the same session. Transient errors re-throw
-      // so the caller keeps the existing token and can retry later.
+      // Auth error = token rejected, unrecoverable → wipe (if same session).
+      // Transient errors re-throw so the caller keeps the existing token.
       if (isAuthError(err)) {
         if (sessionEpoch === startedEpoch) await clearLocalSession();
         return null;
@@ -167,23 +156,19 @@ export function refreshToken(): Promise<string | null> {
   return inFlightRefresh;
 }
 
-// Test-only: reset module-level state so a leaked `inFlightRefresh` can't make
-// the next test's `refreshToken()` silently reuse a stale promise.
+// Test-only: clear module state so a leaked `inFlightRefresh` can't bleed into the next test.
 export function __resetSessionStateForTests(): void {
   sessionEpoch = 0;
   inFlightRefresh = null;
 }
 
-// The V1 token is opaque (not a JWT), so expiry can't be read client-side; this
-// returns the stored token as-is without pre-emptive refresh. If a refresh is
-// in flight, callers await it for the freshest token — but a transient failure
-// must not deny them the still-valid stored token, so fall back to it on throw.
+// Token is opaque (not a JWT), so no client-side expiry check; return it as-is.
+// Await an in-flight refresh for freshness, but fall back to the stored token on a transient throw.
 export async function getValidToken(): Promise<string | null> {
   if (inFlightRefresh) {
     try {
       return await inFlightRefresh;
     } catch {
-      // Transient refresh failure (auth failures resolve to null, not throw).
       return getToken();
     }
   }

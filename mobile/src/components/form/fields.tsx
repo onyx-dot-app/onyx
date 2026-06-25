@@ -1,6 +1,4 @@
-// Bound field atoms (Layer 2) — the only form files that import react-hook-form. RN
-// counterpart of web's `InputTypeInField` / `PasswordInputTypeInField`. Binds via
-// `useController`, never `register` — RN `TextInput` emits `onChangeText`, not a DOM event.
+// Binds via `useController`, never `register` — RN `TextInput` emits `onChangeText`, not a DOM event.
 import {
   useController,
   type Control,
@@ -20,8 +18,7 @@ import {
   type TextInputVariant,
 } from "@/components/ui/text-input";
 
-// RN TextInput only handles strings, so binding a number/boolean field would coerce +
-// corrupt form state — constrain names to string-valued paths.
+// RN TextInput only handles strings; binding a number/boolean field would corrupt form state.
 type StringFieldPath<TFieldValues extends FieldValues> = {
   [K in FieldPath<TFieldValues>]: FieldPathValue<TFieldValues, K> extends
     | string
@@ -43,15 +40,13 @@ interface FieldBaseProps<
   TName extends StringFieldPath<TFieldValues>,
 > {
   name: TName;
-  /** Optional — falls back to the nearest <FormProvider>. */
   control?: Control<TFieldValues>;
-  /** Inline RHF rules; a `zodResolver` at the form level is preferred. */
   rules?: FieldRules<TFieldValues, TName>;
   title: string;
   description?: string;
   subDescription?: string;
   suffix?: "optional" | (string & {});
-  /** Visually disabled + non-editable. The value stays in form state and submits. */
+  /** Value still submits while disabled. */
   disabled?: boolean;
 }
 
@@ -64,8 +59,7 @@ function resolveVariant(
   return "idle";
 }
 
-// A truthy error with no message (e.g. boolean `required: true`) would flip the field red
-// with no message row or a11y alert — a fallback keeps message + variant in lockstep.
+// Fallback message keeps the error variant and a11y alert in lockstep when an error has no message.
 function errorMessageOf(
   message: string | undefined,
   hasError: boolean,

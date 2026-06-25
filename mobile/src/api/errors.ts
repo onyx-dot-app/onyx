@@ -1,6 +1,3 @@
-// Backend errors arrive as `{ error_code, detail }`, `{ detail }`, or `{ message }`;
-// apiFetch flattens any shape into these typed fields.
-
 interface ApiErrorArgs {
   status: number;
   code?: string;

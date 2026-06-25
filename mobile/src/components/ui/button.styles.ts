@@ -1,33 +1,23 @@
-// Pure style/state logic for the Button — no RN imports, so it's unit-testable.
-// Ported from web's Opal Button + its color matrix
-// (web/lib/opal/src/core/interactive/stateless/styles.css). Classes are literal
-// token strings (so NativeWind's compiler sees them) resolving to the same Onyx
-// tokens as web. Web `:hover` has no touch equivalent, so the matrix carries only
-// rest / active / disabled.
+// Classes are literal token strings so NativeWind's compiler sees them.
+// No `hover` state: touch has no hover equivalent, so the matrix is rest/active/disabled.
 import type {
   InteractiveProminence,
   InteractiveVariant,
   TextFont,
 } from "@onyx-ai/shared/contracts";
 
-/** Size preset — mirrors web's `ContainerSizeVariants`. */
 export type ButtonSize = "lg" | "md" | "sm" | "xs" | "2xs" | "fit";
 
-/** Width preset. `"fit"` shrink-wraps to content; `"full"` stretches to parent. */
 export type ButtonWidth = "fit" | "full";
 
-/** Touch interaction override (no `hover` — see file header). */
 export type ButtonInteraction = "rest" | "active";
 
-/** Resolved visual state the color matrix is keyed on. */
 export type ButtonColorState = "rest" | "active" | "disabled";
 
 interface ButtonColorCell {
   bg: string;
-  /** Foreground class — label and icon. */
   fg: string;
-  /** Secondary-prominence border (`""` otherwise); tracks `fg` because web's bare
-   *  `@apply border` is `currentColor` in Tailwind v4. */
+  // Tracks `fg`: a bare `@apply border` is `currentColor` in Tailwind v4.
   border: string;
 }
 
@@ -36,8 +26,7 @@ type ButtonColorMatrix = Record<
   Record<InteractiveProminence, Record<ButtonColorState, ButtonColorCell>>
 >;
 
-// Full Record by type, so a new shared variant/prominence won't compile until its
-// cells are added — the cross-platform drift guard.
+// Full Record by type: a new shared variant/prominence won't compile until its cells exist.
 export const BUTTON_COLORS: ButtonColorMatrix = {
   default: {
     primary: {
@@ -200,22 +189,15 @@ export const BUTTON_COLORS: ButtonColorMatrix = {
 };
 
 interface ButtonSizeSpec {
-  /** Height class (`""` = content height, for `fit`). */
-  height: string;
-  /** Min-width class — keeps icon-only buttons square (`""` for `fit`). */
-  minWidth: string;
+  height: string; // `""` = content height, for `fit`
+  minWidth: string; // keeps icon-only buttons square
   padding: string;
   rounding: string;
   font: TextFont;
-  /** Padding around each icon (web's icon-wrapper padding). */
   iconPad: string;
-  /** Icon glyph size, px. */
   iconSize: number;
 }
 
-// Heights are web's line-height tokens → px (lg h1-headline 2.25rem=36 … 2xs
-// secondary 1rem=16); padding web rem×16 (p-2=8 → p-8, p-1=4 → p-4, p-0.5=2 → p-2);
-// rounding from the Button's `isLarge ? "md" : size==="2xs" ? "xs" : "sm"` rule.
 export const BUTTON_SIZES: Record<ButtonSize, ButtonSizeSpec> = {
   lg: {
     height: "h-36",

@@ -1,4 +1,3 @@
-// Signup screen: shared AuthMethods in signup mode, gated on /auth/type.
 import { router } from "expo-router";
 import { ActivityIndicator } from "react-native";
 

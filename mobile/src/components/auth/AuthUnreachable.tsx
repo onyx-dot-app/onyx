@@ -1,6 +1,4 @@
-// AuthGate's error overlay when `/api/me` is unreachable: a retry + change-instance escape so
-// a backend blip can't strand the user on a spinner. Self-clears too — the query refetches on
-// app focus / reconnect once the instance is reachable again.
+// Self-clears: the `/api/me` query refetches on app focus / reconnect once the instance is reachable.
 import { router } from "expo-router";
 import { View } from "react-native";
 

@@ -1,5 +1,4 @@
-// Connect screen — mobile-only instance picker mirroring the desktop "Root Domain" screen
-// (desktop/src/index.html). Probes the URL via `/auth/type` before committing it.
+// Probes the URL via /auth/type before committing it.
 import { router } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
@@ -19,7 +18,7 @@ export default function ConnectScreen() {
   const serverUrl = useSession((state) => state.serverUrl);
   const setServerUrl = useSession((state) => state.setServerUrl);
 
-  // Default to cloud (like desktop): cloud users tap through, self-hosted overwrite.
+  // Default to cloud: cloud users tap through, self-hosted overwrite.
   const [url, setUrl] = useState(serverUrl ?? ONYX_CLOUD_URL);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,7 +41,7 @@ export default function ConnectScreen() {
       setBusy(false);
       return;
     }
-    // `busy` stays true — the screen unmounts on navigation, so there's nothing to reset.
+    // busy stays true: the screen unmounts on navigation, nothing to reset.
     setServerUrl(normalized);
     router.replace("/(auth)/login");
   }

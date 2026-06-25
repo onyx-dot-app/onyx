@@ -1,17 +1,13 @@
-// Tokens are credentials, so they live in the device keychain via
-// expo-secure-store, NOT in MMKV (non-secret cache only). Scoped by instance
-// URL so user B can't reuse another instance's bearer token. iOS Keychain
-// survives uninstall with no bulk-clear, so logout deletes the entry explicitly.
+// Tokens live in the keychain (expo-secure-store), never MMKV; scoped by instance
+// URL so a bearer can't cross instances. Keychain survives uninstall, so logout deletes explicitly.
 import * as SecureStore from "expo-secure-store";
 
 import { getBaseUrl } from "@/api/config";
 
-// SecureStore keys allow alphanumerics plus ".", "-", "_".
 const ACCESS_TOKEN_KEY_PREFIX = "onyx.auth.access_token";
 const SAFE_KEY_CHAR = /^[A-Za-z0-9.-]$/;
 
-// THIS_DEVICE_ONLY keeps the token out of iCloud/backups; WHEN_UNLOCKED gates
-// reads on an unlocked device.
+// THIS_DEVICE_ONLY keeps the token out of iCloud/backups.
 const TOKEN_KEYCHAIN_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };

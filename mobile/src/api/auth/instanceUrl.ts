@@ -1,5 +1,5 @@
-// `probeAuthType` validates a *candidate* URL via raw `fetch` — `apiFetch` is bound to
-// the already-committed server URL, so it can't reach an unconfirmed instance.
+// Probes a *candidate* URL via raw `fetch`; `apiFetch` is bound to the committed
+// server URL and can't reach an unconfirmed instance.
 import { getApiPrefix } from "@/api/config";
 import type { AuthTypeMetadata } from "@/api/types";
 
@@ -7,8 +7,7 @@ export const ONYX_CLOUD_URL = "https://cloud.onyx.app";
 
 const PROBE_TIMEOUT_MS = 10_000;
 
-// Add https only when no scheme is given (explicit http:// is kept, e.g. localhost);
-// strip query/fragment + trailing slash.
+// Default to https only when no scheme given (keep explicit http:// for localhost).
 export function normalizeServerUrl(input: string): string {
   const trimmed = input.trim();
   if (trimmed.length === 0) {

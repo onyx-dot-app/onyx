@@ -15,11 +15,6 @@ import SvgFolder from "@/icons/folder";
 import SvgPlus from "@/icons/plus";
 import SvgSettings from "@/icons/settings";
 
-// Demo of the React Native Sidebar — a port of the web Opal `SidebarLayouts` shell.
-// Tap the menu icon to slide the sidebar in over the screen; tap the backdrop or
-// swipe left to close. Colors resolve from @onyx-ai/shared, identical to web in
-// both light and dark.
-
 function SidebarTrigger() {
   const { setFolded } = useSidebar();
   return (
@@ -41,7 +36,7 @@ export default function Home() {
 
   function choose(key: string) {
     setSelected(key);
-    setFolded(true); // auto-dismiss after selection (demo behavior)
+    setFolded(true);
   }
 
   return (
@@ -61,7 +56,6 @@ export default function Home() {
             Signed in as {user.email}
           </Text>
         ) : null}
-        {/* temporary: log out to test the auth loop */}
         <Button
           width="full"
           prominence="secondary"

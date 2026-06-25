@@ -1,5 +1,4 @@
-// Login/signup cross-link (web's footer links). The action is an inner <Text onPress> so it
-// reads as one sentence with only the action underlined.
+// Action is an inner <Text onPress> so it reads as one sentence with only the action underlined.
 import { Text } from "@/components/ui/text";
 
 interface AuthSwitchLinkProps {
