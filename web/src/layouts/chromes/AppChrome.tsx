@@ -486,6 +486,17 @@ export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
 
   const appFocus = useAppFocus();
+  const { appName } = useSettings();
+  const { currentChatSession } = useChatSessions();
+
+  useEffect(() => {
+    const appendChatNameToDocumentTitle =
+      (appFocus.isChat() || appFocus.isSharedChat()) && currentChatSession;
+    document.title = appendChatNameToDocumentTitle
+      ? `${currentChatSession.name} — ${appName}`
+      : appName;
+  }, [currentChatSession?.name, appName, appFocus]);
+
   const { hasBackground, appBackgroundUrl } = useAppBackground();
   const { resolvedTheme } = useTheme();
   const { isSafari } = useBrowserInfo();

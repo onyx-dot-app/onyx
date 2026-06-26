@@ -25,10 +25,6 @@ export async function generateFaviconMetadata(): Promise<Metadata["icons"]> {
   return { icon: iconSrc };
 }
 
-export async function generateAppNameMetadata(): Promise<Metadata["title"]> {
-  return fetchAppName();
-}
-
 export async function generateAdminTitleMetadata(): Promise<Metadata["title"]> {
   return `Admin — ${await fetchAppName()}`;
 }
