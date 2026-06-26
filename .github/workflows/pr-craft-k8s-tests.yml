@@ -55,9 +55,8 @@ env:
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
   BACKEND_IMAGE: "localhost:5001/onyx-backend:ci"
-  # Fail fast on opencode hangs (default is 900s). Without this, CI
-  # waits 15 min for the per-turn timeout while the 20-min workflow timeout
-  # kills the job first — losing failure logs and giving zero signal.
+  # Fail fast on opencode hangs (default is 900s) so a stuck turn surfaces logs
+  # well within the job timeout instead of being killed with zero signal.
   SANDBOX_TURN_TIMEOUT_SECONDS: "120"
   KIND_REGISTRY_NAME: "kind-registry"
   KIND_REGISTRY_PORT: "5001"
@@ -150,7 +149,7 @@ jobs:
           echo "test-files=[${entries%,}]" >> "$GITHUB_OUTPUT"
 
   build-images:
-    # Build the 3 images in parallel (one matrix leg each) and push to the shared
+    # Build both images in parallel (one matrix leg each) and push to the shared
     # ECR repo so each test shard pulls prebuilt images instead of cold-building.
     name: build-image (${{ matrix.image }})
     needs: changes
@@ -304,8 +303,6 @@ jobs:
           node_image: kindest/node:v1.33.1
           config: ${{ runner.temp }}/kind-config.yaml
 
-      # Connect the registry to kind's docker network and tell containerd
-      # to route localhost:5001 → kind-registry:5000.
       - name: Connect local registry to kind network
         run: |
           docker network connect "kind" "${KIND_REGISTRY_NAME}" || true
@@ -380,7 +377,6 @@ jobs:
               --set "api.image.tag=ci" \
               --set "celery_shared.image.repository=localhost:5001/onyx-backend" \
               --set "celery_shared.image.tag=ci" \
-              --set "webserver.replicaCount=0" \
               --set-string "auth.sandboxPushSecret.values.private_key=${ONYX_SANDBOX_PUSH_PRIVATE_KEY}" \
               --timeout 10m; then
               exit 0
@@ -607,8 +603,6 @@ jobs:
             -m "not nightly" \
             "${{ matrix.test-file.path }}"
 
-      # Surface live-captured pod logs + cluster state inline, and bundle cluster
-      # logs into the upload artifact. One step so a failure dumps everything.
       - name: Collect diagnostics on failure
         if: failure()
         run: |
