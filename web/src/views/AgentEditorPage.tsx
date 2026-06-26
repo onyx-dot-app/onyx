@@ -102,6 +102,7 @@ import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { ValidSources } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { useDraft, draftKey, clearDraft } from "@/hooks/useDraft";
 
 interface AgentIconEditorProps {
   existingAgent?: FullAgent | null;
@@ -482,6 +483,60 @@ function AgentStarterMessages() {
   );
 }
 
+interface AgentDraftManagerProps {
+  storageKey: string;
+}
+
+// Auto-saves the form to a draft (only while dirty, so a pristine form never
+// prompts) and surfaces a restore banner when one exists.
+function AgentDraftManager({ storageKey }: AgentDraftManagerProps) {
+  const { values, dirty, setValues } =
+    useFormikContext<Record<string, unknown>>();
+  const { draft, loaded, hasDraft, save, clear } = useDraft<
+    Record<string, unknown>
+  >({ key: storageKey });
+  const [handled, setHandled] = useState(false);
+
+  useEffect(() => {
+    if (loaded && dirty) save(values);
+  }, [values, dirty, loaded, save]);
+
+  if (!loaded || !hasDraft || handled || !draft) return null;
+
+  function handleRestore() {
+    // JSON stores dates as ISO strings; revive the one date field back to a
+    // Date.
+    const cutoff = draft!.knowledge_cutoff_date;
+    setValues({
+      ...draft!,
+      knowledge_cutoff_date:
+        typeof cutoff === "string" ? new Date(cutoff) : (cutoff ?? null),
+    });
+    setHandled(true);
+  }
+
+  function handleDismiss() {
+    clear();
+    setHandled(true);
+  }
+
+  return (
+    <MessageCard
+      variant="info"
+      title="Restore unsaved changes?"
+      description="We saved your in-progress edits from a previous session."
+      rightChildren={
+        <div className="flex gap-2">
+          <Button prominence="secondary" onClick={handleDismiss}>
+            Discard
+          </Button>
+          <Button onClick={handleRestore}>Restore</Button>
+        </div>
+      }
+    />
+  );
+}
+
 export interface AgentEditorPageProps {
   agent?: FullAgent;
   refreshAgent?: () => void;
@@ -502,6 +557,13 @@ export default function AgentEditorPage({
   const canUpdateFeaturedStatus = isAdmin;
   const { vectorDbEnabled } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
+
+  // Separate keys for create vs. edit so a new-agent draft can't bleed into an
+  // existing one.
+  const agentDraftStorageKey = draftKey(
+    "agent-editor",
+    existingAgent?.id != null ? String(existingAgent.id) : "new"
+  );
 
   // Labels are edited in the Share Agent section and saved with the form
   const { labels: allLabels, createLabel } = useLabels();
@@ -928,6 +990,9 @@ export default function AgentEditorPage({
       // Success
       const agent = await personaResponse.json();
 
+      // Saved: drop the draft so it can't resurface as a stale restore prompt.
+      clearDraft(agentDraftStorageKey);
+
       // Apply the leveled share draft captured in the dialog before the
       // agent existed (the create payload only carries viewer-level ids)
       if (!existingAgent && values.shared_draft) {
@@ -1271,6 +1336,8 @@ export default function AgentEditorPage({
 
                     {/* Agent Form Content */}
                     <SettingsLayouts.Body>
+                      <AgentDraftManager storageKey={agentDraftStorageKey} />
+
                       <GeneralLayouts.Section
                         flexDirection="row"
                         gap={2.5}

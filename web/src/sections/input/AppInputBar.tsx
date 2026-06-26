@@ -20,6 +20,7 @@ import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import useAppFocus from "@/hooks/useAppFocus";
+import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
@@ -205,6 +206,48 @@ const AppInputBar = React.memo(
     const isSearchMode =
       (isNewSession && appMode === "search") || isSearchActive;
 
+    // Draft the message, keyed by chat session id (or "new" before a session
+    // exists; the key flips to the real id once the session is created).
+    const chatSessionId = appFocus.isChat() ? appFocus.getId() : null;
+    const chatDraftStorageKey = draftKey("chat", chatSessionId ?? "new");
+    const {
+      draft: chatDraft,
+      loaded: chatDraftLoaded,
+      save: saveChatDraft,
+      clear: clearChatDraft,
+    } = useDraft<string>({ key: chatDraftStorageKey });
+    const draftSeededRef = useRef(false);
+    const skipNextDraftSaveRef = useRef(false);
+
+    // Re-arm seeding when the active key changes (e.g. switching sessions).
+    useEffect(() => {
+      draftSeededRef.current = false;
+    }, [chatDraftStorageKey]);
+
+    // Restore the draft into the empty input once read. A URL prompt
+    // (initialMessage) wins, and a non-empty input is never clobbered.
+    useEffect(() => {
+      if (!chatDraftLoaded || draftSeededRef.current) return;
+      draftSeededRef.current = true;
+      if (chatDraft && !initialMessage && !message) {
+        // setMessage is async, so the save effect below would fire first with
+        // the stale empty message and wipe what we just seeded; skip that run.
+        skipNextDraftSaveRef.current = true;
+        setMessage(chatDraft);
+      }
+    }, [chatDraftLoaded, chatDraft, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Persist message changes (debounced). The hook's empty-skip rule means
+    // clearing the input also removes the stored draft.
+    useEffect(() => {
+      if (!chatDraftLoaded || !draftSeededRef.current) return;
+      if (skipNextDraftSaveRef.current) {
+        skipNextDraftSaveRef.current = false;
+        return;
+      }
+      saveChatDraft(message);
+    }, [message, chatDraftLoaded, saveChatDraft]);
+
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
       setIsRecording((prevIsRecording) => {
         if (!prevIsRecording && nextIsRecording) {
@@ -228,8 +271,9 @@ const AppInputBar = React.memo(
           return;
         }
         handleSubmit(text);
+        clearChatDraft();
       },
-      [handleSubmit]
+      [handleSubmit, clearChatDraft]
     );
 
     // Expose reset and focus methods to parent via ref
@@ -237,6 +281,7 @@ const AppInputBar = React.memo(
       reset: () => {
         if (!isAutoSending.current) {
           clearMessage();
+          clearChatDraft();
         }
       },
       focus: () => {
