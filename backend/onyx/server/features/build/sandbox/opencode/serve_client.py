@@ -48,6 +48,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# opencode permission category emitted by the no-op ``connect_app`` tool (set to
+# "ask" in opencode_config). Intercepted in _handle_permission_ask to drive the
+# connect-app OAuth flow instead of auto-allowing.
+_CONNECT_APP_PERMISSION = "connect_app"
+
 
 # Event union (kept narrow — only the types we actually translate to).
 SandboxEvent = (
@@ -1482,6 +1487,9 @@ class OpencodeServeClient:
                 yield sandbox_event
 
             if raw.get("type") == "permission.asked":
+                # connect_app announces a card to the live stream and blocks for
+                # the user's decision; other permissions auto-allow. Nothing is
+                # yielded here — the card reaches the browser via the announce.
                 self._handle_permission_ask(raw, state.session_id, directory=directory)
 
             if terminated_locally:
@@ -1521,12 +1529,12 @@ class OpencodeServeClient:
     def _handle_permission_ask(
         self, evt: dict[str, Any], session_id: str, *, directory: str
     ) -> None:
-        """Auto-allow + telemetry per §Decisions #1.
+        """Answer opencode's ``permission.asked``.
 
-        Production ``opencode.json`` should already cover every permission
-        category we use. Reaching this path means opencode added a new
-        category we haven't configured — auto-allow keeps the turn moving
-        and the WARN log lets us notice.
+        ``connect_app`` (configured ``"ask"``) announces a connect card to the
+        live stream and blocks for the user's decision; every other category is
+        auto-allowed (production ``opencode.json`` covers the ones we use — an
+        unexpected one means a config gap, so WARN + allow).
         """
         props = evt.get("properties") or {}
         perm_id = props.get("id")
@@ -1537,6 +1545,13 @@ class OpencodeServeClient:
                 "opencode-serve: permission.asked without id; cannot respond"
             )
             return
+
+        if perm_type == _CONNECT_APP_PERMISSION:
+            self._handle_connect_app_permission(
+                evt, session_id, perm_id, directory=directory
+            )
+            return
+
         logger.warning(
             "opencode-serve: auto-allowing unexpected permission.asked "
             "(type=%s patterns=%s session=%s id=%s) — update opencode.json",
@@ -1545,18 +1560,93 @@ class OpencodeServeClient:
             session_id,
             perm_id,
         )
+        self._answer_permission(session_id, perm_id, allow=True, directory=directory)
+
+    def _answer_permission(
+        self, session_id: str, perm_id: str, *, allow: bool, directory: str
+    ) -> None:
+        """Resolve a pending opencode permission: ``allow`` (``once``) runs the
+        tool, deny (``reject``) surfaces the rejection to the agent."""
+        response = "once" if allow else "reject"
         try:
             self._http.post(
                 f"/session/{session_id}/permissions/{perm_id}",
                 params={"directory": directory},
-                json={"response": "once"},
+                json={"response": response},
             )
         except httpx.HTTPError as e:
             logger.warning(
-                "opencode-serve: permission auto-allow failed for %s: %s",
+                "opencode-serve: permission %s (%s) failed for %s: %s",
+                "allow" if allow else "deny",
+                response,
                 perm_id,
                 e,
             )
+
+    def _handle_connect_app_permission(
+        self, evt: dict[str, Any], session_id: str, perm_id: str, *, directory: str
+    ) -> None:
+        """Announce a connect card and block for the user's decision, then answer
+        opencode allow (connected) / reject (declined); a wait timeout declines.
+
+        The turn consumer can't relay to the browser, so it announces (keyed by
+        the build session id in ``directory``) and the live stream emits the
+        card. App slug comes from the tool's ``context.ask`` metadata. See
+        :mod:`onyx.server.features.build.connect_app` for the channels.
+        """
+        from uuid import uuid4
+
+        from onyx.cache.factory import get_cache_backend
+        from onyx.server.features.build import connect_app
+        from onyx.server.features.build.configs import (
+            SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
+        )
+        from shared_configs.contextvars import get_current_tenant_id
+
+        props = evt.get("properties") or {}
+        meta_raw = props.get("metadata")
+        meta = meta_raw if isinstance(meta_raw, dict) else {}
+        app_slug = meta.get("app")
+        if not app_slug:
+            logger.warning(
+                "connect_app permission missing app metadata (meta=%s perm_id=%s); "
+                "denying",
+                meta,
+                perm_id,
+            )
+            self._answer_permission(
+                session_id, perm_id, allow=False, directory=directory
+            )
+            return
+
+        build_session_id = directory.rstrip("/").rsplit("/", 1)[-1]
+        request_id = str(uuid4())
+        decision: connect_app.ConnectAppDecision | None = None
+        try:
+            cache = get_cache_backend(tenant_id=get_current_tenant_id())
+            connect_app.announce_request(
+                build_session_id,
+                connect_app.ConnectAppRequest(
+                    request_id=request_id,
+                    app_slug=str(app_slug),
+                    reason=meta.get("reason") or None,
+                ),
+                cache,
+            )
+            decision = connect_app.wait_for_decision(
+                request_id, SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS, cache
+            )
+        except Exception:
+            logger.exception(
+                "connect_app decision wait failed for app=%s; denying", app_slug
+            )
+
+        self._answer_permission(
+            session_id,
+            perm_id,
+            allow=decision == connect_app.ConnectAppDecision.CONNECTED,
+            directory=directory,
+        )
 
 
 # ---------------------------------------------------------------------------

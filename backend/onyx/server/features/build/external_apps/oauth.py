@@ -27,6 +27,7 @@ from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.external_apps.models import OAuthCallbackRequest
 from onyx.server.features.build.external_apps.models import OAuthCallbackResponse
 from onyx.server.features.build.external_apps.models import OAuthStartResponse
+from onyx.skills.push import push_skills_for_users
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -238,6 +239,13 @@ def handle_external_app_oauth_callback(
         user_id=user.id,
         user_credentials=stored_credentials,
     )
+
+    # Authenticating opens this user's per-user gate; refresh their sandboxes so
+    # the now-usable skill bundle lands (parity with the credentials endpoint).
+    # The connect card's "connected" decision (posted by the FE after this
+    # callback writes the credential) is what resumes a parked connect_app turn.
+    push_skills_for_users({user.id}, db_session)
+    db_session.commit()
 
     # One-shot — prevent replay.
     r.delete(redis_key)

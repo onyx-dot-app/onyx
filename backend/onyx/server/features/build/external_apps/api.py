@@ -7,6 +7,7 @@ from pydantic import TypeAdapter
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import Permission
@@ -29,12 +30,16 @@ from onyx.db.utils import UNSET
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.models import BuiltInExternalAppDescriptor
+from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import action_policy_views
 from onyx.external_apps.providers.registry import fetch_available_built_in_apps
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
+from onyx.external_apps.providers.registry import get_provider_for_app
 from onyx.external_apps.providers.registry import resolve_action_overrides
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build import connect_app
+from onyx.server.features.build.external_apps.models import ConnectAppDecisionRequest
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
 )
@@ -50,6 +55,7 @@ from onyx.skills.push import push_skills_for_users
 from onyx.utils.encryption import mask_string
 from onyx.utils.pydantic_util import parse_json_form_field
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
 
@@ -121,6 +127,7 @@ def _to_user_response(
         credential_keys=required_keys,
         credential_values=credential_values,
         authenticated=authenticated,
+        supports_oauth=isinstance(get_provider_for_app(app), OAuthExternalAppProvider),
     )
 
 
@@ -445,3 +452,21 @@ def list_external_apps(
         for app in apps
         if app.skill.enabled
     ]
+
+
+@router.post("/apps/connect/{request_id}/decision")
+def resolve_connect_app_request(
+    request_id: str,
+    body: ConnectAppDecisionRequest,
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+) -> None:
+    """Record the user's decision on a pending ``connect_app`` request.
+
+    The connect card (rendered from a ``ConnectAppRequestPacket``) POSTs here to
+    unblock the parked agent turn waiting on ``request_id``: "connected" allows
+    its tool call, "declined" hands it a rejection. Idempotent from the caller's
+    view — the waiting consumer reads the first decision; a duplicate lands on an
+    expired/empty key.
+    """
+    cache = get_cache_backend(tenant_id=get_current_tenant_id())
+    connect_app.resolve(request_id, body.decision, cache)
