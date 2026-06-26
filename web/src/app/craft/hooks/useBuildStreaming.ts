@@ -151,11 +151,8 @@ export function useBuildStreaming() {
       interruptedTurnId: string | null,
       generation: number
     ): Promise<void> => {
-      // May we still act on this interrupt? Only while it's the same turn we
-      // launched for: the generation a queued auto-send would bump is unchanged,
-      // the session is still running, and the backend hasn't moved to a
-      // different turn. Once false, acting would clobber whatever turn is now
-      // live. Pass the turn id to also require it match, or null to skip that.
+      // Only act while this is still the interrupt we launched for; otherwise a
+      // newer turn (a queued auto-send bumps the generation) would be clobbered.
       const ownsInterrupt = (turnId: string | null): boolean => {
         const s = useBuildSessionStore.getState().sessions.get(sessionId);
         return (
@@ -166,9 +163,8 @@ export function useBuildStreaming() {
         );
       };
 
-      // Settle the interrupted turn to "active". Reload BEFORE the flip: the
-      // flip triggers the queued auto-send, so reloading after would race the
-      // freshly-started next turn.
+      // Reload BEFORE the flip to "active": the flip triggers the queued
+      // auto-send, so reloading after would race the freshly-started next turn.
       const settle = async (): Promise<void> => {
         await useBuildSessionStore
           .getState()
@@ -186,7 +182,6 @@ export function useBuildStreaming() {
         });
       };
 
-      // Poll until the interrupted turn disappears from the backend.
       let turnId = interruptedTurnId;
       for (let i = 0; i < INTERRUPT_RECONCILE_MAX_ATTEMPTS; i++) {
         await sleep(INTERRUPT_RECONCILE_INTERVAL_MS);
@@ -207,15 +202,14 @@ export function useBuildStreaming() {
           await settle();
           return;
         }
-        // Learn the id if the interrupt beat the local activeTurnId; bail if the
-        // backend has moved on to a different turn.
+        // turnId is null when the interrupt beat the local activeTurnId — adopt
+        // the backend's; a different id means the backend moved on, so bail.
         if (turnId === null) turnId = activeTurn.turn_id;
         else if (activeTurn.turn_id !== turnId) return;
       }
 
-      // Timed out. One last check: settle if the turn is actually gone now (so
-      // the UI unblocks), otherwise it's genuinely still running — just drop the
-      // "stopping…" affordance and leave it running.
+      // Timed out: settle if the turn is actually gone now (unblock the UI),
+      // otherwise it's genuinely still running — just clear the "stopping" state.
       console.warn("[Streaming] Interrupted turn reconciliation timed out");
       if (!ownsInterrupt(turnId)) return;
       const turnGone = await fetchActiveTurn(sessionId)
