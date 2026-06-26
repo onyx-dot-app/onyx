@@ -161,9 +161,14 @@ Docker:
 
 - Source of truth: shared `sandbox_proxy_ca` volume.
 - The proxy mounts the volume read-write at `/var/lib/sandbox-proxy/ca`.
-- Sandboxes mount the same volume read-only at `/sandbox-ca`.
-- `ca.crt` is the rendezvous file; `ca.key` is proxy-only. Half-written states
-  fail loudly instead of regenerating and invalidating already-trusted certs.
+- Sandboxes mount the same volume read-only at `/sandbox-ca`, so Docker
+  sandboxes can see both `ca.crt` and `ca.key` in the container filesystem.
+- `firewall-init.sh` reads only `/sandbox-ca/ca.crt`. `ca.key` is written
+  `0600` and root-owned; the Docker sandbox starts as root only for CA install
+  and firewall setup, then `setpriv` drops the agent process to UID 1000. This
+  is a root-only permission boundary, not the Kubernetes cert-only projection.
+- `ca.crt` is the rendezvous file. Half-written states fail loudly instead of
+  regenerating and invalidating already-trusted certs.
 
 ## Request Lifecycle
 
@@ -636,8 +641,11 @@ Kubernetes and Docker both set enough termination grace for this drain path.
 - Scheduled-task grants must require `ScheduledTaskRun.status == RUNNING`.
 - Credential resolver failures after a resolver claims a request must block,
   not forward with placeholders.
-- The proxy CA private key must never be mounted into sandbox pods or
-  containers.
+- Kubernetes sandbox pods must mount only the proxy CA cert, never the Secret
+  containing `ca.key`.
+- Docker sandboxes currently mount the shared CA volume read-only; `ca.key`
+  must remain `0600` and root-owned, and user code must continue to run after
+  the entrypoint drops to UID 1000.
 - Sandbox egress must remain proxy-only; bypassing `*_PROXY` must not open
   direct internet or internal network access.
 
