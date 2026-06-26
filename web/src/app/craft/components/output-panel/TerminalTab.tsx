@@ -6,7 +6,12 @@ import { Text } from "@opal/components";
 import { SvgLoader } from "@opal/icons";
 import { cn } from "@opal/utils";
 
-type TerminalStatus = "connecting" | "connected" | "disconnected";
+type TerminalStatus = "connecting" | "connected" | "disconnected" | "error";
+
+// Stop reconnecting after this many closes that never reached a usable
+// connection — a permanently rejected socket (non-owner / unauthorized) would
+// otherwise retry forever and hammer the backend auth path.
+const MAX_FAILED_CONNECTS = 5;
 
 interface TerminalTabProps {
   sessionId: string | undefined;
@@ -26,6 +31,7 @@ export default function TerminalTab({ sessionId }: TerminalTabProps) {
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rafRef = useRef<number | null>(null);
   const reconnectDelayRef = useRef(500);
+  const failedConnectsRef = useRef(0);
   const lastDimsRef = useRef<{ cols: number; rows: number }>({
     cols: 0,
     rows: 0,
@@ -108,6 +114,7 @@ export default function TerminalTab({ sessionId }: TerminalTabProps) {
             return;
           }
           reconnectDelayRef.current = 500;
+          failedConnectsRef.current = 0;
           setStatus("connected");
           sendResize(ws);
         };
@@ -126,6 +133,14 @@ export default function TerminalTab({ sessionId }: TerminalTabProps) {
 
         ws.onclose = () => {
           if (destroyed) return;
+          // A socket that never reached `onopen` is being rejected (e.g. the
+          // caller isn't the session owner). Give up after a few tries instead
+          // of reconnecting forever against an endpoint that won't authorize.
+          failedConnectsRef.current += 1;
+          if (failedConnectsRef.current >= MAX_FAILED_CONNECTS) {
+            setStatus("error");
+            return;
+          }
           setStatus("disconnected");
           const delay =
             reconnectDelayRef.current +
@@ -256,6 +271,18 @@ export default function TerminalTab({ sessionId }: TerminalTabProps) {
           <SvgLoader className="size-5 stroke-text-03 animate-spin" />
           <Text font="main-ui-body" color="text-03">
             Connecting to sandbox…
+          </Text>
+        </div>
+      )}
+
+      {/* Gave up reconnecting */}
+      {status === "error" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-neutral-950 px-6 text-center">
+          <Text font="main-ui-body" color="text-03">
+            Couldn&apos;t connect to the sandbox terminal.
+          </Text>
+          <Text font="secondary-body" color="text-04">
+            The sandbox may be unavailable, or you may not have access.
           </Text>
         </div>
       )}
