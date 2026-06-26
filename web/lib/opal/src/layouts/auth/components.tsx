@@ -8,6 +8,7 @@ import {
   MessageCard,
   Text,
 } from "@opal/components";
+import { Form } from "formik";
 import SvgArrowRightCircle from "@opal/icons/arrow-right-circle";
 import { Content } from "@opal/layouts";
 import { SvgOnyxLogo } from "@opal/logos";
@@ -46,7 +47,7 @@ function Card({
 }: CardProps) {
   return (
     <div className="opal-auth-card-outer">
-      <OpalCard padding="lg" rounding="lg">
+      <OpalCard padding="lg" rounding="lg" shadow="lg">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <div className="p-0.5">
@@ -81,6 +82,20 @@ function Card({
         </div>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FormBody — Formik Form wrapper with standard auth-page layout classes
+// ---------------------------------------------------------------------------
+
+interface FormBodyProps {
+  children: React.ReactNode;
+}
+
+function FormBody({ children }: FormBodyProps) {
+  return (
+    <Form className="w-full flex flex-col items-stretch gap-4">{children}</Form>
   );
 }
 
@@ -167,6 +182,8 @@ export {
   Root,
   type CardProps,
   Card,
+  type FormBodyProps,
+  FormBody,
   OrSeparator,
   type FieldsProps,
   Fields,

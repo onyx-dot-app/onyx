@@ -6,7 +6,7 @@ import { forgotPassword } from "@/lib/auth/svc";
 import { AuthLayouts, InputVertical } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
-import { Form, Formik } from "formik";
+import { Formik } from "formik";
 import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { toast } from "@/hooks/useToast";
@@ -56,7 +56,7 @@ function ForgotPasswordPage() {
         onSubmit={handleSubmit}
       >
         {({ isSubmitting }) => (
-          <Form className="w-full flex flex-col items-stretch gap-4">
+          <AuthLayouts.FormBody>
             <AuthLayouts.Fields>
               <InputVertical title="Email" withLabel="email">
                 <InputTypeInField
@@ -68,7 +68,7 @@ function ForgotPasswordPage() {
               </InputVertical>
             </AuthLayouts.Fields>
             <AuthLayouts.Submit label="submit" disabled={isSubmitting} />
-          </Form>
+          </AuthLayouts.FormBody>
         )}
       </Formik>
     </AuthLayouts.Card>

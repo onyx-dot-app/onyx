@@ -6,7 +6,7 @@ import { resetPassword } from "@/lib/auth/svc";
 import { AuthLayouts, InputVertical } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { markdown } from "@opal/utils";
-import { Form, Formik } from "formik";
+import { Formik } from "formik";
 import * as Yup from "yup";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { toast } from "@/hooks/useToast";
@@ -86,7 +86,7 @@ export default function ResetPasswordPage() {
         onSubmit={handleSubmit}
       >
         {({ isSubmitting, isValid, dirty }) => (
-          <Form className="w-full flex flex-col items-stretch gap-4">
+          <AuthLayouts.FormBody>
             <AuthLayouts.Fields>
               <InputVertical title="New Password" withLabel="password">
                 <PasswordInputTypeInField
@@ -108,7 +108,7 @@ export default function ResetPasswordPage() {
               label="reset"
               disabled={isSubmitting || !dirty || !isValid}
             />
-          </Form>
+          </AuthLayouts.FormBody>
         )}
       </Formik>
     </AuthLayouts.Card>
