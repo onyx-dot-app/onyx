@@ -2,7 +2,14 @@
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
@@ -144,25 +151,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     currentChatSessionId,
     isLoading: isLoadingChatSessions,
   } = useChatSessions();
-  // handle redirect if chat page is disabled
-  // NOTE: this must be done here, in a client component since
-  // settings are passed in via Context and therefore aren't
-  // available in server-side components
   const settings = useSettings();
   const { appName } = settings;
 
-  const appNameRef = useRef<string>("Onyx");
-  useEffect(() => {
-    appNameRef.current = appName;
+  useLayoutEffect(() => {
     document.title = currentChatSession?.name
       ? `${currentChatSession.name} — ${appName}`
       : appName;
   }, [currentChatSession?.name, appName]);
-  useEffect(() => {
-    return () => {
-      document.title = appNameRef.current;
-    };
-  }, []);
 
   const { vectorDbEnabled } = settings;
   const { ccPairs } = useCCPairs(vectorDbEnabled);
