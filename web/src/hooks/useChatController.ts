@@ -75,7 +75,7 @@ import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
-import { projectFilesToFileDescriptors } from "@/app/app/services/fileUtils";
+import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 
 const SYSTEM_MESSAGE_ID = -3;
 
