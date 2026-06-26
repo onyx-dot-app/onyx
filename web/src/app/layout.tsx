@@ -53,11 +53,6 @@ const dmMono = DM_Mono({
   ],
 });
 
-export const metadata: Metadata = {
-  title: "Onyx",
-  description: "Question answering for your documents",
-};
-
 // force-dynamic prevents Next.js from statically prerendering pages at build
 // time — many child routes use cookies() which requires dynamic rendering.
 export const dynamic = "force-dynamic";
