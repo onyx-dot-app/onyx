@@ -242,12 +242,6 @@ jobs:
 
           release_id=$(get_release_id)
           if [ -z "$release_id" ]; then
-            # Create the draft release via the API and read the id directly from
-            # the creation response. The list endpoint above is eventually
-            # consistent — a freshly created draft can be absent from
-            # get_release_id for several seconds — so re-listing to discover the
-            # new id races and intermittently returns empty. The POST response is
-            # authoritative and always includes the id.
             release_id=$(gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
               -f tag_name="$TAG" \
               -f name="$TAG" \
