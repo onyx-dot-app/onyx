@@ -6,7 +6,7 @@
  */
 import React from "react";
 import { render, screen, waitFor, setupUser } from "@tests/setup/test-utils";
-import EmailPasswordForm from "./EmailPasswordForm";
+import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 
 // Mock next/navigation (not used by this component, but required by dependencies)
 jest.mock("next/navigation", () => ({
