@@ -85,7 +85,9 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     # the named deny — opencode evaluates skill rules with findLast().
     "skill": {"*": "allow", "customize-opencode": "deny"},
     "question": "allow",
-    "webfetch": "allow",
+    # SPIKE (craft-connect-permission): force one tool to "ask" so opencode emits
+    # a permission.asked we can capture. Revert to "allow" after the spike.
+    "webfetch": "ask",
 }
 
 _TMP_EXTERNAL_DIRECTORY_RULES: dict[str, str] = {

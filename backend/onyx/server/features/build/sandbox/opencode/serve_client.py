@@ -1529,6 +1529,10 @@ class OpencodeServeClient:
         and the WARN log lets us notice.
         """
         props = evt.get("properties") or {}
+        # SPIKE (craft-connect-permission): dump the full permission.asked payload
+        # so we can confirm it blocks the turn and see what fields it carries
+        # (callID/messageID/tool/input) for the connect-app redesign. Remove after.
+        logger.info("appsetup-spike permission.asked evt=%r", evt)
         perm_id = props.get("id")
         perm_type = props.get("permission")
         patterns = props.get("patterns")
