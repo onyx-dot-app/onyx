@@ -144,8 +144,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     currentChatSessionId,
     isLoading: isLoadingChatSessions,
   } = useChatSessions();
-  const settings = useSettings();
-  const { appName } = settings;
+  const { appName, vectorDbEnabled, disable_default_assistant } = useSettings();
 
   useEffect(() => {
     if (!appFocus.isChat() && !appFocus.isSharedChat()) return;
@@ -154,7 +153,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       : appName;
   }, [currentChatSession?.name, appName, appFocus]);
 
-  const { vectorDbEnabled } = settings;
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -304,7 +302,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     liveAgent,
     currentChatSessionId,
     currentChatSession ?? undefined,
-    settings.disable_default_assistant ?? false
+    disable_default_assistant ?? false
   );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
