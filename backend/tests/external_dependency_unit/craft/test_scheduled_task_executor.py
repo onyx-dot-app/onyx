@@ -437,11 +437,13 @@ def test_run_fails_when_wake_fails(
     db_session: Session,
     test_user: User,
     sandbox: Callable[..., Sandbox],
+    session_manager_with_stub: SessionManager,  # noqa: ARG001 — binds the stub backend
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A PROVISIONING sandbox with a 0s wait window makes the wake deterministically
-    raise, which must mark the run FAILED / sandbox_wake_failed. Backend-agnostic:
-    ensure_sandbox_running times out polling the DB row before touching any manager."""
+    """A PROVISIONING sandbox with a 0s wait window makes ensure_sandbox_running time
+    out polling the DB row, marking the run FAILED / sandbox_wake_failed. The stub
+    backend is bound so SessionManager construction can't raise and satisfy the
+    assertion via the same broad handler without exercising the timeout path."""
     monkeypatch.setattr(
         "onyx.server.features.build.scheduled_tasks.executor.PROVISIONING_WAIT_SECONDS",
         0,
