@@ -39,6 +39,7 @@ type DeployEdgeOptions struct {
 	DryRun         bool
 	Yes            bool
 	NoWaitDeploy   bool
+	NoVerify       bool
 }
 
 // NewDeployEdgeCommand creates the `ods deploy edge` command.
@@ -69,6 +70,7 @@ Example usage:
     $ ods deploy edge`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
+			opts.NoVerify = deployNoVerify
 			deployEdge(opts)
 		},
 	}
@@ -124,8 +126,15 @@ func deployEdge(opts *DeployEdgeOptions) {
 		log.Fatalf("Failed to move local tag: %v", err)
 	}
 
+	pushArgs := []string{"push", "-f"}
+	if opts.NoVerify {
+		log.Info("--no-verify set; skipping git pre-push hooks.")
+		pushArgs = append(pushArgs, "--no-verify")
+	}
+	pushArgs = append(pushArgs, "origin", edgeTagName)
+
 	log.Infof("Force-pushing tag '%s' to origin...", edgeTagName)
-	if err := git.RunCommand("push", "-f", "origin", edgeTagName); err != nil {
+	if err := git.RunCommand(pushArgs...); err != nil {
 		log.Fatalf("Failed to push edge tag: %v", err)
 	}
 
