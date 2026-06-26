@@ -751,9 +751,9 @@ Relevant config:
 Local development:
 
 - Kubernetes Craft development uses real sandbox pods. See
-  `docs/dev/local-kubernetes.md`.
+  `docs/craft/dev/local-kubernetes.md`.
 - Docker backend and proxy-specific local development are covered in
-  `docs/dev/local-compose-craft.md`.
+  `docs/craft/dev/local-compose-craft.md`.
 - Sandbox proxy changes require rebuilding the backend image, loading it into
   the local cluster, and restarting the proxy/API pods.
 - Sandbox image, `firewall-init.sh`, or opencode plugin changes require

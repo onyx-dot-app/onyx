@@ -225,7 +225,7 @@ pod-create→Ready. Image sizes are read from `docker image inspect`.
 ### Prereqs
 
 - Local kind cluster on the `kind-onyx-dev` context (see
-  `docs/dev/local-kubernetes.md`). The script refuses to run against
+  `docs/craft/dev/local-kubernetes.md`). The script refuses to run against
   any other kubectl context as a safety guard.
 - Tools on `$PATH`: `docker`, `kind`, `kubectl`, `python3`.
 
