@@ -62,7 +62,7 @@ import ChatScrollContainer, {
 } from "@/sections/chat/ChatScrollContainer";
 import ProjectContextPanel from "@/sections/projects/ProjectContextPanel";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import { getProjectTokenCount } from "@/app/app/projects/projectsService";
+import { getProjectTokenCount } from "@/lib/projects/svc";
 import ProjectChatSessionList from "@/sections/projects/ProjectChatSessionList";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";

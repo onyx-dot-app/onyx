@@ -1,5 +1,5 @@
-import { FileDescriptor } from "../interfaces";
-import { ProjectFile } from "../projects/projectsService";
+import type { FileDescriptor } from "@/app/app/interfaces";
+import type { ProjectFile } from "@/lib/projects/types";
 
 export function projectsFileToFileDescriptor(
   file: ProjectFile

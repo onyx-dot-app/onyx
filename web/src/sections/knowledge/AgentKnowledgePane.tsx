@@ -29,7 +29,7 @@ import { getSourceMetadata } from "@/lib/sources";
 import { ValidSources, DocumentSetSummary } from "@/lib/types";
 import useCCPairs from "@/hooks/useCCPairs";
 import { ConnectedSource } from "@/lib/hierarchy/interfaces";
-import { ProjectFile } from "@/app/app/projects/projectsService";
+import { ProjectFile } from "@/lib/projects/types";
 import { AgentAttachedDocument, AgentHierarchyNode } from "@/lib/agents/types";
 import { timeAgo } from "@opal/time";
 import { Spacer } from "@opal/components";
