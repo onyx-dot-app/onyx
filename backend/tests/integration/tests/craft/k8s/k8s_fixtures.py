@@ -403,6 +403,19 @@ def cleanup_api_user_sandbox_rows(user_id: UUID) -> None:
         )
 
 
+def _delete_sandbox_row(sandbox_id: UUID) -> None:
+    """Delete a single Sandbox row, leaving its owner intact — for extra sandboxes
+    provisioned against the shared pool user, whose row must survive the module."""
+    try:
+        with get_session_with_current_tenant() as session:
+            row = session.get(Sandbox, sandbox_id)
+            if row is not None:
+                session.delete(row)
+                session.commit()
+    except Exception:
+        logger.warning("Failed to delete sandbox row %s", sandbox_id, exc_info=True)
+
+
 @contextmanager
 def _provisioned_sandbox(
     manager: KubernetesSandboxManager,
@@ -531,6 +544,10 @@ def running_sandbox(
 
     # Per-test pods from provision_api_user; teardown terminates these (not the pool pod).
     extra_sandbox_user_ids: dict[UUID, UUID] = {}
+    # Extra sandboxes provisioned for the *pool* user (when create_with_sandbox
+    # re-provisions because the pool pod was unhealthy): drop only the row, never
+    # the pool user.
+    pool_extra_sandbox_ids: list[UUID] = []
 
     def _register_extra(sandbox_id: UUID, api_user: "DATestUser") -> None:
         extra_sandbox_user_ids[sandbox_id] = UUID(api_user.id)
@@ -547,10 +564,10 @@ def running_sandbox(
             )
             _SUITE_SANDBOX_IDS.add(sandbox_id)
             if sandbox_id != pool.sandbox_id:
-                _register_extra(sandbox_id, pool.api_user)
+                pool_extra_sandbox_ids.append(sandbox_id)
 
         def _cleanup() -> None:
-            for extra_id, user_id in extra_sandbox_user_ids.items():
+            def _terminate(extra_id: UUID) -> None:
                 try:
                     pool.manager.terminate(extra_id)
                 except Exception:
@@ -563,7 +580,13 @@ def running_sandbox(
                     )
                 except Exception:
                     pass
+
+            for extra_id, user_id in extra_sandbox_user_ids.items():
+                _terminate(extra_id)
                 cleanup_api_user_sandbox_rows(user_id)
+            for extra_id in pool_extra_sandbox_ids:
+                _terminate(extra_id)
+                _delete_sandbox_row(extra_id)
 
         request.addfinalizer(_cleanup)
 
