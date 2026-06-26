@@ -4,13 +4,12 @@ import { SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED } from "@/lib/consta
 import { fetchEnterpriseSettingsSS } from "@/lib/settings/svcSS";
 
 export async function generateMetadata(): Promise<Metadata> {
-  let title = "Admin - Onyx";
+  let title = "Onyx";
 
   if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
     const enterprise = await fetchEnterpriseSettingsSS();
     if (enterprise) {
-      if (enterprise.application_name)
-        title = `Admin - ${enterprise.application_name}`;
+      if (enterprise.application_name) title = enterprise.application_name;
     }
   }
 
