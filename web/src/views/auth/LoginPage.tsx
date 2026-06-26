@@ -7,7 +7,7 @@ import { AuthLayouts } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAuthTypeMetadata } from "@/hooks/useAuthTypeMetadata";
-import SignInButton from "@/views/auth/SignInButton";
+import SignInButton from "@/sections/auth/SignInButton";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
 import { AuthType, NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/utils";

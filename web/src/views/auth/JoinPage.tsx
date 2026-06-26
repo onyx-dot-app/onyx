@@ -10,7 +10,7 @@ import { AuthType } from "@/lib/constants";
 import { AuthLayouts } from "@opal/layouts";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 import EmailPasswordForm from "@/sections/auth/EmailPasswordForm";
-import SignInButton from "@/views/auth/SignInButton";
+import SignInButton from "@/sections/auth/SignInButton";
 
 function getAuthUrl(authType: AuthType): string | null {
   switch (authType) {
