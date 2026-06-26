@@ -1,8 +1,9 @@
-"""Connect-app rendezvous over Redis: announce up, decision back.
+"""Connect-app plumbing over Redis: announce the card, stash the answer context.
 
-These exercise the two channels the parked turn and the decision request use to
-meet across workers — the announce (request → the live-stream worker) and the
-single-shot decision latch (answer → the parked turn). Real Redis, no DB.
+These exercise the two records the producing worker, the live-stream worker, and
+the decision request use to meet across processes — the announce (request → the
+live-stream worker) and the pending context (request_id → how to answer the
+permission). Real Redis, no DB.
 """
 
 from __future__ import annotations
@@ -17,39 +18,6 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 def _cache() -> CacheBackend:
     return get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-
-
-def test_resolve_then_wait_returns_decision() -> None:
-    cache = _cache()
-    request_id = f"connect-app-test-{uuid4()}"
-    cache.delete(connect_app._decision_key(request_id))  # type: ignore[attr-defined]
-
-    connect_app.resolve(request_id, connect_app.ConnectAppDecision.CONNECTED, cache)
-    decision = connect_app.wait_for_decision(request_id, timeout_s=5, cache=cache)
-
-    assert decision is connect_app.ConnectAppDecision.CONNECTED
-
-
-def test_wait_for_decision_times_out_to_none() -> None:
-    cache = _cache()
-    request_id = f"connect-app-test-{uuid4()}"
-    cache.delete(connect_app._decision_key(request_id))  # type: ignore[attr-defined]
-
-    assert connect_app.wait_for_decision(request_id, timeout_s=1, cache=cache) is None
-
-
-def test_decision_is_single_shot() -> None:
-    """The first waiter consumes the decision; a second wait times out."""
-    cache = _cache()
-    request_id = f"connect-app-test-{uuid4()}"
-    cache.delete(connect_app._decision_key(request_id))  # type: ignore[attr-defined]
-
-    connect_app.resolve(request_id, connect_app.ConnectAppDecision.DECLINED, cache)
-    first = connect_app.wait_for_decision(request_id, timeout_s=5, cache=cache)
-    second = connect_app.wait_for_decision(request_id, timeout_s=1, cache=cache)
-
-    assert first is connect_app.ConnectAppDecision.DECLINED
-    assert second is None
 
 
 def test_announce_then_pop_roundtrips_request() -> None:
@@ -72,3 +40,45 @@ def test_pop_announcement_times_out_to_none() -> None:
     cache.delete(connect_app._announce_key(session_id))  # type: ignore[attr-defined]
 
     assert connect_app.pop_announcement(session_id, timeout_s=1, cache=cache) is None
+
+
+def test_stash_then_load_roundtrips_pending() -> None:
+    cache = _cache()
+    request_id = f"connect-app-test-{uuid4()}"
+
+    pending = connect_app.ConnectAppPending(
+        build_session_id="bs-1",
+        opencode_session_id="oc-1",
+        perm_id="perm-1",
+        directory="/workspace/sessions/bs-1",
+    )
+    connect_app.stash_pending(request_id, pending, cache)
+
+    assert connect_app.load_pending(request_id, cache) == pending
+
+
+def test_load_pending_missing_returns_none() -> None:
+    cache = _cache()
+    request_id = f"connect-app-test-{uuid4()}"
+
+    assert connect_app.load_pending(request_id, cache) is None
+
+
+def test_clear_pending_removes_the_context() -> None:
+    """After answering, the context is cleared so a duplicate decision is a no-op."""
+    cache = _cache()
+    request_id = f"connect-app-test-{uuid4()}"
+
+    connect_app.stash_pending(
+        request_id,
+        connect_app.ConnectAppPending(
+            build_session_id="bs-1",
+            opencode_session_id="oc-1",
+            perm_id="perm-1",
+            directory="/workspace/sessions/bs-1",
+        ),
+        cache,
+    )
+    connect_app.clear_pending(request_id, cache)
+
+    assert connect_app.load_pending(request_id, cache) is None

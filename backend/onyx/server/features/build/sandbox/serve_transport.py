@@ -417,6 +417,30 @@ class _ServeMixin:
             ).password,
         )
 
+    def answer_connect_app_permission(
+        self,
+        sandbox_id: UUID,
+        *,
+        opencode_session_id: str,
+        perm_id: str,
+        directory: str,
+        allow: bool,
+    ) -> None:
+        """Answer a pending ``connect_app`` permission on ``sandbox_id``.
+
+        The decision endpoint calls this (on whatever worker handled the POST) to
+        answer opencode directly — decoupled from the turn-driving worker. A
+        one-shot unary call, so no event bus."""
+        client = self._build_serve_client(
+            sandbox_id, directory, with_event_bus=False
+        )
+        try:
+            client.answer_permission(
+                opencode_session_id, perm_id, allow=allow, directory=directory
+            )
+        finally:
+            client.close()
+
     def _close_session_buses(self, sandbox_id: UUID, session_id: UUID) -> None:
         """Release the per-(sandbox, session) bus. Call from
         ``cleanup_session_workspace`` — without this the reader thread +

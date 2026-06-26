@@ -21,13 +21,17 @@ from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
 from typing import cast
+from uuid import uuid4
 
 import httpx
 
+from onyx.cache.factory import get_cache_backend
+from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import OPENCODE_SERVE_CONNECT_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_EVENT_READ_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVE_REQUEST_TIMEOUT
 from onyx.server.features.build.configs import OPENCODE_SERVER_USERNAME
+from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SANDBOX_TURN_TIMEOUT_SECONDS
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
 from onyx.server.features.build.packets import SubagentStartedPacket
@@ -45,6 +49,7 @@ from onyx.server.features.build.sandbox.opencode.event_bus import BUS_CLOSED_SEN
 from onyx.server.features.build.sandbox.opencode.event_bus import PodEventBus
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -132,6 +137,12 @@ class _TurnState:
     # terminator (fired from session.idle/status) consumes it — message.updated
     # itself is per-step and can't terminate the turn.
     last_finish: str | None = None
+    # connect_app permission id → monotonic deadline. The decision endpoint
+    # answers opencode directly; this is only the timeout fallback — if the user
+    # never decides, reject so the agent gets a clean decline before the turn
+    # times out. A late reject after the user answered is a no-op (opencode
+    # resolves a permission once).
+    pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -1435,6 +1446,8 @@ class OpencodeServeClient:
                     yield PromptResponse.model_validate({"stopReason": "cancelled"})
                     return
 
+            self._reject_expired_connect_app_permissions(state, now, directory=directory)
+
             remaining = timeout - (time.monotonic() - start)
             if remaining <= 0:
                 self.abort(opencode_session_id, directory=directory)
@@ -1487,10 +1500,10 @@ class OpencodeServeClient:
                 yield sandbox_event
 
             if raw.get("type") == "permission.asked":
-                # connect_app announces a card to the live stream and blocks for
-                # the user's decision; other permissions auto-allow. Nothing is
-                # yielded here — the card reaches the browser via the announce.
-                self._handle_permission_ask(raw, state.session_id, directory=directory)
+                # connect_app announces a card to the live stream; the decision
+                # endpoint answers opencode out-of-band. Other permissions
+                # auto-allow. Nothing is yielded here.
+                self._handle_permission_ask(raw, state, directory=directory)
 
             if terminated_locally:
                 return
@@ -1527,14 +1540,15 @@ class OpencodeServeClient:
         _raise_for_status(r, "prompt_async")
 
     def _handle_permission_ask(
-        self, evt: dict[str, Any], session_id: str, *, directory: str
+        self, evt: dict[str, Any], state: _TurnState, *, directory: str
     ) -> None:
         """Answer opencode's ``permission.asked``.
 
-        ``connect_app`` (configured ``"ask"``) announces a connect card to the
-        live stream and blocks for the user's decision; every other category is
-        auto-allowed (production ``opencode.json`` covers the ones we use — an
-        unexpected one means a config gap, so WARN + allow).
+        ``connect_app`` (configured ``"ask"``) announces a connect card and
+        leaves the permission pending for the decision endpoint to answer
+        out-of-band; every other category is auto-allowed (production
+        ``opencode.json`` covers the ones we use — an unexpected one means a
+        config gap, so WARN + allow).
         """
         props = evt.get("properties") or {}
         perm_id = props.get("id")
@@ -1548,7 +1562,7 @@ class OpencodeServeClient:
 
         if perm_type == _CONNECT_APP_PERMISSION:
             self._handle_connect_app_permission(
-                evt, session_id, perm_id, directory=directory
+                evt, state, perm_id, directory=directory
             )
             return
 
@@ -1557,16 +1571,19 @@ class OpencodeServeClient:
             "(type=%s patterns=%s session=%s id=%s) — update opencode.json",
             perm_type,
             patterns,
-            session_id,
+            state.session_id,
             perm_id,
         )
-        self._answer_permission(session_id, perm_id, allow=True, directory=directory)
+        self.answer_permission(
+            state.session_id, perm_id, allow=True, directory=directory
+        )
 
-    def _answer_permission(
+    def answer_permission(
         self, session_id: str, perm_id: str, *, allow: bool, directory: str
     ) -> None:
         """Resolve a pending opencode permission: ``allow`` (``once``) runs the
-        tool, deny (``reject``) surfaces the rejection to the agent."""
+        tool, deny (``reject``) surfaces the rejection to the agent. Answering an
+        already-resolved permission is a no-op on opencode's side."""
         response = "once" if allow else "reject"
         try:
             self._http.post(
@@ -1584,25 +1601,19 @@ class OpencodeServeClient:
             )
 
     def _handle_connect_app_permission(
-        self, evt: dict[str, Any], session_id: str, perm_id: str, *, directory: str
+        self, evt: dict[str, Any], state: _TurnState, perm_id: str, *, directory: str
     ) -> None:
-        """Announce a connect card and block for the user's decision, then answer
-        opencode allow (connected) / reject (declined); a wait timeout declines.
+        """Announce a connect card and leave the permission pending; the decision
+        endpoint answers opencode allow/deny out-of-band (see
+        :mod:`onyx.server.features.build.connect_app`).
 
-        The turn consumer can't relay to the browser, so it announces (keyed by
-        the build session id in ``directory``) and the live stream emits the
-        card. App slug comes from the tool's ``context.ask`` metadata. See
-        :mod:`onyx.server.features.build.connect_app` for the channels.
+        The turn consumer can't relay to the browser, so it announces the card
+        (keyed by the build session id in ``directory``) and stashes the context
+        the decision endpoint needs to answer this exact permission. It does NOT
+        block — the consume loop keeps running while opencode stays paused, and
+        only rejects on the timeout fallback (``pending_connect_app_deadlines``).
+        App slug comes from the tool's ``context.ask`` metadata.
         """
-        from uuid import uuid4
-
-        from onyx.cache.factory import get_cache_backend
-        from onyx.server.features.build import connect_app
-        from onyx.server.features.build.configs import (
-            SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
-        )
-        from shared_configs.contextvars import get_current_tenant_id
-
         props = evt.get("properties") or {}
         meta_raw = props.get("metadata")
         meta = meta_raw if isinstance(meta_raw, dict) else {}
@@ -1614,16 +1625,25 @@ class OpencodeServeClient:
                 meta,
                 perm_id,
             )
-            self._answer_permission(
-                session_id, perm_id, allow=False, directory=directory
+            self.answer_permission(
+                state.session_id, perm_id, allow=False, directory=directory
             )
             return
 
         build_session_id = directory.rstrip("/").rsplit("/", 1)[-1]
         request_id = str(uuid4())
-        decision: connect_app.ConnectAppDecision | None = None
         try:
             cache = get_cache_backend(tenant_id=get_current_tenant_id())
+            connect_app.stash_pending(
+                request_id,
+                connect_app.ConnectAppPending(
+                    build_session_id=build_session_id,
+                    opencode_session_id=state.session_id,
+                    perm_id=perm_id,
+                    directory=directory,
+                ),
+                cache,
+            )
             connect_app.announce_request(
                 build_session_id,
                 connect_app.ConnectAppRequest(
@@ -1633,20 +1653,34 @@ class OpencodeServeClient:
                 ),
                 cache,
             )
-            decision = connect_app.wait_for_decision(
-                request_id, SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS, cache
-            )
         except Exception:
             logger.exception(
-                "connect_app decision wait failed for app=%s; denying", app_slug
+                "connect_app announce failed for app=%s; denying", app_slug
             )
+            self.answer_permission(
+                state.session_id, perm_id, allow=False, directory=directory
+            )
+            return
 
-        self._answer_permission(
-            session_id,
-            perm_id,
-            allow=decision == connect_app.ConnectAppDecision.CONNECTED,
-            directory=directory,
+        state.pending_connect_app_deadlines[perm_id] = (
+            time.monotonic() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
         )
+
+    def _reject_expired_connect_app_permissions(
+        self, state: _TurnState, now: float, *, directory: str
+    ) -> None:
+        """Timeout fallback: reject connect_app permissions the user never
+        answered, so the agent gets a clean decline instead of a hung turn."""
+        expired = [
+            perm_id
+            for perm_id, deadline in state.pending_connect_app_deadlines.items()
+            if deadline <= now
+        ]
+        for perm_id in expired:
+            del state.pending_connect_app_deadlines[perm_id]
+            self.answer_permission(
+                state.session_id, perm_id, allow=False, directory=directory
+            )
 
 
 # ---------------------------------------------------------------------------

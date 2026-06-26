@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import File
@@ -11,6 +13,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ExternalAppType
 from onyx.db.enums import Permission
+from onyx.db.enums import SandboxStatus
 from onyx.db.external_app import create_external_app
 from onyx.db.external_app import delete_external_app
 from onyx.db.external_app import get_external_app_by_id
@@ -39,6 +42,8 @@ from onyx.external_apps.providers.registry import resolve_action_overrides
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build import connect_app
+from onyx.server.features.build.db.build_session import get_build_session
+from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.external_apps.models import ConnectAppDecisionRequest
 from onyx.server.features.build.external_apps.models import (
     CreateBuiltInExternalAppRequest,
@@ -47,6 +52,7 @@ from onyx.server.features.build.external_apps.models import ExternalAppAdminResp
 from onyx.server.features.build.external_apps.models import ExternalAppUserResponse
 from onyx.server.features.build.external_apps.models import UpdateExternalAppRequest
 from onyx.server.features.build.external_apps.models import UpsertUserCredentialsRequest
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.skills.bundle import read_bundle_file
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
@@ -458,15 +464,34 @@ def list_external_apps(
 def resolve_connect_app_request(
     request_id: str,
     body: ConnectAppDecisionRequest,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
 ) -> None:
     """Record the user's decision on a pending ``connect_app`` request.
 
-    The connect card (rendered from a ``ConnectAppRequestPacket``) POSTs here to
-    unblock the parked agent turn waiting on ``request_id``: "connected" allows
-    its tool call, "declined" hands it a rejection. Idempotent from the caller's
-    view — the waiting consumer reads the first decision; a duplicate lands on an
-    expired/empty key.
+    The connect card (rendered from a ``ConnectAppRequestPacket``) POSTs here. We
+    load the stashed answer context and answer opencode directly on the user's
+    sandbox — "connected" allows the parked tool call, "declined" hands it a
+    rejection. The turn-driving worker isn't involved. Idempotent: an expired or
+    already-answered request is a no-op.
     """
     cache = get_cache_backend(tenant_id=get_current_tenant_id())
-    connect_app.resolve(request_id, body.decision, cache)
+    pending = connect_app.load_pending(request_id, cache)
+    if pending is None:
+        return
+
+    # Scope to the caller's own session before touching their sandbox.
+    if get_build_session(UUID(pending.build_session_id), user.id, db_session) is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connect request not found.")
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    if sandbox is None or sandbox.status != SandboxStatus.RUNNING:
+        raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, "Sandbox is not running.")
+
+    get_sandbox_manager().answer_connect_app_permission(
+        sandbox.id,
+        opencode_session_id=pending.opencode_session_id,
+        perm_id=pending.perm_id,
+        directory=pending.directory,
+        allow=body.decision == connect_app.ConnectAppDecision.CONNECTED,
+    )
+    connect_app.clear_pending(request_id, cache)

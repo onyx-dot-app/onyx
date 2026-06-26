@@ -1,26 +1,23 @@
-"""Connect-app request rendezvous.
+"""Connect-app request plumbing.
 
 When the agent calls the no-op ``connect_app`` tool, opencode emits a permission
-request. The turn-driving consumer (``serve_client``) announces it here; the
-separate live-stream consumer (``merge_events_with_announces``) picks the
-announce up and emits a ``ConnectAppRequestPacket`` rendered as a card on the
-frontend. The user's connect/reject decision is delivered back and unblocks the
-parked turn.
+request and pauses the turn. The turn-driving consumer (``serve_client``) does
+two things and then keeps streaming — it never blocks:
 
-Two Redis channels, both keyed so the blocked turn and the decision request can
-land on different api-server workers:
+* **announces** the request so the live-stream consumer
+  (``merge_events_with_announces``) can emit a ``ConnectAppRequestPacket`` the FE
+  renders as a card, and
+* **stashes** the context needed to answer this exact permission.
 
-* ``announce`` — carries the request to whichever worker holds the user's live
-  SSE stream (the turn-driving worker does not relay to the browser itself).
-* ``decision`` — a single-shot latch carrying the user's answer back to the
-  parked turn.
+The user's decision arrives at the decision endpoint, which loads the stashed
+context and answers opencode directly (an outbound POST to the sandbox) — allow
+(connected) or reject (declined). opencode then resumes the turn and the consumer
+streams the result. No turn-side waiting, no DB row.
 
-This deliberately avoids the ActionApproval machinery (no DB row, no ``/live``
-poll): the permission already blocks the agent, so all we move is one request up
-and one decision back.
+Both Redis records are keyed so the producing worker, the live-stream worker, and
+the decision request can be different api-server processes.
 """
 
-import time
 from enum import Enum
 
 from pydantic import BaseModel
@@ -31,10 +28,9 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# The decision outlives a brief worker hiccup but not a stale request.
-_DECISION_TTL_S = 60 * 30
-# Only needs to outlive the gap between the announce and the live stream's BLPOP.
+# Each record only needs to outlive the user's connect/decline interaction.
 _ANNOUNCE_TTL_S = 60
+_PENDING_TTL_S = 60 * 30
 
 
 class ConnectAppDecision(str, Enum):
@@ -50,12 +46,22 @@ class ConnectAppRequest(BaseModel):
     reason: str | None = None
 
 
-def _decision_key(request_id: str) -> str:
-    return f"craft:connect_app:decision:{request_id}"
+class ConnectAppPending(BaseModel):
+    """The context the decision endpoint needs to answer one connect_app
+    permission on opencode, keyed by ``request_id``."""
+
+    build_session_id: str
+    opencode_session_id: str
+    perm_id: str
+    directory: str
 
 
 def _announce_key(session_id: str) -> str:
     return f"craft:connect_app:announce:{session_id}"
+
+
+def _pending_key(request_id: str) -> str:
+    return f"craft:connect_app:pending:{request_id}"
 
 
 def announce_request(
@@ -84,38 +90,26 @@ def pop_announcement(
         return None
 
 
-def resolve(request_id: str, decision: ConnectAppDecision, cache: CacheBackend) -> None:
-    """Deliver the user's decision to the parked turn waiting on ``request_id``."""
-    key = _decision_key(request_id)
-    cache.rpush(key, decision.value)
-    cache.expire(key, _DECISION_TTL_S)
+def stash_pending(
+    request_id: str, pending: ConnectAppPending, cache: CacheBackend
+) -> None:
+    """Record how to answer this request's permission, for the decision endpoint."""
+    cache.set(_pending_key(request_id), pending.model_dump_json(), ex=_PENDING_TTL_S)
 
 
-def wait_for_decision(
-    request_id: str, timeout_s: int, cache: CacheBackend
-) -> ConnectAppDecision | None:
-    """Block until the user resolves ``request_id``; ``None`` on timeout.
-
-    Polls in short BLPOP slices so an overall long wait stays responsive to
-    process shutdown. Called from the (synchronous) opencode event consumer.
-    """
-    if timeout_s <= 0:
+def load_pending(request_id: str, cache: CacheBackend) -> ConnectAppPending | None:
+    """Load the answer context; ``None`` if expired/already cleared/unparseable."""
+    raw = cache.get(_pending_key(request_id))
+    if raw is None:
+        return None
+    if isinstance(raw, bytes):
+        raw = raw.decode()
+    try:
+        return ConnectAppPending.model_validate_json(raw)
+    except ValidationError:
+        logger.warning("connect_app: unparseable pending for %s", request_id)
         return None
 
-    key = _decision_key(request_id)
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        result = cache.blpop([key], 1)
-        if result is None:
-            continue
-        _key, value = result
-        if isinstance(value, bytes):
-            value = value.decode()
-        try:
-            return ConnectAppDecision(value)
-        except ValueError:
-            logger.warning(
-                "connect_app: unparseable decision %r for %s", value, request_id
-            )
-            return None
-    return None
+
+def clear_pending(request_id: str, cache: CacheBackend) -> None:
+    cache.delete(_pending_key(request_id))
