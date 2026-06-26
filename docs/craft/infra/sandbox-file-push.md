@@ -54,9 +54,9 @@ The feature owns *what*, *when*, and *which sandboxes*. The caller queries the D
 
 Three pieces:
 
-1. **`SandboxManager` push API** — `push_to_sandbox` and `push_to_sandboxes` ship as concrete default methods on the existing `SandboxManager` ABC (`backend/onyx/server/features/build/sandbox/base.py`). They own parallel fan-out via `ThreadPoolExecutor`, per-target retry with exponential backoff, and result aggregation. Backend-agnostic — the same code runs whether the manager is k8s, local, or future docker-compose. Callers own user-to-sandbox resolution (DB queries) and pass sandbox_id-keyed mappings.
-2. **One new abstract method on `SandboxManager`** — `write_files_to_sandbox(*, sandbox_id, mount_path, files)`. Subclasses implement this. Kubernetes does tar.gz + HTTP to the in-pod daemon; local writes to the sandbox directory directly via `shutil`.
-3. **In-pod push daemon (k8s only)** — small FastAPI/uvicorn process running alongside opencode in each sandbox pod's main container. One endpoint: `POST /push`. Not present in local or docker-compose backends.
+1. **`SandboxManager` push API** — `push_to_sandbox` and `push_to_sandboxes` ship as concrete default methods on the existing `SandboxManager` ABC (`backend/onyx/server/features/build/sandbox/base.py`). They own parallel fan-out via `ThreadPoolExecutor`, per-target retry with exponential backoff, and result aggregation. Backend-agnostic — the same code runs whether the manager is k8s or Docker compose. Callers own user-to-sandbox resolution (DB queries) and pass sandbox_id-keyed mappings.
+2. **One new abstract method on `SandboxManager`** — `write_files_to_sandbox(*, sandbox_id, mount_path, files)`. Subclasses implement this. Kubernetes does tar.gz + signed HTTP to the in-pod sidecar; Docker compose streams a tar archive into the container with `docker exec`.
+3. **In-pod push daemon (k8s only)** — small FastAPI/uvicorn process running alongside opencode in each sandbox pod's sidecar container. One endpoint: `POST /push`. Not present in the Docker compose backend.
 
 ## 3.1 Backends
 
@@ -73,8 +73,7 @@ class SandboxManager(ABC):
 | Backend | `write_files_to_sandbox` does |
 |---|---|
 | **Kubernetes (v1)** | Builds tar.gz, looks up pod IP, HTTP POST to in-pod daemon, daemon does safe-extract + atomic swap. §5 / §6 / §9.1 / §9.2 describe this path. |
-| **Local (v1)** | Writes directly to `$SANDBOX_ROOT/<sandbox_id>/sessions/<session_id>/<mount_path>/` via `shutil`. Atomic swap (§7) still applies. No daemon, no networking, no auth, no NetworkPolicy. ~20 LOC. |
-| **Docker-compose (future, not v1)** | Bind-mount a host dir into the container and write to the host dir, or `docker exec`. Same shape; lands when we need it. |
+| **Docker compose (v1)** | Builds tar.gz and streams it into the sandbox container with `docker exec tar -x`, then atomically replaces the target path. Same `mount_path` contract; no sidecar HTTP, signing, or NetworkPolicy. |
 
 Section applicability:
 
@@ -159,7 +158,7 @@ Semantics:
 
 ## 5. Wire format & in-pod daemon — *Kubernetes backend only*
 
-This entire section describes the k8s `write_files_to_sandbox` implementation. Local backend writes directly via `shutil`; no daemon, no wire format. Docker-compose (future) likely lands somewhere between the two.
+This entire section describes the k8s `write_files_to_sandbox` implementation. Docker compose streams a tar archive through `docker exec`; no daemon, no wire format, and no push signing.
 
 The daemon is a small Python module (FastAPI + uvicorn) packaged into the existing sandbox image. Python is already in the image; daemon dependencies are added to the sandbox image's `initial-requirements.txt`. One endpoint:
 

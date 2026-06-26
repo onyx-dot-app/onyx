@@ -120,7 +120,7 @@ The API server container already has built-in skill files on disk at
    `/workspace/skills/pptx/scripts/preview.py` to
    `/workspace/managed/skills/pptx/scripts/preview.py`.
 
-5. `/workspace/managed/` already exists in the sandbox image (Dockerfile L61:
+4. `/workspace/managed/` already exists in the sandbox image (Dockerfile L61:
    `mkdir -p /workspace/sessions /workspace/templates /workspace/managed`).
 
 ### Phase 4: Update AGENTS.md skills section
@@ -155,20 +155,18 @@ scan. Sandbox managers stay DB-agnostic.
 
 1. **Dockerfile L92**: remove `COPY --exclude=__pycache__ skills/ /workspace/skills/`.
 
-2. **`LocalSandboxManager.provision()` L212-218**: remove the
-   `shutil.copytree(skills_source_path, sandbox_skills)` block.
+2. **`DirectoryManager.setup_skills()`**: remove. It should have no production callers
+   after Phase 3 moves skill delivery to sandbox push; remove or update any tests that
+   still depend on it.
 
-3. **`DirectoryManager.setup_skills()`**: remove. Only callers are the local sandbox
-   manager (Phase 3 step 3 inlines the equivalent) and tests.
-
-4. **`DirectoryManager._skills_path` / `skills_source_path`**: remove if no remaining
-   callers after step 3. Both `DirectoryManager` constructors still pass it for now to
+3. **`DirectoryManager._skills_path` / `skills_source_path`**: remove if no remaining
+   callers after step 2. Both `DirectoryManager` constructors still pass it for now to
    keep diffs small; can be removed in a follow-up.
 
-5. **`sandbox/skills/rendering.py`** and the `sandbox/skills/` package: delete after
+4. **`sandbox/skills/rendering.py`** and the `sandbox/skills/` package: delete after
    Phase 2 step 1 moves the function out.
 
-6. **`SKILLS_TEMPLATE_PATH`**: keep — Phase 2 step 2 reads from it.
+5. **`SKILLS_TEMPLATE_PATH`**: keep — Phase 2 step 2 reads from it.
 
 ## Tests
 

@@ -978,7 +978,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     {/*
                       # Note (@raunakab)
 
-                      `shadow-01` on AppInputBar extends ~14px below the element
+                      `shadow-box-01` on AppInputBar extends ~14px below the element
                       (2px offset + 12px blur). Because the content area in `Root`
                       (app-layouts.tsx) uses `overflow-auto`, shadows that exceed
                       the container bounds are clipped.

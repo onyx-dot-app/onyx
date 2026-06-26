@@ -80,7 +80,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
           padding={0}
           gap={0}
           height="full"
-          className="radial-00 hover:shadow-00"
+          className="radial-00 hover:shadow-box-00"
         >
           <div className="flex self-stretch h-24">
             <CardItemLayout

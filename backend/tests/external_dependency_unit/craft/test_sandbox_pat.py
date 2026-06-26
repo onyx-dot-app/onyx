@@ -60,7 +60,7 @@ class TestEnsureSandboxPat:
         pat = db_session.query(PersonalAccessToken).filter_by(hashed_token=hashed).one()
         assert pat.pat_type == PatType.CRAFT
         assert pat.user_id == test_user.id
-        assert pat.scopes == [Permission.READ_SEARCH.value]
+        assert pat.scopes == [Permission.CRAFT_SANDBOX.value]
 
     def test_second_call_reuses_token(
         self,
