@@ -77,6 +77,14 @@ export function parsePacket(raw: unknown): ParsedPacket {
           | null,
       };
 
+    case "connect_app_request":
+      return {
+        type: "connect_app_request",
+        requestId: (p.request_id ?? "") as string,
+        appSlug: (p.app_slug ?? "") as string,
+        reason: (p.reason ?? null) as string | null,
+      };
+
     case "error":
       return { type: "error", message: (p.message ?? "") as string };
 
