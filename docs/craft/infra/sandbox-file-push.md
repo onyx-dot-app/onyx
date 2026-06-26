@@ -54,9 +54,9 @@ The feature owns *what*, *when*, and *which sandboxes*. The caller queries the D
 
 Three pieces:
 
-1. **`SandboxManager` push API** — `push_to_sandbox` and `push_to_sandboxes` ship as concrete default methods on the existing `SandboxManager` ABC (`backend/onyx/server/features/build/sandbox/base.py`). They own parallel fan-out via `ThreadPoolExecutor`, per-target retry with exponential backoff, and result aggregation. Backend-agnostic — the same code runs whether the manager is k8s, local, or future docker-compose. Callers own user-to-sandbox resolution (DB queries) and pass sandbox_id-keyed mappings.
-2. **One new abstract method on `SandboxManager`** — `write_files_to_sandbox(*, sandbox_id, mount_path, files)`. Subclasses implement this. Kubernetes does tar.gz + HTTP to the in-pod daemon; local writes to the sandbox directory directly via `shutil`.
-3. **In-pod push daemon (k8s only)** — small FastAPI/uvicorn process running alongside opencode in each sandbox pod's main container. One endpoint: `POST /push`. Not present in local or docker-compose backends.
+1. **`SandboxManager` push API** — `push_to_sandbox` and `push_to_sandboxes` ship as concrete default methods on the existing `SandboxManager` ABC (`backend/onyx/server/features/build/sandbox/base.py`). They own parallel fan-out via `ThreadPoolExecutor`, per-target retry with exponential backoff, and result aggregation. Backend-agnostic — the same code runs whether the manager is k8s or Docker compose. Callers own user-to-sandbox resolution (DB queries) and pass sandbox_id-keyed mappings.
+2. **One new abstract method on `SandboxManager`** — `write_files_to_sandbox(*, sandbox_id, mount_path, files)`. Subclasses implement this. Kubernetes does tar.gz + signed HTTP to the in-pod sidecar; Docker compose streams a tar archive into the container with `docker exec`.
+3. **In-pod push daemon (k8s only)** — small FastAPI/uvicorn process running alongside opencode in each sandbox pod's sidecar container. One endpoint: `POST /push`. Not present in the Docker compose backend.
 
 ## 3.1 Backends
 
@@ -73,22 +73,21 @@ class SandboxManager(ABC):
 | Backend | `write_files_to_sandbox` does |
 |---|---|
 | **Kubernetes (v1)** | Builds tar.gz, looks up pod IP, HTTP POST to in-pod daemon, daemon does safe-extract + atomic swap. §5 / §6 / §9.1 / §9.2 describe this path. |
-| **Local (v1)** | Writes directly to `$SANDBOX_ROOT/<sandbox_id>/sessions/<session_id>/<mount_path>/` via `shutil`. Atomic swap (§7) still applies. No daemon, no networking, no auth, no NetworkPolicy. ~20 LOC. |
-| **Docker-compose (future, not v1)** | Bind-mount a host dir into the container and write to the host dir, or `docker exec`. Same shape; lands when we need it. |
+| **Docker compose (v1)** | Builds tar.gz and streams it into the sandbox container with `docker exec tar -x`, then atomically replaces the target path. Same `mount_path` contract; no sidecar HTTP, signing, or NetworkPolicy. |
 
 Section applicability:
 
-| Section | K8s | Local | Docker-compose (future) |
-|---|---|---|---|
-| §4 caller-facing API | ✓ | ✓ | ✓ |
-| §5 wire format & daemon | ✓ | — | TBD |
-| §6 pod spec & supervisor | ✓ | — | TBD |
-| §7 atomic swap | ✓ | ✓ | ✓ |
-| §8 cold-start & wakeup | ✓ | ✓ | ✓ |
-| §9.1 NetworkPolicy | ✓ | — | TBD |
-| §9.2 shared secret | ✓ | — | TBD |
-| §9.3 safe extract | ✓ | hygiene applies, no untrusted bytes | TBD |
-| §10 multi-tenancy | ✓ | ✓ | ✓ |
+| Section | K8s | Docker compose |
+|---|---|---|
+| §4 caller-facing API | ✓ | ✓ |
+| §5 wire format & daemon | ✓ | — |
+| §6 pod spec & supervisor | ✓ | — |
+| §7 atomic swap | ✓ | ✓ |
+| §8 cold-start & wakeup | ✓ | ✓ |
+| §9.1 NetworkPolicy | ✓ | — |
+| §9.2 push signing (Ed25519) | ✓ | — |
+| §9.3 safe extract | ✓ | hygiene applies, no untrusted bytes |
+| §10 multi-tenancy | ✓ | ✓ |
 
 ## 4. Push API on `SandboxManager`
 
@@ -159,21 +158,22 @@ Semantics:
 
 ## 5. Wire format & in-pod daemon — *Kubernetes backend only*
 
-This entire section describes the k8s `write_files_to_sandbox` implementation. Local backend writes directly via `shutil`; no daemon, no wire format. Docker-compose (future) likely lands somewhere between the two.
+This entire section describes the k8s `write_files_to_sandbox` implementation. Docker compose streams a tar archive through `docker exec`; no daemon, no wire format, and no push signing.
 
 The daemon is a small Python module (FastAPI + uvicorn) packaged into the existing sandbox image. Python is already in the image; daemon dependencies are added to the sandbox image's `initial-requirements.txt`. One endpoint:
 
 ```
 POST /push?mount_path=<abs-path-inside-sandbox>
 Headers:
-  Authorization: Bearer <shared-secret>
+  X-Push-Signature: <base64 Ed25519 signature over {timestamp}|{path}|{sha256_hex}>
+  X-Push-Timestamp: <unix seconds; rejected if clock drift is too large>
   Content-Type:  application/gzip
   X-Bundle-Sha256: <hex sha256 of the raw body>
 Body: tar.gz bytes (single archive containing the files)
 
 200 OK            → bundle accepted, swap complete
 400 Bad Request   → hash mismatch / malformed archive / safe-extract violation
-401 Unauthorized  → shared secret missing or invalid
+401 Unauthorized  → signature missing/invalid or timestamp out of range
 413 Payload Too Large → exceeds size cap
 ```
 
@@ -182,13 +182,16 @@ Body: tar.gz bytes (single archive containing the files)
 def push(
     request: Request,
     mount_path: str = Query(...),
-    authorization: str = Header(...),
+    x_push_signature: str = Header(..., alias="X-Push-Signature"),
+    x_push_timestamp: str = Header(..., alias="X-Push-Timestamp"),
     x_bundle_sha256: str = Header(...),
 ) -> dict:
-    verify_shared_secret(authorization)        # hmac.compare_digest against env
     body = request.body()                      # bounded by MAX_BUNDLE_BYTES
-    if hashlib.sha256(body).hexdigest() != x_bundle_sha256:
+    sha = hashlib.sha256(body).hexdigest()
+    if sha != x_bundle_sha256:
         raise HTTPException(400, "bundle hash mismatch")
+    # Ed25519-verify {timestamp}|{path}|{sha256_hex} against the public key env.
+    _verify_signature(mount_path, sha, x_push_signature, x_push_timestamp)
     safe_extract_then_atomic_swap(body, mount_path)
     return {"status": "ok"}
 ```
@@ -212,7 +215,7 @@ def push(
 Changes in `backend/onyx/server/features/build/sandbox/kubernetes/kubernetes_sandbox_manager.py:_create_sandbox_pod`:
 
 - **Labels**: `onyx.app/tenant-id`, `onyx.app/user-id`, `onyx.app/sandbox-id`.
-- **Env var**: `ONYX_SANDBOX_PUSH_SECRET` via `V1EnvVar.value_from=V1EnvVarSource(secret_key_ref=...)` — mounted from the shared `onyx-sandbox-push-secret` k8s Secret (same Secret in api_server pods).
+- **Env var**: `ONYX_SANDBOX_PUSH_PUBLIC_KEY` — the base64 Ed25519 *public* key set as a plain env value (derived from the push keypair via `get_push_key_pair()`). The matching *private* key lives only in the signer pods (api_server + heavy/scheduled-tasks workers) as `ONYX_SANDBOX_PUSH_PRIVATE_KEY`; the sandbox pod only ever holds the public key.
 - **Container port**: expose 8731 (cluster-internal only).
 - **Entrypoint**: changes from `CMD ["sleep", "infinity"]` to a supervisor (§6.1).
 
@@ -270,7 +273,7 @@ Two POSIX guarantees do the work: `rename` of a symlink is atomic; open file han
 
 ## 8. Cold-start & wakeup hydration
 
-When a sandbox is provisioned (k8s pod created, or local sandbox dir created) `/workspace/managed/` is empty. Each feature exposes a `push_to_pod(sandbox_id, user, db_session)` helper that builds its current file set for the user and calls `get_sandbox_manager().push_to_sandbox(...)`. `SandboxManager.setup_session_workspace` calls each helper after the sandbox is ready:
+When a sandbox is provisioned (k8s pod or Docker container created) `/workspace/managed/` is empty. Each feature exposes a `push_to_pod(sandbox_id, user, db_session)` helper that builds its current file set for the user and calls `get_sandbox_manager().push_to_sandbox(...)`. `SandboxManager.setup_session_workspace` calls each helper after the sandbox is ready:
 
 ```python
 skills.push_to_pod(sandbox_id, user, db_session)
@@ -316,11 +319,11 @@ spec:
 {{- end }}
 ```
 
-### 9.2 Shared secret (defense in depth) — *Kubernetes backend only*
+### 9.2 Push request signing (Ed25519) — *Kubernetes backend only*
 
-A single long-random secret lives in k8s Secret `onyx-sandbox-push-secret`, mounted as env var `ONYX_SANDBOX_PUSH_SECRET` in both api_server and every sandbox pod. `KubernetesSandboxManager.write_files_to_sandbox` sends `Authorization: Bearer ${ONYX_SANDBOX_PUSH_SECRET}`; the daemon `hmac.compare_digest`s the incoming header against its local copy and rejects with 401 on mismatch. `hmac.compare_digest` (not `==`) avoids timing side channels.
+The signer pods (api_server + heavy/scheduled-tasks workers) hold the Ed25519 *private* key as env var `ONYX_SANDBOX_PUSH_PRIVATE_KEY`, sourced from the restricted k8s Secret `onyx-sandbox-push-secret`. `KubernetesSandboxManager.write_files_to_sandbox` signs `{timestamp}|{path}|{sha256_hex}` and sends `X-Push-Signature` + `X-Push-Timestamp`. The daemon holds only the *public* key (`ONYX_SANDBOX_PUSH_PUBLIC_KEY`), verifies the signature, and rejects with 401 on an invalid signature or an out-of-range timestamp (drift is bounded to mitigate replay). Asymmetric signing means a compromised sandbox pod cannot forge pushes — it never sees the private key.
 
-Rotation: update the Secret and roll api_server + sandbox pods. v1 does not hot-reload.
+Rotation: regenerate the keypair, update the Secret, and roll the signer pods; new sandbox pods pick up the new public key at provision time.
 
 ### 9.3 Safe extract (load-bearing security boundary)
 
@@ -399,10 +402,11 @@ backend/onyx/server/features/build/sandbox/
 │       └── daemon/     # in-pod push daemon — self-contained, no onyx.* imports,
 │           ├── server.py   # FastAPI app on :8731  (invoked as `python -m sandbox_daemon.server`)
 │           └── extract.py  # safe_extract_then_atomic_swap + reject-list checks
-└── local/local_sandbox_manager.py     # write+find via shutil
+└── docker/
+    └── docker_sandbox_manager.py      # write via docker exec tar + atomic replace
 ```
 
-No `pusher.py` module — `push_to_sandbox` and `push_to_sandboxes` are concrete methods on `SandboxManager`'s base class (§4). Push types (`PushResult`, `PushFailure`, etc.) live in `models.py` alongside the existing sandbox models. Tarball building (`_build_targz`) and auth header construction (`_build_push_auth_header`) are private functions in `kubernetes_sandbox_manager.py`, not separate modules. The daemon is a self-contained package under `image/sandbox_daemon/` with no `onyx.*` imports; it is copied to `/workspace/sandbox_daemon/` in the sandbox image. The local implementation uses only `shutil` + `os.rename` for atomic swap; no daemon dependency.
+No `pusher.py` module — `push_to_sandbox` and `push_to_sandboxes` are concrete methods on `SandboxManager`'s base class (§4). Push types (`PushResult`, `PushFailure`, etc.) live in `models.py` alongside the existing sandbox models. Tarball building (`_build_targz`) and auth header construction (`_build_push_auth_header`) are private functions in `kubernetes_sandbox_manager.py`, not separate modules. The daemon is a self-contained package under `image/sandbox_daemon/` with no `onyx.*` imports; it is copied to `/workspace/sandbox_daemon/` in the sandbox image. The Docker compose implementation uses `docker exec` to stream a tarball into the sandbox container and atomically replace the target path; no daemon dependency.
 
 ### Per-feature push helpers
 
@@ -436,13 +440,13 @@ Dockerfile changes:
 
 **`kubernetes_sandbox_manager.py`**:
 - Implement `write_files_to_sandbox` using `CoreV1Api` + tar.gz + HTTP to the in-pod daemon.
-- Modifications in `_create_sandbox_pod`: add labels (§6), add `ONYX_SANDBOX_PUSH_SECRET` env var via `V1EnvVarSource.secret_key_ref`, expose container port 8731.
+- Modifications in `_create_sandbox_pod`: add labels (§6), add the `ONYX_SANDBOX_PUSH_PUBLIC_KEY` env var (plain base64 public-key value), expose container port 8731.
 
-**`local_sandbox_manager.py`**:
-- Implement `write_files_to_sandbox` using `shutil` writes and `os.rename` for atomic swap.
+**`docker_sandbox_manager.py`**:
+- Implement `write_files_to_sandbox` using `docker exec` tar streaming and atomic target replacement.
 
 **Both managers** — modifications in `setup_session_workspace`:
-- Call each feature's `push_to_pod(...)` instead of writing AGENTS.md / opencode.json / skills via the existing bash heredoc (k8s) or direct file writes (local).
+- Call each feature's `push_to_pod(...)` instead of writing AGENTS.md / opencode.json / skills via the existing bash heredoc.
 - Same call at the wakeup hook (§8).
 
 ### Helm chart
@@ -455,22 +459,23 @@ deployment/helm/charts/onyx/
 ```
 
 `values.yaml` changes — no new template file for the secret:
-- Add `auth.sandboxPushSecret` entry alongside existing `auth.postgresql`, `auth.redis`, etc. The existing `templates/auth-secrets.yaml` loops over `.Values.auth.*` and emits the k8s Secret automatically. The api_server deployment already wires `auth.*` entries into env vars via the `onyx.envSecrets` helper, so api_server picks up `ONYX_SANDBOX_PUSH_SECRET` for free.
+- Add `auth.sandboxPushSecret` entry alongside existing `auth.postgresql`, `auth.redis`, etc. The existing `templates/auth-secrets.yaml` loops over `.Values.auth.*` and emits the k8s Secret automatically. Because the sandbox push key is restricted (`allPods: false`), only the API, heavy, and scheduled-tasks deployments opt into it through the purpose-specific auth helper.
 
 ```yaml
 auth:
   sandboxPushSecret:
     enabled: true
+    allPods: false
     secretName: 'onyx-sandbox-push-secret'
     existingSecret: ""
     secretKeys:
-      ONYX_SANDBOX_PUSH_SECRET: shared_secret
+      ONYX_SANDBOX_PUSH_PRIVATE_KEY: private_key
     values:
-      shared_secret: ""   # set at deploy time
+      private_key: ""   # set at deploy time
 ```
 
 - Add `sandboxPush.networkPolicy.enabled: true` flag for the NetworkPolicy.
-- Sandbox pods reference the same secret via a `V1EnvVarSource(secret_key_ref=V1SecretKeySelector(name="onyx-sandbox-push-secret", key="shared_secret"))` in `KubernetesSandboxManager._create_sandbox_pod`.
+- Sandbox pods receive only the base64 Ed25519 *public* key as a plain `ONYX_SANDBOX_PUSH_PUBLIC_KEY` env value (derived from the push keypair via `get_push_key_pair()`) in `KubernetesSandboxManager._create_sandbox_pod` — never the private signing key.
 
 ### Tests
 
@@ -504,7 +509,7 @@ backend/tests/integration/tests/sandbox/
 
 ### External-dependency unit (`backend/tests/external_dependency_unit/sandbox/`)
 - `KubernetesSandboxManager.write_files_to_sandbox` produces a well-formed tar.gz with the right sha256 header.
-- `LocalSandboxManager.write_files_to_sandbox` writes to the expected path and performs the atomic swap.
+- `DockerSandboxManager.write_files_to_sandbox` writes to the expected path and performs the atomic swap.
 
 ### Integration (`backend/tests/integration/tests/sandbox/`)
 - Bring up a real sandbox, `push_to_sandbox` a small file set, verify files at the expected path inside the sandbox.

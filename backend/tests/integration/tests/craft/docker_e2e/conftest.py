@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from typing import NamedTuple
 from typing import Protocol
 from uuid import UUID
 
@@ -18,6 +19,11 @@ from tests.integration.common_utils.managers.build_session import BuildSessionMa
 from tests.integration.common_utils.test_models import DATestUser
 
 
+class DockerSandbox(NamedTuple):
+    session_id: UUID
+    container_name: str
+
+
 class DockerExec(Protocol):
     def __call__(
         self,
@@ -30,7 +36,13 @@ class DockerExec(Protocol):
 
 
 class ProvisionSandbox(Protocol):
-    def __call__(self, user: DATestUser) -> tuple[UUID, str]: ...
+    def __call__(
+        self,
+        user: DATestUser,
+        *,
+        llm_provider_type: str | None = None,
+        llm_model_name: str | None = None,
+    ) -> DockerSandbox: ...
 
 
 def _container_name(sandbox_id: str) -> str:
@@ -57,14 +69,28 @@ def _docker_exec(
     )
 
 
-def _provision_sandbox(user: DATestUser) -> tuple[UUID, str]:
-    session = BuildSessionManager.create(user)
+def _provision_sandbox(
+    user: DATestUser,
+    *,
+    llm_provider_type: str | None = None,
+    llm_model_name: str | None = None,
+) -> DockerSandbox:
+    # Both default to None on the create request, so passing them through
+    # unconditionally is equivalent to omitting them.
+    session = BuildSessionManager.create(
+        user,
+        llm_provider_type=llm_provider_type,
+        llm_model_name=llm_model_name,
+    )
     sandbox = session.sandbox
     assert sandbox is not None, f"Session response missing sandbox: {session!r}"
     assert sandbox.status == SandboxStatus.RUNNING, (
         f"Sandbox not RUNNING after create: {sandbox.status!r}"
     )
-    return UUID(session.id), _container_name(sandbox.id)
+    return DockerSandbox(
+        session_id=UUID(session.id),
+        container_name=_container_name(sandbox.id),
+    )
 
 
 @pytest.fixture(scope="session")

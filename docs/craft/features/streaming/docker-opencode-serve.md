@@ -135,9 +135,9 @@ Update `docs/craft/opencode-serve-migration.md` §"Migration phases" to note Doc
 
 ## Tests
 
-**External-dependency-unit** (`backend/tests/external_dependency_unit/craft/`):
-- New file `test_docker_sandbox_serve_streaming.py` — mirror `test_opencode_serve_streaming.py` but against a Docker-provisioned sandbox container. Asserts ordered event sequence from `send_message`. Use a no-tools prompt for determinism.
-- Update `test_kubernetes_sandbox_file_ops.py` if any imports churn from the base.py refactor.
+**Docker compose integration** (`backend/tests/integration/tests/craft/docker_e2e/`):
+- `test_serve_streaming_docker.py` keeps the direct transport/event matrix against a Docker-provisioned sandbox container.
+- Follow-up k8s coverage should validate deployed API/Celery turn handoff once that lane is added.
 
 **Unit** (`backend/tests/unit/onyx/server/features/build/sandbox/`):
 - `test_docker_manager_config.py` — extend the env-allowlist assertion to include the four new serve env vars. Assert the OLD allowlist no longer matches (catches regressions in either direction).
