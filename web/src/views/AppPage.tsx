@@ -147,10 +147,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { appName, vectorDbEnabled, disable_default_assistant } = useSettings();
 
   useEffect(() => {
-    if (!appFocus.isChat() && !appFocus.isSharedChat()) return;
-    if (!currentChatSession) return;
+    const appendChatNameToDocumentTitle =
+      (appFocus.isChat() || appFocus.isSharedChat()) && currentChatSession;
 
-    document.title = `${currentChatSession.name} — ${appName}`;
+    document.title = appendChatNameToDocumentTitle
+      ? `${currentChatSession.name} — ${appName}`
+      : appName;
   }, [currentChatSession?.name, appName, appFocus]);
 
   const { ccPairs } = useCCPairs(vectorDbEnabled);
