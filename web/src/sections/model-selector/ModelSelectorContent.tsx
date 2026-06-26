@@ -207,7 +207,11 @@ export default function ModelSelectorContent({
                 ]
               : groupedOptions.length === 1
                 ? [
-                    <Section key="single-provider" gap={0.25}>
+                    <Section
+                      key="single-provider"
+                      gap={0.25}
+                      alignItems="stretch"
+                    >
                       {groupedOptions[0]!.options.map(renderModelItem)}
                     </Section>,
                   ]
@@ -261,7 +265,7 @@ export default function ModelSelectorContent({
                         </CollapsibleTrigger>
 
                         <CollapsibleContent>
-                          <Section gap={0.25}>
+                          <Section gap={0.25} alignItems="stretch">
                             {group.options.map(renderModelItem)}
                           </Section>
                         </CollapsibleContent>
