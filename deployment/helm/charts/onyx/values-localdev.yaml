@@ -166,11 +166,8 @@ celery_worker_scheduled_tasks:
 celery_worker_monitoring:
   replicaCount: 0
 
-# slackbot / discordbot / mcpServer use .enabled (not replicaCount).
+# slackbot / mcpServer use .enabled (not replicaCount).
 slackbot:
-  enabled: false
-
-discordbot:
   enabled: false
 
 mcpServer:

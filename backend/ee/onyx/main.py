@@ -2,7 +2,6 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from httpx_oauth.clients.google import GoogleOAuth2
 
 from ee.onyx.server.analytics.api import router as analytics_router
 from ee.onyx.server.auth_check import check_ee_router_auth
@@ -39,20 +38,10 @@ from ee.onyx.server.token_rate_limits.api import (
 )
 from ee.onyx.server.user_group.api import router as user_group_router
 from ee.onyx.utils.encryption import test_encryption
-from onyx.auth.users import auth_backend
-from onyx.auth.users import create_onyx_oauth_router
-from onyx.auth.users import fastapi_users
 from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
-from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
-from onyx.configs.app_configs import OAUTH_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
-from onyx.main import get_application as get_application_base
-from onyx.main import include_auth_router_with_prefix
 from onyx.main import include_router_with_global_prefix_prepended
+from onyx.main import get_application as get_application_base
 from onyx.main import lifespan as lifespan_base
 from onyx.main import use_route_function_names_as_operation_ids
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
@@ -100,40 +89,6 @@ def get_application() -> FastAPI:
         # Checks LICENSE_ENFORCEMENT_ENABLED at runtime (can be toggled without restart)
         # MT deployments use control plane gating via is_tenant_gated() instead
         add_license_enforcement_middleware(application, logger)
-
-    if AUTH_TYPE == AuthType.CLOUD:
-        # For Google OAuth, refresh tokens are requested by:
-        # 1. Adding the right scopes
-        # 2. Properly configuring OAuth in Google Cloud Console to allow offline access
-        google_login_scopes = list(
-            GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES
-        )
-
-        oauth_client = GoogleOAuth2(
-            OAUTH_CLIENT_ID,
-            OAUTH_CLIENT_SECRET,
-            scopes=google_login_scopes,
-        )
-        include_auth_router_with_prefix(
-            application,
-            create_onyx_oauth_router(
-                oauth_client,
-                auth_backend,
-                USER_AUTH_SECRET,
-                associate_by_email=True,
-                is_verified_by_default=True,
-                # Points the user back to the login page
-                redirect_url=f"{WEB_DOMAIN}/auth/oauth/callback",
-            ),
-            prefix="/auth/oauth",
-        )
-
-        # Need basic auth router for `logout` endpoint
-        include_auth_router_with_prefix(
-            application,
-            fastapi_users.get_logout_router(auth_backend),
-            prefix="/auth",
-        )
 
     # RBAC / group access control
     include_router_with_global_prefix_prepended(application, user_group_router)

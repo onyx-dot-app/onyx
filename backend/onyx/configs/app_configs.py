@@ -204,10 +204,9 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 )
 
 # Captcha cookie TTL — how long a verified captcha token remains valid in
-# the browser cookie before the user has to solve another challenge. Sized
-# to comfortably cover one Google OAuth round-trip (typically <10s) while
-# keeping the replay window tight. 120s also matches Google's own v3 token
-# lifetime, so a paired-up cookie + token never outlive each other.
+# the browser cookie before the user has to solve another challenge.
+# 120s matches Google's own v3 token lifetime, so a paired-up cookie + token
+# never outlive each other.
 CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
 
 # Redis TTL for cached control-plane billing/trial lookups. 24h default —
@@ -216,41 +215,10 @@ CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "1
 # refreshes are not stale. Env-tunable for emergency tightening.
 BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "86400"))
 
-# OAuth Login Flow
-# Used for both Google OAuth2 and OIDC flows
-OAUTH_CLIENT_ID = (
-    os.environ.get("OAUTH_CLIENT_ID", os.environ.get("GOOGLE_OAUTH_CLIENT_ID")) or ""
-)
-OAUTH_CLIENT_SECRET = (
-    os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
-    or ""
-)
-
-# Whether Google OAuth is enabled (requires both client ID and secret)
-OAUTH_ENABLED = bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
-
-# Default scopes requested when signing in with Google (AUTH_TYPE=google_oauth
-# or AUTH_TYPE=cloud, and the BASIC + OAuth fallback path). These are the
-# minimum required to identify the user via OpenID Connect.
-GOOGLE_LOGIN_BASE_SCOPES = ["openid", "email", "profile"]
-
-# Applicable for Google OAuth login, allows you to override the scopes that
-# are requested from Google. Mirrors OIDC_SCOPE_OVERRIDE; useful when the
-# access token needs to be passed through to tool calls that require
-# additional Google API scopes.
-GOOGLE_OAUTH_SCOPE_OVERRIDE: list[str] | None = None
-_GOOGLE_OAUTH_SCOPE_OVERRIDE = os.environ.get("GOOGLE_OAUTH_SCOPE_OVERRIDE")
-
-if _GOOGLE_OAUTH_SCOPE_OVERRIDE:
-    try:
-        GOOGLE_OAUTH_SCOPE_OVERRIDE = [
-            scope.strip() for scope in _GOOGLE_OAUTH_SCOPE_OVERRIDE.split(",")
-        ]
-    except Exception:
-        logger.exception(
-            "Error configuring Google OAuth login scopes: %s",
-            _GOOGLE_OAUTH_SCOPE_OVERRIDE,
-        )
+# OIDC Login Flow
+OAUTH_CLIENT_ID = os.environ.get("OAUTH_CLIENT_ID") or ""
+OAUTH_CLIENT_SECRET = os.environ.get("OAUTH_CLIENT_SECRET") or ""
+OAUTH_ENABLED = False
 
 # OpenID Connect configuration URL for OIDC integrations
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""

@@ -110,9 +110,6 @@ export const getAuthUrlSS = async (
   switch (authType) {
     case AuthType.BASIC:
       return "";
-    case AuthType.GOOGLE_OAUTH: {
-      return await getGoogleOAuthUrlSS(nextUrl);
-    }
     case AuthType.CLOUD: {
       return await getGoogleOAuthUrlSS(nextUrl);
     }

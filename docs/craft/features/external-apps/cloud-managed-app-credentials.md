@@ -51,9 +51,9 @@ EXT_APP_<APP_TYPE>_<FIELD>     e.g. EXT_APP_GMAIL_CLIENT_ID, EXT_APP_SLACK_CLIEN
 ```
 
 The `EXT_APP_` prefix and specific app type (e.g. `GMAIL`, not `GOOGLE`) keep
-these distinct from the auth-flow `GOOGLE_OAUTH_*` variables. Each constant is
-mapped to its field on the provider's `managed_org_credentials`. Stored values
-are encrypted at rest (`organization_credentials`, an `EncryptedJson` column).
+these distinct from login and connector configuration. Each constant is mapped
+to its field on the provider's `managed_org_credentials`. Stored values are
+encrypted at rest (`organization_credentials`, an `EncryptedJson` column).
 
 Leaving a provider's variables unset is valid: the app is still provisioned, just
 without credentials until they are configured (it can't be meaningfully enabled

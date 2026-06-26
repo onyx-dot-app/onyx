@@ -31,7 +31,6 @@ import {
   SvgUsers,
   SvgWallet,
   SvgZoomIn,
-  SvgDiscord,
   SvgSlack,
 } from "@opal/icons";
 
@@ -88,12 +87,6 @@ export const ADMIN_ROUTES = {
     icon: SvgSlack,
     title: "Slack Integration",
     sidebarLabel: "Slack Integration",
-  },
-  DISCORD_BOTS: {
-    path: "/admin/discord-bot",
-    icon: SvgDiscord,
-    title: "Discord Integration",
-    sidebarLabel: "Discord Integration",
   },
   MCP_ACTIONS: {
     path: "/admin/actions/mcp",

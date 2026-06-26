@@ -885,44 +885,6 @@ celery_worker_scheduled_tasks:
   tolerations: []
   affinity: {}
 
-# Discord bot for Onyx
-# The bot offloads message processing to scalable API pods via HTTP requests.
-discordbot:
-  extraEnv: []
-  enabled: false  # Disabled by default - requires bot token configuration
-  # Bot token can be provided directly or via a Kubernetes secret
-  # Option 1: Direct token (not recommended for production)
-  botToken: ""
-  # Option 2: Reference a Kubernetes secret (recommended)
-  botTokenSecretName: ""  # Name of the secret containing the bot token
-  botTokenSecretKey: "token"  # Key within the secret (default: "token")
-  # Command prefix for bot commands (default: "!")
-  invokeChar: "!"
-  image:
-    repository: onyxdotapp/onyx-backend
-    tag: ""  # Overrides the image tag whose default is the chart appVersion.
-  podAnnotations: {}
-  podLabels:
-    scope: onyx-backend
-  deploymentLabels:
-    app: discord-bot
-  podSecurityContext:
-    {}
-  securityContext:
-    {}
-  resources:
-    requests:
-      cpu: "500m"
-      memory: "512Mi"
-    limits:
-      cpu: "1000m"
-      memory: "2000Mi"
-  volumes: []
-  volumeMounts: []
-  nodeSelector: {}
-  tolerations: []
-  affinity: {}
-
 slackbot:
   extraEnv: []
   enabled: true
@@ -1451,7 +1413,7 @@ configMap:
   # overridden only if sandboxes must reach a different proxy host.
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
 
-  # Auth type: "basic" (default), "google_oauth", "oidc", or "saml"
+  # Auth type: "basic" (default), "oidc", or "saml"
   # UPGRADE NOTE: Default changed from "disabled" to "basic" in 0.4.34.
   # Set auth.userauth.enabled=true and provide auth.userauth.values.user_auth_secret
   # before enabling flows that require it.

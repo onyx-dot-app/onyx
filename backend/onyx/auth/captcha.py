@@ -4,9 +4,9 @@ Two flows share this module:
 
 1. Email/password signup — ``UserManager.create`` verifies the token
    posted with the signup body.
-2. Google OAuth signup — the frontend pre-verifies a token, the backend
-   sets a signed cookie, and ``CaptchaCookieMiddleware`` checks the
-   cookie on the ``/auth/oauth/callback`` redirect.
+2. OAuth signup — the frontend pre-verifies a token, the backend sets a
+   signed cookie, and ``CaptchaCookieMiddleware`` checks the cookie on the
+   OAuth callback redirect.
 
 Verification calls the reCAPTCHA Enterprise Assessment API so rejections
 can key on ``riskAnalysis.reasons`` rather than a raw 0-1 score.

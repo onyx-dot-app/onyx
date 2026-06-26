@@ -21,7 +21,7 @@ LOG_ONYX_MODEL_INTERACTIONS=False
 LOG_LEVEL=debug
 
 
-# Useful if you want to toggle auth on/off (google_oauth/OIDC specifically).
+# Useful if you want to toggle OIDC auth on/off.
 OAUTH_CLIENT_ID=<REPLACE THIS>
 OAUTH_CLIENT_SECRET=<REPLACE THIS>
 OPENID_CONFIG_URL=<REPLACE THIS>

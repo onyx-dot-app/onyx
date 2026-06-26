@@ -18,7 +18,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
-from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
 from httpx_oauth.clients.openid import OpenID
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -43,12 +42,9 @@ from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.app_configs import ENABLE_PUBLIC_DOCS
-from onyx.configs.app_configs import GOOGLE_LOGIN_BASE_SCOPES
-from onyx.configs.app_configs import GOOGLE_OAUTH_SCOPE_OVERRIDE
 from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
 from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import OAUTH_ENABLED
 from onyx.configs.app_configs import OIDC_PKCE_ENABLED
 from onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
 from onyx.configs.app_configs import OPENID_CONFIG_URL
@@ -118,7 +114,6 @@ from onyx.server.manage.administrative import router as admin_router
 from onyx.server.manage.code_interpreter.api import (
     admin_router as code_interpreter_admin_router,
 )
-from onyx.server.manage.discord_bot.api import router as discord_bot_router
 from onyx.server.manage.embedding.api import admin_router as embedding_admin_router
 from onyx.server.manage.embedding.api import basic_router as embedding_router
 from onyx.server.manage.get_state import router as state_router
@@ -528,7 +523,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(
         application, slack_bot_management_router
     )
-    include_router_with_global_prefix_prepended(application, discord_bot_router)
     include_router_with_global_prefix_prepended(application, persona_router)
     include_router_with_global_prefix_prepended(application, admin_persona_router)
     include_router_with_global_prefix_prepended(application, agents_router)
@@ -607,67 +601,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
             prefix="/users",
         )
 
-    # Mobile bearer gateway (login/refresh/logout + the SSO code exchange). Must cover
-    # google_oauth too — its /auth/mobile/sso/exchange lives here — so it can't be nested
-    # in the basic/cloud block above (that 404'd the exchange on a google_oauth instance).
-    if AUTH_TYPE in (AuthType.BASIC, AuthType.CLOUD, AuthType.GOOGLE_OAUTH):
+    # Mobile bearer gateway (login/refresh/logout + the SSO code exchange).
+    if AUTH_TYPE in (AuthType.BASIC, AuthType.CLOUD):
         include_auth_router_with_prefix(
             application,
             mobile_auth_router,
             prefix="/auth/mobile",
         )
-
-    # Register Google OAuth when AUTH_TYPE is GOOGLE_OAUTH, or when
-    # AUTH_TYPE is BASIC and OAuth credentials are configured
-    if AUTH_TYPE == AuthType.GOOGLE_OAUTH or (
-        AUTH_TYPE == AuthType.BASIC and OAUTH_ENABLED
-    ):
-        google_login_scopes = list(
-            GOOGLE_OAUTH_SCOPE_OVERRIDE or GOOGLE_LOGIN_BASE_SCOPES
-        )
-
-        oauth_client = GoogleOAuth2(
-            OAUTH_CLIENT_ID,
-            OAUTH_CLIENT_SECRET,
-            scopes=google_login_scopes,
-        )
-        include_auth_router_with_prefix(
-            application,
-            create_onyx_oauth_router(
-                oauth_client,
-                auth_backend,
-                USER_AUTH_SECRET,
-                associate_by_email=True,
-                is_verified_by_default=True,
-                redirect_url=f"{WEB_DOMAIN}/auth/oauth/callback",
-            ),
-            prefix="/auth/oauth",
-        )
-
-        # Dedicated mobile Google OAuth router. redirect_url is under /api so the IdP
-        # returns to the api_server, not the web callback wrapper (which drops the
-        # cookie-less deep-link 302). mobile_auth_backend only namespaces its route
-        # names apart from the web router's; same Google client + strategy.
-        include_auth_router_with_prefix(
-            application,
-            create_onyx_oauth_router(
-                oauth_client,
-                mobile_auth_backend,
-                USER_AUTH_SECRET,
-                associate_by_email=True,
-                is_verified_by_default=True,
-                redirect_url=f"{WEB_DOMAIN}/api/auth/mobile/oauth/callback",
-            ),
-            prefix="/auth/mobile/oauth",
-        )
-
-        # Need logout router for GOOGLE_OAUTH only (BASIC already has it from above)
-        if AUTH_TYPE == AuthType.GOOGLE_OAUTH:
-            include_auth_router_with_prefix(
-                application,
-                fastapi_users.get_logout_router(auth_backend),
-                prefix="/auth",
-            )
 
     if AUTH_TYPE == AuthType.OIDC:
         # Ensure we request offline_access for refresh tokens
@@ -716,7 +656,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     if (
         AUTH_TYPE == AuthType.CLOUD
         or AUTH_TYPE == AuthType.BASIC
-        or AUTH_TYPE == AuthType.GOOGLE_OAUTH
         or AUTH_TYPE == AuthType.OIDC
     ):
         # Add refresh token endpoint for OAuth as well

@@ -180,6 +180,10 @@ def verify_auth_setting() -> None:
         raise ValueError(
             "'cloud' is not a valid auth type for self-hosted deployments."
         )
+    if raw_auth_type == "google_oauth":
+        raise ValueError(
+            "AUTH_TYPE='google_oauth' is no longer supported. Use 'basic', 'oidc', or 'saml'."
+        )
     if raw_auth_type == "disabled":
         logger.warning(
             "AUTH_TYPE='disabled' is no longer supported. Using 'basic' instead. Please update your configuration."

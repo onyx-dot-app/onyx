@@ -93,7 +93,7 @@ The complete feature set of Onyx which is recommended for serious users and larg
 
 Onyx is built for teams of all sizes, from individual users to the largest global enterprises:
 - 👥 Collaboration: Share chats and agents with other members of your organization.
-- 🔐 Single Sign On: SSO via Google OAuth, OIDC, or SAML. Group syncing and user provisioning via SCIM.
+- 🔐 Single Sign On: SSO via OIDC or SAML. Group syncing and user provisioning via SCIM.
 - 🛡️ Role Based Access Control: RBAC for sensitive resources like access to agents, actions, etc.
 - 📊 Analytics: Usage graphs broken down by teams, LLMs, or agents.
 - 🕵️ Query History: Audit usage to ensure safe adoption of AI in your organization.

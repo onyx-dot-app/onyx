@@ -18,6 +18,16 @@ def test_verify_auth_setting_raises_for_cloud(
         verify_auth_setting()
 
 
+def test_verify_auth_setting_raises_for_google_oauth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Google OAuth login is not valid for self-hosted deployments."""
+    monkeypatch.setenv("AUTH_TYPE", "google_oauth")
+
+    with pytest.raises(ValueError, match="google_oauth"):
+        verify_auth_setting()
+
+
 def test_verify_auth_setting_warns_for_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -36,7 +46,7 @@ def test_verify_auth_setting_warns_for_disabled(
 
 @pytest.mark.parametrize(
     "auth_type",
-    [AuthType.BASIC, AuthType.GOOGLE_OAUTH, AuthType.OIDC, AuthType.SAML],
+    [AuthType.BASIC, AuthType.OIDC, AuthType.SAML],
 )
 def test_verify_auth_setting_valid_auth_types(
     monkeypatch: pytest.MonkeyPatch,

@@ -40,7 +40,6 @@ import {
 } from "@/views/admin/ServiceAccountsPage/svc";
 import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import {
-  DISCORD_SERVICE_API_KEY_NAME,
   SERVICE_ACCOUNT_ROLE_OPTIONS,
 } from "@/views/admin/ServiceAccountsPage/interfaces";
 import ApiKeyFormModal from "@/views/admin/ServiceAccountsPage/ApiKeyFormModal";
@@ -81,11 +80,7 @@ export default function ServiceAccountsPage() {
     null
   );
 
-  const visibleApiKeys = (apiKeys ?? []).filter(
-    (key) => key.api_key_name !== DISCORD_SERVICE_API_KEY_NAME
-  );
-
-  const filteredApiKeys = visibleApiKeys.filter(
+  const filteredApiKeys = (apiKeys ?? []).filter(
     (key) =>
       !search ||
       (key.api_key_name ?? "").toLowerCase().includes(search.toLowerCase()) ||

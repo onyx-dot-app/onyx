@@ -153,8 +153,7 @@ export default function MCPAuthenticationModal({
 
   // Check if OAuth is enabled for the Onyx instance
   const authType = useAuthType();
-  const isOAuthEnabled =
-    authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
+  const isOAuthEnabled = authType === AuthType.OIDC;
 
   const redirectUri = useMemo(() => {
     if (typeof window === "undefined") {

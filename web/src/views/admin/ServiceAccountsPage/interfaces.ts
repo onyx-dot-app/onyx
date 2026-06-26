@@ -2,8 +2,6 @@ import { UserRole } from "@/lib/types";
 import { SvgUserManage, SvgUser, SvgLock } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 
-export const DISCORD_SERVICE_API_KEY_NAME = "discord-bot-service";
-
 // Roles assignable to a service account, shared by the Account Type column and
 // the Groups & Roles modal so the option list lives in one place.
 export const SERVICE_ACCOUNT_ROLE_OPTIONS: {

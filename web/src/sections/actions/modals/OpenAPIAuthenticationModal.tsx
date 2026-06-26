@@ -79,8 +79,7 @@ export default function OpenAPIAuthenticationModal({
   entityName = null,
 }: OpenAPIAuthenticationModalProps) {
   const authType = useAuthType();
-  const isOAuthEnabled =
-    authType === AuthType.OIDC || authType === AuthType.GOOGLE_OAUTH;
+  const isOAuthEnabled = authType === AuthType.OIDC;
   const [existingOAuthConfig, setExistingOAuthConfig] =
     useState<OAuthConfig | null>(null);
   const [isLoadingOAuthConfig, setIsLoadingOAuthConfig] = useState(false);

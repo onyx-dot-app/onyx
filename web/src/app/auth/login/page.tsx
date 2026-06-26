@@ -84,8 +84,7 @@ export default async function Page(props: PageProps) {
 
   const ssoLoginFooterContent =
     authTypeMetadata &&
-    (authTypeMetadata.authType === AuthType.GOOGLE_OAUTH ||
-      authTypeMetadata.authType === AuthType.OIDC ||
+    (authTypeMetadata.authType === AuthType.OIDC ||
       authTypeMetadata.authType === AuthType.SAML) ? (
       <>Need access? Reach out to your IT admin to get access.</>
     ) : undefined;
