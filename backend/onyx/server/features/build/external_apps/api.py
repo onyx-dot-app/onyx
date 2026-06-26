@@ -467,13 +467,9 @@ def resolve_connect_app_request(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """Record the user's decision on a pending ``connect_app`` request.
-
-    The connect card (rendered from a ``ConnectAppRequestPacket``) POSTs here. We
-    load the stashed answer context and answer opencode directly on the user's
-    sandbox — "connected" allows the parked tool call, "declined" hands it a
-    rejection. The turn-driving worker isn't involved. Idempotent: an expired or
-    already-answered request is a no-op.
+    """Answer a pending ``connect_app`` request: load the stashed context and
+    answer opencode on the user's sandbox — connected (allow) / declined
+    (reject). Idempotent; an expired or already-answered request is a no-op.
     """
     cache = get_cache_backend(tenant_id=get_current_tenant_id())
     pending = connect_app.load_pending(request_id, cache)

@@ -137,11 +137,9 @@ class _TurnState:
     # terminator (fired from session.idle/status) consumes it — message.updated
     # itself is per-step and can't terminate the turn.
     last_finish: str | None = None
-    # connect_app permission id → monotonic deadline. The decision endpoint
-    # answers opencode directly; this is only the timeout fallback — if the user
-    # never decides, reject so the agent gets a clean decline before the turn
-    # times out. A late reject after the user answered is a no-op (opencode
-    # resolves a permission once).
+    # connect_app permission id → monotonic deadline. Timeout fallback only (the
+    # decision endpoint answers directly); reject an undecided request for a clean
+    # decline. A late reject after the user answered is a harmless no-op.
     pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
 
 
@@ -1500,9 +1498,6 @@ class OpencodeServeClient:
                 yield sandbox_event
 
             if raw.get("type") == "permission.asked":
-                # connect_app announces a card to the live stream; the decision
-                # endpoint answers opencode out-of-band. Other permissions
-                # auto-allow. Nothing is yielded here.
                 self._handle_permission_ask(raw, state, directory=directory)
 
             if terminated_locally:
@@ -1542,13 +1537,10 @@ class OpencodeServeClient:
     def _handle_permission_ask(
         self, evt: dict[str, Any], state: _TurnState, *, directory: str
     ) -> None:
-        """Answer opencode's ``permission.asked``.
-
-        ``connect_app`` (configured ``"ask"``) announces a connect card and
-        leaves the permission pending for the decision endpoint to answer
-        out-of-band; every other category is auto-allowed (production
-        ``opencode.json`` covers the ones we use — an unexpected one means a
-        config gap, so WARN + allow).
+        """Answer opencode's ``permission.asked``. ``connect_app`` defers to the
+        connect-card flow; every other category is auto-allowed (production
+        ``opencode.json`` covers them — an unexpected one is a config gap, so
+        WARN + allow).
         """
         props = evt.get("properties") or {}
         perm_id = props.get("id")
@@ -1603,16 +1595,10 @@ class OpencodeServeClient:
     def _handle_connect_app_permission(
         self, evt: dict[str, Any], state: _TurnState, perm_id: str, *, directory: str
     ) -> None:
-        """Announce a connect card and leave the permission pending; the decision
-        endpoint answers opencode allow/deny out-of-band (see
-        :mod:`onyx.server.features.build.connect_app`).
-
-        The turn consumer can't relay to the browser, so it announces the card
-        (keyed by the build session id in ``directory``) and stashes the context
-        the decision endpoint needs to answer this exact permission. It does NOT
-        block — the consume loop keeps running while opencode stays paused, and
-        only rejects on the timeout fallback (``pending_connect_app_deadlines``).
-        App slug comes from the tool's ``context.ask`` metadata.
+        """Announce the card and stash the answer context, then return — the
+        decision endpoint answers opencode out-of-band (see :mod:`connect_app`).
+        Doesn't block; the consume loop's timeout fallback rejects if the user
+        never decides. App slug comes from the tool's ``context.ask`` metadata.
         """
         props = evt.get("properties") or {}
         meta_raw = props.get("metadata")

@@ -426,11 +426,9 @@ class _ServeMixin:
         directory: str,
         allow: bool,
     ) -> None:
-        """Answer a pending ``connect_app`` permission on ``sandbox_id``.
-
-        The decision endpoint calls this (on whatever worker handled the POST) to
-        answer opencode directly — decoupled from the turn-driving worker. A
-        one-shot unary call, so no event bus."""
+        """Answer a pending ``connect_app`` permission on ``sandbox_id`` — the
+        decision endpoint's path to opencode, on whatever worker handled the POST.
+        One-shot, so no event bus."""
         client = self._build_serve_client(
             sandbox_id, directory, with_event_bus=False
         )

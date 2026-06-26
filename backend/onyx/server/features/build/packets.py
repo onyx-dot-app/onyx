@@ -82,7 +82,7 @@ class ConnectAppRequestPacket(BasePacket):
 
     The FE renders the connect card from this packet (resolving the app from the
     registry by ``app_slug``) and POSTs the decision to
-    ``/build/apps/connect/{request_id}/decision`` to unblock the parked turn.
+    ``/build/apps/connect/{request_id}/decision`` to answer the agent's tool call.
     """
 
     type: Literal["connect_app_request"] = "connect_app_request"

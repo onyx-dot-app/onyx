@@ -1,21 +1,12 @@
-"""Connect-app request plumbing.
+"""Connect-app request plumbing — two Redis records, no DB, no turn-side waiting.
 
-When the agent calls the no-op ``connect_app`` tool, opencode emits a permission
-request and pauses the turn. The turn-driving consumer (``serve_client``) does
-two things and then keeps streaming — it never blocks:
-
-* **announces** the request so the live-stream consumer
-  (``merge_events_with_announces``) can emit a ``ConnectAppRequestPacket`` the FE
-  renders as a card, and
-* **stashes** the context needed to answer this exact permission.
-
-The user's decision arrives at the decision endpoint, which loads the stashed
-context and answers opencode directly (an outbound POST to the sandbox) — allow
-(connected) or reject (declined). opencode then resumes the turn and the consumer
-streams the result. No turn-side waiting, no DB row.
-
-Both Redis records are keyed so the producing worker, the live-stream worker, and
-the decision request can be different api-server processes.
+The agent's no-op ``connect_app`` tool makes opencode pause the turn. The turn
+consumer ``announces`` the request (so the live stream can emit a
+``ConnectAppRequestPacket`` card) and ``stashes`` the context to answer it, then
+keeps streaming. The decision endpoint loads that context and answers opencode
+directly on the sandbox — allow (connected) / reject (declined) — and opencode
+resumes. Both records are keyed so the producing, live-stream, and decision
+workers can be different processes.
 """
 
 from enum import Enum
