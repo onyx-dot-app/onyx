@@ -1,11 +1,3 @@
-"""Connect-app plumbing over Redis: announce the card, stash the answer context.
-
-These exercise the two records the producing worker, the live-stream worker, and
-the decision request use to meet across processes — the announce (request → the
-live-stream worker) and the pending context (request_id → how to answer the
-permission). Real Redis, no DB.
-"""
-
 from __future__ import annotations
 
 from uuid import uuid4

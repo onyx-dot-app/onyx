@@ -241,9 +241,7 @@ def handle_external_app_oauth_callback(
     )
 
     # Authenticating opens this user's per-user gate; refresh their sandboxes so
-    # the now-usable skill bundle lands (parity with the credentials endpoint).
-    # The connect card's "connected" decision (posted by the FE after this
-    # callback writes the credential) is what resumes a parked connect_app turn.
+    # the now-usable skill bundle lands
     push_skills_for_users({user.id}, db_session)
     db_session.commit()
 

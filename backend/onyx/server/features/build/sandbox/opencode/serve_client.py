@@ -53,9 +53,7 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# opencode permission category emitted by the no-op ``connect_app`` tool (set to
-# "ask" in opencode_config). Intercepted in _handle_permission_ask to drive the
-# connect-app OAuth flow instead of auto-allowing.
+# opencode permission category emitted by the no-op ``connect_app`` tool
 _CONNECT_APP_PERMISSION = "connect_app"
 
 
@@ -1444,7 +1442,9 @@ class OpencodeServeClient:
                     yield PromptResponse.model_validate({"stopReason": "cancelled"})
                     return
 
-            self._reject_expired_connect_app_permissions(state, now, directory=directory)
+            self._reject_expired_connect_app_permissions(
+                state, now, directory=directory
+            )
 
             remaining = timeout - (time.monotonic() - start)
             if remaining <= 0:
