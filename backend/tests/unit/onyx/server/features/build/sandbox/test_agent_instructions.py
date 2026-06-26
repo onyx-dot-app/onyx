@@ -68,3 +68,8 @@ def test_generate_agent_instructions_omits_optional_sections_when_values_absent(
     assert "**Disabled Tools**" not in content
     assert "SENTINEL_NO_SKILLS" in content
     assert _unresolved_placeholders(content) == set()
+
+
+def test_build_connectable_apps_section_empty_renders_nothing() -> None:
+    """No connectable apps → no heading at all (the section is omitted)."""
+    assert agent_instructions.build_connectable_apps_section([]) == ""
