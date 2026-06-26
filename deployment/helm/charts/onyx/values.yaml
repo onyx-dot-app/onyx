@@ -433,6 +433,25 @@ api:
   containerPorts:
     server: 8080
 
+  # Uvicorn worker processes per pod. Each worker is its own process with its own
+  # event loop and threadpool, so >1 adds parallel capacity and keeps a wedged
+  # worker from taking down the pod's /health. The app lifespan runs per worker
+  # (same as adding replicas, which already run it concurrently), so this is
+  # safe; size against pod CPU and per-worker memory. Default 1 = prior behavior.
+  workers: 1
+
+  # Max concurrent connections per uvicorn worker. When set, the worker rejects
+  # new connections past this (503) instead of queueing into a thread-starvation
+  # wedge. Empty = no cap (uvicorn default). Example: 200.
+  limitConcurrency: ""
+
+  # Size of the anyio threadpool serving sync endpoints, including the streaming
+  # chat generator (each long-running request — deep research, code interpreter —
+  # holds one thread for its whole duration). 0 keeps the anyio default (40).
+  # Raise for workloads with many concurrent long agent requests; each thread is
+  # real, so size against CPU/memory.
+  threadpoolSize: 0
+
   podSecurityContext:
     {}
     # fsGroup: 2000
