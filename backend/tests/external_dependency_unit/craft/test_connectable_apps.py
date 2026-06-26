@@ -21,16 +21,16 @@ def test_lists_only_unconnected_apps_and_renders_them(
 ) -> None:
     user = make_user(db_session, email_prefix="connectable")
 
-    # Connectable: needs a user-supplied token the org hasn't pre-filled.
+    # Connectable: public, needs a user token the org hasn't pre-filled.
     make_external_app(
         db_session,
-        skill=make_skill(db_session, slug="needs-setup"),
+        skill=make_skill(db_session, slug="needs-setup", is_public=True),
         auth_template=_USER_TOKEN_TEMPLATE,
     )
     # Connected: the user already stored the token.
     connected = make_external_app(
         db_session,
-        skill=make_skill(db_session, slug="already-connected"),
+        skill=make_skill(db_session, slug="already-connected", is_public=True),
         auth_template=_USER_TOKEN_TEMPLATE,
     )
     make_user_credential(
@@ -39,7 +39,7 @@ def test_lists_only_unconnected_apps_and_renders_them(
     # Org-credentialed: org pre-fills the token, so there's nothing to set up.
     make_external_app(
         db_session,
-        skill=make_skill(db_session, slug="org-filled"),
+        skill=make_skill(db_session, slug="org-filled", is_public=True),
         auth_template=_USER_TOKEN_TEMPLATE,
         organization_credentials={"token": "shared"},
     )
@@ -49,20 +49,26 @@ def test_lists_only_unconnected_apps_and_renders_them(
         skill=make_skill(db_session, slug="disabled-app", enabled=False),
         auth_template=_USER_TOKEN_TEMPLATE,
     )
+    # Not visible: non-public and not granted to this user — must be excluded, or
+    # the user would connect a skill that never injects into their sandbox.
+    make_external_app(
+        db_session,
+        skill=make_skill(db_session, slug="hidden-app", is_public=False),
+        auth_template=_USER_TOKEN_TEMPLATE,
+    )
     db_session.commit()
 
-    slugs = {
-        app.skill.slug for app in get_connectable_apps_for_user(db_session, user.id)
-    }
+    slugs = {app.skill.slug for app in get_connectable_apps_for_user(db_session, user)}
 
     assert "needs-setup" in slugs
     assert "already-connected" not in slugs
     assert "org-filled" not in slugs
     assert "disabled-app" not in slugs
+    assert "hidden-app" not in slugs
 
     section = build_connectable_apps_section(
-        get_connectable_apps_for_user(db_session, user.id)
+        get_connectable_apps_for_user(db_session, user)
     )
     assert "## Connectable apps" in section
     assert "needs-setup" in section
-    assert "already-connected" not in section
+    assert "hidden-app" not in section

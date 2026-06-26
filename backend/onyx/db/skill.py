@@ -113,6 +113,15 @@ def _add_user_visibility_filter(
     )
 
 
+def visible_skill_ids_for_user(user: User, db_session: Session) -> set[UUID]:
+    """Enabled skill ids the user can see (public / group-granted / personal) —
+    the visibility source of truth shared with sandbox injection."""
+    stmt = _add_user_visibility_filter(
+        select(Skill).where(Skill.enabled.is_(True)), user
+    )
+    return {skill.id for skill in db_session.scalars(stmt)}
+
+
 def _exclude_unavailable_built_ins(
     stmt: Select[tuple[Skill]], db_session: Session
 ) -> Select[tuple[Skill]]:

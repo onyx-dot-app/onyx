@@ -162,7 +162,7 @@ def build_user_skills_payload(user: User, db_session: Session) -> tuple[str, Fil
     skills = list_skills_for_sandbox_injection(user=user, db_session=db_session)
     section = build_skills_section_from_data(skills)
     connectable = build_connectable_apps_section(
-        get_connectable_apps_for_user(db_session, user.id)
+        get_connectable_apps_for_user(db_session, user)
     )
     if connectable:
         section = f"{section}\n{connectable}"
