@@ -151,28 +151,32 @@ export function useBuildStreaming() {
       interruptedTurnId: string | null,
       generation: number
     ): Promise<void> => {
-      // A newer turn (e.g. a queued message that auto-sent) bumps turnGeneration;
-      // once stale, this reconcile must not settle/reload or it clobbers that turn.
-      const isSuperseded = (): boolean => {
-        const session = useBuildSessionStore.getState().sessions.get(sessionId);
-        return !session || session.turnGeneration !== generation;
+      // May we still act on this interrupt? Only while it's the same turn we
+      // launched for: the generation a queued auto-send would bump is unchanged,
+      // the session is still running, and the backend hasn't moved to a
+      // different turn. Once false, acting would clobber whatever turn is now
+      // live. Pass the turn id to also require it match, or null to skip that.
+      const ownsInterrupt = (turnId: string | null): boolean => {
+        const s = useBuildSessionStore.getState().sessions.get(sessionId);
+        return (
+          !!s &&
+          s.turnGeneration === generation &&
+          s.status === "running" &&
+          (turnId === null || !s.activeTurnId || s.activeTurnId === turnId)
+        );
       };
 
-      // Reload before flipping to "active": the flip triggers the queued
-      // auto-send, so reloading after would race the freshly-started next turn.
-      const settleToActive = async (): Promise<void> => {
+      // Settle the interrupted turn to "active". Reload BEFORE the flip: the
+      // flip triggers the queued auto-send, so reloading after would race the
+      // freshly-started next turn.
+      const settle = async (): Promise<void> => {
         await useBuildSessionStore
           .getState()
           .loadSession(sessionId, { force: true })
           .catch((err) =>
-            console.warn(
-              "[Streaming] Failed to reload reconciled interrupted turn:",
-              err
-            )
+            console.warn("[Streaming] Failed to reload settled turn:", err)
           );
-        if (isSuperseded()) {
-          return;
-        }
+        if (!ownsInterrupt(null)) return;
         updateSessionData(sessionId, {
           status: "active",
           isInterrupting: false,
@@ -182,29 +186,13 @@ export function useBuildStreaming() {
         });
       };
 
-      let reconciledTurnId = interruptedTurnId;
-      for (
-        let attempt = 0;
-        attempt < INTERRUPT_RECONCILE_MAX_ATTEMPTS;
-        attempt++
-      ) {
+      // Poll until the interrupted turn disappears from the backend.
+      let turnId = interruptedTurnId;
+      for (let i = 0; i < INTERRUPT_RECONCILE_MAX_ATTEMPTS; i++) {
         await sleep(INTERRUPT_RECONCILE_INTERVAL_MS);
+        if (!ownsInterrupt(turnId)) return;
 
-        const currentSession = useBuildSessionStore
-          .getState()
-          .sessions.get(sessionId);
-        if (
-          !currentSession ||
-          currentSession.turnGeneration !== generation ||
-          currentSession.status !== "running" ||
-          (reconciledTurnId &&
-            currentSession.activeTurnId &&
-            currentSession.activeTurnId !== reconciledTurnId)
-        ) {
-          return;
-        }
-
-        let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
+        let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>>;
         try {
           activeTurn = await fetchActiveTurn(sessionId);
         } catch (err) {
@@ -215,52 +203,27 @@ export function useBuildStreaming() {
           continue;
         }
 
-        if (activeTurn) {
-          if (reconciledTurnId === null) {
-            reconciledTurnId = activeTurn.turn_id;
-            continue;
-          }
-          if (activeTurn.turn_id === reconciledTurnId) {
-            continue;
-          }
+        if (!activeTurn) {
+          await settle();
           return;
         }
-
-        if (isSuperseded()) {
-          return;
-        }
-        await settleToActive();
-        return;
+        // Learn the id if the interrupt beat the local activeTurnId; bail if the
+        // backend has moved on to a different turn.
+        if (turnId === null) turnId = activeTurn.turn_id;
+        else if (activeTurn.turn_id !== turnId) return;
       }
 
-      // On timeout, a final check: if the backend turn is actually gone, settle
-      // so the UI doesn't stay stuck on a stale "running"; otherwise leave it.
-      if (
-        isSuperseded() ||
-        useBuildSessionStore.getState().sessions.get(sessionId)?.status !==
-          "running"
-      ) {
-        return;
-      }
-
-      let finalActiveTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
-      let finalFetchSucceeded = true;
-      try {
-        finalActiveTurn = await fetchActiveTurn(sessionId);
-      } catch (err) {
-        finalFetchSucceeded = false;
-        console.warn("[Streaming] Final reconcile check failed:", err);
-      }
-      if (isSuperseded()) {
-        return;
-      }
-
+      // Timed out. One last check: settle if the turn is actually gone now (so
+      // the UI unblocks), otherwise it's genuinely still running — just drop the
+      // "stopping…" affordance and leave it running.
       console.warn("[Streaming] Interrupted turn reconciliation timed out");
-      if (finalFetchSucceeded && finalActiveTurn === null) {
-        await settleToActive();
-      } else {
-        updateSessionData(sessionId, { isInterrupting: false });
-      }
+      if (!ownsInterrupt(turnId)) return;
+      const turnGone = await fetchActiveTurn(sessionId)
+        .then((t) => t === null)
+        .catch(() => false);
+      if (!ownsInterrupt(turnId)) return;
+      if (turnGone) await settle();
+      else updateSessionData(sessionId, { isInterrupting: false });
     },
     [updateSessionData]
   );
