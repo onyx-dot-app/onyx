@@ -1,5 +1,7 @@
+"use client";
+
 import useSWR from "swr";
-import { Project } from "@/app/app/projects/projectsService";
+import { Project } from "@/lib/projects/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 

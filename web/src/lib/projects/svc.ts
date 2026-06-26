@@ -1,66 +1,15 @@
-import { ChatFileType, ChatSession } from "../interfaces";
+import type {
+  Project,
+  CategorizedFiles,
+  ProjectFile,
+  RejectedFile,
+  UserFileDeleteResult,
+  UserFileStatus,
+  ProjectDetails,
+} from "@/lib/projects/types";
 
-// Generic error handler that avoids exposing server error details
-const handleRequestError = (action: string, response: Response) => {
+const handleRequestError = (action: string, response: Response): never => {
   throw new Error(`${action} failed (Status: ${response.status})`);
-};
-
-export interface Project {
-  id: number;
-  name: string;
-  description: string | null;
-  created_at: string;
-  user_id: string;
-  instructions: string | null;
-  chat_sessions: ChatSession[];
-}
-
-export interface CategorizedFiles {
-  user_files: ProjectFile[];
-  rejected_files: RejectedFile[];
-}
-
-export interface ProjectFile {
-  id: string;
-  name: string;
-  project_id: number | null;
-  user_id: string | null;
-  file_id: string;
-  created_at: string;
-  status: UserFileStatus;
-  file_type: string;
-  last_accessed_at: string;
-  chat_file_type: ChatFileType;
-  token_count: number | null;
-  chunk_count: number | null;
-  temp_id?: string | null;
-}
-
-export interface RejectedFile {
-  file_name: string;
-  reason: string;
-}
-
-export interface UserFileDeleteResult {
-  has_associations: boolean;
-  project_names: string[];
-  assistant_names: string[];
-}
-
-export enum UserFileStatus {
-  UPLOADING = "UPLOADING", //UI only
-  PROCESSING = "PROCESSING",
-  COMPLETED = "COMPLETED",
-  SKIPPED = "SKIPPED",
-  FAILED = "FAILED",
-  CANCELED = "CANCELED",
-  DELETING = "DELETING",
-}
-
-export type ProjectDetails = {
-  project: Project;
-  files?: ProjectFile[];
-  persona_id_to_is_featured?: Record<number, boolean>;
 };
 
 export async function fetchProjects(): Promise<Project[]> {
@@ -243,16 +192,6 @@ export async function deleteUserFile(
     handleRequestError("Delete file", response);
   }
   return (await response.json()) as UserFileDeleteResult;
-}
-
-export async function getUserFile(fileId: string): Promise<ProjectFile> {
-  const response = await fetch(
-    `/api/user/projects/file/${encodeURIComponent(fileId)}`
-  );
-  if (!response.ok) {
-    handleRequestError("Fetch file", response);
-  }
-  return response.json();
 }
 
 export async function getUserFileStatuses(

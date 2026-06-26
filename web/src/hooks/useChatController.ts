@@ -6,7 +6,7 @@ import {
   nameChatSession,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
-import { getMaxSelectedDocumentTokens } from "@/app/app/projects/projectsService";
+import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/interfaces";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -75,7 +75,7 @@ import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
 import { useAppParams } from "@/hooks/appNavigation";
-import { projectFilesToFileDescriptors } from "@/app/app/services/fileUtils";
+import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 
 const SYSTEM_MESSAGE_ID = -3;
 
