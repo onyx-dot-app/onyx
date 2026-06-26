@@ -335,7 +335,7 @@ function MCPServerCard({
     );
   } else if (hasTools) {
     cardContent = (
-      <GeneralLayouts.Section gap={0.5} padding={0.5}>
+      <GeneralLayouts.Section gap={0.5} padding={0.5} alignItems="stretch">
         {filteredTools.map((tool) => {
           const toolDisabled =
             !tool.isAvailable ||
@@ -1485,7 +1485,10 @@ export default function AgentEditorPage({
                           description="Tools and capabilities available for this agent to use."
                         />
                         <SimpleCollapsible.Content>
-                          <GeneralLayouts.Section gap={0.5}>
+                          <GeneralLayouts.Section
+                            gap={0.5}
+                            alignItems="stretch"
+                          >
                             <Disabled
                               disabled={!isImageGenerationAvailable}
                               tooltip={imageGenerationDisabledTooltip}

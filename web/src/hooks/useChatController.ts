@@ -363,6 +363,8 @@ export default function useChatController({
     // The stream will close naturally when the backend sends the STOP packet
     setStreamingStartTime(currentSession, null);
     updateChatStateAction(currentSession, "input");
+    // On stop nothing else flips the queue gate, so release it here or queued follow-ups never auto-send.
+    setLatestMessageRenderComplete(currentSession, true);
   }, [currentMessageHistory, currentMessageTree]);
 
   const onSubmit = useCallback(
