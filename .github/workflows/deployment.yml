@@ -168,10 +168,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
+      - name: Setup uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
         with:
-          go-version: "1.26.4"
-          cache-dependency-path: "**/go.sum"
+          version: "0.9.9"
+          enable-cache: false
 
       - name: Configure AWS credentials
         continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
@@ -181,10 +182,9 @@ jobs:
           aws-region: us-east-2
 
       - name: Run dependency audit
-        working-directory: tools/ods
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: go run . audit --fail-on=critical
+        run: uv run --no-sync --with onyx-devtools ods audit --fail-on=critical
 
   check-version-tag:
     runs-on: ubuntu-slim

@@ -23,9 +23,6 @@ on:
 
 permissions: {}
 
-env:
-  GO_VERSION: "1.26.4"
-
 jobs:
   audit:
     name: audit
@@ -41,10 +38,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
+      - name: Setup uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: "**/go.sum"
+          version: "0.9.9"
+          enable-cache: false
 
       - name: Configure AWS credentials
         id: aws
@@ -57,18 +55,16 @@ jobs:
       # PR runs gate on criticals; nightly/dispatch runs upload a SARIF report.
       - name: Run audit (gate)
         if: github.event_name == 'pull_request'
-        working-directory: tools/ods
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: go run . audit --fail-on=critical
+        run: uv run --no-sync --with onyx-devtools ods audit --fail-on=critical
 
       - name: Run audit (SARIF report)
         if: github.event_name != 'pull_request'
-        working-directory: tools/ods
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # Don't fail the report job on findings; the SARIF upload surfaces them.
-        run: go run . audit --format=sarif > "$GITHUB_WORKSPACE/audit.sarif" || true
+        run: uv run --no-sync --with onyx-devtools ods audit --format=sarif > audit.sarif || true
 
       - name: Upload SARIF file
         if: github.event_name != 'pull_request'
