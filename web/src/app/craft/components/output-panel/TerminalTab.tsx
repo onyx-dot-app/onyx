@@ -8,9 +8,7 @@ import { cn } from "@opal/utils";
 
 type TerminalStatus = "connecting" | "connected" | "disconnected" | "error";
 
-// Stop reconnecting after this many closes that never reached a usable
-// connection — a permanently rejected socket (non-owner / unauthorized) would
-// otherwise retry forever and hammer the backend auth path.
+// Without this cap a permanently rejected socket (non-owner) retries forever.
 const MAX_FAILED_CONNECTS = 5;
 
 interface TerminalTabProps {
@@ -133,9 +131,6 @@ export default function TerminalTab({ sessionId }: TerminalTabProps) {
 
         ws.onclose = () => {
           if (destroyed) return;
-          // A socket that never reached `onopen` is being rejected (e.g. the
-          // caller isn't the session owner). Give up after a few tries instead
-          // of reconnecting forever against an endpoint that won't authorize.
           failedConnectsRef.current += 1;
           if (failedConnectsRef.current >= MAX_FAILED_CONNECTS) {
             setStatus("error");
