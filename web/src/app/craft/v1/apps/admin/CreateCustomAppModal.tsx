@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import useSWR from "swr";
 import Modal from "@/refresh-components/Modal";
 import {
   Button,
   InputTypeIn,
   MessageCard,
+  Tabs,
   Text,
   Tooltip,
 } from "@opal/components";
@@ -14,12 +16,37 @@ import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
 import InputKeyValue, {
   KeyValue,
 } from "@/refresh-components/inputs/InputKeyValue";
-import { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
+import PasswordInputTypeIn from "@/refresh-components/inputs/PasswordInputTypeIn";
+import {
+  CustomOAuthConfig,
+  ExternalAppAdminResponse,
+  TokenEndpointAuthMethod,
+} from "@/app/craft/v1/apps/registry";
 import {
   createCustomExternalApp,
   replaceCustomAppBundle,
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+
+type AuthMethod = "static" | "oauth";
+
+// Authorize-URL params the OAuth flow itself owns — rejected server-side
+// (overriding e.g. response_type or state would break every connect).
+const RESERVED_AUTHORIZE_PARAMS = new Set([
+  "response_type",
+  "client_id",
+  "redirect_uri",
+  "state",
+]);
+
+// The auth template every OAuth custom app uses (RFC 6750). The form doesn't
+// ask; the API keeps the template flexible for exotic cases.
+const BEARER_TEMPLATE: Record<string, string> = {
+  Authorization: "Bearer {access_token}",
+};
 
 interface CreateCustomAppModalProps {
   open: boolean;
@@ -64,6 +91,19 @@ export default function CreateCustomAppModal({
   const [orgCredentials, setOrgCredentials] = useState<KeyValue[]>([
     { key: "", value: "" },
   ]);
+  const [authMethod, setAuthMethod] = useState<AuthMethod>("static");
+  const [authorizeUrl, setAuthorizeUrl] = useState("");
+  const [tokenUrl, setTokenUrl] = useState("");
+  const [scope, setScope] = useState("");
+  const [scopeParam, setScopeParam] = useState("scope");
+  const [extraAuthorizeParams, setExtraAuthorizeParams] = useState<KeyValue[]>([
+    { key: "", value: "" },
+  ]);
+  const [tokenAuthMethod, setTokenAuthMethod] =
+    useState<TokenEndpointAuthMethod>("client_secret_post");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [copiedRedirectUri, setCopiedRedirectUri] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +113,8 @@ export default function CreateCustomAppModal({
   // blank when creating. Prevents a prior attempt from leaking in.
   useEffect(() => {
     if (!open) return;
+    const oauth = existingApp?.oauth_config ?? null;
+    const existingOrg = existingApp?.organization_credentials ?? {};
     setName(existingApp?.name ?? "");
     setDescription(existingApp?.description ?? "");
     setUpstreamPatterns(existingApp?.upstream_url_patterns ?? []);
@@ -81,21 +123,57 @@ export default function CreateCustomAppModal({
         ? toKeyValues(existingApp.auth_template)
         : [{ key: "", value: "" }]
     );
+    // client_id/client_secret get dedicated inputs in OAuth mode; keep them
+    // out of the generic editor so they don't show twice.
     setOrgCredentials(
-      existingApp
-        ? toKeyValues(existingApp.organization_credentials)
-        : [{ key: "", value: "" }]
+      toKeyValues(
+        Object.fromEntries(
+          Object.entries(existingOrg).filter(
+            ([key]) =>
+              !oauth || (key !== "client_id" && key !== "client_secret")
+          )
+        )
+      )
     );
+    setAuthMethod(oauth ? "oauth" : "static");
+    setAuthorizeUrl(oauth?.authorize_url ?? "");
+    setTokenUrl(oauth?.token_url ?? "");
+    setScope(oauth?.scope ?? "");
+    setScopeParam(oauth?.scope_param ?? "scope");
+    setExtraAuthorizeParams(toKeyValues(oauth?.extra_authorize_params ?? {}));
+    setTokenAuthMethod(
+      oauth?.token_endpoint_auth_method ?? "client_secret_post"
+    );
+    setClientId(oauth ? (existingOrg.client_id ?? "") : "");
+    setClientSecret(oauth ? (existingOrg.client_secret ?? "") : "");
+    setCopiedRedirectUri(false);
     setFile(null);
     setError(null);
   }, [open, existingApp]);
+
+  // Server-derived (WEB_DOMAIN): the URI the flow actually sends — the
+  // browser origin can differ (proxy, tunnel) and would mislead.
+  const { data: redirectUriData, error: redirectUriError } = useSWR<{
+    redirect_uri: string;
+  }>(SWR_KEYS.buildExternalAppsOAuthRedirectUri, errorHandlingFetcher, {
+    onError: (err) =>
+      console.error("Failed to fetch the OAuth redirect URI:", err),
+  });
+  const redirectUri = redirectUriData?.redirect_uri ?? null;
+
+  async function copyRedirectUri() {
+    if (redirectUri === null) return;
+    await navigator.clipboard.writeText(redirectUri);
+    setCopiedRedirectUri(true);
+  }
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     setFile(event.target.files?.[0] ?? null);
   }
 
-  // Headers and org credentials are optional; name + at least one upstream
-  // pattern are required. A bundle is required only on create (optional on edit).
+  // Name + an upstream pattern are required; OAuth mode also needs the
+  // endpoint URLs and client credentials (else every Connect fails at the
+  // start route). Bundle required only on create.
   const disabledCreateReason = (() => {
     if (isSaving) return "Save is already in progress.";
     if (name.trim().length === 0) {
@@ -103,6 +181,26 @@ export default function CreateCustomAppModal({
     }
     if (upstreamPatterns.length === 0) {
       return "Add at least one upstream URL pattern. Type a pattern and press Enter.";
+    }
+    if (authMethod === "oauth") {
+      if (!authorizeUrl.trim().startsWith("https://")) {
+        return "Enter the provider's authorization URL (must be https://).";
+      }
+      if (!tokenUrl.trim().startsWith("https://")) {
+        return "Enter the provider's token URL (must be https://).";
+      }
+      if (clientId.trim().length === 0) {
+        return "Enter the client ID from the provider's OAuth app settings.";
+      }
+      if (clientSecret.trim().length === 0) {
+        return "Enter the client secret from the provider's OAuth app settings.";
+      }
+      const reserved = Object.keys(toRecord(extraAuthorizeParams)).find((key) =>
+        RESERVED_AUTHORIZE_PARAMS.has(key)
+      );
+      if (reserved) {
+        return `"${reserved}" is sent by the OAuth flow itself — remove it from the extra authorization parameters.`;
+      }
     }
     if (!isEdit && file === null) {
       return "Upload a bundle .zip file before creating this custom app.";
@@ -124,6 +222,31 @@ export default function CreateCustomAppModal({
   async function save() {
     setIsSaving(true);
     setError(null);
+
+    const oauthConfig: CustomOAuthConfig | null =
+      authMethod === "oauth"
+        ? {
+            authorize_url: authorizeUrl.trim(),
+            token_url: tokenUrl.trim(),
+            scope: scope.trim(),
+            scope_param: scopeParam.trim() || "scope",
+            extra_authorize_params: toRecord(extraAuthorizeParams),
+            token_endpoint_auth_method: tokenAuthMethod,
+          }
+        : null;
+    // OAuth mode is fully prescribed: the bearer template, and exactly the
+    // client credentials as org credentials (the keys the OAuth routes read).
+    const authTemplate = oauthConfig ? BEARER_TEMPLATE : toRecord(headers);
+    const orgCredentialsRecord: Record<string, string> = oauthConfig
+      ? {}
+      : toRecord(orgCredentials);
+    if (oauthConfig) {
+      if (clientId.trim()) orgCredentialsRecord.client_id = clientId.trim();
+      if (clientSecret.trim()) {
+        orgCredentialsRecord.client_secret = clientSecret.trim();
+      }
+    }
+
     // Edit is two calls (bundle + fields); track the bundle step to message
     // partial success accurately.
     let bundleSaved = false;
@@ -136,13 +259,15 @@ export default function CreateCustomAppModal({
           setFile(null);
           bundleSaved = true;
         }
-        // enabled is toggled separately on the card.
+        // enabled is toggled separately on the card. oauth_config is always
+        // sent: an explicit null switches the app back to static credentials.
         await updateExternalApp(existingApp.id, {
           name: name.trim(),
           description: description.trim(),
           upstream_url_patterns: upstreamPatterns,
-          auth_template: toRecord(headers),
-          organization_credentials: toRecord(orgCredentials),
+          auth_template: authTemplate,
+          organization_credentials: orgCredentialsRecord,
+          oauth_config: oauthConfig,
         });
       } else {
         // Create: bundle is required (enforced by `canSave`).
@@ -150,10 +275,11 @@ export default function CreateCustomAppModal({
           name: name.trim(),
           description: description.trim(),
           upstream_url_patterns: upstreamPatterns,
-          auth_template: toRecord(headers),
-          organization_credentials: toRecord(orgCredentials),
+          auth_template: authTemplate,
+          organization_credentials: orgCredentialsRecord,
           enabled: true,
           bundle: file!,
+          ...(oauthConfig ? { oauth_config: oauthConfig } : {}),
         });
       }
       onSaved();
@@ -218,38 +344,193 @@ export default function CreateCustomAppModal({
             </div>
 
             <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">Header credential pattern</Text>
+              <Text font="main-ui-action">Authentication</Text>
               <Text font="secondary-body" color="text-03">
-                {`Optional — headers injected into outbound requests. Use {placeholder} for values the user (or org below) supplies, e.g. "Bearer {api_key}". Leave empty to allowlist the upstream patterns without injecting credentials.`}
+                How users connect to this app: static headers they (or your org)
+                fill in, or an OAuth 2.0 authorization-code flow against the
+                provider.
               </Text>
-              <InputKeyValue
-                keyTitle="Header"
-                valueTitle="Value"
-                keyPlaceholder="Authorization"
-                valuePlaceholder="Bearer {api_key}"
-                items={headers}
-                onChange={setHeaders}
-                mode="line"
-                addButtonLabel="Add header"
-              />
-            </div>
+              <Tabs
+                value={authMethod}
+                onValueChange={(value) => setAuthMethod(value as AuthMethod)}
+              >
+                <Tabs.List>
+                  <Tabs.Trigger value="static">Static headers</Tabs.Trigger>
+                  <Tabs.Trigger value="oauth">OAuth 2.0</Tabs.Trigger>
+                </Tabs.List>
+                <div className="pt-3">
+                  <Tabs.Content value="static">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">
+                          Header credential pattern
+                        </Text>
+                        <Text font="secondary-body" color="text-03">
+                          {`Optional — headers injected into outbound requests. Use {placeholder} for values the user (or org below) supplies, e.g. "Bearer {api_key}". Leave empty to allowlist the upstream patterns without injecting credentials.`}
+                        </Text>
+                        <InputKeyValue
+                          keyTitle="Header"
+                          valueTitle="Value"
+                          keyPlaceholder="Authorization"
+                          valuePlaceholder="Bearer {api_key}"
+                          items={headers}
+                          onChange={setHeaders}
+                          mode="line"
+                          addButtonLabel="Add header"
+                        />
+                      </div>
 
-            <div className="flex flex-col gap-1">
-              <Text font="main-ui-action">Organization credentials</Text>
-              <Text font="secondary-body" color="text-03">
-                Optional — values your org pre-fills for every user. Leave empty
-                for apps where each user supplies their own credentials.
-              </Text>
-              <InputKeyValue
-                keyTitle="Credential key"
-                valueTitle="Value"
-                keyPlaceholder="api_key"
-                valuePlaceholder="sk-…"
-                items={orgCredentials}
-                onChange={setOrgCredentials}
-                mode="line"
-                addButtonLabel="Add credential"
-              />
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">
+                          Organization credentials
+                        </Text>
+                        <Text font="secondary-body" color="text-03">
+                          Optional — values your org pre-fills for every user.
+                          Leave empty for apps where each user supplies their
+                          own credentials.
+                        </Text>
+                        <InputKeyValue
+                          keyTitle="Credential key"
+                          valueTitle="Value"
+                          keyPlaceholder="api_key"
+                          valuePlaceholder="sk-…"
+                          items={orgCredentials}
+                          onChange={setOrgCredentials}
+                          mode="line"
+                          addButtonLabel="Add credential"
+                        />
+                      </div>
+                    </div>
+                  </Tabs.Content>
+
+                  <Tabs.Content value="oauth">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Redirect URI</Text>
+                        <Text font="secondary-body" color="text-03">
+                          Register this callback URL in the provider&apos;s
+                          OAuth app settings.
+                        </Text>
+                        <div className="flex items-center gap-2">
+                          <Text font="main-ui-body" color="text-03">
+                            {redirectUri ??
+                              (redirectUriError
+                                ? "Couldn't load the redirect URI."
+                                : "Loading…")}
+                          </Text>
+                          <Button
+                            prominence="secondary"
+                            disabled={redirectUri === null}
+                            onClick={copyRedirectUri}
+                          >
+                            {copiedRedirectUri ? "Copied" : "Copy"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Authorization URL</Text>
+                        <InputTypeIn
+                          value={authorizeUrl}
+                          onChange={(e) => setAuthorizeUrl(e.target.value)}
+                          placeholder="https://provider.example.com/oauth/authorize"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Token URL</Text>
+                        <InputTypeIn
+                          value={tokenUrl}
+                          onChange={(e) => setTokenUrl(e.target.value)}
+                          placeholder="https://provider.example.com/oauth/token"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Scopes</Text>
+                        <Text font="secondary-body" color="text-03">
+                          Exactly as the provider expects them (often
+                          space-separated). Leave empty to use the
+                          provider&apos;s defaults.
+                        </Text>
+                        <InputTypeIn
+                          value={scope}
+                          onChange={(e) => setScope(e.target.value)}
+                          placeholder="read write"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Client ID</Text>
+                        <InputTypeIn
+                          value={clientId}
+                          onChange={(e) => setClientId(e.target.value)}
+                          placeholder="From the provider's OAuth app settings"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Client secret</Text>
+                        <PasswordInputTypeIn
+                          value={clientSecret}
+                          onChange={(e) => setClientSecret(e.target.value)}
+                          placeholder="Treat this like a password"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">Token endpoint auth</Text>
+                        <Text font="secondary-body" color="text-03">
+                          Most providers take the client credentials in the
+                          request body; some require an HTTP Basic header
+                          instead.
+                        </Text>
+                        <InputSelect
+                          value={tokenAuthMethod}
+                          onValueChange={(value) =>
+                            setTokenAuthMethod(value as TokenEndpointAuthMethod)
+                          }
+                        >
+                          <InputSelect.Trigger />
+                          <InputSelect.Content>
+                            <InputSelect.Item value="client_secret_post">
+                              Request body (client_secret_post)
+                            </InputSelect.Item>
+                            <InputSelect.Item value="client_secret_basic">
+                              Basic auth header (client_secret_basic)
+                            </InputSelect.Item>
+                          </InputSelect.Content>
+                        </InputSelect>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <Text font="main-ui-action">
+                          Extra authorization parameters
+                        </Text>
+                        <Text font="secondary-body" color="text-03">
+                          {`Optional — added to the authorize URL (response_type=code is always sent). E.g. access_type=offline for providers that gate refresh tokens behind it.`}
+                        </Text>
+                        <InputKeyValue
+                          keyTitle="Parameter"
+                          valueTitle="Value"
+                          keyPlaceholder="access_type"
+                          valuePlaceholder="offline"
+                          items={extraAuthorizeParams}
+                          onChange={setExtraAuthorizeParams}
+                          mode="line"
+                          addButtonLabel="Add parameter"
+                        />
+                      </div>
+
+                      <Text font="secondary-body" color="text-03">
+                        {
+                          "Matching outbound requests are authenticated with “Authorization: Bearer <the user's access token>”."
+                        }
+                      </Text>
+                    </div>
+                  </Tabs.Content>
+                </div>
+              </Tabs>
             </div>
 
             <div className="flex flex-col gap-1">

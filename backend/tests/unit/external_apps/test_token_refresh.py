@@ -10,12 +10,12 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.exc import SQLAlchemyError
 
 from onyx.external_apps import token_refresh as tr
-from onyx.external_apps.providers.base import TokenRefreshTerminalError
-from onyx.external_apps.providers.base import TokenRefreshTransientError
+from onyx.external_apps.oauth_handler import TokenRequestTerminalError
+from onyx.external_apps.oauth_handler import TokenRequestTransientError
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
 
 # ---------------------------------------------------------------------------
-# Provider.refresh_credentials (RFC-6749 default on OAuthExternalAppProvider)
+# refresh_credentials (RFC-6749 default on OAuthFlowHandler)
 # ---------------------------------------------------------------------------
 
 
@@ -30,7 +30,7 @@ def _response(status_code: int, body: dict[str, Any]) -> requests.Response:
 
 def _patch_post(monkeypatch: pytest.MonkeyPatch, response: object) -> None:
     monkeypatch.setattr(
-        "onyx.external_apps.providers.base.requests.post",
+        "onyx.external_apps.oauth_handler.requests.post",
         lambda *_a, **_k: response,
     )
 
@@ -83,15 +83,15 @@ def test_refresh_missing_refresh_token_is_terminal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     called = MagicMock()
-    monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", called)
-    with pytest.raises(TokenRefreshTerminalError):
+    monkeypatch.setattr("onyx.external_apps.oauth_handler.requests.post", called)
+    with pytest.raises(TokenRequestTerminalError):
         GoogleCalendarProvider().refresh_credentials({"access_token": "a"}, "c", "s")
     called.assert_not_called()
 
 
 def test_refresh_invalid_grant_is_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_post(monkeypatch, _response(400, {"error": "invalid_grant"}))
-    with pytest.raises(TokenRefreshTerminalError):
+    with pytest.raises(TokenRequestTerminalError):
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
 
@@ -106,7 +106,7 @@ def test_refresh_client_and_request_errors_are_transient(
     so the existing credential is kept, not cleared — re-auth can't fix a
     misconfigured client, and clearing would force every affected user to reconnect."""
     _patch_post(monkeypatch, _response(400, {"error": error_code}))
-    with pytest.raises(TokenRefreshTransientError):
+    with pytest.raises(TokenRequestTransientError):
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
 
@@ -126,13 +126,13 @@ def test_refresh_invalid_grant_with_description_is_terminal(
             },
         ),
     )
-    with pytest.raises(TokenRefreshTerminalError):
+    with pytest.raises(TokenRequestTerminalError):
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
 
 def test_refresh_5xx_is_transient(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_post(monkeypatch, _response(503, {"error": "server_error"}))
-    with pytest.raises(TokenRefreshTransientError):
+    with pytest.raises(TokenRequestTransientError):
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
 
@@ -140,8 +140,8 @@ def test_refresh_network_error_is_transient(monkeypatch: pytest.MonkeyPatch) -> 
     def _boom(*_a: Any, **_k: Any) -> None:
         raise requests.RequestException("connection reset")
 
-    monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", _boom)
-    with pytest.raises(TokenRefreshTransientError):
+    monkeypatch.setattr("onyx.external_apps.oauth_handler.requests.post", _boom)
+    with pytest.raises(TokenRequestTransientError):
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
 
@@ -162,7 +162,7 @@ def test_refresh_non_object_error_body_is_transient(
     error, not an unguarded `.get()` `AttributeError` that escapes the
     terminal/transient handling."""
     _patch_post(monkeypatch, _raw_response(502, raw_body))
-    with pytest.raises(TokenRefreshTransientError):
+    with pytest.raises(TokenRequestTransientError):
         GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
 
@@ -181,7 +181,7 @@ def _capturing_post(
         captured["data"] = kwargs.get("data")
         return response
 
-    monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", _post)
+    monkeypatch.setattr("onyx.external_apps.oauth_handler.requests.post", _post)
     return captured
 
 
@@ -192,12 +192,8 @@ def test_provider_overrides_only_the_refresh_request(
     alone — the POST, error handling, and response mapping are inherited."""
 
     class _ResourceProvider(GoogleCalendarProvider, abstract=True):
-        def build_refresh_request(
-            self, refresh_token: str, client_id: str, client_secret: str
-        ) -> dict[str, str]:
-            base = super().build_refresh_request(
-                refresh_token, client_id, client_secret
-            )
+        def build_refresh_request(self, refresh_token: str) -> dict[str, str]:
+            base = super().build_refresh_request(refresh_token)
             return {**base, "resource": "r"}
 
     captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
@@ -213,18 +209,18 @@ def test_provider_overrides_only_the_terminal_error_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A provider with different failure semantics overrides
-    `terminal_refresh_errors` alone."""
+    `terminal_token_errors` alone."""
 
     class _StrictProvider(GoogleCalendarProvider, abstract=True):
-        terminal_refresh_errors = frozenset({"consent_required"})
+        terminal_token_errors = frozenset({"consent_required"})
 
     _patch_post(monkeypatch, _response(400, {"error": "consent_required"}))
-    with pytest.raises(TokenRefreshTerminalError):
+    with pytest.raises(TokenRequestTerminalError):
         _StrictProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
     # `invalid_grant` is no longer terminal for this provider → transient.
     _patch_post(monkeypatch, _response(400, {"error": "invalid_grant"}))
-    with pytest.raises(TokenRefreshTransientError):
+    with pytest.raises(TokenRequestTransientError):
         _StrictProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
 
 
@@ -275,7 +271,7 @@ def _setup(
     monkeypatch.setattr(tr, "redis_shared_lock", _noop_cm)
     monkeypatch.setattr(tr, "get_session_with_tenant", _noop_cm)
     monkeypatch.setattr(tr, "get_external_app_by_id", lambda *_a, **_k: app)
-    monkeypatch.setattr(tr, "get_provider_for_app", lambda *_a, **_k: provider)
+    monkeypatch.setattr(tr, "resolve_oauth_handler", lambda *_a, **_k: provider)
     monkeypatch.setattr(
         tr,
         "get_external_app_user_credential",
@@ -333,7 +329,7 @@ def test_ensure_fresh_terminal_clears_credential_without_raising(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spies = _setup(monkeypatch, creds_sequence=[_stale_creds(), _stale_creds()])
-    spies["refresh"].side_effect = TokenRefreshTerminalError("invalid_grant")
+    spies["refresh"].side_effect = TokenRequestTerminalError("invalid_grant")
     _run()  # does not raise — the app simply reads as disconnected afterwards
     spies["delete"].assert_called_once()
     spies["upsert"].assert_not_called()
@@ -343,7 +339,7 @@ def test_ensure_fresh_transient_keeps_existing_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spies = _setup(monkeypatch, creds_sequence=[_stale_creds(), _stale_creds()])
-    spies["refresh"].side_effect = TokenRefreshTransientError("503")
+    spies["refresh"].side_effect = TokenRequestTransientError("503")
     _run()  # does not raise
     spies["upsert"].assert_not_called()
     spies["delete"].assert_not_called()
@@ -391,7 +387,7 @@ def test_ensure_fresh_noop_for_non_oauth_app(monkeypatch: pytest.MonkeyPatch) ->
     # Stale creds pass the pre-check, but a non-OAuth provider has no refresh
     # flow → bail under the lock, no refresh/upsert.
     spies = _setup(monkeypatch, creds_sequence=[_stale_creds(), _stale_creds()])
-    monkeypatch.setattr(tr, "get_provider_for_app", lambda *_a, **_k: None)
+    monkeypatch.setattr(tr, "resolve_oauth_handler", lambda *_a, **_k: None)
     _run()
     spies["refresh"].assert_not_called()
     spies["upsert"].assert_not_called()
