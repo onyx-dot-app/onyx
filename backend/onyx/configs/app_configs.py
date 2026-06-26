@@ -1155,6 +1155,11 @@ VESPA_MIGRATION_SERVER_SIDE_REQUEST_TIMEOUT = os.environ.get(
 
 SYSTEM_RECURSION_LIMIT = int(os.environ.get("SYSTEM_RECURSION_LIMIT") or "1000")
 
+# Size of the api-server anyio threadpool that runs sync endpoints, including the
+# streaming chat generator (each long request holds one thread for its duration).
+# 0 keeps the anyio default (40). Set via the api.threadpoolSize Helm value.
+API_SERVER_THREADPOOL_SIZE = int(os.environ.get("ONYX_API_THREADPOOL_SIZE") or "0")
+
 PARSE_WITH_TRAFILATURA = os.environ.get("PARSE_WITH_TRAFILATURA", "").lower() == "true"
 
 # allow for custom error messages for different errors returned by litellm
