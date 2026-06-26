@@ -10,6 +10,9 @@ restart.
 from typing import Any
 
 from onyx.server.features.build.sandbox.models import LLMProviderConfig
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # 4.6+ supports adaptive thinking; older needs enabled+budgetTokens.
 _ADAPTIVE_THINKING_MODELS = frozenset(
@@ -77,7 +80,10 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
         "opencode.json": "deny",
         "**/opencode.json": "deny",
     },
-    "list": "allow",
+    # SPIKE (craft-connect-permission): force a frequently-used tool to "ask" so
+    # opencode emits a permission.asked on essentially any turn (still
+    # auto-allowed). Revert to "allow" after the spike.
+    "list": "ask",
     "lsp": "allow",
     "patch": "allow",
     # Deny opencode's built-in customize-opencode skill (edits opencode.json
@@ -85,9 +91,7 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     # the named deny — opencode evaluates skill rules with findLast().
     "skill": {"*": "allow", "customize-opencode": "deny"},
     "question": "allow",
-    # SPIKE (craft-connect-permission): force one tool to "ask" so opencode emits
-    # a permission.asked we can capture. Revert to "allow" after the spike.
-    "webfetch": "ask",
+    "webfetch": "allow",
 }
 
 _TMP_EXTERNAL_DIRECTORY_RULES: dict[str, str] = {
@@ -113,6 +117,12 @@ def _build_permissions(
     if disabled_tools:
         for tool in disabled_tools:
             permissions[tool] = "deny"
+    # SPIKE (craft-connect-permission): confirm a freshly-provisioned sandbox is
+    # getting the "ask" config. If this line is absent on a new turn, the sandbox
+    # wasn't re-provisioned (or the api-server didn't reload). Remove after.
+    logger.info(
+        "appsetup-spike opencode permissions built: list=%s", permissions.get("list")
+    )
     return permissions
 
 
