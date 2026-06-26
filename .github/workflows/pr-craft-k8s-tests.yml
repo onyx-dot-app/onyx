@@ -291,9 +291,6 @@ jobs:
           cat > "${RUNNER_TEMP}/kind-config.yaml" <<'EOF'
           kind: Cluster
           apiVersion: kind.x-k8s.io/v1alpha4
-          # kindnet (kind's default CNI) enforces NetworkPolicy; no external CNI needed.
-          networking:
-            podSubnet: "192.168.0.0/16"
           containerdConfigPatches:
             - |-
               [plugins."io.containerd.grpc.v1.cri".registry]
