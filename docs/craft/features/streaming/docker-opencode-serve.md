@@ -135,9 +135,9 @@ Update `docs/craft/opencode-serve-migration.md` §"Migration phases" to note Doc
 
 ## Tests
 
-**Docker compose integration** (`backend/tests/integration/tests/craft/docker_e2e/`):
-- `test_serve_streaming_docker.py` keeps the direct transport/event matrix against a Docker-provisioned sandbox container.
-- Follow-up k8s coverage should validate deployed API/Celery turn handoff once that lane is added.
+**External-dependency-unit** (`backend/tests/external_dependency_unit/craft/`):
+- `test_docker_sandbox_serve_streaming.py` keeps the direct transport/event matrix against a Docker-provisioned sandbox container. The Craft k8s lane now covers deployed API/Celery turn handoff through `backend/tests/integration/tests/craft/k8s/test_messages_api_k8s.py` instead of directly calling `KubernetesSandboxManager.send_message`.
+- Update `backend/tests/integration/tests/craft/k8s/test_kubernetes_sandbox_file_ops.py` if any imports churn from the base.py refactor.
 
 **Unit** (`backend/tests/unit/onyx/server/features/build/sandbox/`):
 - `test_docker_manager_config.py` — extend the env-allowlist assertion to include the four new serve env vars. Assert the OLD allowlist no longer matches (catches regressions in either direction).

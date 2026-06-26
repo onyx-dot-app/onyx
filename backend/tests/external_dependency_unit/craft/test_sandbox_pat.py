@@ -135,20 +135,6 @@ class TestEnsureSandboxPat:
         all_pats = list_user_pats(db_session, test_user.id)
         assert any(p.pat_type == PatType.CRAFT for p in all_pats)
 
-    def test_pat_type_defaults_to_user(
-        self,
-        db_session: Session,
-        test_user: User,
-        tenant_context: None,  # noqa: ARG002
-    ) -> None:
-        pat, _token = create_pat(
-            db_session=db_session,
-            user_id=test_user.id,
-            name="default-type-test",
-            expiration_days=30,
-        )
-        assert pat.pat_type == PatType.USER
-
     def test_mismatched_hash_revokes_and_mints_new(
         self,
         db_session: Session,

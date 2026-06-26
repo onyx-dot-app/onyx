@@ -96,14 +96,15 @@ Encoded in the document_id prefix: `CRAFT_FILE__{user_id}__{hash}`. `fetch_user_
 
 **New:**
 - `backend/onyx/server/features/build/sandbox/user_library.py` — sync module
-- `backend/tests/external_dependency_unit/craft/test_user_library_sync.py` — ext-dep tests
+- `backend/tests/integration/tests/craft/k8s/test_user_library_sync.py` — API-driven k8s integration tests against the Helm-installed kind lane with real API, web_server, Celery, backing services, sandbox proxy, and sandbox pods
+- `backend/tests/external_dependency_unit/craft/test_user_library_fileset.py` — direct fileset/sync helper coverage
 
 **Modified:**
 - `backend/onyx/server/features/build/db/user_library.py` — added all the CRUD/storage helpers
 - `backend/onyx/server/features/build/user_library/api.py` — thinned to call db helpers; `PersistentDocumentWriter` usage removed; `HTTPException` → `OnyxError`
 - `backend/onyx/server/features/build/session/manager.py` — `_hydrate_user_library` called in both `create_session__no_commit` and `get_or_create_empty_session`
 - `backend/onyx/skills/push.py` — per-failure logging (consistent with user_library push logging)
-- `backend/tests/external_dependency_unit/craft/conftest.py` — `SandboxHandle.provision_for` now returns `(Sandbox, Path)` tuple, eliminating duplicated `_provision_with_status` helpers
+- `backend/tests/integration/tests/craft/k8s/k8s_fixtures.py` — `SandboxHandle.provision_api_user` returns a `WorkspaceProxy` for API-created users, eliminating duplicated `_provision_with_status` helpers
 
 **Deleted:**
 - `backend/onyx/server/features/build/indexing/persistent_document_writer.py`
@@ -111,16 +112,28 @@ Encoded in the document_id prefix: `CRAFT_FILE__{user_id}__{hash}`. `fetch_user_
 
 ## 7. Tests
 
-Tests follow the layered paradigm in `docs/craft/tests/coverage-and-overview.md`.
+Tests follow the layered Craft testing strategy: API-driven integration coverage
+where real sandbox behavior matters, with narrower tests for pure file-set logic.
 
-### Ext-dep (`test_user_library_sync.py`)
+### K8s Integration (`test_user_library_sync.py`)
 
-Real Postgres + real `LocalSandboxManager` on `tmp_path`. Seeds via the same DB helpers production uses (no `DocumentMetadata` construction in test code).
+Real Postgres + Redis + MinIO from the Helm-installed kind chart, plus real
+api_server, web_server, Celery workers, sandbox-proxy, and sandbox pods. Tests
+seed data through the deployed `/build/user-library` APIs and assert the
+resulting files inside the sandbox pod.
 
-- `test_hydrate_pushes_files_to_sandbox` — happy path
-- `test_sync_disabled_files_excluded` — filter contract via `set_sync_disabled`
-- `test_directories_excluded_from_fileset` — directory exclusion via `create_directory_record`
-- `test_sync_after_delete_removes_file` — atomic swap cleanup after `delete_user_file`
+- `test_upload_api_syncs_file_to_running_sandbox` — upload API pushes a file
+- `test_upload_zip_api_syncs_nested_file` — zip upload pushes nested file paths
+- `test_session_workspace_links_user_library_after_api_upload` — session symlink exposes synced files
+- `test_delete_api_removes_file_from_running_sandbox` — delete API removes the file
+
+### External-dependency unit (`test_user_library_fileset.py`)
+
+Direct helper coverage for the pieces that do not need Kubernetes:
+
+- `build_user_library_fileset` excludes sync-disabled files and directory records.
+- `hydrate_user_library` pushes the current fileset to one sandbox manager target.
+- `sync_user_library_to_active_sandboxes` targets only active sandbox rows.
 
 ### Integration (`test_user_library_api.py`, pre-existing)
 
@@ -128,7 +141,11 @@ HTTP-level coverage including cross-user 404, toggle, delete, upload caps. Alrea
 
 ### K8s
 
-No new K8s tests — push daemon contract (signed tarball, atomic swap) is already covered by existing K8s tests. User library sync reuses `write_files_to_sandbox()` unchanged.
+`backend/tests/integration/tests/craft/k8s/test_user_library_sync.py` covers
+API-triggered sync against the real deployed API and sandbox pods. The lower-level push daemon
+contract (signed tarball, atomic swap) remains covered by the broader Craft
+k8s integration suite; user library sync reuses `write_files_to_sandbox()`
+unchanged.
 
 ## 8. Not in scope
 

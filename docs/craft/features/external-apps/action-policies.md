@@ -3,10 +3,10 @@
 > **Relationship to Approvals.** This plan owns the **policy layer** for
 > external apps: the per-action catalog, the admin-set `ALWAYS | ASK | DENY`
 > decisions, their storage, and the request→decision resolver. It is the
-> external-apps-scoped realization of "Phase 4 — Policy Management" in the
-> [Craft Approvals proposal](../approvals/approvals-plan.md). **Enforcement**
-> (intercepting the request, holding it, prompting the user) lives in the egress
-> proxy — see [Phase 1 — Egress Interception Proxy](../approvals/phase-1-proxy.md).
+> external-apps-scoped policy layer for the
+> [Craft egress proxy and approvals runtime](../egress-proxy-and-approvals/README.md).
+> **Enforcement** (intercepting the request, holding it, prompting the user)
+> lives in the egress proxy.
 > This document defines the contract that proxy reads; it does not build the
 > proxy.
 
@@ -75,7 +75,8 @@ extensible (adding a provider is a code-only change) and safe-by-default
 
 ### Out of Scope
 
-- The egress proxy's request interception/forwarding ([Phase 1](../approvals/phase-1-proxy.md)).
+- The egress proxy's request interception/forwarding
+  ([runtime reference](../egress-proxy-and-approvals/README.md#request-lifecycle)).
 - The `ASK` approval UX — event shape, hold mechanism, "remember for session",
   timeout (the Approvals workstream).
 - Audit logging; per-user policy overrides; proxy-side caching.

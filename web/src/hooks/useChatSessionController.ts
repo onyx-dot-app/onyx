@@ -29,9 +29,11 @@ import {
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { ProjectFile } from "@/app/app/projects/projectsService";
-import { getSessionProjectTokenCount } from "@/app/app/projects/projectsService";
-import { getProjectFilesForSession } from "@/app/app/projects/projectsService";
+import type { ProjectFile } from "@/lib/projects/types";
+import {
+  getSessionProjectTokenCount,
+  getProjectFilesForSession,
+} from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.

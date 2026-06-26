@@ -576,7 +576,8 @@ def build_container_create_kwargs(
       starts. ``restart_policy: unless-stopped`` re-enters the same fail-fast
       init -- no cumulative exposure, no user code reachable during the window.
     - The named proxy-CA volume is mounted read-only at ``/sandbox-ca`` for
-      ``firewall-init.sh`` to read ``ca.crt``.
+      ``firewall-init.sh`` to read ``ca.crt``. That volume also contains
+      root-only ``ca.key``; the agent runs as UID 1000 after init.
 
     ``ONYX_SERVER_URL`` must be the *public* Onyx URL (the one onyx-cli inside
     the sandbox will hit over HTTPS) — not an internal compose DNS name. We emit

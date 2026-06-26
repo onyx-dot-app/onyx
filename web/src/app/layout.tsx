@@ -1,12 +1,8 @@
 import "./globals.css";
 
 import type { Metadata } from "next";
-import {
-  GTM_ENABLED,
-  MODAL_ROOT_ID,
-  SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
-} from "@/lib/constants";
-import { fetchEnterpriseSettingsSS } from "@/lib/settings/svcSS";
+import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
+import { generateFaviconMetadata } from "@/lib/app/svcSS";
 import AppProvider from "@/providers/AppProvider";
 import { PHProvider } from "./providers";
 import {
@@ -60,20 +56,7 @@ const dmMono = DM_Mono({
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  let title = "Onyx";
-  let iconSrc = "/onyx.ico";
-
-  if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
-    const enterprise = await fetchEnterpriseSettingsSS();
-    if (enterprise) {
-      title = enterprise.application_name?.trim() || "Onyx";
-      if (enterprise.use_custom_logo) {
-        iconSrc = "/api/enterprise-settings/logo";
-      }
-    }
-  }
-
-  return { title, icons: { icon: iconSrc } };
+  return { icons: await generateFaviconMetadata() };
 }
 
 interface LayoutProps {

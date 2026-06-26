@@ -325,6 +325,55 @@ Check that specified modules are only lazily imported (used for keeping backend 
 ods check-lazy-imports
 ```
 
+### `audit` - Audit Dependencies for Vulnerabilities
+
+Scan the JavaScript (`bun.lock`) and Python (`uv.lock`) lockfiles via
+[osv-scanner](https://github.com/google/osv-scanner) (vendored as a library, no
+external binary required) and open GitHub Dependabot security alerts for known
+vulnerabilities. With no selector flags, all sources are audited.
+
+Accepted advisories are suppressed via an allowlist fetched from S3 at runtime
+(`s3://onyx-internal-tools/audit/ignores.json` by default), so a release can be
+unblocked without a code change. The command exits non-zero when an unignored
+finding at or above `--fail-on` (default `critical`) remains, which is how it
+gates deploys.
+
+```shell
+ods audit [--web] [--python] [--dependabot] [--format text|json|sarif] [--fail-on critical|high|moderate|low] [--ignore-url s3://...]
+```
+
+**Examples:**
+
+```shell
+# Audit everything; fail on unignored criticals
+ods audit
+
+# Only the Python lockfile
+ods audit --python
+
+# Emit a SARIF report (used by the nightly GitHub code-scanning job)
+ods audit --python --format=sarif > audit.sarif
+```
+
+The allowlist is a JSON document of the form:
+
+```json
+{
+  "ignores": [
+    {
+      "id": "GHSA-xxxx-xxxx-xxxx",
+      "ecosystem": "npm",
+      "reason": "not reachable in our usage",
+      "added_by": "you@onyx.app",
+      "expires": "2026-09-01"
+    }
+  ]
+}
+```
+
+`id` matches a finding's id or any of its aliases (case-insensitive); `ecosystem`
+and `expires` are optional (an expired entry stops suppressing).
+
 ### `run-ci` - Run CI on Fork PRs
 
 Pull requests from forks don't automatically trigger GitHub Actions for security reasons.
