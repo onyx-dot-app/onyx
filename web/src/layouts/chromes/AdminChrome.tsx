@@ -33,8 +33,6 @@ export default function AdminChrome({ children }: AdminChromeProps) {
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
   const hasCustomSidebar = pathname.startsWith("/admin/connectors");
 
-  // // Lite mode (no vector DB): connector/indexing pages can't run, show a notice.
-  // const vectorDbEnabled = settings.vector_db_enabled !== false;
   let content = children;
   if (isVectorDbRequiredRoute(pathname)) {
     if (isLoading) {
