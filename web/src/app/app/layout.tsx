@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import type { Route } from "next";
 import { unstable_noStore as noStore } from "next/cache";
 import { requireAuth } from "@/lib/auth/requireAuth";
@@ -7,6 +8,11 @@ import { VoiceModeProvider } from "@/providers/VoiceModeProvider";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
 import { RootLayout } from "@opal/layouts";
 import AppChrome from "@/layouts/chromes/AppChrome";
+import { generateAppNameMetadata } from "@/lib/app/svcSS";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: await generateAppNameMetadata() };
+}
 
 export interface LayoutProps {
   children: React.ReactNode;

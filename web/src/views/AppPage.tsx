@@ -2,14 +2,7 @@
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
@@ -154,11 +147,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const settings = useSettings();
   const { appName } = settings;
 
-  useLayoutEffect(() => {
+  useEffect(() => {
+    if (!appFocus.isChat() && !appFocus.isSharedChat()) return;
     document.title = currentChatSession?.name
       ? `${currentChatSession.name} — ${appName}`
       : appName;
-  }, [currentChatSession?.name, appName]);
+  }, [currentChatSession?.name, appName, appFocus]);
 
   const { vectorDbEnabled } = settings;
   const { ccPairs } = useCCPairs(vectorDbEnabled);
@@ -556,14 +550,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     deepResearchEnabledForCurrentWorkflow,
     multiModel.isMultiModelActive,
   ]);
-
-  const toggleDocumentSidebar = useCallback(() => {
-    if (!documentSidebarVisible) {
-      updateCurrentDocumentSidebarVisible(true);
-    } else {
-      updateCurrentDocumentSidebarVisible(false);
-    }
-  }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
   if (resolvedUser === null) {
     redirect("/auth/login");
