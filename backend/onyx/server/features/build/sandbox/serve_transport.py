@@ -425,15 +425,13 @@ class _ServeMixin:
         perm_id: str,
         directory: str,
         allow: bool,
-    ) -> None:
+    ) -> bool:
         """Answer a pending ``connect_app`` permission on ``sandbox_id`` — the
         decision endpoint's path to opencode, on whatever worker handled the POST.
-        One-shot, so no event bus."""
-        client = self._build_serve_client(
-            sandbox_id, directory, with_event_bus=False
-        )
+        Returns whether opencode accepted it. One-shot, so no event bus."""
+        client = self._build_serve_client(sandbox_id, directory, with_event_bus=False)
         try:
-            client.answer_permission(
+            return client.answer_permission(
                 opencode_session_id, perm_id, allow=allow, directory=directory
             )
         finally:

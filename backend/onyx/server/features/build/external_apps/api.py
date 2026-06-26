@@ -483,11 +483,17 @@ def resolve_connect_app_request(
     if sandbox is None or sandbox.status != SandboxStatus.RUNNING:
         raise OnyxError(OnyxErrorCode.SERVICE_UNAVAILABLE, "Sandbox is not running.")
 
-    get_sandbox_manager().answer_connect_app_permission(
+    answered = get_sandbox_manager().answer_connect_app_permission(
         sandbox.id,
         opencode_session_id=pending.opencode_session_id,
         perm_id=pending.perm_id,
         directory=pending.directory,
         allow=body.decision == connect_app.ConnectAppDecision.CONNECTED,
     )
+    if not answered:
+        # Leave the pending record intact (TTL) so the user can retry
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "Could not reach the sandbox to apply your choice — please try again.",
+        )
     connect_app.clear_pending(request_id, cache)

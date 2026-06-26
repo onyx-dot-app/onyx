@@ -1572,13 +1572,14 @@ class OpencodeServeClient:
 
     def answer_permission(
         self, session_id: str, perm_id: str, *, allow: bool, directory: str
-    ) -> None:
+    ) -> bool:
         """Resolve a pending opencode permission: ``allow`` (``once``) runs the
-        tool, deny (``reject``) surfaces the rejection to the agent. Answering an
-        already-resolved permission is a no-op on opencode's side."""
+        tool, deny (``reject``) surfaces the rejection to the agent. Returns
+        whether opencode accepted the answer; answering an already-resolved
+        permission is a no-op on opencode's side."""
         response = "once" if allow else "reject"
         try:
-            self._http.post(
+            r = self._http.post(
                 f"/session/{session_id}/permissions/{perm_id}",
                 params={"directory": directory},
                 json={"response": response},
@@ -1591,6 +1592,17 @@ class OpencodeServeClient:
                 perm_id,
                 e,
             )
+            return False
+        if not r.is_success:
+            logger.warning(
+                "opencode-serve: permission %s (%s) for %s -> HTTP %s",
+                "allow" if allow else "deny",
+                response,
+                perm_id,
+                r.status_code,
+            )
+            return False
+        return True
 
     def _handle_connect_app_permission(
         self, evt: dict[str, Any], state: _TurnState, perm_id: str, *, directory: str
