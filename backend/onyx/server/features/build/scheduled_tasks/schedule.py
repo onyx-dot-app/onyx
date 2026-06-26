@@ -1,7 +1,7 @@
 """Pure helpers for compiling, validating, and reasoning about schedules.
 
 Single source of truth for the cron semantics described in
-``docs/craft/features/scheduled-tasks.md``:
+``docs/craft/features/scheduled-tasks/overview.md``:
 
 - The DB stores a canonical 5-field cron string + ``editor_mode`` (UI hint).
   All three editor modes (interval, daily/weekly, advanced) compile to the

@@ -289,5 +289,4 @@ Storage is handled by the API server through FileStore.
 
 `node_modules` and `.next` are deliberately excluded from snapshots
 because (a) they're huge, (b) `restore_snapshot` rebuilds them via the
-hardlink-backed `bun install` against the pre-warmed Bun cache (see
-`docs/craft/features/bun-node-modules-dedup.md`).
+hardlink-backed `bun install` against the pre-warmed Bun cache.
