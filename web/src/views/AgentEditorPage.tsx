@@ -1488,7 +1488,10 @@ export default function AgentEditorPage({
                           description="Tools and capabilities available for this agent to use."
                         />
                         <SimpleCollapsible.Content>
-                          <GeneralLayouts.Section gap={0.5} alignItems="stretch">
+                          <GeneralLayouts.Section
+                            gap={0.5}
+                            alignItems="stretch"
+                          >
                             <Disabled
                               disabled={!isImageGenerationAvailable}
                               tooltip={imageGenerationDisabledTooltip}

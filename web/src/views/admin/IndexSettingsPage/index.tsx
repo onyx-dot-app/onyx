@@ -1443,7 +1443,10 @@ export default function IndexSettingsPage() {
                         borderColor={statusVariant}
                         rounding="lg"
                       >
-                        <GeneralLayouts.Section width="full" alignItems="stretch">
+                        <GeneralLayouts.Section
+                          width="full"
+                          alignItems="stretch"
+                        >
                           <InputHorizontal
                             title="Contextual Retrieval"
                             description="Add document-level context to every indexed chunk to improve hybrid search relevance. This can increase embedding cost significantly."
@@ -1508,7 +1511,10 @@ export default function IndexSettingsPage() {
                       }
                     >
                       <Card border="solid" rounding="lg">
-                        <GeneralLayouts.Section width="full" alignItems="stretch">
+                        <GeneralLayouts.Section
+                          width="full"
+                          alignItems="stretch"
+                        >
                           <InputHorizontal
                             title="Extract & Caption Images"
                             description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
