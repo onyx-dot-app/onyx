@@ -1,6 +1,5 @@
 # Runs the Craft Kubernetes integration tests against a Helm-installed kind
-# cluster with the real API, web_server, Celery workers, sandbox proxy, and
-# sandbox pods.
+# cluster with the real API, Celery workers, sandbox proxy, and sandbox pods.
 #
 # Each test file owns a module-scoped sandbox pod and the single-node kind
 # cluster fits one sandbox pod at a time, so the lane shards per test file, each
@@ -56,7 +55,6 @@ env:
   SANDBOX_PROXY_CA_SECRET: "sandbox-proxy-ca"
   SANDBOX_PROXY_CA_CONFIGMAP: "sandbox-proxy-ca-bundle"
   BACKEND_IMAGE: "localhost:5001/onyx-backend:ci"
-  WEB_IMAGE: "localhost:5001/onyx-web-server:ci"
   # Fail fast on opencode hangs (default is 900s). Without this, CI
   # waits 15 min for the per-turn timeout while the 20-min workflow timeout
   # kills the job first — losing failure logs and giving zero signal.
@@ -76,8 +74,6 @@ env:
   REDIS_PASSWORD: "password"
   API_SERVER_HOST: "127.0.0.1"
   API_SERVER_PORT: "8080"
-  WEB_SERVER_HOST: "127.0.0.1"
-  WEB_SERVER_PORT: "3000"
 
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
@@ -173,12 +169,6 @@ jobs:
             context: ./backend
             file: ./backend/Dockerfile
             extra_build_args: ""
-          - image: web
-            context: ./web
-            file: ./web/Dockerfile
-            extra_build_args: |
-              NEXT_PUBLIC_CLOUD_ENABLED=false
-              WEB_FRAME_PROTECTION_ENABLED=false
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
@@ -295,7 +285,6 @@ jobs:
           }
           mirror "${ECR_CACHE}:craft-k8s-sandbox-${RUN_ID}" "${SANDBOX_CONTAINER_IMAGE}"
           mirror "${ECR_CACHE}:craft-k8s-backend-${RUN_ID}" "${BACKEND_IMAGE}"
-          mirror "${ECR_CACHE}:craft-k8s-web-${RUN_ID}" "${WEB_IMAGE}"
 
       - name: Write kind config
         run: |
@@ -394,8 +383,7 @@ jobs:
               --set "api.image.tag=ci" \
               --set "celery_shared.image.repository=localhost:5001/onyx-backend" \
               --set "celery_shared.image.tag=ci" \
-              --set "webserver.image.repository=localhost:5001/onyx-web-server" \
-              --set "webserver.image.tag=ci" \
+              --set "webserver.replicaCount=0" \
               --set-string "auth.sandboxPushSecret.values.private_key=${ONYX_SANDBOX_PUSH_PRIVATE_KEY}" \
               --timeout 10m; then
               exit 0
@@ -517,7 +505,6 @@ jobs:
           for deployment in \
             onyx-sandbox-proxy \
             onyx-api-server \
-            onyx-web-server \
             onyx-celery-beat \
             onyx-celery-worker-primary \
             onyx-celery-worker-light \
@@ -551,24 +538,20 @@ jobs:
           done
           exit 1
 
-      - name: Forward chart API and webserver to runner
+      - name: Forward chart API to runner
         run: |
           set -eo pipefail
           setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-api-service \"$API_SERVER_PORT\":8080; sleep 1; done" \
             > "${RUNNER_TEMP}/api-port-forward.log" 2>&1 &
           echo "$!" > "${RUNNER_TEMP}/api-port-forward.pid"
-          setsid bash -c "while true; do kubectl -n \"$HELM_RELEASE_NAMESPACE\" port-forward svc/onyx-webserver \"$WEB_SERVER_PORT\":3000; sleep 1; done" \
-            > "${RUNNER_TEMP}/web-port-forward.log" 2>&1 &
-          echo "$!" > "${RUNNER_TEMP}/web-port-forward.pid"
           for _ in $(seq 1 60); do
-            if curl -fsS "http://${API_SERVER_HOST}:${API_SERVER_PORT}/health" \
-                && curl -fsS "http://${WEB_SERVER_HOST}:${WEB_SERVER_PORT}/" >/dev/null; then
-              echo "chart API + webserver reachable"
+            if curl -fsS "http://${API_SERVER_HOST}:${API_SERVER_PORT}/health"; then
+              echo "chart API reachable at ${API_SERVER_HOST}:${API_SERVER_PORT}"
               exit 0
             fi
             sleep 2
           done
-          cat "${RUNNER_TEMP}/api-port-forward.log" "${RUNNER_TEMP}/web-port-forward.log" || true
+          cat "${RUNNER_TEMP}/api-port-forward.log" || true
           exit 1
 
       # The test process runs on the CI runner, which has no cluster DNS.
@@ -670,7 +653,7 @@ jobs:
 
           echo "::group::chart resources and app logs"
           helm status onyx -n "${HELM_RELEASE_NAMESPACE}" || true
-          for dep in onyx-api-server onyx-web-server onyx-celery-worker-primary \
+          for dep in onyx-api-server onyx-celery-worker-primary \
               onyx-celery-worker-heavy onyx-celery-worker-scheduled-tasks \
               onyx-cloudnative-pg redis-operator; do
             kubectl -n "${HELM_RELEASE_NAMESPACE}" logs "deployment/${dep}" --all-containers --tail=500 || true
@@ -680,7 +663,7 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::port-forward logs"
-          for f in postgres redis minio api web; do
+          for f in postgres redis minio api; do
             echo "--- ${f} ---"; cat "${RUNNER_TEMP}/${f}-port-forward.log" 2>/dev/null || true
           done
           echo "::endgroup::"
@@ -712,7 +695,6 @@ jobs:
             "${RUNNER_TEMP}/redis-port-forward.pid" \
             "${RUNNER_TEMP}/minio-port-forward.pid" \
             "${RUNNER_TEMP}/api-port-forward.pid" \
-            "${RUNNER_TEMP}/web-port-forward.pid" \
             "${RUNNER_TEMP}/sandbox-log-watcher.pid"; do
             if [ -f "${pid_file}" ]; then
               kill "$(cat "${pid_file}")" 2>/dev/null || true
