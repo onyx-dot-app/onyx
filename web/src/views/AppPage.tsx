@@ -2,14 +2,7 @@
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
 import { personaIncludesRetrieval } from "@/app/app/services/lib";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast, useToastFromQuery } from "@/hooks/useToast";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
@@ -151,16 +144,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     currentChatSessionId,
     isLoading: isLoadingChatSessions,
   } = useChatSessions();
-  const settings = useSettings();
-  const { appName } = settings;
+  const { vectorDbEnabled, disable_default_assistant } = useSettings();
 
-  useLayoutEffect(() => {
-    document.title = currentChatSession?.name
-      ? `${currentChatSession.name} — ${appName}`
-      : appName;
-  }, [currentChatSession?.name, appName]);
-
-  const { vectorDbEnabled } = settings;
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { tags } = useTags();
   const { documentSets } = useDocumentSets();
@@ -310,7 +295,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     liveAgent,
     currentChatSessionId,
     currentChatSession ?? undefined,
-    settings.disable_default_assistant ?? false
+    disable_default_assistant ?? false
   );
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
@@ -556,14 +541,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     deepResearchEnabledForCurrentWorkflow,
     multiModel.isMultiModelActive,
   ]);
-
-  const toggleDocumentSidebar = useCallback(() => {
-    if (!documentSidebarVisible) {
-      updateCurrentDocumentSidebarVisible(true);
-    } else {
-      updateCurrentDocumentSidebarVisible(false);
-    }
-  }, [documentSidebarVisible, updateCurrentDocumentSidebarVisible]);
 
   if (resolvedUser === null) {
     redirect("/auth/login");

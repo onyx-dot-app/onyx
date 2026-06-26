@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect } from "react";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
 import { useSettings } from "@/lib/settings/hooks";
@@ -21,17 +22,20 @@ export default function AdminChrome({ children }: AdminChromeProps) {
   const { setFolded } = useSidebarState();
   const { isMobile } = useScreenSize();
   const pathname = usePathname();
-  const settings = useSettings();
+  const { appName, vectorDbEnabled, isLoading, application_status } =
+    useSettings();
+
+  useLayoutEffect(() => {
+    document.title = `Admin — ${appName}`;
+  }, [pathname, appName]);
 
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
   const hasCustomSidebar = pathname.startsWith("/admin/connectors");
 
-  // Lite mode (no vector DB): connector/indexing pages can't run, show a notice.
-  const vectorDbEnabled = settings.vector_db_enabled !== false;
   let content = children;
   if (isVectorDbRequiredRoute(pathname)) {
-    if (settings.isLoading) {
+    if (isLoading) {
       content = (
         <Section padding={2}>
           <SvgSimpleLoader className="h-6 w-6" />
@@ -44,7 +48,7 @@ export default function AdminChrome({ children }: AdminChromeProps) {
 
   return (
     <RootLayout.Root>
-      {settings.application_status === ApplicationStatus.PAYMENT_REMINDER && (
+      {application_status === ApplicationStatus.PAYMENT_REMINDER && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 bg-status-warning-01 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
           <Text font="main-ui-body" color="text-05">
             {markdown(
