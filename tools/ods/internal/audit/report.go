@@ -24,20 +24,20 @@ func render(w io.Writer, format string, res *Result) error {
 
 func renderText(w io.Writer, res *Result) error {
 	if len(res.Findings) == 0 {
-		fmt.Fprintln(w, "No dependency vulnerabilities found.")
+		_, _ = fmt.Fprintln(w, "No dependency vulnerabilities found.")
 		if len(res.Ignored) > 0 {
-			fmt.Fprintf(w, "(%d suppressed by allowlist)\n", len(res.Ignored))
+			_, _ = fmt.Fprintf(w, "(%d suppressed by allowlist)\n", len(res.Ignored))
 		}
 		return nil
 	}
 
-	fmt.Fprintln(w, "Dependency vulnerabilities:")
+	_, _ = fmt.Fprintln(w, "Dependency vulnerabilities:")
 	for _, f := range res.Findings {
 		version := f.Package
 		if f.Version != "" {
 			version = f.Package + "@" + f.Version
 		}
-		fmt.Fprintf(w, "  %-9s %-9s %-22s %-28s %s",
+		_, _ = fmt.Fprintf(w, "  %-9s %-9s %-22s %-28s %s",
 			strings.ToUpper(string(f.Severity)),
 			f.Ecosystem,
 			f.ID,
@@ -45,12 +45,12 @@ func renderText(w io.Writer, res *Result) error {
 			truncate(f.Title, 60),
 		)
 		if f.Source == SourceDependabot {
-			fmt.Fprint(w, " [dependabot]")
+			_, _ = fmt.Fprint(w, " [dependabot]")
 		}
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 
-	fmt.Fprintf(w, "\n%s\n", summaryLine(res))
+	_, _ = fmt.Fprintf(w, "\n%s\n", summaryLine(res))
 	return nil
 }
 
