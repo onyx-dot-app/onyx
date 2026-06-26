@@ -6,7 +6,7 @@ import type { Route } from "next";
 import CommandMenu, {
   useCommandMenuContext,
 } from "@/refresh-components/commandmenu/CommandMenu";
-import { useProjects } from "@/lib/hooks/useProjects";
+import { useProjects } from "@/lib/projects/hooks";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import { timeAgo } from "@opal/time";

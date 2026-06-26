@@ -8,7 +8,7 @@ import {
 } from "@/lib/search/interfaces";
 import { SubQuestionDetail, CitationMap } from "../interfaces";
 import { ValidSources } from "@/lib/types";
-import { ProjectFile } from "../projects/projectsService";
+import { ProjectFile } from "@/lib/projects/types";
 import { BlinkingBar } from "./BlinkingBar";
 import Text from "@/refresh-components/texts/Text";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";

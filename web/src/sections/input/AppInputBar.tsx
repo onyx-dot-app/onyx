@@ -28,10 +28,7 @@ import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
-import {
-  ProjectFile,
-  UserFileStatus,
-} from "@/app/app/projects/projectsService";
+import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
 import {
