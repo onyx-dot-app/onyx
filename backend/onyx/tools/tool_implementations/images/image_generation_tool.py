@@ -17,6 +17,7 @@ from onyx.file_store.utils import load_chat_file_by_id
 from onyx.file_store.utils import save_files
 from onyx.image_gen.factory import get_image_generation_provider
 from onyx.image_gen.factory import validate_credentials
+from onyx.image_gen.generation import resolve_image_size
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.image_gen.interfaces import ReferenceImage
 from onyx.server.query_and_chat.placement import Placement
@@ -169,18 +170,7 @@ class ImageGenerationTool(Tool[None]):
         shape: ImageShape,
         reference_images: list[ReferenceImage] | None = None,
     ) -> tuple[ImageGenerationResponse, Any]:
-        if shape == ImageShape.LANDSCAPE:
-            if "gpt-image-" in self.model:
-                size = "1536x1024"
-            else:
-                size = "1792x1024"
-        elif shape == ImageShape.PORTRAIT:
-            if "gpt-image-" in self.model:
-                size = "1024x1536"
-            else:
-                size = "1024x1792"
-        else:
-            size = "1024x1024"
+        size = resolve_image_size(self.model, shape)
         logger.debug("Generating image with model: %s, size: %s", self.model, size)
         try:
             response = self.img_provider.generate_image(

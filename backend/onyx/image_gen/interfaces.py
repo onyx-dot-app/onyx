@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+from enum import Enum
 from typing import Any
 from typing import TYPE_CHECKING
 
@@ -10,6 +11,12 @@ from onyx.image_gen.exceptions import ImageProviderCredentialsError
 
 if TYPE_CHECKING:
     from litellm.types.utils import ImageResponse as ImageGenerationResponse
+
+
+class ImageShape(str, Enum):
+    SQUARE = "square"
+    PORTRAIT = "portrait"
+    LANDSCAPE = "landscape"
 
 
 class ImageGenerationProviderCredentials(BaseModel):
