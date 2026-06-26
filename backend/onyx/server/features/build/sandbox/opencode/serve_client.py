@@ -827,6 +827,12 @@ def _emit_terminator(
     state.terminator_yielded = True
 
     if error:
+        # An aborted message is a cancellation (the user interrupted), not a
+        # turn failure — emit the normal cancelled terminal so consumers don't
+        # treat an interrupt as an error.
+        if error.get("name") == "MessageAbortedError":
+            yield PromptResponse.model_validate({"stopReason": "cancelled"})
+            return
         msg = ""
         data = error.get("data")
         if isinstance(data, dict):

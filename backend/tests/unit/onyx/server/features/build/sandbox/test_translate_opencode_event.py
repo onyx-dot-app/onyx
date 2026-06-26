@@ -597,6 +597,32 @@ def test_message_updated_with_error_emits_error_event() -> None:
                         "role": "assistant",
                         "time": {"completed": 1779000000000},
                         "error": {
+                            "name": "UnknownError",
+                            "data": {"message": "Model not found."},
+                        },
+                    }
+                },
+            },
+            s,
+        )
+    )
+    assert len(out) == 1
+    assert isinstance(out[0], Error)
+    assert "Model not found" in out[0].message
+
+
+def test_message_aborted_emits_cancelled_terminal() -> None:
+    s = _state()
+    out = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.updated",
+                "properties": {
+                    "info": {
+                        "sessionID": SESS,
+                        "role": "assistant",
+                        "time": {"completed": 1779000000000},
+                        "error": {
                             "name": "MessageAbortedError",
                             "data": {"message": "Aborted"},
                         },
@@ -607,8 +633,8 @@ def test_message_updated_with_error_emits_error_event() -> None:
         )
     )
     assert len(out) == 1
-    assert isinstance(out[0], Error)
-    assert "Aborted" in out[0].message
+    assert isinstance(out[0], PromptResponse)
+    assert out[0].stop_reason == "cancelled"
 
 
 def test_duplicate_session_error_silenced_after_first() -> None:

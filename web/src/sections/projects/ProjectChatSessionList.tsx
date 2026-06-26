@@ -5,7 +5,7 @@ import { deleteChatSession } from "@/app/app/services/lib";
 import {
   moveChatSession as moveChatSessionService,
   removeChatSessionFromProject as removeChatSessionFromProjectService,
-} from "@/app/app/projects/projectsService";
+} from "@/lib/projects/svc";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { ChatSession } from "@/app/app/interfaces";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";

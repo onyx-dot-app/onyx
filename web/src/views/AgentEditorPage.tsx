@@ -45,10 +45,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { toast } from "@/hooks/useToast";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
-import {
-  ProjectFile,
-  UserFileStatus,
-} from "@/app/app/projects/projectsService";
+import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
@@ -338,7 +335,7 @@ function MCPServerCard({
     );
   } else if (hasTools) {
     cardContent = (
-      <GeneralLayouts.Section gap={0.5} padding={0.5}>
+      <GeneralLayouts.Section gap={0.5} padding={0.5} alignItems="stretch">
         {filteredTools.map((tool) => {
           const toolDisabled =
             !tool.isAvailable ||
@@ -1488,7 +1485,10 @@ export default function AgentEditorPage({
                           description="Tools and capabilities available for this agent to use."
                         />
                         <SimpleCollapsible.Content>
-                          <GeneralLayouts.Section gap={0.5}>
+                          <GeneralLayouts.Section
+                            gap={0.5}
+                            alignItems="stretch"
+                          >
                             <Disabled
                               disabled={!isImageGenerationAvailable}
                               tooltip={imageGenerationDisabledTooltip}

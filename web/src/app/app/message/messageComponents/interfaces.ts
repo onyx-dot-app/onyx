@@ -2,7 +2,7 @@ import { JSX } from "react";
 import { MinimalAgent } from "@/lib/agents/types";
 import { Packet, StopReason } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { ProjectFile } from "../../projects/projectsService";
+import { ProjectFile } from "@/lib/projects/types";
 import { LlmDescriptor } from "@/lib/hooks";
 import { IconType } from "react-icons";
 import type { IconFunctionComponent } from "@opal/types";

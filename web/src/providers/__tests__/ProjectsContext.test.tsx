@@ -4,7 +4,7 @@ import {
   ProjectsProvider,
   useProjectsContext,
 } from "@/providers/ProjectsContext";
-import type { ProjectFile } from "@/app/app/projects/projectsService";
+import type { ProjectFile } from "@/lib/projects/types";
 
 const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();
@@ -20,7 +20,7 @@ jest.mock("@/hooks/appNavigation", () => ({
   useAppRouter: () => jest.fn(),
 }));
 
-jest.mock("@/lib/hooks/useProjects", () => ({
+jest.mock("@/lib/projects/hooks", () => ({
   useProjects: () => ({
     projects: [],
     refreshProjects: jest.fn().mockResolvedValue([]),
@@ -46,8 +46,8 @@ jest.mock("@/hooks/useToast", () => ({
   },
 }));
 
-jest.mock("@/app/app/projects/projectsService", () => {
-  const actual = jest.requireActual("@/app/app/projects/projectsService");
+jest.mock("@/lib/projects/svc", () => {
+  const actual = jest.requireActual("@/lib/projects/svc");
   return {
     ...actual,
     fetchProjects: jest.fn().mockResolvedValue([]),
