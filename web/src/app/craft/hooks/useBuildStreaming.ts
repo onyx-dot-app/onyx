@@ -158,11 +158,8 @@ export function useBuildStreaming() {
         return !session || session.turnGeneration !== generation;
       };
 
-      // Reload backend state (artifacts, sandbox, ...) while the session is
-      // still "running" — loadSession preserves the live turn in that state —
-      // and only then flip to the terminal status. Reloading before the flip
-      // avoids a TOCTOU: the flip to "active" triggers the queued auto-send, so
-      // a reload after it would race the freshly-started next turn.
+      // Reload before flipping to "active": the flip triggers the queued
+      // auto-send, so reloading after would race the freshly-started next turn.
       const settleToActive = async (): Promise<void> => {
         await useBuildSessionStore
           .getState()
@@ -236,11 +233,8 @@ export function useBuildStreaming() {
         return;
       }
 
-      // Timed out: the interrupt didn't visibly settle within the budget. Do one
-      // final check — if the backend turn is actually gone, settle so the UI
-      // unblocks and any queued message can send (rather than leaving the
-      // session stuck on a stale "running"). If it's still running (or the check
-      // fails), just drop the "stopping" affordance and leave it running.
+      // On timeout, a final check: if the backend turn is actually gone, settle
+      // so the UI doesn't stay stuck on a stale "running"; otherwise leave it.
       if (
         isSuperseded() ||
         useBuildSessionStore.getState().sessions.get(sessionId)?.status !==
