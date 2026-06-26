@@ -225,7 +225,7 @@ pod-create→Ready. Image sizes are read from `docker image inspect`.
 ### Prereqs
 
 - Local kind cluster on the `kind-onyx-dev` context (see
-  `docs/dev/local-kubernetes.md`). The script refuses to run against
+  `docs/craft/dev/local-kubernetes.md`). The script refuses to run against
   any other kubectl context as a safety guard.
 - Tools on `$PATH`: `docker`, `kind`, `kubectl`, `python3`.
 
@@ -289,5 +289,4 @@ Storage is handled by the API server through FileStore.
 
 `node_modules` and `.next` are deliberately excluded from snapshots
 because (a) they're huge, (b) `restore_snapshot` rebuilds them via the
-hardlink-backed `bun install` against the pre-warmed Bun cache (see
-`docs/craft/features/bun-node-modules-dedup.md`).
+hardlink-backed `bun install` against the pre-warmed Bun cache.

@@ -54,7 +54,7 @@ Add a `docker` sandbox backend alongside `local` (dev only) and `kubernetes` (cl
 
 **Key decisions:** direct Docker control from the backend (no runner microservice), shared image family across docker/k8s, `local` retained for dev but not marketed as secure.
 
-Detail doc: `sandbox-backends.md` (to be written).
+Detail doc: [`docker/docker-compose-overview.md`](docker/docker-compose-overview.md).
 
 ### 3. Skills System
 
@@ -62,7 +62,7 @@ DB-backed skills with versioned bundles stored in the existing file store and ma
 
 **Key decisions:** built-ins are seeded into the DB so built-in and custom skills share one admin/selection path; no in-browser skill editing in V1; no second plugin ecosystem.
 
-Detail doc: `skills.md` (to be written).
+Detail doc: [`features/skills/README.md`](features/skills/README.md).
 
 ### 4. Egress Interception & Secrets
 
@@ -72,7 +72,7 @@ Models: `CraftSecret`, `CraftInterceptedService`, `CraftInterceptedServiceGrant`
 
 **Key decisions:** proxy-environment interception (not transparent network appliance) for V1; sandbox never receives raw tokens; ambiguous requests classified `UNKNOWN` and require approval by default; interception is the secrets boundary AND the external-write approval enforcement point.
 
-Detail doc: `interception.md` (to be written). Has tight coupling with **Approvals** — interception is where most write approvals are enforced.
+Detail doc: [`features/egress-proxy-and-approvals/README.md`](features/egress-proxy-and-approvals/README.md). Has tight coupling with **Approvals** — interception is where most write approvals are enforced.
 
 ### 5. OAuth for External Apps
 
@@ -90,7 +90,7 @@ First-class approval primitive for risky Craft actions: external writes, deliver
 
 **Key decisions:** approvals are in scope for V1; enforcement in backend/proxy paths only (prompts and OpenCode permissions are guidance, not boundary); session/trigger owner can approve their own writes by default with admin override; encrypted request snapshots + idempotency keys for safe replay; no Slack/email notification dependency in V1 (skill-based later).
 
-Detail doc: [`approvals.md`](approvals.md).
+Detail doc: [`features/egress-proxy-and-approvals/README.md`](features/egress-proxy-and-approvals/README.md).
 
 ### 7. Scheduled Triggers
 
@@ -98,7 +98,7 @@ Saved Craft prompts on a schedule. Three schedule forms: run-once, simple interv
 
 **Key decisions:** every scheduled run gets a fresh session (no reuse); scheduled-only for V1 (no event triggers); explicit timeout logic in the task body (Celery time limits don't work with thread pools); approval-waiting runs release sandbox capacity so humans aren't blocking CPU.
 
-Detail doc: [`triggers.md`](triggers.md). Depends on **Approvals** for the `WAITING_FOR_APPROVAL` state and on **Interception** for write gating.
+Detail doc: [`features/scheduled-tasks/overview.md`](features/scheduled-tasks/overview.md). Depends on **Approvals** for the `WAITING_FOR_APPROVAL` state and on **Interception** for write gating.
 
 ### 8. Shared admin UI
 

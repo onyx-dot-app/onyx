@@ -286,7 +286,7 @@ You've successfully set up a local Onyx instance!
 
 ### Running on a Local Kubernetes Cluster
 
-For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Local Kubernetes Development](/docs/dev/local-kubernetes.md) for the full workflow.
+For Onyx Craft (Build) development, sandboxes are real Kubernetes pods — run `make craft-up` to bring up a local kind cluster in one shot. See [Local Kubernetes Development](/docs/craft/dev/local-kubernetes.md) for the full workflow.
 
 ### Running in Docker
 

@@ -380,7 +380,7 @@ aws iam get-role --role-name AmazonEKSTFWorkloadAccessRole-<cluster-name> \
 
 ## 5. Lead infra TODO coverage
 
-The lead infra TODO list in `docs/craft/infra/todos.md` is accounted for as:
+The original lead infra TODO list is accounted for as:
 
 | TODO | Status in this PR | Operational note |
 |---|---|---|

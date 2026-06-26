@@ -6,7 +6,7 @@
 # optionally removes locally-built images. Never touches .vscode/.env.k8s —
 # it contains user-edited secrets.
 #
-# See docs/dev/local-kubernetes.md for the full workflow.
+# See docs/craft/dev/local-kubernetes.md for the full workflow.
 #
 # Usage:
 #   deployment/helm/dev/craft-down.sh

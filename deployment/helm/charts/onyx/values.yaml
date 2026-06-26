@@ -5,7 +5,7 @@
 # Companion overlays in this directory:
 #   - values-lite.yaml      Minimal deploy (no vector DB / Redis / model servers).
 #   - values-localdev.yaml  Laptop-sized overlay for kind/minikube; see
-#                           /docs/dev/local-kubernetes.md for the full workflow.
+#                           /docs/craft/dev/local-kubernetes.md for the full workflow.
 
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)

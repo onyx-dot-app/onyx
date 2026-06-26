@@ -4,7 +4,7 @@
 # laptop. Pairs with telepresence intercept so api_server / celery / web run
 # in your vscode debugger while the rest of the stack runs in-cluster.
 #
-# See docs/dev/local-kubernetes.md for the full workflow.
+# See docs/craft/dev/local-kubernetes.md for the full workflow.
 
 # Track nightly `edge` builds instead of `latest` (a released tag) — keeps
 # in-cluster images closer to main, reducing schema/code skew with local

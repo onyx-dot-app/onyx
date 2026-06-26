@@ -1,9 +1,8 @@
 """Unit tests for ``translate_opencode_event``.
 
 Pure-function tests against canned opencode ``/event`` payloads. Locks
-the wire contract documented in
-``docs/craft/opencode-serve-test-report.md`` so regressions surface here.
-No network, no subprocess, no real opencode serve.
+the observed wire contract so regressions surface here. No network, no
+subprocess, no real opencode serve.
 """
 
 from __future__ import annotations

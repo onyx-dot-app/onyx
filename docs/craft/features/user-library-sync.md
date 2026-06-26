@@ -112,7 +112,8 @@ Encoded in the document_id prefix: `CRAFT_FILE__{user_id}__{hash}`. `fetch_user_
 
 ## 7. Tests
 
-Tests follow the layered paradigm in `docs/craft/tests/coverage-and-overview.md`.
+Tests follow the layered Craft testing strategy: API-driven integration coverage
+where real sandbox behavior matters, with narrower tests for pure file-set logic.
 
 ### K8s Integration (`test_user_library_sync.py`)
 

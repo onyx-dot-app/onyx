@@ -5,7 +5,7 @@ The Celery `run_scheduled_task` task is a thin wrapper around
 logic importable + testable without a Celery worker (external-dependency
 unit tests instantiate it directly).
 
-Lifecycle (see ``docs/craft/features/scheduled-tasks.md``):
+Lifecycle (see ``docs/craft/features/scheduled-tasks/overview.md``):
 
 1. Fetch the run row + owning task. Bail out idempotently if the run is
    not ``QUEUED`` (Celery may redeliver, or a sweeper may have already
