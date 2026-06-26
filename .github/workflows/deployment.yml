@@ -242,11 +242,12 @@ jobs:
 
           release_id=$(get_release_id)
           if [ -z "$release_id" ]; then
-            gh release create "$TAG" \
-              --title "$TAG" \
-              --notes "See the assets to download this version and install." \
-              --draft
-            release_id=$(get_release_id)
+            release_id=$(gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+              -f tag_name="$TAG" \
+              -f name="$TAG" \
+              -f body="See the assets to download this version and install." \
+              -F draft=true \
+              --jq '.id')
           fi
 
           if [ -z "$release_id" ]; then
