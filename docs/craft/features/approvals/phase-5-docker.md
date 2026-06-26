@@ -602,7 +602,7 @@ poison CI.
   containers via `docker run`, assert `lookup` finds them, evicts on
   removal. Skip if `/var/run/docker.sock` is absent.
 
-**Integration** (Docker compose CI lane): the
+**Integration** (CI lane mirroring `pr-craft-k8s-tests.yml`): the
 `pr-craft-compose-integration.yml` lane stands up the docker-compose stack
 with the `--include-craft` overlay, provisions a sandbox, triggers a
 gated Slack request via a stand-in matcher, POSTs APPROVE via the

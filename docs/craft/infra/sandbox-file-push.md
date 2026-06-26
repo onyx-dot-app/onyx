@@ -77,17 +77,17 @@ class SandboxManager(ABC):
 
 Section applicability:
 
-| Section | K8s | Docker compose |
-|---|---|---|
-| §4 caller-facing API | ✓ | ✓ |
-| §5 wire format & daemon | ✓ | — |
-| §6 pod spec & supervisor | ✓ | — |
-| §7 atomic swap | ✓ | ✓ |
-| §8 cold-start & wakeup | ✓ | ✓ |
-| §9.1 NetworkPolicy | ✓ | — |
-| §9.2 push signing (Ed25519) | ✓ | — |
-| §9.3 safe extract | ✓ | hygiene applies, no untrusted bytes |
-| §10 multi-tenancy | ✓ | ✓ |
+| Section | K8s | Local | Docker-compose (future) |
+|---|---|---|---|
+| §4 caller-facing API | ✓ | ✓ | ✓ |
+| §5 wire format & daemon | ✓ | — | TBD |
+| §6 pod spec & supervisor | ✓ | — | TBD |
+| §7 atomic swap | ✓ | ✓ | ✓ |
+| §8 cold-start & wakeup | ✓ | ✓ | ✓ |
+| §9.1 NetworkPolicy | ✓ | — | TBD |
+| §9.2 push signing (Ed25519) | ✓ | — | TBD |
+| §9.3 safe extract | ✓ | hygiene applies, no untrusted bytes | TBD |
+| §10 multi-tenancy | ✓ | ✓ | ✓ |
 
 ## 4. Push API on `SandboxManager`
 
@@ -273,7 +273,7 @@ Two POSIX guarantees do the work: `rename` of a symlink is atomic; open file han
 
 ## 8. Cold-start & wakeup hydration
 
-When a sandbox is provisioned (k8s pod or Docker container created) `/workspace/managed/` is empty. Each feature exposes a `push_to_pod(sandbox_id, user, db_session)` helper that builds its current file set for the user and calls `get_sandbox_manager().push_to_sandbox(...)`. `SandboxManager.setup_session_workspace` calls each helper after the sandbox is ready:
+When a sandbox is provisioned (k8s pod created) `/workspace/managed/` is empty. Each feature exposes a `push_to_pod(sandbox_id, user, db_session)` helper that builds its current file set for the user and calls `get_sandbox_manager().push_to_sandbox(...)`. `SandboxManager.setup_session_workspace` calls each helper after the sandbox is ready:
 
 ```python
 skills.push_to_pod(sandbox_id, user, db_session)
@@ -395,18 +395,16 @@ backend/onyx/server/features/build/sandbox/
 │                       #   RetriableWriteError, FatalWriteError
 │                       #   (merged with existing SandboxInfo, LLMProviderConfig, etc.)
 ├── base.py             # push_to_sandbox + push_to_sandboxes (concrete) + 1 abstract method
-├── kubernetes/
-│   ├── kubernetes_sandbox_manager.py  # write+find via tarball+HTTP;
-│   │                                  #   _build_targz, _build_push_auth_header (private)
-│   └── docker/
-│       └── daemon/     # in-pod push daemon — self-contained, no onyx.* imports,
-│           ├── server.py   # FastAPI app on :8731  (invoked as `python -m sandbox_daemon.server`)
-│           └── extract.py  # safe_extract_then_atomic_swap + reject-list checks
-└── docker/
-    └── docker_sandbox_manager.py      # write via docker exec tar + atomic replace
+└── kubernetes/
+    ├── kubernetes_sandbox_manager.py  # write+find via tarball+HTTP;
+    │                                  #   _build_targz, _build_push_auth_header (private)
+    └── docker/
+        └── daemon/     # in-pod push daemon — self-contained, no onyx.* imports,
+            ├── server.py   # FastAPI app on :8731  (invoked as `python -m sandbox_daemon.server`)
+            └── extract.py  # safe_extract_then_atomic_swap + reject-list checks
 ```
 
-No `pusher.py` module — `push_to_sandbox` and `push_to_sandboxes` are concrete methods on `SandboxManager`'s base class (§4). Push types (`PushResult`, `PushFailure`, etc.) live in `models.py` alongside the existing sandbox models. Tarball building (`_build_targz`) and auth header construction (`_build_push_auth_header`) are private functions in `kubernetes_sandbox_manager.py`, not separate modules. The daemon is a self-contained package under `image/sandbox_daemon/` with no `onyx.*` imports; it is copied to `/workspace/sandbox_daemon/` in the sandbox image. The Docker compose implementation uses `docker exec` to stream a tarball into the sandbox container and atomically replace the target path; no daemon dependency.
+No `pusher.py` module — `push_to_sandbox` and `push_to_sandboxes` are concrete methods on `SandboxManager`'s base class (§4). Push types (`PushResult`, `PushFailure`, etc.) live in `models.py` alongside the existing sandbox models. Tarball building (`_build_targz`) and auth header construction (`_build_push_auth_header`) are private functions in `kubernetes_sandbox_manager.py`, not separate modules. The daemon is a self-contained package under `image/sandbox_daemon/` with no `onyx.*` imports; it is copied to `/workspace/sandbox_daemon/` in the sandbox image.
 
 ### Per-feature push helpers
 
@@ -442,10 +440,7 @@ Dockerfile changes:
 - Implement `write_files_to_sandbox` using `CoreV1Api` + tar.gz + HTTP to the in-pod daemon.
 - Modifications in `_create_sandbox_pod`: add labels (§6), add the `ONYX_SANDBOX_PUSH_PUBLIC_KEY` env var (plain base64 public-key value), expose container port 8731.
 
-**`docker_sandbox_manager.py`**:
-- Implement `write_files_to_sandbox` using `docker exec` tar streaming and atomic target replacement.
-
-**Both managers** — modifications in `setup_session_workspace`:
+**Modifications in `setup_session_workspace`:**
 - Call each feature's `push_to_pod(...)` instead of writing AGENTS.md / opencode.json / skills via the existing bash heredoc.
 - Same call at the wakeup hook (§8).
 
@@ -480,41 +475,44 @@ auth:
 ### Tests
 
 ```
-backend/tests/unit/sandbox/
-├── test_safe_extract.py        # path traversal, symlinks, special files, size caps
-├── test_tarball.py             # build → extract round-trips, deterministic sha
-└── test_push_orchestration.py  # SandboxManager.push_to_sandboxes default impl:
-                                #   fan-out, retry on RetriableWriteError,
-                                #   FatalWriteError short-circuits, result aggregation
-                                #   (uses a stub SandboxManager subclass — no real backend)
-backend/tests/external_dependency_unit/sandbox/
-└── test_kubernetes_push.py     # KubernetesSandboxManager.write_files_to_sandbox
-                                #   against a fake k8s client
-backend/tests/integration/tests/sandbox/
-└── test_push_e2e.py            # real sandbox via real SandboxManager; push, verify
+backend/tests/unit/onyx/server/features/build/sandbox/
+├── test_safe_extract.py             # path traversal, symlinks, special files, size caps
+├── test_tarball.py                  # build → extract round-trips, deterministic sha
+├── test_push_orchestration.py       # SandboxManager.push_to_sandboxes default impl
+└── test_k8s_push_error_mapping.py   # KubernetesSandboxManager error mapping
+backend/tests/integration/tests/craft/k8s/
+├── test_kubernetes_sandbox.py       # full-stack kind lane pod write_files_to_sandbox push + verify
+└── test_skill_push.py               # skill API push fan-out through real API/Celery-backed sandboxes
 ```
 
 ## 13. Tests
 
-### Unit (`backend/tests/unit/sandbox/`)
+### Unit (`backend/tests/unit/onyx/server/features/build/sandbox/`)
 - Safe-extract rejects path traversal, symlinks, hard links, special files, oversized entries, writes outside `/workspace/managed/`.
 - Atomic swap survives a write that fails midway (old symlink intact, new versioned dir orphaned).
 - Tarball builder produces deterministic byte output given the same input (for cache-friendliness in §14).
 
-### Orchestration unit (`backend/tests/unit/sandbox/test_push_orchestration.py`)
+### Orchestration unit (`backend/tests/unit/onyx/server/features/build/sandbox/test_push_orchestration.py`)
 - `push_to_sandboxes` fans out across multiple targets, aggregates result correctly.
 - `RetriableWriteError` triggers retry; `FatalWriteError` does not.
 - Timeout budget exhaustion records a `timeout` failure.
 - Users without active sandboxes are skipped silently.
 
-### External-dependency unit (`backend/tests/external_dependency_unit/sandbox/`)
-- `KubernetesSandboxManager.write_files_to_sandbox` produces a well-formed tar.gz with the right sha256 header.
-- `DockerSandboxManager.write_files_to_sandbox` writes to the expected path and performs the atomic swap.
+### Unit error mapping (`backend/tests/unit/onyx/server/features/build/sandbox/test_k8s_push_error_mapping.py`)
+- `KubernetesSandboxManager.write_files_to_sandbox` maps daemon 5xx/timeouts to retriable failures and 4xx/signature/size failures to fatal failures.
+- Oversized `FileSet` payloads fail before issuing HTTP requests.
 
-### Integration (`backend/tests/integration/tests/sandbox/`)
-- Bring up a real sandbox, `push_to_sandbox` a small file set, verify files at the expected path inside the sandbox.
+### Craft k8s integration (`backend/tests/integration/tests/craft/k8s/`)
+- Bring up the Helm-installed kind lane with real API, web_server, Celery workers,
+  sandbox proxy, backing services, and sandbox pods.
+- `test_kubernetes_sandbox.py` pushes a small file set and verifies files at the expected path inside the pod.
+- `test_skill_push.py` verifies API-triggered fan-out, grant filtering, disable/removal, bundle replacement, and deletion against real sandboxes.
 - Replace files at the same `mount_path`; confirm old files are gone (replace-as-unit semantics).
 - Two parallel pushes to the same sandbox at different `mount_path`s — both succeed.
+
+Partial-failure aggregation and retry behavior stay in
+`backend/tests/unit/onyx/server/features/build/sandbox/test_push_orchestration.py`,
+where failure injection belongs.
 
 Per-feature integration tests live with each feature; the push primitive itself is what's tested here.
 

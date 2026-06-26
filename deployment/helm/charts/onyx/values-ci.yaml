@@ -1,9 +1,9 @@
 # Values overlay for the Craft K8s CI lane (pr-craft-k8s-tests.yml).
 #
 # The workflow installs the chart into a kind cluster so the Craft tests run
-# against a real deployed API, webserver, Celery workers, sandbox proxy, and
-# sandbox pods. Keep this overlay representative while sizing nonessential
-# components down for the CI runner.
+# against a real deployed API, Celery workers, sandbox proxy, and sandbox pods.
+# Keep this overlay representative while sizing nonessential components down for
+# the CI runner.
 
 vectorDB:
   enabled: true
@@ -46,14 +46,15 @@ configMap:
   SANDBOX_API_SERVER_URL: "http://onyx-api-service.onyx.svc.cluster.local:8080"
   # Sandbox image the kind cluster pulls (built+pushed by the CI workflow).
   SANDBOX_CONTAINER_IMAGE: "localhost:5001/onyx-sandbox:ci"
-  # Tiny requests so the 4 vCPU runner can fit 4 concurrent sandbox pods.
+  # Tiny requests so the sandbox pod schedules alongside the full Onyx stack on
+  # the single kind node.
   SANDBOX_POD_CPU_REQUEST: "100m"
   SANDBOX_POD_MEMORY_REQUEST: "256Mi"
   SANDBOX_POD_CPU_LIMIT: "2000m"
   SANDBOX_POD_MEMORY_LIMIT: "6Gi"
-  # Sandboxes accumulate node_modules across sessions; an under-requested pod is
-  # the kubelet's first eviction target under node disk pressure. Production
-  # default is 5Gi/20Gi.
+  # Sandbox pods do real disk work over their lifetime (shared bun cache, build
+  # outputs, opencode data); without an ephemeral-storage request the kubelet
+  # evicts them first under node disk pressure. Prod default is 5Gi/20Gi.
   SANDBOX_POD_EPHEMERAL_STORAGE_REQUEST: "2Gi"
   SANDBOX_POD_EPHEMERAL_STORAGE_LIMIT: "8Gi"
   # Shrink the approval-gate park window so timeout-path tests don't wait the
@@ -108,7 +109,7 @@ auth:
       private_key: ""
 
 # Keep MinIO chart-backed in CI so the workflow exercises chart object-storage
-# wiring, but size it for the 4 CPU runner.
+# wiring, but size it down for the CI runner.
 minio:
   persistence:
     size: 1Gi
@@ -116,15 +117,9 @@ minio:
     requests:
       memory: 256Mi
 
+# Web image isn't built for this lane; the Craft tests drive the API directly.
 webserver:
-  replicaCount: 1
-  resources:
-    requests:
-      cpu: 250m
-      memory: 512Mi
-    limits:
-      cpu: 1000m
-      memory: 2Gi
+  replicaCount: 0
 
 api:
   replicaCount: 1

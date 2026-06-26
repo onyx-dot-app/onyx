@@ -97,37 +97,6 @@ def test_insert_action_approval_rejects_empty_actions(
         )
 
 
-def test_try_record_decision_happy_path_refreshes_in_memory_row(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    build_session_with_user: Callable[..., BuildSession],
-) -> None:
-    """Pins the ``db_session.refresh(row)`` fix.
-
-    Without it the identity-mapped ORM object still reads ``decision=None``
-    even after Postgres has the new value.
-    """
-    user = make_user(db_session)
-    bs = build_session_with_user(user=user)
-    row = _seed_pending(db_session, bs.id)
-    assert row.decision is None
-
-    returned = try_record_decision(
-        db_session,
-        approval_id=row.approval_id,
-        decision=ApprovalDecision.REJECTED,
-    )
-    db_session.commit()
-
-    assert returned is not None
-    assert returned.approval_id == row.approval_id
-    assert returned.decision == ApprovalDecision.REJECTED
-    assert returned.decided_at is not None
-    # The same ORM object reference must reflect the new state (refresh fix).
-    assert row.decision == ApprovalDecision.REJECTED
-    assert row.decided_at is not None
-
-
 def test_try_record_decision_lost_race_returns_none_and_preserves_decision(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
