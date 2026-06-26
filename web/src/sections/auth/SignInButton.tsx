@@ -32,7 +32,7 @@ import { AuthType } from "@/lib/constants";
 import { FcGoogle } from "react-icons/fc";
 import type { IconProps } from "@opal/types";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
-import Text from "@/refresh-components/texts/Text";
+import { toast } from "@/hooks/useToast";
 
 interface SignInButtonProps {
   authorizeUrl: string;
@@ -45,7 +45,6 @@ export default function SignInButton({
 }: SignInButtonProps) {
   const { getCaptchaToken, isCaptchaEnabled } = useCaptcha();
   const [isVerifying, setIsVerifying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   let button: string | undefined;
   let icon: React.FunctionComponent<IconProps> | undefined;
@@ -67,7 +66,6 @@ export default function SignInButton({
     e.preventDefault();
     if (isVerifying) return;
     setIsVerifying(true);
-    setError(null);
     // Stays true on the success branch so the button remains disabled until
     // the browser actually begins unloading for the OAuth redirect — prevents
     // a double-click window between `window.location.href = ...` and unload.
@@ -79,7 +77,7 @@ export default function SignInButton({
         console.error(
           "Captcha: grecaptcha.execute returned no token. The widget may not have loaded yet."
         );
-        setError("grecaptcha.execute returned no token");
+        toast.error("grecaptcha.execute returned no token");
         return;
       }
       const res = await fetch("/api/auth/captcha/oauth-verify", {
@@ -96,7 +94,7 @@ export default function SignInButton({
             body.detail ?? "(none)"
           }`
         );
-        setError(
+        toast.error(
           "Captcha verification failed. Please refresh your browser and try again."
         );
         return;
@@ -106,7 +104,7 @@ export default function SignInButton({
     } catch (exc) {
       // eslint-disable-next-line no-console
       console.error("Captcha verify request failed", exc);
-      setError(exc instanceof Error ? exc.message : String(exc));
+      toast.error(exc instanceof Error ? exc.message : String(exc));
     } finally {
       if (!navigating) setIsVerifying(false);
     }
@@ -121,26 +119,19 @@ export default function SignInButton({
     (authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD);
 
   return (
-    <>
-      <Button
-        prominence={
-          authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD
-            ? "secondary"
-            : "primary"
-        }
-        width="full"
-        icon={icon}
-        href={intercepted ? undefined : authorizeUrl}
-        onClick={intercepted ? handleClick : undefined}
-        disabled={isVerifying}
-      >
-        {button}
-      </Button>
-      {error && (
-        <Text as="p" mainUiMuted className="text-status-error-05 mt-2">
-          {error}
-        </Text>
-      )}
-    </>
+    <Button
+      prominence={
+        authType === AuthType.GOOGLE_OAUTH || authType === AuthType.CLOUD
+          ? "secondary"
+          : "primary"
+      }
+      width="full"
+      icon={icon}
+      href={intercepted ? undefined : authorizeUrl}
+      onClick={intercepted ? handleClick : undefined}
+      disabled={isVerifying}
+    >
+      {button}
+    </Button>
   );
 }
