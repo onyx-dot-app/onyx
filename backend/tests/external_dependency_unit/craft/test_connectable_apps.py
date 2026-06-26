@@ -1,9 +1,3 @@
-"""`get_connectable_apps_for_user`: the org apps a user still needs to connect.
-
-These drive the AGENTS.md "Connectable apps" listing — the agent learns which
-apps exist but aren't usable yet so it can offer to connect one.
-"""
-
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
@@ -57,7 +51,9 @@ def test_lists_only_unconnected_apps_and_renders_them(
     )
     db_session.commit()
 
-    slugs = {app.skill.slug for app in get_connectable_apps_for_user(db_session, user.id)}
+    slugs = {
+        app.skill.slug for app in get_connectable_apps_for_user(db_session, user.id)
+    }
 
     assert "needs-setup" in slugs
     assert "already-connected" not in slugs

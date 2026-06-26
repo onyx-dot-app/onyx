@@ -87,9 +87,7 @@ _PERMISSIONS_TEMPLATE: dict[str, Any] = {
     "question": "allow",
     "webfetch": "allow",
     # Connect-app tool: a no-op tool the agent calls to request connecting an
-    # external app it isn't set up for. "ask" makes opencode pause the turn and
-    # emit permission.asked, which the api-server intercepts to drive the OAuth
-    # card and answer allow/deny (see serve_client._handle_permission_ask).
+    # external app it isn't set up for.
     "connect_app": "ask",
 }
 
