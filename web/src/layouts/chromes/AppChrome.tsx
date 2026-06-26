@@ -2,10 +2,11 @@
 
 import {
   useCallback,
+  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  useEffect,
   type ReactNode,
 } from "react";
 import { RootLayout, RootLayoutRightPanelSlotContext } from "@opal/layouts";
@@ -489,7 +490,7 @@ export default function AppChrome({ children }: AppChromeProps) {
   const { appName } = useSettings();
   const { currentChatSession } = useChatSessions();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const appendChatNameToDocumentTitle =
       (appFocus.isChat() || appFocus.isSharedChat()) && currentChatSession;
     document.title = appendChatNameToDocumentTitle

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import AdminSidebar from "@/sections/sidebar/AdminSidebar";
 import { usePathname } from "next/navigation";
 import { useSettings } from "@/lib/settings/hooks";
@@ -25,9 +25,9 @@ export default function AdminChrome({ children }: AdminChromeProps) {
   const { appName, vectorDbEnabled, isLoading, application_status } =
     useSettings();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.title = `Admin — ${appName}`;
-  }, [appName]);
+  }, [pathname, appName]);
 
   // Certain admin panels have their own custom sidebar.
   // For those pages, we skip rendering the default `AdminSidebar` and let those individual pages render their own.
