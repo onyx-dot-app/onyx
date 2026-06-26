@@ -3,6 +3,7 @@
 from collections.abc import Iterable
 from pathlib import Path
 
+from onyx.db.models import ExternalApp
 from onyx.db.models import Skill
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
@@ -88,6 +89,31 @@ def build_skills_section_from_data(skills: Iterable[Skill]) -> str:
 
     entries.sort(key=lambda e: e[0])
     return "\n".join(f"- **{slug}**: {desc}" for slug, desc in entries)
+
+
+def build_connectable_apps_section(apps: Iterable[ExternalApp]) -> str:
+    """Render the "Connectable apps" block: org apps the user hasn't set up yet.
+
+    These aren't usable until connected, so the agent can't call them directly —
+    but knowing they exist lets it plan around them and offer to connect one via
+    the ``connect_app`` tool. Empty input renders nothing (no heading)."""
+    entries = sorted((app.skill.slug, _truncate(app.skill.description)) for app in apps)
+    if not entries:
+        return ""
+
+    lines = [
+        "",
+        "## Connectable apps",
+        "",
+        "These org apps are available but **not yet set up** for this user, so you "
+        "cannot call them yet. When the task needs one, call the "
+        "`connect_app` tool with its slug to prompt the user to connect it; "
+        "once they do, it works like any connected app. Never ask for or handle "
+        "credentials yourself.",
+        "",
+    ]
+    lines += [f"- **{slug}**: {desc}" for slug, desc in entries]
+    return "\n".join(lines)
 
 
 def generate_agent_instructions(
