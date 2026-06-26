@@ -148,9 +148,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   useEffect(() => {
     if (!appFocus.isChat() && !appFocus.isSharedChat()) return;
-    document.title = currentChatSession?.name
-      ? `${currentChatSession.name} — ${appName}`
-      : appName;
+    if (!currentChatSession) return;
+
+    document.title = `${currentChatSession.name} — ${appName}`;
   }, [currentChatSession?.name, appName, appFocus]);
 
   const { ccPairs } = useCCPairs(vectorDbEnabled);
