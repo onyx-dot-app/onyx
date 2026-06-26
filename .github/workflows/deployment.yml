@@ -149,6 +149,43 @@ jobs:
             echo "short-sha=$SHORT_SHA"
           } >> "$GITHUB_OUTPUT"
 
+  # Block the release when dependencies carry unignored critical vulnerabilities.
+  # Runs the same `ods audit` gate used on PRs and nightly. Always runs (no skip
+  # condition) so the build jobs that depend on it aren't skipped on test runs;
+  # the audit itself degrades gracefully when the S3 allowlist or Dependabot API
+  # is unavailable.
+  audit-gate:
+    needs: [determine-builds]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read # checkout + read lockfiles
+      id-token: write # OIDC for fetching the S3 allowlist
+      security-events: read # read Dependabot alerts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: "1.26.4"
+          cache-dependency-path: "**/go.sum"
+
+      - name: Configure AWS credentials
+        continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # ratchet:aws-actions/configure-aws-credentials@v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Run dependency audit
+        working-directory: tools/ods
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: go run . audit --fail-on=critical
+
   check-version-tag:
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -196,7 +233,9 @@ jobs:
   # This ensures all desktop matrix jobs upload to the same release instead of
   # racing to create duplicate releases.
   create-release:
-    needs: determine-builds
+    needs:
+      - determine-builds
+      - audit-gate
     if: needs.determine-builds.outputs.build-desktop == 'true'
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -434,7 +473,9 @@ jobs:
           args: ${{ matrix.args }}
 
   build-web-amd64:
-    needs: determine-builds
+    needs:
+      - determine-builds
+      - audit-gate
     if: needs.determine-builds.outputs.build-web == 'true'
     runs-on:
       - runs-on
@@ -505,7 +546,9 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-web-arm64:
-    needs: determine-builds
+    needs:
+      - determine-builds
+      - audit-gate
     if: needs.determine-builds.outputs.build-web == 'true'
     runs-on:
       - runs-on
@@ -644,7 +687,9 @@ jobs:
             $IMAGES
 
   build-web-cloud-amd64:
-    needs: determine-builds
+    needs:
+      - determine-builds
+      - audit-gate
     if: needs.determine-builds.outputs.build-web-cloud == 'true'
     runs-on:
       - runs-on
@@ -726,7 +771,9 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-web-cloud-arm64:
-    needs: determine-builds
+    needs:
+      - determine-builds
+      - audit-gate
     if: needs.determine-builds.outputs.build-web-cloud == 'true'
     runs-on:
       - runs-on
@@ -870,7 +917,9 @@ jobs:
             $IMAGES
 
   build-backend-amd64:
-    needs: determine-builds
+    needs:
+      - determine-builds
+      - audit-gate
     if: needs.determine-builds.outputs.build-backend == 'true'
     runs-on:
       - runs-on
@@ -940,7 +989,9 @@ jobs:
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
   build-backend-arm64:
-    needs: determine-builds
+    needs:
+      - determine-builds
+      - audit-gate
     if: needs.determine-builds.outputs.build-backend == 'true'
     runs-on:
       - runs-on
@@ -1078,7 +1129,9 @@ jobs:
             $IMAGES
 
   build-model-server-amd64:
-    needs: determine-builds
+    needs:
+      - determine-builds
+      - audit-gate
     if: needs.determine-builds.outputs.build-model-server == 'true'
     runs-on:
       - runs-on
@@ -1155,7 +1208,9 @@ jobs:
           sbom: false
 
   build-model-server-arm64:
-    needs: determine-builds
+    needs:
+      - determine-builds
+      - audit-gate
     if: needs.determine-builds.outputs.build-model-server == 'true'
     runs-on:
       - runs-on
@@ -1302,6 +1357,7 @@ jobs:
   prepare-sandbox:
     needs:
       - determine-builds
+      - audit-gate
     if: needs.determine-builds.outputs.is-test-run == 'true' || (needs.determine-builds.outputs.is-stable == 'true' || needs.determine-builds.outputs.is-beta-standalone == 'true' || needs.determine-builds.outputs.is-cloud-tag == 'true' || startsWith(github.ref_name, 'nightly-latest') || github.ref_name == 'edge')
     runs-on: ubuntu-slim
     timeout-minutes: 10

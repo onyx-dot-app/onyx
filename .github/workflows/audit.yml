@@ -1,0 +1,78 @@
+name: Dependency Audit
+
+concurrency:
+  group: audit-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "web/bun.lock"
+      - "web/package.json"
+      - "bun.lock"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/dependabot.yml"
+      - ".github/workflows/audit.yml"
+      - "tools/ods/**"
+  schedule:
+    # Nightly at 09:00 UTC.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  GO_VERSION: "1.26.4"
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read # checkout + read lockfiles
+      id-token: write # OIDC for fetching the S3 allowlist
+      security-events: write # SARIF upload (nightly) + read Dependabot alerts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: "**/go.sum"
+
+      - name: Configure AWS credentials
+        id: aws
+        continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # ratchet:aws-actions/configure-aws-credentials@v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      # PR runs gate on criticals; nightly/dispatch runs upload a SARIF report.
+      - name: Run audit (gate)
+        if: github.event_name == 'pull_request'
+        working-directory: tools/ods
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: go run . audit --fail-on=critical
+
+      - name: Run audit (SARIF report)
+        if: github.event_name != 'pull_request'
+        working-directory: tools/ods
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Don't fail the report job on findings; the SARIF upload surfaces them.
+        run: go run . audit --format=sarif > "$GITHUB_WORKSPACE/audit.sarif" || true
+
+      - name: Upload SARIF file
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@ba454b8ab46733eb6145342877cd148270bb77ab # ratchet:github/codeql-action/upload-sarif@codeql-bundle-v2.23.5
+        with:
+          sarif_file: audit.sarif
+          category: ods-audit
