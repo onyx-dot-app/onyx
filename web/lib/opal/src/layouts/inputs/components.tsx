@@ -102,10 +102,11 @@ function Vertical({
       width="full"
       padding="fit"
       rightChildren={
-        <Text font="secondary-body" color="text-03">
+        <Text font="secondary-body" color="text-03" as="p">
           {topRight}
         </Text>
       }
+      center
     />
   ) : (
     <Content
