@@ -19,6 +19,9 @@ from typing import Any
 _BASE = "https://www.googleapis.com/drive/v3/"
 # Content uploads use a separate host path from the metadata/JSON API.
 _UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3/"
+# The Google Docs API lives on a different host than Drive; surgical edits to an
+# existing Doc (get structure / batchUpdate) go here, not through the Drive base.
+_DOCS_BASE = "https://docs.googleapis.com/v1/"
 _PAGE_SIZE = 100
 _DEFAULT_LIMIT = 100
 _HTTP_TIMEOUT_SECONDS = 180
@@ -104,6 +107,50 @@ def _req_bytes(path: str, params: dict[str, Any], max_bytes: int) -> tuple[bytes
     if len(data) > max_bytes:
         return data[:max_bytes], True
     return data, False
+
+
+def _req_docs(
+    path: str,
+    params: dict[str, Any] | None = None,
+    method: str = "GET",
+    body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Call a Google Docs API endpoint (docs.googleapis.com, a different host
+    than Drive); return parsed JSON ({} on empty/204)."""
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    headers = {"Content-Type": "application/json; charset=utf-8"} if data else {}
+    req = urllib.request.Request(  # noqa: S310 — fixed https base url
+        _url(_DOCS_BASE, path, params), data=data, method=method, headers=headers
+    )
+    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
+        raw = resp.read().decode("utf-8")
+    return json.loads(raw) if raw.strip() else {}
+
+
+def _doc_end_index(doc: dict[str, Any]) -> int:
+    """The end index of a document's body — the last structural element's
+    `endIndex`. Inserting text must target `endIndex - 1` to stay in range (the
+    final newline is not a valid insertion point past it)."""
+    content = doc.get("body", {}).get("content", []) or []
+    end = 1
+    for element in content:
+        if isinstance(element, dict) and "endIndex" in element:
+            end = element["endIndex"]
+    return end
+
+
+def _get_doc(document_id: str, fields: str | None = None) -> dict[str, Any]:
+    params = {"fields": fields} if fields else None
+    return _req_docs(f"documents/{_seg(document_id)}", params=params)
+
+
+def _batch_update(document_id: str, requests: list[Any]) -> dict[str, Any]:
+    """POST a Docs `batchUpdate` with the given list of request objects."""
+    return _req_docs(
+        f"documents/{_seg(document_id)}:batchUpdate",
+        method="POST",
+        body={"requests": requests},
+    )
 
 
 def _upload(
@@ -361,6 +408,50 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("method", choices=("GET", "POST", "PATCH", "PUT", "DELETE"))
     sp.add_argument("path", help="appended to drive/v3/")
     sp.add_argument("json_body", nargs="?", help="JSON object for the request body")
+
+    # --- Google Docs API (docs.googleapis.com) ---
+    sp = sub.add_parser(
+        "get-doc", help="get a Google Doc's structure (body content + indices)"
+    )
+    sp.add_argument("document_id")
+    sp.add_argument(
+        "--fields",
+        help="Docs fields selector, e.g. 'documentId,body,title' "
+        "(default: whole document)",
+    )
+
+    sp = sub.add_parser(
+        "batch-update",
+        help="apply raw Docs batchUpdate requests to a Doc (write)",
+    )
+    sp.add_argument("document_id")
+    sp.add_argument(
+        "requests_json",
+        nargs="?",
+        help="JSON array of Docs request objects (e.g. insertText, "
+        "updateParagraphStyle, createParagraphBullets, deleteContentRange)",
+    )
+    sp.add_argument(
+        "--file",
+        dest="requests_file",
+        help="path to a file holding the JSON requests array (instead of inline)",
+    )
+
+    sp = sub.add_parser("insert-text", help="insert text at an index in a Doc (write)")
+    sp.add_argument("document_id")
+    sp.add_argument(
+        "--index", type=int, required=True, help="1-based character index to insert at"
+    )
+    sp.add_argument("--text", required=True, help="text to insert")
+
+    sp = sub.add_parser(
+        "append-text", help="append text to the end of a Doc's body (write)"
+    )
+    sp.add_argument("document_id")
+    sp.add_argument("--text", required=True, help="text to append")
+
+    sp = sub.add_parser("create-doc", help="create a new empty Google Doc (write)")
+    sp.add_argument("--title", required=True, help="title of the new document")
     return p
 
 
@@ -434,6 +525,45 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         )
         return {"ok": True, "deleted": True}
 
+    # --- Google Docs API ---
+    if a.cmd == "get-doc":
+        doc = _get_doc(a.document_id, fields=getattr(a, "fields", None))
+        return {"ok": True, "document": doc}
+
+    if a.cmd == "batch-update":
+        raw_requests = a.requests_json
+        if getattr(a, "requests_file", None):
+            with open(a.requests_file, encoding="utf-8") as fh:
+                raw_requests = fh.read()
+        if not raw_requests:
+            return {"ok": False, "error": "no_requests"}
+        try:
+            requests = json.loads(raw_requests)
+        except json.JSONDecodeError as e:
+            return {"ok": False, "error": f"invalid requests json: {e}"}
+        if not isinstance(requests, list):
+            return {"ok": False, "error": "requests_not_array"}
+        resp = _batch_update(a.document_id, requests)
+        return {"ok": True, "data": resp}
+
+    if a.cmd == "insert-text":
+        requests = [{"insertText": {"location": {"index": a.index}, "text": a.text}}]
+        resp = _batch_update(a.document_id, requests)
+        return {"ok": True, "data": resp}
+
+    if a.cmd == "append-text":
+        doc = _get_doc(a.document_id, fields="body(content(endIndex))")
+        end = _doc_end_index(doc)
+        # Insert just before the final newline of the body to stay in range.
+        index = max(1, end - 1)
+        requests = [{"insertText": {"location": {"index": index}, "text": a.text}}]
+        resp = _batch_update(a.document_id, requests)
+        return {"ok": True, "index": index, "data": resp}
+
+    if a.cmd == "create-doc":
+        doc = _req_docs("documents", method="POST", body={"title": a.title})
+        return {"ok": True, "document": doc}
+
     # `call` raw escape hatch
     parsed_body = None
     if a.json_body:
@@ -454,6 +584,9 @@ def main(argv: list[str]) -> int:
     except FileNotFoundError as e:
         print(f"file not found: {e.filename}", file=sys.stderr)
         return 2
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     except json.JSONDecodeError as e:
         print(f"Google Drive returned a non-JSON response: {e}", file=sys.stderr)
         return 1
