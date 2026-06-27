@@ -2069,9 +2069,7 @@ echo WRITE_OK"""
             stderr=True,
             tty=True,
             user=SANDBOX_EXEC_USER,
-            # docker exec bypasses the entrypoint's HOME/USER setup, so set it
-            # explicitly (as the other sandbox-user execs do) — otherwise ~ and
-            # ~/.bashrc resolve to the wrong/unset HOME for the interactive shell.
+            # docker exec bypasses the entrypoint's HOME/USER setup, so set it.
             environment=SANDBOX_EXEC_ENV,
         )["Id"]
         sock_obj = api.exec_start(exec_id, socket=True, tty=True, demux=False)

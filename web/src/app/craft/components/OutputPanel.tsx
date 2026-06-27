@@ -129,9 +129,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const isFilePreviewActive = activePanelTabId !== null;
   const activeTab = isFilePreviewActive ? null : activeOutputTab;
 
-  // Keep the terminal mounted across tab switches, but scope it to sessions
-  // whose terminal was actually opened — otherwise browsing to another session
-  // would mount a hidden TerminalTab and open a PTY the user never asked for.
+  // Per session, not panel-wide: else browsing to another session opens a PTY.
   const openedTerminalSessionsRef = useRef<Set<string>>(new Set());
   if (activeOutputTab === "terminal" && session?.id) {
     openedTerminalSessionsRef.current.add(session.id);
