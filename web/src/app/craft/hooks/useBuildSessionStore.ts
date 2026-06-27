@@ -1452,10 +1452,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const hasOptimisticMessages =
         (currentSession?.messages?.length ?? 0) > 0 && currentSessionIsLive;
       const isStreaming = hasOptimisticMessages;
-      // preferPersisted changes only the message source (DB vs local optimistic).
-      // Its sole caller, settle(), runs on a live "running" session, so the
-      // isStreaming status branch below still keeps status live — letting settle
-      // stay the single owner of the flip to "active" (avoiding the auto-send race).
+      // settle() (the only preferPersisted caller) runs on a live "running"
+      // session, so the isStreaming status branch below already keeps status live,
+      // leaving settle the sole owner of the flip to "active" (else auto-send races).
       const useDbMessages = !isStreaming || options?.preferPersisted === true;
 
       // Construct webapp URL

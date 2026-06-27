@@ -377,8 +377,6 @@ describe("loadSession preferPersisted (interrupt reconciliation)", () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
   });
 
-  // Simulates a lost-to-interrupt prompt_response: local state has only the user
-  // message, while the DB transcript holds the partial agent_thought.
   function seedInterruptedSession(): void {
     useBuildSessionStore.getState().createSession(SESSION_ID, {
       status: "running",
@@ -437,8 +435,6 @@ describe("loadSession preferPersisted (interrupt reconciliation)", () => {
         isStreaming: false,
       },
     ]);
-    // The DB-sourced path also clears the stale optimistic turn metadata (pre-fix
-    // the isStreaming branch kept activeTurnId="turn-interrupted"/localOwner=true).
     expect(session?.streamItems).toEqual([]);
     expect(session?.activeTurnId).toBeNull();
     expect(session?.activeTurnLocalOwner).toBe(false);
