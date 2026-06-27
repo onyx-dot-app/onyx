@@ -4,10 +4,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// deployNoVerify, when set, skips git pre-push hooks (passes --no-verify to
-// git push) for deploy subcommands that push to git. It is bound to the
-// persistent --no-verify flag on the parent `deploy` command and inherited by
-// all subcommands; subcommands that don't push to git ignore it.
 var deployNoVerify bool
 
 // NewDeployCommand creates the parent `ods deploy` command. Subcommands hang
