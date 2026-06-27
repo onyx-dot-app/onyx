@@ -129,11 +129,15 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const isFilePreviewActive = activePanelTabId !== null;
   const activeTab = isFilePreviewActive ? null : activeOutputTab;
 
-  // Keep the terminal mounted once opened so its shell survives tab switches.
-  const terminalEverOpenedRef = useRef(false);
-  if (activeOutputTab === "terminal") {
-    terminalEverOpenedRef.current = true;
+  // Keep the terminal mounted across tab switches, but scope it to sessions
+  // whose terminal was actually opened — otherwise browsing to another session
+  // would mount a hidden TerminalTab and open a PTY the user never asked for.
+  const openedTerminalSessionsRef = useRef<Set<string>>(new Set());
+  if (activeOutputTab === "terminal" && session?.id) {
+    openedTerminalSessionsRef.current.add(session.id);
   }
+  const showTerminal =
+    !!session?.id && openedTerminalSessionsRef.current.has(session.id);
 
   const handlePinnedTabClick = (tab: TabValue) => {
     if (session?.id) {
@@ -656,10 +660,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
             )}
           </>
         )}
-        {/* Terminal is mounted once opened and kept alive (hidden, not
-            unmounted) across tab/file-preview switches so its shell session
-            and scrollback persist. */}
-        {terminalEverOpenedRef.current && (
+        {showTerminal && (
           <div
             className={cn(
               "h-full",
