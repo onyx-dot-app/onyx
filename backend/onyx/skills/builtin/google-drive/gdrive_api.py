@@ -536,13 +536,13 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
             with open(a.requests_file, encoding="utf-8") as fh:
                 raw_requests = fh.read()
         if not raw_requests:
-            raise ValueError("no requests provided (pass JSON or --file)")
+            return {"ok": False, "error": "no_requests"}
         try:
             requests = json.loads(raw_requests)
         except json.JSONDecodeError as e:
-            raise ValueError(f"invalid requests json: {e}")
+            return {"ok": False, "error": f"invalid requests json: {e}"}
         if not isinstance(requests, list):
-            raise ValueError("requests must be a JSON array")
+            return {"ok": False, "error": "requests_not_array"}
         resp = _batch_update(a.document_id, requests)
         return {"ok": True, "data": resp}
 
