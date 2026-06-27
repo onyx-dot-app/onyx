@@ -144,9 +144,7 @@ def _get_doc(document_id: str, fields: str | None = None) -> dict[str, Any]:
     return _req_docs(f"documents/{_seg(document_id)}", params=params)
 
 
-def _batch_update(
-    document_id: str, requests: list[Any]
-) -> dict[str, Any]:
+def _batch_update(document_id: str, requests: list[Any]) -> dict[str, Any]:
     """POST a Docs `batchUpdate` with the given list of request objects."""
     return _req_docs(
         f"documents/{_seg(document_id)}:batchUpdate",
@@ -439,9 +437,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="path to a file holding the JSON requests array (instead of inline)",
     )
 
-    sp = sub.add_parser(
-        "insert-text", help="insert text at an index in a Doc (write)"
-    )
+    sp = sub.add_parser("insert-text", help="insert text at an index in a Doc (write)")
     sp.add_argument("document_id")
     sp.add_argument(
         "--index", type=int, required=True, help="1-based character index to insert at"
@@ -540,20 +536,18 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
             with open(a.requests_file, encoding="utf-8") as fh:
                 raw_requests = fh.read()
         if not raw_requests:
-            return {"ok": False, "error": "no requests provided (pass JSON or --file)"}
+            raise ValueError("no requests provided (pass JSON or --file)")
         try:
             requests = json.loads(raw_requests)
         except json.JSONDecodeError as e:
-            return {"ok": False, "error": f"invalid requests json: {e}"}
+            raise ValueError(f"invalid requests json: {e}")
         if not isinstance(requests, list):
-            return {"ok": False, "error": "requests_not_array"}
+            raise ValueError("requests must be a JSON array")
         resp = _batch_update(a.document_id, requests)
         return {"ok": True, "data": resp}
 
     if a.cmd == "insert-text":
-        requests = [
-            {"insertText": {"location": {"index": a.index}, "text": a.text}}
-        ]
+        requests = [{"insertText": {"location": {"index": a.index}, "text": a.text}}]
         resp = _batch_update(a.document_id, requests)
         return {"ok": True, "data": resp}
 
@@ -562,9 +556,7 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
         end = _doc_end_index(doc)
         # Insert just before the final newline of the body to stay in range.
         index = max(1, end - 1)
-        requests = [
-            {"insertText": {"location": {"index": index}, "text": a.text}}
-        ]
+        requests = [{"insertText": {"location": {"index": index}, "text": a.text}}]
         resp = _batch_update(a.document_id, requests)
         return {"ok": True, "index": index, "data": resp}
 
@@ -592,6 +584,9 @@ def main(argv: list[str]) -> int:
     except FileNotFoundError as e:
         print(f"file not found: {e.filename}", file=sys.stderr)
         return 2
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     except json.JSONDecodeError as e:
         print(f"Google Drive returned a non-JSON response: {e}", file=sys.stderr)
         return 1
