@@ -1452,8 +1452,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const hasOptimisticMessages =
         (currentSession?.messages?.length ?? 0) > 0 && currentSessionIsLive;
       const isStreaming = hasOptimisticMessages;
-      // preferPersisted keeps status live (below) so the flip to "active" stays
-      // the caller's and doesn't race the queued auto-send.
+      // preferPersisted changes only the message source (DB vs local optimistic).
+      // Its sole caller, settle(), runs on a live "running" session, so the
+      // isStreaming status branch below still keeps status live — letting settle
+      // stay the single owner of the flip to "active" (avoiding the auto-send race).
       const useDbMessages = !isStreaming || options?.preferPersisted === true;
 
       // Construct webapp URL
@@ -1472,18 +1474,15 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         activeTurn?.turn_index ??
         (useDbMessages ? null : currentSession!.activeTurnIndex);
 
-      const status =
-        options?.preferPersisted === true && currentSession
-          ? currentSession.status
-          : isStreaming
-            ? currentSession!.status
-            : activeTurn
-              ? "running"
-              : needsRestore
-                ? "creating"
-                : sessionData.status === "active"
-                  ? "active"
-                  : "idle";
+      const status = isStreaming
+        ? currentSession!.status
+        : activeTurn
+          ? "running"
+          : needsRestore
+            ? "creating"
+            : sessionData.status === "active"
+              ? "active"
+              : "idle";
       const persistedMessages = useDbMessages
         ? consolidateMessagesIntoTurns(messages)
         : currentSession!.messages;
