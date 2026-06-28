@@ -390,6 +390,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     if labels_to_skip:
         if any(label in issue.fields.labels for label in labels_to_skip):
@@ -486,7 +487,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue.key}: {issue.fields.summary}",
         title=f"{issue.key} {issue.fields.summary}",
         doc_updated_at=time_str_to_utc(issue.fields.updated),
@@ -526,6 +527,9 @@ class JiraConnector(
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
         scoped_token: bool = False,
+        # Source tag applied to emitted documents. Subclasses (e.g. JSM) override
+        # this to index their tickets as a distinct source type.
+        document_source: DocumentSource = DocumentSource.JIRA,
     ) -> None:
         self.batch_size = batch_size
 
@@ -539,6 +543,7 @@ class JiraConnector(
         self.labels_to_skip = set(labels_to_skip)
         self.jql_query = jql_query
         self.scoped_token = scoped_token
+        self.document_source = document_source
         self._jira_client: JIRA | None = None
         # Cache project permissions to avoid fetching them repeatedly across runs
         self._project_permissions_cache: dict[str, Any] = {}
@@ -836,6 +841,7 @@ class JiraConnector(
                     comment_email_blacklist=self.comment_email_blacklist,
                     labels_to_skip=self.labels_to_skip,
                     parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+                    source=self.document_source,
                 ):
                     # Add permission information to the document if requested
                     if include_permissions:
@@ -1096,6 +1102,103 @@ class JiraConnector(
         )
 
 
+class JiraServiceManagementConnector(JiraConnector):
+    """Connector for Jira Service Management (JSM) projects.
+
+    JSM runs on the same Jira Cloud/Server REST API and shares the issue model
+    used for regular Jira projects.  This connector reuses all of
+    JiraConnector's fetching, checkpointing, permission-sync, and hierarchy
+    logic.
+
+    Differences from the base JiraConnector:
+    - Documents are tagged with DocumentSource.JIRA_SERVICE_MANAGEMENT.
+    - When no explicit project key or JQL is given the base JQL is scoped to
+      ``project type = "service_management"`` so only JSM projects are indexed.
+    - ``validate_connector_settings`` additionally confirms that a provided
+      project key is a genuine service-desk project.
+    """
+
+    # Atlassian project type string used to identify JSM projects
+    _JSM_PROJECT_TYPE = "service_management"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        # Force the JSM source regardless of what the caller passes so this
+        # connector can never accidentally emit plain Jira documents.
+        kwargs["document_source"] = DocumentSource.JIRA_SERVICE_MANAGEMENT
+        super().__init__(*args, **kwargs)
+
+    # ------------------------------------------------------------------
+    # JQL helpers
+    # ------------------------------------------------------------------
+
+    def _jsm_base_jql(self) -> str:
+        """Return a base JQL clause that constrains results to JSM projects.
+
+        If a project key was supplied we scope directly to that project.
+        Otherwise we use the ``project type`` operator so every service-desk
+        project is covered without needing an exhaustive list.
+        """
+        if self.jira_project:
+            return f"project = {self.quoted_jira_project}"
+        return f'project type = "{self._JSM_PROJECT_TYPE}"'
+
+    def _get_jql_query(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> str:
+        """Build JQL that is always scoped to JSM projects.
+
+        A user-supplied ``jql_query`` is respected (ANDed with the time
+        window) but the JSM project-type filter is NOT added on top of it —
+        users who provide custom JQL know what they are filtering on.
+        """
+        start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        end_date_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+        time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
+
+        if self.jql_query:
+            return f"({self.jql_query}) AND {time_jql}"
+
+        return f"({self._jsm_base_jql()}) AND {time_jql}"
+
+    # ------------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------------
+
+    def validate_connector_settings(self) -> None:
+        """Validate settings and, when a project key is given, confirm it is a
+        JSM (service-desk) project.
+
+        Raises:
+            ConnectorValidationError: If the project exists but is not a JSM
+                project, or if any other validation fails.
+        """
+        # Run the base validation first (credential check, JQL syntax, etc.)
+        super().validate_connector_settings()
+
+        # If a specific project key was provided, verify it is a JSM project.
+        if self.jira_project and self._jira_client is not None:
+            try:
+                project = self._jira_client.project(self.jira_project)
+                project_type = getattr(project, "projectTypeKey", None)
+                if project_type != self._JSM_PROJECT_TYPE:
+                    raise ConnectorValidationError(
+                        f"Project '{self.jira_project}' has project type "
+                        f"'{project_type}', not '{self._JSM_PROJECT_TYPE}'. "
+                        "Jira Service Management connector only supports "
+                        "service_management projects. Please choose a JSM "
+                        "project or leave the project key blank to index all "
+                        "JSM projects."
+                    )
+            except ConnectorValidationError:
+                raise
+            except Exception as e:
+                self._handle_jira_connector_settings_error(e)
+
+
 def make_checkpoint_callback(
     checkpoint: JiraConnectorCheckpoint,
 ) -> Callable[[Iterator[list[str]], str | None], None]:
@@ -1120,7 +1223,12 @@ if __name__ == "__main__":
     # For connector permission testing, set EE to true.
     global_version.set_ee()
 
-    connector = JiraConnector(
+    # Set JSM_MODE=1 to run the Jira Service Management connector instead of
+    # the standard Jira connector.
+    use_jsm = os.environ.get("JSM_MODE", "0") == "1"
+    ConnectorClass = JiraServiceManagementConnector if use_jsm else JiraConnector
+
+    connector = ConnectorClass(
         jira_base_url=os.environ["JIRA_BASE_URL"],
         project_key=os.environ.get("JIRA_PROJECT_KEY"),
         comment_email_blacklist=[],
