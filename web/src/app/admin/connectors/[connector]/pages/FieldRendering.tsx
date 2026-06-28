@@ -7,6 +7,7 @@ import { TextFormField, MultiSelectField } from "@/components/Field";
 import ListInput from "./ConnectorInput/ListInput";
 import StringPairListInput from "./ConnectorInput/StringPairListInput";
 import FileInput from "./ConnectorInput/FileInput";
+import SeafileLibraryPicker from "@/components/admin/connectors/seafile/SeafileLibraryPicker";
 import { ConfigurableSources } from "@/lib/types";
 import { Credential } from "@/lib/connectors/credentials";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
@@ -178,6 +179,12 @@ export const RenderField: FC<RenderFieldProps> = ({
           label={label}
           optional={field.optional}
           description={description}
+        />
+      ) : connector === "seafile" && field.name === "repo_ids" ? (
+        <SeafileLibraryPicker
+          currentCredential={currentCredential}
+          label={label ?? ""}
+          description={description ?? ""}
         />
       ) : field.type === "list" ? (
         <ListInput name={field.name} label={label} description={description} />
