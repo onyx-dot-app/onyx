@@ -6082,6 +6082,11 @@ class ExternalApp(Base):
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
+    # CUSTOM apps only: a serialized `CustomOAuthConfig` (no secrets). NULL
+    # means static credentials; always NULL for built-ins.
+    oauth_config: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
     organization_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
         EncryptedJson(),
         nullable=False,
@@ -6097,6 +6102,14 @@ class ExternalApp(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    __table_args__ = (
+        # Schema-level backstop for the `oauth_config` invariant above.
+        CheckConstraint(
+            "app_type = 'CUSTOM' OR oauth_config IS NULL",
+            name="ck_external_app_oauth_config_custom_only",
+        ),
     )
 
     skill: Mapped["Skill"] = relationship("Skill")

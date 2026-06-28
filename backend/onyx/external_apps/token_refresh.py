@@ -21,10 +21,10 @@ from onyx.db.external_app import get_external_app_by_id
 from onyx.db.external_app import get_external_app_user_credential
 from onyx.db.external_app import upsert_external_app_user_credential
 from onyx.db.models import ExternalApp
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.base import TokenRefreshTerminalError
-from onyx.external_apps.providers.base import TokenRefreshTransientError
-from onyx.external_apps.providers.registry import get_provider_for_app
+from onyx.external_apps.oauth_handler import OAuthFlowHandler
+from onyx.external_apps.oauth_handler import TokenRequestTerminalError
+from onyx.external_apps.oauth_handler import TokenRequestTransientError
+from onyx.external_apps.providers.registry import resolve_oauth_handler
 from onyx.external_apps.token_utils import needs_refresh
 from onyx.external_apps.token_utils import stamp_expires_at
 from onyx.redis.lock_context import redis_shared_lock
@@ -38,8 +38,8 @@ logger = setup_logger()
 _LOCK_HELD_S = 30.0
 _LOCK_WAIT_S = 5.0
 
-# Gathered inside a session for the POST: provider, stored creds, client id/secret.
-_RefreshInputs = tuple[OAuthExternalAppProvider, dict[str, Any], str, str]
+# Gathered inside a session for the POST: handler, stored creds, client id/secret.
+_RefreshInputs = tuple[OAuthFlowHandler, dict[str, Any], str, str]
 
 
 def ensure_fresh_credentials(
@@ -99,12 +99,12 @@ def _refresh_under_lock(
         inputs = _load_refresh_inputs(db, external_app_id, user_id)
     if inputs is None:
         return
-    provider, stored, client_id, client_secret = inputs
+    handler, stored, client_id, client_secret = inputs
 
     # POST with no DB connection held.
     try:
-        refreshed = provider.refresh_credentials(stored, client_id, client_secret)
-    except TokenRefreshTransientError as exc:
+        refreshed = handler.refresh_credentials(stored, client_id, client_secret)
+    except TokenRequestTransientError as exc:
         # Keep the existing token; retry on a later request.
         logger.warning(
             "ea_token_refresh.transient external_app_id=%s error=%s",
@@ -112,7 +112,7 @@ def _refresh_under_lock(
             exc,
         )
         return
-    except TokenRefreshTerminalError as exc:
+    except TokenRequestTerminalError as exc:
         # Dead grant: drop the credential so the app reads as disconnected.
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             delete_external_app_user_credential(
@@ -148,8 +148,8 @@ def _load_refresh_inputs(
     app = get_external_app_by_id(db, external_app_id)
     if app is None:
         return None
-    provider = get_provider_for_app(app)
-    if not isinstance(provider, OAuthExternalAppProvider):
+    handler = resolve_oauth_handler(app)
+    if handler is None:
         return None
 
     stored = _read_stored_credentials(db, external_app_id, user_id)
@@ -163,7 +163,7 @@ def _load_refresh_inputs(
         )
         return None
     client_id, client_secret = client
-    return provider, stored, client_id, client_secret
+    return handler, stored, client_id, client_secret
 
 
 def _read_stored_credentials(
