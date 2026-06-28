@@ -1740,6 +1740,60 @@
       }
     },
     "connector": {
+      "seafile": {
+        "actions": {
+          "cancel": "Abbrechen",
+          "save": "Änderungen speichern",
+          "saving": "Speichern..."
+        },
+        "editModal": { "title": "Seafile-Konfiguration bearbeiten" },
+        "fields": {
+          "allowedExtensions": {
+            "description": "Dateierweiterungen, die dieser Konnektor indizieren soll.",
+            "label": "Zulässige Erweiterungen",
+            "placeholder": "Erweiterung eingeben"
+          },
+          "baseUrl": {
+            "description": "URL Ihrer selbst gehosteten Seafile-Instanz, z. B. https://seafile.example.com",
+            "label": "Basis-URL"
+          },
+          "libraries": {
+            "description": "Wählen Sie die zu indizierenden Seafile-Bibliotheken aus oder geben Sie sie ein.",
+            "label": "Bibliotheks-IDs"
+          },
+          "maxFileSize": {
+            "description": "Größere Dateien werden übersprungen.",
+            "label": "Maximale Dateigröße in Byte"
+          },
+          "pathPrefixes": {
+            "description": "Pfade innerhalb jeder Bibliothek. Mit / wird die gesamte Bibliothek indiziert.",
+            "label": "Pfadpräfixe",
+            "placeholder": "Pfadpräfix eingeben"
+          }
+        },
+        "libraryPicker": {
+          "fetchError": "Bibliotheken konnten nicht abgerufen werden.",
+          "loading": "Seafile-Bibliotheken werden geladen...",
+          "manualDescription": "Geben Sie IDs direkt ein, wenn die Erkennung nicht verfügbar ist.",
+          "manualLabel": "Manuelle Bibliotheks-IDs",
+          "manualPlaceholder": "Bibliotheks-ID eingeben",
+          "refresh": "Aktualisieren"
+        },
+        "toasts": {
+          "updated": "Seafile-Einstellungen aktualisiert. Führen Sie eine vollständige Neuindizierung aus und lassen Sie die Bereinigung vorhandene Dokumente abgleichen.",
+          "updateFailed": "Seafile-Einstellungen konnten nicht aktualisiert werden"
+        },
+        "validation": {
+          "baseUrlProtocol": "Die Basis-URL muss mit http:// oder https:// beginnen",
+          "baseUrlRequired": "Die Basis-URL ist erforderlich",
+          "extensionRequired": "Mindestens eine Dateierweiterung ist erforderlich",
+          "extensionUnsupported": "Mindestens eine Erweiterung wird vom Seafile-Konnektor nicht unterstützt",
+          "libraryRequired": "Mindestens eine Bibliotheks-ID ist erforderlich",
+          "maxFileSizeInteger": "Die maximale Dateigröße muss ganzzahlig sein",
+          "maxFileSizePositive": "Die maximale Dateigröße muss größer als null sein",
+          "maxFileSizeRequired": "Die maximale Dateigröße ist erforderlich"
+        }
+      },
       "accessType": {
         "autoSyncOption": {
           "description": "Wir synchronisieren Berechtigungen automatisch aus der Quelle. Ein Dokument ist in Onyx nur dann auffindbar, wenn der suchende Benutzer in der Quelle Zugriff auf das Dokument hat.",

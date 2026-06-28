@@ -1740,6 +1740,60 @@
       }
     },
     "connector": {
+      "seafile": {
+        "actions": {
+          "cancel": "إلغاء",
+          "save": "حفظ التغييرات",
+          "saving": "جارٍ الحفظ..."
+        },
+        "editModal": { "title": "تعديل إعداد Seafile" },
+        "fields": {
+          "allowedExtensions": {
+            "description": "امتدادات الملفات التي يجب على هذا الموصل فهرستها.",
+            "label": "الامتدادات المسموح بها",
+            "placeholder": "أدخل امتدادًا"
+          },
+          "baseUrl": {
+            "description": "رابط Seafile المستضاف ذاتيًا، مثل https://seafile.example.com",
+            "label": "الرابط الأساسي"
+          },
+          "libraries": {
+            "description": "حدد أو أدخل مكتبات Seafile التي يجب فهرستها.",
+            "label": "معرّفات المكتبات"
+          },
+          "maxFileSize": {
+            "description": "سيتم تخطي الملفات التي تتجاوز هذا الحد.",
+            "label": "الحد الأقصى لحجم الملف بالبايت"
+          },
+          "pathPrefixes": {
+            "description": "المسارات داخل كل مكتبة. اترك / لفهرسة المكتبة كاملة.",
+            "label": "بادئات المسار",
+            "placeholder": "أدخل بادئة المسار"
+          }
+        },
+        "libraryPicker": {
+          "fetchError": "تعذر جلب المكتبات.",
+          "loading": "جارٍ تحميل مكتبات Seafile...",
+          "manualDescription": "أدخل معرّفات المكتبات مباشرة إذا لم يكن الاكتشاف متاحًا.",
+          "manualLabel": "معرّفات المكتبات اليدوية",
+          "manualPlaceholder": "أدخل معرّف المكتبة",
+          "refresh": "تحديث"
+        },
+        "toasts": {
+          "updated": "تم تحديث إعدادات Seafile. شغّل إعادة فهرسة كاملة واسمح للتنظيف بتسوية المستندات الحالية.",
+          "updateFailed": "فشل تحديث إعدادات Seafile"
+        },
+        "validation": {
+          "baseUrlProtocol": "يجب أن يبدأ الرابط الأساسي بـ http:// أو https://",
+          "baseUrlRequired": "الرابط الأساسي مطلوب",
+          "extensionRequired": "يلزم امتداد ملف واحد على الأقل",
+          "extensionUnsupported": "امتداد واحد أو أكثر غير مدعوم بواسطة موصل Seafile",
+          "libraryRequired": "يلزم معرّف مكتبة واحد على الأقل",
+          "maxFileSizeInteger": "يجب أن يكون الحد الأقصى لحجم الملف عددًا صحيحًا",
+          "maxFileSizePositive": "يجب أن يكون الحد الأقصى لحجم الملف أكبر من صفر",
+          "maxFileSizeRequired": "الحد الأقصى لحجم الملف مطلوب"
+        }
+      },
       "accessType": {
         "autoSyncOption": {
           "description": "سنقوم بمزامنة الأذونات تلقائيًا من المصدر. لن يكون المستند قابلًا للبحث في Onyx إلا إذا كان المستخدم الذي يجري البحث يملك إذن الوصول إلى المستند في المصدر.",

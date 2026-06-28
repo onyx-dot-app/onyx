@@ -1740,6 +1740,60 @@
       }
     },
     "connector": {
+      "seafile": {
+        "actions": {
+          "cancel": "キャンセル",
+          "save": "変更を保存",
+          "saving": "保存中..."
+        },
+        "editModal": { "title": "Seafile 設定を編集" },
+        "fields": {
+          "allowedExtensions": {
+            "description": "このコネクタがインデックスするファイル拡張子です。",
+            "label": "許可する拡張子",
+            "placeholder": "拡張子を入力"
+          },
+          "baseUrl": {
+            "description": "セルフホスト Seafile の URL（例: https://seafile.example.com）",
+            "label": "ベース URL"
+          },
+          "libraries": {
+            "description": "インデックスする Seafile ライブラリを選択または入力します。",
+            "label": "ライブラリ ID"
+          },
+          "maxFileSize": {
+            "description": "この上限を超えるファイルはスキップされます。",
+            "label": "最大ファイルサイズ（バイト）"
+          },
+          "pathPrefixes": {
+            "description": "各ライブラリ内のパスです。/ のままにするとライブラリ全体をインデックスします。",
+            "label": "パスプレフィックス",
+            "placeholder": "パスプレフィックスを入力"
+          }
+        },
+        "libraryPicker": {
+          "fetchError": "ライブラリを取得できません。",
+          "loading": "Seafile ライブラリを読み込み中...",
+          "manualDescription": "ライブラリ検出を利用できない場合は ID を直接入力してください。",
+          "manualLabel": "ライブラリ ID の手動入力",
+          "manualPlaceholder": "ライブラリ ID を入力",
+          "refresh": "更新"
+        },
+        "toasts": {
+          "updated": "Seafile 設定を更新しました。完全な再インデックスを実行し、既存ドキュメントを整理してください。",
+          "updateFailed": "Seafile 設定を更新できませんでした"
+        },
+        "validation": {
+          "baseUrlProtocol": "ベース URL は http:// または https:// で始める必要があります",
+          "baseUrlRequired": "ベース URL は必須です",
+          "extensionRequired": "少なくとも 1 つの拡張子が必要です",
+          "extensionUnsupported": "Seafile コネクタでサポートされていない拡張子があります",
+          "libraryRequired": "少なくとも 1 つのライブラリ ID が必要です",
+          "maxFileSizeInteger": "最大ファイルサイズは整数で指定してください",
+          "maxFileSizePositive": "最大ファイルサイズは 0 より大きくしてください",
+          "maxFileSizeRequired": "最大ファイルサイズは必須です"
+        }
+      },
       "accessType": {
         "autoSyncOption": {
           "description": "ソースから権限を自動的に同期します。検索を行うユーザーがソースでそのドキュメントへのアクセス権限を持つ場合に限り、Onyxで検索可能になります。",
