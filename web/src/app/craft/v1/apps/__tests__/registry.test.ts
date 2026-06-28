@@ -33,6 +33,7 @@ function configuredApp(
     enabled: false,
     actions: [],
     is_onyx_managed: false,
+    oauth_config: null,
     ...overrides,
   };
 }
