@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from typing_extensions import override # pyright: ignore[reportMissingModuleSource]
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.models import ChatFileType

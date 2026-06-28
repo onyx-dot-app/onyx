@@ -55,17 +55,10 @@ def test_open_url_tool_unavailable_when_vector_db_disabled() -> None:
 # ------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("vector_db_disabled", [True, False])
-def test_file_reader_tool_available(vector_db_disabled: bool) -> None:
-    # Patch where it's *used*, not where it's defined — the module has its own
-    # local reference after `from onyx.configs.app_configs import DISABLE_VECTOR_DB`.
-    with patch(
-        "onyx.tools.tool_implementations.file_reader.file_reader_tool.DISABLE_VECTOR_DB",
-        vector_db_disabled,
-    ):
-        from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
-            FileReaderTool,
-        )
+def test_file_reader_tool_always_available() -> None:
+    from onyx.tools.tool_implementations.file_reader.file_reader_tool import (
+        FileReaderTool,
+    )
 
-        db_session = MagicMock(spec=Session)
-        assert FileReaderTool.is_available(db_session) is vector_db_disabled
+    db_session = MagicMock(spec=Session)
+    assert FileReaderTool.is_available(db_session) is True
