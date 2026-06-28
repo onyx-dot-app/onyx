@@ -25,7 +25,11 @@ from onyx.connectors.factory import (
     instantiate_connector,
     validate_ccpair_for_user,
 )
-from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    CheckpointedConnector,
+    LoadConnector,
+)
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
 from onyx.db.enums import AccessType
@@ -198,6 +202,21 @@ class TestIdentifyConnectorClass:
 
         assert connector_class is not None
         assert connector_class.__name__ == "GithubConnector"
+
+    def test_identify_seafile_accepts_poll_as_checkpointed_connector(self) -> None:
+        connector_class = identify_connector_class(
+            DocumentSource.SEAFILE, InputType.POLL
+        )
+
+        assert connector_class.__name__ == "SeafileConnector"
+        assert issubclass(connector_class, CheckpointedConnector)
+
+    def test_identify_seafile_rejects_load_state(self) -> None:
+        with pytest.raises(ConnectorMissingException):
+            identify_connector_class(DocumentSource.SEAFILE, InputType.LOAD_STATE)
+
+        connector_class = identify_connector_class(DocumentSource.SEAFILE)
+        assert not issubclass(connector_class, LoadConnector)
 
 
 class TestConnectorMappingIntegrity:
