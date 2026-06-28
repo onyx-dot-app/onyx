@@ -6,6 +6,7 @@ import { Credential } from "@/lib/connectors/credentials";
 import { Button } from "@opal/components";
 import { SvgRefreshCw, SvgSimpleLoader } from "@opal/icons";
 import { useFormikContext } from "formik";
+import { useTranslations } from "next-intl";
 
 type FormValues = Record<string, any>;
 
@@ -89,6 +90,7 @@ export default function SeafileLibraryPicker({
   label,
   description,
 }: SeafileLibraryPickerProps) {
+  const t = useTranslations("admin.connector.seafile.libraryPicker");
   const { values, setFieldValue } = useFormikContext<FormValues>();
   const [libraries, setLibraries] = useState<SeafileLibrary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -130,14 +132,12 @@ export default function SeafileLibraryPicker({
           return;
         }
         setLibraries([]);
-        setError(
-          err instanceof Error ? err.message : "Unable to fetch libraries."
-        );
+        setError(err instanceof Error ? err.message : t("fetchError"));
       } finally {
         setIsLoading(false);
       }
     },
-    [baseUrl, currentCredential?.id]
+    [baseUrl, currentCredential?.id, t]
   );
 
   useEffect(() => {
@@ -181,25 +181,26 @@ export default function SeafileLibraryPicker({
             disabled={isLoading}
             onClick={() => void loadLibraries()}
           >
-            Refresh
+            {t("refresh")}
           </Button>
         )}
       </div>
 
-      {isLoading && (
-        <div className="text-sm text-text-03">Loading Seafile libraries...</div>
-      )}
+      {isLoading && <div className="text-sm text-text-03">{t("loading")}</div>}
 
       {error && <div className="text-sm text-action-danger-05">{error}</div>}
 
       {!isLoading && visibleLibraries.length > 0 && (
         <div className="mt-3 space-y-2">
           {visibleLibraries.map((library) => (
+            // oxlint-disable-next-line jsx-a11y/label-has-associated-control -- The dynamic htmlFor matches the checkbox id.
             <label
               key={library.id}
+              htmlFor={`seafile-library-${library.id}`}
               className="flex items-start gap-3 rounded border border-border bg-background px-3 py-2"
             >
               <input
+                id={`seafile-library-${library.id}`}
                 type="checkbox"
                 className="mt-1"
                 checked={selectedCanonicalRepoIds.has(
@@ -225,10 +226,10 @@ export default function SeafileLibraryPicker({
         <div className="mt-3">
           <TextArrayField
             name="repo_ids"
-            label="Manual Library IDs"
+            label={t("manualLabel")}
             values={values}
-            subtext="Enter library IDs directly if library discovery is unavailable."
-            placeholder="Enter library ID"
+            subtext={t("manualDescription")}
+            placeholder={t("manualPlaceholder")}
           />
         </div>
       )}

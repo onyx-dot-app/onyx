@@ -1772,6 +1772,60 @@
       }
     },
     "connector": {
+      "seafile": {
+        "actions": {
+          "cancel": "Annuler",
+          "save": "Enregistrer les modifications",
+          "saving": "Enregistrement..."
+        },
+        "editModal": { "title": "Modifier la configuration Seafile" },
+        "fields": {
+          "allowedExtensions": {
+            "description": "Extensions de fichiers à indexer par ce connecteur.",
+            "label": "Extensions autorisées",
+            "placeholder": "Saisir une extension"
+          },
+          "baseUrl": {
+            "description": "URL de votre instance Seafile auto-hébergée, par ex. https://seafile.example.com",
+            "label": "URL de base"
+          },
+          "libraries": {
+            "description": "Sélectionnez ou saisissez les bibliothèques Seafile à indexer.",
+            "label": "Identifiants des bibliothèques"
+          },
+          "maxFileSize": {
+            "description": "Les fichiers dépassant cette limite sont ignorés.",
+            "label": "Taille maximale en octets"
+          },
+          "pathPrefixes": {
+            "description": "Chemins dans chaque bibliothèque. Laissez / pour indexer toute la bibliothèque.",
+            "label": "Préfixes de chemin",
+            "placeholder": "Saisir un préfixe"
+          }
+        },
+        "libraryPicker": {
+          "fetchError": "Impossible de récupérer les bibliothèques.",
+          "loading": "Chargement des bibliothèques Seafile...",
+          "manualDescription": "Saisissez directement les identifiants si la découverte est indisponible.",
+          "manualLabel": "Identifiants manuels",
+          "manualPlaceholder": "Saisir un identifiant",
+          "refresh": "Actualiser"
+        },
+        "toasts": {
+          "updated": "Paramètres Seafile mis à jour. Lancez une réindexation complète et laissez l'élagage réconcilier les documents indexés.",
+          "updateFailed": "Échec de la mise à jour des paramètres Seafile"
+        },
+        "validation": {
+          "baseUrlProtocol": "L'URL de base doit commencer par http:// ou https://",
+          "baseUrlRequired": "L'URL de base est requise",
+          "extensionRequired": "Au moins une extension est requise",
+          "extensionUnsupported": "Une ou plusieurs extensions ne sont pas prises en charge par le connecteur Seafile",
+          "libraryRequired": "Au moins un identifiant de bibliothèque est requis",
+          "maxFileSizeInteger": "La taille maximale doit être un entier",
+          "maxFileSizePositive": "La taille maximale doit être supérieure à zéro",
+          "maxFileSizeRequired": "La taille maximale est requise"
+        }
+      },
       "accessType": {
         "autoSyncOption": {
           "description": "Nous synchroniserons automatiquement les permissions depuis la source. Un document ne sera consultable dans Onyx que si l'utilisateur effectuant la recherche est autorisé à y accéder dans la source.",

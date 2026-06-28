@@ -1772,6 +1772,60 @@
       }
     },
     "connector": {
+      "seafile": {
+        "actions": {
+          "cancel": "Cancel",
+          "save": "Save Changes",
+          "saving": "Saving..."
+        },
+        "editModal": { "title": "Edit Seafile Configuration" },
+        "fields": {
+          "allowedExtensions": {
+            "description": "File extensions this connector should index.",
+            "label": "Allowed Extensions",
+            "placeholder": "Enter extension"
+          },
+          "baseUrl": {
+            "description": "Your self-hosted Seafile URL, e.g. https://seafile.example.com",
+            "label": "Base URL"
+          },
+          "libraries": {
+            "description": "Select or enter the Seafile libraries this connector should index.",
+            "label": "Library IDs"
+          },
+          "maxFileSize": {
+            "description": "Files larger than this limit are skipped.",
+            "label": "Max File Size Bytes"
+          },
+          "pathPrefixes": {
+            "description": "Paths inside each library. Leave as / to index each configured library.",
+            "label": "Path Prefixes",
+            "placeholder": "Enter path prefix"
+          }
+        },
+        "libraryPicker": {
+          "fetchError": "Unable to fetch libraries.",
+          "loading": "Loading Seafile libraries...",
+          "manualDescription": "Enter library IDs directly if library discovery is unavailable.",
+          "manualLabel": "Manual Library IDs",
+          "manualPlaceholder": "Enter library ID",
+          "refresh": "Refresh"
+        },
+        "toasts": {
+          "updated": "Seafile settings updated. Run a complete re-index and allow pruning to reconcile existing indexed documents.",
+          "updateFailed": "Failed to update Seafile settings"
+        },
+        "validation": {
+          "baseUrlProtocol": "Base URL must start with http:// or https://",
+          "baseUrlRequired": "Base URL is required",
+          "extensionRequired": "At least one file extension is required",
+          "extensionUnsupported": "One or more extensions are not supported by the Seafile connector",
+          "libraryRequired": "At least one library ID is required",
+          "maxFileSizeInteger": "Max file size must be an integer",
+          "maxFileSizePositive": "Max file size must be greater than zero",
+          "maxFileSizeRequired": "Max file size is required"
+        }
+      },
       "accessType": {
         "autoSyncOption": {
           "description": "We will automatically sync permissions from the source. A document will be searchable in Onyx if and only if the user performing the search has permission to access the document in the source.",
