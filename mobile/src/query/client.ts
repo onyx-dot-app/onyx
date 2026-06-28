@@ -25,17 +25,18 @@ export const persister = createSyncStoragePersister({
   storage: makeMmkvStorage(queryStorage),
 });
 
-// PII prefixes excluded from the unencrypted MMKV snapshot; only the leading entity
-// segment matches since the trailing serverUrl varies per instance. Chat content
-// (session names, messages) is sensitive PII, so it stays out of the on-disk cache
-// and refetches on launch — same reason as the `me` key.
+// Keys excluded from the unencrypted MMKV snapshot. Identity (`me`) and ALL chat
+// data are PII; excluded data lives in memory only and refetches on launch (the
+// trailing serverUrl varies per instance, so only the leading entity segment matches).
 const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
   [QUERY_KEYS.me(null)[0]],
-  [QUERY_KEYS.chatSessions(null)[0]],
-  [QUERY_KEYS.chatSession(null, "")[0]],
 ];
 
 function isNonPersistedKey(queryKey: readonly unknown[]): boolean {
+  // Default-deny for chat: any key whose entity segment starts with `chat-` (covers
+  // chat-sessions/chat-session today + future chat-message/history keys) never persists.
+  const head = queryKey[0];
+  if (typeof head === "string" && head.startsWith("chat-")) return true;
   return NON_PERSISTED_KEY_PREFIXES.some((prefix) =>
     prefix.every((segment, i) => queryKey[i] === segment),
   );

@@ -35,6 +35,11 @@ describe("dehydrateOptions PII exclusion", () => {
     expect(wouldPersist(QUERY_KEYS.me(url))).toBe(false);
   });
 
+  it("excludes future chat-* keys by default (default-deny)", () => {
+    expect(wouldPersist(["chat-messages", url])).toBe(false);
+    expect(wouldPersist(["chat-history", url, "abc"])).toBe(false);
+  });
+
   it("persists non-PII success queries", () => {
     expect(wouldPersist(QUERY_KEYS.authType(url))).toBe(true);
   });

@@ -52,6 +52,9 @@ export function useChatSessions() {
     getNextPageParam: (lastPage) => {
       if (!lastPage.has_more || lastPage.sessions.length === 0)
         return undefined;
+      // `before` is exclusive (backend: time_updated < before); a same-microsecond
+      // tie straddling a page boundary can drop a session. Matches web's cursor; a
+      // real fix needs a backend (time_updated, id) compound cursor — deferred to PR 4.
       return lastPage.sessions[lastPage.sessions.length - 1]!.time_updated;
     },
   });
