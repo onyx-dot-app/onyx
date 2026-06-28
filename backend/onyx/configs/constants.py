@@ -314,6 +314,7 @@ class DocumentSource(str, Enum):
     FIREFLIES = "fireflies"
     ZOOM = "zoom"
     EGNYTE = "egnyte"
+    SEAFILE = "seafile"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
     DRUPAL_WIKI = "drupal_wiki"
@@ -842,6 +843,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.FIREFLIES: "Meeting transcripts and recordings",
     DocumentSource.ZOOM: "Meeting and webinar transcripts and recordings",
     DocumentSource.EGNYTE: "Cloud-stored files and documents",
+    DocumentSource.SEAFILE: "Self-hosted file libraries and documents",
     DocumentSource.AIRTABLE: "Structured data and records",
     DocumentSource.HIGHSPOT: "Sales enablement content and pitches",
     DocumentSource.DRUPAL_WIKI: "Knowledge base pages and content",
