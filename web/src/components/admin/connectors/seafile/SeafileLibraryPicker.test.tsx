@@ -4,12 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { Formik } from "formik";
 import SeafileLibraryPicker from "./SeafileLibraryPicker";
 import { Credential } from "@/lib/connectors/credentials";
+import { ValidSources } from "@/lib/types";
 
 const credential: Credential<{ seafile_api_token: string }> = {
   id: 42,
   credential_json: { seafile_api_token: "masked" },
   admin_public: true,
-  source: "seafile",
+  source: ValidSources.Seafile,
   user_id: null,
   user_email: null,
   time_created: "2026-01-01T00:00:00Z",
