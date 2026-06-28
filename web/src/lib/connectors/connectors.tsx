@@ -1782,6 +1782,77 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     ],
     advanced_values: [],
   },
+  seafile: {
+    description: "Configure Seafile connector",
+    subtext:
+      "Use a dedicated Seafile service account with read access only to the libraries and paths you want Onyx to index. Generate or copy that user's Web API auth token from Seafile; self-hosted instances may need ENABLE_GET_AUTH_TOKEN_BY_SESSION enabled in seahub_settings.py before the token appears in user settings.",
+    values: [
+      {
+        type: "text",
+        query: "Enter the Seafile base URL:",
+        label: "Base URL",
+        name: "base_url",
+        optional: false,
+        description:
+          "Your self-hosted Seafile URL, e.g. https://seafile.example.com",
+      },
+      {
+        type: "list",
+        query: "Enter Seafile library/repo IDs to index:",
+        label: "Library IDs",
+        name: "repo_ids",
+        optional: false,
+        description:
+          "Library IDs appear in Seafile library URLs as /lib/<library-id>/.... Add each library the service account can read.",
+      },
+      {
+        type: "list",
+        query: "Enter path prefixes to index:",
+        label: "Path Prefixes",
+        name: "path_prefixes",
+        optional: true,
+        default: ["/"],
+        description:
+          "Optional paths inside each library, such as /docs. Leave as / to index each configured library.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        query: "Enter allowed file extensions:",
+        label: "Allowed Extensions",
+        name: "allowed_extensions",
+        optional: true,
+        default: [
+          ".txt",
+          ".md",
+          ".markdown",
+          ".html",
+          ".csv",
+          ".json",
+          ".yaml",
+          ".yml",
+          ".xml",
+          ".log",
+          ".pdf",
+          ".docx",
+          ".pptx",
+          ".xlsx",
+        ],
+        description: "Text-like files plus PDF, DOCX, PPTX, and XLSX.",
+      },
+      {
+        type: "number",
+        query: "Enter max file size in bytes:",
+        label: "Max File Size Bytes",
+        name: "max_file_size_bytes",
+        optional: true,
+        default: 20971520,
+        description:
+          "Files larger than this limit are skipped instead of indexed.",
+      },
+    ],
+  },
   airtable: {
     description: "Configure Airtable connector",
     values: [

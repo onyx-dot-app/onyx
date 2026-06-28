@@ -9,7 +9,7 @@ import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { Agent } from "@/lib/agents/types";
 import React from "react";
 import { DOCS_ADMINS_PATH, DOCS_BASE_URL } from "@/lib/constants";
-import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";
+import { SvgFileText, SvgGlobe, SvgMail, SvgUploadCloud } from "@opal/icons";
 import {
   SvgAirtable,
   SvgAsana,
@@ -48,6 +48,7 @@ import {
   SvgOutline,
   SvgProductboard,
   SvgSalesforce,
+  SvgSeafile,
   SvgSharepoint,
   SvgSlack,
   SvgSlab,
@@ -235,6 +236,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Egnyte",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/egnyte`,
+  },
+  seafile: {
+    icon: SvgSeafile,
+    displayName: "Seafile",
+    category: SourceCategory.Storage,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/seafile`,
   },
   oci_storage: {
     icon: SvgOracle,
