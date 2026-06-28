@@ -645,6 +645,7 @@ export enum ValidSources {
   Freshdesk = "freshdesk",
   Fireflies = "fireflies",
   Egnyte = "egnyte",
+  Seafile = "seafile",
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",

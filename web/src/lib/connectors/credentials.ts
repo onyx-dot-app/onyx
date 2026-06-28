@@ -293,6 +293,10 @@ export interface EgnyteCredentialJson {
   access_token: string;
 }
 
+export interface SeafileCredentialJson {
+  seafile_api_token: string;
+}
+
 export interface AirtableCredentialJson {
   airtable_access_token: string;
 }
@@ -507,6 +511,9 @@ export const credentialTemplates: Record<ValidSources, any> = {
     domain: "",
     access_token: "",
   } as EgnyteCredentialJson,
+  seafile: {
+    seafile_api_token: "",
+  } as SeafileCredentialJson,
   airtable: {
     airtable_access_token: "",
   } as AirtableCredentialJson,
@@ -718,6 +725,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Canvas
   canvas_access_token: "Canvas Access Token",
+
+  // Seafile
+  seafile_api_token: "Seafile Service Account Web API Auth Token",
 
   // GitBook
   gitbook_space_id: "GitBook Space ID",
