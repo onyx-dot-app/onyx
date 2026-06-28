@@ -1,8 +1,9 @@
 import "./globals.css";
 
+import type { Metadata } from "next";
 import { GTM_ENABLED, MODAL_ROOT_ID } from "@/lib/constants";
+import { generateFaviconMetadata } from "@/lib/app/svcSS";
 import AppProvider from "@/providers/AppProvider";
-import DynamicMetadata from "@/providers/DynamicMetadata";
 import { PHProvider } from "./providers";
 import {
   PostHogPageTracker,
@@ -52,9 +53,11 @@ const dmMono = DM_Mono({
 
 // force-dynamic prevents Next.js from statically prerendering pages at build
 // time — many child routes use cookies() which requires dynamic rendering.
-// This is safe because the layout itself has no server-side data fetching;
-// all data is fetched client-side via SWR in the provider tree.
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return { icons: await generateFaviconMetadata() };
+}
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -104,7 +107,6 @@ export default function Layout({ children }: LayoutProps) {
                   <AppHealthBanner />
                   <LicenseExpiryBanner />
                   <AppProvider>
-                    <DynamicMetadata />
                     <PostHogRuntimeInitializer />
                     <CustomAnalyticsScript />
                     <PostHogPageTracker />

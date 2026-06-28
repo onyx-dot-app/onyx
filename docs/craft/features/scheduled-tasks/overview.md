@@ -2,11 +2,10 @@
 
 ## Objective
 
-Implement the **Scheduled Tasks** product surface in
-[`docs/product/scheduled-tasks.md`](../../../product/scheduled-tasks.md): a user
-saves a prompt + schedule, and the system runs the prompt as Craft on a
-timer. Every fire creates a brand-new Craft session, executes the agent
-headlessly, and records what happened.
+Implement the **Scheduled Tasks** product surface: a user saves a prompt +
+schedule, and the system runs the prompt as Craft on a timer. Every fire
+creates a brand-new Craft session, executes the agent headlessly, and records
+what happened.
 
 V1 = schedule-only, single-user, no event triggers, no live-attach. The bar:
 a user creates a task in `/craft/v1/tasks`, sees it fire without their

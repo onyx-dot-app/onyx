@@ -28,10 +28,7 @@ import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { FileCard } from "@/sections/cards/FileCard";
-import {
-  ProjectFile,
-  UserFileStatus,
-} from "@/app/app/projects/projectsService";
+import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
 import {
@@ -768,10 +765,10 @@ const AppInputBar = React.memo(
             ref={containerRef}
             id="onyx-chat-input"
             className={cn(
-              "relative w-full flex flex-col shadow-01 bg-background-neutral-00 rounded-16"
+              "relative w-full flex flex-col shadow-box-01 bg-background-neutral-00 rounded-16"
               // # Note (from @raunakab):
               //
-              // `shadow-01` extends ~14px below the element (2px offset + 12px blur).
+              // `shadow-box-01` extends ~14px below the element (2px offset + 12px blur).
               // Because the content area in `Root` (app-layouts.tsx) uses `overflow-auto`,
               // shadows that exceed the container bounds are clipped.
               //

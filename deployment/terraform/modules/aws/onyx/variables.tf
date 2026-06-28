@@ -110,10 +110,9 @@ variable "redis_auth_token" {
   sensitive   = true
 }
 
-# Craft sandbox node group knobs, forwarded to the eks module (default off).
-variable "enable_craft_sandbox_node_group" {
+variable "enable_craft" {
   type        = bool
-  description = "Create a dedicated, IMDSv2-hardened Craft sandbox node group (labeled/tainted for sandbox pods)."
+  description = "Enable Craft infrastructure. Currently provisions a dedicated, IMDSv2-hardened Craft sandbox node group (labeled/tainted for sandbox pods)."
   default     = false
 }
 
@@ -125,8 +124,8 @@ variable "craft_sandbox_node_instance_types" {
 
 variable "craft_sandbox_node_min_size" {
   type        = number
-  description = "Min size of the Craft sandbox node group."
-  default     = 0
+  description = "Min size of the Craft sandbox node group. Keep >= 1: cluster-autoscaler can only scale a group back up from zero with node-template label/taint ASG tags, which are not configured here, so a value of 0 would leave sandbox pods Pending after idle scale-down."
+  default     = 1
 }
 
 variable "craft_sandbox_node_max_size" {
@@ -139,6 +138,17 @@ variable "craft_sandbox_node_desired_size" {
   type        = number
   description = "Desired size of the Craft sandbox node group."
   default     = 1
+}
+
+variable "craft_sandbox_node_disk_size_gb" {
+  type        = number
+  description = "Root EBS volume (GiB) for Craft sandbox nodes. Size relative to the instance's vCPU and the sandbox pod's ephemeral-storage request (default 5Gi/pod). The default suits the default m5.large; raise it for larger instances."
+  default     = 50
+
+  validation {
+    condition     = var.craft_sandbox_node_disk_size_gb >= 20
+    error_message = "craft_sandbox_node_disk_size_gb must be at least 20 GiB; the AL2023 AMI and OS overlay consume ~8 GiB, leaving too little ephemeral storage for even one sandbox pod (5Gi request) below that threshold."
+  }
 }
 
 variable "enable_iam_auth" {

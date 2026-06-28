@@ -194,3 +194,206 @@ def test_replace_sends_no_metadata_and_targets_file(
     assert captured["file_id"] == "EXISTING"
     assert captured["metadata"] == {}  # replace touches content only
     assert captured["content_type"] == "application/octet-stream"
+
+
+# --- Google Docs API commands ---
+
+
+def test_docs_base_targets_docs_host() -> None:
+    """Docs commands must hit docs.googleapis.com, not the Drive host."""
+    assert gdrive._DOCS_BASE == "https://docs.googleapis.com/v1/"
+    url = gdrive._url(gdrive._DOCS_BASE, "documents/D1:batchUpdate")
+    assert url == "https://docs.googleapis.com/v1/documents/D1:batchUpdate"
+
+
+def test_get_doc_builds_documents_path(monkeypatch: Any) -> None:
+    calls: list[tuple[str, dict[str, Any] | None]] = []
+
+    def fake_docs(
+        path: str,
+        params: dict[str, Any] | None = None,
+        method: str = "GET",
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        calls.append((path, params))
+        assert method == "GET"
+        return {"documentId": "D1", "title": "Spec"}
+
+    monkeypatch.setattr(gdrive, "_req_docs", fake_docs)
+
+    args = gdrive._build_parser().parse_args(["get-doc", "D1"])
+    result = gdrive._dispatch(args)
+
+    assert calls[0][0] == "documents/D1"
+    assert result["ok"] is True
+    assert result["document"]["documentId"] == "D1"
+
+
+def test_get_doc_passes_fields(monkeypatch: Any) -> None:
+    calls: list[tuple[str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(
+        gdrive,
+        "_req_docs",
+        lambda path, params=None, **_kwargs: calls.append((path, params)) or {},
+    )
+
+    args = gdrive._build_parser().parse_args(
+        ["get-doc", "D1", "--fields", "documentId,body"]
+    )
+    gdrive._dispatch(args)
+
+    assert calls[0][1] == {"fields": "documentId,body"}
+
+
+def test_insert_text_builds_batch_update_request(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_docs(
+        path: str,
+        method: str = "GET",
+        body: dict[str, Any] | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        captured.update(path=path, method=method, body=body)
+        return {"documentId": "D1"}
+
+    monkeypatch.setattr(gdrive, "_req_docs", fake_docs)
+
+    args = gdrive._build_parser().parse_args(
+        ["insert-text", "D1", "--index", "5", "--text", "hello"]
+    )
+    result = gdrive._dispatch(args)
+
+    assert captured["path"] == "documents/D1:batchUpdate"
+    assert captured["method"] == "POST"
+    assert captured["body"] == {
+        "requests": [{"insertText": {"location": {"index": 5}, "text": "hello"}}]
+    }
+    assert result["ok"] is True
+
+
+def test_append_text_computes_end_index_from_get_doc(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_docs(
+        path: str,
+        method: str = "GET",
+        body: dict[str, Any] | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        if path.endswith(":batchUpdate"):
+            captured.update(path=path, method=method, body=body)
+            return {"documentId": "D1"}
+        # get-doc response: last structural element endIndex is 42
+        return {
+            "body": {
+                "content": [
+                    {"endIndex": 1},
+                    {"endIndex": 25},
+                    {"endIndex": 42},
+                ]
+            }
+        }
+
+    monkeypatch.setattr(gdrive, "_req_docs", fake_docs)
+
+    args = gdrive._build_parser().parse_args(["append-text", "D1", "--text", "more"])
+    result = gdrive._dispatch(args)
+
+    # end index 42 -> insert at 41 to stay in range
+    assert result["index"] == 41
+    assert captured["body"] == {
+        "requests": [{"insertText": {"location": {"index": 41}, "text": "more"}}]
+    }
+
+
+def test_doc_end_index_defaults_to_one_for_empty_body() -> None:
+    assert gdrive._doc_end_index({}) == 1
+    assert gdrive._doc_end_index({"body": {"content": []}}) == 1
+
+
+def test_batch_update_passes_through_requests_array(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_docs(
+        path: str,
+        method: str = "GET",
+        body: dict[str, Any] | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        captured.update(path=path, method=method, body=body)
+        return {"documentId": "D1", "replies": []}
+
+    monkeypatch.setattr(gdrive, "_req_docs", fake_docs)
+
+    requests_json = (
+        '[{"deleteContentRange": {"range": {"startIndex": 1, "endIndex": 5}}}]'
+    )
+    args = gdrive._build_parser().parse_args(["batch-update", "D1", requests_json])
+    result = gdrive._dispatch(args)
+
+    assert captured["path"] == "documents/D1:batchUpdate"
+    assert captured["method"] == "POST"
+    assert captured["body"] == {
+        "requests": [
+            {"deleteContentRange": {"range": {"startIndex": 1, "endIndex": 5}}}
+        ]
+    }
+    assert result["ok"] is True
+
+
+def test_batch_update_rejects_non_array(monkeypatch: Any) -> None:
+    monkeypatch.setattr(gdrive, "_req_docs", lambda *_a, **_k: pytest_fail_if_called())
+
+    def pytest_fail_if_called() -> dict[str, Any]:
+        raise AssertionError("network should not be called for invalid input")
+
+    args = gdrive._build_parser().parse_args(["batch-update", "D1", '{"a": 1}'])
+    result = gdrive._dispatch(args)
+
+    assert result["ok"] is False
+    assert result["error"] == "requests_not_array"
+
+
+def test_batch_update_reads_requests_from_file(monkeypatch: Any, tmp_path: Any) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        gdrive,
+        "_req_docs",
+        lambda path, body=None, **_kwargs: captured.update(path=path, body=body) or {},
+    )
+    reqs = tmp_path / "requests.json"
+    reqs.write_text('[{"insertText": {"location": {"index": 1}, "text": "x"}}]')
+
+    args = gdrive._build_parser().parse_args(
+        ["batch-update", "D1", "--file", str(reqs)]
+    )
+    gdrive._dispatch(args)
+
+    assert captured["body"]["requests"] == [
+        {"insertText": {"location": {"index": 1}, "text": "x"}}
+    ]
+
+
+def test_create_doc_posts_title(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_docs(
+        path: str,
+        method: str = "GET",
+        body: dict[str, Any] | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        captured.update(path=path, method=method, body=body)
+        assert body is not None
+        return {"documentId": "NEW", "title": body["title"]}
+
+    monkeypatch.setattr(gdrive, "_req_docs", fake_docs)
+
+    args = gdrive._build_parser().parse_args(["create-doc", "--title", "My Doc"])
+    result = gdrive._dispatch(args)
+
+    assert captured["path"] == "documents"
+    assert captured["method"] == "POST"
+    assert captured["body"] == {"title": "My Doc"}
+    assert result["document"]["documentId"] == "NEW"

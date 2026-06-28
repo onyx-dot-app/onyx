@@ -591,6 +591,16 @@ export interface BuildSessionData {
    * a fresh turn / aborted fetch).
    */
   isInterrupting: boolean;
+  /**
+   * True from a user interrupt until the next turn starts. Drives the transient
+   * "Response stopped" notice; cleared when a new message is sent.
+   */
+  wasInterrupted: boolean;
+  /**
+   * Bumped per new interactive turn; a pending reconcileInterruptedTurn bails
+   * when it changes, so a stale reconcile can't clobber the superseding turn.
+   */
+  turnGeneration: number;
   error: string | null;
   webappUrl: string | null;
   /** Sandbox info from backend */
@@ -825,6 +835,8 @@ const createInitialSessionData = (
   streamItems: [],
   queuedMessages: [],
   isInterrupting: false,
+  wasInterrupted: false,
+  turnGeneration: 0,
   error: null,
   webappUrl: null,
   sandbox: null,
@@ -2529,6 +2541,13 @@ export const useIsInterrupting = () =>
     const { currentSessionId, sessions } = state;
     if (!currentSessionId) return false;
     return sessions.get(currentSessionId)?.isInterrupting ?? false;
+  });
+
+export const useWasInterrupted = () =>
+  useBuildSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    if (!currentSessionId) return false;
+    return sessions.get(currentSessionId)?.wasInterrupted ?? false;
   });
 
 export const useSessionHistory = () =>

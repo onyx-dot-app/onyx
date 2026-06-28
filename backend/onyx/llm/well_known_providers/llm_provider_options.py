@@ -18,6 +18,7 @@ from onyx.llm.well_known_providers.constants import BEDROCK_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import BIFROST_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LITELLM_PROXY_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import LM_STUDIO_PROVIDER_NAME
+from onyx.llm.well_known_providers.constants import NEBIUS_TOKENFACTORY_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OLLAMA_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_COMPATIBLE_PROVIDER_NAME
 from onyx.llm.well_known_providers.constants import OPENAI_PROVIDER_NAME
@@ -53,6 +54,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         LITELLM_PROXY_PROVIDER_NAME: [],  # Dynamic - fetched from LiteLLM proxy API
         BIFROST_PROVIDER_NAME: [],  # Dynamic - fetched from Bifrost API
         OPENAI_COMPATIBLE_PROVIDER_NAME: [],  # Dynamic - fetched from OpenAI-compatible API
+        NEBIUS_TOKENFACTORY_PROVIDER_NAME: [],  # Dynamic - fetched from /v1/models
     }
 
 
@@ -347,6 +349,7 @@ def get_provider_display_name(provider_name: str) -> str:
         OPENROUTER_PROVIDER_NAME: "OpenRouter",
         LITELLM_PROXY_PROVIDER_NAME: "LiteLLM Proxy",
         OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI-Compatible",
+        NEBIUS_TOKENFACTORY_PROVIDER_NAME: "Nebius TokenFactory",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

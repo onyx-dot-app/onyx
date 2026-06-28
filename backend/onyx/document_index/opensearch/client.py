@@ -7,18 +7,28 @@ from typing import Any
 from typing import Generic
 from typing import TypeVar
 
+import boto3
 from opensearchpy import OpenSearch
 from opensearchpy import TransportError
+from opensearchpy import Urllib3AWSV4SignerAuth
 from opensearchpy.helpers import bulk
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_PASSWORD
 from onyx.configs.app_configs import OPENSEARCH_ADMIN_USERNAME
+from onyx.configs.app_configs import OPENSEARCH_AUTH_METHOD
+from onyx.configs.app_configs import OPENSEARCH_AWS_REGION
+from onyx.configs.app_configs import OPENSEARCH_AWS_SERVICE
+from onyx.configs.app_configs import OPENSEARCH_CA_CERTS
+from onyx.configs.app_configs import OPENSEARCH_CLIENT_CERT
+from onyx.configs.app_configs import OPENSEARCH_CLIENT_KEY
 from onyx.configs.app_configs import OPENSEARCH_HOST
 from onyx.configs.app_configs import OPENSEARCH_REST_API_PORT
 from onyx.configs.app_configs import OPENSEARCH_USE_SSL
+from onyx.configs.app_configs import OPENSEARCH_VERIFY_CERTS
 from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
 from onyx.document_index.opensearch.schema import DocumentChunk
 from onyx.document_index.opensearch.schema import DocumentChunkWithoutVectors
@@ -144,16 +154,26 @@ class OpenSearchClient(AbstractContextManager):
     Args:
         host: The host of the OpenSearch cluster.
         port: The port of the OpenSearch cluster.
-        auth: The authentication credentials for the OpenSearch cluster. A tuple
-            of (username, password).
+        auth: The basic-auth credentials for the OpenSearch cluster, a tuple of
+            (username, password). Used only when auth_method is BASIC; ignored
+            for IAM.
         use_ssl: Whether to use SSL for the OpenSearch cluster. Defaults to
             True.
-        verify_certs: Whether to verify the SSL certificates for the OpenSearch
-            cluster. Defaults to False.
+        verify_certs: Whether to verify the server certificate. Defaults to
+            OPENSEARCH_VERIFY_CERTS.
+        ca_certs: CA bundle path used to verify the server certificate.
+        client_cert: Client certificate path for mutual TLS.
+        client_key: Client private key path for mutual TLS.
         ssl_show_warn: Whether to show warnings for SSL certificates. Defaults
             to False.
         timeout: The timeout for the OpenSearch cluster. Defaults to
             DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S.
+        auth_method: Whether to authenticate with HTTP basic auth or AWS SigV4
+            (IAM). Defaults to OPENSEARCH_AUTH_METHOD.
+        aws_region: AWS region used for SigV4 signing. Required when auth_method
+            is IAM. Defaults to OPENSEARCH_AWS_REGION.
+        aws_service: AWS service name for SigV4 signing ("es" for managed
+            domains, "aoss" for Serverless). Defaults to OPENSEARCH_AWS_SERVICE.
     """
 
     def __init__(
@@ -162,21 +182,50 @@ class OpenSearchClient(AbstractContextManager):
         port: int = OPENSEARCH_REST_API_PORT,
         auth: tuple[str, str] = (OPENSEARCH_ADMIN_USERNAME, OPENSEARCH_ADMIN_PASSWORD),
         use_ssl: bool = OPENSEARCH_USE_SSL,
-        verify_certs: bool = False,
+        verify_certs: bool = OPENSEARCH_VERIFY_CERTS,
+        ca_certs: str | None = OPENSEARCH_CA_CERTS,
+        client_cert: str | None = OPENSEARCH_CLIENT_CERT,
+        client_key: str | None = OPENSEARCH_CLIENT_KEY,
         ssl_show_warn: bool = False,
         timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
+        auth_method: OpenSearchAuthMethod = OPENSEARCH_AUTH_METHOD,
+        aws_region: str | None = OPENSEARCH_AWS_REGION,
+        aws_service: str = OPENSEARCH_AWS_SERVICE,
     ):
         logger.debug(
-            "Creating OpenSearch client with host %s, port %s and timeout %s seconds.",
+            "Creating OpenSearch client with host %s, port %s, auth method "
+            "%s and timeout %s seconds.",
             host,
             port,
+            auth_method.value,
             timeout,
         )
+        http_auth: tuple[str, str] | Urllib3AWSV4SignerAuth
+        if auth_method == OpenSearchAuthMethod.IAM:
+            if not aws_region:
+                raise ValueError(
+                    "aws_region is required for IAM authentication to OpenSearch."
+                )
+            # SigV4 signing for an AWS managed domain whose FGAC master is an
+            # IAM ARN. Credentials come from the default boto3 chain (env, IRSA,
+            # instance/task role); the signer refreshes them per request.
+            credentials = boto3.Session().get_credentials()
+            if credentials is None:
+                raise ValueError(
+                    "OpenSearch IAM authentication is enabled but no AWS credentials "
+                    "could be resolved from the environment."
+                )
+            http_auth = Urllib3AWSV4SignerAuth(credentials, aws_region, aws_service)
+        else:
+            http_auth = auth
         self._client = OpenSearch(
             hosts=[{"host": host, "port": port}],
-            http_auth=auth,
+            http_auth=http_auth,
             use_ssl=use_ssl,
             verify_certs=verify_certs,
+            ca_certs=ca_certs,
+            client_cert=client_cert,
+            client_key=client_key,
             ssl_show_warn=ssl_show_warn,
             # NOTE: This timeout applies to all requests the client makes,
             # including bulk indexing. When exceeded, the client will raise a
@@ -414,16 +463,26 @@ class OpenSearchIndexClient(OpenSearchClient):
         index_name: The name of the index to interact with.
         host: The host of the OpenSearch cluster.
         port: The port of the OpenSearch cluster.
-        auth: The authentication credentials for the OpenSearch cluster. A tuple
-            of (username, password).
+        auth: The basic-auth credentials for the OpenSearch cluster, a tuple of
+            (username, password). Used only when auth_method is BASIC; ignored
+            for IAM.
         use_ssl: Whether to use SSL for the OpenSearch cluster. Defaults to
             True.
-        verify_certs: Whether to verify the SSL certificates for the OpenSearch
-            cluster. Defaults to False.
+        verify_certs: Whether to verify the server certificate. Defaults to
+            OPENSEARCH_VERIFY_CERTS.
+        ca_certs: CA bundle path used to verify the server certificate.
+        client_cert: Client certificate path for mutual TLS.
+        client_key: Client private key path for mutual TLS.
         ssl_show_warn: Whether to show warnings for SSL certificates. Defaults
             to False.
         timeout: The timeout for the OpenSearch cluster. Defaults to
             DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S.
+        auth_method: Whether to authenticate with HTTP basic auth or AWS SigV4
+            (IAM). Defaults to OPENSEARCH_AUTH_METHOD.
+        aws_region: AWS region used for SigV4 signing. Required when auth_method
+            is IAM. Defaults to OPENSEARCH_AWS_REGION.
+        aws_service: AWS service name for SigV4 signing ("es" for managed
+            domains, "aoss" for Serverless). Defaults to OPENSEARCH_AWS_SERVICE.
     """
 
     def __init__(
@@ -433,10 +492,16 @@ class OpenSearchIndexClient(OpenSearchClient):
         port: int = OPENSEARCH_REST_API_PORT,
         auth: tuple[str, str] = (OPENSEARCH_ADMIN_USERNAME, OPENSEARCH_ADMIN_PASSWORD),
         use_ssl: bool = OPENSEARCH_USE_SSL,
-        verify_certs: bool = False,
+        verify_certs: bool = OPENSEARCH_VERIFY_CERTS,
+        ca_certs: str | None = OPENSEARCH_CA_CERTS,
+        client_cert: str | None = OPENSEARCH_CLIENT_CERT,
+        client_key: str | None = OPENSEARCH_CLIENT_KEY,
         ssl_show_warn: bool = False,
         timeout: int = DEFAULT_OPENSEARCH_CLIENT_TIMEOUT_S,
         emit_metrics: bool = True,
+        auth_method: OpenSearchAuthMethod = OPENSEARCH_AUTH_METHOD,
+        aws_region: str | None = OPENSEARCH_AWS_REGION,
+        aws_service: str = OPENSEARCH_AWS_SERVICE,
     ):
         super().__init__(
             host=host,
@@ -444,8 +509,14 @@ class OpenSearchIndexClient(OpenSearchClient):
             auth=auth,
             use_ssl=use_ssl,
             verify_certs=verify_certs,
+            ca_certs=ca_certs,
+            client_cert=client_cert,
+            client_key=client_key,
             ssl_show_warn=ssl_show_warn,
             timeout=timeout,
+            auth_method=auth_method,
+            aws_region=aws_region,
+            aws_service=aws_service,
         )
         self._index_name = index_name
         self._emit_metrics = emit_metrics

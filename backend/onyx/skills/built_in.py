@@ -179,6 +179,9 @@ _REGISTRY: Final = BuiltInSkillRegistry(
         ),
         ExternalAppBuiltInProvider(skill_id="gmail", app_type=ExternalAppType.GMAIL),
         ExternalAppBuiltInProvider(skill_id="github", app_type=ExternalAppType.GITHUB),
+        ExternalAppBuiltInProvider(
+            skill_id="hubspot", app_type=ExternalAppType.HUBSPOT
+        ),
     )
 )
 

@@ -9,22 +9,27 @@ controllable dependency: the bundled mock LLM server provides unlimited,
 zero-cost, deterministic call volume so every regression is attributable to
 Onyx code.
 
-This is a **standalone uv project** — intentionally not a member of the root
-uv workspace, so Locust's gevent pins never constrain the backend lockfile.
-Code here must never import `onyx.*` (gevent monkey-patching breaks backend
-deps); the stream parser is vendored.
+Locust's dependencies live in the root project's optional **`loadtest`
+dependency group** (not synced by default), so its gevent/flask tree only
+enters the environment when you opt in. Code here must never import `onyx.*`
+(gevent monkey-patching breaks backend deps); the stream parser is vendored.
 
 ## Setup
 
+From the repo root, sync with the `loadtest` group, then work from this
+directory. The `uv run` commands below all pass `--group loadtest` so the
+group stays installed (a bare `uv run` re-syncs to the default groups and
+would drop Locust).
+
 ```bash
+uv sync --group loadtest
 cd loadtest
-uv sync
 ```
 
 ### Mock LLM server
 
 ```bash
-uv run uvicorn mock_llm.app:app --port 8001
+uv run --group loadtest uvicorn mock_llm.app:app --port 8001
 ```
 
 Register it in Onyx (Admin Panel → LLM, or `PUT /api/admin/llm/provider`) as
@@ -49,7 +54,7 @@ Behavior knobs ride in the model name (litellm passes it through verbatim):
 The mock understands Onyx's LLM-loop contract: `tool_choice` none/auto/
 required/forced, the deep-research phase sequence (clarification →
 plan → orchestrator → research agents → reports), and `max_tokens` caps.
-Contract tests: `uv run pytest tests/ -q`.
+Contract tests: `uv run --group loadtest pytest tests/ -q`.
 
 ### Provider profiles
 
@@ -68,7 +73,7 @@ their resources open longer, which is exactly what stresses the api-server):
 ## Running
 
 ```bash
-ONYX_API_KEY=<key> uv run locust --headless -u 5 -r 1 -t 5m -H https://<your-onyx-url>
+ONYX_API_KEY=<key> uv run --group loadtest locust --headless -u 5 -r 1 -t 5m -H https://<your-onyx-url>
 ```
 
 ### Scenario mix
@@ -85,9 +90,9 @@ approximating production traffic shape:
 
 ```bash
 # default weighted mix:
-... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url>
+... uv run --group loadtest locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url>
 # or pin to specific classes:
-... uv run locust --headless -u 10 -r 2 -t 10m -H https://<your-onyx-url> BasicChatUser ChatWithSearchUser
+... uv run --group loadtest locust --headless -u 10 -r 2 -t 10m -H https://<your-onyx-url> BasicChatUser ChatWithSearchUser
 ```
 
 ### Targeted reproducers
@@ -114,7 +119,7 @@ mode. Each maps to a real production incident class:
 
 ```bash
 ONYX_LONGCONV_MODEL=mock-smallctx \
-... uv run locust --headless -u 25 -r 5 -t 20m -H https://<your-onyx-url> CompressionUser
+... uv run --group loadtest locust --headless -u 25 -r 5 -t 20m -H https://<your-onyx-url> CompressionUser
 ```
 - **FileAttachmentUser** (`fileattach:*`) — uploads one file (`ONYX_FILE_KB`,
   default 512) up front, then attaches it to every message. Exercises the
@@ -124,8 +129,8 @@ ONYX_LONGCONV_MODEL=mock-smallctx \
   across a growing history (a file-heavy long chat).
 
 ```bash
-... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> LongConversationUser
-... uv run locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> DisconnectUser
+... uv run --group loadtest locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> LongConversationUser
+... uv run --group loadtest locust --headless -u 50 -r 5 -t 15m -H https://<your-onyx-url> DisconnectUser
 ```
 
 ### Collapse-point ramp (`ONYX_SHAPE=stepramp`)
@@ -139,11 +144,49 @@ overrides `-u/-r` and is only active when `ONYX_SHAPE=stepramp` is set.
 ```bash
 ONYX_SHAPE=stepramp ONYX_RAMP_STAGES=25,50,100,200 ONYX_RAMP_DWELL=300 \
 ONYX_LLM_MODEL=mock-ttft8000-itl40-len600 \
-ONYX_API_KEY=<key> uv run locust --headless -t 25m -H https://<your-onyx-url>
+ONYX_API_KEY=<key> uv run --group loadtest locust --headless -t 25m -H https://<your-onyx-url>
 ```
 
 The API key is created by an admin via `POST /api/admin/api-key`
 (`{"name": "loadtest", "role": "basic"}`) or Admin Panel → API Keys.
+
+### Worker concurrency sweep (`ThreadHogUser` + `HealthProbeUser`)
+
+Validates the api-server worker config (`api.workers` / `api.threadpoolSize` /
+CPU in the Helm chart) against the production failure mode: long-running agent
+requests pin the anyio threadpool, the event loop starves, and the liveness
+`httpGet /health` probe (`timeoutSeconds: 10`, `failureThreshold: 3`) starts
+failing → the pod is SIGKILLed.
+
+- **ThreadHogUser** (`hog:*`) — each turn streams a deliberately slow mock
+  response (default `mock-ttft1000-itl200-len600` ≈ 121s), holding one
+  threadpool thread for the whole turn. Concurrency (`-u`) maps directly to
+  pool pressure.
+- **HealthProbeUser** (`HEALTH:probe`) — pins `ONYX_HEALTH_PROBES` (default 1)
+  users that GET `/health` once per `ONYX_HEALTH_INTERVAL` (default 1s),
+  **independent of `-u`**, and fail any probe slower than `ONYX_HEALTH_SLA_MS`
+  (default 10000, the liveness `timeoutSeconds`). The `HEALTH:probe` failure
+  rate is the experiment's primary signal — when it goes non-zero, this config
+  would start getting liveness-killed at that concurrency.
+
+```bash
+# One run: hold ~49 long requests, probe /health throughout.
+ONYX_API_KEY=<key> ONYX_HEALTH_PATH=/health \
+  uv run --group loadtest locust --headless -u 50 -r 5 -t 15m \
+  -H https://<your-onyx-url> ThreadHogUser HealthProbeUser
+```
+
+Sweep `concurrent-long-requests ∈ {10,20,40,80}` (use `ONYX_SHAPE=stepramp`)
+against chart configs `api.workers ∈ {1,2,4}` × `api.threadpoolSize ∈ {40,80}`
+× CPU `∈ {2,4}`. The right config is the smallest one where `HEALTH:probe`
+stays at **0 failures** through your target concurrency.
+
+> **st-dev routing caveats:** the `/loadtest` subpath is shadowed by the
+> catch-all route — point `LOCUST_HOST` at a dedicated host or port-forward.
+> When `LOCUST_HOST` is the web/nginx host, set `ONYX_HEALTH_PATH=/api/health`;
+> when it targets the api Service directly, `/health` is correct. st-dev is
+> direct-RDS, so absolute numbers differ from customer infra — compare configs
+> **relative** to each other, not against an absolute SLA.
 
 ## Configuration (env vars)
 
@@ -155,6 +198,12 @@ The API key is created by an admin via `POST /api/admin/api-key`
 | `ONYX_SEARCH_MODEL` | `mock-tools1` | Model for ChatWithSearchUser |
 | `ONYX_MULTITOOL_MODEL` | `mock-tools3` | Model for MultiToolUser |
 | `ONYX_DR_MODEL` | `mock-agents2` | Model for DeepResearchUser |
+| `ONYX_HOG_MODEL` | `mock-ttft1000-itl200-len600` | Slow model for ThreadHogUser (sets per-turn thread-hold time) |
+| `ONYX_HOG_WAIT_SECONDS` / `ONYX_HOG_STREAM_READ_TIMEOUT` | 1 / 600 | ThreadHogUser think time / max inter-chunk wait |
+| `ONYX_HEALTH_PATH` | `/health` | Health-probe path (`/api/health` via web/nginx host) |
+| `ONYX_HEALTH_PROBES` | 1 | Number of HealthProbeUser instances to pin (independent of `-u`) |
+| `ONYX_HEALTH_INTERVAL` | 1.0 | Seconds between health probes |
+| `ONYX_HEALTH_SLA_MS` | 10000 | Fail a probe slower than this (liveness `timeoutSeconds`) |
 | `ONYX_LONGCONV_MODEL` | unset | Model for LongConversationUser (unset = persona default) |
 | `ONYX_SESSION_TURNS` | 1 | Turns to keep one session alive (LongConversationUser 20, CompressionUser 60) |
 | `ONYX_MSG_CHARS` | 0 | Per-message size in chars (CompressionUser defaults to 8000; 0 = short questions) |

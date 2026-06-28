@@ -104,8 +104,9 @@ from `onyx/skills/builtin/pptx/scripts/`).
 - Prod / default: `ENABLE_SKILLS=true` — full image, all skills work.
 - Dev kind clusters / CI: `ENABLE_SKILLS=false` — ~700 MB smaller, but
   any skill that shells out to `soffice` / `pdftoppm` / `pptxgenjs` will
-  fail. The current K8s test suite doesn't exercise those, so
-  `pr-craft-k8s-tests.yml` builds with `ENABLE_SKILLS=false`.
+  fail. The full-cluster Craft K8s integration lane doesn't exercise
+  those runtime tools, so `pr-craft-k8s-tests.yml` builds with
+  `ENABLE_SKILLS=false`.
 
 To toggle in dev:
 
@@ -224,7 +225,7 @@ pod-create→Ready. Image sizes are read from `docker image inspect`.
 ### Prereqs
 
 - Local kind cluster on the `kind-onyx-dev` context (see
-  `docs/dev/local-kubernetes.md`). The script refuses to run against
+  `docs/craft/dev/local-kubernetes.md`). The script refuses to run against
   any other kubectl context as a safety guard.
 - Tools on `$PATH`: `docker`, `kind`, `kubectl`, `python3`.
 
@@ -288,5 +289,4 @@ Storage is handled by the API server through FileStore.
 
 `node_modules` and `.next` are deliberately excluded from snapshots
 because (a) they're huge, (b) `restore_snapshot` rebuilds them via the
-hardlink-backed `bun install` against the pre-warmed Bun cache (see
-`docs/craft/features/bun-node-modules-dedup.md`).
+hardlink-backed `bun install` against the pre-warmed Bun cache.

@@ -43,6 +43,10 @@ from onyx.db.models import UserRole
 from onyx.db.permissions import recompute_permissions_for_group__no_commit
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import fetch_user_by_id
+from onyx.utils.audit import actor_from_user
+from onyx.utils.audit import AuditAction
+from onyx.utils.audit import AuditOutcome
+from onyx.utils.audit import emit_audit_event
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -772,7 +776,7 @@ def add_users_to_user_group(
 
 def update_user_group(
     db_session: Session,
-    user: User,  # noqa: ARG001
+    user: User,
     user_group_id: int,
     user_group_update: UserGroupUpdate,
 ) -> UserGroup:
@@ -864,6 +868,20 @@ def update_user_group(
     )
 
     db_session.commit()
+
+    if added_user_ids or removed_user_ids:
+        emit_audit_event(
+            AuditAction.USER_GROUP_CHANGE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="user_group",
+            resource_id=user_group_id,
+            extra={
+                "added_user_ids": [str(uid) for uid in added_user_ids],
+                "removed_user_ids": [str(uid) for uid in removed_user_ids],
+            },
+        )
+
     return db_user_group
 
 

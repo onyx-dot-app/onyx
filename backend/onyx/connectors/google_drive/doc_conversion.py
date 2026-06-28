@@ -24,6 +24,8 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
 )
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
+from onyx.connectors.google_drive.file_retrieval import add_drive_resource_key_header
+from onyx.connectors.google_drive.file_retrieval import DRIVE_RESOURCE_KEY_FIELD
 from onyx.connectors.google_drive.models import GDriveMimeType
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import get_document_sections
@@ -268,7 +270,10 @@ class ExportSizeThresholdExceeded(Exception):
 
 
 def download_request(
-    service: GoogleDriveService, file_id: str, size_threshold: int
+    service: GoogleDriveService,
+    file_id: str,
+    size_threshold: int,
+    resource_key: str | None = None,
 ) -> bytes:
     """
     Download the file from Google Drive.
@@ -278,6 +283,7 @@ def download_request(
     request = service.files().get_media(  # ty: ignore[unresolved-attribute]
         fileId=file_id
     )
+    add_drive_resource_key_header(request, file_id, resource_key)
     return _download_request(request, file_id, size_threshold)
 
 
@@ -318,13 +324,14 @@ def _download_and_extract_sections_basic(
     file_id = file["id"]
     file_name = file["name"]
     mime_type = file["mimeType"]
+    resource_key = file.get(DRIVE_RESOURCE_KEY_FIELD)
     link = file.get(WEB_VIEW_LINK_KEY, "")
 
     # For non-Google files, download the file
     # Use the correct API call for downloading files
     # lazy evaluation to only download the file if necessary
     def response_call() -> bytes:
-        return download_request(service, file_id, size_threshold)
+        return download_request(service, file_id, size_threshold, resource_key)
 
     def _extract_tabular(
         raw_bytes: bytes, name: str, content_type: str
@@ -378,6 +385,7 @@ def _download_and_extract_sections_basic(
         request = service.files().export_media(  # ty: ignore[unresolved-attribute]
             fileId=file_id, mimeType=export_mime_type
         )
+        add_drive_resource_key_header(request, file_id, resource_key)
         response = _download_request(request, file_id, size_threshold)
         if not response:
             logger.warning("Failed to export %s as %s", file_name, export_mime_type)

@@ -96,11 +96,14 @@ class StubSandboxManager(SandboxManager):
       by ``subscribe_to_opencode_session``.
     - ``create_snapshot_returns``: ``SnapshotResult | None`` returned by
       ``create_snapshot``.
-    - ``list_directory_returns``, ``read_file_returns``,
-      ``upload_file_returns``, ``delete_file_returns``,
+    - ``create_snapshot_results_by_session``: per-session ``SnapshotResult``,
+      ``None``, or exception for ``create_snapshot``.
+    - ``list_directory_returns`` or ``list_directory_returns_by_path``,
+      ``read_file_returns``, ``upload_file_returns``, ``delete_file_returns``,
       ``get_upload_stats_returns``, ``get_webapp_url_returns``,
       ``generate_pptx_preview_returns``: return values for the matching
-      filesystem / utility methods.
+      filesystem / utility methods. Use ``list_directory_returns_by_path`` for
+      recursive directory-walk tests.
 
     Silent no-op opt-ins
     --------------------
@@ -132,8 +135,14 @@ class StubSandboxManager(SandboxManager):
         self.health_check_returns: bool | None = None
         self.session_workspace_exists_returns: bool | None = None
         self.create_snapshot_returns: SnapshotResult | None | object = _UNSET
+        self.create_snapshot_results_by_session: dict[
+            UUID, SnapshotResult | None | Exception
+        ] = {}
         self.create_opencode_history_snapshot_returns: bool | object = _UNSET
         self.list_directory_returns: list[FilesystemEntry] | None = None
+        self.list_directory_returns_by_path: dict[str, list[FilesystemEntry]] | None = (
+            None
+        )
         self.read_file_returns: bytes | None = None
         self.upload_file_returns: str | None = None
         self.delete_file_returns: bool | None = None
@@ -207,6 +216,7 @@ class StubSandboxManager(SandboxManager):
         self.last_send_message_payload: dict[str, Any] | None = None
         self.last_subscribe_to_opencode_session_payload: dict[str, Any] | None = None
         self.last_list_directory_payload: dict[str, Any] | None = None
+        self.list_directory_payloads: list[dict[str, Any]] = []
         self.last_read_file_payload: dict[str, Any] | None = None
         self.last_upload_file_payload: dict[str, Any] | None = None
         self.last_delete_file_payload: dict[str, Any] | None = None
@@ -320,6 +330,12 @@ class StubSandboxManager(SandboxManager):
             "session_id": session_id,
             "tenant_id": tenant_id,
         }
+        if session_id in self.create_snapshot_results_by_session:
+            outcome = self.create_snapshot_results_by_session[session_id]
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
         if self.create_snapshot_returns is _UNSET:
             raise _not_configured("create_snapshot")
         return cast("SnapshotResult | None", self.create_snapshot_returns)
@@ -483,6 +499,12 @@ class StubSandboxManager(SandboxManager):
             "session_id": session_id,
             "path": path,
         }
+        self.list_directory_payloads.append(self.last_list_directory_payload)
+        if self.list_directory_returns_by_path is not None:
+            entries = self.list_directory_returns_by_path.get(path)
+            if entries is None:
+                raise ValueError(f"Directory not found: {path}")
+            return entries
         if self.list_directory_returns is None:
             raise _not_configured("list_directory")
         return self.list_directory_returns

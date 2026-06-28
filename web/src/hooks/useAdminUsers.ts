@@ -10,7 +10,7 @@ import type { UserRole, InvitedUserSnapshot } from "@/lib/types";
 import type {
   UserRow,
   UserGroupInfo,
-} from "@/refresh-pages/admin/UsersPage/interfaces";
+} from "@/views/admin/UsersPage/interfaces";
 
 // ---------------------------------------------------------------------------
 // Backend response shape (GET /manage/users/accepted/all)

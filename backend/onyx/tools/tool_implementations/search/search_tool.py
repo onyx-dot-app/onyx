@@ -39,10 +39,12 @@ from collections.abc import Callable
 from typing import Any
 from typing import cast
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import BaseFilters
@@ -62,6 +64,7 @@ from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.context.search.utils import populate_file_ids_on_sections
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import check_federated_connectors_exist
+from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.document_set import filter_document_set_names_by_user_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
@@ -87,12 +90,16 @@ from onyx.secondary_llm_flows.document_filter import select_chunks_for_relevance
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from onyx.secondary_llm_flows.query_expansion import keyword_query_expansion
 from onyx.secondary_llm_flows.query_expansion import semantic_query_rephrase
+from onyx.secondary_llm_flows.source_filter import decide_search_scope
+from onyx.secondary_llm_flows.source_filter import SearchCycle
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.streaming_models import SearchToolDocumentsDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolQueriesDelta
 from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolCallException
 from onyx.tools.models import ToolResponse
@@ -124,6 +131,29 @@ from shared_configs.configs import MODEL_SERVER_PORT
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+
+
+class QueryExpansionAndScope(BaseModel):
+    """Result of one search cycle's query expansion + source-scope decision."""
+
+    semantic_query: str | None
+    keyword_queries: list[str]
+    plan_scope: list[DocumentSource] | None
+
+
+def _build_scope_note(
+    scope: list[DocumentSource] | None, queries_run: list[str]
+) -> str:
+    """Note appended to a scoped search's response: which source(s) it covered
+    and the queries that ran, so a repeat can vary terms. "" when unscoped."""
+    if not scope:
+        return ""
+    searched = ", ".join(source.value for source in scope)
+    queries_str = "; ".join(queries_run) or "(none)"
+    return (
+        f"(This internal search covered only: {searched}. Queries run: {queries_str}. "
+        "Call internal_search again with different query terms to keep searching.)"
+    )
 
 
 def deduplicate_queries(
@@ -265,6 +295,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.bypass_acl = bypass_acl
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
+
+        self._search_cycles: list[SearchCycle] = []
+        self._cached_expansion: tuple[str | None, list[str]] | None = None
+        self._scope_decision_settled = False
 
         self._id = tool_id
 
@@ -428,6 +462,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         acl_filters: list[str] | None,
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
+        effective_filters: BaseFilters | None,
     ) -> list[InferenceChunk]:
         """Run search pipeline for a single query using pre-fetched data.
 
@@ -441,6 +476,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             acl_filters: Pre-fetched ACL filters (None when bypass_acl)
             embedding_model: Pre-fetched embedding model
             federated_retrieval_infos: Pre-fetched federated retrieval functions
+            effective_filters: Filters for THIS search, with the per-call source
+                scope already applied (computed once in run()).
 
         Returns:
             List of InferenceChunk results
@@ -451,9 +488,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 hybrid_alpha=hybrid_alpha,
                 # For projects, the search scope is the project and has no other limits
                 user_selected_filters=(
-                    self.user_selected_filters
-                    if self.project_id_filter is None
-                    else None
+                    effective_filters if self.project_id_filter is None else None
                 ),
                 bypass_acl=self.bypass_acl,
                 limit=num_hits,
@@ -520,7 +555,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         QUERIES_FIELD: {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of search queries to execute, typically a single query.",
+                            "description": (
+                                "List of search queries to execute, typically a single query. "
+                                "Query expansion and filter extraction steps will be run "
+                                "automatically downstream, do not include time or source type "
+                                "scoping details in your query."
+                            ),
                         },
                     },
                     "required": [QUERIES_FIELD],
@@ -536,6 +576,58 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
         )
 
+    @log_function_time(
+        func_name="Search tool - query expansion + scope decision",
+        print_only=True,
+        debug_only=True,
+    )
+    def _expand_queries_and_decide_scope(
+        self,
+        skip_query_expansion: bool,
+        message_history: list[ChatMinimalTextMessage],
+        user_info: str | None,
+        memories: list[str],
+        decide_args: tuple[Any, ...],
+    ) -> QueryExpansionAndScope:
+        """Expand the query and decide the source scope, in parallel when both apply.
+
+        Repeat calls reuse the cached expansion instead of re-expanding. Once the
+        scope decision finds no source directive it latches off for the rest of the
+        turn, since the conversation cannot introduce one mid-turn.
+        """
+        expand_queries = not skip_query_expansion
+        decide_scope = not self._scope_decision_settled
+
+        jobs: list[tuple[Callable, tuple]] = []
+        scope_job_index: int | None = None
+        if expand_queries:
+            expansion_args = (message_history, self.llm, user_info, memories)
+            jobs.append((semantic_query_rephrase, expansion_args))
+            jobs.append((keyword_query_expansion, expansion_args))
+        if decide_scope:
+            scope_job_index = len(jobs)
+            jobs.append((decide_search_scope, decide_args))
+
+        results = run_functions_tuples_in_parallel(jobs) if jobs else []
+
+        semantic_query: str | None = None
+        keyword_queries: list[str] = []
+        if expand_queries:
+            semantic_query = results[0]
+            keyword_queries = results[1] or []
+            self._cached_expansion = (semantic_query, keyword_queries)
+
+        plan_scope: list[DocumentSource] | None = None
+        if scope_job_index is not None:
+            plan_scope = results[scope_job_index]
+            self._scope_decision_settled = plan_scope is None
+
+        return QueryExpansionAndScope(
+            semantic_query=semantic_query,
+            keyword_queries=keyword_queries,
+            plan_scope=plan_scope,
+        )
+
     @log_function_time(print_only=True)
     def run(
         self,
@@ -547,9 +639,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         overall_start_time = time.time()
 
         # Initialize timing variables (in case of early exceptions)
-        query_expansion_elapsed = 0.0
         document_selection_elapsed = 0.0
         document_expansion_elapsed = 0.0
+
+        connected_sources: list[DocumentSource] = []
 
         # Pre-fetch all DB data in a single short-lived session so that
         # parallel search workers need zero DB connections.
@@ -619,6 +712,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 or []
             )
 
+            # Project mode ignores user filters, so source scoping doesn't apply.
+            if self.project_id_filter is None:
+                connected_sources = fetch_unique_document_sources(db_session)
+
             # Slack tokens and entity config — only prefetch when Slack
             # search is enabled or we're in a Slack bot context.
             if self.enable_slack_search or self.slack_context:
@@ -656,38 +753,110 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         user_info = override_kwargs.user_info
 
-        # Skip query expansion if this is a repeat search call
-        if override_kwargs.skip_query_expansion:
-            logger.debug("Search tool - Skipping query expansion (repeat search call)")
-            semantic_query = None
-            keyword_queries: list[str] = []
+        # A persona/user source restriction is the outer bound the decision works within.
+        user_source_restriction: list[DocumentSource] | None = (
+            list(self.user_selected_filters.source_type)
+            if self.user_selected_filters and self.user_selected_filters.source_type
+            else None
+        )
+        if user_source_restriction is not None:
+            allowed = set(user_source_restriction)
+            candidate_sources = [s for s in connected_sources if s in allowed]
         else:
-            # Start timing for query expansion/rephrase
-            query_expansion_start_time = time.time()
+            candidate_sources = connected_sources
 
-            functions_with_args: list[tuple[Callable, tuple]] = [
-                (
-                    semantic_query_rephrase,
-                    (message_history, self.llm, user_info, memories),
+        decide_args = (
+            message_history,
+            self.llm,
+            candidate_sources,
+            list(self._search_cycles),
+            llm_queries,
+        )
+        expansion = self._expand_queries_and_decide_scope(
+            skip_query_expansion=override_kwargs.skip_query_expansion,
+            message_history=message_history,
+            user_info=user_info,
+            memories=memories,
+            decide_args=decide_args,
+        )
+        semantic_query = expansion.semantic_query
+        keyword_queries = expansion.keyword_queries
+        plan_scope = expansion.plan_scope
+
+        resolved_scope = (
+            plan_scope if plan_scope is not None else user_source_restriction
+        )
+
+        logger.info(
+            "Internal search - source scope: %s",
+            [s.value for s in resolved_scope] if resolved_scope else "all sources",
+        )
+
+        # On a repeat call that advanced to a not-yet-searched source, reuse the
+        # cached expansion (it is source-agnostic) rather than searching raw queries.
+        searched_sources = {
+            value for cycle in self._search_cycles for value in cycle.searched_sources
+        }
+        is_new_filter = bool(resolved_scope) and any(
+            source.value not in searched_sources for source in resolved_scope
+        )
+        if (
+            override_kwargs.skip_query_expansion
+            and is_new_filter
+            and self._cached_expansion is not None
+        ):
+            semantic_query, keyword_queries = self._cached_expansion
+
+        self._search_cycles.append(
+            SearchCycle(
+                cycle_number=len(self._search_cycles) + 1,
+                queries=list(llm_queries),
+                searched_sources=(
+                    [source.value for source in resolved_scope]
+                    if resolved_scope
+                    else []
                 ),
-                (
-                    keyword_query_expansion,
-                    (message_history, self.llm, user_info, memories),
-                ),
-            ]
-
-            expansion_results = run_functions_tuples_in_parallel(functions_with_args)
-
-            # End timing for query expansion/rephrase
-            query_expansion_elapsed = time.time() - query_expansion_start_time
-            logger.debug(
-                "Search tool - Query expansion/rephrase took %s seconds",
-                format(query_expansion_elapsed, ".3f"),
             )
-            semantic_query = expansion_results[0]  # str
-            keyword_queries = (
-                expansion_results[1] if expansion_results[1] is not None else []
-            )  # list[str]
+        )
+
+        # Surface the scope to the UI only when it narrows to a strict subset of
+        # the connected sources — scoping to all of them is equivalent to an
+        # unscoped search, so the UI keeps its default "internal documents" label.
+        scopes_all_sources = bool(connected_sources) and set(
+            connected_sources
+        ).issubset(resolved_scope or [])
+        if resolved_scope and not scopes_all_sources:
+            self.emitter.emit(
+                Packet(
+                    placement=placement,
+                    obj=SearchToolFilterDelta(
+                        sources=[source.value for source in resolved_scope]
+                    ),
+                )
+            )
+
+        queries_run = list(
+            dict.fromkeys(
+                llm_queries
+                + ([semantic_query] if semantic_query else [])
+                + keyword_queries
+            )
+        )
+        scope_note = _build_scope_note(resolved_scope, queries_run)
+
+        effective_filters = self.user_selected_filters
+        if resolved_scope is not None:
+            effective_filters = (
+                self.user_selected_filters or BaseFilters()
+            ).model_copy(update={"source_type": resolved_scope})
+            federated_retrieval_infos = [
+                info
+                for info in federated_retrieval_infos
+                if info.source.to_non_federated_source() in resolved_scope
+            ]
+            # Disable the Slack federated search when Slack is out of scope.
+            if DocumentSource.SLACK not in resolved_scope:
+                slack_access_token = None
 
         # Prepare queries with their weights and hybrid_alpha settings
         # Group 1: Keyword queries (use hybrid_alpha=0.2)
@@ -769,6 +938,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
+                        effective_filters,
                     ),
                 )
             )
@@ -786,6 +956,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                         acl_filters,
                         embedding_model,
                         federated_retrieval_infos,
+                        effective_filters,
                     ),
                 )
             )
@@ -830,13 +1001,17 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         if not top_sections:
             logger.info("Search tool - no results found, returning empty response")
+            empty_response, _ = convert_inference_sections_to_llm_string(
+                top_sections=[],
+                note=scope_note or None,
+            )
             return ToolResponse(
                 rich_response=SearchDocsResponse(
                     search_docs=[],
                     citation_mapping={},
                     displayed_docs=None,
                 ),
-                llm_facing_response="",
+                llm_facing_response=empty_response,
             )
 
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
@@ -978,17 +1153,19 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             limit=override_kwargs.max_llm_chunks,
             include_document_id=False,
             include_link=override_kwargs.include_link,
+            note=scope_note or None,
         )
 
         # End overall timing
         overall_elapsed = time.time() - overall_start_time
         logger.debug(
-            "Search tool - Total execution time: %s seconds (query expansion: %ss, document selection: %ss, document expansion: %ss)",
+            "Search tool - Total execution time: %s seconds (document selection: %ss, document expansion: %ss)",
             format(overall_elapsed, ".3f"),
-            format(query_expansion_elapsed, ".3f"),
             format(document_selection_elapsed, ".3f"),
             format(document_expansion_elapsed, ".3f"),
         )
+
+        llm_facing_response = docs_str
 
         return ToolResponse(
             # Typically the rich response will give more docs in case it needs to be displayed in the UI
@@ -998,5 +1175,5 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 displayed_docs=final_ui_docs,
             ),
             # The LLM facing response typically includes less docs to cut down on noise and token usage
-            llm_facing_response=docs_str,
+            llm_facing_response=llm_facing_response,
         )

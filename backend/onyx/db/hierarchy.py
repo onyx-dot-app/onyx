@@ -6,6 +6,7 @@ from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -135,44 +136,49 @@ def ensure_source_node_exists(
     return source_node
 
 
-def resolve_parent_hierarchy_node_id(
+def _create_stub_hierarchy_node(
     db_session: Session,
-    raw_parent_id: str | None,
+    raw_node_id: str,
     source: DocumentSource,
-) -> int | None:
+    source_node_id: int,
+) -> HierarchyNode:
+    """Create a STUB placeholder for a parent that hasn't been indexed yet.
+
+    Flushed immediately so subsequent lookups in the same session find it,
+    preventing duplicate stubs when multiple children share the same missing parent.
+    The stub is promoted to the real node type when the parent page is processed.
     """
-    Resolve a raw_parent_id to a database HierarchyNode ID.
-
-    If raw_parent_id is None, returns the SOURCE node ID for backward compatibility.
-    If the parent node doesn't exist, returns the SOURCE node ID as fallback.
-    """
-    if raw_parent_id is None:
-        # No parent specified - use the SOURCE node
-        source_node = get_source_hierarchy_node(db_session, source)
-        return source_node.id if source_node else None
-
-    parent_node = get_hierarchy_node_by_raw_id(db_session, raw_parent_id, source)
-    if parent_node:
-        return parent_node.id
-
-    # Parent not found - fall back to SOURCE node
-    logger.warning(
-        "Parent hierarchy node not found: raw_id=%s, source=%s. Falling back to SOURCE node.",
-        raw_parent_id,
-        source,
+    stub = HierarchyNode(
+        raw_node_id=raw_node_id,
+        display_name="__stub__",
+        link=None,
+        source=source,
+        node_type=HierarchyNodeType.STUB,
+        parent_id=source_node_id,
+        is_public=False,
     )
-    source_node = get_source_hierarchy_node(db_session, source)
-    return source_node.id if source_node else None
+    db_session.add(stub)
+    try:
+        with db_session.begin_nested():
+            db_session.flush()
+        return stub
+    except IntegrityError:
+        # A concurrent worker inserted this stub first; return theirs.
+        existing = get_hierarchy_node_by_raw_id(db_session, raw_node_id, source)
+        if existing is not None:
+            return existing
+        raise
 
 
 def upsert_parents(
     db_session: Session,
     node: PydanticHierarchyNode,
+    source_node_id: int,
     source: DocumentSource,
     node_by_id: dict[str, PydanticHierarchyNode],
     done_ids: set[str],
     is_connector_public: bool = False,
-) -> None:
+) -> list[HierarchyNode]:
     """
     Upsert the in-batch ancestors of ``node`` in oldest-to-newest order.
 
@@ -213,29 +219,39 @@ def upsert_parents(
         current = parent_node
 
     # Drain oldest-first so each parent is persisted before its children.
+    created: list[HierarchyNode] = []
     for parent_node in reversed(pending):
-        upsert_hierarchy_node(
-            db_session,
-            parent_node,
-            source,
-            commit=False,
-            is_connector_public=is_connector_public,
+        created.extend(
+            upsert_hierarchy_node(
+                db_session,
+                parent_node,
+                source_node_id,
+                source,
+                commit=False,
+                is_connector_public=is_connector_public,
+            )
         )
         done_ids.add(parent_node.raw_node_id)
+    return created
 
 
 def upsert_hierarchy_node(
     db_session: Session,
     node: PydanticHierarchyNode,
+    source_node_id: int,
     source: DocumentSource,
     commit: bool = True,
     is_connector_public: bool = False,
-) -> HierarchyNode:
+) -> list[HierarchyNode]:
     """
     Upsert a hierarchy node from a Pydantic model.
 
     If a node with the same raw_node_id and source exists, updates it.
     Otherwise, creates a new node.
+
+    Returns a list containing the upserted node, plus a STUB node if one was
+    created for a missing parent. The STUB is promoted when the real parent is
+    later processed.
 
     Args:
         db_session: SQLAlchemy session
@@ -246,13 +262,26 @@ def upsert_hierarchy_node(
             and all hierarchy nodes should be marked as public regardless of their
             external_access settings. This ensures nodes from public connectors are
             accessible to all users.
+        source_node_id: DB id of the SOURCE root node for this source, used to
+            detect and replace the fallback with a STUB for missing cross-batch parents.
     """
-    # Resolve parent_id from raw_parent_id
-    parent_id = (
-        None
-        if node.node_type == HierarchyNodeType.SOURCE
-        else resolve_parent_hierarchy_node_id(db_session, node.raw_parent_id, source)
-    )
+    ret: list[HierarchyNode] = []
+    if node.node_type == HierarchyNodeType.SOURCE:
+        parent_id: int | None = None
+    elif node.raw_parent_id is None:
+        parent_id = source_node_id
+    else:
+        parent_node = get_hierarchy_node_by_raw_id(
+            db_session, node.raw_parent_id, source
+        )
+        if parent_node is not None:
+            parent_id = parent_node.id
+        else:
+            stub = _create_stub_hierarchy_node(
+                db_session, node.raw_parent_id, source, source_node_id
+            )
+            parent_id = stub.id
+            ret.append(stub)
 
     # For public connectors, all nodes are public
     # Otherwise, extract permission fields from external_access if present
@@ -305,13 +334,14 @@ def upsert_hierarchy_node(
             external_user_group_ids=external_user_group_ids,
         )
         db_session.add(hierarchy_node)
+    ret.append(hierarchy_node)
 
     if commit:
         db_session.commit()
     else:
         db_session.flush()
 
-    return hierarchy_node
+    return ret
 
 
 def upsert_hierarchy_nodes_batch(
@@ -324,10 +354,12 @@ def upsert_hierarchy_nodes_batch(
     """
     Batch upsert hierarchy nodes.
 
-    Note: This function requires that for each node passed in, all
-    its ancestors exist in either the database or elsewhere in the nodes list.
-    This function handles parent dependencies for you as long as that condition is met
-    (so you don't need to worry about parent nodes appearing before their children in the list).
+    Handles parent dependencies automatically: in-batch ancestors are upserted
+    before their children, and cross-batch missing parents get a STUB placeholder
+    that is promoted when the real parent is later processed.
+
+    Returns all upserted nodes including any STUB nodes created for missing parents,
+    so callers can cache and register them all uniformly.
 
     Args:
         db_session: SQLAlchemy session
@@ -338,38 +370,46 @@ def upsert_hierarchy_nodes_batch(
             and all hierarchy nodes should be marked as public regardless of their
             external_access settings.
     """
+    source_node = ensure_source_node_exists(db_session, source)
+    source_node_id = source_node.id
+
     node_by_id = {}
     for node in nodes:
         if node.node_type != HierarchyNodeType.SOURCE:
             node_by_id[node.raw_node_id] = node
-    done_ids = set[str]()
+    done_ids: set[str] = set()
 
-    results = []
+    all_nodes: list[HierarchyNode] = []
     for node in nodes:
         if node.raw_node_id in done_ids:
             continue
-        upsert_parents(
-            db_session,
-            node,
-            source,
-            node_by_id,
-            done_ids,
-            is_connector_public=is_connector_public,
+        all_nodes.extend(
+            upsert_parents(
+                db_session,
+                node,
+                source_node_id,
+                source,
+                node_by_id,
+                done_ids,
+                is_connector_public=is_connector_public,
+            )
         )
-        hierarchy_node = upsert_hierarchy_node(
-            db_session,
-            node,
-            source,
-            commit=False,
-            is_connector_public=is_connector_public,
+        all_nodes.extend(
+            upsert_hierarchy_node(
+                db_session,
+                node,
+                source_node_id,
+                source,
+                commit=False,
+                is_connector_public=is_connector_public,
+            )
         )
         done_ids.add(node.raw_node_id)
-        results.append(hierarchy_node)
 
     if commit:
         db_session.commit()
 
-    return results
+    return all_nodes
 
 
 def link_hierarchy_nodes_to_documents(
@@ -508,7 +548,10 @@ def _get_accessible_hierarchy_nodes_for_source(
     Returns:
         List of all HierarchyNode objects for the source
     """
-    stmt = select(HierarchyNode).where(HierarchyNode.source == source)
+    stmt = select(HierarchyNode).where(
+        HierarchyNode.source == source,
+        HierarchyNode.node_type != HierarchyNodeType.STUB,
+    )
     stmt = stmt.order_by(HierarchyNode.display_name)
     return list(db_session.execute(stmt).scalars().all())
 
@@ -530,6 +573,61 @@ def get_accessible_hierarchy_nodes_for_source(
         "onyx.db.hierarchy", "_get_accessible_hierarchy_nodes_for_source"
     )
     return versioned_fn(db_session, source, user_email, external_group_ids)
+
+
+HIERARCHY_NODE_SEARCH_LIMIT = 30
+
+
+def escape_like_pattern(s: str) -> str:
+    """Escape LIKE metacharacters so user input is treated as a literal substring."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _search_accessible_hierarchy_nodes(
+    db_session: Session,
+    query: str,
+    sources: list[DocumentSource] | None,
+    user_email: str,  # noqa: ARG001
+    external_group_ids: list[str],  # noqa: ARG001
+    limit: int = HIERARCHY_NODE_SEARCH_LIMIT,
+) -> list[HierarchyNode]:
+    """MIT version: case-insensitive display_name search without ACL filtering."""
+    pattern = f"%{escape_like_pattern(query)}%"
+    stmt = (
+        select(HierarchyNode)
+        .where(
+            HierarchyNode.node_type.notin_(
+                [HierarchyNodeType.STUB, HierarchyNodeType.SOURCE]
+            ),
+            HierarchyNode.display_name.ilike(pattern, escape="\\"),
+        )
+        .order_by(HierarchyNode.display_name)
+        .limit(limit)
+    )
+    if sources:
+        stmt = stmt.where(HierarchyNode.source.in_(sources))
+    return list(db_session.execute(stmt).scalars().all())
+
+
+def search_accessible_hierarchy_nodes(
+    db_session: Session,
+    query: str,
+    sources: list[DocumentSource] | None,
+    user_email: str,
+    external_group_ids: list[str],
+    limit: int = HIERARCHY_NODE_SEARCH_LIMIT,
+) -> list[HierarchyNode]:
+    """Search hierarchy nodes by display_name substring, ACL-gated.
+
+    MIT version returns all matching nodes; EE version applies permission filtering.
+    STUB and SOURCE nodes are always excluded.
+    """
+    versioned_fn = fetch_versioned_implementation(
+        "onyx.db.hierarchy", "_search_accessible_hierarchy_nodes"
+    )
+    return versioned_fn(
+        db_session, query, sources, user_email, external_group_ids, limit
+    )
 
 
 def _filter_accessible_hierarchy_node_ids(

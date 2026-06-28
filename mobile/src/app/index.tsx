@@ -2,6 +2,9 @@ import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useLogout } from "@/api/auth/useLogout";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { SidebarLayouts, SidebarTab, useSidebar } from "@/components/sidebar";
@@ -11,11 +14,6 @@ import SvgSearch from "@/icons/search";
 import SvgFolder from "@/icons/folder";
 import SvgPlus from "@/icons/plus";
 import SvgSettings from "@/icons/settings";
-
-// Demo of the React Native Sidebar — a port of the web Opal `SidebarLayouts` shell.
-// Tap the menu icon to slide the sidebar in over the screen; tap the backdrop or
-// swipe left to close. Colors resolve from @onyx-ai/shared, identical to web in
-// both light and dark.
 
 function SidebarTrigger() {
   const { setFolded } = useSidebar();
@@ -33,10 +31,12 @@ function SidebarTrigger() {
 export default function Home() {
   const { setFolded } = useSidebar();
   const [selected, setSelected] = useState("general");
+  const logout = useLogout();
+  const { data: user } = useCurrentUser();
 
   function choose(key: string) {
     setSelected(key);
-    setFolded(true); // auto-dismiss after selection (demo behavior)
+    setFolded(true);
   }
 
   return (
@@ -46,11 +46,25 @@ export default function Home() {
         <Text font="main-ui-action">Onyx Mobile</Text>
       </View>
 
-      <View className="flex-1 items-center justify-center px-6">
+      <View className="flex-1 items-center justify-center px-24">
         <Text font="main-content-body" className="text-center text-text-03">
           Tap the menu icon to open the sidebar. Tap the backdrop or swipe left
           to close.
         </Text>
+        {user ? (
+          <Text font="secondary-body" color="text-03" className="mt-24">
+            Signed in as {user.email}
+          </Text>
+        ) : null}
+        <Button
+          width="full"
+          prominence="secondary"
+          loading={logout.isPending}
+          onPress={() => logout.mutate()}
+          className="mt-16"
+        >
+          {logout.isPending ? "Logging out…" : "Log out"}
+        </Button>
       </View>
 
       <SidebarLayouts.Root foldable>

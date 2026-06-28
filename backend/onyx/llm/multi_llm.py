@@ -406,6 +406,7 @@ class LitellmLLM(LLM):
         if model_provider in (
             LlmProviderNames.BIFROST,
             LlmProviderNames.OPENAI_COMPATIBLE,
+            LlmProviderNames.NEBIUS_TOKENFACTORY,
         ):
             self._custom_llm_provider = "openai"
             # LiteLLM's OpenAI client requires an api_key to be set.
@@ -534,6 +535,7 @@ class LitellmLLM(LLM):
         is_openai_compatible_proxy = self._model_provider in (
             LlmProviderNames.BIFROST,
             LlmProviderNames.OPENAI_COMPATIBLE,
+            LlmProviderNames.NEBIUS_TOKENFACTORY,
         )
         model_provider = (
             f"{self.config.model_provider}/responses"

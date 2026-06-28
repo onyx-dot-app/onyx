@@ -1,1 +1,1 @@
-export { default } from "@/refresh-pages/admin/CodeInterpreterPage";
+export { default } from "@/views/admin/CodeInterpreterPage";

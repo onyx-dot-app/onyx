@@ -9,7 +9,7 @@
 import type {
   CustomSkill,
   SkillsList,
-} from "@/refresh-pages/admin/SkillsPage/interfaces";
+} from "@/views/admin/SkillsPage/interfaces";
 
 async function readErrorDetail(res: Response): Promise<string> {
   try {

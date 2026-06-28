@@ -21,45 +21,87 @@ The valid values for "date" is a date in format MM/DD/YYYY, ALWAYS follow this f
 """.strip()
 
 
-# Smaller followup prompts in source_filter.py
-# Known issue: LLMs like GPT-3.5 try to generalize. If the valid sources contains "web" but not
-# "confluence" and the user asks for confluence related things, the LLM will select "web" since
-# confluence is accessed as a website. This cannot be fixed without also reducing the capability
-# to match things like repository->github, website->web, etc.
-# This is generally not a big issue though as if the company has confluence, hopefully they add
-# a connector for it or the user is aware that confluence has not been added.
-SOURCE_FILTER_PROMPT = f"""
-Given a user query, extract relevant source filters for use in a downstream search tool.
-Respond with a json containing the source filters or null if no specific sources are referenced.
-ONLY extract sources when the user is explicitly limiting the scope of where information is \
-coming from.
-The user may provide invalid source filters, ignore those.
+# Used in source_filter.py: decide which connected source(s) an internal search
+# cycle should cover, given the conversation, the prior cycles this turn, and the
+# queries being run this cycle. Filled with: {conversation_history},
+# {current_cycle_queries}, {previous_cycles}, {valid_sources}, {last_user_query}.
+# Output is a bracketed comma-separated list of sources.
+SOURCE_SCOPE_DECISION_PROMPT = """
+You scope an internal search to its relevant sources. When the conversation EXPLICITLY \
+names source(s) to search, scope to them; when it names none, return [] (search every \
+source). You scope only by source — other scoping is handled by other systems. The system \
+runs multiple cycles, and the queries and sources of previous cycles are provided as \
+context.
 
-The valid sources are:
-{{valid_sources}}
-{{web_source_warning}}
-{{file_source_warning}}
+## Guidance
 
+Scope to a source when it is EXPLICITLY named — in this cycle's queries, or in an earlier \
+turn that this cycle continues. NEVER infer a source from the query's topic (e.g. an HR or \
+billing query is not a source). If no source is named, return [].
 
-ALWAYS answer with ONLY a json with the key "{SOURCES_KEY}". \
-The value for "{SOURCES_KEY}" must be null or a list of valid sources.
+A source named in an earlier turn still applies to a same-topic follow-up that names no new \
+source — keep scoping to it.
 
-Sample Response:
-{{sample_response}}
+When source(s) ARE named, the phrasing decides the mode:
+
+- COMBINED — one or more named sources with NO fallback order ("in Google Drive"; "search \
+A and B"; "check both A and B"): scope to all of them every cycle, regardless of previous \
+cycles. A single named source is COMBINED — scope to it.
+
+- BACKOFF ("check A first, then B", "try A; if nothing, then B" — an order): scope to ONE \
+source per cycle. By DEFAULT ADVANCE — scope to the first named source NOT in any previous \
+cycle's searched_sources; a reworded retry of the same search keeps advancing. BUT if this \
+cycle's queries are about a clearly DIFFERENT topic than the previous cycle's, re-search the \
+source the previous cycle used — it has not been searched for this new topic. Once all named \
+sources have been tried, scope to all of them.
+
+Only scope to sources listed in the Valid sources section below. If a named source is not \
+listed there, ignore it and scope to the named sources that ARE listed; return [] only when \
+none of the named sources are listed.
+
+## Conversation history
+
+{conversation_history}
+
+## Current cycle queries
+
+{current_cycle_queries}
+
+## Previous cycles of this user query
+
+{previous_cycles}
+
+## Valid sources
+
+{valid_sources}
+
+## Guidance reminder
+
+COMBINED ("A and B"): scope to all named sources, every cycle.
+BACKOFF ("A first, then B"): by DEFAULT ADVANCE to the first named source not in previous \
+cycles' searched_sources (a reworded retry keeps advancing). If this cycle's queries are \
+about a clearly DIFFERENT topic than the previous cycle's, re-search the source the previous \
+cycle used.
+If no source is named anywhere in the conversation, return [].
+
+## Output format
+
+Output a comma separated list of sources within brackets:
+[source_1, source_2]
+
+Do not include any formatting, explanations, or other text aside from the list. Provide an \
+empty list [] if no source should be scoped this cycle.
+
+## Query reminder
+
+The user's query is:
+{last_user_query}
+
+CRITICAL: output only the comma separated list of sources.
 """.strip()
-
-WEB_SOURCE_WARNING = """
-Note: The "web" source only applies to when the user specifies "website" in the query. \
-It does not apply to tools such as Confluence, GitHub, etc. that have a website.
-""".strip()
-
-FILE_SOURCE_WARNING = """
-Note: The "file" source only applies to when the user refers to uploaded files in the query.
-""".strip()
-
 
 # Use the following for easy viewing of prompts
 if __name__ == "__main__":
     print(TIME_FILTER_PROMPT)
     print("------------------")
-    print(SOURCE_FILTER_PROMPT)
+    print(SOURCE_SCOPE_DECISION_PROMPT)

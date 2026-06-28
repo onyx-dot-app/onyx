@@ -33,6 +33,7 @@ import { SidebarStateProvider } from "@opal/layouts";
 import { AppBackgroundProvider } from "@/providers/AppBackgroundProvider";
 import { QueryControllerProvider } from "@/providers/QueryControllerProvider";
 import ToastProvider from "@/providers/ToastProvider";
+import { FullWidthChatProvider } from "@/providers/FullWidthChatProvider";
 
 interface SidebarPersistenceProviderProps {
   children: React.ReactNode;
@@ -78,7 +79,9 @@ export default function AppProvider({ children }: AppProviderProps) {
             <ModalProvider>
               <SidebarPersistenceProvider>
                 <QueryControllerProvider>
-                  <ToastProvider>{children}</ToastProvider>
+                  <FullWidthChatProvider>
+                    <ToastProvider>{children}</ToastProvider>
+                  </FullWidthChatProvider>
                 </QueryControllerProvider>
               </SidebarPersistenceProvider>
             </ModalProvider>

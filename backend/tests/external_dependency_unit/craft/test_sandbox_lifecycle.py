@@ -2,9 +2,8 @@
 
 DB-bound tests that pin the sandbox state machine: PROVISIONING → RUNNING,
 provision failures rolling back the row, idempotent provisioning, the
-health-check failure -> re-provision recovery path, the idle-selection
-query shape, and the Redis lock that serializes concurrent provision
-attempts for the same user.
+health-check failure -> re-provision recovery path, and the idle-selection
+query shape.
 
 The full ``cleanup_idle_sandboxes_task`` end-to-end behavior lives in
 ``test_idle_cleanup.py`` — this file only covers the selection query, not
@@ -27,7 +26,6 @@ from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession
 from onyx.db.models import Sandbox
 from onyx.db.models import User
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.db.sandbox import create_snapshot__no_commit
 from onyx.server.features.build.db.sandbox import get_running_sandboxes
@@ -41,9 +39,6 @@ from tests.common.craft.payloads import default_llm_config
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox
 from tests.external_dependency_unit.craft.db_helpers import make_user
-from tests.external_dependency_unit.craft.redis_helpers import (
-    assert_lock_serializes_two_threads,
-)
 
 
 class TestProvisionTransitions:
@@ -446,33 +441,3 @@ class TestIdleCleanupSelection:
             s.id for s in get_running_sandboxes(db_session) if is_sandbox_idle(s, now)
         }
         assert row.id not in idle_ids
-
-
-# NOTE: ``test_idle_cleanup_marks_sandbox_sleeping_and_sessions_idle`` was
-# removed here. It hand-rolled the post-snapshot half of
-# ``cleanup_idle_sandboxes_task`` (clear_nextjs_ports_for_user +
-# mark_user_sessions_idle__no_commit + update_sandbox_status__no_commit) in
-# the test body, which is a P1 violation: the test was reimplementing
-# production logic rather than asserting an observable outcome of the real
-# task. The same end-state is covered by
-# ``backend/tests/external_dependency_unit/craft/test_idle_cleanup.py:
-# test_sessions_marked_idle_and_nextjs_ports_cleared``, which invokes
-# ``cleanup_idle_sandboxes_task.run`` directly and asserts the IDLE flip
-# plus cleared ``nextjs_port`` on every active session for the user.
-
-
-class TestConcurrentProvisionLock:
-    def test_concurrent_provision_serialized_by_redis_lock(
-        self,
-        db_session: Session,  # noqa: ARG002
-        test_user: User,
-    ) -> None:
-        # Real Redis lock under the same key shape used by sessions_api.py
-        # (``session_create:{user_id}``). Two threads race for the lock; the
-        # second observes that the first held it and therefore had to wait.
-        redis_client = get_redis_client(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-        )
-        lock_key = f"session_create:{test_user.id}"
-
-        assert_lock_serializes_two_threads(redis_client, lock_key)

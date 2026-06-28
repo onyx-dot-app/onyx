@@ -1,10 +1,7 @@
-// React Native port of web's Opal Button
-// (web/lib/opal/src/components/buttons/button/components.tsx); the color matrix
-// and sizing live in button.styles. Web "hover" maps to RN "pressed". Spacing
-// uses margins, not `gap-*` (unreliable in RN/NativeWind — see SidebarTab).
-// `children` is plain string; web's RichStr/markdown is intentionally unsupported.
-import { Pressable, View } from "react-native";
+// Spacing uses margins, not `gap-*` (unreliable in RN/NativeWind).
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { router, type Href } from "expo-router";
+import { cssInterop } from "nativewind";
 import type { InteractiveContract } from "@onyx-ai/shared/contracts";
 
 import { cn } from "@/lib/utils";
@@ -20,31 +17,26 @@ import {
   type ButtonWidth,
 } from "@/components/ui/button.styles";
 
+// ActivityIndicator ignores `style.color`; bridge the text-color class onto its `color` prop.
+const Spinner = cssInterop(ActivityIndicator, {
+  className: { target: false, nativeStyleToProp: { color: "color" } },
+}) as React.ComponentType<{ className?: string; size?: "small" | "large" }>;
+
 type ButtonBaseProps = InteractiveContract & {
-  /** Size preset. @default "lg" */
   size?: ButtonSize;
-  /** `"fit"` shrink-wraps to content; `"full"` stretches to parent. @default "fit" */
   width?: ButtonWidth;
-  /**
-   * Forces the pressed visual without a touch (e.g. an open popover trigger).
-   * @default "rest"
-   */
   interaction?: ButtonInteraction;
+  loading?: boolean;
   rightIcon?: IconFunctionComponent;
   onPress?: () => void;
-  /** Navigates here on press (expo-router). */
   href?: Href;
-  /** Accepted for web API parity; a no-op on touch. */
   tooltip?: string;
-  /** Layout overrides, applied to the outer pressable. */
   className?: string;
-  /** Screen-reader name — required for icon-only buttons (they have no text). */
+  // Required for icon-only buttons — without text a screen reader announces just "button".
   accessibilityLabel?: string;
 };
 
-// Mirrors web's discriminated `ButtonContentProps`: a label or a leading icon,
-// never neither. Icon-only (no children) must supply `accessibilityLabel` —
-// with no text, a screen reader would otherwise announce just "button".
+// A label or a leading icon, never neither; icon-only must supply `accessibilityLabel`.
 type ButtonProps = ButtonBaseProps &
   (
     | { icon?: IconFunctionComponent; children: string }
@@ -62,6 +54,7 @@ function Button({
   width = "fit",
   interaction = "rest",
   disabled = false,
+  loading = false,
   accessibilityLabel,
   icon,
   rightIcon,
@@ -74,24 +67,27 @@ function Button({
   const hasLabel = children != null;
 
   function handlePress() {
-    // disabled Pressable already blocks onPress — no guard needed
+    // disabled/loading Pressable already blocks onPress — no guard needed
     onPress?.();
     if (href != null) router.navigate(href);
   }
 
   return (
     <Pressable
-      disabled={disabled}
+      disabled={disabled || loading}
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled }}
-      // RN stretches flex children on the cross axis, so `fit` needs `self-start`
-      // to shrink-wrap like web's `w-fit` (RN has no `fit-content`).
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
+      // RN stretches flex children cross-axis; `self-start` shrink-wraps `fit` (no `fit-content`).
       className={cn(width === "full" ? "w-full" : "self-start", className)}
     >
       {({ pressed }) => {
-        const state = resolveButtonState(disabled, interaction, pressed);
+        const state = resolveButtonState(
+          disabled || loading,
+          interaction,
+          pressed,
+        );
         const colors = BUTTON_COLORS[variant][prominence][state];
         return (
           <View
@@ -106,16 +102,19 @@ function Button({
               colors.border,
             )}
           >
-            {icon ? (
+            {loading ? (
+              <View className={cn("items-center justify-center", spec.iconPad)}>
+                <Spinner size="small" className={colors.fg} />
+              </View>
+            ) : icon ? (
               <View className={cn("items-center justify-center", spec.iconPad)}>
                 <Icon as={icon} size={spec.iconSize} className={colors.fg} />
               </View>
             ) : null}
 
             {hasLabel ? (
-              // `mx-4` reproduces web's `gap-1` around the label (RN `gap-*` is
-              // unreliable). `shrink` + `ellipsizeMode="clip"` clip a long label
-              // (matching web) instead of pushing the trailing icon out.
+              // `mx-4` substitutes for `gap-*`; `shrink`+clip trims a long label
+              // instead of pushing the trailing icon out.
               <Text
                 font={spec.font}
                 numberOfLines={1}
@@ -126,7 +125,7 @@ function Button({
               </Text>
             ) : null}
 
-            {rightIcon ? (
+            {!loading && rightIcon ? (
               <View
                 className={cn(
                   "items-center justify-center",

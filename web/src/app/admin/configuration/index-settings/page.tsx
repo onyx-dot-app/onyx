@@ -1,1 +1,1 @@
-export { default } from "@/refresh-pages/admin/IndexSettingsPage";
+export { default } from "@/views/admin/IndexSettingsPage";

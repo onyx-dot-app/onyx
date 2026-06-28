@@ -64,9 +64,11 @@ You hold no API keys or tokens, and never need them: the proxy injects the real 
 automatically. Empty or placeholder auth headers are expected.
 
 Actions that change external state (e.g. posting a Slack message, creating a Linear issue, sending
-email) may be gated. The request pauses at the proxy for user approval for up to **3 minutes**.
+email) may be gated. The request pauses at the proxy for user approval for up to
+**{{APPROVAL_WAIT_TIMEOUT_SECONDS}} seconds**.
 
-If you make a network call (e.g. `curl`), set a client timeout of **at least 200 seconds** 
+If you make a network call (e.g. `curl`), set a client timeout of
+**at least {{APPROVAL_CLIENT_TIMEOUT_SECONDS}} seconds**
 so you don't give up before the user decides.
 
 On rejection, timeout, or a disabled action, the call returns HTTP 403 with a JSON

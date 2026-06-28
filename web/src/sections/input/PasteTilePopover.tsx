@@ -80,7 +80,7 @@ function PasteTilePopover({
       <div
         role="dialog"
         aria-label="Edit pasted text"
-        className="fixed z-50 bg-background-neutral-00 border border-border-01 rounded-08 shadow-02 p-1 max-w-[400px]"
+        className="fixed z-50 bg-background-neutral-00 border border-border-01 rounded-08 shadow-box-02 p-1 max-w-[400px]"
         style={{
           left: Math.max(GAP, left),
           ...(fitsBelow
