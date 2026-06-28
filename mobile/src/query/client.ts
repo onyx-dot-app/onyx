@@ -26,9 +26,13 @@ export const persister = createSyncStoragePersister({
 });
 
 // PII prefixes excluded from the unencrypted MMKV snapshot; only the leading entity
-// segment matches since the trailing serverUrl varies per instance.
+// segment matches since the trailing serverUrl varies per instance. Chat content
+// (session names, messages) is sensitive PII, so it stays out of the on-disk cache
+// and refetches on launch — same reason as the `me` key.
 const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
   [QUERY_KEYS.me(null)[0]],
+  [QUERY_KEYS.chatSessions(null)[0]],
+  [QUERY_KEYS.chatSession(null, "")[0]],
 ];
 
 function isNonPersistedKey(queryKey: readonly unknown[]): boolean {
