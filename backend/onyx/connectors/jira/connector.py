@@ -1147,9 +1147,9 @@ class JiraServiceManagementConnector(JiraConnector):
     ) -> str:
         """Build JQL that is always scoped to JSM projects.
 
-        A user-supplied ``jql_query`` is respected (ANDed with the time
-        window) but the JSM project-type filter is NOT added on top of it —
-        users who provide custom JQL know what they are filtering on.
+        A user-supplied ``jql_query`` is ANDed with the JSM project-type
+        filter so that custom queries cannot accidentally index non-JSM tickets
+        under the JIRA_SERVICE_MANAGEMENT source.
         """
         start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
             "%Y-%m-%d %H:%M"
@@ -1160,7 +1160,9 @@ class JiraServiceManagementConnector(JiraConnector):
         time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
 
         if self.jql_query:
-            return f"({self.jql_query}) AND {time_jql}"
+            return (
+                f"({self._jsm_base_jql()}) AND ({self.jql_query}) AND {time_jql}"
+            )
 
         return f"({self._jsm_base_jql()}) AND {time_jql}"
 

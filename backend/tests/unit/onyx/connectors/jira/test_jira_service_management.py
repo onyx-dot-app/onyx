@@ -212,7 +212,7 @@ class TestJSMJQLGeneration:
     def test_custom_jql_is_wrapped_and_time_added(
         self, mock_jira_client: MagicMock
     ) -> None:
-        """User-supplied JQL is AND-ed with the time window, not the type filter."""
+        """User-supplied JQL is AND-ed with both the JSM type filter and time window."""
         connector = JiraServiceManagementConnector(
             jira_base_url="https://example.atlassian.net",
             jql_query='issuetype = "Service Request"',
@@ -223,8 +223,8 @@ class TestJSMJQLGeneration:
         assert 'issuetype = "Service Request"' in jql
         # Time window is applied
         assert "updated >=" in jql
-        # The project-type guard is NOT added on top of custom JQL (user owns the filter)
-        assert "project type" not in jql
+        # JSM project-type scope is always enforced, even with custom JQL
+        assert "project type" in jql
 
     def test_jql_differs_from_base_connector_without_project(self) -> None:
         """JSM connector JQL must differ from plain Jira JQL when no project is set."""
