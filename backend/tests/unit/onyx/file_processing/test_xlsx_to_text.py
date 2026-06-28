@@ -6,6 +6,8 @@ import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 
 from onyx.file_processing.extract_file_text import _sheet_to_csv
+from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import xlsx_sheet_extraction
 from onyx.file_processing.extract_file_text import xlsx_to_text
 
@@ -26,6 +28,46 @@ def _make_xlsx(sheets: dict[str, list[list[str]]]) -> io.BytesIO:
 
 
 class TestXlsxToText:
+    def test_extract_file_text_supports_xlsm(self) -> None:
+        xlsm = _make_xlsx(
+            {
+                "Sheet1": [
+                    ["Name", "Value"],
+                    ["alpha", "1"],
+                ]
+            }
+        )
+
+        with patch(
+            "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+            return_value=None,
+        ):
+            result = extract_file_text(xlsm, "macro-enabled.xlsm")
+
+        assert "Name" in result
+        assert "alpha" in result
+
+    def test_extract_text_and_images_supports_xlsm(self) -> None:
+        xlsm = _make_xlsx(
+            {
+                "Sheet1": [
+                    ["Name", "Value"],
+                    ["alpha", "1"],
+                ]
+            }
+        )
+
+        with patch(
+            "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+            return_value=None,
+        ):
+            result = extract_text_and_images(xlsm, "macro-enabled.xlsm")
+
+        assert "Name" in result.text_content
+        assert "alpha" in result.text_content
+        assert result.embedded_images == []
+        assert result.metadata == {}
+
     def test_single_sheet_basic(self) -> None:
         xlsx = _make_xlsx(
             {

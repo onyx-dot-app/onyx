@@ -843,6 +843,7 @@ def extract_file_text(
         ".docx": lambda f: read_docx_file(f, file_name)[0],  # no images
         ".pptx": lambda f: pptx_to_text(f, file_name),
         ".xlsx": lambda f: xlsx_to_text(f, file_name),
+        ".xlsm": lambda f: xlsx_to_text(f, file_name),
         ".eml": eml_to_text,
         ".epub": epub_to_text,
         ".html": parse_html_page_basic,
@@ -1001,7 +1002,7 @@ def _extract_text_and_images(
                 text_content=text_content, embedded_images=images, metadata={}
             )
 
-        if extension == ".xlsx":
+        if extension in OnyxFileExtensions.SPREADSHEET_EXTENSIONS:
             return ExtractionResult(
                 text_content=xlsx_to_text(file, file_name=file_name),
                 embedded_images=[],
