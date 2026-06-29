@@ -12,11 +12,11 @@ The mobile app already boots through `AuthGate` into an authenticated shell with
 
 When the user sends a message, a **mobile orchestration hook** does three things: (1) if there's no chat session yet, it creates one on the backend (`POST /api/chat/create-chat-session`) carrying the selected agent's `persona_id` and the active `project_id`; (2) it optimistically drops a user bubble and an empty assistant bubble into an in-memory **message tree**; (3) it opens the streaming request.
 
-The stream is the heart of it. We POST the message to `/api/chat/send-chat-message` using **`expo/fetch`** (the only HTTP call in the app that doesn't go through `apiFetch`, because it needs a readable byte stream). The backend replies with **newline-delimited JSON** — one packet per line. A **shared pure parser** (the same line-buffering logic the web app uses, lifted into `@onyx-ai/shared`) turns the byte chunks into typed packet objects. The mobile hook reads those packets, ignores heartbeats, and — for the core experience — only cares about the message text packets (`MESSAGE_START/DELTA/END`) plus `STOP`/`ERROR`. It appends streamed text onto the assistant bubble, flushing updates to the UI in ~50ms batches so the screen doesn't thrash.
+The stream is the heart of it. We POST the message to `/api/chat/send-chat-message` using **`expo/fetch`** (the only HTTP call in the app that doesn't go through `apiFetch`, because it needs a readable byte stream). The backend replies with **newline-delimited JSON** — one packet per line. A **mobile-native pure parser** (mirroring the web app's line-buffering logic) turns the byte chunks into typed packet objects. The mobile hook reads those packets, ignores heartbeats, and — for the core experience — only cares about the message text packets (`MESSAGE_START/DELTA/END`) plus `STOP`/`ERROR`. It appends streamed text onto the assistant bubble, flushing updates to the UI in ~50ms batches so the screen doesn't thrash.
 
 The chat screen renders the message tree with **FlashList v2** (non-inverted, auto-pinned to the bottom while streaming). The streaming assistant bubble renders its accumulating text through a **React Native markdown component**. When the `STOP` packet arrives, the conversation returns to idle and the assistant bubble gets its real server message-id.
 
-Reopening a past chat fetches its history from the backend and rebuilds the message tree with the **same shared `processRawChatHistory` helper** the web uses. Listing chats, agents, and projects all go through **TanStack Query** (already wired and persisted to MMKV), keyed by server URL so switching backends never serves stale data.
+Reopening a past chat fetches its history from the backend and rebuilds the message tree with a **mobile-native `processRawChatHistory`** (mirroring web's logic). Listing chats, agents, and projects all go through **TanStack Query** (already wired and persisted to MMKV), keyed by server URL so switching backends never serves stale data.
 
 Agents, projects, and attachments layer on top of this core without changing it: agent selection just sets the `persona_id` used at session-create time; projects set the `project_id`; attachments upload files (via `expo-file-system`'s streaming upload task) and attach their `file_descriptors[]` to the send request, gating the send button until the files finish indexing.
 
@@ -46,12 +46,12 @@ Agents, projects, and attachments layer on top of this core without changing it:
                     └───────────────┬─────────────────┘
                                     │ calls
               ┌─────────────────────▼──────────────────────┐
-              │  @onyx-ai/shared  (pure TS, cross-platform) │
-              │  contracts: chat/streaming/files/agents/proj│
-              │  utils: ndjson parser · messageTree ·       │
-              │         processRawChatHistory · fileDescr.  │
+              │  mobile/src/chat/  (pure TS, mobile-native) │
+              │  ndjson parser · contracts (chat/streaming/ │
+              │  files/agents/proj) · messageTree ·         │
+              │  processRawChatHistory · fileDescriptors    │
               └─────────────────────────────────────────────┘
-                         ▲ (web re-points imports here, per phase, no big-bang refactor)
+                  (web keeps its own copies — nothing shared)
 ```
 
 ## Key components
@@ -59,10 +59,10 @@ Agents, projects, and attachments layer on top of this core without changing it:
 - **`(app)` route group** — authed chat screens (new-chat, `chat/[id]`, history, projects). (new, mobile)
 - **`useChatController` / `useChatSessionController`** — mobile orchestration: submit, drive the stream, batch flushes, stop, load/resume history. (new, mobile)
 - **`chatSessionStore` (zustand)** — ephemeral per-session state: message tree, chat state, abort controller. **Not persisted.** (new, mobile)
-- **expo/fetch stream wrapper** — the one streaming HTTP call; feeds bytes into the shared parser. (new, mobile)
+- **expo/fetch stream wrapper** — the one streaming HTTP call; feeds bytes into the mobile-native parser. (new, mobile)
 - **TanStack Query hooks** — sessions, agents, projects, files lists (persisted, keyed by server URL). (new, mobile)
 - **RN UI** — `MessageList` (FlashList v2), `StreamingMarkdown`, `InputBar` (keyboard-sticky), agent picker, project screens, attachment chips. (new, mobile)
-- **`@onyx-ai/shared` contracts + pure helpers** — types + NDJSON parser + message-tree math + history rebuild + file-descriptor helper. (new in shared; web re-points to them per phase)
+- **Mobile-native chat data layer** (`mobile/src/chat/`) — NDJSON parser + packet/chat/file **types** + message-tree math + history rebuild + file-descriptor helper; ported from web, **nothing shared** (web keeps its own copies). (new, mobile)
 
 ## End-to-end scenario
 
@@ -72,7 +72,7 @@ Agents, projects, and attachments layer on top of this core without changing it:
 4. `useChatController` creates a session (`persona_id` = chosen agent) → gets `chat_session_id`, navigates to `chat/[id]`.
 5. It drops a user bubble + empty assistant bubble into the message tree (`chatState='loading'`).
 6. It POSTs the message via `expo/fetch`; the backend streams NDJSON packets.
-7. The shared parser yields packets; the hook appends `MESSAGE_DELTA` text to the assistant bubble, flushing every ~50ms (`chatState='streaming'`).
+7. The mobile-native parser yields packets; the hook appends `MESSAGE_DELTA` text to the assistant bubble, flushing every ~50ms (`chatState='streaming'`).
 8. FlashList keeps the view pinned to the bottom; the assistant bubble renders markdown as it grows.
 9. `STOP` arrives → `chatState='input'`, assistant bubble gets its server message-id, sessions list refetches so history reflects the new turn.
 10. User backgrounds the app mid-answer and returns → reopening the session replays buffered packets and re-attaches to the live run.
@@ -83,20 +83,20 @@ Agents, projects, and attachments layer on top of this core without changing it:
 2. Create chat session if none (`persona_id`, `project_id`) → `chat_session_id`.
 3. Optimistically seed the message tree (user + empty assistant nodes).
 4. Open `expo/fetch` POST stream with bearer + JSON body.
-5. Decode bytes → shared NDJSON parser → typed packets; drop heartbeats.
+5. Decode bytes → mobile-native NDJSON parser → typed packets; drop heartbeats.
 6. Reduce `MESSAGE_*` packets into the assistant node; batch-flush to zustand (~50ms).
 7. On `STOP`/`ERROR`/abort: settle chat state, release the reader, capture message-id, refetch sessions.
-8. Reopen/resume: fetch history → shared `processRawChatHistory` → tree; if a run is live, tail `resume-stream`.
+8. Reopen/resume: fetch history → mobile-native `processRawChatHistory` → tree; if a run is live, tail `resume-stream`.
 
 ## Key decisions & why
 
 - **`expo/fetch` for streaming, `apiFetch` for everything else** — RN's legacy fetch has no readable body; `expo/fetch` (SDK 56 default) exposes `response.body.getReader()`, letting us reuse the web's exact NDJSON parsing. JSON list calls stay on the existing `apiFetch` choke-point (bearer + error normalization).
-- **Share the parser + tree math, not the reducer** — the NDJSON framing and tree semantics are identical-by-construction across clients (same backend), so sharing them prevents silent drift at near-zero cost; the packet→display reducer is React-coupled and trivial for the core, so it stays mobile-owned. (This is Approach C, honoring the extract-on-proven-reuse policy.)
+- **Keep the whole chat pure layer mobile-native; share nothing** — the parser, message tree, history rebuild, and packet→display mapping are all written in `mobile/src/chat/`, with web keeping its own copies. The shared-package machinery (a `@onyx-ai/shared` util + a web re-point + jest/dist coupling) is more moving parts than the ~200 lines of duplication it removes; pre-production the backend protocol is stable, so drift is low and cheap to re-extract later if it bites. Web stays untouched. (Approach C dropped to "no shared chat code" per the **PR 2 Decision (2026-06-26)**.)
 - **Two-tier state: TanStack Query for lists, zustand for the live stream** — lists benefit from the existing MMKV persistence + refetch; the streaming tree holds an `AbortController` and must *not* be persisted, so it lives in a separate, ephemeral zustand store.
 - **FlashList v2 non-inverted with `maintainVisibleContentPosition`** — the modern v2 pattern for chat; pins to the bottom while streaming without yanking a user who scrolled up.
 
 ## What existing behavior changes
 
 - **Mobile**: net-new feature; nothing pre-existing is removed.
-- **Web**: behavior unchanged. Some web files have their *imports re-pointed* to the now-shared pure helpers (mechanical, verified by web's own tests), only in the phase that extracts each helper — never a forced rewrite.
+- **Web**: behavior unchanged **and untouched** — the mobile chat port shares no code with web, so no web files are modified or re-pointed.
 - **Backend**: no changes.
