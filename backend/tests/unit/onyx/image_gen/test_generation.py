@@ -6,6 +6,7 @@ import pytest
 
 from onyx.image_gen.exceptions import ImageGenerationNotConfiguredError
 from onyx.image_gen.generation import generate_images_with_default_config
+from onyx.image_gen.generation import is_image_generation_configured
 from onyx.image_gen.interfaces import ImageShape
 from onyx.image_gen.interfaces import ReferenceImage
 
@@ -147,3 +148,30 @@ def test_no_image_data_raises() -> None:
     ):
         with pytest.raises(RuntimeError):
             generate_images_with_default_config(prompt="cat")
+
+
+def test_is_image_generation_configured_true() -> None:
+    with (
+        patch(
+            f"{_HELPER}.get_default_image_generation_config",
+            return_value=_fake_config("gpt-image-1"),
+        ),
+        patch(f"{_HELPER}.validate_credentials", return_value=True),
+    ):
+        assert is_image_generation_configured(MagicMock()) is True
+
+
+def test_is_image_generation_configured_false_when_no_config() -> None:
+    with patch(f"{_HELPER}.get_default_image_generation_config", return_value=None):
+        assert is_image_generation_configured(MagicMock()) is False
+
+
+def test_is_image_generation_configured_false_when_invalid_creds() -> None:
+    with (
+        patch(
+            f"{_HELPER}.get_default_image_generation_config",
+            return_value=_fake_config("gpt-image-1"),
+        ),
+        patch(f"{_HELPER}.validate_credentials", return_value=False),
+    ):
+        assert is_image_generation_configured(MagicMock()) is False

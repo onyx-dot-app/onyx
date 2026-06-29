@@ -64,6 +64,16 @@ def _default_provider_and_model(
     return llm_provider.provider, config.model_configuration.name, credentials
 
 
+def is_image_generation_configured(db_session: Session) -> bool:
+    """True if a usable default image-gen provider is configured. Shared by the
+    endpoint and the built-in skill's availability gate so they can't drift."""
+    try:
+        _default_provider_and_model(db_session)
+        return True
+    except ImageGenerationNotConfiguredError:
+        return False
+
+
 def generate_images_with_default_config(
     prompt: str,
     shape: ImageShape = ImageShape.SQUARE,
