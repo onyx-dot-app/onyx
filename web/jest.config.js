@@ -19,7 +19,6 @@ const esmPackages = [
   "@radix-ui",
   "@floating-ui",
   "@headlessui",
-  "@phosphor-icons",
   // Testing & Mocking
   "msw",
   "until-async",
