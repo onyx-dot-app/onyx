@@ -9,6 +9,7 @@ import pytest
 
 from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import HierarchyNode
+from tests.daily.connectors.utils import set_test_staging_callback
 
 
 @pytest.fixture
@@ -191,6 +192,7 @@ def test_tabular_file_sets_file_id_on_document(
         connector = LocalFileConnector(
             file_locations=[file_id], file_names=["data.csv"], zip_metadata={}
         )
+        set_test_staging_callback(connector)
         batches = list(connector.load_from_state())
 
     assert len(batches) == 1
@@ -273,6 +275,7 @@ def test_mixed_batch_only_tabular_gets_file_id(
             file_names=["data.csv", "notes.txt"],
             zip_metadata={},
         )
+        set_test_staging_callback(connector)
         batches = list(connector.load_from_state())
 
     assert len(batches) == 1

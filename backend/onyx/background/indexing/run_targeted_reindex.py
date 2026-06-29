@@ -39,6 +39,8 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import TargetedReindexJobTarget
 from onyx.db.targeted_reindex import targets_to_connector_failures
 from onyx.document_index.factory import get_all_document_indices
+from onyx.file_store.staging import build_tracking_raw_file_callback
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.adapters.document_indexing_adapter import (
     DocumentIndexingBatchAdapter,
@@ -264,53 +266,66 @@ def process_targets_for_cc_pair(
     include_permissions = cc_pair.access_type == AccessType.SYNC
     failures = targets_to_connector_failures(targets, db_session)
 
-    # Materialize the connector output once. MAX_TARGETS_PER_REQUEST caps
-    # the universe at 100 docs total per job, so this is bounded.
+    # Tabular sections stage their CSV via this callback; this path has no
+    # attempt-end reaper, so track the staged ids and reap them in the finally.
+    staging_callback, staged_csv_ids = build_tracking_raw_file_callback(
+        metadata={"cc_pair_id": str(cc_pair_id), "tenant_id": tenant_id}
+    )
+    connector.set_raw_file_callback(staging_callback)
+
     docs: list[Document] = []
-    hierarchy_nodes: list[HierarchyNode] = []
     failed_from_connector: set[str] = set()
-    for item in connector.reindex(
-        errors=failures, include_permissions=include_permissions
-    ):
-        if isinstance(item, ConnectorFailure):
-            if item.failed_document is not None:
-                failed_from_connector.add(item.failed_document.document_id)
-            continue
-        if isinstance(item, Document):
-            docs.append(item)
-            continue
-        if isinstance(item, HierarchyNode):
-            hierarchy_nodes.append(item)
-            continue
-
-    if hierarchy_nodes:
-        _persist_hierarchy_nodes(
-            nodes=hierarchy_nodes,
-            cc_pair=cc_pair,
-            tenant_id=tenant_id,
-            db_session=db_session,
-        )
-        logger.debug(
-            "Persisted and cached %s hierarchy nodes for cc_pair_id=%s",
-            len(hierarchy_nodes),
-            cc_pair_id,
-        )
-
-    # Per-attempt pipeline run. Each attempt commits to its own
-    # search_settings's document_indices.
     landed_overall: set[str] = set()
     failed_pipeline_overall: set[str] = set()
-    for attempt in cc_pair_attempts:
-        for batch_num, batch in enumerate(chunked(docs, INDEX_BATCH_SIZE)):
-            landed, failed = _flush_batch(
-                documents=list(batch),
-                attempt=attempt,
+    try:
+        # Materialize the connector output once. MAX_TARGETS_PER_REQUEST caps
+        # the universe at 100 docs total per job, so this is bounded.
+        hierarchy_nodes: list[HierarchyNode] = []
+        for item in connector.reindex(
+            errors=failures, include_permissions=include_permissions
+        ):
+            if isinstance(item, ConnectorFailure):
+                if item.failed_document is not None:
+                    failed_from_connector.add(item.failed_document.document_id)
+                continue
+            if isinstance(item, Document):
+                docs.append(item)
+                continue
+            if isinstance(item, HierarchyNode):
+                hierarchy_nodes.append(item)
+                continue
+
+        if hierarchy_nodes:
+            _persist_hierarchy_nodes(
+                nodes=hierarchy_nodes,
+                cc_pair=cc_pair,
                 tenant_id=tenant_id,
                 db_session=db_session,
-                batch_num=batch_num,
             )
-            landed_overall |= landed
-            failed_pipeline_overall |= failed
+            logger.debug(
+                "Persisted and cached %s hierarchy nodes for cc_pair_id=%s",
+                len(hierarchy_nodes),
+                cc_pair_id,
+            )
+
+        # Per-attempt pipeline run. Each attempt commits to its own
+        # search_settings's document_indices.
+        for attempt in cc_pair_attempts:
+            for batch_num, batch in enumerate(chunked(docs, INDEX_BATCH_SIZE)):
+                landed, failed = _flush_batch(
+                    documents=list(batch),
+                    attempt=attempt,
+                    tenant_id=tenant_id,
+                    db_session=db_session,
+                    batch_num=batch_num,
+                )
+                landed_overall |= landed
+                failed_pipeline_overall |= failed
+    finally:
+        delete_files_best_effort(
+            staged_csv_ids,
+            context=f"targeted-reindex staging cleanup cc_pair={cc_pair_id}",
+        )
 
     # Conservative landing: a doc is only "landed" if some attempt
     # accepted it AND no attempt or upstream phase failed it. The set
