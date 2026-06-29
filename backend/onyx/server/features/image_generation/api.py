@@ -1,5 +1,6 @@
-"""Craft sandbox image-generation endpoint: runs server-side so no provider
-credentials enter the sandbox. Consumed by the ``onyx-cli image`` command."""
+"""Image-generation endpoint: generate image(s) from the admin-configured
+default provider, server-side (no provider keys leave the backend). Callable by
+any authenticated user via ``onyx-cli image`` / the GENERATE_IMAGE scope."""
 
 import base64
 import binascii
@@ -22,10 +23,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Called by the sandbox itself (onyx-cli), not the frontend, so this is mounted
-# standalone rather than under the BASIC_ACCESS-gated /build router and is gated
-# on the sandbox PAT's CRAFT_SANDBOX scope.
-router = APIRouter(prefix="/build/image-generation")
+router = APIRouter(prefix="/image-generation")
 
 _MAX_IMAGES = 4
 _MAX_REFERENCE_IMAGES = 16
@@ -77,9 +75,7 @@ def _decode_reference_images(
 @router.post("/generate")
 def generate_image(
     request: ImageGenerationRequest,
-    _user: User = Depends(
-        require_permission(Permission.CRAFT_SANDBOX, require_scoped_token=True)
-    ),
+    _user: User = Depends(require_permission(Permission.GENERATE_IMAGE)),
 ) -> ImageGenerationResponse:
     if not request.prompt.strip():
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "prompt must not be empty")
