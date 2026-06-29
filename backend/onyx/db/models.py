@@ -3421,6 +3421,44 @@ class InternetContentProvider(Base):
         return f"<InternetContentProvider(name='{self.name}', provider_type='{self.provider_type}')>"
 
 
+class TracingProviderConfig(Base):
+    """Admin-configured LLM-observability tracing provider (Braintrust, Langfuse).
+
+    One row per provider; providers are enabled independently. When no row exists
+    for a provider, tracing falls back to the corresponding environment variables.
+    Not used in multi-tenant (cloud) deployments.
+    """
+
+    __tablename__ = "tracing_provider_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_type: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Braintrust API key / Langfuse secret key. Non-secret fields live in `config`.
+    api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    # Non-secret provider settings: Braintrust {project}; Langfuse {public_key, host}.
+    config: Mapped[dict[str, str] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<TracingProviderConfig(provider_type='{self.provider_type}', "
+            f"enabled={self.enabled})>"
+        )
+
+
 class DocumentSet(Base):
     __tablename__ = "document_set"
 
