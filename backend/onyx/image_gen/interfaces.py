@@ -56,9 +56,7 @@ class ImageGenerationProvider(abc.ABC):
         credentials: ImageGenerationProviderCredentials,
     ) -> ImageGenerationProvider:
         if not cls.validate_credentials(credentials):
-            raise ImageProviderCredentialsError(
-                f"Invalid image generation credentials: {credentials}"
-            )
+            raise ImageProviderCredentialsError("Invalid image generation credentials")
         return cls._build_from_credentials(credentials)
 
     @classmethod

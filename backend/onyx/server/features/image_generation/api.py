@@ -104,9 +104,12 @@ def generate_image(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
-    except Exception as e:
+    except Exception:
         logger.exception("Image generation failed")
-        raise OnyxError(OnyxErrorCode.LLM_PROVIDER_ERROR, str(e))
+        raise OnyxError(
+            OnyxErrorCode.LLM_PROVIDER_ERROR,
+            "Image generation failed.",
+        )
 
     images: list[GeneratedImagePayload] = []
     for item in generated:
