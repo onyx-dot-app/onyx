@@ -217,6 +217,7 @@ const AppInputBar = React.memo(
     } = useDraft<string>({ key: chatDraftStorageKey });
     const draftSeededRef = useRef(false);
     const skipNextDraftSaveRef = useRef(false);
+    const prevDraftKeyRef = useRef(chatDraftStorageKey);
     // Snapshot of message, read non-reactively in the restore effect so seeding
     // doesn't re-run on every keystroke.
     const messageRef = useRef(message);
@@ -224,7 +225,13 @@ const AppInputBar = React.memo(
 
     useEffect(() => {
       draftSeededRef.current = false;
-    }, [chatDraftStorageKey]);
+      // Clear the previous session's leftover text instead of leaking it into
+      // this one.
+      if (prevDraftKeyRef.current !== chatDraftStorageKey) {
+        prevDraftKeyRef.current = chatDraftStorageKey;
+        clearMessage();
+      }
+    }, [chatDraftStorageKey, clearMessage]);
 
     // Restore once read: a URL prompt wins and a non-empty input is never
     // clobbered.
