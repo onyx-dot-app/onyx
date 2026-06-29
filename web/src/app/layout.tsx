@@ -94,6 +94,16 @@ export default function Layout({ children }: LayoutProps) {
       </head>
 
       <body className={`relative font-hanken`}>
+        {/* Tag <html> as desktop ASAP (before paint) when running inside the
+            Tauri wrapper, so the native title-bar reservation in
+            css/desktop-titlebar.css engages. Retries briefly in case the Tauri
+            globals aren't injected yet at parse time. No-op in a browser. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){function m(){if('__TAURI_INTERNALS__' in window||'__TAURI__' in window){document.documentElement.classList.add('onyx-desktop');return true}return false}if(!m()){var n=0,t=setInterval(function(){if(m()||++n>20)clearInterval(t)},50)}})();",
+          }}
+        />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
