@@ -14,16 +14,22 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.license import get_license
+from ee.onyx.utils.license import verify_license_signature
 from ee.onyx.utils.license_expiry import ExpiryWarningStage
+from ee.onyx.utils.license_expiry import get_expiry_warning_stage
 from ee.onyx.utils.license_expiry import get_grace_days_remaining
 from onyx.auth.email_utils import build_html_email
 from onyx.auth.email_utils import send_email
+from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
+from onyx.db.models import User
 from onyx.db.notification import batch_create_notifications
 from onyx.db.users import get_active_admin_users
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -149,4 +155,43 @@ def notify_admins_for_stage(
         stage.value,
         len(inserted_admin_ids),
         today.isoformat(),
+    )
+
+
+def ensure_license_expiry_notification_for_user(
+    user: User,
+    db_session: Session,
+) -> None:
+    """On-read fallback: materialize the requesting admin's in-app notification
+    for the current expiry stage so the banner appears immediately instead of
+    waiting for the once-daily task. Idempotent via the notification unique
+    index; never emails (the daily task owns email + all-admin fan-out)."""
+    if MULTI_TENANT or user.role != UserRole.ADMIN:
+        return
+
+    license_record = get_license(db_session)
+    if not license_record:
+        return
+    try:
+        payload = verify_license_signature(license_record.license_data)
+    except ValueError:
+        logger.exception("Failed to verify license during on-read notification ensure")
+        return
+
+    stage = get_expiry_warning_stage(payload.expires_at)
+    if stage == ExpiryWarningStage.NONE:
+        return
+
+    today = datetime.now(timezone.utc).date()
+    additional_data = _build_additional_data(stage, payload.expires_at, today)
+    grace_days = get_grace_days_remaining(payload.expires_at)
+    title, description, _ = _build_copy(stage, payload.expires_at, grace_days)
+
+    batch_create_notifications(
+        user_ids=[user.id],
+        notif_type=NotificationType.LICENSE_EXPIRY_WARNING,
+        db_session=db_session,
+        title=title,
+        description=description,
+        additional_data=additional_data,
     )

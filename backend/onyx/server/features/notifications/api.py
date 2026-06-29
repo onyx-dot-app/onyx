@@ -26,6 +26,7 @@ from onyx.server.features.release_notes.utils import (
     ensure_release_notes_fresh_and_notify,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 router = APIRouter(prefix="/notifications")
@@ -58,6 +59,19 @@ def _check_for_notifications_to_create(
         logger.exception("Failed to check for release notes in notifications endpoint")
 
 
+def _ensure_license_expiry_notification(user: User, db_session: Session) -> None:
+    """Self-hosted EE only: create the admin's current-stage license-expiry
+    notification on read so the banner appears without waiting for the daily
+    task. No-op on non-EE builds (and for non-admins / no active warning)."""
+    try:
+        fetch_ee_implementation_or_noop(
+            "ee.onyx.utils.license_notifications",
+            "ensure_license_expiry_notification_for_user",
+        )(user, db_session)
+    except Exception:
+        logger.exception("Failed to ensure license expiry notification on read")
+
+
 @router.get("")
 def get_notifications_api(
     page_num: int = Query(0, ge=0),
@@ -72,17 +86,20 @@ def get_notifications_api(
     Get a page of notifications for the current user, optionally filtered to a
     single notif_type.
 
-    Note: the first page of the unfiltered feed also executes checks that should
-    create notifications. A type-filtered request is a targeted read and skips
-    those create-checks.
+    Note: the first unfiltered page runs the generic create-checks. A
+    type-filtered request skips them, except a LICENSE_EXPIRY_WARNING filter
+    still ensures the requesting admin's current expiry notification exists.
 
     Examples of checks that create new notifications:
     - Checking for new release notes the user hasn't seen
     - Checking for misconfigurations due to version changes
     - Explicitly announcing breaking changes
     """
-    if page_num == 0 and notif_type is None:
-        _check_for_notifications_to_create(user, db_session)
+    if page_num == 0:
+        if notif_type is None:
+            _check_for_notifications_to_create(user, db_session)
+        if notif_type in (None, NotificationType.LICENSE_EXPIRY_WARNING):
+            _ensure_license_expiry_notification(user, db_session)
 
     total_items, undismissed_count = count_notifications(
         user=user,
