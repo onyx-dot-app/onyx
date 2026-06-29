@@ -62,6 +62,7 @@ from onyx.db.mcp import get_user_connection_config
 from onyx.db.mcp import update_connection_config
 from onyx.db.mcp import update_mcp_server__no_commit
 from onyx.db.mcp import upsert_user_connection_config
+from onyx.db.mcp import user_can_access_mcp_server
 from onyx.db.models import MCPConnectionConfig
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.db.models import Tool
@@ -1790,6 +1791,13 @@ def _list_mcp_tools_by_id(
 
     if is_admin:
         _ensure_mcp_server_owner_or_admin(mcp_server, user)
+    elif not user_can_access_mcp_server(user, server_id, db):
+        # Non-admin callers may only list tools of servers they can access;
+        # otherwise this IDORs a private server and triggers an outbound connect.
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "You do not have access to this MCP server.",
+        )
 
     # Get connection config based on auth type
     # TODO: for now, only the admin that set up a per-user api key server can
@@ -2514,6 +2522,10 @@ def upsert_mcp_server(
 
     except HTTPException:
         # Re-raise HTTP exceptions as-is
+        raise
+    except OnyxError:
+        # Preserve structured errors (e.g. EE_REQUIRED 403) instead of masking
+        # them as a 500, matching the other _apply_mcp_server_access call sites.
         raise
     except Exception as e:
         logger.exception("Failed to create/update MCP tool")

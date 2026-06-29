@@ -109,6 +109,8 @@ def _add_mcp_server_access_filter(stmt: Select, user: User | None) -> Select:
     if not user.is_anonymous:
         where_clause |= User__UserGroup.user_id == user.id
         where_clause |= MCPServer__User.user_id == user.id
+        # The curator who created a private server must still see/attach it.
+        where_clause |= MCPServer.owner == user.email
     return stmt.where(where_clause)
 
 
