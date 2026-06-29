@@ -4,6 +4,7 @@ from fastapi import Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
@@ -63,25 +64,30 @@ def get_notifications_api(
     page_size: int = Query(
         DEFAULT_NOTIFICATIONS_PAGE_SIZE, ge=1, le=MAX_NOTIFICATIONS_PAGE_SIZE
     ),
+    notif_type: NotificationType | None = Query(None),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedNotifications:
     """
-    Get a page of notifications for the current user.
+    Get a page of notifications for the current user, optionally filtered to a
+    single notif_type.
 
-    Note: the first page also executes checks that should create notifications.
+    Note: the first page of the unfiltered feed also executes checks that should
+    create notifications. A type-filtered request is a targeted read and skips
+    those create-checks.
 
     Examples of checks that create new notifications:
     - Checking for new release notes the user hasn't seen
     - Checking for misconfigurations due to version changes
     - Explicitly announcing breaking changes
     """
-    if page_num == 0:
+    if page_num == 0 and notif_type is None:
         _check_for_notifications_to_create(user, db_session)
 
     total_items, undismissed_count = count_notifications(
         user=user,
         db_session=db_session,
+        notif_type=notif_type,
     )
     offset = page_num * page_size
     notifications = [
@@ -89,6 +95,7 @@ def get_notifications_api(
         for notif in get_notifications(
             user=user,
             db_session=db_session,
+            notif_type=notif_type,
             include_dismissed=True,
             limit=page_size,
             offset=offset,

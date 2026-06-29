@@ -242,6 +242,64 @@ def test_get_notifications_api_runs_ensure_checks_on_first_page(
     assert calls == []
 
 
+def test_get_notifications_api_filters_by_type_and_skips_checks(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def record_call(name: str) -> Callable[..., None]:
+        def _record_call(*_args: object, **_kwargs: object) -> None:
+            calls.append(name)
+
+        return _record_call
+
+    for hook in (
+        "ensure_build_mode_intro_notification",
+        "ensure_permissions_migration_notification",
+        "ensure_release_notes_fresh_and_notify",
+    ):
+        monkeypatch.setattr(notifications_api, hook, record_call(hook))
+
+    user = create_test_user(db_session, "notification_api_type_filter")
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    _create_notification(
+        db_session=db_session,
+        user=user,
+        index=0,
+        first_shown=base_time,
+        dismissed=False,
+    )
+    db_session.add(
+        Notification(
+            user_id=user.id,
+            notif_type=NotificationType.LICENSE_EXPIRY_WARNING,
+            dismissed=False,
+            last_shown=base_time,
+            first_shown=base_time,
+            title="License expiring",
+            additional_data={"stage": "t_30d"},
+        )
+    )
+    db_session.commit()
+
+    response = notifications_api.get_notifications_api(
+        page_num=0,
+        page_size=50,
+        notif_type=NotificationType.LICENSE_EXPIRY_WARNING,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert response.total_items == 1
+    assert [n.notif_type for n in response.notifications] == [
+        NotificationType.LICENSE_EXPIRY_WARNING
+    ]
+    # A type-filtered request is a targeted read and must skip create-checks.
+    assert calls == []
+
+
 def test_notification_summary_runs_ensure_checks_before_counting(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001

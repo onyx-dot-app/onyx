@@ -4,18 +4,26 @@
 // undismissed LICENSE_EXPIRY_WARNING notification and dismisses through the
 // notifications API, so a dismissal persists per-user server-side and survives
 // browser/localStorage resets. Notifications are created per stage (admins
-// only, single-tenant) by the license-expiry Celery task.
+// only, single-tenant) by the license-expiry Celery task. Fetches the
+// notifications feed filtered to this type so the warning can't be paged out
+// behind unrelated notifications.
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
+import useSWR from "swr";
 import { MessageCard } from "@opal/components";
-import useNotifications from "@/hooks/useNotifications";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import { dismissNotification } from "@/lib/notifications/api";
 import {
   NotificationType,
   type Notification,
+  type NotificationsResponse,
 } from "@/lib/notifications/interfaces";
 import type { ExpiryWarningStage } from "@/lib/billing/interfaces";
+
+// Per-user license notifications are few (one per active stage, plus a daily
+// one during grace), so a single max-size page is always enough.
+const LICENSE_NOTIFICATIONS_URL = `/api/notifications?notif_type=${NotificationType.LICENSE_EXPIRY_WARNING}&page_size=50`;
 
 // Single source for stage semantics (higher = more urgent): picks which warning
 // to show when several are undismissed and drives the banner variant. Typed
@@ -84,7 +92,11 @@ function useMainContainerOffset(): { left: number; width: number } {
 }
 
 export default function LicenseExpiryBanner() {
-  const { notifications, refresh } = useNotifications();
+  const { data, mutate } = useSWR<NotificationsResponse>(
+    LICENSE_NOTIFICATIONS_URL,
+    errorHandlingFetcher,
+    { revalidateOnFocus: false, dedupingInterval: 30000 }
+  );
   const { left, width } = useMainContainerOffset();
   // IDs hidden optimistically while the server dismissal is in flight.
   const [pendingDismissals, setPendingDismissals] = useState<Set<number>>(
@@ -92,7 +104,7 @@ export default function LicenseExpiryBanner() {
   );
 
   const active = useMemo<Notification | null>(() => {
-    const candidates = notifications.filter(
+    const candidates = (data?.notifications ?? []).filter(
       (notification) =>
         notification.notif_type === NotificationType.LICENSE_EXPIRY_WARNING &&
         !notification.dismissed &&
@@ -103,12 +115,17 @@ export default function LicenseExpiryBanner() {
       const next = severityForStage(notification.additional_data?.stage);
       const current = severityForStage(best.additional_data?.stage);
       if (next > current) return notification;
-      if (next === current && notification.last_shown > best.last_shown) {
+      // Same stage: keep the most recent. Compare instants, not raw strings.
+      if (
+        next === current &&
+        new Date(notification.last_shown).getTime() >
+          new Date(best.last_shown).getTime()
+      ) {
         return notification;
       }
       return best;
     }, null);
-  }, [notifications, pendingDismissals]);
+  }, [data, pendingDismissals]);
 
   if (!active) return null;
 
@@ -123,7 +140,7 @@ export default function LicenseExpiryBanner() {
     // isn't silently lost and the user can retry.
     setPendingDismissals((prev) => new Set(prev).add(activeId));
     void dismissNotification(activeId)
-      .then(() => refresh())
+      .then(() => mutate())
       .catch((error) => {
         console.error("Failed to dismiss license expiry notification:", error);
         setPendingDismissals((prev) => {
