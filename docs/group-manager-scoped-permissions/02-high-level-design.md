@@ -3,7 +3,7 @@
 # §8 Scoped Permissions (Group Manager) — High-Level Design
 
 > **Revised by the 2026-06-29 regression review.** Bundle/coverage decisions here are updated by
-> **D4** (actions = agent-mediated, `manage:actions` dropped), **D5** (skills = a 7th scoped resource under a
+> **D4** (`manage:actions` stays in the bundle, scoped via agents at GATE 2), **D5** (skills = a 7th scoped resource under a
 > new `manage:skills` token), **D6** (managers do everything **except delete**) and **D7** (attaching an agent
 > to a group is controlled by `manage:agents`). The authoritative, complete case list lives in
 > [03 §11](03-detailed-design.md). Also a hard prerequisite: the broken `current_curator_or_admin_user`
@@ -31,8 +31,8 @@ resolution (never cached, never stale), and a **two-gate** enforcement model who
             is_manager=TRUE  ⇒  apply SCOPED_MANAGER_PERMISSIONS (in code)
                                 │   {manage:connectors, manage:document_sets,
                                 ▼    manage:agents, add:agents, manage:user_groups}
-                          but ONLY to    (+ new manage:skills token; manage:actions dropped —
-                          Engineering's   actions are agent-mediated — see 03 §11)
+                          but ONLY to    (+ manage:skills + manage:actions; actions
+                          Engineering's   scoped via their agents at GATE 2 — see 03 §11)
                           resources — resolved LIVE
 ```
 

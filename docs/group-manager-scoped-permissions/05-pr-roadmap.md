@@ -8,8 +8,9 @@ there is no escalation window at any merge boundary. (Pre-GA branch: existing cu
 STANDARD by the `account_type` backfill, so no live capability is regressed while enforcement lands incrementally.)
 
 > **Revised by the 2026-06-29 regression review** — see [03 §11](03-detailed-design.md) for the full case
-> checklist. Net changes to this roadmap: a new **PR0** (boot-fix prerequisite); **PR4** swaps feedback →
-> **skills** and drops actions (D4/D5); **delete stays admin-only** across all PRs (D6); PR3/PR5 enumerate
+> checklist. Net changes to this roadmap: a new **PR0** (boot-fix prerequisite); **PR4** adds **skills** (D5)
+> and **actions** scoping (D4 — `manage:actions` stays in the bundle, scoped via agents at GATE 2);
+> **delete stays admin-only** across all PRs (D6); PR3/PR5 enumerate
 > the previously-missed write endpoints (cc_pair status/name/property/prune, persona `/share`, group rename,
 > `/agents`) and the persona-gate signature fix (§11.5) + cc_pair-reattach fix (§11.6).
 
@@ -62,14 +63,14 @@ highest-value resource types, exercised by the escalation integration suite (man
 ## PR 1 — Schema foundation: `is_manager` + cached flag + backfill
 - **Goal:** add the only new state §8 needs and preserve the curator signal before it can be lost.
 - **Scope (in):** `User__UserGroup.is_manager`; `User.is_group_manager` (cached route-gate flag); migration
-  `4fa09af6ca14` (down_revision `c8e316473aaa`, role-gated backfill capturing CURATOR + GLOBAL_CURATOR, then
+  `c71a18ea7d07` (down_revision `c8e316473aaa`, role-gated backfill capturing CURATOR + GLOBAL_CURATOR, then
   `is_group_manager` backfill); extend `recompute_user_permissions__no_commit` to recompute the cached flag.
 - **Out of scope:** any reader of the new columns (they're inert this PR); dropping `is_curator`/`role`.
 - **Files:**
   | File | New/Modified | This PR's slice |
   |------|--------------|-----------------|
   | `backend/onyx/db/models.py` | modified | 2 boolean columns (`User__UserGroup`, `User`) |
-  | `backend/alembic/versions/4fa09af6ca14_*.py` | new | add columns + role-gated backfill |
+  | `backend/alembic/versions/c71a18ea7d07_*.py` | new | add columns + role-gated backfill |
   | `backend/onyx/db/permissions.py` | modified | recompute sets `is_group_manager` |
   | `backend/tests/external_dependency_unit/.../test_is_manager_backfill.py` | new | backfill correctness |
 - **Est. size:** ~220 LOC
@@ -98,8 +99,8 @@ highest-value resource types, exercised by the escalation integration suite (man
 - **Feature-flag state:** N/A — nothing calls these yet.
 - **Tests on merge:** unit/external-dependency unit — `assert_group_set_within_scope` invariants (⊆ managed,
   non-empty, private, fail-closed, admin/global bypass); `within_managed_scope_clause` selects the right rows.
-- **Drift checkpoint:** confirm the bundle is the 6-token set — `manage:actions` OUT (D4 — agent-mediated),
-  new `manage:skills` IN (D5); confirm `require_permission`'s token-cap branch is
+- **Drift checkpoint:** confirm the bundle is the 7-token set — includes `manage:actions` (D4, scoped via
+  agents at GATE 2) and the new `manage:skills` (D5); confirm `require_permission`'s token-cap branch is
   unchanged since `03`.
 
 ## PR 3 — Enforce scope on connectors & document sets (walking skeleton)
@@ -130,7 +131,7 @@ highest-value resource types, exercised by the escalation integration suite (man
   guess `server/documents/cc_pair.py`) — locate the actual group/access setter before coding. Confirm doc sets
   still use `is_public` (not an `access_type`) for the private check.
 
-## PR 4 — Enforce scope on agents, skills & token limits
+## PR 4 — Enforce scope on agents, skills, actions & token limits
 - **Goal:** extend the proven model to the remaining manager-scoped resources; verify PAT composition.
 - **Scope (in):** persona filter + thread the acting `user: User` into `update_persona_access` (both MIT+EE
   twins); persona group-share is **`MANAGE_AGENTS`-gated via GATE 2 (D7, §11.5)** — admin/global bypass,
@@ -139,9 +140,11 @@ highest-value resource types, exercised by the escalation integration suite (man
   bundle; no migration), a NEW scoped admin-list path (do NOT touch the runtime visibility filter), GATE 2 on
   `replace_skill_grants`, re-point `skill/api.py` by verb to `MANAGE_SKILLS, allow_scope=True` (§11.2);
   managed-scope enforcement in EE `token_limit.py` group write path; `credentials.py` **and `feedback.py`** left
-  unchanged (documented no-ops); **persona/skill delete stays admin-only (D6)**; scoped-PAT tests. **Actions:
-  nothing to build** — agent-mediated
-  (D4), `MANAGE_ACTIONS` not in the bundle, tool/MCP catalog stays owner/admin.
+  unchanged (documented no-ops); **persona/skill delete stays admin-only (D6)**; scoped-PAT tests. **Actions
+  (D4):** `MANAGE_ACTIONS` is in the bundle; switch the tool/MCP admin endpoints to `allow_scope=True` and
+  replace their owner-or-admin per-resource check with GATE 2 deriving the action's groups via its agents
+  (`Tool → Persona__Tool → Persona__UserGroup` ⊆ managed); delete stays admin-only; tool used by no agent →
+  owner/admin only.
 - **Out of scope:** membership/assignment (PR5); UI (PR6).
 - **Files:**
   | File | New/Modified | This PR's slice |
@@ -150,11 +153,13 @@ highest-value resource types, exercised by the escalation integration suite (man
   | `backend/ee/onyx/db/persona.py` | modified | `update_persona_access` EE gate (lockstep signature) |
   | `backend/onyx/db/skill.py` | modified | scoped admin-list path + `replace_skill_grants` GATE 2 + is_public toggle gate (§11.2) |
   | `backend/onyx/server/features/skill/api.py` | modified | re-point off curator dep; `allow_scope=True` by verb (DELETE stays admin-only) |
+  | `backend/onyx/server/features/{tool,mcp}/api.py` | modified | `allow_scope=True`; agent-mediated GATE 2 replaces owner-or-admin (§11.1) |
+  | `backend/onyx/db/tools.py` | modified | agent-mediated action scope (Tool→Persona__Tool→groups) |
   | `backend/ee/onyx/db/token_limit.py` | modified | managed-scope on group token-limit writes |
   | `backend/onyx/server/.../persona api` | modified | `ADD_AGENTS, allow_scope=True` deps |
-  | `backend/tests/integration/.../test_group_manager_agents.py` | new | agent + skill escalation + ADD_AGENTS-owner no-regression + PAT narrowing |
+  | `backend/tests/integration/.../test_group_manager_agents.py` | new | agent + skill + action escalation + ADD_AGENTS-owner no-regression + PAT narrowing |
   | `backend/onyx/db/feedback.py` | unchanged | NO CHANGE — admin-only, not in bundle (§11.7) |
-- **Est. size:** ~460 LOC
+- **Est. size:** ~620 LOC (agents + skills + actions + token limits)
 - **Depends on:** PR 2 (independent of PR 3)
 - **Feature-flag state:** N/A — lands-together invariant.
 - **Tests on merge:** integration — agent create/share scoped; manager can't widen a PAT's group reach; `add:agents`

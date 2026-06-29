@@ -52,8 +52,8 @@ is_group_manager: Mapped[bool] = mapped_column(
 
 ### 1.2 Migration — additive only (ship with the feature)
 
-`backend/alembic/versions/4fa09af6ca14_add_is_manager_to_user__user_group.py`
-(revision `4fa09af6ca14`, **down_revision `c8e316473aaa`** — current head).
+`backend/alembic/versions/c71a18ea7d07_add_is_manager_and_is_group_manager.py`
+(revision `c71a18ea7d07`, **down_revision `c8e316473aaa`**).
 **Tenant schema** (`alembic/versions/`), NOT `alembic_tenants/`.
 
 ```python
@@ -120,17 +120,17 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset({
     Permission.ADD_AGENTS,
     Permission.MANAGE_USER_GROUPS,   # membership + resource sharing of the managed group only
     Permission.MANAGE_SKILLS,        # NEW dedicated token (D5) — also grantable globally in the groups UI
+    Permission.MANAGE_ACTIONS,       # tools/MCP — in the bundle for GATE 1 reach; scoped via agents at GATE 2 (D4)
 })
 ```
 Code-defined, never written to `permission_grant`. Expanded live; never merged into
 `effective_permissions` (which stays global-only).
 
-> **MANAGE_ACTIONS is intentionally NOT in the bundle (D4 — see §11.1).** Actions are *agent-mediated*: a
-> manager configures actions on their group's agents through the persona edit path (`tool_ids` on
-> `create_update_persona`, `persona.py:1114`), already gated by `MANAGE_AGENTS` + the persona GATE 2. The
-> standalone custom-tool / MCP-server catalog CRUD (`tool/api.py`, `mcp/api.py`) stays **owner-or-admin**
-> and is *not* switched to `allow_scope` — there is no tool→group junction and none is needed. Managers
-> manage actions *via agents*, not by CRUD-ing the global catalog.
+> **`MANAGE_ACTIONS` is in the bundle (D4), scoped via agents.** It must be — GATE 1
+> (`has_permission_or_scope`) would 403 a scoped manager on every action endpoint otherwise. "Agent-mediated"
+> describes GATE 2's scope resolution, not bundle membership: the route gate lets the manager *reach* the
+> tool/MCP endpoints; GATE 2 derives an action's groups from the agents that reference it
+> (`Tool → Persona__Tool → Persona__UserGroup`) and requires them ⊆ managed. See §11.1.
 
 ### 2.2 Live scope resolution (two forms)
 
@@ -354,6 +354,9 @@ backend/
     db/feedback.py                     ← (no change — admin-only, not in bundle; §11.7)
     db/credentials.py                  ← (no change — documented no-op)
     server/features/skill/api.py       ← MOD: re-point off curator dep; allow_scope by verb (§11.2)
+    server/features/tool/api.py        ← MOD: allow_scope=True; agent-mediated GATE 2 replaces owner-or-admin (§11.1)
+    server/features/mcp/api.py         ← MOD: allow_scope=True; agent-mediated GATE 2 replaces owner-or-admin (§11.1)
+    db/tools.py                        ← MOD: agent-mediated action scope (Tool→Persona__Tool→groups, §11.1)
     server/.../{document_set,connector,cc_pair,persona}/api.py  ← MOD: allow_scope=True deps
     server/.../permissions api         ← MOD: /users/me/permissions adds is_manager
   ee/onyx/
@@ -362,7 +365,7 @@ backend/
     db/token_limit.py                  ← MOD: managed-scope enforcement on group token-limit writes
     server/user_group/api.py           ← MOD: allow_scope deps + NEW manager-assign endpoint
   alembic/versions/
-    4fa09af6ca14_add_is_manager_to_user__user_group.py   ← NEW migration
+    c71a18ea7d07_add_is_manager_and_is_group_manager.py  ← NEW migration (down_revision c8e316473aaa)
 web/
   src/app/ee/admin/groups/[groupId]/   ← MOD: manager toggle UI
   src/lib/.../usePermissions(.ts)      ← MOD: is_manager flag
@@ -405,8 +408,9 @@ A 5-dimension adversarial review against `new-permission-system` (PAT · admin-r
 junction-only · completeness, 18 agents) confirmed the core design is sound — PAT cap preserved, chat
 runtime untouched, purely junction-based, and the feared backfill data-loss does **not** occur — but found
 that §1–10 under-specify several manager-reachable paths. **This section is the authoritative coverage
-checklist; implement every row.** New decisions locked with the owner: **D4 actions = agent-mediated** ·
-**D5 skills = in scope (7th resource)** · **D6 managers may do everything EXCEPT delete**.
+checklist; implement every row.** New decisions locked with the owner: **D4 actions = `manage:actions` in the
+bundle, scoped via agents at GATE 2** · **D5 skills = in scope (7th resource)** · **D6 managers may do
+everything EXCEPT delete**.
 
 ### 11.0 PREREQUISITE — independent boot bug (fix before/with PR1)
 `current_curator_or_admin_user` was removed from `onyx/auth/users.py` by §1–7 but is still imported by
@@ -416,15 +420,21 @@ dead dep: skills → see §11.2; `targeted_reindex.py:80/163` → `require_permi
 its connector/indexing peers). This is a merge-integration break, not a §8 feature change, but it blocks
 everything. Add an `import onyx.main` smoke test to CI so a deleted auth dep fails fast.
 
-### 11.1 Actions (D4 — agent-mediated; MANAGE_ACTIONS dropped from bundle)
-- A manager "manages actions" by setting `tool_ids` on a managed-group agent via `create_update_persona`
-  (`persona.py:1114`, `PersonaUpsertRequest.tool_ids`) — already gated by `MANAGE_AGENTS` + persona GATE 2.
-  The tool catalog is shared (BASIC_ACCESS list — existing behavior; `Persona__Tool`, `models.py:703`).
-- Standalone custom-tool/MCP CRUD (`tool/api.py` POST/PUT/DELETE on `MANAGE_ACTIONS`; `mcp/api.py`
-  owner-or-admin) **stays admin/owner — do NOT add `allow_scope`.** The `MCPServer__UserGroup` junction
-  stays unused; no tool→group scoping is built.
-- **Remove `MANAGE_ACTIONS` from `SCOPED_MANAGER_PERMISSIONS`** (§2.1). The "scoped via agents" claim is now
-  literally true and needs no new code. (Closes review-F1.)
+### 11.1 Actions (D4 — `MANAGE_ACTIONS` in the bundle; scoped via agents at GATE 2)
+- **`MANAGE_ACTIONS` stays in `SCOPED_MANAGER_PERMISSIONS`** (§2.1). Bundle membership is what GATE 1
+  (`has_permission_or_scope`) checks — drop it and a scoped manager 403s at the route on every action endpoint.
+  "Agent-mediated" is GATE 2's scope resolution, not a reason to omit the token.
+- **Reaching the endpoints (GATE 1):** switch the standalone tool/MCP admin endpoints (`tool/api.py`
+  POST/PUT/DELETE, `mcp/api.py`) to `require_permission(MANAGE_ACTIONS, allow_scope=True)` so managers can reach
+  them. (Delete stays admin-only per D6.)
+- **Scope check (GATE 2):** actions have no direct group; derive an action's groups from the agents that
+  reference it — `Tool → Persona__Tool → Persona__UserGroup` — and require them ⊆ managed (+ PRIVATE). This
+  **replaces** the current owner-or-admin per-resource check (`_get_editable_custom_tool` /
+  `_ensure_mcp_server_owner_or_admin`); keep owner/admin as a bypass.
+- **Edge cases:** a tool used by agents spanning a group the manager doesn't manage → reject; a tool referenced
+  by **no** agent → no group context → owner/admin only.
+- Attaching existing catalog tools to an agent still flows through the persona path (`tool_ids` on
+  `create_update_persona`, gated by `MANAGE_AGENTS` + the persona GATE 2) — unchanged.
 
 ### 11.2 Skills (D5 — in scope, 7th scoped resource) — REVISED per the GO/NO-GO review
 Skills (`Skill__UserGroup` `models.py:4460`; `db/skill.py`) are group-shareable but **do NOT mirror personas
@@ -478,6 +488,7 @@ All `allow_scope=True` + GATE 2 EXCEPT where marked admin-only (D6/D2):
 | doc-set **DELETE** `:93` | — | **admin-only (D6)** |
 | persona create `persona/api.py:310` · update `:181` · **share `:443`** | `update_persona_access` (§11.5) | allow_scope=True; **GATE 2 keyed on `MANAGE_AGENTS` (D7)** — admin/global bypass; scoped managers ⊆ managed; ADD_AGENTS-only can't group-share |
 | skill create/update `skill/api.py:186/...` | skill write fn (§11.2) | allow_scope=True; GATE 2 on `replace_skill_grants` |
+| tool/MCP create/update `tool/api.py` · `mcp/api.py` | GATE 2 via agents (`Tool → Persona__Tool → Persona__UserGroup` ⊆ managed); replaces owner-or-admin check (§11.1) | allow_scope=True; **DELETE admin-only (D6)** |
 | group update/members `user_group/api.py:194/215` · **rename `:164`** | `update_user_group` / `add_users_to_user_group` | allow_scope=True; GATE 2 = group ∈ managed; **cc_pair_ids per §11.6** |
 | group `/agents` persona attach `user_group/api.py:256` | `update_persona_access` | allow_scope=True; **manager-scope GATE 2 = target group ∈ managed** (the roster surface) |
 | group create `:144` · delete · permissions `:115` | — | **admin-only (D2)** |

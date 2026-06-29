@@ -95,8 +95,9 @@ action passes **two gates** — a coarse route gate (cached) and a per-resource 
 2. **What** — `SCOPED_MANAGER_PERMISSIONS = {manage:connectors, manage:document_sets, manage:agents,
    add:agents, manage:user_groups}`, expanded live at resolve time, applied only to managed groups.
    **Never** merged into `effective_permissions.global`. (Per the 2026-06-29 review — D4 — `manage:actions`
-   was **dropped**: actions are agent-mediated via the persona `tool_ids` path. Skills are added as a 7th
-   scoped resource under a new dedicated `manage:skills` token (D5). See [03 §11](03-detailed-design.md).)
+   **stays in the bundle** so GATE 1 admits managers; scope is resolved at GATE 2 via the agents that
+   reference the action. Skills are added as a 7th scoped resource under a new dedicated `manage:skills`
+   token (D5). See [03 §11](03-detailed-design.md).)
 3. **Cached vs live** — `User.effective_permissions` carries global tokens **plus an `is_manager` boolean**
    (so the route gate needs no extra query). The managed-group **list** is read live by
    `get_scoped_groups(user)` (one indexed read on `user_id WHERE is_manager=true`) — never cached, so never

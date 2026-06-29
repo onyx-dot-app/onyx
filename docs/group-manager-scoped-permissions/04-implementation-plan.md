@@ -40,8 +40,9 @@ PRIVATE and strictly within their managed groups — enforced authoritatively at
 - **Regression-review additions (2026-06-29) — see [03 §11](03-detailed-design.md) for the full checklist:**
   - **PREREQUISITE (boot bug, §11.0):** `current_curator_or_admin_user` is gone but still imported by
     `skill/api.py:16` + `targeted_reindex.py:22` → the API server won't boot. Fix first (Step 0).
-  - **D4 actions (§11.1):** agent-mediated — **drop `MANAGE_ACTIONS` from the bundle**; the tool/MCP catalog
-    stays owner/admin (no `allow_scope`). No tool→group scoping built.
+  - **D4 actions (§11.1):** keep `MANAGE_ACTIONS` **in the bundle** (GATE 1 reach); switch the tool/MCP admin
+    endpoints to `allow_scope=True`; GATE 2 scopes via the agents that reference the action
+    (`Tool → Persona__Tool → Persona__UserGroup` ⊆ managed), replacing the owner-or-admin per-resource check.
   - **D5 skills (§11.2):** add a **dedicated `MANAGE_SKILLS` permission** (groups UI + bundle; no migration).
     Skills do NOT mirror personas — add a NEW scoped admin-list path (don't touch the runtime visibility
     filter), GATE 2 on `replace_skill_grants` (the `/grants` seam), re-point `skill/api.py` by verb to
@@ -68,7 +69,7 @@ onto `require_permission(...)`. Until this lands, `import onyx.main` raises `Imp
 Lands as its own small commit ahead of (or at the head of) PR1.
 
 **Step 1 — Schema + cached flag + migration.** Add `User__UserGroup.is_manager` and `User.is_group_manager`
-(`db/models.py`). Author migration `4fa09af6ca14` (down_revision `c8e316473aaa`, `alembic/versions/`) adding both
+(`db/models.py`). Author migration `c71a18ea7d07` (down_revision `c8e316473aaa`, `alembic/versions/`) adding both
 columns, role-gated `is_manager` backfill (CURATOR + GLOBAL_CURATOR), and `is_group_manager` backfill from the
 result. Extend `recompute_user_permissions__no_commit` (`db/permissions.py:43`) to recompute `is_group_manager`.
 

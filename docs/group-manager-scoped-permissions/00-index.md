@@ -18,8 +18,8 @@ Source of truth (wiki): `Engineering Projects/Group-Based Permissions System V2/
 **Decisions locked at GATE 2:** D1 cache `is_group_manager` boolean (route gate zero-query; managed-list stays
 live) · D2 admins-only create groups · D3 admin-or-manager-of-that-group assigns managers.
 
-**Decisions locked at the 2026-06-29 regression + GO/NO-GO reviews:** D4 actions = agent-mediated
-(`manage:actions` dropped from the bundle) · D5 skills = a 7th scoped resource under a **new dedicated
+**Decisions locked at the 2026-06-29 regression + GO/NO-GO reviews:** D4 actions = `manage:actions`
+**stays in the bundle** (GATE 1 reach), scoped via the agents that reference them at GATE 2 · D5 skills = a 7th scoped resource under a **new dedicated
 `manage:skills` permission** (grantable in the groups UI + in the bundle; no DB migration) · D6 managers may do
 everything **except delete** · **D7 attaching an agent to a group is controlled by `manage:agents`** (standard GATE 2 keyed on
 `MANAGE_AGENTS` — admins/global holders self-share to their groups, scoped managers to managed groups;
