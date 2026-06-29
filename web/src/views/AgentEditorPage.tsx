@@ -491,8 +491,10 @@ interface AgentDraftManagerProps {
   clearRef: React.RefObject<(() => void) | null>;
 }
 
-// Auto-saves the form to a draft (only while dirty, so a pristine form never
-// prompts) and surfaces a restore banner when one exists.
+// Headless coordinator for new-agent drafts: auto-saves the form while dirty
+// and auto-restores any stored draft on mount. Only mounted for agent creation;
+// edits to an existing agent are assumed minor and aren't drafted. Renders
+// nothing.
 export function AgentDraftManager({
   storageKey,
   clearRef,
@@ -502,7 +504,7 @@ export function AgentDraftManager({
   const { draft, loaded, hasDraft, save, clear } = useDraft<
     Record<string, unknown>
   >({ key: storageKey });
-  const [handled, setHandled] = useState(false);
+  const restoredRef = useRef(false);
 
   useEffect(() => {
     clearRef.current = clear;
@@ -515,46 +517,24 @@ export function AgentDraftManager({
     if (loaded && dirty) save(values);
   }, [values, dirty, loaded, save]);
 
-  // Editing the form means the user is working fresh, not restoring; latch the
-  // banner shut so it can't reappear, even if they later revert to pristine.
+  // Restore the draft once the read completes. Safe to apply silently: the
+  // create form starts pristine, so there's nothing to clobber. The !dirty
+  // guard still bails if the user began typing before the read landed.
   useEffect(() => {
-    if (dirty) setHandled(true);
-  }, [dirty]);
+    if (!loaded || restoredRef.current) return;
+    restoredRef.current = true;
+    if (hasDraft && draft && !dirty) {
+      // JSON stores dates as ISO strings; revive the one date field to a Date.
+      const cutoff = draft.knowledge_cutoff_date;
+      setValues({
+        ...draft,
+        knowledge_cutoff_date:
+          typeof cutoff === "string" ? new Date(cutoff) : (cutoff ?? null),
+      });
+    }
+  }, [loaded, hasDraft, draft, dirty, setValues]);
 
-  if (!loaded || !hasDraft || handled || !draft) return null;
-
-  function handleRestore() {
-    // JSON stores dates as ISO strings; revive the one date field back to a
-    // Date.
-    const cutoff = draft!.knowledge_cutoff_date;
-    setValues({
-      ...draft!,
-      knowledge_cutoff_date:
-        typeof cutoff === "string" ? new Date(cutoff) : (cutoff ?? null),
-    });
-    setHandled(true);
-  }
-
-  function handleDismiss() {
-    clear();
-    setHandled(true);
-  }
-
-  return (
-    <MessageCard
-      variant="info"
-      title="Restore unsaved changes?"
-      description="We saved your in-progress edits from a previous session."
-      rightChildren={
-        <div className="flex gap-2">
-          <Button prominence="secondary" onClick={handleDismiss}>
-            Discard
-          </Button>
-          <Button onClick={handleRestore}>Restore</Button>
-        </div>
-      }
-    />
-  );
+  return null;
 }
 
 export interface AgentEditorPageProps {
@@ -578,12 +558,8 @@ export default function AgentEditorPage({
   const { vectorDbEnabled } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  // Separate keys for create vs. edit so a new-agent draft can't bleed into an
-  // existing one.
-  const agentDraftStorageKey = draftKey(
-    "agent-editor",
-    existingAgent?.id != null ? String(existingAgent.id) : "new"
-  );
+  // Drafts are only kept while creating an agent, so a single "new" key.
+  const agentDraftStorageKey = draftKey("agent-editor", "new");
   // Assigned by AgentDraftManager; lets handleSubmit cancel a pending draft
   // write before clearing on a successful save.
   const clearAgentDraftRef = useRef<(() => void) | null>(null);
@@ -1361,10 +1337,14 @@ export default function AgentEditorPage({
 
                     {/* Agent Form Content */}
                     <SettingsLayouts.Body>
-                      <AgentDraftManager
-                        storageKey={agentDraftStorageKey}
-                        clearRef={clearAgentDraftRef}
-                      />
+                      {/* Drafts are only kept for new agents; edits to an
+                          existing agent are assumed minor. */}
+                      {!existingAgent && (
+                        <AgentDraftManager
+                          storageKey={agentDraftStorageKey}
+                          clearRef={clearAgentDraftRef}
+                        />
+                      )}
 
                       <GeneralLayouts.Section
                         flexDirection="row"
