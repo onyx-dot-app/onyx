@@ -6,7 +6,6 @@ import {
   Button,
   CompactMarkdown,
   MessageCard,
-  Tag,
   Text,
   Tooltip,
 } from "@opal/components";
@@ -37,13 +36,6 @@ interface SkillPreviewModalProps {
   skillId: string | null;
   fallbackTitle?: string;
   onClose: () => void;
-}
-
-function statusTag(preview: SkillPreview) {
-  if (preview.source === "builtin") {
-    return <Tag title="Built-in" color="blue" />;
-  }
-  return <Tag title="Custom" color="gray" />;
 }
 
 function metadataRows(
@@ -114,14 +106,6 @@ export default function SkillPreviewModal({
           {preview && !isLoading && !error && (
             <Section gap={1} alignItems="stretch">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action" color="text-05">
-                    Source
-                  </Text>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {statusTag(preview)}
-                  </div>
-                </div>
                 {metadataRows(preview).map((row) => (
                   <div key={row.label} className="flex flex-col gap-1">
                     <Text font="main-ui-action" color="text-05">
