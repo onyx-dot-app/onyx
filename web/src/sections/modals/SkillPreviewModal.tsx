@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import {
   Button,
@@ -9,6 +10,7 @@ import {
   Text,
 } from "@opal/components";
 import { SvgBlocks, SvgSimpleLoader } from "@opal/icons";
+import { cn } from "@opal/utils";
 import Modal from "@/refresh-components/Modal";
 import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -16,6 +18,15 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type { SkillPreview } from "@/views/admin/SkillsPage/interfaces";
 
 type SkillPreviewMode = "admin" | "user";
+type InstructionsDisplayMode = "rendered" | "raw";
+
+const INSTRUCTIONS_DISPLAY_OPTIONS: {
+  value: InstructionsDisplayMode;
+  label: string;
+}[] = [
+  { value: "rendered", label: "Rendered" },
+  { value: "raw", label: "Raw" },
+];
 
 interface SkillPreviewModalProps {
   open: boolean;
@@ -51,6 +62,8 @@ export default function SkillPreviewModal({
   fallbackTitle = "Skill preview",
   onClose,
 }: SkillPreviewModalProps) {
+  const [instructionsDisplayMode, setInstructionsDisplayMode] =
+    useState<InstructionsDisplayMode>("rendered");
   const swrKey =
     open && skillId
       ? mode === "admin"
@@ -62,6 +75,14 @@ export default function SkillPreviewModal({
     error,
     isLoading,
   } = useSWR<SkillPreview>(swrKey, errorHandlingFetcher);
+  const instructionsMarkdown =
+    preview?.instructions_markdown || "No instructions found.";
+
+  useEffect(() => {
+    if (open) {
+      setInstructionsDisplayMode("rendered");
+    }
+  }, [open, skillId]);
 
   return (
     <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -111,13 +132,47 @@ export default function SkillPreviewModal({
               </div>
 
               <Section gap={0.25} alignItems="stretch">
-                <Text font="main-ui-action" color="text-05">
-                  Instructions
-                </Text>
-                <div className="rounded-lg border border-border p-3 overflow-y-auto overflow-x-hidden bg-background-50 max-h-[48dvh]">
-                  <CompactMarkdown>
-                    {preview.instructions_markdown || "No instructions found."}
-                  </CompactMarkdown>
+                <div className="flex items-center justify-between gap-2">
+                  <Text font="main-ui-action" color="text-05">
+                    Instructions
+                  </Text>
+                  <div
+                    role="group"
+                    className="inline-flex shrink-0 rounded-08 border border-border-01 bg-background-tint-01 p-0.5"
+                    aria-label="Instruction display mode"
+                  >
+                    {INSTRUCTIONS_DISPLAY_OPTIONS.map((option) => {
+                      const isSelected =
+                        option.value === instructionsDisplayMode;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          aria-pressed={isSelected}
+                          className={cn(
+                            "h-6 rounded-04 px-2 text-xs font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-border-04",
+                            isSelected
+                              ? "bg-background-neutral-00 text-text-05 shadow-sm"
+                              : "text-text-03 hover:text-text-05"
+                          )}
+                          onClick={() =>
+                            setInstructionsDisplayMode(option.value)
+                          }
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border p-3 overflow-y-auto overflow-x-hidden bg-background-neutral-00 max-h-[48dvh]">
+                  {instructionsDisplayMode === "rendered" ? (
+                    <CompactMarkdown>{instructionsMarkdown}</CompactMarkdown>
+                  ) : (
+                    <pre className="m-0 whitespace-pre-wrap wrap-break-word font-mono text-xs leading-5 text-text-04">
+                      {instructionsMarkdown}
+                    </pre>
+                  )}
                 </div>
               </Section>
             </Section>
