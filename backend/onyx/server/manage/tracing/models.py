@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 from pydantic import Field
 
@@ -8,7 +10,7 @@ class TracingProviderView(BaseModel):
     provider_type: TracingProviderType
     connected: bool
     # "db" (configured in the UI), "env" (legacy env vars), or "none".
-    source: str
+    source: Literal["db", "env", "none"]
     enabled: bool
     config: dict[str, str] = Field(default_factory=dict)
     masked_api_key: str | None = None

@@ -61,11 +61,12 @@ def _build_view(
     row: TracingProviderConfig | None,
     effective: EffectiveTracingConfig,
 ) -> TracingProviderView:
-    is_connected = (
-        effective.braintrust is not None
-        if provider_type == TracingProviderType.BRAINTRUST
-        else effective.langfuse is not None
-    )
+    if provider_type == TracingProviderType.BRAINTRUST:
+        is_connected = effective.braintrust is not None
+    elif provider_type == TracingProviderType.LANGFUSE:
+        is_connected = effective.langfuse is not None
+    else:
+        is_connected = False
     if row is not None:
         return TracingProviderView(
             provider_type=provider_type,
