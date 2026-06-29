@@ -1507,9 +1507,8 @@ LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY") or ""
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY") or ""
 LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST") or ""  # For self-hosted Langfuse
 
-# How long each process caches the resolved (DB-or-env) tracing config before
-# re-checking. This bounds how quickly an admin's connect/disconnect in the UI
-# takes effect across all processes (api_server + Celery workers + ...).
+# Per-process cache TTL for the resolved tracing config; bounds how quickly a UI
+# connect/disconnect takes effect (no restart needed).
 TRACING_CONFIG_CACHE_TTL_SECONDS = float(
     os.environ.get("TRACING_CONFIG_CACHE_TTL_SECONDS") or "30"
 )

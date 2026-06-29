@@ -3422,11 +3422,10 @@ class InternetContentProvider(Base):
 
 
 class TracingProviderConfig(Base):
-    """Admin-configured LLM-observability tracing provider (Braintrust, Langfuse).
+    """Admin-configured tracing provider (Braintrust, Langfuse), one row each.
 
-    One row per provider; providers are enabled independently. When no row exists
-    for a provider, tracing falls back to the corresponding environment variables.
-    Not used in multi-tenant (cloud) deployments.
+    api_key holds the Braintrust API key / Langfuse secret key; non-secret settings
+    (Braintrust project; Langfuse public_key, host) live in config.
     """
 
     __tablename__ = "tracing_provider_config"
@@ -3434,11 +3433,9 @@ class TracingProviderConfig(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     provider_type: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    # Braintrust API key / Langfuse secret key. Non-secret fields live in `config`.
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )
-    # Non-secret provider settings: Braintrust {project}; Langfuse {public_key, host}.
     config: Mapped[dict[str, str] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )

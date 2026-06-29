@@ -1,10 +1,5 @@
-"""Unified tracing setup for all providers (Braintrust, Langfuse, etc.).
-
-Registers a single :class:`DynamicTracingProcessor` that resolves the effective
-(DB-backed, env-fallback) provider config at runtime, so admin connect/disconnect
-takes effect without a restart. See ``onyx/tracing/provider_config.py`` and
-``onyx/tracing/dynamic_processor.py``.
-"""
+"""Registers the DynamicTracingProcessor, which resolves the live (DB-or-env)
+provider config at runtime so config changes apply without a restart."""
 
 from onyx.tracing.dynamic_processor import DynamicTracingProcessor
 from onyx.tracing.framework import set_trace_processors
@@ -17,11 +12,8 @@ _dynamic_processor: DynamicTracingProcessor | None = None
 
 
 def setup_tracing() -> list[str]:
-    """Register the dynamic tracing processor and perform an initial config read.
-
-    Idempotent: subsequent calls are no-ops (the registered processor refreshes its
-    own config on a short TTL). Returns the provider names active at startup.
-    """
+    """Register the dynamic tracing processor and do an initial config read.
+    Idempotent; returns the provider names active at startup."""
     global _initialized, _dynamic_processor
     if _initialized:
         logger.debug("Tracing already initialized, skipping")

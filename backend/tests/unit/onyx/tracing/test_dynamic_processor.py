@@ -113,8 +113,7 @@ def test_config_change_retires_and_shuts_down_old_delegates() -> None:
         proc.reconcile(force=True)
 
         assert proc._delegates == [new]
-        # No in-flight traces, so the old set is flushed and shut down immediately.
-        assert "force_flush" in old.calls
+        # No in-flight traces, so the old set is shut down immediately.
         assert "shutdown" in old.calls
 
 

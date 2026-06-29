@@ -1,11 +1,6 @@
-"""Resolution of the effective tracing-provider config (DB-backed, env fallback).
-
-Per provider, a DB row (when present) is authoritative — enabled rows turn the
-provider on with their stored credentials, disabled rows turn it off. When no row
-exists for a provider, we fall back to the corresponding environment variables, so
-env-only deployments are unchanged. In multi-tenant (cloud) deployments the UI
-config feature is unsupported, so only env vars are consulted.
-"""
+"""Resolve the effective tracing-provider config: a DB row (if present) wins per
+provider, else env-var fallback. Env-only under MULTI_TENANT (UI config is
+unsupported on cloud)."""
 
 from __future__ import annotations
 
@@ -123,7 +118,6 @@ def resolve_effective_tracing_config() -> EffectiveTracingConfig:
     try:
         with get_session_with_current_tenant() as db_session:
             for row in fetch_all_tracing_providers(db_session):
-                # A DB row is authoritative for its provider (overrides env).
                 if row.provider_type == TracingProviderType.BRAINTRUST.value:
                     braintrust = _braintrust_from_row(row)
                 elif row.provider_type == TracingProviderType.LANGFUSE.value:

@@ -1,15 +1,9 @@
-"""A single tracing processor that reflects the live (DB-or-env) provider config.
+"""Tracing processor that reflects the live (DB-or-env) provider config.
 
-Registered once at startup. It resolves the effective tracing config on a short
-TTL and (re)builds the underlying Braintrust/Langfuse delegate processors when the
-config changes — so an admin's connect/disconnect takes effect without a restart,
-across every process that emits traces.
-
-To avoid disrupting a trace that is already in flight when the config changes, the
-delegate set is pinned per-trace at ``on_trace_start``: a trace's spans and its
-``on_trace_end`` are always routed to the delegates it began with. Replaced
-("retired") delegate sets are flushed immediately and shut down once their last
-in-flight trace drains.
+Registered once at startup; resolves the effective config on a short TTL and
+rebuilds the Braintrust/Langfuse delegates when it changes, so connect/disconnect
+applies without a restart. The delegate set is pinned per-trace so a config change
+never disrupts an in-flight trace.
 """
 
 from __future__ import annotations
@@ -55,9 +49,12 @@ def _build_langfuse_processor(config: LangfuseConfig) -> TracingProcessor:
     from onyx import __version__
     from onyx.tracing.langfuse_tracing_processor import LangfuseTracingProcessor
 
-    # Langfuse SDK reads LANGFUSE_HOST from the environment in some code paths.
+    # The Langfuse SDK reads LANGFUSE_HOST from the env in some paths; keep it in
+    # sync (and cleared when no host is configured) to avoid a stale value.
     if config.host:
         os.environ["LANGFUSE_HOST"] = config.host
+    else:
+        os.environ.pop("LANGFUSE_HOST", None)
 
     client = Langfuse(
         public_key=config.public_key,
@@ -69,8 +66,6 @@ def _build_langfuse_processor(config: LangfuseConfig) -> TracingProcessor:
 
 
 def build_delegates(config: EffectiveTracingConfig) -> list[TracingProcessor]:
-    """Construct the provider processors for an effective config. Each provider is
-    isolated: a failure building one does not prevent the other."""
     delegates: list[TracingProcessor] = []
     if config.braintrust:
         try:
@@ -108,8 +103,8 @@ class DynamicTracingProcessor(TracingProcessor):
         self._retiring: list[list[TracingProcessor]] = []
 
     def reconcile(self, force: bool = False) -> EffectiveTracingConfig | None:
-        """Refresh the effective config (TTL-throttled unless ``force``) and rebuild
-        delegates if it changed. Returns the resolved config when a check ran."""
+        """Refresh the config (TTL-throttled unless ``force``) and rebuild delegates
+        if it changed. All provider I/O happens off the lock."""
         now = time.monotonic()
         with self._lock:
             if (
@@ -119,40 +114,46 @@ class DynamicTracingProcessor(TracingProcessor):
             ):
                 return None
             self._last_checked = now
+            current_fingerprint = self._fingerprint
 
         config = resolve_effective_tracing_config()
         fingerprint = config.fingerprint()
+        if fingerprint == current_fingerprint:
+            return config
 
-        retired: list[TracingProcessor] | None = None
+        # Build new delegates (imports + SDK client init + network I/O) off the lock.
+        new_delegates = build_delegates(config)
+
+        discard: list[TracingProcessor] | None = None
         with self._lock:
             if fingerprint == self._fingerprint:
-                return config
-            if self._delegates:
-                retired = self._delegates
-                self._retiring.append(retired)
-            self._delegates = build_delegates(config)
-            self._fingerprint = fingerprint
+                # Another thread already applied this exact config while we built.
+                discard = new_delegates
+            else:
+                if self._delegates:
+                    self._retiring.append(self._delegates)
+                self._delegates = new_delegates
+                self._fingerprint = fingerprint
+            drained = self._collect_drained()
 
-        if retired:
-            # Flush immediately so buffered spans are sent; full shutdown waits until
-            # the set's in-flight traces drain (see _reap_retired).
-            _forward(retired, "force_flush")
-            with self._lock:
-                self._reap_retired()
+        if discard is not None:
+            _forward(discard, "shutdown")
+        for delegate_set in drained:
+            _forward(delegate_set, "shutdown")
+
         logger.notice(
             "Tracing config applied with providers: %s",
             ", ".join(config.active_provider_names()) or "none",
         )
         return config
 
-    def _reap_retired(self) -> None:
-        """Shut down retired delegate sets that no trace references anymore.
-        Caller must hold ``self._lock``."""
-        still_referenced = {id(d) for d in self._trace_delegates.values()}
-        drained = [s for s in self._retiring if id(s) not in still_referenced]
-        self._retiring = [s for s in self._retiring if id(s) in still_referenced]
-        for delegate_set in drained:
-            _forward(delegate_set, "shutdown")
+    def _collect_drained(self) -> list[list[TracingProcessor]]:
+        """Remove and return retired sets no trace references. Caller holds the lock;
+        the returned sets must be shut down outside it (shutdown can block)."""
+        referenced = {id(d) for d in self._trace_delegates.values()}
+        drained = [s for s in self._retiring if id(s) not in referenced]
+        self._retiring = [s for s in self._retiring if id(s) in referenced]
+        return drained
 
     def on_trace_start(self, trace: Trace) -> None:
         self.reconcile()
@@ -166,7 +167,9 @@ class DynamicTracingProcessor(TracingProcessor):
             delegates = self._trace_delegates.pop(trace.trace_id, self._delegates)
         _forward(delegates, "on_trace_end", trace)
         with self._lock:
-            self._reap_retired()
+            drained = self._collect_drained()
+        for delegate_set in drained:
+            _forward(delegate_set, "shutdown")
 
     def on_span_start(self, span: Span[Any]) -> None:
         with self._lock:
@@ -180,13 +183,11 @@ class DynamicTracingProcessor(TracingProcessor):
 
     def force_flush(self) -> None:
         with self._lock:
-            delegates = list(self._delegates)
-            retiring = [p for s in self._retiring for p in s]
-        _forward(delegates + retiring, "force_flush")
+            delegates = self._delegates + [p for s in self._retiring for p in s]
+        _forward(delegates, "force_flush")
 
     def shutdown(self) -> None:
         with self._lock:
-            delegates = list(self._delegates)
-            retiring = [p for s in self._retiring for p in s]
+            delegates = self._delegates + [p for s in self._retiring for p in s]
             self._retiring = []
-        _forward(delegates + retiring, "shutdown")
+        _forward(delegates, "shutdown")
