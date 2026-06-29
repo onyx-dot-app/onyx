@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import Permission
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_curator_or_admin_user
 from onyx.configs.app_configs import MAX_PERSONAL_SKILLS_PER_USER
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Skill
@@ -170,7 +169,7 @@ def _ensure_owned_personal(skill: Skill, user: User, db_session: Session) -> Non
 
 @admin_router.get("")
 def list_skills_admin(
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillsList:
     rows = list(list_skills_for_admin(db_session=db_session))
@@ -183,7 +182,7 @@ def create_custom_skill(
     is_public: bool = Form(False),
     group_ids: str = Form("[]"),
     bundle: UploadFile = File(...),
-    user: User = Depends(current_curator_or_admin_user),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     parsed_group_ids = _parse_group_ids(group_ids)
@@ -220,7 +219,7 @@ def create_custom_skill(
 def patch_custom_skill(
     skill_id: UUID,
     patch_req: SkillPatchRequest,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     """Toggle ``enabled``/``is_public`` on a custom skill. Built-in
@@ -256,7 +255,7 @@ def patch_custom_skill(
 def replace_custom_skill_bundle(
     skill_id: UUID,
     bundle: UploadFile = File(...),
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     skill = fetch_skill_by_id(skill_id, db_session)
@@ -294,7 +293,7 @@ def replace_custom_skill_bundle(
 def replace_custom_skill_grants(
     skill_id: UUID,
     body: GrantsReplace,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> CustomSkillResponse:
     skill = fetch_skill_by_id(skill_id, db_session)
@@ -319,7 +318,7 @@ def replace_custom_skill_grants(
 @admin_router.delete("/custom/{skill_id}")
 def delete_custom_skill(
     skill_id: UUID,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     skill = fetch_skill_by_id(skill_id, db_session)
