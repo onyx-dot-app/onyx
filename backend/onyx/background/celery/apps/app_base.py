@@ -85,6 +85,9 @@ def clear_revoked(state: Any, **kwargs: Any) -> dict[str, Any]:  # noqa: ARG001
     cross-node entries don't expire — so after a mass-revoke it can pin at its 50k
     cap and won't self-heal or clear on a rolling restart. Broadcast this to clear
     the fleet without restarting. Deliberate use only: revoked state is dropped.
+
+    Intentionally ungated, like Celery's built-in shutdown/terminate/revoke control
+    commands: the trust boundary is broker access, not a per-command check.
     """
     from celery.worker import state as worker_state  # ty: ignore[unresolved-import]
 
