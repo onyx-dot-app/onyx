@@ -1205,8 +1205,6 @@ jobs:
           cache-to: type=inline
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
-          provenance: false
-          sbom: false
 
   build-model-server-arm64:
     needs:
@@ -1284,8 +1282,6 @@ jobs:
           cache-to: type=inline
           outputs: type=image,name=${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           no-cache: ${{ env.EDGE_TAG != 'true' && vars.MODEL_SERVER_NO_CACHE == 'true' }}
-          provenance: false
-          sbom: false
 
   merge-model-server:
     needs:
