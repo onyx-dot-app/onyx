@@ -235,6 +235,7 @@ class MinimalPersonaSnapshot(BaseModel):
         cls,
         persona: Persona,
         user_permission: PersonaAccessLevel | None = None,
+        include_owner_email: bool = True,
     ) -> "MinimalPersonaSnapshot":
         # Collect unique sources from document sets, hierarchy nodes, and attached documents
         sources: set[DocumentSource] = set()
@@ -288,7 +289,12 @@ class MinimalPersonaSnapshot(BaseModel):
             builtin_persona=persona.builtin_persona,
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
-                MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
+                # Owner email is PII: keep the id (needed for ownership/creator
+                # filtering) but blank the email for non-owner/non-admin callers.
+                MinimalUserSnapshot(
+                    id=persona.user.id,
+                    email=persona.user.email if include_owner_email else "",
+                )
                 if persona.user
                 else None
             ),
