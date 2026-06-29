@@ -635,7 +635,7 @@ def _validate_curator_can_modify_group(
     )
     accessible_group_ids = {group.id for group in accessible_groups}
     if user_group_id not in accessible_group_ids:
-        logger.error(
+        logger.warning(
             "User '%s' attempted to modify group '%s' which they do not curate",
             user.email,
             user_group_id,
