@@ -1002,6 +1002,12 @@ MAX_XLSX_CELLS_PER_SHEET = max(
     0, int(os.environ.get("MAX_XLSX_CELLS_PER_SHEET") or 10_000_000)
 )
 
+# PDF text extraction runs isolated (a malformed PDF can make PDFium hard-abort
+# or hang); this is the timeout before the subprocess is killed and pypdf runs.
+PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS = float(
+    os.environ.get("PDF_TEXT_EXTRACTION_TIMEOUT_SECONDS") or 120
+)
+
 # Use document summary for contextual rag
 USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
 # Use chunk summary for contextual rag
