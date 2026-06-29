@@ -87,6 +87,19 @@ class TabularSection(Section):
     def __sizeof__(self) -> int:
         return sys.getsizeof(self.csv_file_id) + sys.getsizeof(self.link)
 
+    def read_csv_text(self) -> str:
+        """Full staged-CSV content as text, read from the file store on demand.
+
+        The indexing path never calls this — it streams the CSV row-by-row at
+        chunk time so a large sheet stays off the heap. Use only for
+        non-streaming consumers (e.g. the no-vector-db plaintext path)."""
+        from onyx.file_store.file_store import get_default_file_store
+
+        with get_default_file_store().read_file(
+            self.csv_file_id, use_tempfile=True
+        ) as raw:
+            return raw.read().decode("utf-8", errors="replace")
+
 
 class BasicExpertInfo(BaseModel):
     """Basic Information for the owner of a document, any of the fields can be left as None

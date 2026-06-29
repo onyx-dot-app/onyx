@@ -275,16 +275,12 @@ def _process_user_file_without_vector_db(
     user_file_uuid = _as_uuid(user_file_id)
 
     # Combine section text from all document sections. Tabular sections are
-    # file-backed (no inline text), so read their staged CSV from the file store.
-    file_store = get_default_file_store()
+    # file-backed; read their staged CSV on demand.
     text_parts: list[str] = []
     for doc in documents:
         for section in doc.sections:
             if isinstance(section, TabularSection):
-                with file_store.read_file(
-                    section.csv_file_id, use_tempfile=True
-                ) as raw:
-                    csv_text = raw.read().decode("utf-8", errors="replace").strip()
+                csv_text = section.read_csv_text().strip()
                 if csv_text:
                     text_parts.append(csv_text)
             elif section.text:
