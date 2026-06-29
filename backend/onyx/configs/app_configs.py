@@ -849,9 +849,8 @@ for _redis_tls_name, _redis_tls_path in (
 
 CELERY_RESULT_EXPIRES = int(os.environ.get("CELERY_RESULT_EXPIRES", 86400))  # seconds
 
-# How long the scheduler skips a connector after its prune fails before it can
-# re-dispatch. Above the prune dispatch cadence (BLOCK_PRUNING, ~8 min in cloud)
-# to break the re-fire loop; well below prune_freq so a failed prune retries soon.
+# 30m default: above the ~8 min cloud prune-dispatch cadence (so a failed prune
+# can't re-fire in a loop), well under prune_freq (so it retries soon, not days later).
 PRUNE_FAILURE_BACKOFF_SECONDS = int(
     os.environ.get("PRUNE_FAILURE_BACKOFF_SECONDS") or 30 * 60
 )
