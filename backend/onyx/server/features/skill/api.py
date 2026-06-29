@@ -42,11 +42,14 @@ from onyx.server.features.skill.models import CustomSkillResponse
 from onyx.server.features.skill.models import GrantsReplace
 from onyx.server.features.skill.models import PersonalSkillPatchRequest
 from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.server.features.skill.models import SkillPreviewResponse
 from onyx.server.features.skill.models import SkillsList
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.skills.bundle import read_bundle_file
 from onyx.skills.bundle import slug_from_filename
+from onyx.skills.content import read_builtin_skill_instructions
+from onyx.skills.content import read_custom_skill_bundle_instructions
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
 from onyx.skills.push import push_skill_to_affected_sandboxes
@@ -156,6 +159,25 @@ def _ensure_owned_personal(skill: Skill, user: User, db_session: Session) -> Non
         )
 
 
+def _preview_response_for_skill(
+    skill: Skill,
+) -> SkillPreviewResponse:
+    if skill.built_in_skill_id is not None:
+        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
+        if definition is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+        return SkillPreviewResponse.from_builtin(
+            skill,
+            instructions_markdown=read_builtin_skill_instructions(definition),
+        )
+
+    instructions_markdown = read_custom_skill_bundle_instructions(skill)
+    return SkillPreviewResponse.from_custom(
+        skill,
+        instructions_markdown=instructions_markdown,
+    )
+
+
 @admin_router.get("")
 def list_skills_admin(
     _: User = Depends(current_curator_or_admin_user),
@@ -164,6 +186,18 @@ def list_skills_admin(
     rows = list(list_skills_for_admin(db_session=db_session))
     builtins, customs = _split_rows(rows, db_session, include_grants=True)
     return SkillsList(builtins=builtins, customs=customs)
+
+
+@admin_router.get("/{skill_id}/preview")
+def preview_skill_admin(
+    skill_id: UUID,
+    _: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> SkillPreviewResponse:
+    skill = fetch_skill_by_id(skill_id, db_session)
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return _preview_response_for_skill(skill)
 
 
 @admin_router.post("/custom")
@@ -365,6 +399,19 @@ def fetch_skill_for_current_user(
         group_ids=[],
         has_grants=bool(get_group_ids_for_skill(found.id, db_session)),
     )
+
+
+@user_router.get("/{skill_id}/preview")
+def preview_skill_for_current_user(
+    skill_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SkillPreviewResponse:
+    found = fetch_skill_for_user(skill_id, user, db_session)
+    if found is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+
+    return _preview_response_for_skill(found)
 
 
 @user_router.post("/custom")
