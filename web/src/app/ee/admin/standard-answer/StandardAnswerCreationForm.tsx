@@ -4,7 +4,7 @@ import { toast } from "@/hooks/useToast";
 import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
 import Button from "@/refresh-components/buttons/Button";
-import { Form, Formik } from "formik";
+import { Form, Formik, ErrorMessage } from "formik";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import * as Yup from "yup";
@@ -21,7 +21,9 @@ import {
   SelectorFormField,
   Label,
 } from "@/components/Field";
-import { InputComboBoxMulti } from "@/refresh-components/inputs/InputComboBox";
+import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
+import Chip from "@/refresh-components/Chip";
+import Text from "@/refresh-components/texts/Text";
 
 function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {
   return keywordSelect == "any";
@@ -106,7 +108,7 @@ export const StandardAnswerCreationForm = ({
             }
           }}
         >
-          {({ isSubmitting, values, setFieldValue, errors, touched }) => (
+          {({ isSubmitting, values, setFieldValue }) => (
             <Form>
               {values.matchRegex ? (
                 <TextFormField
@@ -165,45 +167,84 @@ export const StandardAnswerCreationForm = ({
                   placeholder="The answer in Markdown. Example: If you need any help from the IT team, please email internalsupport@company.com"
                 />
               </div>
-              <div className="w-4/12">
+              <div className="w-4/12 flex flex-col gap-2">
                 <Label>Categories:</Label>
-                <InputComboBoxMulti
-                  name="categories"
-                  placeholder="Select or create categories"
-                  creatable
-                  onChange={(selected_options) => {
-                    const selected_categories = selected_options.map(
-                      (option) => ({
-                        id: Number(option.value),
-                        name: option.label,
-                      })
+                <InputComboBox
+                  placeholder="Search or create categories..."
+                  value=""
+                  onChange={() => {}}
+                  onValueChange={async (value) => {
+                    // `value` is either an existing category id (option select)
+                    // or the typed name (the "Create" option). Match on either
+                    // so an existing category is never duplicated.
+                    const existing = standardAnswerCategories.find(
+                      (category) =>
+                        category.id.toString() === value ||
+                        category.name.toLowerCase() ===
+                          value.trim().toLowerCase()
                     );
-                    setFieldValue("categories", selected_categories);
-                  }}
-                  onCreate={async (created_name) => {
+                    if (existing) {
+                      if (
+                        !values.categories.some((c) => c.id === existing.id)
+                      ) {
+                        setFieldValue("categories", [
+                          ...values.categories,
+                          existing,
+                        ]);
+                      }
+                      return;
+                    }
+
                     const response = await createStandardAnswerCategory({
-                      name: created_name,
+                      name: value,
                     });
-                    const newCategory = await response.json();
-                    return {
-                      label: newCategory.name,
-                      value: newCategory.id.toString(),
-                    };
+                    const newCategory =
+                      (await response.json()) as StandardAnswerCategory;
+                    setFieldValue("categories", [
+                      ...values.categories,
+                      newCategory,
+                    ]);
                   }}
-                  options={standardAnswerCategories.map((category) => ({
-                    label: category.name,
-                    value: category.id.toString(),
-                  }))}
-                  selected={values.categories.map((category) => ({
-                    label: category.name,
-                    value: category.id.toString(),
-                  }))}
-                  error={
-                    touched.categories && typeof errors.categories === "string"
-                      ? errors.categories
-                      : undefined
-                  }
+                  options={standardAnswerCategories
+                    .filter(
+                      (category) =>
+                        !values.categories.some((c) => c.id === category.id)
+                    )
+                    .map((category) => ({
+                      label: category.name,
+                      value: category.id.toString(),
+                    }))}
+                  createPrefix="Create"
+                  searchIcon
                 />
+
+                {values.categories.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {values.categories.map((category) => (
+                      <Chip
+                        key={category.id}
+                        onRemove={() =>
+                          setFieldValue(
+                            "categories",
+                            values.categories.filter(
+                              (c) => c.id !== category.id
+                            )
+                          )
+                        }
+                      >
+                        {category.name}
+                      </Chip>
+                    ))}
+                  </div>
+                )}
+
+                <ErrorMessage name="categories" component="div">
+                  {(msg) => (
+                    <Text as="p" text03 className="text-action-danger-05">
+                      {msg}
+                    </Text>
+                  )}
+                </ErrorMessage>
               </div>
               <div className="py-4 flex">
                 {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
