@@ -15,6 +15,7 @@ from onyx.file_store.utils import build_frontend_file_url
 from onyx.file_store.utils import load_chat_file_by_id
 from onyx.file_store.utils import save_files
 from onyx.image_gen.factory import get_image_generation_provider
+from onyx.image_gen.generation import generate_images_with_provider
 from onyx.image_gen.generation import is_image_generation_configured
 from onyx.image_gen.generation import resolve_image_size
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
@@ -145,39 +146,22 @@ class ImageGenerationTool(Tool[None]):
         prompt: str,
         shape: ImageShape,
         reference_images: list[ReferenceImage] | None = None,
-    ) -> tuple[ImageGenerationResponse, Any]:
+    ) -> ImageGenerationResponse:
         size = resolve_image_size(self.model, shape)
         logger.debug("Generating image with model: %s, size: %s", self.model, size)
         try:
-            response = self.img_provider.generate_image(
-                prompt=prompt,
+            generated = generate_images_with_provider(
+                provider=self.img_provider,
                 model=self.model,
+                prompt=prompt,
                 size=size,
                 n=1,
                 reference_images=reference_images,
-                # response_format parameter is not supported for gpt-image-* models
-                response_format=None if "gpt-image-" in self.model else "b64_json",
             )
-
-            if not response.data or len(response.data) == 0:
-                raise RuntimeError("No image data returned from the API")
-
-            image_item = response.data[0].model_dump()
-
-            image_data = image_item.get("b64_json")
-            if not image_data:
-                raise RuntimeError("No base64 image data returned from the API")
-
-            revised_prompt = image_item.get("revised_prompt")
-            if revised_prompt is None:
-                revised_prompt = prompt
-
-            return (
-                ImageGenerationResponse(
-                    revised_prompt=revised_prompt,
-                    image_data=image_data,
-                ),
-                response,
+            first = generated[0]
+            return ImageGenerationResponse(
+                revised_prompt=first.revised_prompt,
+                image_data=first.b64_data,
             )
 
         except requests.RequestException as e:
@@ -333,9 +317,7 @@ class ImageGenerationTool(Tool[None]):
         reference_images = self._load_reference_images(reference_image_file_ids)
 
         # Use threading to generate images in parallel while emitting heartbeats
-        results: list[tuple[ImageGenerationResponse, Any] | None] = [
-            None
-        ] * self.num_imgs
+        results: list[ImageGenerationResponse | None] = [None] * self.num_imgs
         completed = threading.Event()
         error_holder: list[Exception | None] = [None]
 
@@ -343,7 +325,7 @@ class ImageGenerationTool(Tool[None]):
         def generate_all_images() -> None:
             try:
                 generated_results = cast(
-                    list[tuple[ImageGenerationResponse, Any]],
+                    list[ImageGenerationResponse],
                     run_functions_tuples_in_parallel(
                         [
                             (
@@ -398,8 +380,7 @@ class ImageGenerationTool(Tool[None]):
         if not valid_results:
             raise ValueError("No images were generated")
 
-        # Extract ImageGenerationResponse objects
-        image_generation_responses = [r[0] for r in valid_results]
+        image_generation_responses = valid_results
 
         # Save files and create GeneratedImage objects
         file_ids = save_files(

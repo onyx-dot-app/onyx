@@ -8,6 +8,7 @@ from onyx.db.image_generation import get_default_image_generation_config
 from onyx.image_gen.exceptions import ImageGenerationNotConfiguredError
 from onyx.image_gen.factory import get_image_generation_provider
 from onyx.image_gen.factory import validate_credentials
+from onyx.image_gen.interfaces import ImageGenerationProvider
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.image_gen.interfaces import ImageShape
 from onyx.image_gen.interfaces import ReferenceImage
@@ -30,6 +31,58 @@ def resolve_image_size(model: str, shape: ImageShape) -> str:
     if shape == ImageShape.PORTRAIT:
         return "1024x1536" if is_gpt_image else "1024x1792"
     return "1024x1024"
+
+
+def response_format_for_model(model: str) -> str | None:
+    """gpt-image-* models reject the ``response_format`` param; every other
+    model needs ``b64_json`` to return base64 inline. Shared so the chat tool
+    and the endpoint can't drift on this."""
+    return None if _GPT_IMAGE_PREFIX in model else "b64_json"
+
+
+def generate_images_with_provider(
+    provider: ImageGenerationProvider,
+    model: str,
+    prompt: str,
+    size: str,
+    n: int = 1,
+    quality: str | None = None,
+    reference_images: list[ReferenceImage] | None = None,
+) -> list[GeneratedImageData]:
+    """Call an already-built provider and extract base64 image(s). Shared by the
+    endpoint and the chat ``ImageGenerationTool`` so the provider-call shape,
+    ``response_format`` rule, and b64/revised-prompt parsing live in one place.
+    Raises RuntimeError when the provider returns no usable image data; provider
+    errors propagate to the caller."""
+    response = provider.generate_image(
+        prompt=prompt,
+        model=model,
+        size=size,
+        n=n,
+        quality=quality,
+        reference_images=reference_images,
+        response_format=response_format_for_model(model),
+    )
+
+    if not response.data:
+        raise RuntimeError("No image data returned from the provider.")
+
+    results: list[GeneratedImageData] = []
+    for item in response.data:
+        dumped = item.model_dump()
+        b64 = dumped.get("b64_json")
+        if not b64:
+            continue
+        results.append(
+            GeneratedImageData(
+                b64_data=b64,
+                revised_prompt=dumped.get("revised_prompt") or prompt,
+            )
+        )
+
+    if not results:
+        raise RuntimeError("No base64 image data returned from the provider.")
+    return results
 
 
 def _default_provider_and_model(
@@ -105,33 +158,12 @@ def generate_images_with_default_config(
         size,
     )
 
-    response = provider.generate_image(
-        prompt=prompt,
+    return generate_images_with_provider(
+        provider=provider,
         model=model,
+        prompt=prompt,
         size=size,
         n=n,
         quality=quality,
         reference_images=reference_images,
-        # response_format is unsupported for gpt-image-* models.
-        response_format=None if _GPT_IMAGE_PREFIX in model else "b64_json",
     )
-
-    if not response.data:
-        raise RuntimeError("No image data returned from the provider.")
-
-    results: list[GeneratedImageData] = []
-    for item in response.data:
-        dumped = item.model_dump()
-        b64 = dumped.get("b64_json")
-        if not b64:
-            continue
-        results.append(
-            GeneratedImageData(
-                b64_data=b64,
-                revised_prompt=dumped.get("revised_prompt") or prompt,
-            )
-        )
-
-    if not results:
-        raise RuntimeError("No base64 image data returned from the provider.")
-    return results
