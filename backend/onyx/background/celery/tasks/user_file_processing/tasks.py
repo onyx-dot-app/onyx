@@ -37,6 +37,7 @@ from onyx.configs.constants import USER_FILE_PROJECT_SYNC_MAX_QUEUE_DEPTH
 from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.models import TabularSection
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
@@ -273,10 +274,22 @@ def _process_user_file_without_vector_db(
 
     user_file_uuid = _as_uuid(user_file_id)
 
-    # Combine section text from all document sections
-    combined_text = " ".join(
-        section.text for doc in documents for section in doc.sections if section.text
-    )
+    # Combine section text from all document sections. Tabular sections are
+    # file-backed (no inline text), so read their staged CSV from the file store.
+    file_store = get_default_file_store()
+    text_parts: list[str] = []
+    for doc in documents:
+        for section in doc.sections:
+            if isinstance(section, TabularSection):
+                with file_store.read_file(
+                    section.csv_file_id, use_tempfile=True
+                ) as raw:
+                    csv_text = raw.read().decode("utf-8", errors="replace").strip()
+                if csv_text:
+                    text_parts.append(csv_text)
+            elif section.text:
+                text_parts.append(section.text)
+    combined_text = " ".join(text_parts)
 
     # Compute token count using the user's default LLM tokenizer
     try:
